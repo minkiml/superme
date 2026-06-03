@@ -100,9 +100,14 @@ def link(channel_id: str, name: str) -> tuple[bool, str]:
     if name not in _DEFS:
         avail = ", ".join(f"`{n}`" for n in known_workspaces())
         return False, f"Unknown workspace `{name}`. Defined: {avail}."
+    ws = _build(name)
+    if not ws.cwd.is_dir():
+        return False, (
+            f"Workspace `{name}` points at a path that doesn't exist:\n"
+            f"> `{ws.cwd}`\nFix its `cwd` in registry.yaml, then try again."
+        )
     _LINKS[channel_id] = name
     _save_links()
-    ws = _build(name)
     return True, f"✅ This channel is now the *{name}* workspace.\n> cwd: `{ws.cwd}`"
 
 
