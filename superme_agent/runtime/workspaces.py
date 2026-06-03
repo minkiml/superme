@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 
 import yaml
 
-from .config import ROOT_DIR, REGISTRY_FILE, LINKS_FILE
+from .config import ROOT_DIR, REGISTRY_FILE, LINKS_FILE, THREAD_WS_FILE
 
 log = logging.getLogger("superme-agent")
 
@@ -27,6 +27,7 @@ class Workspace:
     cwd: Path
     persona_append: str = ""
     extra_mcp: list = field(default_factory=list)  # names; wired when servers exist
+    label: str = ""                                 # display name (defaults to name)
 
 
 # --- definitions: loaded once from registry.yaml at startup ------------------
@@ -77,7 +78,12 @@ def _build(name: str) -> Workspace:
         cwd=cwd,
         persona_append=(spec.get("persona_append") or "").strip(),
         extra_mcp=spec.get("extra_mcp") or [],
+        label=(spec.get("label") or name),
     )
+
+
+def default_workspace() -> str:
+    return _DEFAULT
 
 
 def known_workspaces() -> list[str]:
@@ -116,3 +122,39 @@ def unlink(channel_id: str) -> str:
     _LINKS.pop(channel_id, None)
     _save_links()
     return f"↩️ This channel is back to the default workspace (*{_DEFAULT}*)."
+
+
+# --- per-thread pin: a thread keeps the workspace it was BORN in -------------
+# The channel link decides the workspace for NEW threads only; existing threads
+# stay pinned, so switching a channel's workspace never contaminates live threads.
+def _load_pins() -> dict:
+    try:
+        return json.loads(THREAD_WS_FILE.read_text())
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+_PINS: dict = _load_pins()
+
+
+def _save_pins() -> None:
+    try:
+        THREAD_WS_FILE.write_text(json.dumps(_PINS, indent=2))
+    except OSError as e:
+        log.warning("Could not persist thread workspace pins: %s", e)
+
+
+def pinned(thread_ts: str) -> str | None:
+    """The workspace a thread is pinned to, or None if it hasn't started yet."""
+    return _PINS.get(thread_ts)
+
+
+def workspace_for_thread(thread_ts: str, channel_id: str) -> Workspace:
+    """The workspace for a thread: its pin if it has one, else the channel's
+    current link (pinned now so the rest of the thread stays consistent)."""
+    name = _PINS.get(thread_ts)
+    if name is None or name not in _DEFS:
+        name = current(channel_id)          # new thread inherits the channel link
+        _PINS[thread_ts] = name
+        _save_pins()
+    return _build(name)

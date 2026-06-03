@@ -62,11 +62,14 @@ async def _handle_workspace_command(arg: str, channel: str, say, thread_ts) -> N
     if low in ("", "show", "status", "?"):
         cur = workspaces.current(channel)
         avail = ", ".join(f"`{n}`" for n in workspaces.known_workspaces())
-        await say(
-            thread_ts=thread_ts,
-            text=f"This channel → *{cur}* workspace.\nDefined: {avail}\n"
-            "Use `@me workspace use <name>` to link, or `@me workspace reset`.",
-        )
+        pin = workspaces.pinned(thread_ts)
+        lines = []
+        if pin and pin != cur:
+            lines.append(f"This *thread* is pinned to *{pin}* (it keeps its workspace for life).")
+        lines.append(f"New threads in this channel → *{cur}* workspace.")
+        lines.append(f"Defined: {avail}")
+        lines.append("`@me workspace use <name>` to switch the channel default, or `… reset`.")
+        await say(thread_ts=thread_ts, text="\n".join(lines))
         return
     if low in ("reset", "clear", "default", "unlink"):
         await say(text=workspaces.unlink(channel), thread_ts=thread_ts)

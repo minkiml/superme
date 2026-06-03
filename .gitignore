@@ -4,6 +4,7 @@
 # Local runtime state (per-environment, not committed)
 .sessions.json
 .channel_links.json
+.thread_workspaces.json
 
 # Python
 __pycache__/

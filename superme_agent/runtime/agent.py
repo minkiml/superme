@@ -79,8 +79,7 @@ class Assistant:
         self._sessions = sessions
         self._permissions = permissions
 
-    def _build_options(self, say, client, channel, thread_ts, user, resume) -> ClaudeAgentOptions:
-        ws = workspaces.resolve(channel)
+    def _build_options(self, say, client, channel, thread_ts, user, resume, ws) -> ClaudeAgentOptions:
         append = PERSONA + (f"\n\n{ws.persona_append}" if ws.persona_append else "")
         return ClaudeAgentOptions(
             cwd=str(ws.cwd),                       # the workspace (Layer 3)
@@ -96,9 +95,9 @@ class Assistant:
             can_use_tool=self._permissions.make_callback(say, client, thread_ts, user),
         )
 
-    async def _run_once(self, prompt, say, client, channel, thread_ts, user, resume, on_status) -> str:
+    async def _run_once(self, prompt, say, client, channel, thread_ts, user, resume, on_status, ws) -> str:
         final = ""
-        options = self._build_options(say, client, channel, thread_ts, user, resume)
+        options = self._build_options(say, client, channel, thread_ts, user, resume, ws)
         async for message in query(prompt=_stream_prompt(prompt), options=options):
             if isinstance(message, AssistantMessage):
                 for block in message.content:
@@ -124,12 +123,21 @@ class Assistant:
         `on_status(text)` (optional) is awaited with a short status line each time a
         tool runs, for a live "what it's doing now" indicator in Slack.
         """
+        # Pin the workspace for this thread (born under the channel's current link);
+        # it stays fixed for the thread's life, so switching the channel never
+        # contaminates an in-flight thread.
+        ws = workspaces.workspace_for_thread(thread_ts, channel)
         resume = self._sessions.get(thread_ts)
         try:
-            return await self._run_once(prompt, say, client, channel, thread_ts, user, resume, on_status)
+            final = await self._run_once(prompt, say, client, channel, thread_ts, user, resume, on_status, ws)
         except Exception:
             if not resume:
                 raise  # genuine failure, not a stale-resume problem
             log.warning("resume failed for thread %s; retrying as a fresh session", thread_ts)
             self._sessions.forget(thread_ts)
-            return await self._run_once(prompt, say, client, channel, thread_ts, user, None, on_status)
+            final = await self._run_once(prompt, say, client, channel, thread_ts, user, None, on_status, ws)
+
+        # Indicate the workspace when it isn't the default one.
+        if ws.name != workspaces.default_workspace():
+            final = f"{final}\n\n_⌂ workspace: {ws.label}_"
+        return final

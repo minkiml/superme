@@ -24,6 +24,8 @@ REGISTRY_FILE = APP_DIR / "config" / "registry.yaml"
 SESSIONS_FILE = APP_DIR / ".sessions.json"
 # Channel→workspace links, managed live from Slack (not committed; per-environment).
 LINKS_FILE = APP_DIR / ".channel_links.json"
+# Per-thread workspace pin (a thread keeps the workspace it was born in).
+THREAD_WS_FILE = APP_DIR / ".thread_workspaces.json"
 ENV_FILE = APP_DIR / ".env"
 
 load_dotenv(ENV_FILE)
