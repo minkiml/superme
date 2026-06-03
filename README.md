@@ -22,15 +22,16 @@ WORKSPACE           a cwd (codebase/project) + its own .claude harness — swaps
   tools + policy — none of which depend on `cwd`. So the agent stays "itself"
   wherever it works.
 - A **workspace** is **defined** in `config/registry.yaml` (name → cwd + extras) and
-  **linked** to a channel live from Slack: `@bot workspace use <name>` (persisted to
-  `.channel_links.json`, no restart). Unlinked channels use the **default workspace =
-  repo root**. `setting_sources=["project","local"]` loads that workspace's own
-  `CLAUDE.md`/skills on top of the harness.
+  **assigned to a channel** from Slack: `@bot workspace use <name>`. A channel is
+  configurable until its first conversation, then **locks** to one workspace for life
+  (one channel = one workspace). Unconfigured channels use the **default = repo root**.
+  `setting_sources=["project","local"]` loads that workspace's own `CLAUDE.md`/skills
+  on top of the harness. Full details: [docs/channel-workspaces.md](docs/channel-workspaces.md).
 
-  Workspace commands (in any channel):
-  - `@bot workspace` — show this channel's workspace + the defined ones
-  - `@bot workspace use <name>` — link this channel to a workspace
-  - `@bot workspace reset` — back to the default workspace
+  Workspace commands:
+  - `@bot workspace` — show this channel's workspace (and whether it's locked)
+  - `@bot workspace use <name>` — assign (only before the channel locks)
+  - `@bot workspace reset` — back to default (only before the channel locks)
 
 ## Project layout
 ```
