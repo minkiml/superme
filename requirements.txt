@@ -1,0 +1,5 @@
+slack-bolt>=1.18
+aiohttp>=3.9
+python-dotenv>=1.0
+claude-agent-sdk>=0.2
+pyyaml>=6

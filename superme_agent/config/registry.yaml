@@ -1,0 +1,22 @@
+# Channel → workspace links.
+# A workspace = a cwd (codebase/project) + optional per-workspace extras.
+# Unlinked channels fall back to `default_workspace`.
+
+default_workspace: default
+
+workspaces:
+  default:
+    cwd: "."            # repo root (also the future global-harness codebase)
+
+  # Examples (uncomment + edit to specialize a channel):
+  # myapp:
+  #   cwd: "/Users/cooma/Developer/myapp"
+  # stock:
+  #   cwd: "/Users/cooma/Developer/stock-research"
+  #   persona_append: "You are a markets analyst. Always note that this is not financial advice."
+  #   extra_mcp: ["yfinance"]     # wired once that MCP server exists
+
+# Link a Slack channel ID to a workspace name (ID = canonical key; name is a comment).
+channels: {}
+  # C0123ABC: myapp     # #proj-myapp
+  # C0456DEF: stock     # #stock

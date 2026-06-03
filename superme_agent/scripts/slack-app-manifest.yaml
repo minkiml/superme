@@ -1,0 +1,38 @@
+# Slack app manifest — paste this at https://api.slack.com/apps → "Create New App"
+# → "From a manifest". It pre-configures the bot name, scopes, the app_mention
+# event, Socket Mode, and interactivity (the Allow/Deny buttons) in one step.
+#
+# After creating: generate an app-level token (xapp-) for Socket Mode, then
+# install the app to get the bot token (xoxb-). See README "Slack app setup".
+#
+# Rename the bot here if you like — `display_information.name` is the app name;
+# `features.bot_user.display_name` is what shows on messages and drives @mention.
+display_information:
+  name: My Agent
+  description: Platform team assistant powered by the Claude Agent SDK.
+
+features:
+  bot_user:
+    display_name: my-agent
+    always_online: true
+
+oauth_config:
+  scopes:
+    bot:
+      - app_mentions:read   # receive @mentions
+      - chat:write          # post replies + approval buttons
+      - channels:history    # read public channel messages (read_channel)
+      - channels:read       # resolve public channel info
+      - groups:history      # read PRIVATE channel messages (your "primary")
+      - groups:read         # resolve private channel info
+      - reactions:read      # receive ✅/❌ approval reactions
+      - reactions:write     # pre-add tappable ✅/❌ hints to approval cards
+
+settings:
+  event_subscriptions:
+    bot_events:
+      - app_mention         # wake the bot when mentioned
+      - reaction_added      # approve/deny by reacting to the card
+  socket_mode_enabled: true # no public URL needed
+  org_deploy_enabled: false
+  token_rotation_enabled: false

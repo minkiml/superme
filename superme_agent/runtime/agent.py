@@ -1,0 +1,135 @@
+"""The agent core (Layer 1 glue).
+
+Composes ClaudeAgentOptions = the portable harness (always) + the resolved
+workspace (per channel), then runs the SDK query loop.
+
+Harness, loaded cwd-INDEPENDENTLY so the agent is "itself" in any workspace:
+  - persona  -> system_prompt append (harness/persona.md)
+  - skills + subagents + hooks + static MCP -> local plugin (harness/plugin)
+  - in-process Slack tools -> mcp_servers (harness/tools)
+  - permission policy -> can_use_tool (harness/policy)
+
+Workspace, per channel (workspaces.py): cwd + setting_sources(project/local) load
+that repo's own CLAUDE.md/skills, plus optional persona_append / extra MCP.
+"""
+
+import logging
+
+from claude_agent_sdk import (
+    query,
+    ClaudeAgentOptions,
+    AssistantMessage,
+    ResultMessage,
+)
+
+from .config import PERSONA_FILE, PLUGIN_DIR
+from .permissions import PermissionManager
+from .sessions import SessionStore
+from . import workspaces
+from ..harness.tools.slack_tools import make_slack_mcp_server
+
+log = logging.getLogger("superme-agent")
+
+# The portable persona, loaded once from the harness.
+PERSONA = PERSONA_FILE.read_text()
+
+
+async def _stream_prompt(text: str):
+    """Wrap one user turn as the streaming-input message the SDK expects.
+
+    A `can_use_tool` callback forces streaming mode, so the prompt must be an
+    AsyncIterable of message dicts rather than a plain string.
+    """
+    yield {
+        "type": "user",
+        "message": {"role": "user", "content": text},
+        "parent_tool_use_id": None,
+    }
+
+
+def _friendly_status(tool_name: str, tool_input: dict) -> str:
+    """A short Slack-mrkdwn status line for a tool the agent is about to run."""
+    inp = tool_input or {}
+    if tool_name in ("Read", "Glob", "Grep", "NotebookRead"):
+        return "🔍 _reading files…_"
+    if tool_name in ("Edit", "Write", "NotebookEdit"):
+        f = (inp.get("file_path") or "").rsplit("/", 1)[-1]
+        return f"✏️ _editing {f}…_" if f else "✏️ _editing files…_"
+    if tool_name == "Bash":
+        return "💻 _running a command…_"
+    if tool_name in ("WebSearch", "WebFetch"):
+        return "🌐 _searching the web…_"
+    if tool_name == "mcp__slack__read_channel":
+        return "💬 _reading the channel…_"
+    if tool_name == "mcp__slack__read_thread":
+        return "🗨️ _reading a thread…_"
+    if tool_name == "Skill":
+        return "🧩 _using a skill…_"
+    if tool_name == "Agent":
+        return "🤖 _delegating to a subagent…_"
+    if tool_name == "TodoWrite":
+        return "🗒️ _planning…_"
+    return f"🔧 _{tool_name}…_"
+
+
+class Assistant:
+    """Wraps the Claude Agent SDK as the SuperMe host agent."""
+
+    def __init__(self, sessions: SessionStore, permissions: PermissionManager):
+        self._sessions = sessions
+        self._permissions = permissions
+
+    def _build_options(self, say, client, channel, thread_ts, user, resume) -> ClaudeAgentOptions:
+        ws = workspaces.resolve(channel)
+        append = PERSONA + (f"\n\n{ws.persona_append}" if ws.persona_append else "")
+        return ClaudeAgentOptions(
+            cwd=str(ws.cwd),                       # the workspace (Layer 3)
+            resume=resume,                          # continuous per-thread session
+            system_prompt={"type": "preset", "preset": "claude_code", "append": append},
+            # Workspace harness only; the agent's own harness comes from the plugin
+            # below, so it loads regardless of cwd (and not from ~/.claude).
+            setting_sources=["project", "local"],
+            plugins=[{"type": "local", "path": str(PLUGIN_DIR)}],
+            skills="all",
+            mcp_servers={"slack": make_slack_mcp_server(client, channel)},
+            permission_mode="default",
+            can_use_tool=self._permissions.make_callback(say, client, thread_ts, user),
+        )
+
+    async def _run_once(self, prompt, say, client, channel, thread_ts, user, resume, on_status) -> str:
+        final = ""
+        options = self._build_options(say, client, channel, thread_ts, user, resume)
+        async for message in query(prompt=_stream_prompt(prompt), options=options):
+            if isinstance(message, AssistantMessage):
+                for block in message.content:
+                    if hasattr(block, "text"):
+                        log.info("assistant: %s", block.text[:200])
+                    elif on_status and hasattr(block, "name") and hasattr(block, "input"):
+                        # A tool-use block — surface what it's doing as live status.
+                        await on_status(_friendly_status(block.name, block.input))
+            elif isinstance(message, ResultMessage):
+                if getattr(message, "session_id", None):
+                    self._sessions.remember(thread_ts, message.session_id)
+                final = (
+                    message.result
+                    if message.subtype == "success"
+                    else "Sorry — I ran into an error handling that request."
+                )
+        return final or "I didn't produce a response."
+
+    async def run(self, prompt, say, client, channel, thread_ts, user, on_status=None) -> str:
+        """Run one turn. If resuming a stale session fails (e.g. the transcript was
+        created under a different cwd), drop it and retry as a fresh conversation.
+
+        `on_status(text)` (optional) is awaited with a short status line each time a
+        tool runs, for a live "what it's doing now" indicator in Slack.
+        """
+        resume = self._sessions.get(thread_ts)
+        try:
+            return await self._run_once(prompt, say, client, channel, thread_ts, user, resume, on_status)
+        except Exception:
+            if not resume:
+                raise  # genuine failure, not a stale-resume problem
+            log.warning("resume failed for thread %s; retrying as a fresh session", thread_ts)
+            self._sessions.forget(thread_ts)
+            return await self._run_once(prompt, say, client, channel, thread_ts, user, None, on_status)
