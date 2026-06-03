@@ -123,10 +123,9 @@ class Assistant:
         `on_status(text)` (optional) is awaited with a short status line each time a
         tool runs, for a live "what it's doing now" indicator in Slack.
         """
-        # Pin the workspace for this thread (born under the channel's current link);
-        # it stays fixed for the thread's life, so switching the channel never
-        # contaminates an in-flight thread.
-        ws = workspaces.workspace_for_thread(thread_ts, channel)
+        # Resolve the channel's workspace; the first run LOCKS the channel to it,
+        # so the workspace never changes mid-stream for any thread in the channel.
+        ws = workspaces.resolve_for_run(channel)
         resume = self._sessions.get(thread_ts)
         try:
             final = await self._run_once(prompt, say, client, channel, thread_ts, user, resume, on_status, ws)
