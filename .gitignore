@@ -3,8 +3,7 @@
 
 # Local runtime state (per-environment, not committed)
 .sessions.json
-.channel_links.json
-.channel_locks.json
+.channel_workspaces.json
 
 # Python
 __pycache__/

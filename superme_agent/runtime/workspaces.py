@@ -3,13 +3,13 @@
 Two halves, deliberately separated:
   - DEFINITIONS (registry.yaml) — workspace name → cwd + extras. Code-side, committed.
     Adding a new workspace = edit registry.yaml (+ restart).
-  - LINKS (.channel_links.json) — channel id → workspace name. Set live from Slack
-    (`@bot workspace use <name>`), persisted.
+  - STATE (.channel_workspaces.json) — channel id → {workspace, locked}. Set live
+    from Slack (`@bot workspace use <name>`), persisted.
 
 Locking model: a channel is freely configurable until its FIRST conversation; the
-first agent run LOCKS the channel to its current workspace (.channel_locks.json).
-After that the workspace can't change — one channel = one workspace for its life.
-This guarantees a channel's threads never see a mid-stream workspace change.
+first agent run LOCKS the channel to its current workspace. After that the workspace
+can't change — one channel = one workspace for its life. This guarantees a channel's
+threads never see a mid-stream workspace change.
 """
 
 import json
@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 
 import yaml
 
-from .config import ROOT_DIR, REGISTRY_FILE, LINKS_FILE, LOCKS_FILE
+from .config import ROOT_DIR, REGISTRY_FILE, CHANNELS_FILE
 
 log = logging.getLogger("superme-agent")
 
@@ -65,8 +65,8 @@ def _save_json(path: Path, data: dict) -> None:
         log.warning("Could not persist %s: %s", path.name, e)
 
 
-_LINKS: dict = _load_json(LINKS_FILE)   # channel -> workspace (configurable until locked)
-_LOCKS: dict = _load_json(LOCKS_FILE)   # channel -> workspace (frozen)
+# channel -> {"workspace": name, "locked": bool}
+_STATE: dict = _load_json(CHANNELS_FILE)
 
 
 def _build(name: str) -> Workspace:
@@ -96,12 +96,12 @@ def default_workspace() -> str:
 
 
 def is_locked(channel_id: str) -> bool:
-    return channel_id in _LOCKS
+    return bool(_STATE.get(channel_id, {}).get("locked"))
 
 
 def current(channel_id: str) -> str:
-    """The channel's effective workspace name (locked value wins, else the link)."""
-    return _LOCKS.get(channel_id) or _LINKS.get(channel_id, _DEFAULT)
+    """The channel's configured workspace name (default if unset)."""
+    return _STATE.get(channel_id, {}).get("workspace") or _DEFAULT
 
 
 # --- configuration (only while a channel is still unlocked) ------------------
@@ -121,8 +121,8 @@ def link(channel_id: str, name: str) -> tuple[bool, str]:
             f"Workspace `{name}` points at a path that doesn't exist:\n"
             f"> `{ws.cwd}`\nFix its `cwd` in registry.yaml, then try again."
         )
-    _LINKS[channel_id] = name
-    _save_json(LINKS_FILE, _LINKS)
+    _STATE[channel_id] = {"workspace": name, "locked": False}
+    _save_json(CHANNELS_FILE, _STATE)
     return True, (
         f"✅ This channel will use the *{name}* workspace.\n> cwd: `{ws.cwd}`\n"
         "_Locks on the first conversation here._"
@@ -133,8 +133,8 @@ def unlink(channel_id: str) -> str:
     """Reset a channel to default (only allowed before it locks)."""
     if is_locked(channel_id):
         return f"🔒 This channel is locked to *{current(channel_id)}* and can't be reset."
-    _LINKS.pop(channel_id, None)
-    _save_json(LINKS_FILE, _LINKS)
+    _STATE.pop(channel_id, None)
+    _save_json(CHANNELS_FILE, _STATE)
     return f"↩️ This channel will use the default workspace (*{_DEFAULT}*) until it locks."
 
 
@@ -143,7 +143,8 @@ def resolve_for_run(channel_id: str) -> Workspace:
     """The workspace for an agent run. Locks the channel on first use so its
     workspace is fixed for the rest of the channel's life."""
     if not is_locked(channel_id):
-        _LOCKS[channel_id] = current(channel_id)
-        _save_json(LOCKS_FILE, _LOCKS)
-        log.info("locked channel %s to workspace %s", channel_id, _LOCKS[channel_id])
-    return _build(_LOCKS[channel_id])
+        name = current(channel_id)
+        _STATE[channel_id] = {"workspace": name, "locked": True}
+        _save_json(CHANNELS_FILE, _STATE)
+        log.info("locked channel %s to workspace %s", channel_id, name)
+    return _build(current(channel_id))
