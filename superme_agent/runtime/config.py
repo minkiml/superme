@@ -22,6 +22,8 @@ PERSONA_FILE = HARNESS_DIR / "persona.md"
 PLUGIN_DIR = HARNESS_DIR / "plugin"
 REGISTRY_FILE = APP_DIR / "config" / "registry.yaml"
 SESSIONS_FILE = APP_DIR / ".sessions.json"
+# Channel→workspace links, managed live from Slack (not committed; per-environment).
+LINKS_FILE = APP_DIR / ".channel_links.json"
 ENV_FILE = APP_DIR / ".env"
 
 load_dotenv(ENV_FILE)

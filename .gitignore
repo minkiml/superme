@@ -1,8 +1,9 @@
 # Secrets
 .env
 
-# Local runtime state (thread -> session_id map)
+# Local runtime state (per-environment, not committed)
 .sessions.json
+.channel_links.json
 
 # Python
 __pycache__/

@@ -18,6 +18,6 @@ workspaces:
   #   persona_append: "You are a markets analyst. Not financial advice."
   #   extra_mcp: ["yfinance"]     # wired once that MCP server exists
 
-# Link a Slack channel ID to a workspace name (ID = canonical key; name is a comment).
-channels: {}
-  # C0123ABC: dummy     # #dummy-project   <- fill in after creating the channel
+# NOTE: channel → workspace LINKS are no longer set here. Link a channel live from
+# Slack: `@bot workspace use <name>` (persisted to .channel_links.json, no restart).
+# This file only DEFINES workspaces; linking is a runtime/per-environment concern.

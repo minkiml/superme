@@ -21,9 +21,16 @@ WORKSPACE           a cwd (codebase/project) + its own .claude harness — swaps
 - The **harness** loads via a local plugin (`plugins=[…]`) + persona + in-process
   tools + policy — none of which depend on `cwd`. So the agent stays "itself"
   wherever it works.
-- A **workspace** is set per channel (`config/registry.yaml`). Unlinked channels use
-  the **default workspace = repo root**. `setting_sources=["project","local"]` loads
-  that workspace's own `CLAUDE.md`/skills on top of the harness.
+- A **workspace** is **defined** in `config/registry.yaml` (name → cwd + extras) and
+  **linked** to a channel live from Slack: `@bot workspace use <name>` (persisted to
+  `.channel_links.json`, no restart). Unlinked channels use the **default workspace =
+  repo root**. `setting_sources=["project","local"]` loads that workspace's own
+  `CLAUDE.md`/skills on top of the harness.
+
+  Workspace commands (in any channel):
+  - `@bot workspace` — show this channel's workspace + the defined ones
+  - `@bot workspace use <name>` — link this channel to a workspace
+  - `@bot workspace reset` — back to the default workspace
 
 ## Project layout
 ```
@@ -42,7 +49,7 @@ superme/                              # repo root = default workspace (+ future 
 │   │   ├── policy.py                 #   SAFE_TOOLS / approval policy
 │   │   ├── tools/slack_tools.py      #   in-process read_channel / read_thread
 │   │   └── plugin/                   #   local plugin: skills/ + agents/ (cwd-independent)
-│   ├── config/registry.yaml          # channel → workspace links
+│   ├── config/registry.yaml          # workspace definitions (links live in .channel_links.json)
 │   └── scripts/                      # check_tokens.py, slack-app-manifest.yaml
 ├── docs/DEV-ROADMAP.md
 ├── requirements.txt

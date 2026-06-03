@@ -11,11 +11,15 @@ from slack_bolt.async_app import AsyncApp
 
 from .config import SLACK_BOT_TOKEN
 from .agent import Assistant
+from . import workspaces
 
 log = logging.getLogger("superme-agent")
 
 # Strips the "<@U123>" mention tags out of the message text.
 MENTION_RE = re.compile(r"<@[A-Z0-9]+>")
+
+# Control command: "@bot workspace [use <name> | reset | <name>]"
+WORKSPACE_RE = re.compile(r"^workspace\b\s*(.*)$", re.IGNORECASE)
 
 # Slack truncates very long messages in the UI; chunk well under that so replies
 # stay fully readable. We split on line boundaries to avoid cutting mid-sentence.
@@ -51,6 +55,27 @@ async def _deliver(client, channel, placeholder_ts, thread_ts, say, text: str) -
         await say(text=chunk, thread_ts=thread_ts)
 
 
+async def _handle_workspace_command(arg: str, channel: str, say, thread_ts) -> None:
+    """`@bot workspace …` — link/unlink/show this channel's workspace (no restart)."""
+    arg = arg.strip()
+    low = arg.lower()
+    if low in ("", "show", "status", "?"):
+        cur = workspaces.current(channel)
+        avail = ", ".join(f"`{n}`" for n in workspaces.known_workspaces())
+        await say(
+            thread_ts=thread_ts,
+            text=f"This channel → *{cur}* workspace.\nDefined: {avail}\n"
+            "Use `@me workspace use <name>` to link, or `@me workspace reset`.",
+        )
+        return
+    if low in ("reset", "clear", "default", "unlink"):
+        await say(text=workspaces.unlink(channel), thread_ts=thread_ts)
+        return
+    name = arg[4:].strip() if low.startswith("use ") else arg
+    _, msg = workspaces.link(channel, name)
+    await say(text=msg, thread_ts=thread_ts)
+
+
 def create_app() -> AsyncApp:
     return AsyncApp(token=SLACK_BOT_TOKEN)
 
@@ -67,6 +92,12 @@ def register_mention_handler(app: AsyncApp, assistant: Assistant) -> None:
         user = event["user"]  # the requester — only they can approve via reaction
         if not prompt:
             await say(text="Ask me something.", thread_ts=thread_ts)
+            return
+
+        # Control command: manage this channel's workspace link, no agent run.
+        ws_cmd = WORKSPACE_RE.match(prompt)
+        if ws_cmd:
+            await _handle_workspace_command(ws_cmd.group(1), channel, say, thread_ts)
             return
 
         log.info("prompt: %s", prompt)
