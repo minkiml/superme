@@ -25,6 +25,9 @@ SESSIONS_FILE = APP_DIR / ".sessions.json"
 # Channel→workspace state {channel: {workspace, locked}}, managed live from Slack
 # (not committed; per-environment).
 CHANNELS_FILE = APP_DIR / ".channel_workspaces.json"
+# Channel→model override {channel: "haiku"|"sonnet"|"opus"}, set live from Slack
+# (`@bot /model …`). Unset channels use the CLI default model.
+MODELS_FILE = APP_DIR / ".channel_models.json"
 ENV_FILE = APP_DIR / ".env"
 
 load_dotenv(ENV_FILE)

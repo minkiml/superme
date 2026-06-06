@@ -13,6 +13,7 @@ Workspace, per channel (workspaces.py): cwd + setting_sources(project/local) loa
 that repo's own CLAUDE.md/skills, plus optional persona_append / extra MCP.
 """
 
+import re
 import logging
 
 from claude_agent_sdk import (
@@ -20,12 +21,14 @@ from claude_agent_sdk import (
     ClaudeAgentOptions,
     AssistantMessage,
     ResultMessage,
+    SystemMessage,
 )
 
 from .config import PERSONA_FILE, PLUGIN_DIR
 from .permissions import PermissionManager
 from .sessions import SessionStore
 from . import workspaces
+from . import models
 from ..harness.tools.slack_tools import make_slack_mcp_server
 
 log = logging.getLogger("superme-agent")
@@ -45,6 +48,42 @@ async def _stream_prompt(text: str):
         "message": {"role": "user", "content": text},
         "parent_tool_use_id": None,
     }
+
+
+def _format_model(resolved: str | None) -> str:
+    """'claude-opus-4-7' / 'claude-haiku-4-5-20251001' -> 'opus 4.7' / 'haiku 4.5'.
+
+    Falls back to the raw id if it doesn't match the expected shape.
+    """
+    if not resolved:
+        return ""
+    m = re.match(r"claude-([a-z]+)-(\d+)-(\d+)", resolved)
+    return f"{m.group(1)} {m.group(2)}.{m.group(3)}" if m else resolved
+
+
+def _context_usage(usage: dict | None, model_usage: dict | None, model: str | None):
+    """Approximate context-window fill. Returns (percent, window_tokens) or None.
+
+    The last turn's prompt (input + both cache buckets) plus its output ≈ the tokens
+    now sitting in the context window. Divide by the model's contextWindow.
+    """
+    if not usage:
+        return None
+    used = (
+        usage.get("input_tokens", 0)
+        + usage.get("cache_creation_input_tokens", 0)
+        + usage.get("cache_read_input_tokens", 0)
+        + usage.get("output_tokens", 0)
+    )
+    window = 200_000
+    if model_usage:
+        entry = model_usage.get(model) if model else None
+        entry = entry or next((v for v in model_usage.values() if isinstance(v, dict)), None)
+        if entry and entry.get("contextWindow"):
+            window = entry["contextWindow"]
+    if not used or not window:
+        return None
+    return round(used / window * 100), window
 
 
 def _friendly_status(tool_name: str, tool_input: dict) -> str:
@@ -84,6 +123,7 @@ class Assistant:
         return ClaudeAgentOptions(
             cwd=str(ws.cwd),                       # the workspace (Layer 3)
             resume=resume,                          # continuous per-thread session
+            model=models.get(channel),              # per-channel override (None = default)
             system_prompt={"type": "preset", "preset": "claude_code", "append": append},
             # Workspace harness only; the agent's own harness comes from the plugin
             # below, so it loads regardless of cwd (and not from ~/.claude).
@@ -95,11 +135,18 @@ class Assistant:
             can_use_tool=self._permissions.make_callback(say, client, thread_ts, user),
         )
 
-    async def _run_once(self, prompt, say, client, channel, thread_ts, user, resume, on_status, ws) -> str:
+    async def _run_once(self, prompt, say, client, channel, thread_ts, user, resume, on_status, ws):
+        """Run one SDK turn. Returns (reply_text, resolved_model_id, context_pct)."""
         final = ""
+        resolved_model = None
+        context = None
         options = self._build_options(say, client, channel, thread_ts, user, resume, ws)
         async for message in query(prompt=_stream_prompt(prompt), options=options):
-            if isinstance(message, AssistantMessage):
+            if isinstance(message, SystemMessage):
+                # The init system message reports the concrete model the CLI resolved.
+                if getattr(message, "subtype", "") == "init":
+                    resolved_model = (getattr(message, "data", None) or {}).get("model")
+            elif isinstance(message, AssistantMessage):
                 for block in message.content:
                     if hasattr(block, "text"):
                         log.info("assistant: %s", block.text[:200])
@@ -109,12 +156,33 @@ class Assistant:
             elif isinstance(message, ResultMessage):
                 if getattr(message, "session_id", None):
                     self._sessions.remember(thread_ts, message.session_id)
+                context = _context_usage(message.usage, message.model_usage, resolved_model)
                 final = (
                     message.result
                     if message.subtype == "success"
                     else "Sorry — I ran into an error handling that request."
                 )
-        return final or "I didn't produce a response."
+        return (final or "I didn't produce a response."), resolved_model, context
+
+    async def compact(self, channel, thread_ts, user, say, client) -> str:
+        """Forward the REPL `/compact` command to this thread's session.
+
+        The underlying CLI intercepts `/compact` as a local command (it writes a
+        compact_boundary into the transcript rather than answering as the model),
+        so we just route it through a normal run and report our own confirmation.
+        """
+        resume = self._sessions.get(thread_ts)
+        if not resume:
+            return "Nothing to compact yet — this thread has no saved session."
+        ws = workspaces.resolve_for_run(channel)
+        try:
+            await self._run_once(
+                "/compact", say, client, channel, thread_ts, user, resume, None, ws
+            )  # return value (reply, model) unused here
+        except Exception:
+            log.exception("compact failed for thread %s", thread_ts)
+            return "Sorry — compaction failed. Check the logs."
+        return "🗜️ Compacted this thread's context — we can keep going with more room."
 
     async def run(self, prompt, say, client, channel, thread_ts, user, on_status=None) -> str:
         """Run one turn. If resuming a stale session fails (e.g. the transcript was
@@ -128,15 +196,21 @@ class Assistant:
         ws = workspaces.resolve_for_run(channel)
         resume = self._sessions.get(thread_ts)
         try:
-            final = await self._run_once(prompt, say, client, channel, thread_ts, user, resume, on_status, ws)
+            final, resolved_model, context = await self._run_once(prompt, say, client, channel, thread_ts, user, resume, on_status, ws)
         except Exception:
             if not resume:
                 raise  # genuine failure, not a stale-resume problem
             log.warning("resume failed for thread %s; retrying as a fresh session", thread_ts)
             self._sessions.forget(thread_ts)
-            final = await self._run_once(prompt, say, client, channel, thread_ts, user, None, on_status, ws)
+            final, resolved_model, context = await self._run_once(prompt, say, client, channel, thread_ts, user, None, on_status, ws)
 
-        # Indicate the workspace when it isn't the default one.
-        if ws.name != workspaces.default_workspace():
-            final = f"{final}\n\n_⌂ workspace: {ws.label}_"
+        # Subtle footer: workspace + the concrete model used (e.g. "opus 4.7") + context fill.
+        tags = [f"⌂ *Workspace*: {ws.label}"]
+        model_label = _format_model(resolved_model)
+        if model_label:
+            tags.append(f"*Model*: {model_label}")
+        if context:
+            pct, window = context
+            tags.append(f"*Context ({window // 1000}k)*: {pct}%")
+        final = f"{final}\n\n_{'  ·  '.join(tags)}_"
         return final

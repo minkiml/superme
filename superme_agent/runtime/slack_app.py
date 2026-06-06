@@ -12,8 +12,12 @@ from slack_bolt.async_app import AsyncApp
 from .config import SLACK_BOT_TOKEN
 from .agent import Assistant
 from . import workspaces
+from .commands import build_registry, parse_slash, CommandContext
 
 log = logging.getLogger("superme-agent")
+
+# The slash-command registry (`/compact`, `/help`, …). Add commands in commands.py.
+COMMANDS = build_registry()
 
 # Strips the "<@U123>" mention tags out of the message text.
 MENTION_RE = re.compile(r"<@[A-Z0-9]+>")
@@ -83,6 +87,28 @@ async def _handle_workspace_command(arg: str, channel: str, say, thread_ts) -> N
     await say(text=msg, thread_ts=thread_ts)
 
 
+async def _handle_slash_command(
+    name: str, args: str, channel, thread_ts, user, say, client, assistant
+) -> None:
+    """Dispatch a `/command` to the registry (unknown → list what's available)."""
+    cmd = COMMANDS.get(name)
+    if not cmd:
+        known = ", ".join(f"`/{c.name}`" for c in COMMANDS.all())
+        await say(text=f"Unknown command `/{name}`. Try {known}.", thread_ts=thread_ts)
+        return
+    ctx = CommandContext(
+        args=args, channel=channel, thread_ts=thread_ts, user=user,
+        say=say, client=client, assistant=assistant,
+    )
+    try:
+        reply = await cmd.handler(ctx)
+    except Exception:
+        log.exception("command /%s failed", name)
+        reply = f"Sorry — `/{name}` failed. Check the logs."
+    if reply:
+        await say(text=reply, thread_ts=thread_ts)
+
+
 def create_app() -> AsyncApp:
     return AsyncApp(token=SLACK_BOT_TOKEN)
 
@@ -99,6 +125,14 @@ def register_mention_handler(app: AsyncApp, assistant: Assistant) -> None:
         user = event["user"]  # the requester — only they can approve via reaction
         if not prompt:
             await say(text="Ask me something.", thread_ts=thread_ts)
+            return
+
+        # Slash command (`/compact`, `/help`, …): dispatch and stop, no agent run.
+        slash = parse_slash(prompt)
+        if slash:
+            await _handle_slash_command(
+                slash[0], slash[1], channel, thread_ts, user, say, client, assistant
+            )
             return
 
         # Control command: manage this channel's workspace link, no agent run.

@@ -47,7 +47,7 @@ def _load_registry() -> dict:
 
 _REGISTRY = _load_registry()
 _DEFS: dict = _REGISTRY.get("workspaces", {}) or {}
-_DEFAULT: str = _REGISTRY.get("default_workspace", "default")
+_DEFAULT: str = _REGISTRY.get("default_workspace", "base")
 
 
 # --- small JSON persistence helpers ------------------------------------------
@@ -124,7 +124,7 @@ def link(channel_id: str, name: str) -> tuple[bool, str]:
     _STATE[channel_id] = {"workspace": name, "locked": False}
     _save_json(CHANNELS_FILE, _STATE)
     return True, (
-        f"✅ This channel will use the *{name}* workspace.\n> cwd: `{ws.cwd}`\n"
+        f"This channel will use the *{name}* workspace.\n> cwd: `{ws.cwd}`\n"
         "_Locks on the first conversation here._"
     )
 
@@ -135,7 +135,7 @@ def unlink(channel_id: str) -> str:
         return f"🔒 This channel is locked to *{current(channel_id)}* and can't be reset."
     _STATE.pop(channel_id, None)
     _save_json(CHANNELS_FILE, _STATE)
-    return f"↩️ This channel will use the default workspace (*{_DEFAULT}*) until it locks."
+    return f"↩This channel will use the default workspace (*{_DEFAULT}*) until it locks."
 
 
 # --- resolution at run time (locks the channel on first use) -----------------

@@ -2,10 +2,10 @@
 # A workspace = a cwd (codebase/project) + optional per-workspace extras.
 # Unlinked channels fall back to `default_workspace`.
 
-default_workspace: default
+default_workspace: base
 
 workspaces:
-  default:
+  base:
     cwd: "."            # repo root (also the future global-harness codebase)
 
   dummy:
