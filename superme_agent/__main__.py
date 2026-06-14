@@ -10,11 +10,12 @@ Socket Mode listener. Layers:
   config/    registry.yaml — channel → workspace links
 """
 
+import os
 import asyncio
 
 from slack_bolt.adapter.socket_mode.async_handler import AsyncSocketModeHandler
 
-from .runtime.config import SLACK_APP_TOKEN, log, warn_on_conflicting_auth
+from .runtime.config import log, warn_on_conflicting_auth
 from .runtime.sessions import SessionStore
 from .runtime.permissions import PermissionManager
 from .runtime.agent import Assistant
@@ -37,7 +38,7 @@ def build():
 
 async def main():
     app = build()
-    handler = AsyncSocketModeHandler(app, SLACK_APP_TOKEN)
+    handler = AsyncSocketModeHandler(app, os.environ["SLACK_APP_TOKEN"])
     log.info("Starting SuperMe agent…")
     await handler.start_async()
 

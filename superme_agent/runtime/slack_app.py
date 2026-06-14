@@ -4,12 +4,12 @@ This is the I/O layer — receive a mention, hand the text to the agent, post th
 reply back into the same thread. All the thinking happens in agent.py.
 """
 
+import os
 import re
 import logging
 
 from slack_bolt.async_app import AsyncApp
 
-from .config import SLACK_BOT_TOKEN
 from .agent import Assistant
 from . import workspaces
 from .commands import build_registry, parse_slash, CommandContext
@@ -110,7 +110,8 @@ async def _handle_slash_command(
 
 
 def create_app() -> AsyncApp:
-    return AsyncApp(token=SLACK_BOT_TOKEN)
+    # Slack credential lives in the adapter, not the surface-neutral config.
+    return AsyncApp(token=os.environ["SLACK_BOT_TOKEN"])
 
 
 def register_mention_handler(app: AsyncApp, assistant: Assistant) -> None:

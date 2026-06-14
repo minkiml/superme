@@ -1,5 +1,10 @@
 """Configuration, paths, and shared setup for the SuperMe agent.
 
+Surface-neutral: this module holds paths, .env loading, and logging only. It must NOT
+require any surface's credentials (e.g. Slack tokens), so the Core can import it
+without a Slack environment. Slack-specific config lives in the Slack adapter
+(runtime/slack_app.py, runtime/permissions.py).
+
 Path model (the host-app vs workspace split):
   APP_DIR   = the host application itself (this package). Holds .env, .sessions.json,
               the harness, and config. Anchored to the CODE location, so it never
@@ -34,19 +39,6 @@ load_dotenv(ENV_FILE)
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("superme-agent")
-
-# Slack credentials (Socket Mode needs both). Missing either is a hard error.
-SLACK_BOT_TOKEN = os.environ["SLACK_BOT_TOKEN"]
-SLACK_APP_TOKEN = os.environ["SLACK_APP_TOKEN"]
-
-# How long to wait for a human to react ✅/❌ before auto-denying (seconds).
-APPROVAL_TIMEOUT = 180
-
-# Emoji names that count as approve / deny on an approval card.
-APPROVE_REACTIONS = {"white_check_mark", "heavy_check_mark", "+1", "thumbsup"}
-DENY_REACTIONS = {"x", "no_entry", "no_entry_sign", "-1", "thumbsdown"}
-APPROVE_EMOJI_SEED = "white_check_mark"
-DENY_EMOJI_SEED = "x"
 
 
 def warn_on_conflicting_auth() -> None:

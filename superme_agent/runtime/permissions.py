@@ -1,9 +1,9 @@
-"""Human-in-the-loop approvals.
+"""Human-in-the-loop approvals — the Slack implementation of the Core's ApproveFn.
 
-Mirrors the Claude Code CLI's interactive permission prompt: safe tools run
-immediately; risky tools (Bash, Write, Edit, …) post an approval card in the
-Slack thread and block the agent loop until the requester responds — or a timeout
-auto-denies.
+The Core decides *whether* a tool needs approval (safe tools auto-run; see
+core/permissions.py). This module is the Slack *surface* for the ask: when the Core
+calls our ApproveFn for a risky tool (Bash, Write, Edit, …), we post an approval card
+in the thread and block until the requester responds — or a timeout auto-denies.
 
 You respond with a native Slack reaction on the card: ✅ to allow, ❌ to deny.
 The bot pre-adds those two as one-tap hints. Reactions are honored ONLY from the
@@ -15,22 +15,18 @@ import uuid
 import asyncio
 import logging
 
-from claude_agent_sdk import (
-    PermissionResultAllow,
-    PermissionResultDeny,
-    ToolPermissionContext,
-)
-
-from .config import (
-    APPROVAL_TIMEOUT,
-    APPROVE_REACTIONS,
-    DENY_REACTIONS,
-    APPROVE_EMOJI_SEED,
-    DENY_EMOJI_SEED,
-)
-from ..harness.policy import is_safe
+from ..core.permissions import ApproveFn
 
 log = logging.getLogger("superme-agent")
+
+# How long to wait for a human to react ✅/❌ before auto-denying (seconds).
+APPROVAL_TIMEOUT = 180
+
+# Emoji names that count as approve / deny on an approval card.
+APPROVE_REACTIONS = {"white_check_mark", "heavy_check_mark", "+1", "thumbsup"}
+DENY_REACTIONS = {"x", "no_entry", "no_entry_sign", "-1", "thumbsdown"}
+APPROVE_EMOJI_SEED = "white_check_mark"
+DENY_EMOJI_SEED = "x"
 
 
 def _describe(tool_name: str, input_data: dict) -> str:
@@ -67,7 +63,7 @@ def _approval_blocks(tool_name: str, input_data: dict) -> list:
 
 
 class PermissionManager:
-    """Bridges the SDK's `can_use_tool` callback to Slack ✅/❌ reactions."""
+    """Slack ✅/❌ reactions as the Core's ApproveFn implementation."""
 
     def __init__(self):
         # approval_id -> {"future": Future, "user": requester_id, "ts": card_ts}
@@ -75,15 +71,14 @@ class PermissionManager:
         # card message ts -> approval_id, so a reaction can find its approval.
         self._ts_index: dict[str, str] = {}
 
-    def make_callback(self, say, client, thread_ts, requester: str):
-        """Build a `can_use_tool` callback bound to this thread and requester."""
+    def make_approver(self, say, client, thread_ts, requester: str) -> ApproveFn:
+        """Build an ApproveFn bound to this thread and requester.
 
-        async def can_use_tool(
-            tool_name: str, input_data: dict, context: ToolPermissionContext
-        ) -> PermissionResultAllow | PermissionResultDeny:
-            if is_safe(tool_name, input_data):
-                return PermissionResultAllow()
+        Only ever called by the Core for tools that aren't auto-allowed, so it always
+        posts a card and waits. Returns True=allow / False=deny (timeout → deny).
+        """
 
+        async def approve(tool_name: str, input_data: dict) -> bool:
             approval_id = uuid.uuid4().hex
             fut: asyncio.Future = asyncio.get_running_loop().create_future()
 
@@ -116,21 +111,15 @@ class PermissionManager:
                         pass
 
             try:
-                approved = await asyncio.wait_for(fut, timeout=APPROVAL_TIMEOUT)
+                return await asyncio.wait_for(fut, timeout=APPROVAL_TIMEOUT)
             except asyncio.TimeoutError:
-                return PermissionResultDeny(message="Approval timed out (no response).")
+                return False
             finally:
                 rec = self._pending.pop(approval_id, None)
                 if rec and rec.get("ts"):
                     self._ts_index.pop(rec["ts"], None)
 
-            return (
-                PermissionResultAllow()
-                if approved
-                else PermissionResultDeny(message="User denied this action in Slack.")
-            )
-
-        return can_use_tool
+        return approve
 
     def _resolve(self, approval_id: str, approved: bool) -> None:
         """Resolve a pending approval's future (idempotent)."""

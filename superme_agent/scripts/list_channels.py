@@ -4,15 +4,16 @@ Run:  python -m superme_agent.scripts.list_channels
 (Private channels appear only after the bot is invited to them.)
 """
 
+import os
 import asyncio
 
 from slack_sdk.web.async_client import AsyncWebClient
 
-from superme_agent.runtime.config import SLACK_BOT_TOKEN
+from superme_agent.runtime import config  # noqa: F401 — loads .env (SLACK_BOT_TOKEN)
 
 
 async def main() -> None:
-    web = AsyncWebClient(token=SLACK_BOT_TOKEN)
+    web = AsyncWebClient(token=os.environ["SLACK_BOT_TOKEN"])
     rows, cursor = [], None
     while True:
         resp = await web.conversations_list(

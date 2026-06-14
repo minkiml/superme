@@ -1,30 +1,19 @@
-"""The agent core (Layer 1 glue).
+"""The Slack adapter — drives the surface-agnostic Core for Slack.
 
-Composes ClaudeAgentOptions = the portable harness (always) + the resolved
-workspace (per channel), then runs the SDK query loop.
+The thinking lives in core/ (AgentService). This module is Slack glue: it resolves
+the channel's workspace into a Context, supplies a Slack ApproveFn and the in-process
+Slack reader tools, consumes the Core's TurnEvents, and renders them for Slack
+(live status, the final reply, the workspace/model/context footer). Session storage
+(thread → session_id) and the model override are Slack-surface state too.
 
-Harness, loaded cwd-INDEPENDENTLY so the agent is "itself" in any workspace:
-  - persona  -> system_prompt append (harness/persona.md)
-  - skills + subagents + hooks + static MCP -> local plugin (harness/plugin)
-  - in-process Slack tools -> mcp_servers (harness/tools)
-  - permission policy -> can_use_tool (harness/policy)
-
-Workspace, per channel (workspaces.py): cwd + setting_sources(project/local) load
-that repo's own CLAUDE.md/skills, plus optional persona_append / extra MCP.
+Keeping `Assistant.run()` / `compact()` signatures stable means slack_app.py and
+commands.py are unaffected by the Core extraction.
 """
 
 import re
 import logging
 
-from claude_agent_sdk import (
-    query,
-    ClaudeAgentOptions,
-    AssistantMessage,
-    ResultMessage,
-    SystemMessage,
-)
-
-from .config import PERSONA_FILE, PLUGIN_DIR
+from ..core import AgentService, Context, Status, Result
 from .permissions import PermissionManager
 from .sessions import SessionStore
 from . import workspaces
@@ -32,22 +21,6 @@ from . import models
 from ..harness.tools.slack_tools import make_slack_mcp_server
 
 log = logging.getLogger("superme-agent")
-
-# The portable persona, loaded once from the harness.
-PERSONA = PERSONA_FILE.read_text()
-
-
-async def _stream_prompt(text: str):
-    """Wrap one user turn as the streaming-input message the SDK expects.
-
-    A `can_use_tool` callback forces streaming mode, so the prompt must be an
-    AsyncIterable of message dicts rather than a plain string.
-    """
-    yield {
-        "type": "user",
-        "message": {"role": "user", "content": text},
-        "parent_tool_use_id": None,
-    }
 
 
 def _format_model(resolved: str | None) -> str:
@@ -59,31 +32,6 @@ def _format_model(resolved: str | None) -> str:
         return ""
     m = re.match(r"claude-([a-z]+)-(\d+)-(\d+)", resolved)
     return f"{m.group(1)} {m.group(2)}.{m.group(3)}" if m else resolved
-
-
-def _context_usage(usage: dict | None, model_usage: dict | None, model: str | None):
-    """Approximate context-window fill. Returns (percent, window_tokens) or None.
-
-    The last turn's prompt (input + both cache buckets) plus its output ≈ the tokens
-    now sitting in the context window. Divide by the model's contextWindow.
-    """
-    if not usage:
-        return None
-    used = (
-        usage.get("input_tokens", 0)
-        + usage.get("cache_creation_input_tokens", 0)
-        + usage.get("cache_read_input_tokens", 0)
-        + usage.get("output_tokens", 0)
-    )
-    window = 200_000
-    if model_usage:
-        entry = model_usage.get(model) if model else None
-        entry = entry or next((v for v in model_usage.values() if isinstance(v, dict)), None)
-        if entry and entry.get("contextWindow"):
-            window = entry["contextWindow"]
-    if not used or not window:
-        return None
-    return round(used / window * 100), window
 
 
 def _friendly_status(tool_name: str, tool_input: dict) -> str:
@@ -111,74 +59,60 @@ def _friendly_status(tool_name: str, tool_input: dict) -> str:
     return f"🔧 _{tool_name}…_"
 
 
+def _context_from_workspace(ws) -> Context:
+    """Map a resolved Slack workspace to a Core Context (global root vs local)."""
+    layer = "global" if ws.name == workspaces.default_workspace() else "local"
+    return Context(
+        layer=layer,
+        id=ws.name,
+        cwd=ws.cwd,
+        knowledge_root=None,            # wired in Stage C (superme-global-knowledge/)
+        persona_append=ws.persona_append,
+        extra_mcp=ws.extra_mcp,
+        label=ws.label,
+    )
+
+
 class Assistant:
-    """Wraps the Claude Agent SDK as the SuperMe host agent."""
+    """Slack-facing host agent: a thin adapter over the Core's AgentService."""
 
     def __init__(self, sessions: SessionStore, permissions: PermissionManager):
         self._sessions = sessions
         self._permissions = permissions
+        self._agent = AgentService()      # loads the portable persona once
 
-    def _build_options(self, say, client, channel, thread_ts, user, resume, ws) -> ClaudeAgentOptions:
-        append = PERSONA + (f"\n\n{ws.persona_append}" if ws.persona_append else "")
-        return ClaudeAgentOptions(
-            cwd=str(ws.cwd),                       # the workspace (Layer 3)
-            resume=resume,                          # continuous per-thread session
-            model=models.get(channel),              # per-channel override (None = default)
-            system_prompt={"type": "preset", "preset": "claude_code", "append": append},
-            # Workspace harness only; the agent's own harness comes from the plugin
-            # below, so it loads regardless of cwd (and not from ~/.claude).
-            setting_sources=["project", "local"],
-            plugins=[{"type": "local", "path": str(PLUGIN_DIR)}],
-            skills="all",
-            mcp_servers={"slack": make_slack_mcp_server(client, channel)},
-            permission_mode="default",
-            can_use_tool=self._permissions.make_callback(say, client, thread_ts, user),
-        )
-
-    async def _run_once(self, prompt, say, client, channel, thread_ts, user, resume, on_status, ws):
-        """Run one SDK turn. Returns (reply_text, resolved_model_id, context_pct)."""
-        final = ""
-        resolved_model = None
-        context = None
-        options = self._build_options(say, client, channel, thread_ts, user, resume, ws)
-        async for message in query(prompt=_stream_prompt(prompt), options=options):
-            if isinstance(message, SystemMessage):
-                # The init system message reports the concrete model the CLI resolved.
-                if getattr(message, "subtype", "") == "init":
-                    resolved_model = (getattr(message, "data", None) or {}).get("model")
-            elif isinstance(message, AssistantMessage):
-                for block in message.content:
-                    if hasattr(block, "text"):
-                        log.info("assistant: %s", block.text[:200])
-                    elif on_status and hasattr(block, "name") and hasattr(block, "input"):
-                        # A tool-use block — surface what it's doing as live status.
-                        await on_status(_friendly_status(block.name, block.input))
-            elif isinstance(message, ResultMessage):
-                if getattr(message, "session_id", None):
-                    self._sessions.remember(thread_ts, message.session_id)
-                context = _context_usage(message.usage, message.model_usage, resolved_model)
-                final = (
-                    message.result
-                    if message.subtype == "success"
-                    else "Sorry — I ran into an error handling that request."
-                )
-        return (final or "I didn't produce a response."), resolved_model, context
+    async def _consume(self, ctx, prompt, resume, model, approve, mcp, on_status) -> Result:
+        """Run one Core turn, rendering Status as live Slack status; return the Result."""
+        result: Result | None = None
+        async for ev in self._agent.run_turn(
+            ctx, prompt, resume=resume, model=model, approve=approve,
+            extra_mcp_servers=mcp,
+        ):
+            if isinstance(ev, Status):
+                if on_status:
+                    await on_status(_friendly_status(ev.tool_name, ev.tool_input))
+            elif isinstance(ev, Result):
+                result = ev
+            # TextDelta is ignored for Slack — we post the final Result.text.
+        return result or Result(text="I didn't produce a response.")
 
     async def compact(self, channel, thread_ts, user, say, client) -> str:
         """Forward the REPL `/compact` command to this thread's session.
 
         The underlying CLI intercepts `/compact` as a local command (it writes a
         compact_boundary into the transcript rather than answering as the model),
-        so we just route it through a normal run and report our own confirmation.
+        so we just route it through a normal turn and report our own confirmation.
         """
         resume = self._sessions.get(thread_ts)
         if not resume:
             return "Nothing to compact yet — this thread has no saved session."
-        ws = workspaces.resolve_for_run(channel)
+        ctx = _context_from_workspace(workspaces.resolve_for_run(channel))
+        approve = self._permissions.make_approver(say, client, thread_ts, user)
+        mcp = {"slack": make_slack_mcp_server(client, channel)}
         try:
-            await self._run_once(
-                "/compact", say, client, channel, thread_ts, user, resume, None, ws
-            )  # return value (reply, model) unused here
+            await self._consume(
+                ctx, "/compact", resume, models.get(channel), approve, mcp, None
+            )
         except Exception:
             log.exception("compact failed for thread %s", thread_ts)
             return "Sorry — compaction failed. Check the logs."
@@ -194,23 +128,29 @@ class Assistant:
         # Resolve the channel's workspace; the first run LOCKS the channel to it,
         # so the workspace never changes mid-stream for any thread in the channel.
         ws = workspaces.resolve_for_run(channel)
+        ctx = _context_from_workspace(ws)
+        approve = self._permissions.make_approver(say, client, thread_ts, user)
+        mcp = {"slack": make_slack_mcp_server(client, channel)}
+        model = models.get(channel)
         resume = self._sessions.get(thread_ts)
+
         try:
-            final, resolved_model, context = await self._run_once(prompt, say, client, channel, thread_ts, user, resume, on_status, ws)
+            result = await self._consume(ctx, prompt, resume, model, approve, mcp, on_status)
         except Exception:
             if not resume:
                 raise  # genuine failure, not a stale-resume problem
             log.warning("resume failed for thread %s; retrying as a fresh session", thread_ts)
             self._sessions.forget(thread_ts)
-            final, resolved_model, context = await self._run_once(prompt, say, client, channel, thread_ts, user, None, on_status, ws)
+            result = await self._consume(ctx, prompt, None, model, approve, mcp, on_status)
+
+        if result.session_id:
+            self._sessions.remember(thread_ts, result.session_id)
 
         # Subtle footer: workspace + the concrete model used (e.g. "opus 4.7") + context fill.
         tags = [f"⌂ *Workspace*: {ws.label}"]
-        model_label = _format_model(resolved_model)
+        model_label = _format_model(result.model)
         if model_label:
             tags.append(f"*Model*: {model_label}")
-        if context:
-            pct, window = context
-            tags.append(f"*Context ({window // 1000}k)*: {pct}%")
-        final = f"{final}\n\n_{'  ·  '.join(tags)}_"
-        return final
+        if result.context_pct is not None and result.context_window:
+            tags.append(f"*Context ({result.context_window // 1000}k)*: {result.context_pct}%")
+        return f"{result.text}\n\n_{'  ·  '.join(tags)}_"
