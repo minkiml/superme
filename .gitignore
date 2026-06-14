@@ -3,8 +3,11 @@
 
 # Local runtime state (per-environment, not committed)
 .sessions.json
+.sessions.v1.json
 .channel_workspaces.json
 .channel_models.json
+.context_models.json
+.slash_commands.json
 
 # Private, lifelong global SuperMe knowledge (its own private repo; never in the app repo)
 superme-global-knowledge/

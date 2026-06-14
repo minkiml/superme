@@ -50,3 +50,40 @@ export function agentSocketUrl(): string {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws'
   return `${proto}://${location.host}/api/ws/agent`
 }
+
+// --- sessions: list + replay (history comes from the SDK transcripts) ----------
+
+export type SessionMeta = {
+  id: string
+  title: string
+  surface: 'slack' | 'web'
+  updated_at: string
+  message_count: number
+}
+
+export type ChatBubble = { role: 'you' | 'superme'; text: string }
+
+export async function listSessions(contextId = 'global'): Promise<SessionMeta[]> {
+  const r = await fetch(`/api/sessions?context_id=${encodeURIComponent(contextId)}`)
+  if (!r.ok) throw new Error(`sessions: ${r.status}`)
+  return r.json()
+}
+
+export async function readSession(
+  id: string,
+  contextId = 'global',
+): Promise<{ id: string; title: string; messages: ChatBubble[]; total: number; truncated: boolean }> {
+  const r = await fetch(
+    `/api/sessions/${encodeURIComponent(id)}?context_id=${encodeURIComponent(contextId)}`,
+  )
+  if (!r.ok) throw new Error(`session: ${r.status}`)
+  return r.json()
+}
+
+export async function deleteSession(id: string, contextId = 'global'): Promise<void> {
+  const r = await fetch(
+    `/api/sessions/${encodeURIComponent(id)}?context_id=${encodeURIComponent(contextId)}`,
+    { method: 'DELETE' },
+  )
+  if (!r.ok) throw new Error(`delete session: ${r.status}`)
+}

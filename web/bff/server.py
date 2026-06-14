@@ -11,6 +11,8 @@ import os
 import asyncio
 import logging
 
+from . import _env  # noqa: F401  (loads the repo-root .env before reading os.environ)
+
 import httpx
 import websockets
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
@@ -61,6 +63,32 @@ async def inject(req: Request):
     body = await req.json()
     async with httpx.AsyncClient() as c:
         r = await c.post(f"{DAEMON_HTTP}/knowledge/inject", json=body)
+    return JSONResponse(r.json(), status_code=r.status_code)
+
+
+# --- sessions HTTP passthrough --------------------------------------------------
+@app.get("/api/sessions")
+async def sessions_list(context_id: str = "global"):
+    async with httpx.AsyncClient() as c:
+        r = await c.get(f"{DAEMON_HTTP}/sessions", params={"context_id": context_id})
+    return JSONResponse(r.json(), status_code=r.status_code)
+
+
+@app.get("/api/sessions/{session_id}")
+async def session_read(session_id: str, context_id: str = "global"):
+    async with httpx.AsyncClient() as c:
+        r = await c.get(
+            f"{DAEMON_HTTP}/sessions/{session_id}", params={"context_id": context_id}
+        )
+    return JSONResponse(r.json(), status_code=r.status_code)
+
+
+@app.delete("/api/sessions/{session_id}")
+async def session_delete(session_id: str, context_id: str = "global"):
+    async with httpx.AsyncClient() as c:
+        r = await c.delete(
+            f"{DAEMON_HTTP}/sessions/{session_id}", params={"context_id": context_id}
+        )
     return JSONResponse(r.json(), status_code=r.status_code)
 
 

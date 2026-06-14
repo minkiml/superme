@@ -6,6 +6,7 @@ arrive *while* a turn is paused awaiting an approval (otherwise the turn loop wo
 block the receive path and deadlock the approval round-trip).
 """
 
+import json
 import asyncio
 import uuid
 import logging
@@ -13,18 +14,40 @@ import logging
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from pydantic import BaseModel
 
-from ..core import AgentService, KnowledgeService
+from ..core import AgentService, KnowledgeService, SessionStore, CommandLayer, Init, Result
 from ..gateway import contexts
-from ..runtime.config import DAEMON_APPROVAL_TIMEOUT
+from ..runtime.config import DAEMON_APPROVAL_TIMEOUT, SLASH_COMMANDS_FILE
 from .protocol import event_to_frame
 
 log = logging.getLogger("superme-agent")
 
 app = FastAPI(title="SuperMe Core daemon")
 
-# One brain + one knowledge service, shared across connections.
+# One brain + knowledge + sessions + shared command layer, shared across connections.
 _agent = AgentService()
 _knowledge = KnowledgeService()
+_sessions = SessionStore()
+_commands = CommandLayer()
+
+
+def _load_slash_cache() -> dict:
+    try:
+        return json.loads(SLASH_COMMANDS_FILE.read_text())
+    except (FileNotFoundError, ValueError):
+        return {}
+
+
+def _cache_slash(context_id: str, slash_commands: list) -> None:
+    """Remember a context's slash-command list so the "/" palette is ready on connect."""
+    if not slash_commands:
+        return
+    cache = _load_slash_cache()
+    if cache.get(context_id) != slash_commands:
+        cache[context_id] = slash_commands
+        try:
+            SLASH_COMMANDS_FILE.write_text(json.dumps(cache, indent=2))
+        except OSError as e:
+            log.warning("could not persist slash cache: %s", e)
 
 
 def _knowledge_root(context_id: str):
@@ -51,6 +74,29 @@ class InjectBody(BaseModel):
 @app.get("/health")
 async def health() -> dict:
     return {"status": "ok", "service": "superme-core-daemon"}
+
+
+# --- sessions: list + replay (history lives in the SDK transcripts) -------------
+@app.get("/sessions")
+async def sessions_list(context_id: str = "global") -> list[dict]:
+    """SuperMe's own past sessions for a context, newest first."""
+    return _sessions.list(contexts.resolve(context_id))
+
+
+@app.get("/sessions/{session_id}")
+async def session_read(session_id: str, context_id: str = "global") -> dict:
+    """One session's title + replayable bubble history."""
+    data = _sessions.read(contexts.resolve(context_id), session_id)
+    if data is None:
+        raise HTTPException(status_code=404, detail="session not found")
+    return data
+
+
+@app.delete("/sessions/{session_id}")
+async def session_delete(session_id: str, context_id: str = "global") -> dict:
+    """Forget a session (removes it from the picker; transcript file is kept)."""
+    _sessions.forget(contexts.resolve(context_id), session_id)
+    return {"ok": True, "id": session_id}
 
 
 @app.get("/knowledge/tree")
@@ -92,6 +138,12 @@ async def knowledge_inject(body: InjectBody) -> dict:
 @app.websocket("/ws/agent")
 async def ws_agent(ws: WebSocket) -> None:
     await ws.accept()
+    # Seed the client's "/" palette from the last-known list (web is the global context),
+    # so it's usable before the first turn reveals the live list.
+    cached = _load_slash_cache().get("global")
+    if cached:
+        await ws.send_json({"type": "init", "slash_commands": cached, "model": None})
+
     pending: dict[str, asyncio.Future] = {}   # approval_id -> Future[bool]
     inbox: asyncio.Queue = asyncio.Queue()     # queued turn frames (None = disconnect)
 
@@ -141,15 +193,38 @@ async def ws_agent(ws: WebSocket) -> None:
             if msg is None:
                 break  # client disconnected
             ctx = contexts.resolve(msg.get("context_id"))
+            prompt = msg.get("prompt", "")
+
+            # Shared command layer: non-native commands (/model) are handled here and
+            # answered directly — no agent turn. Everything else (incl. native /compact,
+            # /clear, skills) falls through to the CLI below.
+            cmd_reply = _commands.handle(ctx, prompt)
+            if cmd_reply is not None:
+                await ws.send_json({
+                    "type": "result", "text": cmd_reply,
+                    "model": None, "context_pct": None,
+                    "context_window": None, "session_id": None,
+                })
+                continue
+
+            # Apply this context's persisted /model choice (the surface may still send an
+            # explicit per-turn model, which wins).
+            model = msg.get("model") or _commands.model_override(ctx)
             try:
                 async for ev in _agent.run_turn(
                     ctx,
-                    msg.get("prompt", ""),
+                    prompt,
                     resume=msg.get("resume"),
-                    model=msg.get("model"),
+                    model=model,
                     approve=approve,
                     extra_mcp_servers=None,     # web has no surface tools; Slack joins in B2
                 ):
+                    # Claim the session id so it shows up in this context's picker
+                    # (and stays distinct from the owner's own Claude Code sessions).
+                    if isinstance(ev, Result):
+                        _sessions.record(ctx, ev.session_id)
+                    elif isinstance(ev, Init):
+                        _cache_slash(ctx.id, ev.slash_commands)
                     await ws.send_json(event_to_frame(ev))
             except Exception as e:
                 log.exception("turn failed")

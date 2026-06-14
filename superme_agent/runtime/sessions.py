@@ -1,51 +1,32 @@
-"""Per-thread session persistence.
+"""Per-thread session persistence for the Slack surface.
 
-The SDK persists each conversation's *transcript* to disk under ~/.claude. What it
-does NOT track for us is which session belongs to which Slack thread — so this
-small store keeps that thread -> session_id index, persisted to a JSON file so a
-thread can be resumed even after the bot restarts.
+Slack conversations are threads; this maps a thread to its SDK session_id so a thread
+resumes after a restart. It's now a thin wrapper over the cross-surface SessionIndex
+(`.sessions.json`) so Slack and the web share one workspace-scoped log — the same
+session can be seen from either surface when they share a cwd.
 """
 
-import json
 import logging
 
-from .config import SESSIONS_FILE
+from ..core.session_index import SessionIndex
 
 log = logging.getLogger("superme-agent")
 
 
 class SessionStore:
-    """A thread_ts -> session_id map, backed by a JSON file."""
+    """A thread_ts -> session_id view over the shared SessionIndex."""
 
-    def __init__(self, path=SESSIONS_FILE):
-        self._path = path
-        self._map: dict[str, str] = self._load()
-
-    def _load(self) -> dict[str, str]:
-        try:
-            return json.loads(self._path.read_text())
-        except (FileNotFoundError, json.JSONDecodeError):
-            return {}
-
-    def _save(self) -> None:
-        try:
-            self._path.write_text(json.dumps(self._map, indent=2))
-        except OSError as e:
-            log.warning("Could not persist sessions map: %s", e)
+    def __init__(self, index: SessionIndex | None = None):
+        self._index = index or SessionIndex()
 
     def get(self, thread_ts: str) -> str | None:
         """The session_id for a thread, or None if it's a fresh conversation."""
-        return self._map.get(thread_ts)
+        return self._index.for_thread(thread_ts)
 
-    def remember(self, thread_ts: str, session_id: str) -> None:
-        """Record a thread's session, persisting only when it actually changes."""
-        if self._map.get(thread_ts) != session_id:
-            self._map[thread_ts] = session_id
-            self._save()
+    def remember(self, thread_ts: str, session_id: str, cwd) -> None:
+        """Record a thread's session under its workspace (cwd)."""
+        self._index.record(session_id, cwd, surface="slack", thread_ts=thread_ts)
 
     def forget(self, thread_ts: str) -> bool:
         """Drop a thread's session (to reset it). Returns True if one existed."""
-        existed = self._map.pop(thread_ts, None) is not None
-        if existed:
-            self._save()
-        return existed
+        return self._index.forget_thread(thread_ts)

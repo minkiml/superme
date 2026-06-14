@@ -7,6 +7,9 @@ Serves /api on http://127.0.0.1:8000, forwarding to the Core daemon. The fronten
 """
 
 import os
+
+from . import _env  # noqa: F401  (loads the repo-root .env before reading os.environ)
+
 import uvicorn
 
 HOST = os.environ.get("SUPERME_BFF_HOST", "127.0.0.1")

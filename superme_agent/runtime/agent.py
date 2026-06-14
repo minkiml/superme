@@ -157,7 +157,7 @@ class Assistant:
             result = await self._consume(ctx, prompt, None, model, approve, mcp, on_status)
 
         if result.session_id:
-            self._sessions.remember(thread_ts, result.session_id)
+            self._sessions.remember(thread_ts, result.session_id, ctx.cwd)
 
         # Subtle footer: workspace + the concrete model used (e.g. "opus 4.7") + context fill.
         tags = [f"⌂ *Workspace*: {ws.label}"]

@@ -21,7 +21,7 @@ from claude_agent_sdk import (
 
 from ..runtime.config import PERSONA_FILE, PLUGIN_DIR
 from .context import Context
-from .events import TextDelta, Status, Result, TurnEvent
+from .events import Init, TextDelta, Status, Result, TurnEvent
 from .permissions import ApproveFn, build_can_use_tool
 
 log = logging.getLogger("superme-agent")
@@ -83,9 +83,11 @@ class AgentService:
             resume=resume,                          # continuous session (surface-owned)
             model=model,                            # surface-resolved override (None = default)
             system_prompt={"type": "preset", "preset": "claude_code", "append": append},
-            # Workspace harness only; the agent's own harness comes from the plugin
-            # below, so it loads regardless of cwd (and not from ~/.claude).
-            setting_sources=["project", "local"],
+            # Which Claude Code setting layers to load (per-Context). Default is
+            # ["user","project","local"] so SuperMe layers the owner's global ~/.claude
+            # artifacts + the hosting dir's project .claude + its own carried harness
+            # (the plugin below, cwd-independent). See Context.setting_sources.
+            setting_sources=ctx.setting_sources,
             plugins=[{"type": "local", "path": str(PLUGIN_DIR)}],
             skills="all",
             mcp_servers=extra_mcp_servers or {},    # surface-specific tools (e.g. Slack readers)
@@ -123,9 +125,15 @@ class AgentService:
             await client.query(prompt)
             async for message in client.receive_response():
                 if isinstance(message, SystemMessage):
-                    # The init system message reports the concrete model the CLI resolved.
+                    # The init system message reports the resolved model + the slash
+                    # commands available this session (built-ins + custom + skills).
                     if getattr(message, "subtype", "") == "init":
-                        resolved_model = (getattr(message, "data", None) or {}).get("model")
+                        data = getattr(message, "data", None) or {}
+                        resolved_model = data.get("model")
+                        yield Init(
+                            slash_commands=data.get("slash_commands") or [],
+                            model=resolved_model,
+                        )
                 elif isinstance(message, AssistantMessage):
                     for block in message.content:
                         if hasattr(block, "text"):

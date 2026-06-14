@@ -8,6 +8,7 @@ daemon->client frames; the client sends turn + approval_response frames back.
     {"type":"approval_response", "id":str, "approved":bool}
 
   daemon -> client
+    {"type":"init", "slash_commands":[str], "model":str|null}
     {"type":"text_delta", "text":str}
     {"type":"status", "tool_name":str, "tool_input":obj}
     {"type":"approval_request", "id":str, "tool_name":str, "tool_input":obj}
@@ -16,11 +17,13 @@ daemon->client frames; the client sends turn + approval_response frames back.
     {"type":"error", "message":str}
 """
 
-from ..core.events import TextDelta, Status, Result, TurnEvent
+from ..core.events import Init, TextDelta, Status, Result, TurnEvent
 
 
 def event_to_frame(ev: TurnEvent) -> dict:
     """Serialize a Core TurnEvent into a daemon->client frame."""
+    if isinstance(ev, Init):
+        return {"type": "init", "slash_commands": ev.slash_commands, "model": ev.model}
     if isinstance(ev, TextDelta):
         return {"type": "text_delta", "text": ev.text}
     if isinstance(ev, Status):

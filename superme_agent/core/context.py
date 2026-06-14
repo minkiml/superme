@@ -12,6 +12,14 @@ same Core code path serves every surface and both harness layers.
   persona_append extra persona text layered on top of the global persona
   extra_mcp      names of surface/workspace-specific MCP servers to attach
   label          human-facing display name
+  setting_sources which Claude Code setting layers to load. Default layers all three,
+                 so SuperMe — wherever it's hosted — combines:
+                   "user"    → the owner's global ~/.claude artifacts (skills/commands;
+                               note: also brings the user's MCP servers, hooks, perms)
+                   "project" → the hosting dir's project-level cwd/.claude (resolves
+                               against `cwd`; none yet, but auto-used when present)
+                   "local"   → cwd/.claude/*.local overrides
+                 …on top of SuperMe's own carried harness (the plugin, cwd-independent).
 """
 
 from pathlib import Path
@@ -27,6 +35,7 @@ class Context:
     persona_append: str = ""
     extra_mcp: list = field(default_factory=list)
     label: str = ""
+    setting_sources: list[str] = field(default_factory=lambda: ["user", "project", "local"])
 
     def __post_init__(self):
         if not self.label:

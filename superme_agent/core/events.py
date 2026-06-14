@@ -3,6 +3,8 @@
 `AgentService.run_turn` yields these as the turn progresses. Each surface renders
 them however it likes; the Core never formats for a specific surface:
 
+  Init       the turn started — the session's available slash commands (incl. skills)
+             and resolved model, so a surface can offer a "/" command palette
   TextDelta  incremental assistant text (web streams it token-by-token; Slack, which
              posts the final reply, can ignore it and use Result.text)
   Status     the agent is about to run a tool — raw tool name + input, so any surface
@@ -13,7 +15,13 @@ them however it likes; the Core never formats for a specific surface:
 No emoji, no markdown, no Slack/web specifics live here.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+
+
+@dataclass
+class Init:
+    slash_commands: list = field(default_factory=list)
+    model: str | None = None
 
 
 @dataclass
@@ -36,4 +44,4 @@ class Result:
     session_id: str | None = None
 
 
-TurnEvent = TextDelta | Status | Result
+TurnEvent = Init | TextDelta | Status | Result

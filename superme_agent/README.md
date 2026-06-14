@@ -61,8 +61,9 @@ superme/                              # repo root = default workspace (+ future 
 - Python 3.10+, Node.js (the SDK wraps the Claude Code runtime).
 - A conda env (this project uses `my-agent`).
 - **Auth (OAuth, Claude Max):** `claude setup-token` → put the `sk-ant-oat01-…` token
-  in `superme_agent/.env` as `CLAUDE_CODE_OAUTH_TOKEN`. Keep `ANTHROPIC_API_KEY` unset
-  (it silently takes precedence). Subscription auth is licensed for *individual* use.
+  in the single repo-root `.env` (copy `.env.example`) as `CLAUDE_CODE_OAUTH_TOKEN`. Keep
+  `ANTHROPIC_API_KEY` unset (it silently takes precedence). Subscription auth is licensed
+  for *individual* use.
 
 ## Slack app setup (one time)
 Create the app from the manifest at [superme_agent/scripts/slack-app-manifest.yaml](superme_agent/scripts/slack-app-manifest.yaml):
