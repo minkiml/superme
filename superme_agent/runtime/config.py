@@ -40,6 +40,12 @@ load_dotenv(ENV_FILE)
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("superme-agent")
 
+# SuperMe Core daemon (Stage B): localhost only, single-owner, no auth.
+DAEMON_HOST = os.environ.get("SUPERME_DAEMON_HOST", "127.0.0.1")
+DAEMON_PORT = int(os.environ.get("SUPERME_DAEMON_PORT", "8787"))
+# How long the daemon waits for a surface to answer an approval before denying (s).
+DAEMON_APPROVAL_TIMEOUT = 180
+
 
 def warn_on_conflicting_auth() -> None:
     """Subscription auth (Claude Max) wins only if no API key shadows it."""

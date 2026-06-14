@@ -11,6 +11,7 @@ that callback to the SDK's `can_use_tool` interface, applying the safe-tool poli
 (which auto-runs read-only tools without ever asking).
 """
 
+import logging
 from typing import Awaitable, Callable
 
 from claude_agent_sdk import (
@@ -20,6 +21,8 @@ from claude_agent_sdk import (
 )
 
 from ..harness.policy import is_safe
+
+log = logging.getLogger("superme-agent")
 
 # (tool_name, tool_input) -> allow?  Supplied by each surface.
 ApproveFn = Callable[[str, dict], Awaitable[bool]]
@@ -37,6 +40,7 @@ def build_can_use_tool(approve: ApproveFn):
         if is_safe(tool_name, input_data):
             return PermissionResultAllow()
         approved = await approve(tool_name, input_data)
+        log.info("approval: %s -> %s", tool_name, "ALLOW" if approved else "DENY")
         return (
             PermissionResultAllow()
             if approved

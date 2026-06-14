@@ -12,7 +12,7 @@ import logging
 from typing import AsyncIterator
 
 from claude_agent_sdk import (
-    query,
+    ClaudeSDKClient,
     ClaudeAgentOptions,
     AssistantMessage,
     ResultMessage,
@@ -25,19 +25,6 @@ from .events import TextDelta, Status, Result, TurnEvent
 from .permissions import ApproveFn, build_can_use_tool
 
 log = logging.getLogger("superme-agent")
-
-
-async def _stream_prompt(text: str):
-    """Wrap one user turn as the streaming-input message the SDK expects.
-
-    A `can_use_tool` callback forces streaming mode, so the prompt must be an
-    AsyncIterable of message dicts rather than a plain string.
-    """
-    yield {
-        "type": "user",
-        "message": {"role": "user", "content": text},
-        "parent_tool_use_id": None,
-    }
 
 
 def _context_usage(usage: dict | None, model_usage: dict | None, model: str | None):
@@ -107,37 +94,43 @@ class AgentService:
         final Result with the reply + run metadata (model, context fill, session id).
         Raises on a hard SDK failure (the surface decides whether to retry, e.g. after a
         stale resume).
+
+        Uses ClaudeSDKClient (persistent connection) rather than the one-shot query():
+        interactive permission callbacks (can_use_tool) need the control channel held
+        open for the whole turn, which query() closes once its input stream ends.
         """
         options = self._build_options(
             ctx, resume=resume, model=model, approve=approve,
             extra_mcp_servers=extra_mcp_servers,
         )
         resolved_model = None
-        async for message in query(prompt=_stream_prompt(prompt), options=options):
-            if isinstance(message, SystemMessage):
-                # The init system message reports the concrete model the CLI resolved.
-                if getattr(message, "subtype", "") == "init":
-                    resolved_model = (getattr(message, "data", None) or {}).get("model")
-            elif isinstance(message, AssistantMessage):
-                for block in message.content:
-                    if hasattr(block, "text"):
-                        log.info("assistant: %s", block.text[:200])
-                        yield TextDelta(block.text)
-                    elif hasattr(block, "name") and hasattr(block, "input"):
-                        # A tool-use block — surface its own "what it's doing" indicator.
-                        yield Status(block.name, block.input or {})
-            elif isinstance(message, ResultMessage):
-                usage = _context_usage(message.usage, message.model_usage, resolved_model)
-                pct, window = usage if usage else (None, None)
-                text = (
-                    message.result
-                    if message.subtype == "success"
-                    else "Sorry — I ran into an error handling that request."
-                )
-                yield Result(
-                    text=text or "I didn't produce a response.",
-                    model=resolved_model,
-                    context_pct=pct,
-                    context_window=window,
-                    session_id=getattr(message, "session_id", None),
-                )
+        async with ClaudeSDKClient(options=options) as client:
+            await client.query(prompt)
+            async for message in client.receive_response():
+                if isinstance(message, SystemMessage):
+                    # The init system message reports the concrete model the CLI resolved.
+                    if getattr(message, "subtype", "") == "init":
+                        resolved_model = (getattr(message, "data", None) or {}).get("model")
+                elif isinstance(message, AssistantMessage):
+                    for block in message.content:
+                        if hasattr(block, "text"):
+                            log.info("assistant: %s", block.text[:200])
+                            yield TextDelta(block.text)
+                        elif hasattr(block, "name") and hasattr(block, "input"):
+                            # A tool-use block — surface its own "what it's doing" indicator.
+                            yield Status(block.name, block.input or {})
+                elif isinstance(message, ResultMessage):
+                    usage = _context_usage(message.usage, message.model_usage, resolved_model)
+                    pct, window = usage if usage else (None, None)
+                    text = (
+                        message.result
+                        if message.subtype == "success"
+                        else "Sorry — I ran into an error handling that request."
+                    )
+                    yield Result(
+                        text=text or "I didn't produce a response.",
+                        model=resolved_model,
+                        context_pct=pct,
+                        context_window=window,
+                        session_id=getattr(message, "session_id", None),
+                    )
