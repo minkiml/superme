@@ -16,6 +16,7 @@ from .context import Context
 from .events import TextDelta, Status, Result, TurnEvent
 from .permissions import ApproveFn, build_can_use_tool
 from .agent_service import AgentService
+from .knowledge_service import KnowledgeService
 
 __all__ = [
     "Context",
@@ -26,4 +27,5 @@ __all__ = [
     "ApproveFn",
     "build_can_use_tool",
     "AgentService",
+    "KnowledgeService",
 ]

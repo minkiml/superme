@@ -4,6 +4,10 @@
 # Local runtime state (per-environment, not committed)
 .sessions.json
 .channel_workspaces.json
+.channel_models.json
+
+# Private, lifelong global SuperMe knowledge (its own private repo; never in the app repo)
+superme-global-knowledge/
 
 # Python
 __pycache__/
@@ -15,4 +19,5 @@ venv/
 # Local
 TODO.md
 task1_todo.md
-docs/
+superme_agent_docs/
+general_docs/

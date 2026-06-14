@@ -10,9 +10,10 @@ import asyncio
 import uuid
 import logging
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from pydantic import BaseModel
 
-from ..core import AgentService
+from ..core import AgentService, KnowledgeService
 from ..gateway import contexts
 from ..runtime.config import DAEMON_APPROVAL_TIMEOUT
 from .protocol import event_to_frame
@@ -21,13 +22,71 @@ log = logging.getLogger("superme-agent")
 
 app = FastAPI(title="SuperMe Core daemon")
 
-# One brain, shared across connections (loads the portable persona once).
+# One brain + one knowledge service, shared across connections.
 _agent = AgentService()
+_knowledge = KnowledgeService()
+
+
+def _knowledge_root(context_id: str):
+    """Resolve a context to its knowledge root, or 400 if it has none."""
+    ctx = contexts.resolve(context_id)
+    if not ctx.knowledge_root:
+        raise HTTPException(status_code=400, detail="context has no knowledge root")
+    return ctx.knowledge_root
+
+
+class WriteBody(BaseModel):
+    path: str
+    content: str
+    context_id: str = "global"
+
+
+class InjectBody(BaseModel):
+    title: str
+    content: str
+    folder: str = "knowledge"
+    context_id: str = "global"
 
 
 @app.get("/health")
 async def health() -> dict:
     return {"status": "ok", "service": "superme-core-daemon"}
+
+
+@app.get("/knowledge/tree")
+async def knowledge_tree(context_id: str = "global") -> dict:
+    """The folder/file tree of the context's knowledge layer."""
+    return _knowledge.list_tree(_knowledge_root(context_id))
+
+
+@app.get("/knowledge/file")
+async def knowledge_read(path: str, context_id: str = "global") -> dict:
+    """One knowledge file's text."""
+    try:
+        return {"path": path, "content": _knowledge.read(_knowledge_root(context_id), path)}
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="file not found")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.put("/knowledge/file")
+async def knowledge_write(body: WriteBody) -> dict:
+    """Create or overwrite a knowledge file (in-place editing)."""
+    try:
+        _knowledge.write(_knowledge_root(body.context_id), body.path, body.content)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"ok": True, "path": body.path}
+
+
+@app.post("/knowledge/inject")
+async def knowledge_inject(body: InjectBody) -> dict:
+    """Create a new note from {title, content} and link it in index.md."""
+    rel = _knowledge.inject(
+        _knowledge_root(body.context_id), body.title, body.content, body.folder
+    )
+    return {"ok": True, "path": rel}
 
 
 @app.websocket("/ws/agent")

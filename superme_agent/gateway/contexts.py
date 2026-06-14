@@ -8,7 +8,7 @@ superme-global-knowledge/ exists.
 
 import logging
 
-from ..runtime.config import ROOT_DIR
+from ..runtime.config import ROOT_DIR, KNOWLEDGE_GLOBAL_DIR
 from ..core.context import Context
 
 log = logging.getLogger("superme-agent")
@@ -28,6 +28,6 @@ def resolve(context_id: str | None) -> Context:
         layer="global",
         id=GLOBAL_ID,
         cwd=ROOT_DIR,
-        knowledge_root=None,      # wired in Stage C (superme-global-knowledge/)
+        knowledge_root=KNOWLEDGE_GLOBAL_DIR,
         label="Me (global)",
     )

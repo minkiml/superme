@@ -26,6 +26,9 @@ HARNESS_DIR = APP_DIR / "harness"
 PERSONA_FILE = HARNESS_DIR / "persona.md"
 PLUGIN_DIR = HARNESS_DIR / "plugin"
 REGISTRY_FILE = APP_DIR / "config" / "registry.yaml"
+# Global SuperMe knowledge home (Repo 2): gitignored from the public app repo, its own
+# private repo. Minimal base structure for now; the real taxonomy is a future design job.
+KNOWLEDGE_GLOBAL_DIR = ROOT_DIR / "superme-global-knowledge"
 SESSIONS_FILE = APP_DIR / ".sessions.json"
 # Channel→workspace state {channel: {workspace, locked}}, managed live from Slack
 # (not committed; per-environment).

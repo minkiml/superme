@@ -59,10 +59,25 @@ class AgentService:
         # The portable persona, loaded once from the in-code harness.
         self._persona = persona if persona is not None else PERSONA_FILE.read_text()
 
+    def _context_preamble(self, ctx: Context) -> str:
+        """A short note telling the agent which context it's operating in."""
+        if ctx.layer == "global":
+            where = ("the owner's top-level **global SuperMe** — their cross-domain "
+                     "identity and knowledge, not any single project")
+        else:
+            where = f"a **local / project sub-SuperMe** (`{ctx.id}`)"
+        return (
+            f"\n\n## Operating context\n"
+            f"You are operating in {where}. "
+            f"Context: `{ctx.label}` · working directory: `{ctx.cwd}`."
+        )
+
     def _build_options(
         self, ctx: Context, *, resume, model, approve: ApproveFn, extra_mcp_servers
     ) -> ClaudeAgentOptions:
-        append = self._persona + (f"\n\n{ctx.persona_append}" if ctx.persona_append else "")
+        append = self._persona + self._context_preamble(ctx)
+        if ctx.persona_append:
+            append += f"\n\n{ctx.persona_append}"
         return ClaudeAgentOptions(
             cwd=str(ctx.cwd),                       # the Context (cwd / workspace)
             resume=resume,                          # continuous session (surface-owned)

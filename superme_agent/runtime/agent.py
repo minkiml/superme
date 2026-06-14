@@ -59,15 +59,28 @@ def _friendly_status(tool_name: str, tool_input: dict) -> str:
     return f"🔧 _{tool_name}…_"
 
 
+# Slack-surface formatting + routing. Lives in the Slack adapter (not the shared
+# persona) so it applies ONLY when the owner is reaching SuperMe through Slack.
+SLACK_PERSONA_NOTE = (
+    "You are reaching the owner through **Slack**, a chat surface: keep replies tight; "
+    "format with Slack mrkdwn (*bold*, _italic_, `code`, > quote). To read or summarize "
+    "the current channel use the `read_channel` tool; only go into thread replies when "
+    "asked (the `channel-deep-scan` skill)."
+)
+
+
 def _context_from_workspace(ws) -> Context:
     """Map a resolved Slack workspace to a Core Context (global root vs local)."""
     layer = "global" if ws.name == workspaces.default_workspace() else "local"
+    persona_append = SLACK_PERSONA_NOTE
+    if ws.persona_append:
+        persona_append += f"\n\n{ws.persona_append}"
     return Context(
         layer=layer,
         id=ws.name,
         cwd=ws.cwd,
         knowledge_root=None,            # wired in Stage C (superme-global-knowledge/)
-        persona_append=ws.persona_append,
+        persona_append=persona_append,
         extra_mcp=ws.extra_mcp,
         label=ws.label,
     )
