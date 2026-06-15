@@ -2,6 +2,100 @@
 @tailwind components;
 @tailwind utilities;
 
-html, body, #root {
+/* Theme tokens. `:root` = light (warm paper); `.dark` = refined warm dark. Three surface
+   tiers give depth: sidebar (deepest) < app < surface (cards/panels). No cold blue. */
+:root {
+  --c-app: #ece5d6; /* page / scene area (mid) */
+  --c-sidebar: #e2d9c6; /* nav rail (deepest) */
+  --c-surface: #fffdf8; /* cards, rail, editor (lightest) */
+  --c-sunken: #e6decd; /* inputs */
+  --c-hover: #e6dccb;
+  --c-line: #d9cfba; /* visible separators */
+  --c-fg: #38332b;
+  --c-muted: #8a8173;
+  --c-faint: #b1a794;
+  --c-accent: #c0673c;
+  --c-accent-soft: #f2dccc;
+  --c-accent-text: #8a4523;
+  --c-on-accent: #fffaf5;
+  --c-success: #2f8f63;
+  --c-danger: #b5463b;
+  --c-warn: #a8702a;
+  color-scheme: light;
+}
+
+.dark {
+  --c-app: #1c1916; /* page / scene area (mid) */
+  --c-sidebar: #141110; /* nav rail (deepest) */
+  --c-surface: #272218; /* cards, rail, editor (lightest) */
+  --c-sunken: #15120e; /* inputs */
+  --c-hover: #322b21;
+  --c-line: #3b3327; /* visible separators */
+  --c-fg: #ece4d8;
+  --c-muted: #9d9180;
+  --c-faint: #6f6557;
+  --c-accent: #e0a35a;
+  --c-accent-soft: #3c3021;
+  --c-accent-text: #f0c081;
+  --c-on-accent: #20180f;
+  --c-success: #6cc59a;
+  --c-danger: #e0796f;
+  --c-warn: #e0a35a;
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
   height: 100%;
+}
+
+body {
+  background: var(--c-app);
+  color: var(--c-fg);
+}
+
+/* Native selects, themed + consistent (boxed by default; `.bare` reads as an inline label). */
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-color: var(--c-sunken);
+  color: var(--c-fg);
+  border: 1px solid var(--c-line);
+  border-radius: 8px;
+  padding: 6px 28px 6px 10px;
+  font-size: 13px;
+  line-height: 1.2;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%239a9082' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+}
+select:focus {
+  outline: none;
+  border-color: var(--c-accent);
+}
+select.bare {
+  background-color: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0 18px 0 0;
+  font-size: inherit;
+  font-weight: 500;
+  background-position: right center;
+}
+
+/* Quiet, themed scrollbars. */
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--c-line);
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
 }

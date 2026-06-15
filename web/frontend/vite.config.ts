@@ -13,6 +13,10 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react()],
     envDir: repoRoot,
+    resolve: {
+      // `@/` → src, so feature folders import across areas without ../../ chains.
+      alias: { '@': path.resolve(__dirname, 'src') },
+    },
     server: {
       port,
       proxy: {

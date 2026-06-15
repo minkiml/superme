@@ -1,7 +1,13 @@
 import { useState } from 'react'
-import { injectNote } from '../api'
+import { injectNote } from '@/lib/api'
 
-export default function InjectForm({ onInjected }: { onInjected: (path: string) => void }) {
+export default function InjectForm({
+  onInjected,
+  contextId = 'global',
+}: {
+  onInjected: (path: string) => void
+  contextId?: string
+}) {
   const [open, setOpen] = useState(false)
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
@@ -11,7 +17,7 @@ export default function InjectForm({ onInjected }: { onInjected: (path: string) 
     if (!title.trim()) return
     setStatus('Saving…')
     try {
-      const { path } = await injectNote(title.trim(), content)
+      const { path } = await injectNote(title.trim(), content, 'knowledge', contextId)
       setStatus(`Injected → ${path}`)
       setTitle('')
       setContent('')
@@ -24,37 +30,37 @@ export default function InjectForm({ onInjected }: { onInjected: (path: string) 
 
   if (!open) {
     return (
-      <div className="border-t border-slate-800 px-3 py-2">
+      <div className="border-t border-line px-3 py-2">
         <button
-          className="w-full rounded bg-slate-800 px-3 py-2 text-sm font-medium text-slate-200 hover:bg-slate-700"
+          className="w-full rounded bg-hover px-3 py-2 text-sm font-medium text-fg hover:bg-hover"
           onClick={() => setOpen(true)}
         >
           + Inject knowledge
         </button>
-        {status && <div className="mt-1 text-xs text-slate-500">{status}</div>}
+        {status && <div className="mt-1 text-xs text-muted">{status}</div>}
       </div>
     )
   }
 
   return (
-    <div className="space-y-2 border-t border-slate-800 p-3">
+    <div className="space-y-2 border-t border-line p-3">
       <input
-        className="w-full rounded bg-slate-950 px-2 py-1 text-sm text-slate-200 outline-none ring-1 ring-slate-700"
+        className="w-full rounded bg-sunken px-2 py-1 text-sm text-fg outline-none ring-1 ring-line"
         placeholder="Title"
         value={title}
         onChange={(e) => setTitle(e.target.value)}
       />
       <textarea
-        className="h-20 w-full resize-none rounded bg-slate-950 px-2 py-1 text-sm text-slate-200 outline-none ring-1 ring-slate-700"
+        className="h-20 w-full resize-none rounded bg-sunken px-2 py-1 text-sm text-fg outline-none ring-1 ring-line"
         placeholder="What should SuperMe know?"
         value={content}
         onChange={(e) => setContent(e.target.value)}
       />
       <div className="flex gap-2">
-        <button className="rounded bg-emerald-600 px-3 py-1 text-sm text-white" onClick={submit}>
+        <button className="rounded bg-success px-3 py-1 text-sm text-on-accent" onClick={submit}>
           Save
         </button>
-        <button className="rounded bg-slate-800 px-3 py-1 text-sm text-slate-300" onClick={() => setOpen(false)}>
+        <button className="rounded bg-hover px-3 py-1 text-sm text-fg" onClick={() => setOpen(false)}>
           Cancel
         </button>
       </div>
