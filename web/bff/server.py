@@ -32,6 +32,14 @@ async def health() -> dict:
     return {"status": "ok", "service": "superme-web-bff", "daemon": DAEMON_HTTP}
 
 
+# --- contexts (global + connected domains) --------------------------------------
+@app.get("/api/contexts")
+async def contexts_list():
+    async with httpx.AsyncClient() as c:
+        r = await c.get(f"{DAEMON_HTTP}/contexts")
+    return JSONResponse(r.json(), status_code=r.status_code)
+
+
 # --- knowledge HTTP passthrough -------------------------------------------------
 @app.get("/api/knowledge/tree")
 async def tree(context_id: str = "global"):

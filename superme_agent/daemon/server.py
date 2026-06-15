@@ -99,6 +99,12 @@ async def session_delete(session_id: str, context_id: str = "global") -> dict:
     return {"ok": True, "id": session_id}
 
 
+@app.get("/contexts")
+async def contexts_list() -> list[dict]:
+    """Live contexts (global + connected domains) for the surfaces to render."""
+    return contexts.list_all()
+
+
 @app.get("/knowledge/tree")
 async def knowledge_tree(context_id: str = "global") -> dict:
     """The folder/file tree of the context's knowledge layer."""
