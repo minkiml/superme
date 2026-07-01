@@ -1,0 +1,198 @@
+"""Response schemas for the learning routes (routers/dev/learning.py): stats, distill/sweep ops,
+and the two-gate proposal review queue.
+
+The proposal row is a rich DB record (JSON columns) and the distill/sweep responses are branch-variant,
+so those use extra='allow' + the routes set response_model_exclude_unset=True (each emits exactly the
+keys it returns). The stats payload is a fixed shape and is modeled strictly.
+"""
+
+from pydantic import BaseModel, ConfigDict
+
+from ..common import OutputForm, TargetScope, ProposalStatus
+
+
+# --- /dev/memory/stats (fixed shape) ---
+
+class CandidateStatItem(BaseModel):
+    id: int
+    signal: str
+    form_hint: str | None = None
+    scope_hint: str | None = None
+    source: str | None = None
+    captured_at: str | None = None
+
+
+class CandidatesStat(BaseModel):
+    total: int
+    pending_proposals: int
+    by_form: dict[str, int]
+    items: list[CandidateStatItem]
+
+
+class KnowledgeStatItem(BaseModel):
+    name: str
+    description: str
+    type: str
+    enabled: bool
+    source: str
+
+
+class KnowledgeStat(BaseModel):
+    facts_total: int
+    facts_enabled: int
+    facts_disabled: int
+    facts_by_type: dict[str, int]
+    artifacts_total: int
+    artifacts_reserved: bool
+    items: list[KnowledgeStatItem]
+
+
+class MemoryStatsResponse(BaseModel):
+    context_id: str
+    distilling: bool
+    candidates: CandidatesStat
+    knowledge: KnowledgeStat
+
+
+# --- distill / sweep ops (branch-variant; exclude_unset on the routes) ---
+
+class DistillResponse(BaseModel):
+    status: str
+    context_id: str
+    candidates: int | None = None
+
+
+class SweepResponse(BaseModel):
+    status: str
+    session_id: str
+    filed: int | None = None
+    watermark: int | None = None
+
+
+class SweptItem(BaseModel):
+    session_id: str
+    repo_id: str
+    filed: int
+
+
+class IdleScanResponse(BaseModel):
+    scanned: int
+    swept: list[SweptItem]
+
+
+# --- proposal review queue ---
+
+class ProposalCandidate(BaseModel):
+    """A source candidate behind a proposal (provenance shown in the review popup)."""
+    model_config = ConfigDict(extra="allow")
+    id: int
+    signal: str | None = None
+    rationale: str | None = None
+    evidence: str | None = None
+    form_hint: str | None = None
+    scope_hint: str | None = None
+    status: str | None = None
+    source: str | None = None
+    captured_at: str | None = None
+
+
+class EvalMetrics(BaseModel):
+    """The artifact's own run cost on a synthetic task (forge_kit/eval.py). kind 'run' = skill/agent
+    measured once; kind 'overhead' = constitution's always-on per-turn cost. Tolerant of pre-metrics
+    and error rows (everything optional, extra='allow' for forward-compat)."""
+    model_config = ConfigDict(extra="allow")
+    kind: str | None = None
+    context_tokens: int | None = None
+    output_tokens: int | None = None
+    turns: int | None = None
+    duration_s: float | None = None
+    cost_usd: float | None = None
+    tokens_per_turn: float | None = None
+    capped: str | None = None
+    error: str | None = None
+    tokens: int | None = None  # legacy (pre-footprint proposals)
+
+
+class EvalReport(BaseModel):
+    """A proposal's gate-2 eval report (forge_kit/eval.py emits it as JSON, stored on the row).
+    Versioned via `schema_version` (1 = current); tolerant of pre-versioning / pre-metrics legacy
+    reports — every field optional, extra='allow' so an older or richer report never 500s a read."""
+    model_config = ConfigDict(extra="allow")
+    schema_version: int | None = None
+    form: str | None = None
+    verdict: str | None = None  # pass | warn | fail | skipped | unknown
+    summary: str | list[str] | None = None
+    checks: list[dict] | None = None
+    issues: list[dict] | None = None
+    metrics: EvalMetrics | None = None
+    trial_task: str | None = None
+
+
+class Proposal(BaseModel):
+    """A memory proposal (rich DB row with JSON columns). Declared fields document the stable shape;
+    extra='allow' carries anything else, and routes emit only the keys actually present. The
+    output_form/target_scope/status enums are locked (R5): their producer coerces/guards to these
+    exact sets, so the Literal can't 500 on a real row."""
+    model_config = ConfigDict(extra="allow")
+    id: int
+    context_id: str | None = None
+    created_at: str | None = None
+    output_form: OutputForm | None = None
+    target_scope: TargetScope | None = None
+    apply_target: str | None = None
+    cluster: str | None = None
+    title: str | None = None
+    body: str | None = None
+    rationale: str | None = None
+    # confidence is model-generated (distill) and uncoerced → stays a loose string, NOT a Literal.
+    confidence: str | None = None  # categorical: "high" | "medium" | "low" (NOT numeric)
+    candidate_ids: list[int] | None = None
+    status: ProposalStatus | None = None
+    recall_type: str | None = None  # retired (WI-8); always null on new rows
+    summary: str | None = None
+    fields: dict | None = None
+    clarifications: list | None = None
+    clarification_answers: dict | list | None = None
+    staged_artifact: str | None = None
+    staged_path: str | None = None
+    eval_report: EvalReport | None = None
+    candidates: list[ProposalCandidate] | None = None
+
+
+class ProposalsResponse(BaseModel):
+    context_id: str
+    proposals: list[Proposal]
+
+
+class ExecutionStep(BaseModel):
+    """One lifecycle event in a proposal's execution trace (real events + a synthetic 'filed' head)."""
+    model_config = ConfigDict(extra="allow")
+    kind: str
+    actor: str | None = None
+    summary: str | None = None
+    created_at: str | None = None
+    meta: dict | None = None
+
+
+class ProposalExecutionResponse(BaseModel):
+    context_id: str
+    proposal_id: int
+    status: str
+    steps: list[ExecutionStep]
+
+
+class ApproveResponse(BaseModel):
+    status: str
+    proposal_id: int
+
+
+class ProposalActionResponse(BaseModel):
+    """reject / drop / artifact-edit: ok + the updated proposal."""
+    ok: bool
+    proposal: Proposal
+
+
+class PublishResponse(BaseModel):
+    ok: bool
+    path: str
+    proposal: Proposal

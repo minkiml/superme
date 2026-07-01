@@ -10,11 +10,10 @@ agent turn runs); it returns None for anything else, which falls through to nati
 dispatch. Per-context model overrides are persisted and applied to later turns.
 """
 
-import json
 import logging
 
 from .context import Context
-from ..runtime.config import CONTEXT_MODELS_FILE
+from .spine import SystemSpine, get_spine
 
 log = logging.getLogger("superme-agent")
 
@@ -23,26 +22,15 @@ MODEL_ALIASES = ("haiku", "sonnet", "opus")
 
 
 class CommandLayer:
-    """Surface-neutral dispatch for non-native slash commands (state per context)."""
+    """Surface-neutral dispatch for non-native slash commands. Per-repo model overrides are
+    persisted in the system spine (the `model_override` table, keyed by repo id) — WI-3."""
 
-    def __init__(self, path=CONTEXT_MODELS_FILE):
-        self._path = path
-
-    def _load(self) -> dict:
-        try:
-            return json.loads(self._path.read_text())
-        except (FileNotFoundError, ValueError):
-            return {}
-
-    def _save(self, data: dict) -> None:
-        try:
-            self._path.write_text(json.dumps(data, indent=2))
-        except OSError as e:
-            log.warning("could not persist %s: %s", self._path.name, e)
+    def __init__(self, spine: SystemSpine | None = None):
+        self._spine = spine or get_spine()
 
     def model_override(self, ctx: Context) -> str | None:
         """The model alias chosen for this context via /model, or None for default."""
-        return self._load().get(ctx.id)
+        return self._spine.get_model_override(ctx.id)
 
     def handle(self, ctx: Context, prompt: str) -> str | None:
         """Run a shared command, or return None to let native dispatch handle it."""
@@ -55,16 +43,13 @@ class CommandLayer:
 
     def _model(self, ctx: Context, arg: str) -> str:
         opts = " | ".join(MODEL_ALIASES)
-        data = self._load()
         if not arg or arg in ("show", "status", "?"):
-            cur = data.get(ctx.id)
+            cur = self._spine.get_model_override(ctx.id)
             return f"Model: **{cur or 'default'}**. Set with `/model <{opts}>` or `/model reset`."
         if arg in ("reset", "default", "clear"):
-            if data.pop(ctx.id, None) is not None:
-                self._save(data)
+            self._spine.set_model_override(ctx.id, None)
             return "Model reset to the **default**."
         if arg not in MODEL_ALIASES:
             return f"Unknown model `{arg}`. Choose one of: {opts}."
-        data[ctx.id] = arg
-        self._save(data)
+        self._spine.set_model_override(ctx.id, arg)
         return f"Model set to **{arg}** for this session."

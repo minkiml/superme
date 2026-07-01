@@ -32,7 +32,10 @@ class KnowledgeService:
         return p
 
     def list_tree(self, root: Path) -> dict:
-        """Nested tree of dirs/files under root (hidden entries skipped)."""
+        """Nested tree of dirs/files under root (hidden entries skipped).
+
+        `root` is a context's workspace/ knowledge root; internal knowledge (dev/) lives
+        in a sibling internal/ root and never appears here (D-016)."""
         root = Path(root)
 
         def walk(d: Path) -> list:

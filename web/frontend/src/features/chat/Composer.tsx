@@ -13,6 +13,7 @@ export default function Composer({
   busy,
   commands,
   ctxLabel,
+  onPaletteOpen,
 }: {
   value: string
   onChange: (value: string) => void
@@ -21,6 +22,7 @@ export default function Composer({
   busy: boolean
   commands: string[]
   ctxLabel: string
+  onPaletteOpen?: () => void
 }) {
   const [palIdx, setPalIdx] = useState(0)
   const [palHidden, setPalHidden] = useState(false) // dismissed with Esc until next edit
@@ -52,7 +54,10 @@ export default function Composer({
             value={value}
             disabled={!ready}
             onChange={(e) => {
-              onChange(e.target.value)
+              const next = e.target.value
+              // Palette just opened (became a "/token") — pull a fresh list so it never lags a publish.
+              if (/^\/\S*$/.test(next) && !/^\/\S*$/.test(value)) onPaletteOpen?.()
+              onChange(next)
               setPalHidden(false)
               setPalIdx(0)
             }}

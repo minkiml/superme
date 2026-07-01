@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
-import { listSessions, readSession, deleteSession, type SessionMeta } from '@/lib/api'
+import { listSessions, readSession, deleteSession, type SessionMeta, type ChatMode } from '@/lib/api'
 import type { Msg } from '../types'
 
 // Owns the conversation list + the active session's replayed bubbles, and the
 // localStorage continuity that survives a refresh. The ChatPanel remounts (parent `key`)
-// when the context changes, so `contextId` is fixed for this hook's lifetime and the
-// mount effect can stay `[]`.
-export function useSessions(contextId: string) {
-  const STORE_KEY = `superme.session.${contextId}`
+// when the context OR mode changes, so `contextId`/`mode` are fixed for this hook's
+// lifetime and the mount effect can stay `[]`. The list + stored session are scoped by
+// mode (core|dev) so each mode shows only its own threads.
+export function useSessions(contextId: string, mode: ChatMode = 'core') {
+  const STORE_KEY = `superme.session.${contextId}.${mode}`
   const [sessions, setSessions] = useState<SessionMeta[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
   const [messages, setMessages] = useState<Msg[]>([])
@@ -24,7 +25,7 @@ export function useSessions(contextId: string) {
 
   async function refreshSessions() {
     try {
-      setSessions(await listSessions(contextId))
+      setSessions(await listSessions(contextId, mode))
     } catch {
       /* daemon may be down; leave the list as-is */
     }
@@ -49,9 +50,10 @@ export function useSessions(contextId: string) {
     setOlderHidden(0)
   }
 
-  async function removeSession(id: string) {
+  // Forget (default) keeps the transcript on disk; purge=true deletes it from disk too.
+  async function removeSession(id: string, purge = false) {
     try {
-      await deleteSession(id, contextId)
+      await deleteSession(id, contextId, purge)
     } catch {
       /* ignore */
     }
@@ -84,6 +86,7 @@ export function useSessions(contextId: string) {
     messages,
     olderHidden,
     sessionRef,
+    refreshSessions,
     openSession,
     newChat,
     removeSession,

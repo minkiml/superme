@@ -79,8 +79,8 @@ export default function SessionDrawer({
               <button
                 onClick={() => onForget(s.id)}
                 className="shrink-0 rounded p-1 text-muted opacity-0 hover:text-danger group-hover:opacity-100"
-                title="Forget this session"
-                aria-label="Forget this session"
+                title="Remove this session"
+                aria-label="Remove this session"
               >
                 <X size={14} />
               </button>

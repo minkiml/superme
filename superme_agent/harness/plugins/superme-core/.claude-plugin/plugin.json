@@ -1,0 +1,6 @@
+{
+  "name": "superme-core",
+  "version": "0.1.0",
+  "description": "SuperMe harness — core-mode (twin) skills/subagents, loaded only when mode=core.",
+  "author": { "name": "SuperMe" }
+}

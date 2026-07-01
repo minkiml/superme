@@ -1,6 +1,0 @@
-{
-  "name": "superme-harness",
-  "version": "0.1.0",
-  "description": "SuperMe agent's portable harness: skills and subagents that load in every workspace, independent of cwd.",
-  "author": { "name": "SuperMe" }
-}

@@ -8,6 +8,8 @@ export default function ConfirmDialog({
   body,
   confirmLabel = 'Confirm',
   cancelLabel = 'Cancel',
+  secondaryLabel,
+  onSecondary,
   onConfirm,
   onCancel,
 }: {
@@ -15,6 +17,9 @@ export default function ConfirmDialog({
   body: ReactNode
   confirmLabel?: string
   cancelLabel?: string
+  // Optional middle action (e.g. a softer alternative to the danger confirm). Tinted neutral.
+  secondaryLabel?: string
+  onSecondary?: () => void
   onConfirm: () => void
   onCancel: () => void
 }) {
@@ -33,6 +38,14 @@ export default function ConfirmDialog({
           <button className="rounded bg-hover px-3 py-1.5 text-xs text-fg hover:bg-hover" onClick={onCancel}>
             {cancelLabel}
           </button>
+          {secondaryLabel && onSecondary && (
+            <button
+              className="rounded border border-line px-3 py-1.5 text-xs text-fg hover:bg-hover"
+              onClick={onSecondary}
+            >
+              {secondaryLabel}
+            </button>
+          )}
           <button
             className="rounded bg-danger px-3 py-1.5 text-xs text-on-accent"
             onClick={onConfirm}

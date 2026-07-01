@@ -1,8 +1,31 @@
 import { PanelRightClose } from 'lucide-react'
 import Dropdown from '@/ui/Dropdown'
 import type { ContextRef } from '@/lib/contexts'
+import type { ChatMode } from '@/lib/api'
 import type { RunMeta } from './types'
 import { formatModel } from './util'
+
+// Compact Core | Dev segmented toggle — switches the chat's agent mode (and its session scope).
+function ModeToggle({ mode, busy, onChange }: { mode: ChatMode; busy: boolean; onChange: (m: ChatMode) => void }) {
+  const opt = (m: ChatMode, label: string) => (
+    <button
+      onClick={() => !busy && mode !== m && onChange(m)}
+      disabled={busy}
+      title={m === 'dev' ? 'Dev mode — build SuperMe (dev-knowledge + dev skills)' : 'Core mode — the twin'}
+      className={`rounded px-1.5 py-0.5 text-[10.5px] font-medium transition ${
+        mode === m ? 'bg-accent text-on-accent' : 'text-muted hover:text-fg'
+      } disabled:opacity-50`}
+    >
+      {label}
+    </button>
+  )
+  return (
+    <div className="flex shrink-0 items-center gap-0.5 rounded-md border border-line bg-sunken p-0.5">
+      {opt('core', 'Core')}
+      {opt('dev', 'Dev')}
+    </div>
+  )
+}
 
 // The chat rail's top bar: connection dot + context selector (when more than one
 // SuperMe), a collapse control, and the active-conversation button that opens the
@@ -17,6 +40,8 @@ export default function ChatHeader({
   activeTitle,
   meta,
   onOpenDrawer,
+  mode,
+  onModeChange,
 }: {
   ready: boolean
   contexts: ContextRef[]
@@ -27,6 +52,8 @@ export default function ChatHeader({
   activeTitle: string
   meta: RunMeta | null
   onOpenDrawer: () => void
+  mode: ChatMode
+  onModeChange: (m: ChatMode) => void
 }) {
   const ctxLabel = contexts.find((c) => c.id === contextId)?.label ?? contextId
   return (
@@ -50,7 +77,9 @@ export default function ChatHeader({
             <span className="truncate text-sm font-medium text-fg">{ctxLabel}</span>
           )}
         </div>
-        {onCollapse && (
+        <div className="flex shrink-0 items-center gap-1.5">
+          <ModeToggle mode={mode} busy={busy} onChange={onModeChange} />
+          {onCollapse && (
           <button
             onClick={onCollapse}
             className="shrink-0 rounded-md p-1.5 text-muted hover:bg-hover hover:text-fg"
@@ -59,7 +88,8 @@ export default function ChatHeader({
           >
             <PanelRightClose size={17} strokeWidth={1.75} />
           </button>
-        )}
+          )}
+        </div>
       </div>
       <button
         onClick={onOpenDrawer}

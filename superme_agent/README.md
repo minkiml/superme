@@ -46,7 +46,7 @@ superme/                              # repo root = default workspace (+ future 
 │   │   ├── permissions.py            #   ✅/❌ reaction approval flow
 │   │   └── workspaces.py             #   channel → workspace resolver
 │   ├── harness/                      # HARNESS layer (portable brain)
-│   │   ├── persona.md                #   voice + routing rules
+│   │   ├── SELF.md                   #   voice + routing rules
 │   │   ├── policy.py                 #   SAFE_TOOLS / approval policy
 │   │   ├── tools/slack_tools.py      #   in-process read_channel / read_thread
 │   │   └── plugin/                   #   local plugin: skills/ + agents/ (cwd-independent)

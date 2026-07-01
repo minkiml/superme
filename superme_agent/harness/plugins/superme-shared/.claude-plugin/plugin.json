@@ -1,0 +1,6 @@
+{
+  "name": "superme-shared",
+  "version": "0.1.0",
+  "description": "SuperMe harness — mode-independent skills/subagents, loaded in every mode (core and dev).",
+  "author": { "name": "SuperMe" }
+}

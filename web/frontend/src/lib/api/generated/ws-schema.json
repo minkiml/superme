@@ -1,0 +1,382 @@
+{
+  "$defs": {
+    "ApprovalRequestFrame": {
+      "description": "A tool needs the owner's approval \u2014 the client answers with an approval_response.",
+      "properties": {
+        "type": {
+          "const": "approval_request",
+          "default": "approval_request",
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "tool_name": {
+          "type": "string"
+        },
+        "tool_input": {
+          "additionalProperties": true,
+          "default": {},
+          "type": "object"
+        }
+      },
+      "required": [
+        "id",
+        "tool_name"
+      ],
+      "type": "object"
+    },
+    "ApprovalResponseFrame": {
+      "description": "The owner's decision on a pending approval_request.",
+      "properties": {
+        "type": {
+          "const": "approval_response",
+          "default": "approval_response",
+          "type": "string"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "approved": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "ErrorFrame": {
+      "description": "The turn raised \u2014 surfaced to the client.",
+      "properties": {
+        "type": {
+          "const": "error",
+          "default": "error",
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "type": "object"
+    },
+    "InitFrame": {
+      "description": "Sent on connect + whenever the SDK reveals the live \"/\" command list.",
+      "properties": {
+        "type": {
+          "const": "init",
+          "default": "init",
+          "type": "string"
+        },
+        "slash_commands": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "type": "object"
+    },
+    "ResultFrame": {
+      "description": "The turn finished (or a direct command reply): final text + run metadata. `tokens` is the\nResult aggregate (null for command/busy replies that never ran an agent).",
+      "properties": {
+        "type": {
+          "const": "result",
+          "default": "result",
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "context_pct": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "context_window": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "type": "object"
+    },
+    "StatusFrame": {
+      "description": "A tool-use the agent is performing (drives the live call-trail).",
+      "properties": {
+        "type": {
+          "const": "status",
+          "default": "status",
+          "type": "string"
+        },
+        "tool_name": {
+          "type": "string"
+        },
+        "tool_input": {
+          "additionalProperties": true,
+          "default": {},
+          "type": "object"
+        }
+      },
+      "required": [
+        "tool_name"
+      ],
+      "type": "object"
+    },
+    "TextDeltaFrame": {
+      "description": "One streamed chunk of the assistant's reply.",
+      "properties": {
+        "type": {
+          "const": "text_delta",
+          "default": "text_delta",
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "type": "object"
+    },
+    "TurnFrame": {
+      "description": "A turn request. Lenient (every field defaulted) so a sparse client frame still validates.",
+      "properties": {
+        "type": {
+          "const": "turn",
+          "default": "turn",
+          "type": "string"
+        },
+        "prompt": {
+          "default": "",
+          "type": "string"
+        },
+        "context_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "resume": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "mode": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "work_item_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "type": "object"
+    },
+    "UsageFrame": {
+      "description": "A per-step token/context snapshot (accumulated into the run's live telemetry).",
+      "properties": {
+        "type": {
+          "const": "usage",
+          "default": "usage",
+          "type": "string"
+        },
+        "total_tokens": {
+          "type": "integer"
+        },
+        "input_tokens": {
+          "type": "integer"
+        },
+        "output_tokens": {
+          "type": "integer"
+        },
+        "context_pct": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "total_tokens",
+        "input_tokens",
+        "output_tokens"
+      ],
+      "type": "object"
+    }
+  },
+  "description": "Schema container \u2014 its JSON schema carries every frame model in `$defs`, the single artifact\nthe FE WS-type codegen consumes (`scripts/ws_schema.py`).",
+  "properties": {
+    "inbound": {
+      "discriminator": {
+        "mapping": {
+          "approval_response": "#/$defs/ApprovalResponseFrame",
+          "turn": "#/$defs/TurnFrame"
+        },
+        "propertyName": "type"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/TurnFrame"
+        },
+        {
+          "$ref": "#/$defs/ApprovalResponseFrame"
+        }
+      ]
+    },
+    "outbound": {
+      "discriminator": {
+        "mapping": {
+          "approval_request": "#/$defs/ApprovalRequestFrame",
+          "error": "#/$defs/ErrorFrame",
+          "init": "#/$defs/InitFrame",
+          "result": "#/$defs/ResultFrame",
+          "status": "#/$defs/StatusFrame",
+          "text_delta": "#/$defs/TextDeltaFrame",
+          "usage": "#/$defs/UsageFrame"
+        },
+        "propertyName": "type"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/InitFrame"
+        },
+        {
+          "$ref": "#/$defs/TextDeltaFrame"
+        },
+        {
+          "$ref": "#/$defs/StatusFrame"
+        },
+        {
+          "$ref": "#/$defs/UsageFrame"
+        },
+        {
+          "$ref": "#/$defs/ApprovalRequestFrame"
+        },
+        {
+          "$ref": "#/$defs/ResultFrame"
+        },
+        {
+          "$ref": "#/$defs/ErrorFrame"
+        }
+      ]
+    }
+  },
+  "required": [
+    "inbound",
+    "outbound"
+  ],
+  "type": "object",
+  "title": "WsFrames"
+}

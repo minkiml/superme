@@ -99,7 +99,7 @@ class Assistant:
         result: Result | None = None
         async for ev in self._agent.run_turn(
             ctx, prompt, resume=resume, model=model, approve=approve,
-            extra_mcp_servers=mcp,
+            extra_mcp_servers=mcp, enforce_silent=True,   # user-facing chat
         ):
             if isinstance(ev, Status):
                 if on_status:

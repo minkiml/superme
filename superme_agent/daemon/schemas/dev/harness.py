@@ -1,0 +1,84 @@
+"""Response schemas for the Manage-Harness routes (routers/dev/harness.py)."""
+
+from pydantic import BaseModel, ConfigDict
+
+
+class PluginEntry(BaseModel):
+    """One universal skill/agent in the harness tree. Skills carry `access`; agents carry
+    `model`/`tools`. Routes use response_model_exclude_unset so each emits only its own keys."""
+    model_config = ConfigDict(extra="allow")
+    kind: str
+    name: str
+    description: str | None = None
+    category: str | None = None
+    access: str | None = None        # skills only
+    model: str | None = None         # agents only
+    tools: str | list[str] | None = None  # agents only (frontmatter scalar or list)
+
+
+class PluginScope(BaseModel):
+    """One scope group (dev | core | shared) in the Skills & Agents tab."""
+    scope: str
+    label: str
+    plugin: str
+    note: str
+    skills: list[PluginEntry]
+    agents: list[PluginEntry]
+
+
+class HarnessPluginsResponse(BaseModel):
+    scopes: list[PluginScope]
+
+
+class PaletteResponse(BaseModel):
+    context_id: str
+    mode: str
+    commands: list[str]
+
+
+class PluginFileResponse(BaseModel):
+    """The raw markdown of one skill/agent (popup preview/edit source)."""
+    scope: str
+    kind: str
+    name: str
+    path: str
+    content: str
+
+
+class PluginFileSaveResponse(BaseModel):
+    ok: bool
+    scope: str
+    kind: str
+    name: str
+
+
+class PublishedRow(BaseModel):
+    """One published LEARNED artifact, reconciled with live on-disk state."""
+    proposal_id: int
+    form: str
+    scope: str
+    slug: str
+    title: str
+    summary: str | None = None
+    created: str | None = None
+    present: bool
+    enabled: bool
+
+
+class PublishedResponse(BaseModel):
+    context_id: str
+    published: list[PublishedRow]
+
+
+class PublishedToggleResponse(BaseModel):
+    """ok + proposal_id + the operational toggle result (present/enabled) spread in via extra."""
+    model_config = ConfigDict(extra="allow")
+    ok: bool
+    proposal_id: int
+
+
+class PublishedDeleteResponse(BaseModel):
+    """ok + proposal_id + `removed` (the delete_published result) carried via extra."""
+    model_config = ConfigDict(extra="allow")
+    ok: bool
+    proposal_id: int

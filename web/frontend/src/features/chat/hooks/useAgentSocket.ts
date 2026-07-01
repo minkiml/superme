@@ -1,7 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
-import { agentSocketUrl } from '@/lib/api'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { agentSocketUrl, getPalette } from '@/lib/api'
+import type { WsFrames, TurnFrame, ApprovalResponseFrame } from '@/lib/api/generated/ws'
 import type { Approval, RunMeta } from '../types'
 import { SEED_COMMANDS } from '../util'
+
+// The WS frame contract is generated from the daemon's frame models (R6) — `npm run gen:ws`.
+type OutboundFrame = WsFrames['outbound'] // daemon → client (discriminated on `type`)
 
 type Handlers = {
   onResult: (text: string, sessionId: string | null) => void
@@ -16,8 +20,8 @@ type Handlers = {
 // Like useSessions, this assumes the ChatPanel remounts on context change, so the WS
 // effect stays `[]` and `contextId` is captured once. `handlers` is read through a ref so
 // changing callbacks never tears down the socket.
-export function useAgentSocket(contextId: string, handlers: Handlers) {
-  const CMDS_KEY = `superme.commands.${contextId}`
+export function useAgentSocket(contextId: string, mode: 'core' | 'dev', handlers: Handlers) {
+  const CMDS_KEY = `superme.commands.${contextId}.${mode}` // dev/core have different palettes
   const [ready, setReady] = useState(false)
   const [live, setLive] = useState('') // streaming assistant text this turn
   const [busy, setBusy] = useState(false)
@@ -32,7 +36,21 @@ export function useAgentSocket(contextId: string, handlers: Handlers) {
   const handlersRef = useRef(handlers)
   handlersRef.current = handlers
 
-  // Restore the cached "/" palette before the first turn populates the real list.
+  // The "/" palette is computed server-side per (context, mode): mode-correct, fresh from disk
+  // (publish/disable/delete reflect at once), internal skills filtered out. Restore the localStorage
+  // copy for an instant first paint, then fetch the authoritative list. `refreshCommands` lets the
+  // caller re-pull (e.g. when the palette opens) so it never lags a publish.
+  const refreshCommands = useCallback(async () => {
+    try {
+      const { commands: cmds } = await getPalette(contextId, mode)
+      const merged = [...new Set([...cmds, ...SEED_COMMANDS])]
+      setCommands(merged)
+      localStorage.setItem(CMDS_KEY, JSON.stringify(merged))
+    } catch {
+      /* keep whatever we have */
+    }
+  }, [contextId, mode, CMDS_KEY])
+
   useEffect(() => {
     try {
       const cached = JSON.parse(localStorage.getItem(CMDS_KEY) || '[]')
@@ -40,8 +58,8 @@ export function useAgentSocket(contextId: string, handlers: Handlers) {
     } catch {
       /* ignore */
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    refreshCommands()
+  }, [CMDS_KEY, refreshCommands])
 
   useEffect(() => {
     const ws = new WebSocket(agentSocketUrl())
@@ -49,14 +67,12 @@ export function useAgentSocket(contextId: string, handlers: Handlers) {
     ws.onopen = () => setReady(true)
     ws.onclose = () => setReady(false)
     ws.onmessage = (ev) => {
-      const f = JSON.parse(ev.data)
+      const f = JSON.parse(ev.data) as OutboundFrame
       switch (f.type) {
         case 'init':
-          if (Array.isArray(f.slash_commands) && f.slash_commands.length) {
-            const cmds = [...new Set([...f.slash_commands, ...SEED_COMMANDS])]
-            setCommands(cmds)
-            localStorage.setItem(CMDS_KEY, JSON.stringify(cmds))
-          }
+          // The WS init carries the daemon's mode-blind cached list (includes internal skills + the
+          // other mode's). The "/" palette is now served by /dev/palette (mode-correct + filtered),
+          // so we ignore init for commands and let refreshCommands own the list.
           break
         case 'text_delta':
           liveRef.current += f.text
@@ -107,10 +123,25 @@ export function useAgentSocket(contextId: string, handlers: Handlers) {
   }, [busy])
 
   // Fire a turn. Returns false (no-op) if a turn is in flight or the socket isn't open.
-  function send(prompt: string, resume: string | null): boolean {
+  // `opts` carries the dev binding: mode="dev" + the work-item id (the item owns its thread,
+  // so the daemon persists the session back onto it).
+  function send(
+    prompt: string,
+    resume: string | null,
+    opts?: { mode?: 'core' | 'dev'; workItemId?: string },
+  ): boolean {
     const ws = wsRef.current
     if (busy || !ws || ws.readyState !== WebSocket.OPEN) return false
-    ws.send(JSON.stringify({ type: 'turn', prompt, context_id: contextId, resume, model: null }))
+    const frame: TurnFrame = {
+      type: 'turn',
+      prompt,
+      context_id: contextId,
+      resume,
+      model: null,
+      mode: opts?.mode ?? 'core',
+      work_item_id: opts?.workItemId ?? null,
+    }
+    ws.send(JSON.stringify(frame))
     setBusy(true)
     liveRef.current = ''
     setLive('')
@@ -119,7 +150,10 @@ export function useAgentSocket(contextId: string, handlers: Handlers) {
 
   function answer(approved: boolean) {
     const ws = wsRef.current
-    if (ws && approval) ws.send(JSON.stringify({ type: 'approval_response', id: approval.id, approved }))
+    if (ws && approval) {
+      const frame: ApprovalResponseFrame = { type: 'approval_response', id: approval.id, approved }
+      ws.send(JSON.stringify(frame))
+    }
     setApproval(null)
   }
 
@@ -133,5 +167,5 @@ export function useAgentSocket(contextId: string, handlers: Handlers) {
     setMeta(null)
   }
 
-  return { ready, live, busy, statusLabel, elapsed, approval, commands, meta, send, answer, clearStream, clearMeta }
+  return { ready, live, busy, statusLabel, elapsed, approval, commands, meta, send, answer, clearStream, clearMeta, refreshCommands }
 }

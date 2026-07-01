@@ -1,0 +1,25 @@
+# System spine — repo registry, scope-aware (PRD §4.11.3). Supersedes registry.yaml.
+#
+# Each repo's STATIC half. The global/"Me" repo is a FIRST-CLASS entry here (it used to
+# be synthesized from registry.yaml's `default_workspace: base` — that base/global split
+# is gone; the id is `global`). Every repo spans the {core, dev} scope lattice; the
+# per-scope operational + knowledge HOME paths are derived by convention in spine.py
+# (so the WI-3 relocation pass edits one function, not every entry), not pinned here.
+#
+# LIVE status (active/idle, last activity, current work-item, inventory counts) is
+# computed from .system.db + the filesystem at read time — never stored here.
+
+repos:
+  global:
+    label: Me
+    cwd: "."                 # repo root (also the universal-harness codebase)
+    layer: global
+    persona_append: ""
+    extra_mcp: []
+
+  dummy:
+    label: Dummy Project
+    cwd: "/Users/cooma/Developer/my_docs/dummy_project"
+    layer: local
+    persona_append: "You are operating in the DUMMY_PROJECT workspace; say so briefly when you start a task here."
+    extra_mcp: []

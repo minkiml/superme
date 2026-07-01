@@ -9,7 +9,7 @@ export async function getJSON<T>(url: string): Promise<T> {
 
 export async function sendJSON<T>(
   url: string,
-  method: 'POST' | 'PUT' | 'DELETE',
+  method: 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   body?: unknown,
 ): Promise<T> {
   const r = await fetch(url, {

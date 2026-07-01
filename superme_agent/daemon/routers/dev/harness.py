@@ -1,0 +1,181 @@
+"""Manage-Harness routes: SuperMe's own universal skills/agents, the chat "/" palette, and the
+published-LEARNED-artifact inventory.
+
+- `/dev/harness/plugins` + `/dev/harness/plugin-file` (GET/PUT): the universal harness plugin tree.
+- `/dev/palette`: the chat "/" palette for a (context, mode), computed live from disk.
+- `/dev/harness/published` (GET/PATCH/DELETE): govern artifacts the learning loop published.
+"""
+
+import logging
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+
+from ...app_state import DevStore, get_dev_store
+from ...deps import load_slash_cache, published_ident
+from ...schemas.dev.harness import (
+    HarnessPluginsResponse, PaletteResponse, PluginFileResponse, PluginFileSaveResponse,
+    PublishedResponse, PublishedToggleResponse, PublishedDeleteResponse,
+)
+
+log = logging.getLogger("superme-agent")
+
+router = APIRouter()
+
+
+# --- universal harness plugin tree (Manage-Harness "Skills & Agents" tab) --------------------
+@router.get("/dev/harness/plugins", response_model=HarnessPluginsResponse,
+            response_model_exclude_unset=True)
+async def dev_harness_plugins() -> dict:
+    """SuperMe's OWN universal skills + agents, grouped by scope (dev | core | shared) — the
+    Manage-Harness "Skills & Agents" tab. Read straight from the harness plugin frontmatter; this
+    is the universal harness only (per-repo operational artifacts are out of scope here)."""
+    from ....core.operational import list_harness_plugins
+    from ....runtime.config import DEV_PLUGIN_DIR, CORE_PLUGIN_DIR, SHARED_PLUGIN_DIR
+    return {"scopes": list_harness_plugins(
+        dev_dir=DEV_PLUGIN_DIR, core_dir=CORE_PLUGIN_DIR, shared_dir=SHARED_PLUGIN_DIR)}
+
+
+def _resolve_plugin_file(scope: str, kind: str, name: str):
+    from ....core.operational import resolve_plugin_file
+    from ....runtime.config import DEV_PLUGIN_DIR, CORE_PLUGIN_DIR, SHARED_PLUGIN_DIR
+    p = resolve_plugin_file(scope, kind, name, dev_dir=DEV_PLUGIN_DIR,
+                            core_dir=CORE_PLUGIN_DIR, shared_dir=SHARED_PLUGIN_DIR)
+    if p is None or not p.is_file():
+        raise HTTPException(status_code=404, detail="skill/agent not found")
+    return p
+
+
+@router.get("/dev/harness/plugin-file", response_model=PluginFileResponse)
+async def dev_harness_plugin_file(scope: str, kind: str, name: str) -> dict:
+    """The raw markdown of one SuperMe skill/agent — the popup's preview + edit source."""
+    p = _resolve_plugin_file(scope, kind, name)
+    return {"scope": scope, "kind": kind, "name": name, "path": str(p), "content": p.read_text()}
+
+
+class PluginFileBody(BaseModel):
+    scope: str
+    kind: str
+    name: str
+    content: str
+
+
+@router.put("/dev/harness/plugin-file", response_model=PluginFileSaveResponse)
+async def dev_harness_plugin_file_save(body: PluginFileBody) -> dict:
+    """Save edits to one SuperMe skill/agent file (the popup's edit mode). Takes effect on the next
+    dev turn (plugins are read per-turn); no daemon restart needed for content edits."""
+    p = _resolve_plugin_file(body.scope, body.kind, body.name)
+    if not (body.content or "").strip():
+        raise HTTPException(status_code=400, detail="content is empty")
+    p.write_text(body.content)
+    log.info("saved harness %s '%s' (%s)", body.kind, body.name, body.scope)
+    return {"ok": True, "scope": body.scope, "kind": body.kind, "name": body.name}
+
+
+# --- Chat "/" palette: mode-correct, fresh-from-disk, category-filtered -----------------------
+# Internal pipeline skills (`category: learning` — the forge-* authors) are hidden here; learned
+# skills appear immediately (computed from disk, not the per-turn SDK snapshot). External/native
+# commands (model, compact, /debug, …) come from the context's cached list since only the SDK can
+# enumerate those. Our own namespaces are stripped from the cache so a stale turn can't re-surface a
+# hidden or wrong-mode skill.
+_HIDE_CATEGORIES = {"learning"}
+
+
+@router.get("/dev/palette", response_model=PaletteResponse)
+async def dev_palette(context_id: str = "global", mode: str = "dev") -> dict:
+    """The chat "/" palette for a (context, mode): user-facing SuperMe skills for the active mode's
+    plugin set (category not in the hidden set), computed live from disk, merged with the context's
+    cached external/native commands."""
+    from ....core.operational import list_palette_skills
+    from ....runtime.config import plugins_for, LOCAL_HARNESS_DIR
+    op_home = (LOCAL_HARNESS_DIR / context_id / mode) if context_id else None
+    skills = list_palette_skills([Path(p) for p in plugins_for(mode, op_home)])
+    visible = [s["command"] for s in skills
+               if (s.get("category") or "").strip().lower() not in _HIDE_CATEGORIES]
+    # Native commands = cached entries NOT in any of OUR namespaces (we serve those fresh, per mode).
+    known_ns = {"superme-shared", "superme-core", "superme-dev",
+                f"{context_id}-dev", f"{context_id}-core"}
+    cached = load_slash_cache().get(context_id) or []
+    external = [c for c in cached if (":" not in c) or (c.split(":", 1)[0] not in known_ns)]
+    return {"context_id": context_id, "mode": mode,
+            "commands": sorted(set(visible) | set(external))}
+
+
+# --- Published inventory: govern LEARNED artifacts post-publish (#6 runtime management) -------
+# Driven by published proposals (not a disk scan) so SuperMe's shipped harness skills never appear
+# here — only what the learning loop published. Live enabled/present state is reconciled with disk.
+@router.get("/dev/harness/published", response_model=PublishedResponse)
+async def dev_harness_published(context_id: str = "global",
+                                dev_store: DevStore = Depends(get_dev_store)) -> dict:
+    """The Published inventory — every LEARNED artifact the owner published, reconciled with live
+    on-disk state (present + enabled). One row per published proposal, newest first."""
+    from ....core import operational as ops
+    rows = []
+    for prop in dev_store.list_memory_proposals(context_id, status="published"):
+        form, scope, repo_id, slug = published_ident(prop, context_id)
+        try:
+            st = ops.published_state(form, scope, repo_id, slug)
+        except Exception:
+            st = {"present": False, "enabled": False}
+        rows.append({
+            "proposal_id": prop["id"], "form": form, "scope": scope, "slug": slug,
+            "title": prop["title"], "summary": prop.get("summary"),
+            "created": prop.get("created_at"), **st,
+        })
+    return {"context_id": context_id, "published": rows}
+
+
+class PublishedToggleBody(BaseModel):
+    enabled: bool
+    context_id: str = "global"
+
+
+@router.patch("/dev/harness/published/{proposal_id}", response_model=PublishedToggleResponse,
+               response_model_exclude_unset=True)
+async def dev_harness_published_toggle(proposal_id: int, body: PublishedToggleBody,
+                                       dev_store: DevStore = Depends(get_dev_store)) -> dict:
+    """Enable/disable a published artifact at runtime (no delete). Constitution flips its frontmatter
+    flag; a skill/agent moves between the live plugin tree and its `.disabled/` shadow. Effective on
+    the next dev turn."""
+    from ....core import operational as ops
+    prop = dev_store.get_memory_proposal(proposal_id)
+    if not prop or prop["context_id"] != body.context_id or prop["status"] != "published":
+        raise HTTPException(status_code=404, detail="published artifact not found")
+    form, scope, repo_id, slug = published_ident(prop, body.context_id)
+    try:
+        res = ops.set_published_enabled(form, scope, repo_id, slug, body.enabled)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"toggle failed: {e}")
+    if res is None:
+        raise HTTPException(status_code=404, detail="artifact file missing on disk")
+    dev_store.log_event(
+        body.context_id, "harness.toggled",
+        f"{'Enabled' if body.enabled else 'Disabled'} {form} '{prop['title']}'",
+        scope="dev", actor="owner",
+        meta={"proposal_id": proposal_id, "form": form, "enabled": body.enabled})
+    return {"ok": True, "proposal_id": proposal_id, **res}
+
+
+@router.delete("/dev/harness/published/{proposal_id}", response_model=PublishedDeleteResponse,
+                response_model_exclude_unset=True)
+async def dev_harness_published_delete(proposal_id: int, context_id: str = "global",
+                                       dev_store: DevStore = Depends(get_dev_store)) -> dict:
+    """Remove a published artifact from disk entirely and retire its proposal (history kept). The
+    loader stops seeing it next turn."""
+    from ....core import operational as ops
+    prop = dev_store.get_memory_proposal(proposal_id)
+    if not prop or prop["context_id"] != context_id or prop["status"] != "published":
+        raise HTTPException(status_code=404, detail="published artifact not found")
+    form, scope, repo_id, slug = published_ident(prop, context_id)
+    try:
+        removed = ops.delete_published(form, scope, repo_id, slug)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"delete failed: {e}")
+    dev_store.set_proposal_status(proposal_id, "retired")
+    dev_store.log_event(
+        context_id, "harness.deleted",
+        f"Deleted {form} '{prop['title']}' (retired)",
+        scope="dev", actor="owner",
+        meta={"proposal_id": proposal_id, "form": form, "removed": removed})
+    return {"ok": True, "proposal_id": proposal_id, "removed": removed}

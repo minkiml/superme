@@ -13,10 +13,14 @@ Surfaces translate their native I/O (Slack events, HTTP/WebSocket) into these ca
 """
 
 from .context import Context
-from .events import Init, TextDelta, Status, Result, TurnEvent
-from .permissions import ApproveFn, build_can_use_tool
+from .events import Init, TextDelta, Status, Usage, Result, TurnEvent
+from .permissions import (
+    ApproveFn, build_can_use_tool, scoped_writes_approve, deny_all, learning_write_approve,
+)
 from .agent_service import AgentService
 from .knowledge_service import KnowledgeService
+from .dev_knowledge import DevKnowledgeService
+from .dev_store import DevStore
 from .sessions import SessionStore
 from .commands import CommandLayer
 
@@ -25,12 +29,18 @@ __all__ = [
     "Init",
     "TextDelta",
     "Status",
+    "Usage",
     "Result",
     "TurnEvent",
     "ApproveFn",
     "build_can_use_tool",
+    "scoped_writes_approve",
+    "deny_all",
+    "learning_write_approve",
     "AgentService",
     "KnowledgeService",
+    "DevKnowledgeService",
+    "DevStore",
     "SessionStore",
     "CommandLayer",
 ]

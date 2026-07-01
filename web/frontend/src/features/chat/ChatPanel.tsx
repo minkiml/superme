@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { Hammer, X } from 'lucide-react'
 import ChatHeader from './ChatHeader'
 import MessageList from './MessageList'
 import Composer from './Composer'
@@ -7,6 +8,10 @@ import ConfirmDialog from '@/ui/ConfirmDialog'
 import { useAgentSocket } from './hooks/useAgentSocket'
 import { useSessions } from './hooks/useSessions'
 import { GLOBAL, type ContextRef } from '@/lib/contexts'
+import type { ChatMode } from '@/lib/api'
+
+// A dev-mode binding: the chat is taken over as one work-item's dev thread.
+export type DevBinding = { workItemId: string; sessionId: string | null; title: string; contextId: string }
 
 // The persistent chat rail. Its context is selectable and detached from whichever
 // dashboard page is active — the parent remounts it via a `key` on context change, so the
@@ -20,30 +25,61 @@ export default function ChatPanel({
   contexts = [GLOBAL],
   onContextChange,
   onCollapse,
+  mode = 'core',
+  onModeChange,
+  binding = null,
+  onUnbind,
+  onBindingSession,
 }: {
   contextId?: string
   contexts?: ContextRef[]
   onContextChange?: (id: string) => void
   onCollapse?: () => void
+  mode?: ChatMode
+  onModeChange?: (m: ChatMode) => void
+  binding?: DevBinding | null
+  onUnbind?: () => void
+  onBindingSession?: (sessionId: string) => void
 }) {
   const ctxLabel = contexts.find((c) => c.id === contextId)?.label ?? contextId
   const [input, setInput] = useState('')
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [confirmId, setConfirmId] = useState<string | null>(null) // session pending "forget"
 
-  const sessions = useSessions(contextId)
-  const socket = useAgentSocket(contextId, {
+  const sessions = useSessions(contextId, mode)
+  const socket = useAgentSocket(contextId, mode, {
     onResult: (text, sessionId) => {
       sessions.appendMessage({ role: 'superme', text })
-      if (sessionId) sessions.claimSession(sessionId)
+      if (sessionId) {
+        sessions.claimSession(sessionId)
+        // The bound item owns its thread — surface a freshly-created session id up so the
+        // binding resumes it next time (the daemon also persists it onto the work-item).
+        if (binding && sessionId !== binding.sessionId) onBindingSession?.(sessionId)
+      }
     },
     onError: (message) => sessions.appendMessage({ role: 'superme', text: '⚠ ' + message }),
   })
 
+  // Binding take-over: open the item's dev thread (resume its session, or a fresh chat if it
+  // has none yet). Keyed on the work-item id so re-binding a different item re-opens.
+  const boundItemRef = useRef<string | null>(null)
+  useEffect(() => {
+    const id = binding?.workItemId ?? null
+    if (id === boundItemRef.current) return
+    boundItemRef.current = id
+    socket.clearStream()
+    socket.clearMeta() // the model·context% readout belongs to a turn, not a session — reset it
+    if (binding?.sessionId) sessions.openSession(binding.sessionId)
+    else sessions.newChat()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [binding?.workItemId])
+
   function send() {
     const text = input
     if (!text.trim()) return
-    if (!socket.send(text, sessions.sessionRef.current)) return
+    // Carry the chat mode; a card binding also tags the work-item so the daemon persists
+    // the session to it. A general dev chat (no binding) sends mode=dev with no work-item.
+    if (!socket.send(text, sessions.sessionRef.current, { mode, workItemId: binding?.workItemId })) return
     sessions.appendMessage({ role: 'you', text })
     setInput('')
   }
@@ -51,6 +87,7 @@ export default function ChatPanel({
   function openSession(id: string) {
     sessions.openSession(id)
     socket.clearStream()
+    socket.clearMeta() // don't carry the previous session's model·context% into this one
   }
 
   function newChat() {
@@ -76,8 +113,28 @@ export default function ChatPanel({
         onCollapse={onCollapse}
         activeTitle={activeTitle}
         meta={socket.meta}
-        onOpenDrawer={() => setDrawerOpen(true)}
+        onOpenDrawer={() => { sessions.refreshSessions(); setDrawerOpen(true) }}
+        mode={mode}
+        onModeChange={(m) => onModeChange?.(m)}
       />
+
+      {binding && (
+        <div className="flex items-center gap-1.5 border-b border-accent/30 bg-accent/10 px-3 py-1.5 text-[11px]">
+          <Hammer size={12} className="shrink-0 text-accent-text" />
+          <span className="text-accent-text">Dev</span>
+          <span className="min-w-0 flex-1 truncate text-fg" title={binding.title}>
+            {binding.title}
+          </span>
+          <button
+            onClick={onUnbind}
+            title="Unbind — back to chat"
+            aria-label="Unbind"
+            className="shrink-0 rounded p-0.5 text-muted hover:bg-hover hover:text-fg"
+          >
+            <X size={13} />
+          </button>
+        </div>
+      )}
 
       <MessageList
         messages={sessions.messages}
@@ -99,6 +156,7 @@ export default function ChatPanel({
         busy={socket.busy}
         commands={socket.commands}
         ctxLabel={ctxLabel}
+        onPaletteOpen={socket.refreshCommands}
       />
 
       {drawerOpen && (
@@ -115,17 +173,24 @@ export default function ChatPanel({
 
       {confirmId && (
         <ConfirmDialog
-          title="Forget this session?"
+          title="Remove this session?"
           body={
             <>
-              {confirmTitle ? <span className="text-fg">“{confirmTitle}”</span> : 'This session'} will be
-              removed from your list. The conversation history is kept on disk — nothing is deleted.
+              {confirmTitle ? <span className="text-fg">“{confirmTitle}”</span> : 'This session'}:{' '}
+              <span className="text-fg">Forget</span> removes it from your list but keeps the transcript on
+              disk. <span className="text-fg">Delete from disk</span> also erases the transcript —
+              permanent, no recovery.
             </>
           }
-          confirmLabel="Forget"
+          secondaryLabel="Forget"
+          onSecondary={() => {
+            sessions.removeSession(confirmId, false)
+            setConfirmId(null)
+          }}
+          confirmLabel="Delete from disk"
           onCancel={() => setConfirmId(null)}
           onConfirm={() => {
-            sessions.removeSession(confirmId)
+            sessions.removeSession(confirmId, true)
             setConfirmId(null)
           }}
         />

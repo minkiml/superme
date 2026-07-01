@@ -1,0 +1,6 @@
+{
+  "name": "superme-dev",
+  "version": "0.1.0",
+  "description": "SuperMe harness — dev-mode skills/subagents (build SuperMe), loaded only when mode=dev.",
+  "author": { "name": "SuperMe" }
+}

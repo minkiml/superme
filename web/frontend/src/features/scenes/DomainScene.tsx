@@ -1,4 +1,4 @@
-import { Boxes, Database } from 'lucide-react'
+import { Boxes } from 'lucide-react'
 import PageHeader from '@/ui/PageHeader'
 import type { ContextRef } from '@/lib/contexts'
 
@@ -12,13 +12,7 @@ function Field({ label, value }: { label: string; value: string }) {
 }
 
 // The presentation scene for one connected domain (a project-level sub-SuperMe).
-export default function DomainScene({
-  domain,
-  onManageKnowledge,
-}: {
-  domain: ContextRef
-  onManageKnowledge: () => void
-}) {
+export default function DomainScene({ domain }: { domain: ContextRef }) {
   return (
     <div className="flex h-full flex-col">
       <PageHeader
@@ -26,15 +20,6 @@ export default function DomainScene({
         title={domain.label}
         subtitle="A connected project · its own sub-SuperMe"
         badge="domain"
-        right={
-          <button
-            onClick={onManageKnowledge}
-            title="Open this domain’s knowledge"
-            className="inline-flex items-center gap-1.5 rounded-md border border-line bg-surface px-2.5 py-1.5 text-xs text-muted hover:bg-hover hover:text-fg"
-          >
-            <Database size={15} /> Knowledge
-          </button>
-        }
       />
       <div className="flex-1 overflow-auto p-6">
         <dl className="max-w-2xl divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface text-sm">

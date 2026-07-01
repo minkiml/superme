@@ -1,30 +1,35 @@
 import { getJSON, sendJSON } from './client'
+import type { Schema } from './generated'
 
 // Sessions: list + replay. History comes from the SDK transcripts, not a parallel log.
+// Transport shapes derive from the daemon OpenAPI; the FE narrows the loose `surface`/`mode`/
+// `role` strings (R5 tightens these server-side later).
 
-export type SessionMeta = {
-  id: string
-  title: string
+export type ChatMode = 'core' | 'dev'
+
+export type SessionMeta = Omit<Schema<'SessionSummary'>, 'surface' | 'mode'> & {
   surface: 'slack' | 'web'
-  updated_at: string
-  message_count: number
+  mode: ChatMode
 }
 
-export type ChatBubble = { role: 'you' | 'superme'; text: string }
+export type ChatBubble = Omit<Schema<'SessionBubble'>, 'role'> & { role: 'you' | 'superme' }
+
+// readSession returns the SessionDetail envelope with narrowed message bubbles.
+export type SessionDetail = Omit<Schema<'SessionDetail'>, 'messages'> & { messages: ChatBubble[] }
 
 const q = encodeURIComponent
 
-export function listSessions(contextId = 'global'): Promise<SessionMeta[]> {
-  return getJSON(`/api/sessions?context_id=${q(contextId)}`)
+export function listSessions(contextId = 'global', mode?: ChatMode): Promise<SessionMeta[]> {
+  const m = mode ? `&mode=${q(mode)}` : ''
+  return getJSON(`/api/sessions?context_id=${q(contextId)}${m}`)
 }
 
-export function readSession(
-  id: string,
-  contextId = 'global',
-): Promise<{ id: string; title: string; messages: ChatBubble[]; total: number; truncated: boolean }> {
+export function readSession(id: string, contextId = 'global'): Promise<SessionDetail> {
   return getJSON(`/api/sessions/${q(id)}?context_id=${q(contextId)}`)
 }
 
-export function deleteSession(id: string, contextId = 'global'): Promise<void> {
-  return sendJSON(`/api/sessions/${q(id)}?context_id=${q(contextId)}`, 'DELETE')
+// Remove a session. `purge: false` (default) = forget — drop from the list, keep the transcript on
+// disk. `purge: true` = disk-level delete — also remove the transcript JSONL (irreversible).
+export function deleteSession(id: string, contextId = 'global', purge = false): Promise<void> {
+  return sendJSON(`/api/sessions/${q(id)}?context_id=${q(contextId)}&purge=${purge}`, 'DELETE')
 }

@@ -13,6 +13,20 @@ SAFE_TOOLS = {
     "WebSearch", "WebFetch", "TodoWrite", "Skill", "Agent",
     # The agent's read-only Slack readers (in-process MCP tools).
     "mcp__slack__read_channel", "mcp__slack__read_thread",
+    # The dev agent's read-only activity-log reader (PRD §4.9).
+    "mcp__dev__dev_log",
+    # Capture SWEEP (WI-8) — the `capture` sub-agent's pen; files a candidate row from a swept
+    # conversation slice. Nothing is applied here (the owner gate is downstream).
+    "mcp__dev__file_candidate",
+    # Memory PROCESSING (PRD §4.10.2) — read the candidate pool, file consolidated proposals.
+    # Still pre-gate: a proposal is a reversible draft awaiting the owner's accept/reject; the
+    # apply step (which writes memory/ files) is what's actually gated, downstream.
+    "mcp__dev__review_candidates",
+    "mcp__dev__propose_memory",
+    # WRITE phase (WI-8 §Phase 3) — the `write` sub-agent's pen; stages the authored artifact into
+    # the proposal row (→ drafted). Still pre-gate: staging writes only to the DB, never to disk;
+    # the disk write (publish) is the owner-gated step downstream.
+    "mcp__dev__stage_artifact",
 }
 
 

@@ -1,10 +1,11 @@
 """Context resolution — surface-facing id -> Core Context.
 
-The global root ("Me") plus connected projects ("domains"). Domains are defined in
-registry.yaml (name -> cwd + extras); each resolves to its cwd and a project-local
-knowledge_root at `<cwd>/superme-knowledge/` (the parallel of superme-global-knowledge/
-at the repo root). The DEFAULT workspace is the repo root and IS the global context, so
-it's never listed as a separate domain.
+The global root ("Me") plus connected projects ("domains"). Domains are defined in the
+spine's repo registry (config/repos.yaml); each resolves to its cwd and a knowledge home
+in the central knowledge repo at `superme-knowledge/<id>-knowledge/` (renovation §4.11.2 —
+centralized for all repos, not under each project's cwd). Each home splits into `core/`
+(dashboard-consumed) + `dev/` (dev-knowledge). The DEFAULT workspace is the repo root and
+IS the global context, so it's never listed as a separate domain.
 
 This registry is the source of *which* domains exist. The future "knowledge bridge" — a
 domains index inside global knowledge (status, meta, root, so SuperMe's own knowledge
@@ -12,82 +13,70 @@ knows its projects) — layers on top of this; it doesn't replace it.
 """
 
 import logging
-from pathlib import Path
 
-import yaml
-
-from ..runtime.config import ROOT_DIR, KNOWLEDGE_GLOBAL_DIR, REGISTRY_FILE
 from ..core.context import Context
+from ..core.spine import RepoConfig, get_spine
 
 log = logging.getLogger("superme-agent")
 
 GLOBAL_ID = "global"
-# Project-local knowledge folder (parallels superme-global-knowledge/ at the root).
-DOMAIN_KNOWLEDGE_DIRNAME = "superme-knowledge"
+# Every per-repo knowledge home splits into sub-roots by scope: core/ (the represented
+# knowledge the Me/Domains dashboards consume — the domain/twin substance) and dev/ (internal
+# dev-knowledge, wired only to the Development dashboard — not browsable). The `internal/`
+# nesting was dropped in the renovation (§4.11.2); dev-knowledge is `<base>/dev` now.
+CORE_SUBDIR = "core"
+
+# The repo registry now lives in the system spine (config/repos.yaml), not registry.yaml —
+# WI-3 cutover. The Context shape is unchanged: only its SOURCE moved. (Slack's separate
+# runtime/workspaces.py still reads registry.yaml until the Slack rebuild folds it in.)
 
 
-def _load_registry() -> tuple[dict, str]:
-    try:
-        reg = yaml.safe_load(REGISTRY_FILE.read_text()) or {}
-    except (FileNotFoundError, yaml.YAMLError) as e:
-        log.warning("registry.yaml unavailable (%s); global context only.", e)
-        return {}, "base"
-    return (reg.get("workspaces") or {}), (reg.get("default_workspace") or "base")
-
-
-_DEFS, _DEFAULT = _load_registry()
-
-
-def _domain_ids() -> list[str]:
-    """Workspace names that are real domains (every def except the default/root)."""
-    return [name for name in _DEFS if name != _DEFAULT]
-
-
-def _global() -> Context:
+def _context_from_repo(rc: RepoConfig, mode: str) -> Context:
+    """Build a Core Context from a spine RepoConfig. Home computation stays here (not in
+    RepoConfig) so the exact Context shape every call-site depends on is preserved:
+    knowledge_root = <base>/core (dashboard-consumed core knowledge); internal_root = <base>
+    (callers append '/dev' → <base>/dev). The renovation dropped the old `internal/` nesting
+    (§4.11.2), so internal_root is just the per-repo knowledge base now."""
+    home = rc._knowledge_base()
     return Context(
-        layer="global",
-        id=GLOBAL_ID,
-        cwd=ROOT_DIR,
-        knowledge_root=KNOWLEDGE_GLOBAL_DIR,
-        label="Me",
+        layer=rc.layer,
+        id=rc.id,
+        mode=mode,
+        cwd=rc.cwd,
+        knowledge_root=home / CORE_SUBDIR,
+        internal_root=home,
+        persona_append=rc.persona_append,
+        extra_mcp=list(rc.extra_mcp),
+        label=rc.label,
     )
 
 
-def _domain(name: str) -> Context:
-    spec = _DEFS.get(name) or {}
-    cwd = Path(spec.get("cwd", "."))
-    if not cwd.is_absolute():
-        cwd = (ROOT_DIR / cwd).resolve()
-    return Context(
-        layer="local",
-        id=name,
-        cwd=cwd,
-        knowledge_root=cwd / DOMAIN_KNOWLEDGE_DIRNAME,
-        persona_append=(spec.get("persona_append") or "").strip(),
-        extra_mcp=spec.get("extra_mcp") or [],
-        label=(spec.get("label") or name),
-    )
+def resolve(context_id: str | None, mode: str = "core") -> Context:
+    """Resolve a surface-facing context id (+ mode) to a Core Context.
 
-
-def resolve(context_id: str | None) -> Context:
-    """Resolve a surface-facing context id to a Core Context.
-
-    `global` (or unknown ids) -> the root SuperMe; a registered domain name -> that
-    project's sub-SuperMe.
+    `global` (or unknown ids) -> the root SuperMe; a registered repo id -> that project's
+    sub-SuperMe. `mode` ("core" | "dev") is supplied BY THE SURFACE — the Me chat runs
+    "core"; the Development dashboard runs "dev". It is orthogonal to the layer (every
+    (layer, mode) pair is valid) and selects the agent's charter + which harness plugins
+    load — not a knowledge sandbox.
     """
+    spine = get_spine()
+    repos = spine.repos()
     cid = context_id or GLOBAL_ID
-    if cid == GLOBAL_ID:
-        return _global()
-    if cid in _DEFS and cid != _DEFAULT:
-        return _domain(cid)
-    log.warning("unknown context_id %r; falling back to global", cid)
-    return _global()
+    rc = repos.get(cid)
+    if rc is None:
+        if cid != GLOBAL_ID:
+            log.warning("unknown context_id %r; falling back to global", cid)
+        rc = repos.get(GLOBAL_ID)
+    if rc is None:  # repos.yaml empty/missing — synthesize a minimal global so we never crash
+        from ..runtime.config import ROOT_DIR
+        rc = RepoConfig(id=GLOBAL_ID, label="Me", cwd=ROOT_DIR, layer="global")
+    return _context_from_repo(rc, mode)
 
 
 def list_all() -> list[dict]:
-    """Live contexts for the surfaces to render: global first, then each domain."""
-    out = [{"id": GLOBAL_ID, "label": "Me", "layer": "global", "cwd": str(ROOT_DIR)}]
-    for name in _domain_ids():
-        ctx = _domain(name)
-        out.append({"id": ctx.id, "label": ctx.label, "layer": "local", "cwd": str(ctx.cwd)})
-    return out
+    """Live contexts for the surfaces to render: global first, then each other repo."""
+    repos = get_spine().repos()
+    order = ([GLOBAL_ID] if GLOBAL_ID in repos else []) + [r for r in repos if r != GLOBAL_ID]
+    return [{"id": repos[r].id, "label": repos[r].label, "layer": repos[r].layer,
+             "cwd": str(repos[r].cwd)} for r in order]

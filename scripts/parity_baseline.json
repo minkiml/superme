@@ -1,0 +1,6236 @@
+{
+  "inventory": [
+    "DELETE /dev/harness/published/{proposal_id}",
+    "DELETE /dev/inbox/{item_id}",
+    "DELETE /dev/work-items/{item_id}",
+    "DELETE /sessions/{session_id}",
+    "GET /contexts",
+    "GET /dev",
+    "GET /dev/harness/plugin-file",
+    "GET /dev/harness/plugins",
+    "GET /dev/harness/published",
+    "GET /dev/log",
+    "GET /dev/memory/proposals",
+    "GET /dev/memory/proposals/{proposal_id}/execution",
+    "GET /dev/memory/stats",
+    "GET /dev/model",
+    "GET /dev/palette",
+    "GET /dev/work-items/{item_id}/artifacts",
+    "GET /dev/work-items/{item_id}/detail",
+    "GET /docs",
+    "GET /docs/{slug}",
+    "GET /health",
+    "GET /knowledge/file",
+    "GET /knowledge/tree",
+    "GET /repos",
+    "GET /runs",
+    "GET /sessions",
+    "GET /sessions/{session_id}",
+    "GET /system",
+    "PATCH /dev/harness/published/{proposal_id}",
+    "PATCH /dev/inbox/{item_id}",
+    "PATCH /dev/memory/proposals/{proposal_id}/artifact",
+    "POST /dev/inbox",
+    "POST /dev/inbox/{item_id}/push",
+    "POST /dev/memory/distill",
+    "POST /dev/memory/proposals/{proposal_id}/approve",
+    "POST /dev/memory/proposals/{proposal_id}/drop",
+    "POST /dev/memory/proposals/{proposal_id}/publish",
+    "POST /dev/memory/proposals/{proposal_id}/reject",
+    "POST /dev/sweep",
+    "POST /dev/sweep/idle-scan",
+    "POST /dev/work-items/{item_id}/advance",
+    "POST /dev/work-items/{item_id}/complete",
+    "POST /dev/work-items/{item_id}/model",
+    "POST /dev/work-items/{item_id}/plan",
+    "POST /knowledge/inject",
+    "POST /repos/{repo_id}/model",
+    "POST /system/learning",
+    "POST /system/model",
+    "PUT /dev/harness/plugin-file",
+    "PUT /knowledge/file",
+    "WS /ws/agent"
+  ],
+  "openapi": {
+    "components": {
+      "schemas": {
+        "ApproveBody": {
+          "properties": {
+            "answers": {
+              "anyOf": [
+                {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                {
+                  "items": {},
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Answers"
+            },
+            "context_id": {
+              "default": "global",
+              "title": "Context Id",
+              "type": "string"
+            }
+          },
+          "title": "ApproveBody",
+          "type": "object"
+        },
+        "ApproveResponse": {
+          "properties": {
+            "proposal_id": {
+              "title": "Proposal Id",
+              "type": "integer"
+            },
+            "status": {
+              "title": "Status",
+              "type": "string"
+            }
+          },
+          "required": [
+            "status",
+            "proposal_id"
+          ],
+          "title": "ApproveResponse",
+          "type": "object"
+        },
+        "ArtifactCall": {
+          "description": "One row of a work-item's run call-trail (tool / sub-agent / skill invocation).",
+          "properties": {
+            "created_at": {
+              "title": "Created At",
+              "type": "string"
+            },
+            "description": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Description"
+            },
+            "id": {
+              "title": "Id",
+              "type": "integer"
+            },
+            "kind": {
+              "enum": [
+                "tool",
+                "subagent",
+                "skill",
+                "mcp"
+              ],
+              "title": "Kind",
+              "type": "string"
+            },
+            "name": {
+              "title": "Name",
+              "type": "string"
+            },
+            "run_id": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Run Id"
+            },
+            "seq": {
+              "title": "Seq",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "id",
+            "seq",
+            "kind",
+            "name",
+            "created_at"
+          ],
+          "title": "ArtifactCall",
+          "type": "object"
+        },
+        "ArtifactEditBody": {
+          "properties": {
+            "content": {
+              "title": "Content",
+              "type": "string"
+            },
+            "context_id": {
+              "default": "global",
+              "title": "Context Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "content"
+          ],
+          "title": "ArtifactEditBody",
+          "type": "object"
+        },
+        "ArtifactRef": {
+          "description": "A work-item design artifact, NORMALIZED on read (R5): legacy bare-string entries\n(\"artifacts/plan.md\") and structured {type, path} entries both coerce to this one shape at the\ndaemon boundary (`DevKnowledgeService`), so the wire contract is a single object union, never a\nstring-or-object mix.",
+          "properties": {
+            "path": {
+              "title": "Path",
+              "type": "string"
+            },
+            "type": {
+              "title": "Type",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "path"
+          ],
+          "title": "ArtifactRef",
+          "type": "object"
+        },
+        "CandidateStatItem": {
+          "properties": {
+            "captured_at": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Captured At"
+            },
+            "form_hint": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Form Hint"
+            },
+            "id": {
+              "title": "Id",
+              "type": "integer"
+            },
+            "scope_hint": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Scope Hint"
+            },
+            "signal": {
+              "title": "Signal",
+              "type": "string"
+            },
+            "source": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
+            }
+          },
+          "required": [
+            "id",
+            "signal"
+          ],
+          "title": "CandidateStatItem",
+          "type": "object"
+        },
+        "CandidatesStat": {
+          "properties": {
+            "by_form": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "title": "By Form",
+              "type": "object"
+            },
+            "items": {
+              "items": {
+                "$ref": "#/components/schemas/CandidateStatItem"
+              },
+              "title": "Items",
+              "type": "array"
+            },
+            "pending_proposals": {
+              "title": "Pending Proposals",
+              "type": "integer"
+            },
+            "total": {
+              "title": "Total",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "total",
+            "pending_proposals",
+            "by_form",
+            "items"
+          ],
+          "title": "CandidatesStat",
+          "type": "object"
+        },
+        "ContextResponse": {
+          "description": "One live context (global or a connected domain) \u2014 what the surfaces render.",
+          "properties": {
+            "cwd": {
+              "title": "Cwd",
+              "type": "string"
+            },
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "label": {
+              "title": "Label",
+              "type": "string"
+            },
+            "layer": {
+              "title": "Layer",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "label",
+            "layer",
+            "cwd"
+          ],
+          "title": "ContextResponse",
+          "type": "object"
+        },
+        "DevLogEvent": {
+          "description": "One activity-log row.",
+          "properties": {
+            "actor": {
+              "enum": [
+                "owner",
+                "agent",
+                "daemon"
+              ],
+              "title": "Actor",
+              "type": "string"
+            },
+            "context_id": {
+              "title": "Context Id",
+              "type": "string"
+            },
+            "created_at": {
+              "title": "Created At",
+              "type": "string"
+            },
+            "id": {
+              "title": "Id",
+              "type": "integer"
+            },
+            "item_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Item Id"
+            },
+            "kind": {
+              "title": "Kind",
+              "type": "string"
+            },
+            "meta": {
+              "anyOf": [
+                {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Meta"
+            },
+            "scope": {
+              "enum": [
+                "item",
+                "dev",
+                "global"
+              ],
+              "title": "Scope",
+              "type": "string"
+            },
+            "summary": {
+              "title": "Summary",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "context_id",
+            "scope",
+            "kind",
+            "actor",
+            "summary",
+            "created_at"
+          ],
+          "title": "DevLogEvent",
+          "type": "object"
+        },
+        "DevLogResponse": {
+          "properties": {
+            "context_id": {
+              "title": "Context Id",
+              "type": "string"
+            },
+            "count": {
+              "title": "Count",
+              "type": "integer"
+            },
+            "events": {
+              "items": {
+                "$ref": "#/components/schemas/DevLogEvent"
+              },
+              "title": "Events",
+              "type": "array"
+            }
+          },
+          "required": [
+            "context_id",
+            "events",
+            "count"
+          ],
+          "title": "DevLogResponse",
+          "type": "object"
+        },
+        "DevModelResponse": {
+          "additionalProperties": true,
+          "description": "The dev-knowledge model manifest (model.yaml) + envelope. The manifest body is dynamic YAML,\nso the known sections are declared for documentation and extra='allow' carries anything else;\na partial manifest validates too (sections optional, route uses exclude_unset). `entities` is\nvalidated as structured rows (R5); the looser sections stay dict-typed (documented stretch).",
+          "properties": {
+            "context_id": {
+              "title": "Context Id",
+              "type": "string"
+            },
+            "context_stack": {
+              "anyOf": [
+                {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Context Stack"
+            },
+            "entities": {
+              "anyOf": [
+                {
+                  "items": {
+                    "$ref": "#/components/schemas/ManifestEntity"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Entities"
+            },
+            "exists": {
+              "title": "Exists",
+              "type": "boolean"
+            },
+            "knowledge_layers": {
+              "anyOf": [
+                {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Knowledge Layers"
+            },
+            "lifecycle": {
+              "anyOf": [
+                {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Lifecycle"
+            },
+            "operating_model": {
+              "anyOf": [
+                {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operating Model"
+            },
+            "skills": {
+              "anyOf": [
+                {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Skills"
+            },
+            "version": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Version"
+            }
+          },
+          "required": [
+            "exists",
+            "context_id"
+          ],
+          "title": "DevModelResponse",
+          "type": "object"
+        },
+        "DevReadResponse": {
+          "description": "A context's parsed dev knowledge: work-items (enriched) + inbox queue + glance + live runs.",
+          "properties": {
+            "context_id": {
+              "title": "Context Id",
+              "type": "string"
+            },
+            "exists": {
+              "title": "Exists",
+              "type": "boolean"
+            },
+            "glance": {
+              "$ref": "#/components/schemas/Glance"
+            },
+            "inbox": {
+              "items": {
+                "$ref": "#/components/schemas/InboxRow"
+              },
+              "title": "Inbox",
+              "type": "array"
+            },
+            "root": {
+              "title": "Root",
+              "type": "string"
+            },
+            "running": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Running",
+              "type": "array"
+            },
+            "work_items": {
+              "items": {
+                "$ref": "#/components/schemas/WorkItem"
+              },
+              "title": "Work Items",
+              "type": "array"
+            }
+          },
+          "required": [
+            "root",
+            "exists",
+            "work_items",
+            "inbox",
+            "glance",
+            "context_id",
+            "running"
+          ],
+          "title": "DevReadResponse",
+          "type": "object"
+        },
+        "DistillResponse": {
+          "properties": {
+            "candidates": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Candidates"
+            },
+            "context_id": {
+              "title": "Context Id",
+              "type": "string"
+            },
+            "status": {
+              "title": "Status",
+              "type": "string"
+            }
+          },
+          "required": [
+            "status",
+            "context_id"
+          ],
+          "title": "DistillResponse",
+          "type": "object"
+        },
+        "DocResponse": {
+          "description": "One doc's full markdown.",
+          "properties": {
+            "content": {
+              "title": "Content",
+              "type": "string"
+            },
+            "slug": {
+              "title": "Slug",
+              "type": "string"
+            },
+            "title": {
+              "title": "Title",
+              "type": "string"
+            }
+          },
+          "required": [
+            "slug",
+            "title",
+            "content"
+          ],
+          "title": "DocResponse",
+          "type": "object"
+        },
+        "DocSummary": {
+          "description": "A doc's index entry (slug + title) for the list view.",
+          "properties": {
+            "slug": {
+              "title": "Slug",
+              "type": "string"
+            },
+            "title": {
+              "title": "Title",
+              "type": "string"
+            }
+          },
+          "required": [
+            "slug",
+            "title"
+          ],
+          "title": "DocSummary",
+          "type": "object"
+        },
+        "DocsListResponse": {
+          "properties": {
+            "docs": {
+              "items": {
+                "$ref": "#/components/schemas/DocSummary"
+              },
+              "title": "Docs",
+              "type": "array"
+            }
+          },
+          "required": [
+            "docs"
+          ],
+          "title": "DocsListResponse",
+          "type": "object"
+        },
+        "EvalMetrics": {
+          "additionalProperties": true,
+          "description": "The artifact's own run cost on a synthetic task (forge_kit/eval.py). kind 'run' = skill/agent\nmeasured once; kind 'overhead' = constitution's always-on per-turn cost. Tolerant of pre-metrics\nand error rows (everything optional, extra='allow' for forward-compat).",
+          "properties": {
+            "capped": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Capped"
+            },
+            "context_tokens": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Context Tokens"
+            },
+            "cost_usd": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cost Usd"
+            },
+            "duration_s": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Duration S"
+            },
+            "error": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Error"
+            },
+            "kind": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kind"
+            },
+            "output_tokens": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Output Tokens"
+            },
+            "tokens": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tokens"
+            },
+            "tokens_per_turn": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tokens Per Turn"
+            },
+            "turns": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Turns"
+            }
+          },
+          "title": "EvalMetrics",
+          "type": "object"
+        },
+        "EvalReport": {
+          "additionalProperties": true,
+          "description": "A proposal's gate-2 eval report (forge_kit/eval.py emits it as JSON, stored on the row).\nVersioned via `schema_version` (1 = current); tolerant of pre-versioning / pre-metrics legacy\nreports \u2014 every field optional, extra='allow' so an older or richer report never 500s a read.",
+          "properties": {
+            "checks": {
+              "anyOf": [
+                {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Checks"
+            },
+            "form": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Form"
+            },
+            "issues": {
+              "anyOf": [
+                {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Issues"
+            },
+            "metrics": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/EvalMetrics"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "schema_version": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Schema Version"
+            },
+            "summary": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Summary"
+            },
+            "trial_task": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Trial Task"
+            },
+            "verdict": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Verdict"
+            }
+          },
+          "title": "EvalReport",
+          "type": "object"
+        },
+        "ExecutionStep": {
+          "additionalProperties": true,
+          "description": "One lifecycle event in a proposal's execution trace (real events + a synthetic 'filed' head).",
+          "properties": {
+            "actor": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Actor"
+            },
+            "created_at": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Created At"
+            },
+            "kind": {
+              "title": "Kind",
+              "type": "string"
+            },
+            "meta": {
+              "anyOf": [
+                {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Meta"
+            },
+            "summary": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Summary"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "title": "ExecutionStep",
+          "type": "object"
+        },
+        "Glance": {
+          "additionalProperties": true,
+          "description": "The dashboard glance summary (counts + bucketed item stubs).",
+          "properties": {
+            "blocked": {
+              "items": {
+                "$ref": "#/components/schemas/GlanceItem"
+              },
+              "title": "Blocked",
+              "type": "array"
+            },
+            "by_phase": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "title": "By Phase",
+              "type": "object"
+            },
+            "by_status": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "title": "By Status",
+              "type": "object"
+            },
+            "counts": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "title": "Counts",
+              "type": "object"
+            },
+            "in_progress": {
+              "items": {
+                "$ref": "#/components/schemas/GlanceItem"
+              },
+              "title": "In Progress",
+              "type": "array"
+            },
+            "inbox_open": {
+              "title": "Inbox Open",
+              "type": "integer"
+            },
+            "waiting": {
+              "items": {
+                "$ref": "#/components/schemas/GlanceItem"
+              },
+              "title": "Waiting",
+              "type": "array"
+            }
+          },
+          "required": [
+            "by_status",
+            "by_phase",
+            "in_progress",
+            "waiting",
+            "blocked",
+            "inbox_open",
+            "counts"
+          ],
+          "title": "Glance",
+          "type": "object"
+        },
+        "GlanceItem": {
+          "additionalProperties": true,
+          "description": "A work-item stub in the glance buckets (in_progress / waiting / blocked).",
+          "properties": {
+            "blocked_by": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Blocked By"
+            },
+            "id": {
+              "title": "Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "title": "GlanceItem",
+          "type": "object"
+        },
+        "HTTPValidationError": {
+          "properties": {
+            "detail": {
+              "items": {
+                "$ref": "#/components/schemas/ValidationError"
+              },
+              "title": "Detail",
+              "type": "array"
+            }
+          },
+          "title": "HTTPValidationError",
+          "type": "object"
+        },
+        "HarnessPluginsResponse": {
+          "properties": {
+            "scopes": {
+              "items": {
+                "$ref": "#/components/schemas/PluginScope"
+              },
+              "title": "Scopes",
+              "type": "array"
+            }
+          },
+          "required": [
+            "scopes"
+          ],
+          "title": "HarnessPluginsResponse",
+          "type": "object"
+        },
+        "HealthResponse": {
+          "properties": {
+            "service": {
+              "title": "Service",
+              "type": "string"
+            },
+            "status": {
+              "title": "Status",
+              "type": "string"
+            }
+          },
+          "required": [
+            "status",
+            "service"
+          ],
+          "title": "HealthResponse",
+          "type": "object"
+        },
+        "IdleScanResponse": {
+          "properties": {
+            "scanned": {
+              "title": "Scanned",
+              "type": "integer"
+            },
+            "swept": {
+              "items": {
+                "$ref": "#/components/schemas/SweptItem"
+              },
+              "title": "Swept",
+              "type": "array"
+            }
+          },
+          "required": [
+            "scanned",
+            "swept"
+          ],
+          "title": "IdleScanResponse",
+          "type": "object"
+        },
+        "InboxBody": {
+          "properties": {
+            "context_id": {
+              "default": "global",
+              "title": "Context Id",
+              "type": "string"
+            },
+            "kind": {
+              "default": "note",
+              "title": "Kind",
+              "type": "string"
+            },
+            "origin": {
+              "default": "user",
+              "title": "Origin",
+              "type": "string"
+            },
+            "tag": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tag"
+            },
+            "text": {
+              "title": "Text",
+              "type": "string"
+            },
+            "title": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Title"
+            }
+          },
+          "required": [
+            "text"
+          ],
+          "title": "InboxBody",
+          "type": "object"
+        },
+        "InboxDeleteResponse": {
+          "properties": {
+            "id": {
+              "title": "Id",
+              "type": "integer"
+            },
+            "ok": {
+              "title": "Ok",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok",
+            "id"
+          ],
+          "title": "InboxDeleteResponse",
+          "type": "object"
+        },
+        "InboxPatch": {
+          "properties": {
+            "kind": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kind"
+            },
+            "routed_to": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Routed To"
+            },
+            "status": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            },
+            "tag": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tag"
+            },
+            "text": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Text"
+            },
+            "title": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Title"
+            }
+          },
+          "title": "InboxPatch",
+          "type": "object"
+        },
+        "InboxPushBody": {
+          "properties": {
+            "context_id": {
+              "default": "global",
+              "title": "Context Id",
+              "type": "string"
+            }
+          },
+          "title": "InboxPushBody",
+          "type": "object"
+        },
+        "InboxPushResponse": {
+          "properties": {
+            "inbox": {
+              "$ref": "#/components/schemas/InboxRow"
+            },
+            "ok": {
+              "title": "Ok",
+              "type": "boolean"
+            },
+            "work_item": {
+              "$ref": "#/components/schemas/WorkItem"
+            }
+          },
+          "required": [
+            "ok",
+            "work_item",
+            "inbox"
+          ],
+          "title": "InboxPushResponse",
+          "type": "object"
+        },
+        "InboxRow": {
+          "description": "One quick-capture triage-queue row. kind/status/origin are locked (R5): DevStore validates\nthem against its own value-sets on write, so the Literal can't 500 on a real row.",
+          "properties": {
+            "context_id": {
+              "title": "Context Id",
+              "type": "string"
+            },
+            "created_at": {
+              "title": "Created At",
+              "type": "string"
+            },
+            "id": {
+              "title": "Id",
+              "type": "integer"
+            },
+            "kind": {
+              "enum": [
+                "note",
+                "idea",
+                "todo",
+                "question"
+              ],
+              "title": "Kind",
+              "type": "string"
+            },
+            "origin": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "user",
+                    "agent"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Origin"
+            },
+            "routed_to": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Routed To"
+            },
+            "source": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
+            },
+            "status": {
+              "enum": [
+                "open",
+                "pushed"
+              ],
+              "title": "Status",
+              "type": "string"
+            },
+            "tag": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tag"
+            },
+            "text": {
+              "title": "Text",
+              "type": "string"
+            },
+            "title": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Title"
+            },
+            "updated_at": {
+              "title": "Updated At",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "context_id",
+            "kind",
+            "text",
+            "status",
+            "created_at",
+            "updated_at"
+          ],
+          "title": "InboxRow",
+          "type": "object"
+        },
+        "InjectBody": {
+          "properties": {
+            "content": {
+              "title": "Content",
+              "type": "string"
+            },
+            "context_id": {
+              "default": "global",
+              "title": "Context Id",
+              "type": "string"
+            },
+            "folder": {
+              "default": "knowledge",
+              "title": "Folder",
+              "type": "string"
+            },
+            "title": {
+              "title": "Title",
+              "type": "string"
+            }
+          },
+          "required": [
+            "title",
+            "content"
+          ],
+          "title": "InjectBody",
+          "type": "object"
+        },
+        "KnowledgeFileResponse": {
+          "properties": {
+            "content": {
+              "title": "Content",
+              "type": "string"
+            },
+            "path": {
+              "title": "Path",
+              "type": "string"
+            }
+          },
+          "required": [
+            "path",
+            "content"
+          ],
+          "title": "KnowledgeFileResponse",
+          "type": "object"
+        },
+        "KnowledgeNode": {
+          "description": "A node in the knowledge tree. `dir` nodes carry `children`; `file` nodes omit it\n(serialized with response_model_exclude_none so files stay `{name, type, path}`).",
+          "properties": {
+            "children": {
+              "anyOf": [
+                {
+                  "items": {
+                    "$ref": "#/components/schemas/KnowledgeNode"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Children"
+            },
+            "name": {
+              "title": "Name",
+              "type": "string"
+            },
+            "path": {
+              "title": "Path",
+              "type": "string"
+            },
+            "type": {
+              "title": "Type",
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "type",
+            "path"
+          ],
+          "title": "KnowledgeNode",
+          "type": "object"
+        },
+        "KnowledgeOkResponse": {
+          "description": "The write/inject result: ok + the (relative) path written.",
+          "properties": {
+            "ok": {
+              "title": "Ok",
+              "type": "boolean"
+            },
+            "path": {
+              "title": "Path",
+              "type": "string"
+            }
+          },
+          "required": [
+            "ok",
+            "path"
+          ],
+          "title": "KnowledgeOkResponse",
+          "type": "object"
+        },
+        "KnowledgeStat": {
+          "properties": {
+            "artifacts_reserved": {
+              "title": "Artifacts Reserved",
+              "type": "boolean"
+            },
+            "artifacts_total": {
+              "title": "Artifacts Total",
+              "type": "integer"
+            },
+            "facts_by_type": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "title": "Facts By Type",
+              "type": "object"
+            },
+            "facts_disabled": {
+              "title": "Facts Disabled",
+              "type": "integer"
+            },
+            "facts_enabled": {
+              "title": "Facts Enabled",
+              "type": "integer"
+            },
+            "facts_total": {
+              "title": "Facts Total",
+              "type": "integer"
+            },
+            "items": {
+              "items": {
+                "$ref": "#/components/schemas/KnowledgeStatItem"
+              },
+              "title": "Items",
+              "type": "array"
+            }
+          },
+          "required": [
+            "facts_total",
+            "facts_enabled",
+            "facts_disabled",
+            "facts_by_type",
+            "artifacts_total",
+            "artifacts_reserved",
+            "items"
+          ],
+          "title": "KnowledgeStat",
+          "type": "object"
+        },
+        "KnowledgeStatItem": {
+          "properties": {
+            "description": {
+              "title": "Description",
+              "type": "string"
+            },
+            "enabled": {
+              "title": "Enabled",
+              "type": "boolean"
+            },
+            "name": {
+              "title": "Name",
+              "type": "string"
+            },
+            "source": {
+              "title": "Source",
+              "type": "string"
+            },
+            "type": {
+              "title": "Type",
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "description",
+            "type",
+            "enabled",
+            "source"
+          ],
+          "title": "KnowledgeStatItem",
+          "type": "object"
+        },
+        "LearningBody": {
+          "properties": {
+            "enabled": {
+              "title": "Enabled",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "enabled"
+          ],
+          "title": "LearningBody",
+          "type": "object"
+        },
+        "LearningResponse": {
+          "properties": {
+            "learning_enabled": {
+              "title": "Learning Enabled",
+              "type": "boolean"
+            },
+            "ok": {
+              "title": "Ok",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok",
+            "learning_enabled"
+          ],
+          "title": "LearningResponse",
+          "type": "object"
+        },
+        "ManifestEntity": {
+          "additionalProperties": true,
+          "description": "One model.yaml entity (the dev-knowledge schema's nodes). Lenient (extra='allow', all\noptional) so a richer/older manifest never 500s, but typing `entities` to this validates each\nrow IS a structured object \u2014 a malformed entry (e.g. a bare string) becomes a clear server-side\nerror at request time rather than a silent FE render crash (R5).",
+          "properties": {
+            "fields": {
+              "anyOf": [
+                {
+                  "items": {},
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Fields"
+            },
+            "id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Id"
+            },
+            "label": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Label"
+            },
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {},
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Schema"
+            },
+            "storage": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Storage"
+            },
+            "store": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Store"
+            },
+            "summary": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Summary"
+            }
+          },
+          "title": "ManifestEntity",
+          "type": "object"
+        },
+        "MemoryStatsResponse": {
+          "properties": {
+            "candidates": {
+              "$ref": "#/components/schemas/CandidatesStat"
+            },
+            "context_id": {
+              "title": "Context Id",
+              "type": "string"
+            },
+            "distilling": {
+              "title": "Distilling",
+              "type": "boolean"
+            },
+            "knowledge": {
+              "$ref": "#/components/schemas/KnowledgeStat"
+            }
+          },
+          "required": [
+            "context_id",
+            "distilling",
+            "candidates",
+            "knowledge"
+          ],
+          "title": "MemoryStatsResponse",
+          "type": "object"
+        },
+        "ModelBody": {
+          "properties": {
+            "context_id": {
+              "default": "global",
+              "title": "Context Id",
+              "type": "string"
+            },
+            "model": {
+              "title": "Model",
+              "type": "string"
+            }
+          },
+          "required": [
+            "model"
+          ],
+          "title": "ModelBody",
+          "type": "object"
+        },
+        "PaletteResponse": {
+          "properties": {
+            "commands": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Commands",
+              "type": "array"
+            },
+            "context_id": {
+              "title": "Context Id",
+              "type": "string"
+            },
+            "mode": {
+              "title": "Mode",
+              "type": "string"
+            }
+          },
+          "required": [
+            "context_id",
+            "mode",
+            "commands"
+          ],
+          "title": "PaletteResponse",
+          "type": "object"
+        },
+        "PlanBody": {
+          "properties": {
+            "context_id": {
+              "default": "global",
+              "title": "Context Id",
+              "type": "string"
+            },
+            "model": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Model"
+            }
+          },
+          "title": "PlanBody",
+          "type": "object"
+        },
+        "PlanResponse": {
+          "properties": {
+            "model": {
+              "title": "Model",
+              "type": "string"
+            },
+            "ok": {
+              "title": "Ok",
+              "type": "boolean"
+            },
+            "status": {
+              "title": "Status",
+              "type": "string"
+            },
+            "work_item_id": {
+              "title": "Work Item Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "ok",
+            "status",
+            "work_item_id",
+            "model"
+          ],
+          "title": "PlanResponse",
+          "type": "object"
+        },
+        "PluginEntry": {
+          "additionalProperties": true,
+          "description": "One universal skill/agent in the harness tree. Skills carry `access`; agents carry\n`model`/`tools`. Routes use response_model_exclude_unset so each emits only its own keys.",
+          "properties": {
+            "access": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access"
+            },
+            "category": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category"
+            },
+            "description": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Description"
+            },
+            "kind": {
+              "title": "Kind",
+              "type": "string"
+            },
+            "model": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Model"
+            },
+            "name": {
+              "title": "Name",
+              "type": "string"
+            },
+            "tools": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tools"
+            }
+          },
+          "required": [
+            "kind",
+            "name"
+          ],
+          "title": "PluginEntry",
+          "type": "object"
+        },
+        "PluginFileBody": {
+          "properties": {
+            "content": {
+              "title": "Content",
+              "type": "string"
+            },
+            "kind": {
+              "title": "Kind",
+              "type": "string"
+            },
+            "name": {
+              "title": "Name",
+              "type": "string"
+            },
+            "scope": {
+              "title": "Scope",
+              "type": "string"
+            }
+          },
+          "required": [
+            "scope",
+            "kind",
+            "name",
+            "content"
+          ],
+          "title": "PluginFileBody",
+          "type": "object"
+        },
+        "PluginFileResponse": {
+          "description": "The raw markdown of one skill/agent (popup preview/edit source).",
+          "properties": {
+            "content": {
+              "title": "Content",
+              "type": "string"
+            },
+            "kind": {
+              "title": "Kind",
+              "type": "string"
+            },
+            "name": {
+              "title": "Name",
+              "type": "string"
+            },
+            "path": {
+              "title": "Path",
+              "type": "string"
+            },
+            "scope": {
+              "title": "Scope",
+              "type": "string"
+            }
+          },
+          "required": [
+            "scope",
+            "kind",
+            "name",
+            "path",
+            "content"
+          ],
+          "title": "PluginFileResponse",
+          "type": "object"
+        },
+        "PluginFileSaveResponse": {
+          "properties": {
+            "kind": {
+              "title": "Kind",
+              "type": "string"
+            },
+            "name": {
+              "title": "Name",
+              "type": "string"
+            },
+            "ok": {
+              "title": "Ok",
+              "type": "boolean"
+            },
+            "scope": {
+              "title": "Scope",
+              "type": "string"
+            }
+          },
+          "required": [
+            "ok",
+            "scope",
+            "kind",
+            "name"
+          ],
+          "title": "PluginFileSaveResponse",
+          "type": "object"
+        },
+        "PluginScope": {
+          "description": "One scope group (dev | core | shared) in the Skills & Agents tab.",
+          "properties": {
+            "agents": {
+              "items": {
+                "$ref": "#/components/schemas/PluginEntry"
+              },
+              "title": "Agents",
+              "type": "array"
+            },
+            "label": {
+              "title": "Label",
+              "type": "string"
+            },
+            "note": {
+              "title": "Note",
+              "type": "string"
+            },
+            "plugin": {
+              "title": "Plugin",
+              "type": "string"
+            },
+            "scope": {
+              "title": "Scope",
+              "type": "string"
+            },
+            "skills": {
+              "items": {
+                "$ref": "#/components/schemas/PluginEntry"
+              },
+              "title": "Skills",
+              "type": "array"
+            }
+          },
+          "required": [
+            "scope",
+            "label",
+            "plugin",
+            "note",
+            "skills",
+            "agents"
+          ],
+          "title": "PluginScope",
+          "type": "object"
+        },
+        "Proposal": {
+          "additionalProperties": true,
+          "description": "A memory proposal (rich DB row with JSON columns). Declared fields document the stable shape;\nextra='allow' carries anything else, and routes emit only the keys actually present. The\noutput_form/target_scope/status enums are locked (R5): their producer coerces/guards to these\nexact sets, so the Literal can't 500 on a real row.",
+          "properties": {
+            "apply_target": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Apply Target"
+            },
+            "body": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Body"
+            },
+            "candidate_ids": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "integer"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Candidate Ids"
+            },
+            "candidates": {
+              "anyOf": [
+                {
+                  "items": {
+                    "$ref": "#/components/schemas/ProposalCandidate"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Candidates"
+            },
+            "clarification_answers": {
+              "anyOf": [
+                {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                {
+                  "items": {},
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Clarification Answers"
+            },
+            "clarifications": {
+              "anyOf": [
+                {
+                  "items": {},
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Clarifications"
+            },
+            "cluster": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cluster"
+            },
+            "confidence": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Confidence"
+            },
+            "context_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Context Id"
+            },
+            "created_at": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Created At"
+            },
+            "eval_report": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/EvalReport"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "fields": {
+              "anyOf": [
+                {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Fields"
+            },
+            "id": {
+              "title": "Id",
+              "type": "integer"
+            },
+            "output_form": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "constitution",
+                    "skill",
+                    "agent"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Output Form"
+            },
+            "rationale": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Rationale"
+            },
+            "recall_type": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Recall Type"
+            },
+            "staged_artifact": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Staged Artifact"
+            },
+            "staged_path": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Staged Path"
+            },
+            "status": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "proposed",
+                    "writing",
+                    "drafted",
+                    "published",
+                    "rejected",
+                    "dropped",
+                    "superseded",
+                    "retired"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            },
+            "summary": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Summary"
+            },
+            "target_scope": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "repo_dev",
+                    "universal_dev",
+                    "core"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Target Scope"
+            },
+            "title": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Title"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "title": "Proposal",
+          "type": "object"
+        },
+        "ProposalActionBody": {
+          "properties": {
+            "context_id": {
+              "default": "global",
+              "title": "Context Id",
+              "type": "string"
+            },
+            "description": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Description"
+            },
+            "type": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Type"
+            }
+          },
+          "title": "ProposalActionBody",
+          "type": "object"
+        },
+        "ProposalActionResponse": {
+          "description": "reject / drop / artifact-edit: ok + the updated proposal.",
+          "properties": {
+            "ok": {
+              "title": "Ok",
+              "type": "boolean"
+            },
+            "proposal": {
+              "$ref": "#/components/schemas/Proposal"
+            }
+          },
+          "required": [
+            "ok",
+            "proposal"
+          ],
+          "title": "ProposalActionResponse",
+          "type": "object"
+        },
+        "ProposalCandidate": {
+          "additionalProperties": true,
+          "description": "A source candidate behind a proposal (provenance shown in the review popup).",
+          "properties": {
+            "captured_at": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Captured At"
+            },
+            "evidence": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Evidence"
+            },
+            "form_hint": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Form Hint"
+            },
+            "id": {
+              "title": "Id",
+              "type": "integer"
+            },
+            "rationale": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Rationale"
+            },
+            "scope_hint": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Scope Hint"
+            },
+            "signal": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Signal"
+            },
+            "source": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
+            },
+            "status": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "title": "ProposalCandidate",
+          "type": "object"
+        },
+        "ProposalExecutionResponse": {
+          "properties": {
+            "context_id": {
+              "title": "Context Id",
+              "type": "string"
+            },
+            "proposal_id": {
+              "title": "Proposal Id",
+              "type": "integer"
+            },
+            "status": {
+              "title": "Status",
+              "type": "string"
+            },
+            "steps": {
+              "items": {
+                "$ref": "#/components/schemas/ExecutionStep"
+              },
+              "title": "Steps",
+              "type": "array"
+            }
+          },
+          "required": [
+            "context_id",
+            "proposal_id",
+            "status",
+            "steps"
+          ],
+          "title": "ProposalExecutionResponse",
+          "type": "object"
+        },
+        "ProposalsResponse": {
+          "properties": {
+            "context_id": {
+              "title": "Context Id",
+              "type": "string"
+            },
+            "proposals": {
+              "items": {
+                "$ref": "#/components/schemas/Proposal"
+              },
+              "title": "Proposals",
+              "type": "array"
+            }
+          },
+          "required": [
+            "context_id",
+            "proposals"
+          ],
+          "title": "ProposalsResponse",
+          "type": "object"
+        },
+        "PublishResponse": {
+          "properties": {
+            "ok": {
+              "title": "Ok",
+              "type": "boolean"
+            },
+            "path": {
+              "title": "Path",
+              "type": "string"
+            },
+            "proposal": {
+              "$ref": "#/components/schemas/Proposal"
+            }
+          },
+          "required": [
+            "ok",
+            "path",
+            "proposal"
+          ],
+          "title": "PublishResponse",
+          "type": "object"
+        },
+        "PublishedDeleteResponse": {
+          "additionalProperties": true,
+          "description": "ok + proposal_id + `removed` (the delete_published result) carried via extra.",
+          "properties": {
+            "ok": {
+              "title": "Ok",
+              "type": "boolean"
+            },
+            "proposal_id": {
+              "title": "Proposal Id",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "ok",
+            "proposal_id"
+          ],
+          "title": "PublishedDeleteResponse",
+          "type": "object"
+        },
+        "PublishedResponse": {
+          "properties": {
+            "context_id": {
+              "title": "Context Id",
+              "type": "string"
+            },
+            "published": {
+              "items": {
+                "$ref": "#/components/schemas/PublishedRow"
+              },
+              "title": "Published",
+              "type": "array"
+            }
+          },
+          "required": [
+            "context_id",
+            "published"
+          ],
+          "title": "PublishedResponse",
+          "type": "object"
+        },
+        "PublishedRow": {
+          "description": "One published LEARNED artifact, reconciled with live on-disk state.",
+          "properties": {
+            "created": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Created"
+            },
+            "enabled": {
+              "title": "Enabled",
+              "type": "boolean"
+            },
+            "form": {
+              "title": "Form",
+              "type": "string"
+            },
+            "present": {
+              "title": "Present",
+              "type": "boolean"
+            },
+            "proposal_id": {
+              "title": "Proposal Id",
+              "type": "integer"
+            },
+            "scope": {
+              "title": "Scope",
+              "type": "string"
+            },
+            "slug": {
+              "title": "Slug",
+              "type": "string"
+            },
+            "summary": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Summary"
+            },
+            "title": {
+              "title": "Title",
+              "type": "string"
+            }
+          },
+          "required": [
+            "proposal_id",
+            "form",
+            "scope",
+            "slug",
+            "title",
+            "present",
+            "enabled"
+          ],
+          "title": "PublishedRow",
+          "type": "object"
+        },
+        "PublishedToggleBody": {
+          "properties": {
+            "context_id": {
+              "default": "global",
+              "title": "Context Id",
+              "type": "string"
+            },
+            "enabled": {
+              "title": "Enabled",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "enabled"
+          ],
+          "title": "PublishedToggleBody",
+          "type": "object"
+        },
+        "PublishedToggleResponse": {
+          "additionalProperties": true,
+          "description": "ok + proposal_id + the operational toggle result (present/enabled) spread in via extra.",
+          "properties": {
+            "ok": {
+              "title": "Ok",
+              "type": "boolean"
+            },
+            "proposal_id": {
+              "title": "Proposal Id",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "ok",
+            "proposal_id"
+          ],
+          "title": "PublishedToggleResponse",
+          "type": "object"
+        },
+        "RepoModelBody": {
+          "properties": {
+            "model": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Model"
+            }
+          },
+          "title": "RepoModelBody",
+          "type": "object"
+        },
+        "RepoModelResponse": {
+          "properties": {
+            "effective": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Effective"
+            },
+            "model": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Model"
+            },
+            "ok": {
+              "title": "Ok",
+              "type": "boolean"
+            },
+            "repo_id": {
+              "title": "Repo Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "ok",
+            "repo_id"
+          ],
+          "title": "RepoModelResponse",
+          "type": "object"
+        },
+        "RepoOverview": {
+          "properties": {
+            "cwd": {
+              "title": "Cwd",
+              "type": "string"
+            },
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "label": {
+              "title": "Label",
+              "type": "string"
+            },
+            "layer": {
+              "title": "Layer",
+              "type": "string"
+            },
+            "model_override": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Model Override"
+            },
+            "scopes": {
+              "additionalProperties": {
+                "$ref": "#/components/schemas/RepoScope"
+              },
+              "title": "Scopes",
+              "type": "object"
+            }
+          },
+          "required": [
+            "id",
+            "label",
+            "cwd",
+            "layer",
+            "scopes"
+          ],
+          "title": "RepoOverview",
+          "type": "object"
+        },
+        "RepoScope": {
+          "description": "One (repo \u00d7 scope) cell: home pointers + computed live status + counts.",
+          "properties": {
+            "active": {
+              "title": "Active",
+              "type": "boolean"
+            },
+            "agents": {
+              "title": "Agents",
+              "type": "integer"
+            },
+            "current_item": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Current Item"
+            },
+            "knowledge_home": {
+              "title": "Knowledge Home",
+              "type": "string"
+            },
+            "last_activity": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Last Activity"
+            },
+            "operational_home": {
+              "title": "Operational Home",
+              "type": "string"
+            },
+            "running": {
+              "title": "Running",
+              "type": "integer"
+            },
+            "sessions": {
+              "title": "Sessions",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "knowledge_home",
+            "operational_home",
+            "active",
+            "sessions",
+            "agents",
+            "running"
+          ],
+          "title": "RepoScope",
+          "type": "object"
+        },
+        "RunRow": {
+          "description": "One row of the spine `run` table (live or historical) \u2014 every run-returning route shares it.\nmode/status are locked (R5: the spine writes exactly these); `feature` stays a free label.",
+          "properties": {
+            "ctx_pct": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ctx Pct"
+            },
+            "ended_at": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ended At"
+            },
+            "feature": {
+              "title": "Feature",
+              "type": "string"
+            },
+            "id": {
+              "title": "Id",
+              "type": "integer"
+            },
+            "item_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Item Id"
+            },
+            "mode": {
+              "enum": [
+                "core",
+                "dev"
+              ],
+              "title": "Mode",
+              "type": "string"
+            },
+            "model": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Model"
+            },
+            "repo_id": {
+              "title": "Repo Id",
+              "type": "string"
+            },
+            "session_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session Id"
+            },
+            "started_at": {
+              "title": "Started At",
+              "type": "string"
+            },
+            "status": {
+              "enum": [
+                "running",
+                "done",
+                "aborted",
+                "waiting"
+              ],
+              "title": "Status",
+              "type": "string"
+            },
+            "tokens": {
+              "title": "Tokens",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "id",
+            "repo_id",
+            "mode",
+            "feature",
+            "status",
+            "tokens",
+            "started_at"
+          ],
+          "title": "RunRow",
+          "type": "object"
+        },
+        "RunsResponse": {
+          "properties": {
+            "history": {
+              "items": {
+                "$ref": "#/components/schemas/RunRow"
+              },
+              "title": "History",
+              "type": "array"
+            },
+            "live": {
+              "items": {
+                "$ref": "#/components/schemas/RunRow"
+              },
+              "title": "Live",
+              "type": "array"
+            },
+            "running": {
+              "title": "Running",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "live",
+            "history",
+            "running"
+          ],
+          "title": "RunsResponse",
+          "type": "object"
+        },
+        "SessionBubble": {
+          "description": "One replayable chat bubble (`you` | `superme`).",
+          "properties": {
+            "role": {
+              "title": "Role",
+              "type": "string"
+            },
+            "text": {
+              "title": "Text",
+              "type": "string"
+            }
+          },
+          "required": [
+            "role",
+            "text"
+          ],
+          "title": "SessionBubble",
+          "type": "object"
+        },
+        "SessionDeleteResponse": {
+          "properties": {
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "ok": {
+              "title": "Ok",
+              "type": "boolean"
+            },
+            "purged": {
+              "title": "Purged",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok",
+            "id",
+            "purged"
+          ],
+          "title": "SessionDeleteResponse",
+          "type": "object"
+        },
+        "SessionDetail": {
+          "description": "One session's title + its most recent bubbles (older ones skipped server-side).",
+          "properties": {
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "messages": {
+              "items": {
+                "$ref": "#/components/schemas/SessionBubble"
+              },
+              "title": "Messages",
+              "type": "array"
+            },
+            "title": {
+              "title": "Title",
+              "type": "string"
+            },
+            "total": {
+              "title": "Total",
+              "type": "integer"
+            },
+            "truncated": {
+              "title": "Truncated",
+              "type": "boolean"
+            },
+            "updated_at": {
+              "title": "Updated At",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "title",
+            "updated_at",
+            "messages",
+            "total",
+            "truncated"
+          ],
+          "title": "SessionDetail",
+          "type": "object"
+        },
+        "SessionSummary": {
+          "description": "A session's picker entry.",
+          "properties": {
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "message_count": {
+              "title": "Message Count",
+              "type": "integer"
+            },
+            "mode": {
+              "title": "Mode",
+              "type": "string"
+            },
+            "surface": {
+              "title": "Surface",
+              "type": "string"
+            },
+            "title": {
+              "title": "Title",
+              "type": "string"
+            },
+            "updated_at": {
+              "title": "Updated At",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "title",
+            "surface",
+            "mode",
+            "updated_at",
+            "message_count"
+          ],
+          "title": "SessionSummary",
+          "type": "object"
+        },
+        "SweepResponse": {
+          "properties": {
+            "filed": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Filed"
+            },
+            "session_id": {
+              "title": "Session Id",
+              "type": "string"
+            },
+            "status": {
+              "title": "Status",
+              "type": "string"
+            },
+            "watermark": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Watermark"
+            }
+          },
+          "required": [
+            "status",
+            "session_id"
+          ],
+          "title": "SweepResponse",
+          "type": "object"
+        },
+        "SweptItem": {
+          "properties": {
+            "filed": {
+              "title": "Filed",
+              "type": "integer"
+            },
+            "repo_id": {
+              "title": "Repo Id",
+              "type": "string"
+            },
+            "session_id": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "session_id",
+            "repo_id",
+            "filed"
+          ],
+          "title": "SweptItem",
+          "type": "object"
+        },
+        "SystemModelBody": {
+          "properties": {
+            "model": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Model"
+            }
+          },
+          "title": "SystemModelBody",
+          "type": "object"
+        },
+        "SystemModelResponse": {
+          "properties": {
+            "effective": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Effective"
+            },
+            "model": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Model"
+            },
+            "ok": {
+              "title": "Ok",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok"
+          ],
+          "title": "SystemModelResponse",
+          "type": "object"
+        },
+        "SystemResponse": {
+          "description": "The System singleton: static config + the live half (in-flight runs) + the repo roster.",
+          "properties": {
+            "default_model": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Default Model"
+            },
+            "default_model_overridden": {
+              "title": "Default Model Overridden",
+              "type": "boolean"
+            },
+            "default_model_static": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Default Model Static"
+            },
+            "default_repo": {
+              "title": "Default Repo",
+              "type": "string"
+            },
+            "identity": {
+              "title": "Identity",
+              "type": "string"
+            },
+            "learning_enabled": {
+              "title": "Learning Enabled",
+              "type": "boolean"
+            },
+            "live_runs": {
+              "items": {
+                "$ref": "#/components/schemas/RunRow"
+              },
+              "title": "Live Runs",
+              "type": "array"
+            },
+            "policy_version": {
+              "title": "Policy Version",
+              "type": "integer"
+            },
+            "repos": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Repos",
+              "type": "array"
+            },
+            "running": {
+              "title": "Running",
+              "type": "integer"
+            },
+            "version": {
+              "title": "Version",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "identity",
+            "version",
+            "default_model_overridden",
+            "policy_version",
+            "default_repo",
+            "learning_enabled",
+            "live_runs",
+            "running",
+            "repos"
+          ],
+          "title": "SystemResponse",
+          "type": "object"
+        },
+        "TaskItem": {
+          "description": "One tasks.md checklist line.",
+          "properties": {
+            "done": {
+              "title": "Done",
+              "type": "boolean"
+            },
+            "text": {
+              "title": "Text",
+              "type": "string"
+            }
+          },
+          "required": [
+            "text",
+            "done"
+          ],
+          "title": "TaskItem",
+          "type": "object"
+        },
+        "ValidationError": {
+          "properties": {
+            "ctx": {
+              "title": "Context",
+              "type": "object"
+            },
+            "input": {
+              "title": "Input"
+            },
+            "loc": {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ]
+              },
+              "title": "Location",
+              "type": "array"
+            },
+            "msg": {
+              "title": "Message",
+              "type": "string"
+            },
+            "type": {
+              "title": "Error Type",
+              "type": "string"
+            }
+          },
+          "required": [
+            "loc",
+            "msg",
+            "type"
+          ],
+          "title": "ValidationError",
+          "type": "object"
+        },
+        "WorkItem": {
+          "additionalProperties": true,
+          "description": "A dev work-item. Base fields are always present; tree-walk + telemetry fields appear only on\nthe enriched /dev list (extra='allow' tolerates any future frontmatter key).",
+          "properties": {
+            "artifacts": {
+              "anyOf": [
+                {
+                  "items": {
+                    "$ref": "#/components/schemas/ArtifactRef"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Artifacts"
+            },
+            "blocked": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Blocked"
+            },
+            "blocked_by": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Blocked By"
+            },
+            "children": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Children"
+            },
+            "context_pct": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Context Pct"
+            },
+            "created_at": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Created At"
+            },
+            "depth": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Depth"
+            },
+            "description": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Description"
+            },
+            "done_at": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Done At"
+            },
+            "folder": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Folder"
+            },
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "last_run": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/WorkItemLastRun"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "model": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Model"
+            },
+            "parent_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Parent Id"
+            },
+            "phase": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "plan_design",
+                    "build_eval",
+                    "done"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Phase"
+            },
+            "root_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Root Id"
+            },
+            "run_context_pct": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Run Context Pct"
+            },
+            "run_model": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Run Model"
+            },
+            "run_started_at": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Run Started At"
+            },
+            "run_tokens": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Run Tokens"
+            },
+            "running": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Running"
+            },
+            "session_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session Id"
+            },
+            "status": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "queued",
+                    "in_progress",
+                    "waiting",
+                    "dropped"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            },
+            "tasks": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/WorkItemTasks"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Title"
+            },
+            "total_tokens": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Total Tokens"
+            },
+            "updated_at": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Updated At"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "title": "WorkItem",
+          "type": "object"
+        },
+        "WorkItemAdvanceResponse": {
+          "properties": {
+            "from": {
+              "title": "From",
+              "type": "string"
+            },
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "ok": {
+              "title": "Ok",
+              "type": "boolean"
+            },
+            "phase": {
+              "title": "Phase",
+              "type": "string"
+            }
+          },
+          "required": [
+            "ok",
+            "id",
+            "phase",
+            "from"
+          ],
+          "title": "WorkItemAdvanceResponse",
+          "type": "object"
+        },
+        "WorkItemArtifactsResponse": {
+          "properties": {
+            "artifacts": {
+              "items": {
+                "$ref": "#/components/schemas/ArtifactCall"
+              },
+              "title": "Artifacts",
+              "type": "array"
+            }
+          },
+          "required": [
+            "artifacts"
+          ],
+          "title": "WorkItemArtifactsResponse",
+          "type": "object"
+        },
+        "WorkItemCompleteResponse": {
+          "properties": {
+            "archived": {
+              "title": "Archived",
+              "type": "string"
+            },
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "ok": {
+              "title": "Ok",
+              "type": "boolean"
+            },
+            "runs_freed": {
+              "title": "Runs Freed",
+              "type": "integer"
+            },
+            "session_cleared": {
+              "title": "Session Cleared",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok",
+            "id",
+            "archived",
+            "session_cleared",
+            "runs_freed"
+          ],
+          "title": "WorkItemCompleteResponse",
+          "type": "object"
+        },
+        "WorkItemDeleteResponse": {
+          "properties": {
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "inbox_removed": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Inbox Removed"
+            },
+            "ok": {
+              "title": "Ok",
+              "type": "boolean"
+            },
+            "session_cleared": {
+              "title": "Session Cleared",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok",
+            "id",
+            "session_cleared"
+          ],
+          "title": "WorkItemDeleteResponse",
+          "type": "object"
+        },
+        "WorkItemDetailResponse": {
+          "properties": {
+            "execution": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Execution"
+            },
+            "item": {
+              "$ref": "#/components/schemas/WorkItem"
+            },
+            "plan": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Plan"
+            },
+            "prd": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Prd"
+            },
+            "tasks": {
+              "anyOf": [
+                {
+                  "items": {
+                    "$ref": "#/components/schemas/TaskItem"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tasks"
+            }
+          },
+          "required": [
+            "item"
+          ],
+          "title": "WorkItemDetailResponse",
+          "type": "object"
+        },
+        "WorkItemLastRun": {
+          "properties": {
+            "context_pct": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Context Pct"
+            },
+            "duration_ms": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Duration Ms"
+            },
+            "model": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Model"
+            },
+            "tokens": {
+              "title": "Tokens",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "tokens"
+          ],
+          "title": "WorkItemLastRun",
+          "type": "object"
+        },
+        "WorkItemModelResponse": {
+          "properties": {
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "model": {
+              "title": "Model",
+              "type": "string"
+            },
+            "ok": {
+              "title": "Ok",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok",
+            "id",
+            "model"
+          ],
+          "title": "WorkItemModelResponse",
+          "type": "object"
+        },
+        "WorkItemTasks": {
+          "properties": {
+            "done": {
+              "title": "Done",
+              "type": "integer"
+            },
+            "total": {
+              "title": "Total",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "done",
+            "total"
+          ],
+          "title": "WorkItemTasks",
+          "type": "object"
+        },
+        "WriteBody": {
+          "properties": {
+            "content": {
+              "title": "Content",
+              "type": "string"
+            },
+            "context_id": {
+              "default": "global",
+              "title": "Context Id",
+              "type": "string"
+            },
+            "path": {
+              "title": "Path",
+              "type": "string"
+            }
+          },
+          "required": [
+            "path",
+            "content"
+          ],
+          "title": "WriteBody",
+          "type": "object"
+        }
+      }
+    },
+    "info": {
+      "title": "SuperMe Core daemon",
+      "version": "0.1.0"
+    },
+    "openapi": "3.1.0",
+    "paths": {
+      "/contexts": {
+        "get": {
+          "description": "Live contexts (global + connected domains) for the surfaces to render.",
+          "operationId": "contexts_list_contexts_get",
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "items": {
+                      "$ref": "#/components/schemas/ContextResponse"
+                    },
+                    "title": "Response Contexts List Contexts Get",
+                    "type": "array"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            }
+          },
+          "summary": "Contexts List"
+        }
+      },
+      "/dev": {
+        "get": {
+          "description": "A context's parsed dev knowledge (files) + inbox queue (DB) + the glance view.\n\n`running` lists work-item ids with a headless /plan turn in flight, so the cards can\nshow a live \"planning\u2026\" state while a background agent works.",
+          "operationId": "dev_read_dev_get",
+          "parameters": [
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "default": "global",
+                "title": "Context Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/DevReadResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Read"
+        }
+      },
+      "/dev/harness/plugin-file": {
+        "get": {
+          "description": "The raw markdown of one SuperMe skill/agent \u2014 the popup's preview + edit source.",
+          "operationId": "dev_harness_plugin_file_dev_harness_plugin_file_get",
+          "parameters": [
+            {
+              "in": "query",
+              "name": "scope",
+              "required": true,
+              "schema": {
+                "title": "Scope",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "kind",
+              "required": true,
+              "schema": {
+                "title": "Kind",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "name",
+              "required": true,
+              "schema": {
+                "title": "Name",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/PluginFileResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Harness Plugin File"
+        },
+        "put": {
+          "description": "Save edits to one SuperMe skill/agent file (the popup's edit mode). Takes effect on the next\ndev turn (plugins are read per-turn); no daemon restart needed for content edits.",
+          "operationId": "dev_harness_plugin_file_save_dev_harness_plugin_file_put",
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginFileBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/PluginFileSaveResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Harness Plugin File Save"
+        }
+      },
+      "/dev/harness/plugins": {
+        "get": {
+          "description": "SuperMe's OWN universal skills + agents, grouped by scope (dev | core | shared) \u2014 the\nManage-Harness \"Skills & Agents\" tab. Read straight from the harness plugin frontmatter; this\nis the universal harness only (per-repo operational artifacts are out of scope here).",
+          "operationId": "dev_harness_plugins_dev_harness_plugins_get",
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HarnessPluginsResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            }
+          },
+          "summary": "Dev Harness Plugins"
+        }
+      },
+      "/dev/harness/published": {
+        "get": {
+          "description": "The Published inventory \u2014 every LEARNED artifact the owner published, reconciled with live\non-disk state (present + enabled). One row per published proposal, newest first.",
+          "operationId": "dev_harness_published_dev_harness_published_get",
+          "parameters": [
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "default": "global",
+                "title": "Context Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/PublishedResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Harness Published"
+        }
+      },
+      "/dev/harness/published/{proposal_id}": {
+        "delete": {
+          "description": "Remove a published artifact from disk entirely and retire its proposal (history kept). The\nloader stops seeing it next turn.",
+          "operationId": "dev_harness_published_delete_dev_harness_published__proposal_id__delete",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "proposal_id",
+              "required": true,
+              "schema": {
+                "title": "Proposal Id",
+                "type": "integer"
+              }
+            },
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "default": "global",
+                "title": "Context Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/PublishedDeleteResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Harness Published Delete"
+        },
+        "patch": {
+          "description": "Enable/disable a published artifact at runtime (no delete). Constitution flips its frontmatter\nflag; a skill/agent moves between the live plugin tree and its `.disabled/` shadow. Effective on\nthe next dev turn.",
+          "operationId": "dev_harness_published_toggle_dev_harness_published__proposal_id__patch",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "proposal_id",
+              "required": true,
+              "schema": {
+                "title": "Proposal Id",
+                "type": "integer"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublishedToggleBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/PublishedToggleResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Harness Published Toggle"
+        }
+      },
+      "/dev/inbox": {
+        "post": {
+          "description": "Quick-capture: add an item to the context's inbox queue (no approval gate).",
+          "operationId": "dev_inbox_add_dev_inbox_post",
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InboxBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/InboxRow"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Inbox Add"
+        }
+      },
+      "/dev/inbox/{item_id}": {
+        "delete": {
+          "description": "Remove an inbox item outright.",
+          "operationId": "dev_inbox_delete_dev_inbox__item_id__delete",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "item_id",
+              "required": true,
+              "schema": {
+                "title": "Item Id",
+                "type": "integer"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/InboxDeleteResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Inbox Delete"
+        },
+        "patch": {
+          "description": "Edit an inbox item: change status, kind, tag, text, or title.",
+          "operationId": "dev_inbox_update_dev_inbox__item_id__patch",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "item_id",
+              "required": true,
+              "schema": {
+                "title": "Item Id",
+                "type": "integer"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InboxPatch"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/InboxRow"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Inbox Update"
+        }
+      },
+      "/dev/inbox/{item_id}/push": {
+        "post": {
+          "description": "Push an inbox item to the workspace: stamp a queued work-item, mark the row pushed.\n\nAgent-free write \u2014 creates `work-items/<id>/` at plan_design/queued, seeded from the\ninbox row, and records `routed_to` on the row. Returns the new work-item + the row.",
+          "operationId": "dev_inbox_push_dev_inbox__item_id__push_post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "item_id",
+              "required": true,
+              "schema": {
+                "title": "Item Id",
+                "type": "integer"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InboxPushBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/InboxPushResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Inbox Push"
+        }
+      },
+      "/dev/log": {
+        "get": {
+          "description": "The activity log \u2014 a SELECTIVE read over the events table (PRD \u00a74.9), never a dump.\nFilters: `item_id` (an item's own timeline), `scope` (item|dev|global), `since`/`until`\n(ISO timestamps \u2014 e.g. \"what happened yesterday\"). Newest first. Powers the dashboard\nactivity view and the chat \"what was done\u2026\" queries.",
+          "operationId": "dev_log_dev_log_get",
+          "parameters": [
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "default": "global",
+                "title": "Context Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "since",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Since"
+              }
+            },
+            {
+              "in": "query",
+              "name": "until",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Until"
+              }
+            },
+            {
+              "in": "query",
+              "name": "scope",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Scope"
+              }
+            },
+            {
+              "in": "query",
+              "name": "item_id",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Item Id"
+              }
+            },
+            {
+              "in": "query",
+              "name": "limit",
+              "required": false,
+              "schema": {
+                "default": 200,
+                "title": "Limit",
+                "type": "integer"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/DevLogResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Log"
+        }
+      },
+      "/dev/memory/distill": {
+        "post": {
+          "description": "The Manage-Harness \"Run distill\" button: fire a headless distill pass over the candidate\npool (no need to open Dev chat). One pass per (repo \u00d7 dev scope) at a time \u2014 guarded by a\nserver-truth spine query, not a shadow set. Returns immediately; poll `/dev/memory/stats`\n(`distilling`) for completion, then refetch the review queue.",
+          "operationId": "dev_memory_distill_dev_memory_distill_post",
+          "parameters": [
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "default": "global",
+                "title": "Context Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/DistillResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Memory Distill"
+        }
+      },
+      "/dev/memory/proposals": {
+        "get": {
+          "description": "The review queue \u2014 proposals awaiting (or past) the owner gate. `status` filters\n(e.g. 'proposed' = still pending). Newest first. Each proposal is enriched with its source\n`candidates` (signal + rationale + evidence + hints) so the review popup can show provenance\nwithout a second round-trip.",
+          "operationId": "memory_proposals_dev_memory_proposals_get",
+          "parameters": [
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "default": "global",
+                "title": "Context Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "status",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Status"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ProposalsResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Memory Proposals"
+        }
+      },
+      "/dev/memory/proposals/{proposal_id}/approve": {
+        "post": {
+          "description": "GATE 1 \u2014 owner approves the proposal's INTENT (and answers distill's clarifying questions).\nValidates the form/scope can actually be written today (core is reserved), records the answers,\nmoves the proposal to `writing`, and fires a headless per-item WRITE run that authors the final\nartifact and stages it (\u2192 `drafted`) for gate-2. Returns immediately; poll the proposal status.",
+          "operationId": "memory_proposal_approve_dev_memory_proposals__proposal_id__approve_post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "proposal_id",
+              "required": true,
+              "schema": {
+                "title": "Proposal Id",
+                "type": "integer"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApproveBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ApproveResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Memory Proposal Approve"
+        }
+      },
+      "/dev/memory/proposals/{proposal_id}/artifact": {
+        "patch": {
+          "description": "GATE 2 (refine) \u2014 owner edits the staged artifact before publishing. Only a `drafted` proposal\ncan be edited; publish then writes whatever is saved here. Status stays `drafted`.",
+          "operationId": "memory_proposal_edit_artifact_dev_memory_proposals__proposal_id__artifact_patch",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "proposal_id",
+              "required": true,
+              "schema": {
+                "title": "Proposal Id",
+                "type": "integer"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactEditBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ProposalActionResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Memory Proposal Edit Artifact"
+        }
+      },
+      "/dev/memory/proposals/{proposal_id}/drop": {
+        "post": {
+          "description": "Owner DROPS a proposal \u2192 this is noise, stop suggesting it: mark the proposal `dropped`\nand its source candidates `dropped` (the negative signal for the learn-from-drops loop, PRD\n\u00a74.10). Unlike reject, dropped candidates are NOT re-queued.",
+          "operationId": "memory_proposal_drop_dev_memory_proposals__proposal_id__drop_post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "proposal_id",
+              "required": true,
+              "schema": {
+                "title": "Proposal Id",
+                "type": "integer"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProposalActionBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ProposalActionResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Memory Proposal Drop"
+        }
+      },
+      "/dev/memory/proposals/{proposal_id}/execution": {
+        "get": {
+          "description": "The proposal's execution trace \u2014 its lifecycle timeline, reused from the `events` table\n(`meta.proposal_id`): approve \u2192 write.start/end (the forge run) \u2192 artifact edits \u2192 publish. A\nsynthetic head marks where distill filed it. Oldest-first; the gate-2 modal's Execution tab.",
+          "operationId": "memory_proposal_execution_dev_memory_proposals__proposal_id__execution_get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "proposal_id",
+              "required": true,
+              "schema": {
+                "title": "Proposal Id",
+                "type": "integer"
+              }
+            },
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "default": "global",
+                "title": "Context Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ProposalExecutionResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Memory Proposal Execution"
+        }
+      },
+      "/dev/memory/proposals/{proposal_id}/publish": {
+        "post": {
+          "description": "GATE 2 \u2014 owner publishes the staged artifact: the single disk write into its live operational\nhome (constitution file / SKILL.md / agent.md). Promotes the source candidates, logs, and returns\nthe path. The proposal must be `drafted` (the write phase staged an artifact). Core is reserved.",
+          "operationId": "memory_proposal_publish_dev_memory_proposals__proposal_id__publish_post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "proposal_id",
+              "required": true,
+              "schema": {
+                "title": "Proposal Id",
+                "type": "integer"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProposalActionBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/PublishResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Memory Proposal Publish"
+        }
+      },
+      "/dev/memory/proposals/{proposal_id}/reject": {
+        "post": {
+          "description": "Owner REJECTS a proposal \u2192 this framing is wrong, but the underlying observation may still\nmatter: mark the proposal `rejected` and RE-QUEUE its source candidates (back to `candidate`)\nso a later distill pass can reconsider/reframe them. To stop re-suggestion, use DROP instead.\nWorks at gate 1 (`proposed`) or gate 2 (`drafted` \u2014 a staged artifact the owner doesn't want).",
+          "operationId": "memory_proposal_reject_dev_memory_proposals__proposal_id__reject_post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "proposal_id",
+              "required": true,
+              "schema": {
+                "title": "Proposal Id",
+                "type": "integer"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProposalActionBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ProposalActionResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Memory Proposal Reject"
+        }
+      },
+      "/dev/memory/stats": {
+        "get": {
+          "description": "Manage-Harness stat tiles (PRD \u00a74.10.4): the two pipeline gauges + drill-down detail.\n\n- `candidates` \u2014 the un-distilled capture pool (what a distill run would consume).\n- `knowledge`  \u2014 what's been LEARNED + published: the live constitution/skill/agent artifacts\n  (proposal-driven, reconciled with on-disk enabled state \u2014 same source as the Published tab).\nEach carries enough detail to render a popup without a second round-trip.",
+          "operationId": "dev_memory_stats_dev_memory_stats_get",
+          "parameters": [
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "default": "global",
+                "title": "Context Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/MemoryStatsResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Memory Stats"
+        }
+      },
+      "/dev/model": {
+        "get": {
+          "description": "The canonical dev-knowledge model manifest (the shared *shape* of dev-knowledge).\n\nShared schema, falling back to the global reference home when a context has none.",
+          "operationId": "dev_model_dev_model_get",
+          "parameters": [
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "default": "global",
+                "title": "Context Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/DevModelResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Model"
+        }
+      },
+      "/dev/palette": {
+        "get": {
+          "description": "The chat \"/\" palette for a (context, mode): user-facing SuperMe skills for the active mode's\nplugin set (category not in the hidden set), computed live from disk, merged with the context's\ncached external/native commands.",
+          "operationId": "dev_palette_dev_palette_get",
+          "parameters": [
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "default": "global",
+                "title": "Context Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "mode",
+              "required": false,
+              "schema": {
+                "default": "dev",
+                "title": "Mode",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/PaletteResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Palette"
+        }
+      },
+      "/dev/sweep": {
+        "post": {
+          "description": "Ops/debug hook: force a capture sweep over ONE named session, run to completion (so the\ncaller gets the result), with an optional `focus` steer. The everyday triggers are fully\nautomatic (phase/idle); this is the by-id escape hatch for debugging or a targeted re-sweep \u2014\nthe ONLY remaining caller that supplies `focus`.",
+          "operationId": "dev_sweep_dev_sweep_post",
+          "parameters": [
+            {
+              "in": "query",
+              "name": "session_id",
+              "required": true,
+              "schema": {
+                "title": "Session Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "default": "global",
+                "title": "Context Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "focus",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Focus"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/SweepResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Sweep"
+        }
+      },
+      "/dev/sweep/idle-scan": {
+        "post": {
+          "description": "Ops hook: force an idle-scan pass now (the same pass the heartbeat runs every poll), with an\noptional lower `idle_seconds`. Lets the owner trigger a \"sweep everything quiet\" on demand\ninstead of waiting out the threshold \u2014 handy while observing capture behaviour.",
+          "operationId": "dev_sweep_idle_scan_dev_sweep_idle_scan_post",
+          "parameters": [
+            {
+              "in": "query",
+              "name": "idle_seconds",
+              "required": false,
+              "schema": {
+                "default": 900,
+                "title": "Idle Seconds",
+                "type": "integer"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/IdleScanResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Sweep Idle Scan"
+        }
+      },
+      "/dev/work-items/{item_id}": {
+        "delete": {
+          "description": "Hard-delete a plan/design work-item and erase its trace: the `work-items/<id>/` folder,\nits SDK session transcript + index entry, and the originating inbox row. Only allowed while\nthe item is in plan_design (past that gate, code may have been touched). 409 otherwise.",
+          "operationId": "dev_work_item_delete_dev_work_items__item_id__delete",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "item_id",
+              "required": true,
+              "schema": {
+                "title": "Item Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "default": "global",
+                "title": "Context Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/WorkItemDeleteResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Work Item Delete"
+        }
+      },
+      "/dev/work-items/{item_id}/advance": {
+        "post": {
+          "description": "Approve \u2192 advance a work-item to the next phase (the owner's gate). plan_design \u2192\nbuild_eval today (approving the plan). Refuses if there's no next phase or a run is in\nflight on the item. Status/run-state is untouched \u2014 phase is the owner axis.",
+          "operationId": "dev_work_item_advance_dev_work_items__item_id__advance_post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "item_id",
+              "required": true,
+              "schema": {
+                "title": "Item Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "default": "global",
+                "title": "Context Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/WorkItemAdvanceResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Work Item Advance"
+        }
+      },
+      "/dev/work-items/{item_id}/artifacts": {
+        "get": {
+          "description": "The call-trail: every tool / sub-agent / skill this work-item's runs invoked, grouped by\nrun (newest run first, calls in order within a run). Powers the detail popup's Execution tab.",
+          "operationId": "dev_work_item_artifacts_dev_work_items__item_id__artifacts_get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "item_id",
+              "required": true,
+              "schema": {
+                "title": "Item Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "default": "global",
+                "title": "Context Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/WorkItemArtifactsResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Work Item Artifacts"
+        }
+      },
+      "/dev/work-items/{item_id}/complete": {
+        "post": {
+          "description": "Complete + archive a Done-phase work-item (the tick-out). Snapshots the execution trace to\n`artifacts/execution.md` (the folder persists), stamps `done_at`, then RECLAIMS disk by purging\nthe SDK session transcript and freeing the item's run + run_artifact rows. Events are kept.",
+          "operationId": "dev_work_item_complete_dev_work_items__item_id__complete_post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "item_id",
+              "required": true,
+              "schema": {
+                "title": "Item Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "default": "global",
+                "title": "Context Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/WorkItemCompleteResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Work Item Complete"
+        }
+      },
+      "/dev/work-items/{item_id}/detail": {
+        "get": {
+          "description": "A work-item's review payload: its frontmatter/body plus the rendered artifact content\nthe review popup shows \u2014 plan.md and prd.md as Markdown bodies, tasks.md as a structured\n`{text, done}` checklist. Structured render, not a raw file dump.",
+          "operationId": "dev_work_item_detail_dev_work_items__item_id__detail_get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "item_id",
+              "required": true,
+              "schema": {
+                "title": "Item Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "default": "global",
+                "title": "Context Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/WorkItemDetailResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Work Item Detail"
+        }
+      },
+      "/dev/work-items/{item_id}/model": {
+        "post": {
+          "description": "Configure the model a work-item's runs use (plan + bound chat) \u2014 reconfigurable anytime\nfrom the review popup. Persisted to `item.md` frontmatter.",
+          "operationId": "dev_work_item_set_model_dev_work_items__item_id__model_post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "item_id",
+              "required": true,
+              "schema": {
+                "title": "Item Id",
+                "type": "string"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/WorkItemModelResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Work Item Set Model"
+        }
+      },
+      "/dev/work-items/{item_id}/plan": {
+        "post": {
+          "description": "Fire a headless /plan turn for a work-item \u2014 the \"Plan it\" quick-action. Flips the\nitem to in_progress immediately, then returns; the agent works in the background and the\nitem lands at `waiting` when done. Poll GET /dev (`running`) for the live planning state.",
+          "operationId": "dev_work_item_plan_dev_work_items__item_id__plan_post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "item_id",
+              "required": true,
+              "schema": {
+                "title": "Item Id",
+                "type": "string"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/PlanResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Work Item Plan"
+        }
+      },
+      "/docs": {
+        "get": {
+          "description": "List the docs (slug + title), overview first, then alphabetical by title.",
+          "operationId": "docs_list_docs_get",
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/DocsListResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            }
+          },
+          "summary": "Docs List"
+        }
+      },
+      "/docs/{slug}": {
+        "get": {
+          "description": "Return one doc's markdown. `overview` maps to README.md. Path-traversal-safe.",
+          "operationId": "docs_read_docs__slug__get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "slug",
+              "required": true,
+              "schema": {
+                "title": "Slug",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/DocResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Docs Read"
+        }
+      },
+      "/health": {
+        "get": {
+          "operationId": "health_health_get",
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HealthResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            }
+          },
+          "summary": "Health"
+        }
+      },
+      "/knowledge/file": {
+        "get": {
+          "description": "One knowledge file's text.",
+          "operationId": "knowledge_read_knowledge_file_get",
+          "parameters": [
+            {
+              "in": "query",
+              "name": "path",
+              "required": true,
+              "schema": {
+                "title": "Path",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "default": "global",
+                "title": "Context Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/KnowledgeFileResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Knowledge Read"
+        },
+        "put": {
+          "description": "Create or overwrite a knowledge file (in-place editing).",
+          "operationId": "knowledge_write_knowledge_file_put",
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WriteBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/KnowledgeOkResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Knowledge Write"
+        }
+      },
+      "/knowledge/inject": {
+        "post": {
+          "description": "Create a new note from {title, content} and link it in index.md.",
+          "operationId": "knowledge_inject_knowledge_inject_post",
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InjectBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/KnowledgeOkResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Knowledge Inject"
+        }
+      },
+      "/knowledge/tree": {
+        "get": {
+          "description": "The folder/file tree of the context's knowledge layer.",
+          "operationId": "knowledge_tree_knowledge_tree_get",
+          "parameters": [
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "default": "global",
+                "title": "Context Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/KnowledgeNode"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Knowledge Tree"
+        }
+      },
+      "/repos": {
+        "get": {
+          "description": "Every repo \u00d7 scope: static meta + computed live status (active/idle, last activity,\ncurrent item) + session/run counts + the per-scope knowledge & operational home pointers.",
+          "operationId": "repos_overview_repos_get",
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "items": {
+                      "$ref": "#/components/schemas/RepoOverview"
+                    },
+                    "title": "Response Repos Overview Repos Get",
+                    "type": "array"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            }
+          },
+          "summary": "Repos Overview"
+        }
+      },
+      "/repos/{repo_id}/model": {
+        "post": {
+          "description": "Set (or clear) one repo's model override. Clearing falls back to the system default.",
+          "operationId": "set_repo_model_repos__repo_id__model_post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "repo_id",
+              "required": true,
+              "schema": {
+                "title": "Repo Id",
+                "type": "string"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepoModelBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/RepoModelResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Set Repo Model"
+        }
+      },
+      "/runs": {
+        "get": {
+          "description": "The run log: live (in-flight) + recent history. Scope to one repo with ?context_id=,\nor omit for the system-wide log. `running` is the live count for a quick gauge.",
+          "operationId": "runs_overview_runs_get",
+          "parameters": [
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Context Id"
+              }
+            },
+            {
+              "in": "query",
+              "name": "limit",
+              "required": false,
+              "schema": {
+                "default": 50,
+                "title": "Limit",
+                "type": "integer"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/RunsResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Runs Overview"
+        }
+      },
+      "/sessions": {
+        "get": {
+          "description": "SuperMe's own past sessions for a context, newest first. `mode` (core|dev) scopes.",
+          "operationId": "sessions_list_sessions_get",
+          "parameters": [
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "default": "global",
+                "title": "Context Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "mode",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Mode"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "items": {
+                      "$ref": "#/components/schemas/SessionSummary"
+                    },
+                    "title": "Response Sessions List Sessions Get",
+                    "type": "array"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Sessions List"
+        }
+      },
+      "/sessions/{session_id}": {
+        "delete": {
+          "description": "Remove a session. Two tiers (the owner chooses):\n\u2022 forget (default) \u2014 drop it from the picker only; the transcript JSONL is LEFT on disk, so\n  it can still be referenced/recovered. This is the reversible \"tidy my list\" action.\n\u2022 purge (`?purge=true`) \u2014 ALSO delete the transcript JSONL from disk. Irreversible disk-level\n  cleanup; leaves no trace (PRD \u00a74.9 hygiene).",
+          "operationId": "session_delete_sessions__session_id__delete",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "session_id",
+              "required": true,
+              "schema": {
+                "title": "Session Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "default": "global",
+                "title": "Context Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "purge",
+              "required": false,
+              "schema": {
+                "default": false,
+                "title": "Purge",
+                "type": "boolean"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/SessionDeleteResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Session Delete"
+        },
+        "get": {
+          "description": "One session's title + replayable bubble history.",
+          "operationId": "session_read_sessions__session_id__get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "session_id",
+              "required": true,
+              "schema": {
+                "title": "Session Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "default": "global",
+                "title": "Context Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/SessionDetail"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Session Read"
+        }
+      },
+      "/system": {
+        "get": {
+          "description": "The System singleton: static config + live half (in-flight runs) + the repo roster.",
+          "operationId": "system_overview_system_get",
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/SystemResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            }
+          },
+          "summary": "System Overview"
+        }
+      },
+      "/system/learning": {
+        "post": {
+          "description": "Flip the learning master switch (idle / phase / completion sweeps). Off by default \u2014 background\nlearning spends tokens unattended. Capture is fully automatic, so this governs all of it.",
+          "operationId": "set_system_learning_system_learning_post",
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/LearningResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Set System Learning"
+        }
+      },
+      "/system/model": {
+        "post": {
+          "description": "Set (or clear) the system-wide default model \u2014 the floor below per-repo overrides.",
+          "operationId": "set_system_model_system_model_post",
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemModelBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/SystemModelResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Set System Model"
+        }
+      }
+    }
+  }
+}

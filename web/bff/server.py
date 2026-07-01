@@ -1,10 +1,15 @@
-"""FastAPI BFF: same-origin /api for the frontend, forwarding to the Core daemon.
+"""FastAPI BFF: same-origin `/api` for the frontend, forwarding to the Core daemon.
 
-- Knowledge endpoints are plain HTTP passthroughs to the daemon.
-- The chat WebSocket is a bidirectional relay: browser <-> BFF <-> daemon, so the
-  frontend only ever opens /api/ws/agent and never knows the daemon exists.
+The BFF is a pure boundary — it holds no brain and no Slack creds; it's a client of
+the daemon. Two forwarders cover the whole surface:
 
-The BFF holds no brain and no Slack creds; it's purely a client of the daemon.
+- A **generic HTTP reverse proxy**: `/api/{path}` → `{daemon}/{path}`, forwarding method,
+  query, body and status verbatim. Adding a daemon route needs zero BFF work.
+- An **explicit WebSocket relay** for the chat: browser <-> BFF <-> daemon, so the
+  frontend only ever opens `/api/ws/agent` and never knows the daemon exists.
+
+The web ingress/boundary role (port separation, a future home for CORS/auth/rate-limiting)
+stays here; the 1:1 route mirroring is gone.
 """
 
 import os
@@ -15,8 +20,7 @@ from . import _env  # noqa: F401  (loads the repo-root .env before reading os.en
 
 import httpx
 import websockets
-from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, Request, Response, WebSocket, WebSocketDisconnect
 
 log = logging.getLogger("superme-web-bff")
 logging.basicConfig(level=logging.INFO)
@@ -24,83 +28,24 @@ logging.basicConfig(level=logging.INFO)
 DAEMON_HTTP = os.environ.get("SUPERME_DAEMON_URL", "http://127.0.0.1:8787")
 DAEMON_WS = DAEMON_HTTP.replace("http", "ws", 1) + "/ws/agent"
 
+# Hop-by-hop headers must not be forwarded; let httpx / the response layer recompute
+# framing and content negotiation rather than passing stale values through.
+_DROP_REQUEST_HEADERS = {"host", "content-length", "connection", "accept-encoding"}
+_DROP_RESPONSE_HEADERS = {
+    "content-length", "content-encoding", "transfer-encoding", "connection",
+}
+
 app = FastAPI(title="SuperMe web BFF")
 
 
 @app.get("/api/health")
 async def health() -> dict:
+    """The BFF's own liveness — independent of the daemon, so the boundary reports up
+    even when the daemon is down. (The daemon's own health is reachable via the proxy.)"""
     return {"status": "ok", "service": "superme-web-bff", "daemon": DAEMON_HTTP}
 
 
-# --- contexts (global + connected domains) --------------------------------------
-@app.get("/api/contexts")
-async def contexts_list():
-    async with httpx.AsyncClient() as c:
-        r = await c.get(f"{DAEMON_HTTP}/contexts")
-    return JSONResponse(r.json(), status_code=r.status_code)
-
-
-# --- knowledge HTTP passthrough -------------------------------------------------
-@app.get("/api/knowledge/tree")
-async def tree(context_id: str = "global"):
-    async with httpx.AsyncClient() as c:
-        r = await c.get(f"{DAEMON_HTTP}/knowledge/tree", params={"context_id": context_id})
-    return JSONResponse(r.json(), status_code=r.status_code)
-
-
-@app.get("/api/knowledge/file")
-async def read_file(path: str, context_id: str = "global"):
-    async with httpx.AsyncClient() as c:
-        r = await c.get(
-            f"{DAEMON_HTTP}/knowledge/file",
-            params={"path": path, "context_id": context_id},
-        )
-    return JSONResponse(r.json(), status_code=r.status_code)
-
-
-@app.put("/api/knowledge/file")
-async def write_file(req: Request):
-    body = await req.json()
-    async with httpx.AsyncClient() as c:
-        r = await c.put(f"{DAEMON_HTTP}/knowledge/file", json=body)
-    return JSONResponse(r.json(), status_code=r.status_code)
-
-
-@app.post("/api/knowledge/inject")
-async def inject(req: Request):
-    body = await req.json()
-    async with httpx.AsyncClient() as c:
-        r = await c.post(f"{DAEMON_HTTP}/knowledge/inject", json=body)
-    return JSONResponse(r.json(), status_code=r.status_code)
-
-
-# --- sessions HTTP passthrough --------------------------------------------------
-@app.get("/api/sessions")
-async def sessions_list(context_id: str = "global"):
-    async with httpx.AsyncClient() as c:
-        r = await c.get(f"{DAEMON_HTTP}/sessions", params={"context_id": context_id})
-    return JSONResponse(r.json(), status_code=r.status_code)
-
-
-@app.get("/api/sessions/{session_id}")
-async def session_read(session_id: str, context_id: str = "global"):
-    async with httpx.AsyncClient() as c:
-        r = await c.get(
-            f"{DAEMON_HTTP}/sessions/{session_id}", params={"context_id": context_id}
-        )
-    return JSONResponse(r.json(), status_code=r.status_code)
-
-
-@app.delete("/api/sessions/{session_id}")
-async def session_delete(session_id: str, context_id: str = "global"):
-    async with httpx.AsyncClient() as c:
-        r = await c.delete(
-            f"{DAEMON_HTTP}/sessions/{session_id}", params={"context_id": context_id}
-        )
-    return JSONResponse(r.json(), status_code=r.status_code)
-
-
-# --- chat WebSocket relay -------------------------------------------------------
+# --- chat WebSocket relay (explicit; the one bidirectional seam) -----------------
 @app.websocket("/api/ws/agent")
 async def ws_relay(browser: WebSocket) -> None:
     await browser.accept()
@@ -130,3 +75,42 @@ async def ws_relay(browser: WebSocket) -> None:
             await browser.close()
         except Exception:
             pass
+
+
+# --- generic HTTP reverse proxy: /api/{path} -> {daemon}/{path} ------------------
+@app.api_route(
+    "/api/{path:path}",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
+)
+async def proxy(path: str, request: Request) -> Response:
+    """Forward any `/api/*` HTTP request to the daemon verbatim — method, query string,
+    body, status and content type pass straight through. New daemon endpoints are served
+    here with no BFF change."""
+    url = f"{DAEMON_HTTP}/{path}"
+    body = await request.body()
+    headers = {
+        k: v for k, v in request.headers.items()
+        if k.lower() not in _DROP_REQUEST_HEADERS
+    }
+    try:
+        async with httpx.AsyncClient() as c:
+            r = await c.request(
+                request.method,
+                url,
+                params=request.query_params.multi_items(),
+                content=body,
+                headers=headers,
+                timeout=httpx.Timeout(300.0, connect=10.0),
+            )
+    except httpx.RequestError as e:
+        log.warning("proxy error %s %s: %s", request.method, url, e)
+        return Response(
+            content=b'{"detail":"daemon unreachable"}',
+            status_code=502,
+            media_type="application/json",
+        )
+    resp_headers = {
+        k: v for k, v in r.headers.items()
+        if k.lower() not in _DROP_RESPONSE_HEADERS
+    }
+    return Response(content=r.content, status_code=r.status_code, headers=resp_headers)
