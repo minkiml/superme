@@ -16,6 +16,7 @@ export default function MessageList({
   approval,
   ctxLabel,
   onAnswer,
+  tone,
 }: {
   messages: Msg[]
   live: string
@@ -26,6 +27,7 @@ export default function MessageList({
   approval: Approval | null
   ctxLabel: string
   onAnswer: (approved: boolean) => void
+  tone?: 'dev' | 'core' // colours assistant `code` by scope + **bold** consistently, matching the doc previews
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
@@ -48,26 +50,28 @@ export default function MessageList({
         <div key={i} className={m.role === 'you' ? 'text-right' : 'text-left'}>
           <div
             className={`inline-block max-w-[90%] overflow-hidden break-words rounded-lg px-3 py-2 text-sm [overflow-wrap:anywhere] ${
-              m.role === 'you' ? 'whitespace-pre-wrap bg-accent text-on-accent' : 'bg-hover text-fg'
+              m.role === 'you'
+                ? 'whitespace-pre-wrap border border-line border-l-2 border-l-[var(--chat-accent)] bg-surface text-fg'
+                : 'bg-hover text-fg'
             }`}
           >
-            {m.role === 'you' ? m.text : <Markdown text={m.text} />}
+            {m.role === 'you' ? m.text : <Markdown text={m.text} tone={tone} />}
           </div>
         </div>
       ))}
       {live && (
         <div className="text-left">
           <div className="inline-block max-w-[90%] overflow-hidden break-words rounded-lg bg-hover px-3 py-2 text-sm text-fg [overflow-wrap:anywhere]">
-            <Markdown text={live} />
+            <Markdown text={live} tone={tone} />
           </div>
         </div>
       )}
       {busy && (
         <div className="flex items-center gap-2 text-xs text-muted">
           <span className="flex gap-0.5">
-            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-accent [animation-delay:-0.3s]" />
-            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-accent [animation-delay:-0.15s]" />
-            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-accent" />
+            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--chat-accent)] [animation-delay:-0.3s]" />
+            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--chat-accent)] [animation-delay:-0.15s]" />
+            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--chat-accent)]" />
           </span>
           <span>{statusLabel ? `${statusLabel}…` : live ? 'responding…' : 'thinking…'}</span>
           <span className="tabular-nums text-muted">{elapsed.toFixed(1)}s</span>

@@ -1,78 +1,54 @@
-import { useEffect, useState } from 'react'
-import { User, FolderTree, Wrench, Hammer, UserCircle, SlidersHorizontal, Activity, MessageSquareText, BookOpen, Gauge } from 'lucide-react'
-import Sidebar, { type NavItem } from '@/ui/Sidebar'
-import MePage from '@/features/scenes/MePage'
-import DomainsPage from '@/features/scenes/DomainsPage'
-import DomainScene from '@/features/scenes/DomainScene'
-import PlaceholderScene from '@/features/scenes/PlaceholderScene'
-import DevDashboard from '@/features/dev/DevDashboard'
-import DevModel from '@/features/dev/DevModel'
-import ManageHarness from '@/features/dev/ManageHarness'
-import System from '@/features/system/System'
-import DocsPage from '@/features/docs/DocsPage'
+import { useEffect, useMemo, useState } from 'react'
+import { Radar, Layers, Activity, SlidersHorizontal, MessageSquareText } from 'lucide-react'
+import TopBar from '@/features/shell/TopBar'
+import GlobalStrip from '@/features/shell/GlobalStrip'
+import NavColumn, { type NavRow } from '@/features/shell/NavColumn'
+import Nexus from '@/features/shell/Nexus'
+import RepoInspector from '@/features/shell/RepoInspector'
+import TokenDrilldown from '@/features/shell/TokenDrilldown'
+import { useCommandStats, type OrbitRepo } from '@/features/shell/useCommandStats'
+import DevWorkspace from '@/features/dev/DevWorkspace'
+import CoreDashboard from '@/features/core/CoreDashboard'
+import Foundations from '@/features/foundations/Foundations'
+import GlobalActivity from '@/features/activity/GlobalActivity'
+import QuickConfig from '@/features/config/QuickConfig'
 import ChatPanel, { type DevBinding } from '@/features/chat/ChatPanel'
 import { GLOBAL, type ContextRef } from '@/lib/contexts'
-import { listContexts, listDocs, type WorkItem, type ChatMode, type DocMeta } from '@/lib/api'
+import { listContexts, type ChatMode } from '@/lib/api'
 
-// Me's sub-categories — placeholder scenes for now (the design of how we present each
-// slice of global knowledge is still open).
-const ME_SUBS = [
-  { id: 'me/profile', label: 'Profile', icon: UserCircle, blurb: 'Who I am — identity, role, the durable facts.' },
-  { id: 'me/preferences', label: 'Preferences', icon: SlidersHorizontal, blurb: 'How I like to work and be worked with.' },
-  { id: 'me/activity', label: 'Activity', icon: Activity, blurb: 'Recent threads, decisions, and what changed.' },
+// System & Dev local nav. Nexus (orbit) is the main entry; Me + projects are reached from orbit
+// nodes, so there's no separate Functional tier in the nav.
+const NAV: NavRow[] = [
+  { id: 'nexus', label: 'Nexus', icon: Radar },
+  { id: 'foundations', label: 'Foundations', icon: Layers },
+  { id: 'activity', label: 'Activity', icon: Activity },
+  { id: 'config', label: 'Quick config', icon: SlidersHorizontal },
 ]
 
-// System space (manage the machinery itself). Harness + Configuration are stubs.
-// (There's no standalone Activity dashboard: the event LOG is consumed by the agent via the
-// `dev_log` tool to answer "what happened…" queries, and a work-item's own timeline shows in
-// its review modal — a global "everything that happened" view isn't useful to the owner.)
-const SYSTEM: NavItem[] = [
-  { id: 'system', label: 'System', icon: Gauge },
-  {
-    id: 'development',
-    label: 'Development',
-    icon: Hammer,
-    children: [
-      { id: 'development/model', label: 'Model' },
-    ],
-  },
-  { id: 'harness', label: 'Manage Harness', icon: Wrench },
-]
-
-// Docs is its own top-level section: the parent shows the overview (superme-docs/README.md),
-// each non-overview doc is a sub-page. Children are fetched at runtime (like Domains).
-function docsNav(docs: DocMeta[]): NavItem {
-  return {
-    id: 'docs',
-    label: 'Docs',
-    icon: BookOpen,
-    children: docs.filter((d) => d.slug !== 'overview').map((d) => ({ id: `docs/${d.slug}`, label: d.title })),
-  }
-}
-
-// The cockpit shell: a two-tier accordion sidebar · the active scene · a persistent chat
-// rail whose context is selectable and detached from whichever scene is showing.
+// The renovated cockpit: full-width top bar + global stats strip, then a row of
+// [navigate · orbit · chater rail] under the strip, over a slim status bar.
 export default function App() {
-  const [active, setActive] = useState('me')
+  const [active, setActive] = useState('nexus')
   const [contexts, setContexts] = useState<ContextRef[]>([GLOBAL])
   const [chatContext, setChatContext] = useState(GLOBAL.id)
-  const [docs, setDocs] = useState<DocMeta[]>([])
   const [chatOpen, setChatOpen] = useState(true)
-  const [chatMode, setChatMode] = useState<ChatMode>('core') // Core (twin) | Dev (builds SuperMe)
-  const [devBinding, setDevBinding] = useState<DevBinding | null>(null) // chat taken over by a work-item
-
-  function bindWorkItem(it: WorkItem, ctxId: string) {
-    setDevBinding({ workItemId: it.id, sessionId: it.session_id ?? null, title: it.title || it.id, contextId: ctxId })
-    setChatContext(ctxId)
-    setChatMode('dev') // binding a card is always a dev-mode interaction
-    setChatOpen(true)
-  }
-
-  // Switching mode from the chat toggle starts that mode fresh (drops any card binding).
-  function changeChatMode(m: ChatMode) {
-    setChatMode(m)
-    setDevBinding(null)
-  }
+  const [chatMode, setChatMode] = useState<ChatMode>('dev') // dev-chater | core-chater
+  const [selectedId, setSelectedId] = useState<string | null>(null) // orbit node → inspector
+  const [connecting, setConnecting] = useState(false)
+  const [tokenDrill, setTokenDrill] = useState(false) // Tokens tile → drill-in
+  // Per-repo destination that takes over the main area (Dev workspace / Core dashboard).
+  const [dest, setDest] = useState<{ repo: OrbitRepo; kind: 'dev' | 'core' } | null>(null)
+  // Chat ⇄ work-item binding: clicking a work-item takes the chat rail over as that item's dev
+  // thread (opens its session, tags sends). Lifted here so DevWorkspace and ChatPanel can share it.
+  const [binding, setBinding] = useState<DevBinding | null>(null)
+  // Optimistic tag overrides — a saved tag shows instantly, before the /repos poll confirms it.
+  const [tagOverrides, setTagOverrides] = useState<Record<string, { color: string; icon: string | null }>>({})
+  const rawStats = useCommandStats()
+  const stats = useMemo(() => {
+    if (!Object.keys(tagOverrides).length) return rawStats
+    const patch = (r: OrbitRepo | null) => (r && tagOverrides[r.id] ? { ...r, ...tagOverrides[r.id] } : r)
+    return { ...rawStats, hub: patch(rawStats.hub), nodes: rawStats.nodes.map((r) => patch(r) as OrbitRepo) }
+  }, [rawStats, tagOverrides])
 
   useEffect(() => {
     listContexts()
@@ -80,99 +56,127 @@ export default function App() {
       .catch(() => {
         /* daemon may be down; the global seed still works */
       })
-    listDocs()
-      .then((d) => setDocs(d.docs))
-      .catch(() => {
-        /* daemon may be down; Docs just shows empty until it's reachable */
-      })
   }, [])
 
-  const domains = contexts.filter((c) => c.id !== GLOBAL.id)
+  const selectedRepo = selectedId ? [stats.hub, ...stats.nodes].find((r) => r?.id === selectedId) ?? null : null
+  // The tag of the repo the chat rail is currently talking to (for the chater header).
+  const chatRepo = [stats.hub, ...stats.nodes].find((r) => r?.id === chatContext) ?? null
+  const chatTag = chatRepo ? { color: chatRepo.color, icon: chatRepo.icon, isHub: chatRepo.id === 'global' } : undefined
 
-  const presentation: NavItem[] = [
-    { id: 'me', label: 'Me', icon: User, hint: 'global', children: ME_SUBS.map((s) => ({ id: s.id, label: s.label })) },
-    {
-      id: 'domains',
-      label: 'Domains',
-      icon: FolderTree,
-      hint: 'projects',
-      children: domains.map((d) => ({ id: `domain/${d.id}`, label: d.label })),
-    },
-  ]
-
-  function Scene() {
-    if (active === 'me') return <MePage />
-    if (active.startsWith('me/')) {
-      const sub = ME_SUBS.find((s) => s.id === active)
-      return <PlaceholderScene title={sub?.label ?? 'Me'} blurb={sub?.blurb ?? ''} icon={sub?.icon} />
-    }
-    if (active === 'domains') return <DomainsPage domains={domains} />
-    if (active.startsWith('domain/')) {
-      const id = active.slice('domain/'.length)
-      const domain = domains.find((d) => d.id === id)
-      if (domain) return <DomainScene domain={domain} />
-      return <DomainsPage domains={domains} />
-    }
-    if (active === 'system') return <System />
-    if (active === 'development')
-      return (
-        <DevDashboard
-          contextId="global"
-          onBindItem={bindWorkItem}
-          onUnbindItem={() => setDevBinding(null)}
-          boundItemId={devBinding?.workItemId ?? null}
-        />
-      )
-    if (active === 'development/model')
-      return <DevModel contextId="global" />
-    if (active === 'harness')
-      return <ManageHarness contextId="global" />
-    if (active === 'docs' || active.startsWith('docs/')) {
-      const slug = active === 'docs' ? 'overview' : active.slice('docs/'.length)
-      const openDoc = (s: string) => setActive(s === 'overview' ? 'docs' : `docs/${s}`)
-      return <DocsPage key={active} slug={slug} onOpenDoc={openDoc} />
-    }
-    return <MePage />
+  function Section() {
+    if (active === 'nexus')
+      return <Nexus stats={stats} selectedId={selectedId} onSelectRepo={setSelectedId} onConnect={() => setConnecting(true)} />
+    if (active === 'foundations') return <Foundations />
+    if (active === 'activity') return <GlobalActivity stats={stats} />
+    if (active === 'config') return <QuickConfig stats={stats} />
+    return <Nexus stats={stats} selectedId={selectedId} onSelectRepo={setSelectedId} onConnect={() => setConnecting(true)} />
   }
 
   return (
-    <div className="flex h-full bg-app text-fg">
-      <Sidebar presentation={presentation} system={[...SYSTEM, docsNav(docs)]} active={active} onSelect={setActive} />
-      <main className="min-w-0 flex-1 overflow-hidden">
-        {/* Call inline (not <Scene/>) so scene state survives App re-renders — a nested
-            component type would remount the whole scene on every chat/nav toggle. */}
-        {Scene()}
-      </main>
-      {/* Kept mounted (display:none when collapsed) so the chat WebSocket + live turn survive. */}
-      <div className={`shrink-0 ${chatOpen ? 'w-[380px]' : 'hidden'}`}>
-        <ChatPanel
-          key={`${chatContext}:${chatMode}`}
-          contextId={chatContext}
-          contexts={contexts}
-          onContextChange={(id) => {
-            setDevBinding(null) // switching context drops any item binding
-            setChatContext(id)
+    <div className="flex h-full flex-col bg-app font-sans text-fg">
+      <TopBar />
+      <GlobalStrip stats={stats} onDetails={(id) => id === 'tokens' && setTokenDrill(true)} />
+
+      <div className="flex min-h-0 flex-1">
+        <NavColumn
+          items={NAV}
+          active={active}
+          onSelect={(id) => {
+            setActive(id)
+            setDest(null) // leaving to a nav surface exits any repo takeover
           }}
-          onCollapse={() => setChatOpen(false)}
-          mode={chatMode}
-          onModeChange={changeChatMode}
-          binding={devBinding}
-          onUnbind={() => setDevBinding(null)}
-          onBindingSession={(sid) => setDevBinding((b) => (b ? { ...b, sessionId: sid } : b))}
         />
-      </div>
-      {!chatOpen && (
-        <div className="flex w-11 shrink-0 flex-col items-center border-l border-line bg-surface py-3">
-          <button
-            onClick={() => setChatOpen(true)}
-            title="Open chat"
-            aria-label="Open chat"
-            className="rounded-md p-1.5 text-muted hover:bg-hover hover:text-fg"
-          >
-            <MessageSquareText size={18} />
-          </button>
+        <main className="min-w-0 flex-1 overflow-hidden">
+          {dest?.kind === 'dev' ? (
+            <DevWorkspace
+              repo={dest.repo}
+              onExit={() => setDest(null)}
+              repos={[stats.hub, ...stats.nodes].filter((r): r is OrbitRepo => !!r)}
+              onSwitch={(r) => setDest({ repo: r, kind: 'dev' })}
+              boundItemId={binding?.workItemId ?? null}
+              onBindItem={(it, ctx) => {
+                // Take the chat over as this item's dev thread and reveal the rail.
+                setBinding({ workItemId: it.id, sessionId: it.session_id ?? null, title: it.title || it.id, contextId: ctx })
+                setChatContext(ctx)
+                setChatMode('dev')
+                setChatOpen(true)
+              }}
+              onUnbindItem={() => setBinding(null)}
+            />
+          ) : dest?.kind === 'core' ? (
+            <CoreDashboard repo={dest.repo} onExit={() => setDest(null)} />
+          ) : (
+            Section()
+          )}
+        </main>
+
+        {/* persistent chater rail — under the stats strip; kept mounted (hidden when collapsed). */}
+        <div className={`shrink-0 border-l border-line ${chatOpen ? 'w-[480px]' : 'hidden'}`}>
+          <ChatPanel
+            key={`${chatContext}:${chatMode}`}
+            contextId={chatContext}
+            contexts={contexts}
+            tag={chatTag}
+            onContextChange={setChatContext}
+            onCollapse={() => setChatOpen(false)}
+            mode={chatMode}
+            onModeChange={setChatMode}
+            binding={binding && binding.contextId === chatContext && chatMode === 'dev' ? binding : null}
+            onUnbind={() => setBinding(null)}
+            onBindingSession={(sid) => setBinding((b) => (b ? { ...b, sessionId: sid } : b))}
+            modelOverride={chatRepo?.modelOverride ?? null}
+            effortOverride={chatRepo?.effortOverride ?? null}
+          />
         </div>
-      )}
+        {!chatOpen && (
+          <div className="flex w-11 shrink-0 flex-col items-center border-l border-line bg-surface py-3">
+            <button
+              onClick={() => setChatOpen(true)}
+              title="Open chat"
+              aria-label="Open chat"
+              className="rounded-md p-1.5 text-muted hover:bg-hover hover:text-fg"
+            >
+              <MessageSquareText size={18} />
+            </button>
+          </div>
+        )}
+      </div>
+
+      <RepoInspector
+        repo={selectedRepo}
+        onClose={() => setSelectedId(null)}
+        onOpenDev={(r) => {
+          setSelectedId(null)
+          setDest({ repo: r, kind: 'dev' })
+        }}
+        onOpenCore={(r) => {
+          setSelectedId(null)
+          setDest({ repo: r, kind: 'core' })
+        }}
+        onTagSaved={(id, patch) => setTagOverrides((o) => ({ ...o, [id]: patch }))}
+      />
+      {tokenDrill && <TokenDrilldown stats={stats} onClose={() => setTokenDrill(false)} />}
+      {connecting && <ConnectModal onClose={() => setConnecting(false)} />}
+    </div>
+  )
+}
+
+// Placeholder: connecting a new domain is real backend work (repo registration) deferred to the
+// end of the renovation. For now this just explains what it will do.
+function ConnectModal({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-6 backdrop-blur-sm" onClick={onClose}>
+      <div className="w-full max-w-sm rounded-2xl border border-line bg-app p-6 text-center shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="mx-auto mb-3 grid h-10 w-10 place-items-center rounded-xl bg-iris" />
+        <h2 className="text-[15px] font-semibold text-fg">Connect a domain</h2>
+        <p className="mt-2 text-[13px] text-muted">
+          Point SuperMe at a new project repo to add it to the orbit. Registration is wired up at the
+          end of the renovation — for now, domains are connected in the repo config.
+        </p>
+        <button onClick={onClose} className="mt-5 rounded-lg border border-line bg-surface px-4 py-2 text-[13px] font-medium text-fg hover:border-faint">
+          Got it
+        </button>
+      </div>
     </div>
   )
 }

@@ -80,6 +80,7 @@ class TurnFrame(BaseModel):
     context_id: str | None = None
     resume: str | None = None
     model: str | None = None
+    effort: str | None = None  # per-turn reasoning-effort override (low|medium|high)
     mode: str | None = None
     work_item_id: str | None = None
 

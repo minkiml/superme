@@ -4,7 +4,7 @@ The Monitor/System dashboard read surface: the System singleton, the repo roster
 plus the model-config + learning-switch write results.
 """
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 from .common import RunMode, RunStatus
 
@@ -33,9 +33,14 @@ class SystemResponse(BaseModel):
     default_model: str | None = None
     default_model_static: str | None = None
     default_model_overridden: bool
+    default_effort: str            # effective system reasoning effort (runtime → YAML → "medium")
+    default_effort_overridden: bool
     policy_version: int
     default_repo: str
     learning_enabled: bool
+    sweep_idle_seconds: int      # a dev session idle this long, with enough new content, gets swept
+    sweep_poll_seconds: int      # how often the idle heartbeat scans (latency knob)
+    sweep_min_user_msgs: int     # min new user turns past the watermark before a sweep fires (0 = off)
     live_runs: list[RunRow]
     running: int
     repos: list[str]
@@ -59,6 +64,10 @@ class RepoOverview(BaseModel):
     cwd: str
     layer: str
     model_override: str | None = None
+    effort_override: str | None = None  # owner-set reasoning-effort override (None = inherit system)
+    learning_enabled: bool = True
+    tag_color: str | None = None   # owner-set visual tag color (None = hashed-palette default)
+    icon: str | None = None        # owner-set icon (emoji) shown in place of the color swatch
     scopes: dict[str, RepoScope]
 
 
@@ -79,8 +88,108 @@ class LearningResponse(BaseModel):
     learning_enabled: bool
 
 
+class SweepConfigBody(BaseModel):
+    """Partial update of the capture-sweep tuning — any omitted field is left unchanged."""
+    idle_seconds: int | None = Field(default=None, ge=0)
+    poll_seconds: int | None = Field(default=None, ge=0)
+    min_user_msgs: int | None = Field(default=None, ge=0)
+
+
+class SweepConfigResponse(BaseModel):
+    ok: bool
+    idle_seconds: int
+    poll_seconds: int
+    min_user_msgs: int
+
+
 class RepoModelResponse(BaseModel):
     ok: bool
     repo_id: str
     model: str | None = None
     effective: str | None = None
+
+
+class SystemEffortResponse(BaseModel):
+    ok: bool
+    effort: str | None = None
+    effective: str
+
+
+class RepoEffortResponse(BaseModel):
+    ok: bool
+    repo_id: str
+    effort: str | None = None
+    effective: str
+
+
+class RepoLearningResponse(BaseModel):
+    ok: bool
+    repo_id: str
+    learning_enabled: bool
+
+
+class RepoMetaResponse(BaseModel):
+    ok: bool
+    repo_id: str
+    tag_color: str | None = None
+    icon: str | None = None
+
+
+# --- token observability (token-usage-tracking-spec) ----------------------------
+class TokenTypeSplit(BaseModel):
+    """Breakdown 2 — the systematic (per token-type) split. `legacy` holds pre-migration rows that
+    only carry the old collapsed scalar. The five sum to the bucket total (reconciliation)."""
+    input: int = 0
+    cache_creation: int = 0
+    cache_read: int = 0
+    output: int = 0
+    legacy: int = 0
+
+
+class CategoryNode(BaseModel):
+    """One node of Breakdown 1 — the semantic tree: a category total + its per-feature amounts."""
+    total: int = 0
+    features: dict[str, int] = {}
+
+
+class TokenBucket(BaseModel):
+    """A token total plus its splits. Two reconciling breakdowns: `by_category` (semantic — the
+    generic tree the FE renders) and `by_type` (systematic). `by_scope`/`by_feature` are retained
+    flat maps for back-compat. All maps are open (producer-supplied labels, not a locked enum)."""
+    total: int
+    by_scope: dict[str, int] = {}
+    by_feature: dict[str, int] = {}
+    by_type: TokenTypeSplit = TokenTypeSplit()
+    by_category: dict[str, CategoryNode] = {}
+
+
+class RepoTokens(TokenBucket):
+    runs: int = 0
+
+
+class TokenUsageResponse(BaseModel):
+    """System-wide token usage: the global bucket + one bucket per repo (keyed by repo id)."""
+    global_: TokenBucket = Field(alias="global")
+    by_repo: dict[str, RepoTokens] = {}
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class TokenDay(BaseModel):
+    """One local-day bucket of the usage time-series: the four token types (+ legacy), the day
+    total, and the running `cumulative` total across days."""
+    day: str
+    input: int = 0
+    cache_creation: int = 0
+    cache_read: int = 0
+    output: int = 0
+    legacy: int = 0
+    total: int = 0
+    cumulative: int = 0
+    runs: int = 0
+
+
+class TokenTimeseriesResponse(BaseModel):
+    """Per-day token usage for the trend graph, bucketed by the caller's local day."""
+    days: list[TokenDay] = []
+    total: int = 0

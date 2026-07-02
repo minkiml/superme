@@ -21,7 +21,7 @@ from ...services.runs import DEFAULT_RUN_MODEL, _begin_run, _run_headless_plan, 
 from ...services.learning import _fire_sweep_bg
 from ...schemas.dev.work_items import (
     PlanResponse, WorkItemDeleteResponse, WorkItemDetailResponse, WorkItemArtifactsResponse,
-    WorkItemCompleteResponse, WorkItemModelResponse, WorkItemAdvanceResponse,
+    WorkItemCompleteResponse, WorkItemModelResponse, WorkItemEffortResponse, WorkItemAdvanceResponse,
 )
 
 log = logging.getLogger("superme-agent")
@@ -33,6 +33,7 @@ router = APIRouter()
 class PlanBody(BaseModel):
     context_id: str = "global"
     model: str | None = None   # per-run model choice; None -> DEFAULT_RUN_MODEL
+    effort: str | None = None  # per-run reasoning effort; None -> item/repo/system default
 
 
 @router.post("/dev/work-items/{item_id}/plan", response_model=PlanResponse)
@@ -52,11 +53,14 @@ async def dev_work_item_plan(item_id: str, body: PlanBody,
     model = body.model or item.get("model") or DEFAULT_RUN_MODEL
     if body.model:
         dev.set_work_item_model(dev_root, item_id, body.model)  # remember the choice for later runs
+    effort = body.effort or item.get("effort")  # None here → _run_headless_plan falls to repo/system/medium
+    if body.effort:
+        dev.set_work_item_effort(dev_root, item_id, body.effort)  # remember the choice for later runs
     # Atomic begin: opens the run, flips to in_progress, logs — or returns False (already running),
     # the per-item run-lock enforced at the data layer (no check-then-start window). 409 on contention.
     if not _begin_run(ctx, body.context_id, item_id, "plan", model):
         raise HTTPException(status_code=409, detail="a run is already in progress for this item")
-    asyncio.create_task(_run_headless_plan(ctx, body.context_id, item_id, item_dir, model))
+    asyncio.create_task(_run_headless_plan(ctx, body.context_id, item_id, item_dir, model, effort))
     return {"ok": True, "status": "planning", "work_item_id": item_id, "model": model}
 
 
@@ -161,7 +165,7 @@ async def dev_work_item_complete(item_id: str, context_id: str = "global",
     #    so the purge is chained behind the background sweep. When auto-learning is OFF we skip the
     #    sweep but STILL purge (disk reclamation is not a learning concern).
     session_id = item.get("session_id")
-    if spine.get_learning_enabled():
+    if spine.learning_enabled_for(context_id):
         _fire_sweep_bg(ctx, session_id, then_purge=True)
     elif session_id:
         sessions.purge(ctx, session_id)
@@ -194,6 +198,23 @@ async def dev_work_item_set_model(item_id: str, body: ModelBody,
     return {"ok": True, "id": item_id, "model": body.model}
 
 
+class EffortBody(BaseModel):
+    context_id: str = "global"
+    effort: str
+
+
+@router.post("/dev/work-items/{item_id}/effort", response_model=WorkItemEffortResponse)
+async def dev_work_item_set_effort(item_id: str, body: EffortBody,
+                                   dev: DevKnowledgeService = Depends(get_dev)) -> dict:
+    """Configure the reasoning effort a work-item's runs use (plan + bound chat) — reconfigurable
+    anytime from the review popup. Persisted to `item.md` frontmatter."""
+    dev_root = _dev_root(body.context_id)
+    if dev.read_work_item(dev_root, item_id) is None:
+        raise HTTPException(status_code=404, detail="work-item not found")
+    dev.set_work_item_effort(dev_root, item_id, body.effort)
+    return {"ok": True, "id": item_id, "effort": body.effort}
+
+
 @router.post("/dev/work-items/{item_id}/advance", response_model=WorkItemAdvanceResponse)
 async def dev_work_item_advance(item_id: str, context_id: str = "global",
                                 dev: DevKnowledgeService = Depends(get_dev),
@@ -223,7 +244,7 @@ async def dev_work_item_advance(item_id: str, context_id: str = "global",
     # Capture trigger (WI-8): a phase just closed — sweep the bound session for learnings the
     # finished phase produced. Background + watermarked, so the gate stays instant and idempotent.
     # Gated by the auto-learning master switch (off by default — token safety).
-    if spine.get_learning_enabled():
+    if spine.learning_enabled_for(context_id):
         _fire_sweep_bg(ctx, item.get("session_id"))
     log.info("advanced work-item %s: %s → %s", item_id, cur, nxt)
     return {"ok": True, "id": item_id, "phase": nxt, "from": cur}

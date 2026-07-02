@@ -382,6 +382,19 @@ def set_published_enabled(form: str, scope: str, repo_id: str | None, slug: str,
     return {"present": True, "enabled": enabled}
 
 
+def published_file(form: str, scope: str, repo_id: str | None, slug: str) -> Path | None:
+    """The editable markdown file for a published artifact (constitution → its file; skill/agent →
+    whichever of the live/disabled copies is on disk). None if nothing is present."""
+    p = _published_paths(form, scope, repo_id, slug)
+    if form == "constitution":
+        f = p["file"]
+        return f if f.is_file() else None
+    for art in (p["live"], p["disabled"]):
+        if art.is_file():
+            return art
+    return None
+
+
 def delete_published(form: str, scope: str, repo_id: str | None, slug: str) -> bool:
     """Remove a published artifact from disk entirely — both the live copy and any `.disabled/`
     shadow. Returns True if anything was removed. The proposal row stays as history (caller retires

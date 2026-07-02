@@ -255,6 +255,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Token Usage
+         * @description System-wide token usage: global total + two reconciling breakdowns (semantic `by_category`
+         *     tree + systematic `by_type`) + per-scope/per-feature splits, and the same per repo. Feeds the
+         *     observability strip + the orbit's per-repo signal. All SuperMe-context spend.
+         */
+        get: operations["token_usage_tokens_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tokens/timeseries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Token Timeseries
+         * @description Per-day token usage for the trend graph. `tz_offset` is minutes to ADD to UTC to reach the
+         *     caller's local time (the FE sends `-getTimezoneOffset()`), so days bucket on the owner's day.
+         */
+        get: operations["token_timeseries_tokens_timeseries_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/system/model": {
         parameters: {
             query?: never;
@@ -269,6 +312,26 @@ export interface paths {
          * @description Set (or clear) the system-wide default model — the floor below per-repo overrides.
          */
         post: operations["set_system_model_system_model_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/system/effort": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set System Effort
+         * @description Set (or clear) the system-wide default reasoning effort — the floor below per-repo overrides.
+         */
+        post: operations["set_system_effort_system_effort_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -296,6 +359,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/system/sweep": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set System Sweep
+         * @description Tune the capture-sweep triggers: idle threshold, heartbeat cadence, and the min-new-user-message
+         *     gate. Any omitted field is left unchanged. Takes effect without a daemon restart (the heartbeat
+         *     reads the cadence each iteration).
+         */
+        post: operations["set_system_sweep_system_sweep_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/repos/{repo_id}/model": {
         parameters: {
             query?: never;
@@ -310,6 +395,68 @@ export interface paths {
          * @description Set (or clear) one repo's model override. Clearing falls back to the system default.
          */
         post: operations["set_repo_model_repos__repo_id__model_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/repos/{repo_id}/effort": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set Repo Effort
+         * @description Set (or clear) one repo's reasoning-effort override. Clearing falls back to the system default.
+         */
+        post: operations["set_repo_effort_repos__repo_id__effort_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/repos/{repo_id}/learning": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set Repo Learning
+         * @description Opt one repo in/out of automatic capture. The global master switch still gates everything;
+         *     this lets a single repo sit out even when the master is on.
+         */
+        post: operations["set_repo_learning_repos__repo_id__learning_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/repos/{repo_id}/meta": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set Repo Meta
+         * @description Set a repo's VISUAL tag: display color and/or icon (emoji). A field omitted (None) is left
+         *     unchanged; an empty string clears it (falls back to the hashed-palette default / no icon).
+         */
+        post: operations["set_repo_meta_repos__repo_id__meta_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -498,6 +645,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/dev/harness/foundation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Dev Harness Foundation
+         * @description SuperMe's repo-agnostic identity + machinery — the Foundations surface. SELF.md is WHO
+         *     (all modes); the per-mode charters are WHAT-MODE (hand-authored, editable). Plus the LEARNED
+         *     universal constitution (always-on rules the learning loop published), per mode.
+         */
+        get: operations["dev_harness_foundation_dev_harness_foundation_get"];
+        /**
+         * Dev Harness Foundation Save
+         * @description Save edits to an identity/charter file (SELF.md / dev-charter / core-charter). These are the
+         *     hand-authored system-prompt sources; takes effect on the next turn (assembled per turn).
+         */
+        put: operations["dev_harness_foundation_save_dev_harness_foundation_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/dev/palette": {
         parameters: {
             query?: never;
@@ -566,6 +740,30 @@ export interface paths {
          *     the next dev turn.
          */
         patch: operations["dev_harness_published_toggle_dev_harness_published__proposal_id__patch"];
+        trace?: never;
+    };
+    "/dev/harness/published/{proposal_id}/file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Dev Harness Published File
+         * @description The raw markdown source of a published artifact — for the Published-tab preview/edit.
+         */
+        get: operations["dev_harness_published_file_dev_harness_published__proposal_id__file_get"];
+        /**
+         * Dev Harness Published File Save
+         * @description Save edits to a published artifact's source. Takes effect on the next dev turn.
+         */
+        put: operations["dev_harness_published_file_save_dev_harness_published__proposal_id__file_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/dev/work-items/{item_id}/plan": {
@@ -692,6 +890,27 @@ export interface paths {
          *     from the review popup. Persisted to `item.md` frontmatter.
          */
         post: operations["dev_work_item_set_model_dev_work_items__item_id__model_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dev/work-items/{item_id}/effort": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dev Work Item Set Effort
+         * @description Configure the reasoning effort a work-item's runs use (plan + bound chat) — reconfigurable
+         *     anytime from the review popup. Persisted to `item.md` frontmatter.
+         */
+        post: operations["dev_work_item_set_effort_dev_work_items__item_id__effort_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1067,6 +1286,44 @@ export interface components {
             items: components["schemas"]["CandidateStatItem"][];
         };
         /**
+         * CategoryNode
+         * @description One node of Breakdown 1 — the semantic tree: a category total + its per-feature amounts.
+         */
+        CategoryNode: {
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
+            /**
+             * Features
+             * @default {}
+             */
+            features: {
+                [key: string]: number;
+            };
+        };
+        /**
+         * ConstitutionEntry
+         * @description One LEARNED universal constitution item (always-on rule) for a mode.
+         */
+        ConstitutionEntry: {
+            /** Mode */
+            mode: string;
+            /** Slug */
+            slug: string;
+            /** Enabled */
+            enabled: boolean;
+            /** Title */
+            title: string;
+            /** Body */
+            body: string;
+            /** Source */
+            source?: string | null;
+            /** Created */
+            created?: string | null;
+        };
+        /**
          * ContextResponse
          * @description One live context (global or a connected domain) — what the surfaces render.
          */
@@ -1215,6 +1472,16 @@ export interface components {
             /** Docs */
             docs: components["schemas"]["DocSummary"][];
         };
+        /** EffortBody */
+        EffortBody: {
+            /**
+             * Context Id
+             * @default global
+             */
+            context_id: string;
+            /** Effort */
+            effort: string;
+        };
         /**
          * EvalMetrics
          * @description The artifact's own run cost on a synthetic task (forge_kit/eval.py). kind 'run' = skill/agent
@@ -1293,6 +1560,45 @@ export interface components {
             } | null;
         } & {
             [key: string]: unknown;
+        };
+        /**
+         * FoundationFile
+         * @description One universal identity/charter file — SuperMe's repo-agnostic machinery (Foundations).
+         */
+        FoundationFile: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Scope */
+            scope: string;
+            /** Path */
+            path: string;
+            /** Present */
+            present: boolean;
+            /** Body */
+            body: string;
+        };
+        /** FoundationFileBody */
+        FoundationFileBody: {
+            /** Key */
+            key: string;
+            /** Content */
+            content: string;
+        };
+        /** FoundationFileSaveResponse */
+        FoundationFileSaveResponse: {
+            /** Ok */
+            ok: boolean;
+            /** Key */
+            key: string;
+        };
+        /** FoundationResponse */
+        FoundationResponse: {
+            /** Files */
+            files: components["schemas"]["FoundationFile"][];
+            /** Constitutions */
+            constitutions: components["schemas"]["ConstitutionEntry"][];
         };
         /**
          * Glance
@@ -1611,6 +1917,8 @@ export interface components {
             context_id: string;
             /** Model */
             model?: string | null;
+            /** Effort */
+            effort?: string | null;
         };
         /** PlanResponse */
         PlanResponse: {
@@ -1845,6 +2153,41 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** PublishedFileBody */
+        PublishedFileBody: {
+            /** Content */
+            content: string;
+            /**
+             * Context Id
+             * @default global
+             */
+            context_id: string;
+        };
+        /**
+         * PublishedFileResponse
+         * @description The editable source of a published artifact — its raw markdown + resolved path.
+         */
+        PublishedFileResponse: {
+            /** Proposal Id */
+            proposal_id: number;
+            /** Form */
+            form: string;
+            /** Scope */
+            scope: string;
+            /** Slug */
+            slug: string;
+            /** Path */
+            path: string;
+            /** Content */
+            content: string;
+        };
+        /** PublishedFileSaveResponse */
+        PublishedFileSaveResponse: {
+            /** Ok */
+            ok: boolean;
+            /** Proposal Id */
+            proposal_id: number;
+        };
         /** PublishedResponse */
         PublishedResponse: {
             /** Context Id */
@@ -1898,6 +2241,49 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** RepoEffortBody */
+        RepoEffortBody: {
+            /** Effort */
+            effort?: string | null;
+        };
+        /** RepoEffortResponse */
+        RepoEffortResponse: {
+            /** Ok */
+            ok: boolean;
+            /** Repo Id */
+            repo_id: string;
+            /** Effort */
+            effort?: string | null;
+            /** Effective */
+            effective: string;
+        };
+        /** RepoLearningResponse */
+        RepoLearningResponse: {
+            /** Ok */
+            ok: boolean;
+            /** Repo Id */
+            repo_id: string;
+            /** Learning Enabled */
+            learning_enabled: boolean;
+        };
+        /** RepoMetaBody */
+        RepoMetaBody: {
+            /** Color */
+            color?: string | null;
+            /** Icon */
+            icon?: string | null;
+        };
+        /** RepoMetaResponse */
+        RepoMetaResponse: {
+            /** Ok */
+            ok: boolean;
+            /** Repo Id */
+            repo_id: string;
+            /** Tag Color */
+            tag_color?: string | null;
+            /** Icon */
+            icon?: string | null;
+        };
         /** RepoModelBody */
         RepoModelBody: {
             /** Model */
@@ -1926,6 +2312,17 @@ export interface components {
             layer: string;
             /** Model Override */
             model_override?: string | null;
+            /** Effort Override */
+            effort_override?: string | null;
+            /**
+             * Learning Enabled
+             * @default true
+             */
+            learning_enabled: boolean;
+            /** Tag Color */
+            tag_color?: string | null;
+            /** Icon */
+            icon?: string | null;
             /** Scopes */
             scopes: {
                 [key: string]: components["schemas"]["RepoScope"];
@@ -1952,6 +2349,47 @@ export interface components {
             agents: number;
             /** Running */
             running: number;
+        };
+        /** RepoTokens */
+        RepoTokens: {
+            /** Total */
+            total: number;
+            /**
+             * By Scope
+             * @default {}
+             */
+            by_scope: {
+                [key: string]: number;
+            };
+            /**
+             * By Feature
+             * @default {}
+             */
+            by_feature: {
+                [key: string]: number;
+            };
+            /**
+             * @default {
+             *       "input": 0,
+             *       "cache_creation": 0,
+             *       "cache_read": 0,
+             *       "output": 0,
+             *       "legacy": 0
+             *     }
+             */
+            by_type: components["schemas"]["TokenTypeSplit"];
+            /**
+             * By Category
+             * @default {}
+             */
+            by_category: {
+                [key: string]: components["schemas"]["CategoryNode"];
+            };
+            /**
+             * Runs
+             * @default 0
+             */
+            runs: number;
         };
         /**
          * RunRow
@@ -2054,6 +2492,29 @@ export interface components {
             /** Message Count */
             message_count: number;
         };
+        /**
+         * SweepConfigBody
+         * @description Partial update of the capture-sweep tuning — any omitted field is left unchanged.
+         */
+        SweepConfigBody: {
+            /** Idle Seconds */
+            idle_seconds?: number | null;
+            /** Poll Seconds */
+            poll_seconds?: number | null;
+            /** Min User Msgs */
+            min_user_msgs?: number | null;
+        };
+        /** SweepConfigResponse */
+        SweepConfigResponse: {
+            /** Ok */
+            ok: boolean;
+            /** Idle Seconds */
+            idle_seconds: number;
+            /** Poll Seconds */
+            poll_seconds: number;
+            /** Min User Msgs */
+            min_user_msgs: number;
+        };
         /** SweepResponse */
         SweepResponse: {
             /** Status */
@@ -2073,6 +2534,20 @@ export interface components {
             repo_id: string;
             /** Filed */
             filed: number;
+        };
+        /** SystemEffortBody */
+        SystemEffortBody: {
+            /** Effort */
+            effort?: string | null;
+        };
+        /** SystemEffortResponse */
+        SystemEffortResponse: {
+            /** Ok */
+            ok: boolean;
+            /** Effort */
+            effort?: string | null;
+            /** Effective */
+            effective: string;
         };
         /** SystemModelBody */
         SystemModelBody: {
@@ -2103,12 +2578,22 @@ export interface components {
             default_model_static?: string | null;
             /** Default Model Overridden */
             default_model_overridden: boolean;
+            /** Default Effort */
+            default_effort: string;
+            /** Default Effort Overridden */
+            default_effort_overridden: boolean;
             /** Policy Version */
             policy_version: number;
             /** Default Repo */
             default_repo: string;
             /** Learning Enabled */
             learning_enabled: boolean;
+            /** Sweep Idle Seconds */
+            sweep_idle_seconds: number;
+            /** Sweep Poll Seconds */
+            sweep_poll_seconds: number;
+            /** Sweep Min User Msgs */
+            sweep_min_user_msgs: number;
             /** Live Runs */
             live_runs: components["schemas"]["RunRow"][];
             /** Running */
@@ -2125,6 +2610,158 @@ export interface components {
             text: string;
             /** Done */
             done: boolean;
+        };
+        /**
+         * TokenBucket
+         * @description A token total plus its splits. Two reconciling breakdowns: `by_category` (semantic — the
+         *     generic tree the FE renders) and `by_type` (systematic). `by_scope`/`by_feature` are retained
+         *     flat maps for back-compat. All maps are open (producer-supplied labels, not a locked enum).
+         */
+        TokenBucket: {
+            /** Total */
+            total: number;
+            /**
+             * By Scope
+             * @default {}
+             */
+            by_scope: {
+                [key: string]: number;
+            };
+            /**
+             * By Feature
+             * @default {}
+             */
+            by_feature: {
+                [key: string]: number;
+            };
+            /**
+             * @default {
+             *       "input": 0,
+             *       "cache_creation": 0,
+             *       "cache_read": 0,
+             *       "output": 0,
+             *       "legacy": 0
+             *     }
+             */
+            by_type: components["schemas"]["TokenTypeSplit"];
+            /**
+             * By Category
+             * @default {}
+             */
+            by_category: {
+                [key: string]: components["schemas"]["CategoryNode"];
+            };
+        };
+        /**
+         * TokenDay
+         * @description One local-day bucket of the usage time-series: the four token types (+ legacy), the day
+         *     total, and the running `cumulative` total across days.
+         */
+        TokenDay: {
+            /** Day */
+            day: string;
+            /**
+             * Input
+             * @default 0
+             */
+            input: number;
+            /**
+             * Cache Creation
+             * @default 0
+             */
+            cache_creation: number;
+            /**
+             * Cache Read
+             * @default 0
+             */
+            cache_read: number;
+            /**
+             * Output
+             * @default 0
+             */
+            output: number;
+            /**
+             * Legacy
+             * @default 0
+             */
+            legacy: number;
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
+            /**
+             * Cumulative
+             * @default 0
+             */
+            cumulative: number;
+            /**
+             * Runs
+             * @default 0
+             */
+            runs: number;
+        };
+        /**
+         * TokenTimeseriesResponse
+         * @description Per-day token usage for the trend graph, bucketed by the caller's local day.
+         */
+        TokenTimeseriesResponse: {
+            /**
+             * Days
+             * @default []
+             */
+            days: components["schemas"]["TokenDay"][];
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
+        };
+        /**
+         * TokenTypeSplit
+         * @description Breakdown 2 — the systematic (per token-type) split. `legacy` holds pre-migration rows that
+         *     only carry the old collapsed scalar. The five sum to the bucket total (reconciliation).
+         */
+        TokenTypeSplit: {
+            /**
+             * Input
+             * @default 0
+             */
+            input: number;
+            /**
+             * Cache Creation
+             * @default 0
+             */
+            cache_creation: number;
+            /**
+             * Cache Read
+             * @default 0
+             */
+            cache_read: number;
+            /**
+             * Output
+             * @default 0
+             */
+            output: number;
+            /**
+             * Legacy
+             * @default 0
+             */
+            legacy: number;
+        };
+        /**
+         * TokenUsageResponse
+         * @description System-wide token usage: the global bucket + one bucket per repo (keyed by repo id).
+         */
+        TokenUsageResponse: {
+            global: components["schemas"]["TokenBucket"];
+            /**
+             * By Repo
+             * @default {}
+             */
+            by_repo: {
+                [key: string]: components["schemas"]["RepoTokens"];
+            };
         };
         /** ValidationError */
         ValidationError: {
@@ -2159,6 +2796,8 @@ export interface components {
             status?: ("queued" | "in_progress" | "waiting" | "dropped") | null;
             /** Model */
             model?: string | null;
+            /** Effort */
+            effort?: string | null;
             /** Done At */
             done_at?: string | null;
             /** Artifacts */
@@ -2251,6 +2890,15 @@ export interface components {
             tasks?: components["schemas"]["TaskItem"][] | null;
             /** Execution */
             execution?: string | null;
+        };
+        /** WorkItemEffortResponse */
+        WorkItemEffortResponse: {
+            /** Ok */
+            ok: boolean;
+            /** Id */
+            id: string;
+            /** Effort */
+            effort: string;
         };
         /** WorkItemLastRun */
         WorkItemLastRun: {
@@ -2691,6 +3339,57 @@ export interface operations {
             };
         };
     };
+    token_usage_tokens_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenUsageResponse"];
+                };
+            };
+        };
+    };
+    token_timeseries_tokens_timeseries_get: {
+        parameters: {
+            query?: {
+                tz_offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenTimeseriesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     set_system_model_system_model_post: {
         parameters: {
             query?: never;
@@ -2711,6 +3410,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SystemModelResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_system_effort_system_effort_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SystemEffortBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemEffortResponse"];
                 };
             };
             /** @description Validation Error */
@@ -2757,6 +3489,39 @@ export interface operations {
             };
         };
     };
+    set_system_sweep_system_sweep_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SweepConfigBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SweepConfigResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     set_repo_model_repos__repo_id__model_post: {
         parameters: {
             query?: never;
@@ -2779,6 +3544,111 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RepoModelResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_repo_effort_repos__repo_id__effort_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                repo_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RepoEffortBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RepoEffortResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_repo_learning_repos__repo_id__learning_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                repo_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LearningBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RepoLearningResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_repo_meta_repos__repo_id__meta_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                repo_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RepoMetaBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RepoMetaResponse"];
                 };
             };
             /** @description Validation Error */
@@ -3110,6 +3980,59 @@ export interface operations {
             };
         };
     };
+    dev_harness_foundation_dev_harness_foundation_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FoundationResponse"];
+                };
+            };
+        };
+    };
+    dev_harness_foundation_save_dev_harness_foundation_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FoundationFileBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FoundationFileSaveResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     dev_palette_dev_palette_get: {
         parameters: {
             query?: {
@@ -3228,6 +4151,74 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PublishedToggleResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dev_harness_published_file_dev_harness_published__proposal_id__file_get: {
+        parameters: {
+            query?: {
+                context_id?: string;
+            };
+            header?: never;
+            path: {
+                proposal_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublishedFileResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dev_harness_published_file_save_dev_harness_published__proposal_id__file_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                proposal_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublishedFileBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublishedFileSaveResponse"];
                 };
             };
             /** @description Validation Error */
@@ -3430,6 +4421,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WorkItemModelResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dev_work_item_set_effort_dev_work_items__item_id__effort_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EffortBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkItemEffortResponse"];
                 };
             };
             /** @description Validation Error */

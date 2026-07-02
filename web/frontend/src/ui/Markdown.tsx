@@ -58,17 +58,32 @@ function internalSlug(href: string | undefined): string | null {
   return m[1].toLowerCase() === 'readme' ? 'overview' : m[1]
 }
 
+// Optional scope tint — the prose stays white (the variant's `text-fg`); only inline/block CODE
+// spans take the scope hue. Literal class strings so Tailwind's JIT picks them up; placed AFTER the
+// variant base so they win over its `[&_code]:text-accent-text`. Used by the Foundations file
+// preview (universal = purple, dev = blue, core = green).
+const TONE: Record<string, string> = {
+  universal: '[&_code]:text-universal [&_pre_code]:text-universal',
+  dev: '[&_code]:text-dev [&_pre_code]:text-dev',
+  core: '[&_code]:text-core [&_pre_code]:text-core',
+}
+// Bold (**…**) gets ONE consistent color across every tinted preview (independent of scope) so
+// emphasis reads uniformly. Placed after the base so it wins over `[&_strong]:text-fg`.
+const BOLD_TINT = '[&_strong]:text-warn'
+
 export default function Markdown({
   text,
   variant = 'chat',
+  tone,
   onInternalLink,
 }: {
   text: string
   variant?: 'chat' | 'doc'
+  tone?: 'universal' | 'dev' | 'core'
   onInternalLink?: (slug: string) => void
 }) {
   return (
-    <div className={variant === 'doc' ? DOC : CHAT}>
+    <div className={`${variant === 'doc' ? DOC : CHAT}${tone ? ' ' + TONE[tone] + ' ' + BOLD_TINT : ''}`}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{

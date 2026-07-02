@@ -15,10 +15,14 @@ export function useSessions(contextId: string, mode: ChatMode = 'core') {
   const [olderHidden, setOlderHidden] = useState(0) // # of replayed-but-skipped older bubbles
   const sessionRef = useRef<string | null>(null) // synchronous read for ws sends
 
-  // Keep the active id in sync across ref (sends), state (picker), and localStorage.
-  function setSession(id: string | null) {
+  // Keep the active id in sync across ref (sends), state (picker), and localStorage. `persist`
+  // controls whether this becomes the context's remembered "general" session: TRUE for the
+  // owner's own general chat, FALSE for a work-item binding (transient — it must not clobber the
+  // general session so unbinding can restore it). See resumeStored().
+  function setSession(id: string | null, persist = true) {
     sessionRef.current = id
     setActiveId(id)
+    if (!persist) return
     if (id) localStorage.setItem(STORE_KEY, id)
     else localStorage.removeItem(STORE_KEY)
   }
@@ -32,8 +36,8 @@ export function useSessions(contextId: string, mode: ChatMode = 'core') {
   }
 
   // Replay a past session's bubbles (history lives in the SDK transcript).
-  async function openSession(id: string) {
-    setSession(id)
+  async function openSession(id: string, persist = true) {
+    setSession(id, persist)
     try {
       const s = await readSession(id, contextId)
       setMessages(s.messages)
@@ -44,10 +48,18 @@ export function useSessions(contextId: string, mode: ChatMode = 'core') {
     }
   }
 
-  function newChat() {
-    setSession(null)
+  function newChat(persist = true) {
+    setSession(null, persist)
     setMessages([])
     setOlderHidden(0)
+  }
+
+  // Restore the context's remembered general session (used when a work-item binding is dropped) —
+  // the last non-work-item thread, or a blank new chat if there's none.
+  function resumeStored() {
+    const stored = localStorage.getItem(STORE_KEY)
+    if (stored) openSession(stored)
+    else newChat()
   }
 
   // Forget (default) keeps the transcript on disk; purge=true deletes it from disk too.
@@ -61,10 +73,11 @@ export function useSessions(contextId: string, mode: ChatMode = 'core') {
     refreshSessions()
   }
 
-  // A finished turn may mint a brand-new session id — claim it (and list it if new).
-  function claimSession(id: string) {
+  // A finished turn may mint a brand-new session id — claim it (and list it if new). `persist`
+  // is false for bound (work-item) turns so they don't overwrite the general session.
+  function claimSession(id: string, persist = true) {
     const wasNew = !sessionRef.current
-    setSession(id)
+    setSession(id, persist)
     if (wasNew) refreshSessions()
   }
 
@@ -89,6 +102,7 @@ export function useSessions(contextId: string, mode: ChatMode = 'core') {
     refreshSessions,
     openSession,
     newChat,
+    resumeStored,
     removeSession,
     claimSession,
     appendMessage,

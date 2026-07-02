@@ -49,6 +49,7 @@ class WorkItem(BaseModel):
     phase: WorkPhase | None = None
     status: WorkStatus | None = None
     model: str | None = None
+    effort: str | None = None  # configured reasoning effort (low|medium|high) its runs use
     # work-item frontmatter dates parse to datetime.date (YAML); a date|str union keeps them faithful
     # (date → isoformat "YYYY-MM-DD" on serialize, exactly as the raw jsonable_encoder path did).
     done_at: date | str | None = None
@@ -133,6 +134,12 @@ class WorkItemModelResponse(BaseModel):
     ok: bool
     id: str
     model: str
+
+
+class WorkItemEffortResponse(BaseModel):
+    ok: bool
+    id: str
+    effort: str
 
 
 class WorkItemAdvanceResponse(BaseModel):

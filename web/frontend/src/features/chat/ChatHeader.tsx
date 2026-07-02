@@ -1,5 +1,6 @@
 import { PanelRightClose } from 'lucide-react'
 import Dropdown from '@/ui/Dropdown'
+import { RepoIcon } from '@/lib/repoIcons'
 import type { ContextRef } from '@/lib/contexts'
 import type { ChatMode } from '@/lib/api'
 import type { RunMeta } from './types'
@@ -13,7 +14,7 @@ function ModeToggle({ mode, busy, onChange }: { mode: ChatMode; busy: boolean; o
       disabled={busy}
       title={m === 'dev' ? 'Dev mode — build SuperMe (dev-knowledge + dev skills)' : 'Core mode — the twin'}
       className={`rounded px-1.5 py-0.5 text-[10.5px] font-medium transition ${
-        mode === m ? 'bg-accent text-on-accent' : 'text-muted hover:text-fg'
+        mode === m ? 'bg-[var(--chat-accent)] text-on-accent' : 'text-muted hover:text-fg'
       } disabled:opacity-50`}
     >
       {label}
@@ -34,6 +35,7 @@ export default function ChatHeader({
   ready,
   contexts,
   contextId,
+  tag,
   onContextChange,
   busy,
   onCollapse,
@@ -46,6 +48,7 @@ export default function ChatHeader({
   ready: boolean
   contexts: ContextRef[]
   contextId: string
+  tag?: { color: string; icon: string | null; isHub: boolean }
   onContextChange?: (id: string) => void
   busy: boolean
   onCollapse?: () => void
@@ -55,11 +58,23 @@ export default function ChatHeader({
   mode: ChatMode
   onModeChange: (m: ChatMode) => void
 }) {
-  const ctxLabel = contexts.find((c) => c.id === contextId)?.label ?? contextId
+  // The global context reads as "SuperMe Hub" in the rail (matches the orbit inspector).
+  const disp = (c: ContextRef) => (c.id === 'global' ? 'SuperMe Hub' : c.label)
+  const cur = contexts.find((c) => c.id === contextId)
+  const ctxLabel = cur ? disp(cur) : contextId
   return (
     <div className="shrink-0 border-b border-line px-4 py-2.5">
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
+          {/* the active repo's visual tag */}
+          {tag && (
+            <span
+              className="grid h-5 w-5 shrink-0 place-items-center rounded-[5px]"
+              style={tag.isHub ? { backgroundImage: 'var(--grad-iris)' } : { backgroundColor: tag.icon ? 'transparent' : tag.color }}
+            >
+              {tag.icon && <RepoIcon name={tag.icon} size={14} color={tag.color} />}
+            </span>
+          )}
           <span
             className={`h-2 w-2 shrink-0 rounded-full ${ready ? 'bg-success' : 'bg-faint'}`}
             title={ready ? 'connected' : 'connecting'}
@@ -70,7 +85,7 @@ export default function ChatHeader({
               value={contextId}
               disabled={busy}
               title="Which SuperMe this chat talks to"
-              options={contexts.map((c) => ({ value: c.id, label: c.label }))}
+              options={contexts.map((c) => ({ value: c.id, label: disp(c) }))}
               onChange={(v) => onContextChange?.(v)}
             />
           ) : (

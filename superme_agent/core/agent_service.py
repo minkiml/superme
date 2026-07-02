@@ -23,6 +23,7 @@ from claude_agent_sdk import (
 from ..runtime.config import (
     SELF_FILE, CHARTER_FILES, LOCAL_HARNESS_DIR, CONSTITUTION_DIR, plugins_for,
 )
+from .models import normalize_model
 from .operational import assemble_constitution, silent_skill_names
 from .context import Context
 from .events import Init, TextDelta, Status, Usage, Result, TurnEvent
@@ -108,7 +109,7 @@ class AgentService:
 
     def _build_options(
         self, ctx: Context, *, resume, model, approve: ApproveFn, extra_mcp_servers,
-        enforce_silent: bool = False,
+        enforce_silent: bool = False, effort: str | None = None,
     ) -> ClaudeAgentOptions:
         # Assemble layer-2 append: persona (WHO) + mode charter (WHAT MODE) + preamble
         # (WHERE) + persona_append (per-project extra). Mode falls back to core.
@@ -145,7 +146,10 @@ class AgentService:
         return ClaudeAgentOptions(
             cwd=str(ctx.cwd),                       # the Context (cwd / workspace)
             resume=resume,                          # continuous session (surface-owned)
-            model=model,                            # surface-resolved override (None = default)
+            # Normalize the model to a CONCRETE id here — the ONE execution choke every turn passes
+            # through — so a tier alias (`sonnet`) never silently runs a lagging concrete version.
+            model=normalize_model(model),           # surface-resolved override (None = default)
+            effort=effort,                          # surface-resolved reasoning effort (None = SDK default)
             system_prompt={"type": "preset", "preset": "claude_code", "append": append},
             # Which Claude Code setting layers to load (per-Context). Default is
             # ["user","project","local"] so SuperMe layers the owner's global ~/.claude
@@ -180,6 +184,7 @@ class AgentService:
         *,
         resume: str | None = None,
         model: str | None = None,
+        effort: str | None = None,
         approve: ApproveFn,
         extra_mcp_servers: dict | None = None,
         enforce_silent: bool = False,
@@ -197,7 +202,7 @@ class AgentService:
         """
         options = self._build_options(
             ctx, resume=resume, model=model, approve=approve,
-            extra_mcp_servers=extra_mcp_servers, enforce_silent=enforce_silent,
+            extra_mcp_servers=extra_mcp_servers, enforce_silent=enforce_silent, effort=effort,
         )
         resolved_model = None
         async with ClaudeSDKClient(options=options) as client:
@@ -231,6 +236,7 @@ class AgentService:
                             input_tokens=step_usage.get("input_tokens", 0),
                             output_tokens=step_usage.get("output_tokens", 0),
                             context_pct=cu[0] if cu else None,
+                            usage=dict(step_usage),
                         )
                 elif isinstance(message, ResultMessage):
                     usage = _context_usage(message.usage, message.model_usage, resolved_model)
@@ -247,4 +253,5 @@ class AgentService:
                         context_window=window,
                         session_id=getattr(message, "session_id", None),
                         tokens=_sum_tokens(message.usage) or None,
+                        usage=dict(message.usage) if message.usage else None,
                     )

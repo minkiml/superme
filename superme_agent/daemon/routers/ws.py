@@ -107,6 +107,12 @@ async def ws_agent(ws: WebSocket) -> None:
             # None at the end = the host/CLI default.
             model = msg.model or _commands.model_override(ctx) or _spine.effective_system_model()
 
+            # Effort resolution mirrors model (per-turn → repo /effort override → system runtime →
+            # system.yaml), left nullable here so a bound work-item's own effort can fill below;
+            # the "medium" floor is applied last, just before the run.
+            effort = (msg.effort or _commands.effort_override(ctx)
+                      or _spine.get_system_effort() or _spine.system_config().default_effort)
+
             # Run-lock: an item runs ONE agent at a time. If something is already working it
             # (a headless plan, or another bound turn), refuse rather than let two agents write
             # the same files concurrently. The owner waits for the in-flight run to finish.
@@ -135,8 +141,14 @@ async def ws_agent(ws: WebSocket) -> None:
                 # The item's configured model (frontmatter) drives its bound-chat turns too,
                 # unless the surface sent an explicit per-turn override.
                 model = model or item.get("model") or DEFAULT_RUN_MODEL
+                effort = effort or item.get("effort")
                 _begin_run(ctx, ctx.id, work_item_id, "chat", model)
                 began_run = True
+            # UNBOUND (general) chat still spends tokens — record a lightweight run so it is fully
+            # accounted (Interactive category), never silent. No item-status flip / no run-lock; just
+            # telemetry + the authoritative per-type usage written at finish. session_id is attached
+            # at finish so per-session grouping works.
+            chat_run_id = None if began_run else _spine.start_run(ctx.id, mode=ctx.mode, feature="chat")
             # Dev-mode turns get the dev MCP server: `dev_log` (read the activity log on demand) +
             # the learning-pipeline tools (review_candidates / propose_memory). Capture is fully
             # automatic — there is no chat-side capture tool; the idle + phase-advance sweeps own it.
@@ -146,12 +158,16 @@ async def ws_agent(ws: WebSocket) -> None:
                 if ctx.mode == "dev" else None
             )
             final_tokens = None
+            final_usage = None
+            final_session = None
+            final_model = None
             try:
                 async for ev in _agent.run_turn(
                     ctx,
                     prompt,
                     resume=msg.resume,
                     model=model,
+                    effort=effort or _spine.DEFAULT_EFFORT,   # final "medium" floor
                     approve=turn_approve,
                     extra_mcp_servers=turn_mcp,
                     enforce_silent=True,   # user-facing chat: hide+block internal `access: silent` skills
@@ -164,6 +180,9 @@ async def ws_agent(ws: WebSocket) -> None:
                     # (and stays distinct from the owner's own Claude Code sessions).
                     elif isinstance(ev, Result):
                         final_tokens = ev.tokens
+                        final_usage = ev.usage
+                        final_session = ev.session_id
+                        final_model = ev.model
                         _sessions.record(ctx, ev.session_id)
                         if work_item_id and ev.session_id and ctx.internal_root:
                             try:
@@ -177,12 +196,18 @@ async def ws_agent(ws: WebSocket) -> None:
                     await ws.send_json(event_to_frame(ev))
                 # Turn done — the agent has stopped, so the item now awaits the owner.
                 if began_run:
-                    _end_run(ctx, ctx.id, work_item_id, final_tokens, "waiting")
+                    _end_run(ctx, ctx.id, work_item_id, final_tokens, "waiting", final_usage)
+                elif chat_run_id:
+                    _spine.finish_run(chat_run_id, usage=final_usage, session_id=final_session,
+                                      model=final_model)
                 # No chat-side capture: the conversation is swept automatically (idle-timeout +
                 # phase-advance/completion), so nothing fires here per-turn.
             except Exception as e:
                 if began_run:
-                    _end_run(ctx, ctx.id, work_item_id, final_tokens, "waiting")
+                    _end_run(ctx, ctx.id, work_item_id, final_tokens, "waiting", final_usage)
+                elif chat_run_id:
+                    _spine.finish_run(chat_run_id, status="aborted", usage=final_usage,
+                                      session_id=final_session, model=final_model)
                 log.exception("turn failed")
                 try:
                     await ws.send_json(error_frame(str(e)))

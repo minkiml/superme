@@ -24,14 +24,18 @@ log = logging.getLogger("superme-agent")
 
 
 def _format_model(resolved: str | None) -> str:
-    """'claude-opus-4-7' / 'claude-haiku-4-5-20251001' -> 'opus 4.7' / 'haiku 4.5'.
+    """Canonical 'Name Version' label: 'claude-opus-4-8' -> 'Opus 4.8',
+    'claude-haiku-4-5-20251001' -> 'Haiku 4.5', 'claude-sonnet-5' -> 'Sonnet 5'.
 
     Falls back to the raw id if it doesn't match the expected shape.
     """
     if not resolved:
         return ""
-    m = re.match(r"claude-([a-z]+)-(\d+)-(\d+)", resolved)
-    return f"{m.group(1)} {m.group(2)}.{m.group(3)}" if m else resolved
+    m = re.match(r"claude-([a-z]+)-(\d+)(?:-(\d+))?", resolved)
+    if not m:
+        return resolved
+    name = m.group(1).capitalize()
+    return f"{name} {m.group(2)}.{m.group(3)}" if m.group(3) else f"{name} {m.group(2)}"
 
 
 def _friendly_status(tool_name: str, tool_input: dict) -> str:

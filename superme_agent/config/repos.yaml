@@ -23,3 +23,53 @@ repos:
     layer: local
     persona_append: "You are operating in the DUMMY_PROJECT workspace; say so briefly when you start a task here."
     extra_mcp: []
+
+  dummy2:
+    label: Dummy Project 2
+    cwd: "/Users/cooma/Developer/my_docs/dummy2"
+    layer: local
+    persona_append: "You are operating in the DUMMY2 workspace; say so briefly when you start a task here."
+    extra_mcp: []
+
+  # Throwaway repos to exercise the orbit / dashboard layout (no real work). Remove when done.
+  dummy3:
+    label: Dummy Project 3
+    cwd: "/Users/cooma/Developer/my_docs/dummy3"
+    layer: local
+    persona_append: ""
+    extra_mcp: []
+
+  dummy4:
+    label: Dummy Project 4
+    cwd: "/Users/cooma/Developer/my_docs/dummy4"
+    layer: local
+    persona_append: ""
+    extra_mcp: []
+
+  dummy5:
+    label: Dummy Project 5
+    cwd: "/Users/cooma/Developer/my_docs/dummy5"
+    layer: local
+    persona_append: ""
+    extra_mcp: []
+
+  dummy6:
+    label: Dummy Project 6
+    cwd: "/Users/cooma/Developer/my_docs/dummy6"
+    layer: local
+    persona_append: ""
+    extra_mcp: []
+
+  dummy7:
+    label: Dummy Project 7
+    cwd: "/Users/cooma/Developer/my_docs/dummy7"
+    layer: local
+    persona_append: ""
+    extra_mcp: []
+
+  dummy8:
+    label: Dummy Project 8
+    cwd: "/Users/cooma/Developer/my_docs/dummy8"
+    layer: local
+    persona_append: ""
+    extra_mcp: []

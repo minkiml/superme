@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { Send } from 'lucide-react'
 import CommandPalette from './CommandPalette'
+import ModelPicker from './ModelPicker'
 
 // The message input: a bordered card with a multi-line textarea + send, and the "/"
 // command palette. Owns the palette's UI state (highlight, dismissed-with-Esc) and the
@@ -14,6 +15,9 @@ export default function Composer({
   commands,
   ctxLabel,
   onPaletteOpen,
+  modelOverride,
+  effortOverride,
+  onSelectModel,
 }: {
   value: string
   onChange: (value: string) => void
@@ -23,16 +27,23 @@ export default function Composer({
   commands: string[]
   ctxLabel: string
   onPaletteOpen?: () => void
+  modelOverride?: string | null // the context's current model selection (for the picker's check)
+  effortOverride?: string | null // the context's current effort selection (for the picker's check)
+  onSelectModel?: (model: string, effort: string) => void // sends `/model <model> <effort>` directly
 }) {
   const [palIdx, setPalIdx] = useState(0)
   const [palHidden, setPalHidden] = useState(false) // dismissed with Esc until next edit
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
 
+  // Once the input resolves to exactly "/model" (optionally a trailing space, no arg yet), swap
+  // the generic "/" palette for the rich model picker.
+  const modelOpen = !!onSelectModel && /^\/model\s*$/.test(value) && !palHidden
+
   // Open while the input is a single "/token" (no space yet).
   const palMatch = value.match(/^\/(\S*)$/)
   const palQuery = palMatch ? palMatch[1].toLowerCase() : null
   const palItems = palQuery !== null ? commands.filter((c) => c.toLowerCase().includes(palQuery)).slice(0, 8) : []
-  const palOpen = palQuery !== null && palItems.length > 0 && !palHidden
+  const palOpen = !modelOpen && palQuery !== null && palItems.length > 0 && !palHidden
 
   function accept(name: string) {
     onChange(`/${name} `)
@@ -41,9 +52,17 @@ export default function Composer({
     inputRef.current?.focus()
   }
 
+  function pickModel(model: string, effort: string) {
+    onSelectModel?.(model, effort)
+    onChange('')
+    setPalHidden(false)
+    inputRef.current?.focus()
+  }
+
   return (
     <div className="shrink-0 p-3">
       <div className="relative">
+        {modelOpen && <ModelPicker currentModel={modelOverride ?? null} currentEffort={effortOverride ?? null} onPick={pickModel} />}
         {palOpen && <CommandPalette items={palItems} activeIndex={palIdx} onHover={setPalIdx} onPick={accept} />}
         <div className="rounded-lg border border-line bg-sunken focus-within:border-accent">
           <textarea
@@ -62,6 +81,11 @@ export default function Composer({
               setPalIdx(0)
             }}
             onKeyDown={(e) => {
+              if (modelOpen) {
+                // Picker is click-driven; don't let Enter fire a bare "/model" message.
+                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); return }
+                if (e.key === 'Escape') { e.preventDefault(); setPalHidden(true); return }
+              }
               if (palOpen) {
                 if (e.key === 'ArrowDown') {
                   e.preventDefault()
@@ -93,7 +117,7 @@ export default function Composer({
           <div className="flex items-center justify-between gap-2 px-2.5 pb-2 pt-1">
             <span className="truncate text-[10px] text-faint">/ commands · Enter to send · Shift+Enter for newline</span>
             <button
-              className="flex shrink-0 items-center justify-center rounded-md bg-accent p-1.5 text-on-accent disabled:opacity-40"
+              className="flex shrink-0 items-center justify-center rounded-md bg-[var(--chat-accent)] p-1.5 text-on-accent disabled:opacity-40"
               disabled={busy || !ready || !value.trim()}
               onClick={onSend}
               title="Send (Enter)"

@@ -13,7 +13,7 @@ import WorkItemModal from './WorkItemModal'
 // pending a clearer model; the abstract schema lives on "Model". Built context-parameterized
 // (D-011) — only global is wired today.
 
-type Zoom = 'workspace' | 'inbox' | null
+type Zoom = 'workspace' | 'inbox'
 type WsView = 'kanban' | 'plan'
 const WS_VIEWS = [
   { value: 'kanban', label: 'Worktree · kanban' },
@@ -25,16 +25,18 @@ export default function DevDashboard({
   onBindItem,
   onUnbindItem,
   boundItemId,
+  embedded = false,
 }: {
   contextId?: string
   onBindItem?: (it: WorkItem, contextId: string) => void
   onUnbindItem?: () => void
   boundItemId?: string | null
+  embedded?: boolean // hosted inside the Dev workspace shell — the shell owns the header
 }) {
   const [data, setData] = useState<DevData | null>(null)
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
-  const [zoom, setZoom] = useState<Zoom>(null)
+  const [zoom, setZoom] = useState<Zoom>('workspace')
   const [wsView, setWsView] = useState<WsView>('kanban')
   const [reviewId, setReviewId] = useState<string | null>(null) // work-item open in the review popup
   const [showShipped, setShowShipped] = useState(false) // the completed-items list overlay
@@ -53,9 +55,9 @@ export default function DevDashboard({
 
   // Headless "Plan it": kick off a background /plan turn, then refresh so the card flips
   // to its "planning…" state (the running-poll below keeps reloading until it settles).
-  async function handlePlan(it: WorkItem, model?: string) {
+  async function handlePlan(it: WorkItem, model?: string, effort?: string) {
     try {
-      await planWorkItem(it.id, contextId, model)
+      await planWorkItem(it.id, contextId, model, effort)
     } catch {
       /* surfaced on next load */
     }
@@ -115,12 +117,8 @@ export default function DevDashboard({
           onClose={() => setShowShipped(false)}
         />
       )}
-      <PageHeader
-        icon={Hammer}
-        title="Development"
-        subtitle="Live environment for this SuperMe's dev-knowledge — operate every store from one map"
-        badge="prototype"
-        right={
+      {embedded ? (
+        <div className="flex items-center justify-end px-6 pt-4">
           <button
             onClick={load}
             disabled={loading}
@@ -130,8 +128,26 @@ export default function DevDashboard({
           >
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Refresh
           </button>
-        }
-      />
+        </div>
+      ) : (
+        <PageHeader
+          icon={Hammer}
+          title="Development"
+          subtitle="Live environment for this SuperMe's dev-knowledge — operate every store from one map"
+          badge="prototype"
+          right={
+            <button
+              onClick={load}
+              disabled={loading}
+              title="Refresh"
+              aria-label="Refresh"
+              className="inline-flex items-center gap-1.5 rounded-md border border-line bg-surface px-2.5 py-1.5 text-xs text-muted hover:bg-hover hover:text-fg disabled:opacity-50"
+            >
+              <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Refresh
+            </button>
+          }
+        />
+      )}
 
       <div className="min-h-0 flex-1 overflow-auto">
         {loading && !data ? (
@@ -139,15 +155,25 @@ export default function DevDashboard({
         ) : err ? (
           <div className="p-6 text-sm text-danger">Couldn’t load dev knowledge — {err}</div>
         ) : !data ? null : (
-          <div className="mx-auto max-w-5xl p-6">
-            {zoom === null ? (
-              <EnvMap data={data} onZoom={setZoom} />
-            ) : zoom === 'workspace' ? (
+          <div className="mx-auto max-w-5xl space-y-5 p-6">
+            {/* Pipeline summary — Inbox → Workspace, always visible; each card selects the store
+                whose working surface shows below. */}
+            <EnvMap
+              data={data}
+              selected={zoom}
+              onSelect={(z) => {
+                setZoom(z)
+                // Leaving the workspace for the Inbox means you're no longer on a work-item —
+                // drop the chat binding so the rail falls back to the general dev session.
+                if (z === 'inbox') onUnbindItem?.()
+              }}
+            />
+
+            {zoom === 'workspace' ? (
               <ZoomPanel
                 title="Workspace"
-                icon={Boxes}
+                icon={Bot}
                 meta={`${data.work_items.filter(isActive).length} active`}
-                onBack={() => setZoom(null)}
                 control={<Dropdown value={wsView} options={WS_VIEWS} onChange={(v) => setWsView(v as WsView)} />}
               >
                 <WorkspaceStats g={data.glance} onShowShipped={() => setShowShipped(true)} />
@@ -175,7 +201,7 @@ export default function DevDashboard({
                 )}
               </ZoomPanel>
             ) : (
-              <ZoomPanel title="Inbox" icon={Inbox} tag="capture queue" meta={`${data.glance.inbox_open ?? 0} open`} onBack={() => setZoom(null)}>
+              <ZoomPanel title="Inbox" icon={Inbox} meta={`${data.glance.inbox_open ?? 0} open`}>
                 <InboxView entries={data.inbox} contextId={contextId} onChanged={load} />
               </ZoomPanel>
             )}
@@ -188,43 +214,40 @@ export default function DevDashboard({
 
 // --- the environment (active pipeline) ------------------------------------------
 
-function EnvMap({ data, onZoom }: { data: DevData; onZoom: (z: Zoom) => void }) {
+function EnvMap({ data, selected, onSelect }: { data: DevData; selected: Zoom; onSelect: (z: Zoom) => void }) {
   const g = data.glance
   const openInbox = data.inbox.filter((e) => e.status === 'open')
   const activeCount = data.work_items.filter(isActive).length
   return (
-    <section>
-      <ZoneLabel>Active pipeline</ZoneLabel>
-      <div className="flex flex-wrap items-stretch gap-2">
-        <StoreCard className="w-60" icon={Inbox} label="Inbox" subtitle="capture queue" hint="open →" onClick={() => onZoom('inbox')}>
-          <Metric n={g.inbox_open ?? 0} unit="open" tone={g.inbox_open ? 'text-accent-text' : 'text-muted'} />
-          <KindBreakdown entries={openInbox} />
-        </StoreCard>
+    <div className="flex items-stretch gap-2">
+      <StoreCard
+        className="flex-1" icon={Inbox} label="Inbox" subtitle="capture queue"
+        selected={selected === 'inbox'} onClick={() => onSelect('inbox')}
+      >
+        <Metric n={g.inbox_open ?? 0} unit="open" tone="text-fg" />
+        <KindBreakdown entries={openInbox} />
+      </StoreCard>
 
-        <Connector label="push" />
+      <Connector label="push" />
 
-        <StoreCard className="w-72" hub icon={Boxes} label="Workspace" subtitle="the living plan · worktree" hint="zoom in →" onClick={() => onZoom('workspace')}>
-          <StatusDots item={g.by_status} total={activeCount} />
-          <AgentChip n={0} />
-        </StoreCard>
-      </div>
-    </section>
+      <StoreCard
+        className="flex-1" icon={Bot} label="Workspace" subtitle="the living plan · worktree"
+        selected={selected === 'workspace'} onClick={() => onSelect('workspace')}
+      >
+        <StatusDots item={g.by_status} total={activeCount} />
+      </StoreCard>
+    </div>
   )
-}
-
-function ZoneLabel({ children }: { children: React.ReactNode }) {
-  return <div className="mb-3 text-[11px] font-medium uppercase tracking-wider text-faint">{children}</div>
 }
 
 // A clickable store card — flows in the layout (not absolutely positioned).
 function StoreCard({
-  icon: Icon, label, subtitle, hint, hub, onClick, children, className = '',
+  icon: Icon, label, subtitle, selected, onClick, children, className = '',
 }: {
   icon: typeof Boxes
   label: string
   subtitle: string
-  hint: string
-  hub?: boolean
+  selected?: boolean // this store's working surface is the one shown below
   onClick: () => void
   children: React.ReactNode
   className?: string
@@ -232,12 +255,12 @@ function StoreCard({
   return (
     <button
       onClick={onClick}
-      className={`group flex flex-col rounded-xl border bg-surface px-3.5 py-3 text-left shadow-sm transition hover:border-accent hover:shadow-md ${
-        hub ? 'border-accent/40 ring-1 ring-accent/20' : 'border-line'
+      className={`group flex flex-col rounded-xl border bg-surface px-3.5 py-3 text-left shadow-sm transition hover:border-accent ${
+        selected ? 'border-accent ring-1 ring-accent/30' : 'border-line'
       } ${className}`}
     >
       <div className="flex items-center gap-2">
-        <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg ${hub ? 'bg-accent text-on-accent' : 'bg-hover text-muted group-hover:text-fg'}`}>
+        <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg ${selected ? 'bg-accent text-on-accent' : 'bg-hover text-muted group-hover:text-fg'}`}>
           <Icon size={15} />
         </span>
         <span className="min-w-0">
@@ -246,9 +269,6 @@ function StoreCard({
         </span>
       </div>
       <div className="mt-2.5">{children}</div>
-      <span className="mt-2 text-[10.5px] font-medium text-faint opacity-0 transition group-hover:text-accent-text group-hover:opacity-100">
-        {hint}
-      </span>
     </button>
   )
 }
@@ -313,15 +333,6 @@ function StatusDots({ item, total }: { item: Record<string, number>; total: numb
         {dot(Check, item.done ?? 0, 'done', 'text-success')}
       </div>
     </div>
-  )
-}
-
-// Active-agents indicator on the Workspace — a placeholder until the orchestration layer lands.
-function AgentChip({ n }: { n: number }) {
-  return (
-    <span className="mt-2 inline-flex items-center gap-1 rounded-full border border-dashed border-line px-2 py-0.5 text-[10px] text-faint">
-      <Bot size={11} /> {n} agents · soon
-    </span>
   )
 }
 
@@ -417,20 +428,22 @@ function ZoomPanel({
   tag?: string
   control?: React.ReactNode
   meta: string
-  onBack: () => void
+  onBack?: () => void
   children: React.ReactNode
 }) {
   return (
     <div className="rounded-xl border border-line bg-surface">
       <div className="flex items-center gap-2.5 border-b border-line px-3 py-2.5">
-        <button
-          onClick={onBack}
-          title="Back to map"
-          aria-label="Back to map"
-          className="rounded-md border border-line bg-surface p-1.5 text-muted hover:bg-hover hover:text-fg"
-        >
-          <ArrowLeft size={15} />
-        </button>
+        {onBack && (
+          <button
+            onClick={onBack}
+            title="Back to map"
+            aria-label="Back to map"
+            className="rounded-md border border-line bg-surface p-1.5 text-muted hover:bg-hover hover:text-fg"
+          >
+            <ArrowLeft size={15} />
+          </button>
+        )}
         <Icon size={16} className="text-accent-text" />
         <span className="text-sm font-semibold text-fg">{title}</span>
         {control ? (

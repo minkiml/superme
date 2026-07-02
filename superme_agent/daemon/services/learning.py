@@ -20,6 +20,7 @@ from ..app_state import agent as _agent, dev_store as _dev_store, spine as _spin
     sessions as _sessions
 from ..deps import cache_slash as _cache_slash, proposal_slug as _proposal_slug
 from ...core import Init, Usage, Result, deny_all, learning_write_approve
+from ...core.models import agent_model
 from ...gateway import contexts
 from ...harness.tools.dev_tools import make_dev_mcp_server
 from ...runtime.config import HARNESS_DIR, CONSTITUTION_DIR
@@ -54,10 +55,13 @@ async def _run_headless_distill(ctx, context_id: str, run_id: int) -> None:
     turn_mcp = {"dev": make_dev_mcp_server(_dev_store, ctx.id)}
     run_status = "done"
     session_id = None
+    run_model = None
+    run_usage = None
     try:
         async for ev in _agent.run_turn(
             ctx, prompt,
             resume=None,
+            model=agent_model("distill"),     # preset tier → latest concrete (never the CLI default)
             approve=deny_all,                 # distill writes only via DB tools (pre-approved), not files
             extra_mcp_servers=turn_mcp,
         ):
@@ -65,6 +69,8 @@ async def _run_headless_distill(ctx, context_id: str, run_id: int) -> None:
                 _spine.bump_run(run_id, add_tokens=ev.total_tokens, ctx_pct=ev.context_pct)
             elif isinstance(ev, Result):
                 session_id = ev.session_id    # captured ONLY to dispose the throwaway transcript
+                run_model = ev.model          # the model the SDK resolved for this headless run
+                run_usage = ev.usage          # whole-turn usage — typed-column fallback at finish
             elif isinstance(ev, Init):
                 _cache_slash(ctx.id, ev.slash_commands)
             # NB: never _sessions.record — distill is sessionless; its transcript is disposed below.
@@ -75,7 +81,7 @@ async def _run_headless_distill(ctx, context_id: str, run_id: int) -> None:
         # The run is LOGGED (the spine run row is kept as durable telemetry + the event below),
         # but the session is fully DISPOSABLE — delete its throwaway transcript so nothing
         # resumable lingers on disk.
-        _spine.finish_run(run_id, status=run_status)
+        _spine.finish_run(run_id, status=run_status, model=run_model, usage=run_usage)
         if session_id:
             _sessions.discard_transcript(ctx, session_id)
         props_after = len(_dev_store.list_memory_proposals(context_id, status="proposed"))
@@ -205,10 +211,13 @@ async def _run_headless_write(ctx, context_id: str, proposal_id: int, run_id: in
                                            proposal_id=proposal_id, staged_path=staged_path)}
     run_status = "done"
     session_id = None
+    run_model = None
+    run_usage = None
     try:
         async for ev in _agent.run_turn(
             ctx, _write_prompt(prop, slug=slug, workspace=workspace, existing_path=existing_path),
             resume=None,
+            model=agent_model("write"),       # preset tier → latest concrete (never the CLI default)
             # forge needs Bash (forge_kit) + Write (draft into the scratch workspace); both are
             # auto-allowed for this hermetic, disposable run. stage_artifact stays DB-only (safe).
             approve=learning_write_approve(workspace),
@@ -218,13 +227,15 @@ async def _run_headless_write(ctx, context_id: str, proposal_id: int, run_id: in
                 _spine.bump_run(run_id, add_tokens=ev.total_tokens, ctx_pct=ev.context_pct)
             elif isinstance(ev, Result):
                 session_id = ev.session_id
+                run_model = ev.model          # the model the SDK resolved for this headless run
+                run_usage = ev.usage          # whole-turn usage — typed-column fallback at finish
             elif isinstance(ev, Init):
                 _cache_slash(ctx.id, ev.slash_commands)
     except Exception:
         log.exception("headless write run failed for proposal %s", proposal_id)
         run_status = "aborted"
     finally:
-        _spine.finish_run(run_id, status=run_status)
+        _spine.finish_run(run_id, status=run_status, model=run_model, usage=run_usage)
         if session_id:
             _sessions.discard_transcript(ctx, session_id)
         after = _dev_store.get_memory_proposal(proposal_id)
@@ -318,10 +329,13 @@ async def run_sweep(ctx, session_id: str, focus: str | None = None) -> dict:
     turn_mcp = {"dev": make_dev_mcp_server(_dev_store, context_id, origin_session_id=session_id)}
     run_status = "done"
     sub_session = None
+    run_model = None
+    run_usage = None
     filed = 0
     try:
         async for ev in _agent.run_turn(
             ctx, prompt, resume=None,
+            model=agent_model("sweep"),       # preset tier → latest concrete (never the CLI default)
             approve=deny_all,                 # capture writes only via the file_candidate DB tool
             extra_mcp_servers=turn_mcp,
         ):
@@ -329,6 +343,8 @@ async def run_sweep(ctx, session_id: str, focus: str | None = None) -> dict:
                 _spine.bump_run(run_id, add_tokens=ev.total_tokens, ctx_pct=ev.context_pct)
             elif isinstance(ev, Result):
                 sub_session = ev.session_id   # captured ONLY to dispose the throwaway transcript
+                run_model = ev.model          # the model the SDK resolved for this headless run
+                run_usage = ev.usage          # whole-turn usage — typed-column fallback at finish
             elif isinstance(ev, Init):
                 _cache_slash(ctx.id, ev.slash_commands)
             # NB: never _sessions.record — the sweep is sessionless; its transcript is disposed below.
@@ -336,7 +352,7 @@ async def run_sweep(ctx, session_id: str, focus: str | None = None) -> dict:
         log.exception("capture sweep run failed for %s (session %s)", context_id, session_id)
         run_status = "aborted"
     finally:
-        _spine.finish_run(run_id, status=run_status)
+        _spine.finish_run(run_id, status=run_status, model=run_model, usage=run_usage)
         if sub_session:
             _sessions.discard_transcript(ctx, sub_session)
         # Advance the watermark ONLY on a clean pass — an aborted sweep must re-sweep the same slice.
@@ -366,6 +382,8 @@ async def run_sweep(ctx, session_id: str, focus: str | None = None) -> dict:
 SWEEP_IDLE_SECONDS = 15 * 60     # a dev session quiet this long, with un-swept content, gets swept
 SWEEP_POLL_SECONDS = 5 * 60      # how often the idle loop scans (the watermark is the real gate, so
                                  # this only sets latency, not how often anything actually sweeps)
+# These are the built-in FALLBACKS. The live values come from the spine (Quick config → sweep
+# tuning): idle threshold, heartbeat poll cadence, and a min-un-swept-user-message gate.
 
 
 def _fire_sweep_bg(ctx, session_id: str | None, *, focus: str | None = None,
@@ -388,18 +406,28 @@ def _fire_sweep_bg(ctx, session_id: str | None, *, focus: str | None = None,
     asyncio.create_task(_job())
 
 
-async def _sweep_idle_sessions(idle_seconds: int = SWEEP_IDLE_SECONDS) -> dict:
+async def _sweep_idle_sessions(idle_seconds: int | None = None, min_user_msgs: int | None = None) -> dict:
     """One idle-scan pass: across every repo, sweep each dev session that (a) has gone quiet for
-    `idle_seconds` and (b) has un-swept content past its watermark. Eligible sessions are swept
+    `idle_seconds` and (b) has enough un-swept content past its watermark — at least `min_user_msgs`
+    new USER messages (we count user turns because a conversation is user→AI→user→AI, so user turns
+    are the natural unit of "how much new conversation is there"). Eligible sessions are swept
     CONCURRENTLY (each has its own single-flight guard). Returns a small summary for logging/tests.
+    Both thresholds default to the live spine sweep config when not passed.
 
     VISIBLE-ONLY (token safety): the scan walks `sessions_for_cwd` (resumable_only=True) — exactly
     the recorded, dashboard-visible dev sessions. Disposable sub-runs (distill/sweep) are never
     recorded, and the owner's own Claude-Code transcript is never recorded, so neither is ever swept."""
+    cfg = _spine.get_sweep_config()
+    if idle_seconds is None:
+        idle_seconds = cfg["idle_seconds"]
+    if min_user_msgs is None:
+        min_user_msgs = cfg["min_user_msgs"]
     now = time.time()
     eligible: list[tuple] = []   # (ctx, repo_id, session_id)
     scanned = 0
     for repo_id in _spine.repos():
+        if not _spine.get_repo_learning(repo_id):
+            continue  # this repo opted out of automatic capture
         try:
             ctx = contexts.resolve(repo_id, "dev")
         except Exception:
@@ -415,8 +443,13 @@ async def _sweep_idle_sessions(idle_seconds: int = SWEEP_IDLE_SECONDS) -> dict:
             if mtime is None or (now - mtime) < idle_seconds:
                 continue  # missing or still active
             msgs = _sessions.transcript_messages(ctx, sid)
-            if _spine.get_sweep_watermark(sid) >= len(msgs):
+            watermark = _spine.get_sweep_watermark(sid)
+            if watermark >= len(msgs):
                 continue  # nothing new since the last sweep
+            # Count NEW user turns past the watermark — sweep only once enough has accumulated.
+            new_user = sum(1 for m in msgs[watermark:] if m.get("role") == "you")
+            if new_user < min_user_msgs:
+                continue
             eligible.append((ctx, repo_id, sid))
 
     if not eligible:
@@ -433,11 +466,14 @@ async def _sweep_idle_sessions(idle_seconds: int = SWEEP_IDLE_SECONDS) -> dict:
 
 
 async def _idle_sweep_loop() -> None:
-    """The daemon's idle-sweep heartbeat: every SWEEP_POLL_SECONDS, IF auto-learning is enabled,
-    scan + sweep quiet dev sessions. When the master switch is off the loop just idles (cheap)."""
+    """The daemon's idle-sweep heartbeat: every `poll_seconds` (live from the spine config), IF
+    auto-learning is enabled, scan + sweep quiet dev sessions. When the master switch is off the
+    loop just idles (cheap). Reading the cadence each iteration lets a Quick-config change take
+    effect without a daemon restart."""
     while True:
         try:
-            await asyncio.sleep(SWEEP_POLL_SECONDS)
+            poll = max(30, _spine.get_sweep_config()["poll_seconds"])
+            await asyncio.sleep(poll)
             if _spine.get_learning_enabled():
                 await _sweep_idle_sessions()
         except asyncio.CancelledError:

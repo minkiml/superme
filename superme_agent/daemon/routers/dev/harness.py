@@ -15,8 +15,9 @@ from pydantic import BaseModel
 from ...app_state import DevStore, get_dev_store
 from ...deps import load_slash_cache, published_ident
 from ...schemas.dev.harness import (
-    HarnessPluginsResponse, PaletteResponse, PluginFileResponse, PluginFileSaveResponse,
-    PublishedResponse, PublishedToggleResponse, PublishedDeleteResponse,
+    FoundationResponse, FoundationFileSaveResponse, HarnessPluginsResponse, PaletteResponse,
+    PluginFileResponse, PluginFileSaveResponse, PublishedResponse, PublishedToggleResponse,
+    PublishedDeleteResponse, PublishedFileResponse, PublishedFileSaveResponse,
 )
 
 log = logging.getLogger("superme-agent")
@@ -71,6 +72,60 @@ async def dev_harness_plugin_file_save(body: PluginFileBody) -> dict:
     p.write_text(body.content)
     log.info("saved harness %s '%s' (%s)", body.kind, body.name, body.scope)
     return {"ok": True, "scope": body.scope, "kind": body.kind, "name": body.name}
+
+
+# --- Foundations: SuperMe's universal identity + charters + learned constitution -------------
+def _foundation_specs():
+    from ....runtime.config import SELF_FILE, CHARTER_FILES
+    return [
+        ("self", "SELF", "universal", SELF_FILE),
+        ("dev-charter", "Dev charter", "dev", CHARTER_FILES["dev"]),
+        ("core-charter", "Core charter", "core", CHARTER_FILES["core"]),
+    ]
+
+
+@router.get("/dev/harness/foundation", response_model=FoundationResponse)
+async def dev_harness_foundation() -> dict:
+    """SuperMe's repo-agnostic identity + machinery — the Foundations surface. SELF.md is WHO
+    (all modes); the per-mode charters are WHAT-MODE (hand-authored, editable). Plus the LEARNED
+    universal constitution (always-on rules the learning loop published), per mode."""
+    from ....core.operational import read_constitution_dir
+    from ....runtime.config import CONSTITUTION_DIR
+    files = []
+    for key, label, scope, path in _foundation_specs():
+        present = path.is_file()
+        files.append({
+            "key": key, "label": label, "scope": scope, "path": str(path),
+            "present": present, "body": path.read_text() if present else "",
+        })
+    constitutions = []
+    for mode in ("dev", "core"):
+        for it in read_constitution_dir(CONSTITUTION_DIR / mode, origin="universal"):
+            constitutions.append({
+                "mode": mode, "slug": it["slug"], "enabled": it["enabled"],
+                "title": it["slug"].replace("-", " "), "body": it["body"],
+                "source": it.get("source"), "created": it.get("created"),
+            })
+    return {"files": files, "constitutions": constitutions}
+
+
+class FoundationFileBody(BaseModel):
+    key: str
+    content: str
+
+
+@router.put("/dev/harness/foundation", response_model=FoundationFileSaveResponse)
+async def dev_harness_foundation_save(body: FoundationFileBody) -> dict:
+    """Save edits to an identity/charter file (SELF.md / dev-charter / core-charter). These are the
+    hand-authored system-prompt sources; takes effect on the next turn (assembled per turn)."""
+    path = next((p for key, _, _, p in _foundation_specs() if key == body.key), None)
+    if path is None:
+        raise HTTPException(status_code=404, detail=f"unknown foundation file '{body.key}'")
+    if not (body.content or "").strip():
+        raise HTTPException(status_code=400, detail="content is empty")
+    path.write_text(body.content)
+    log.info("saved foundation file '%s'", body.key)
+    return {"ok": True, "key": body.key}
 
 
 # --- Chat "/" palette: mode-correct, fresh-from-disk, category-filtered -----------------------
@@ -179,3 +234,44 @@ async def dev_harness_published_delete(proposal_id: int, context_id: str = "glob
         scope="dev", actor="owner",
         meta={"proposal_id": proposal_id, "form": form, "removed": removed})
     return {"ok": True, "proposal_id": proposal_id, "removed": removed}
+
+
+def _published_prop(proposal_id: int, context_id: str, dev_store: DevStore):
+    """Resolve a published proposal + its (form, scope, repo_id, slug) + editable file path."""
+    from ....core import operational as ops
+    prop = dev_store.get_memory_proposal(proposal_id)
+    if not prop or prop["context_id"] != context_id or prop["status"] != "published":
+        raise HTTPException(status_code=404, detail="published artifact not found")
+    form, scope, repo_id, slug = published_ident(prop, context_id)
+    path = ops.published_file(form, scope, repo_id, slug)
+    if path is None:
+        raise HTTPException(status_code=404, detail="artifact file missing on disk")
+    return prop, form, scope, slug, path
+
+
+@router.get("/dev/harness/published/{proposal_id}/file", response_model=PublishedFileResponse)
+async def dev_harness_published_file(proposal_id: int, context_id: str = "global",
+                                     dev_store: DevStore = Depends(get_dev_store)) -> dict:
+    """The raw markdown source of a published artifact — for the Published-tab preview/edit."""
+    _, form, scope, slug, path = _published_prop(proposal_id, context_id, dev_store)
+    return {"proposal_id": proposal_id, "form": form, "scope": scope, "slug": slug,
+            "path": str(path), "content": path.read_text()}
+
+
+class PublishedFileBody(BaseModel):
+    content: str
+    context_id: str = "global"
+
+
+@router.put("/dev/harness/published/{proposal_id}/file", response_model=PublishedFileSaveResponse)
+async def dev_harness_published_file_save(proposal_id: int, body: PublishedFileBody,
+                                          dev_store: DevStore = Depends(get_dev_store)) -> dict:
+    """Save edits to a published artifact's source. Takes effect on the next dev turn."""
+    if not (body.content or "").strip():
+        raise HTTPException(status_code=400, detail="content is empty")
+    prop, form, _, _, path = _published_prop(proposal_id, body.context_id, dev_store)
+    path.write_text(body.content)
+    dev_store.log_event(
+        body.context_id, "harness.edited", f"Edited {form} '{prop['title']}'",
+        scope="dev", actor="owner", meta={"proposal_id": proposal_id, "form": form})
+    return {"ok": True, "proposal_id": proposal_id}

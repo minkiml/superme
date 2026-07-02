@@ -2,46 +2,67 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Theme tokens. `:root` = light (warm paper); `.dark` = refined warm dark. Three surface
-   tiers give depth: sidebar (deepest) < app < surface (cards/panels). No cold blue. */
+/* ── Theme tokens ───────────────────────────────────────────────────────────
+   Renovation visual language: near-black muted surfaces + an iridescent
+   blue→mint→lavender accent. `.dark` is the primary (design is dark-first);
+   `:root` is a clean cool-light fallback. Three surface tiers give depth:
+   sidebar (deepest) < app < surface (cards). Scope accents: dev=blue,
+   core=mint, universal=lavender. Components reference the semantic tokens
+   only — never raw colors — so the whole cockpit re-themes from here. */
 :root {
-  --c-app: #ece5d6; /* page / scene area (mid) */
-  --c-sidebar: #e2d9c6; /* nav rail (deepest) */
-  --c-surface: #fffdf8; /* cards, rail, editor (lightest) */
-  --c-sunken: #e6decd; /* inputs */
-  --c-hover: #e6dccb;
-  --c-line: #d9cfba; /* visible separators */
-  --c-fg: #38332b;
-  --c-muted: #8a8173;
-  --c-faint: #b1a794;
-  --c-accent: #c0673c;
-  --c-accent-soft: #f2dccc;
-  --c-accent-text: #8a4523;
-  --c-on-accent: #fffaf5;
-  --c-success: #2f8f63;
-  --c-danger: #b5463b;
-  --c-warn: #a8702a;
+  --c-app: #f4f5f7;
+  --c-sidebar: #eceef1;
+  --c-surface: #ffffff;
+  --c-sunken: #eef0f3;
+  --c-hover: #e7e9ee;
+  --c-line: #dfe2e8;
+  --c-fg: #1c2024;
+  --c-muted: #5c626c;
+  --c-faint: #9aa0ab;
+  --c-accent: #3b82f6;
+  --c-accent-soft: #e4edfd;
+  --c-accent-text: #2563eb;
+  --c-on-accent: #ffffff;
+  --c-success: #128a5b;
+  --c-danger: #d0453b;
+  --c-warn: #b4791f;
+  /* scope accents */
+  --c-dev: #3b82f6;
+  --c-core: #12a878;
+  --c-universal: #7c6cf0;
   color-scheme: light;
 }
 
 .dark {
-  --c-app: #1c1916; /* page / scene area (mid) */
-  --c-sidebar: #141110; /* nav rail (deepest) */
-  --c-surface: #272218; /* cards, rail, editor (lightest) */
-  --c-sunken: #15120e; /* inputs */
-  --c-hover: #322b21;
-  --c-line: #3b3327; /* visible separators */
-  --c-fg: #ece4d8;
-  --c-muted: #9d9180;
-  --c-faint: #6f6557;
-  --c-accent: #e0a35a;
-  --c-accent-soft: #3c3021;
-  --c-accent-text: #f0c081;
-  --c-on-accent: #20180f;
-  --c-success: #6cc59a;
-  --c-danger: #e0796f;
+  --c-app: #0d0e11; /* scene area (mid) */
+  --c-sidebar: #08090b; /* nav rail (deepest) */
+  --c-surface: #16181d; /* cards, rail, panels (lightest) */
+  --c-sunken: #101216; /* inputs, code */
+  --c-hover: #1e2128; /* hover/active fills, pills */
+  --c-line: #262a31; /* borders, separators */
+  --c-fg: #e7e9ee; /* primary text */
+  --c-muted: #99a0ac; /* secondary text */
+  --c-faint: #5f6572; /* tertiary / hints */
+  --c-accent: #6ea8fe; /* interactive accent (dev blue) */
+  --c-accent-soft: #17263f; /* accent subtle background */
+  --c-accent-text: #a7c7ff; /* accent-colored text/icons */
+  --c-on-accent: #08121f; /* text on an accent fill */
+  --c-success: #5fe3b3;
+  --c-danger: #f0796f;
   --c-warn: #e0a35a;
+  /* scope accents */
+  --c-dev: #6ea8fe;
+  --c-core: #5fe3b3;
+  --c-universal: #b9a7f7;
   color-scheme: dark;
+}
+
+/* The iridescent brand gradient — logo, hub ring, primary/send. Richer than the old
+   blue→green: blue → violet → rose → mint, so it reads dynamic. */
+:root,
+.dark {
+  --grad-iris: linear-gradient(105deg, #6ea8fe, #a78bfa 38%, #f472b6 68%, #34d399);
+  --c-select: #c084fc; /* selection accent — node outline + connector (purple/lavender) */
 }
 
 html,
@@ -53,6 +74,10 @@ body,
 body {
   background: var(--c-app);
   color: var(--c-fg);
+  font-family: 'Inter Variable', 'Hanken Grotesk Variable', system-ui, -apple-system, sans-serif;
+  font-size: 15px;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 /* Native selects, themed + consistent (boxed by default; `.bare` reads as an inline label). */
@@ -99,3 +124,12 @@ select.bare {
 *::-webkit-scrollbar-track {
   background: transparent;
 }
+
+/* Nexus "heartbeat" ring — a soft pulse (scale + fade) shown around a repo/hub node while it is
+   actively RUNNING an agent (real operations). Live-but-idle agents get a static ring (no anim).
+   Scales from the element's centre; the border color is set inline to the repo's tag color. */
+@keyframes heartbeat {
+  0%, 100% { transform: scale(1); opacity: 0.6; }
+  50%      { transform: scale(1.14); opacity: 0.12; }
+}
+.animate-heartbeat { animation: heartbeat 1.5s ease-in-out infinite; }

@@ -6,9 +6,11 @@
     "DELETE /sessions/{session_id}",
     "GET /contexts",
     "GET /dev",
+    "GET /dev/harness/foundation",
     "GET /dev/harness/plugin-file",
     "GET /dev/harness/plugins",
     "GET /dev/harness/published",
+    "GET /dev/harness/published/{proposal_id}/file",
     "GET /dev/log",
     "GET /dev/memory/proposals",
     "GET /dev/memory/proposals/{proposal_id}/execution",
@@ -27,6 +29,8 @@
     "GET /sessions",
     "GET /sessions/{session_id}",
     "GET /system",
+    "GET /tokens",
+    "GET /tokens/timeseries",
     "PATCH /dev/harness/published/{proposal_id}",
     "PATCH /dev/inbox/{item_id}",
     "PATCH /dev/memory/proposals/{proposal_id}/artifact",
@@ -41,13 +45,21 @@
     "POST /dev/sweep/idle-scan",
     "POST /dev/work-items/{item_id}/advance",
     "POST /dev/work-items/{item_id}/complete",
+    "POST /dev/work-items/{item_id}/effort",
     "POST /dev/work-items/{item_id}/model",
     "POST /dev/work-items/{item_id}/plan",
     "POST /knowledge/inject",
+    "POST /repos/{repo_id}/effort",
+    "POST /repos/{repo_id}/learning",
+    "POST /repos/{repo_id}/meta",
     "POST /repos/{repo_id}/model",
+    "POST /system/effort",
     "POST /system/learning",
     "POST /system/model",
+    "POST /system/sweep",
+    "PUT /dev/harness/foundation",
     "PUT /dev/harness/plugin-file",
+    "PUT /dev/harness/published/{proposal_id}/file",
     "PUT /knowledge/file",
     "WS /ws/agent"
   ],
@@ -292,6 +304,82 @@
             "items"
           ],
           "title": "CandidatesStat",
+          "type": "object"
+        },
+        "CategoryNode": {
+          "description": "One node of Breakdown 1 \u2014 the semantic tree: a category total + its per-feature amounts.",
+          "properties": {
+            "features": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "default": {},
+              "title": "Features",
+              "type": "object"
+            },
+            "total": {
+              "default": 0,
+              "title": "Total",
+              "type": "integer"
+            }
+          },
+          "title": "CategoryNode",
+          "type": "object"
+        },
+        "ConstitutionEntry": {
+          "description": "One LEARNED universal constitution item (always-on rule) for a mode.",
+          "properties": {
+            "body": {
+              "title": "Body",
+              "type": "string"
+            },
+            "created": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Created"
+            },
+            "enabled": {
+              "title": "Enabled",
+              "type": "boolean"
+            },
+            "mode": {
+              "title": "Mode",
+              "type": "string"
+            },
+            "slug": {
+              "title": "Slug",
+              "type": "string"
+            },
+            "source": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
+            },
+            "title": {
+              "title": "Title",
+              "type": "string"
+            }
+          },
+          "required": [
+            "mode",
+            "slug",
+            "enabled",
+            "title",
+            "body"
+          ],
+          "title": "ConstitutionEntry",
           "type": "object"
         },
         "ContextResponse": {
@@ -671,6 +759,24 @@
           "title": "DocsListResponse",
           "type": "object"
         },
+        "EffortBody": {
+          "properties": {
+            "context_id": {
+              "default": "global",
+              "title": "Context Id",
+              "type": "string"
+            },
+            "effort": {
+              "title": "Effort",
+              "type": "string"
+            }
+          },
+          "required": [
+            "effort"
+          ],
+          "title": "EffortBody",
+          "type": "object"
+        },
         "EvalMetrics": {
           "additionalProperties": true,
           "description": "The artifact's own run cost on a synthetic task (forge_kit/eval.py). kind 'run' = skill/agent\nmeasured once; kind 'overhead' = constitution's always-on per-turn cost. Tolerant of pre-metrics\nand error rows (everything optional, extra='allow' for forward-compat).",
@@ -956,6 +1062,105 @@
             "kind"
           ],
           "title": "ExecutionStep",
+          "type": "object"
+        },
+        "FoundationFile": {
+          "description": "One universal identity/charter file \u2014 SuperMe's repo-agnostic machinery (Foundations).",
+          "properties": {
+            "body": {
+              "title": "Body",
+              "type": "string"
+            },
+            "key": {
+              "title": "Key",
+              "type": "string"
+            },
+            "label": {
+              "title": "Label",
+              "type": "string"
+            },
+            "path": {
+              "title": "Path",
+              "type": "string"
+            },
+            "present": {
+              "title": "Present",
+              "type": "boolean"
+            },
+            "scope": {
+              "title": "Scope",
+              "type": "string"
+            }
+          },
+          "required": [
+            "key",
+            "label",
+            "scope",
+            "path",
+            "present",
+            "body"
+          ],
+          "title": "FoundationFile",
+          "type": "object"
+        },
+        "FoundationFileBody": {
+          "properties": {
+            "content": {
+              "title": "Content",
+              "type": "string"
+            },
+            "key": {
+              "title": "Key",
+              "type": "string"
+            }
+          },
+          "required": [
+            "key",
+            "content"
+          ],
+          "title": "FoundationFileBody",
+          "type": "object"
+        },
+        "FoundationFileSaveResponse": {
+          "properties": {
+            "key": {
+              "title": "Key",
+              "type": "string"
+            },
+            "ok": {
+              "title": "Ok",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok",
+            "key"
+          ],
+          "title": "FoundationFileSaveResponse",
+          "type": "object"
+        },
+        "FoundationResponse": {
+          "properties": {
+            "constitutions": {
+              "items": {
+                "$ref": "#/components/schemas/ConstitutionEntry"
+              },
+              "title": "Constitutions",
+              "type": "array"
+            },
+            "files": {
+              "items": {
+                "$ref": "#/components/schemas/FoundationFile"
+              },
+              "title": "Files",
+              "type": "array"
+            }
+          },
+          "required": [
+            "files",
+            "constitutions"
+          ],
+          "title": "FoundationResponse",
           "type": "object"
         },
         "Glance": {
@@ -1783,6 +1988,17 @@
               "title": "Context Id",
               "type": "string"
             },
+            "effort": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Effort"
+            },
             "model": {
               "anyOf": [
                 {
@@ -2568,6 +2784,81 @@
           "title": "PublishedDeleteResponse",
           "type": "object"
         },
+        "PublishedFileBody": {
+          "properties": {
+            "content": {
+              "title": "Content",
+              "type": "string"
+            },
+            "context_id": {
+              "default": "global",
+              "title": "Context Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "content"
+          ],
+          "title": "PublishedFileBody",
+          "type": "object"
+        },
+        "PublishedFileResponse": {
+          "description": "The editable source of a published artifact \u2014 its raw markdown + resolved path.",
+          "properties": {
+            "content": {
+              "title": "Content",
+              "type": "string"
+            },
+            "form": {
+              "title": "Form",
+              "type": "string"
+            },
+            "path": {
+              "title": "Path",
+              "type": "string"
+            },
+            "proposal_id": {
+              "title": "Proposal Id",
+              "type": "integer"
+            },
+            "scope": {
+              "title": "Scope",
+              "type": "string"
+            },
+            "slug": {
+              "title": "Slug",
+              "type": "string"
+            }
+          },
+          "required": [
+            "proposal_id",
+            "form",
+            "scope",
+            "slug",
+            "path",
+            "content"
+          ],
+          "title": "PublishedFileResponse",
+          "type": "object"
+        },
+        "PublishedFileSaveResponse": {
+          "properties": {
+            "ok": {
+              "title": "Ok",
+              "type": "boolean"
+            },
+            "proposal_id": {
+              "title": "Proposal Id",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "ok",
+            "proposal_id"
+          ],
+          "title": "PublishedFileSaveResponse",
+          "type": "object"
+        },
         "PublishedResponse": {
           "properties": {
             "context_id": {
@@ -2693,6 +2984,148 @@
           "title": "PublishedToggleResponse",
           "type": "object"
         },
+        "RepoEffortBody": {
+          "properties": {
+            "effort": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Effort"
+            }
+          },
+          "title": "RepoEffortBody",
+          "type": "object"
+        },
+        "RepoEffortResponse": {
+          "properties": {
+            "effective": {
+              "title": "Effective",
+              "type": "string"
+            },
+            "effort": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Effort"
+            },
+            "ok": {
+              "title": "Ok",
+              "type": "boolean"
+            },
+            "repo_id": {
+              "title": "Repo Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "ok",
+            "repo_id",
+            "effective"
+          ],
+          "title": "RepoEffortResponse",
+          "type": "object"
+        },
+        "RepoLearningResponse": {
+          "properties": {
+            "learning_enabled": {
+              "title": "Learning Enabled",
+              "type": "boolean"
+            },
+            "ok": {
+              "title": "Ok",
+              "type": "boolean"
+            },
+            "repo_id": {
+              "title": "Repo Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "ok",
+            "repo_id",
+            "learning_enabled"
+          ],
+          "title": "RepoLearningResponse",
+          "type": "object"
+        },
+        "RepoMetaBody": {
+          "properties": {
+            "color": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Color"
+            },
+            "icon": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Icon"
+            }
+          },
+          "title": "RepoMetaBody",
+          "type": "object"
+        },
+        "RepoMetaResponse": {
+          "properties": {
+            "icon": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Icon"
+            },
+            "ok": {
+              "title": "Ok",
+              "type": "boolean"
+            },
+            "repo_id": {
+              "title": "Repo Id",
+              "type": "string"
+            },
+            "tag_color": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tag Color"
+            }
+          },
+          "required": [
+            "ok",
+            "repo_id"
+          ],
+          "title": "RepoMetaResponse",
+          "type": "object"
+        },
         "RepoModelBody": {
           "properties": {
             "model": {
@@ -2756,6 +3189,28 @@
               "title": "Cwd",
               "type": "string"
             },
+            "effort_override": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Effort Override"
+            },
+            "icon": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Icon"
+            },
             "id": {
               "title": "Id",
               "type": "string"
@@ -2767,6 +3222,11 @@
             "layer": {
               "title": "Layer",
               "type": "string"
+            },
+            "learning_enabled": {
+              "default": true,
+              "title": "Learning Enabled",
+              "type": "boolean"
             },
             "model_override": {
               "anyOf": [
@@ -2785,6 +3245,17 @@
               },
               "title": "Scopes",
               "type": "object"
+            },
+            "tag_color": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tag Color"
             }
           },
           "required": [
@@ -2856,6 +3327,58 @@
             "running"
           ],
           "title": "RepoScope",
+          "type": "object"
+        },
+        "RepoTokens": {
+          "properties": {
+            "by_category": {
+              "additionalProperties": {
+                "$ref": "#/components/schemas/CategoryNode"
+              },
+              "default": {},
+              "title": "By Category",
+              "type": "object"
+            },
+            "by_feature": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "default": {},
+              "title": "By Feature",
+              "type": "object"
+            },
+            "by_scope": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "default": {},
+              "title": "By Scope",
+              "type": "object"
+            },
+            "by_type": {
+              "$ref": "#/components/schemas/TokenTypeSplit",
+              "default": {
+                "cache_creation": 0,
+                "cache_read": 0,
+                "input": 0,
+                "legacy": 0,
+                "output": 0
+              }
+            },
+            "runs": {
+              "default": 0,
+              "title": "Runs",
+              "type": "integer"
+            },
+            "total": {
+              "title": "Total",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "total"
+          ],
+          "title": "RepoTokens",
           "type": "object"
         },
         "RunRow": {
@@ -3119,6 +3642,77 @@
           "title": "SessionSummary",
           "type": "object"
         },
+        "SweepConfigBody": {
+          "description": "Partial update of the capture-sweep tuning \u2014 any omitted field is left unchanged.",
+          "properties": {
+            "idle_seconds": {
+              "anyOf": [
+                {
+                  "minimum": 0.0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idle Seconds"
+            },
+            "min_user_msgs": {
+              "anyOf": [
+                {
+                  "minimum": 0.0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Min User Msgs"
+            },
+            "poll_seconds": {
+              "anyOf": [
+                {
+                  "minimum": 0.0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Poll Seconds"
+            }
+          },
+          "title": "SweepConfigBody",
+          "type": "object"
+        },
+        "SweepConfigResponse": {
+          "properties": {
+            "idle_seconds": {
+              "title": "Idle Seconds",
+              "type": "integer"
+            },
+            "min_user_msgs": {
+              "title": "Min User Msgs",
+              "type": "integer"
+            },
+            "ok": {
+              "title": "Ok",
+              "type": "boolean"
+            },
+            "poll_seconds": {
+              "title": "Poll Seconds",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "ok",
+            "idle_seconds",
+            "poll_seconds",
+            "min_user_msgs"
+          ],
+          "title": "SweepConfigResponse",
+          "type": "object"
+        },
         "SweepResponse": {
           "properties": {
             "filed": {
@@ -3182,6 +3776,52 @@
           "title": "SweptItem",
           "type": "object"
         },
+        "SystemEffortBody": {
+          "properties": {
+            "effort": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Effort"
+            }
+          },
+          "title": "SystemEffortBody",
+          "type": "object"
+        },
+        "SystemEffortResponse": {
+          "properties": {
+            "effective": {
+              "title": "Effective",
+              "type": "string"
+            },
+            "effort": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Effort"
+            },
+            "ok": {
+              "title": "Ok",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok",
+            "effective"
+          ],
+          "title": "SystemEffortResponse",
+          "type": "object"
+        },
         "SystemModelBody": {
           "properties": {
             "model": {
@@ -3237,6 +3877,14 @@
         "SystemResponse": {
           "description": "The System singleton: static config + the live half (in-flight runs) + the repo roster.",
           "properties": {
+            "default_effort": {
+              "title": "Default Effort",
+              "type": "string"
+            },
+            "default_effort_overridden": {
+              "title": "Default Effort Overridden",
+              "type": "boolean"
+            },
             "default_model": {
               "anyOf": [
                 {
@@ -3297,6 +3945,18 @@
               "title": "Running",
               "type": "integer"
             },
+            "sweep_idle_seconds": {
+              "title": "Sweep Idle Seconds",
+              "type": "integer"
+            },
+            "sweep_min_user_msgs": {
+              "title": "Sweep Min User Msgs",
+              "type": "integer"
+            },
+            "sweep_poll_seconds": {
+              "title": "Sweep Poll Seconds",
+              "type": "integer"
+            },
             "version": {
               "title": "Version",
               "type": "integer"
@@ -3306,9 +3966,14 @@
             "identity",
             "version",
             "default_model_overridden",
+            "default_effort",
+            "default_effort_overridden",
             "policy_version",
             "default_repo",
             "learning_enabled",
+            "sweep_idle_seconds",
+            "sweep_poll_seconds",
+            "sweep_min_user_msgs",
             "live_runs",
             "running",
             "repos"
@@ -3333,6 +3998,181 @@
             "done"
           ],
           "title": "TaskItem",
+          "type": "object"
+        },
+        "TokenBucket": {
+          "description": "A token total plus its splits. Two reconciling breakdowns: `by_category` (semantic \u2014 the\ngeneric tree the FE renders) and `by_type` (systematic). `by_scope`/`by_feature` are retained\nflat maps for back-compat. All maps are open (producer-supplied labels, not a locked enum).",
+          "properties": {
+            "by_category": {
+              "additionalProperties": {
+                "$ref": "#/components/schemas/CategoryNode"
+              },
+              "default": {},
+              "title": "By Category",
+              "type": "object"
+            },
+            "by_feature": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "default": {},
+              "title": "By Feature",
+              "type": "object"
+            },
+            "by_scope": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "default": {},
+              "title": "By Scope",
+              "type": "object"
+            },
+            "by_type": {
+              "$ref": "#/components/schemas/TokenTypeSplit",
+              "default": {
+                "cache_creation": 0,
+                "cache_read": 0,
+                "input": 0,
+                "legacy": 0,
+                "output": 0
+              }
+            },
+            "total": {
+              "title": "Total",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "total"
+          ],
+          "title": "TokenBucket",
+          "type": "object"
+        },
+        "TokenDay": {
+          "description": "One local-day bucket of the usage time-series: the four token types (+ legacy), the day\ntotal, and the running `cumulative` total across days.",
+          "properties": {
+            "cache_creation": {
+              "default": 0,
+              "title": "Cache Creation",
+              "type": "integer"
+            },
+            "cache_read": {
+              "default": 0,
+              "title": "Cache Read",
+              "type": "integer"
+            },
+            "cumulative": {
+              "default": 0,
+              "title": "Cumulative",
+              "type": "integer"
+            },
+            "day": {
+              "title": "Day",
+              "type": "string"
+            },
+            "input": {
+              "default": 0,
+              "title": "Input",
+              "type": "integer"
+            },
+            "legacy": {
+              "default": 0,
+              "title": "Legacy",
+              "type": "integer"
+            },
+            "output": {
+              "default": 0,
+              "title": "Output",
+              "type": "integer"
+            },
+            "runs": {
+              "default": 0,
+              "title": "Runs",
+              "type": "integer"
+            },
+            "total": {
+              "default": 0,
+              "title": "Total",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "day"
+          ],
+          "title": "TokenDay",
+          "type": "object"
+        },
+        "TokenTimeseriesResponse": {
+          "description": "Per-day token usage for the trend graph, bucketed by the caller's local day.",
+          "properties": {
+            "days": {
+              "default": [],
+              "items": {
+                "$ref": "#/components/schemas/TokenDay"
+              },
+              "title": "Days",
+              "type": "array"
+            },
+            "total": {
+              "default": 0,
+              "title": "Total",
+              "type": "integer"
+            }
+          },
+          "title": "TokenTimeseriesResponse",
+          "type": "object"
+        },
+        "TokenTypeSplit": {
+          "description": "Breakdown 2 \u2014 the systematic (per token-type) split. `legacy` holds pre-migration rows that\nonly carry the old collapsed scalar. The five sum to the bucket total (reconciliation).",
+          "properties": {
+            "cache_creation": {
+              "default": 0,
+              "title": "Cache Creation",
+              "type": "integer"
+            },
+            "cache_read": {
+              "default": 0,
+              "title": "Cache Read",
+              "type": "integer"
+            },
+            "input": {
+              "default": 0,
+              "title": "Input",
+              "type": "integer"
+            },
+            "legacy": {
+              "default": 0,
+              "title": "Legacy",
+              "type": "integer"
+            },
+            "output": {
+              "default": 0,
+              "title": "Output",
+              "type": "integer"
+            }
+          },
+          "title": "TokenTypeSplit",
+          "type": "object"
+        },
+        "TokenUsageResponse": {
+          "description": "System-wide token usage: the global bucket + one bucket per repo (keyed by repo id).",
+          "properties": {
+            "by_repo": {
+              "additionalProperties": {
+                "$ref": "#/components/schemas/RepoTokens"
+              },
+              "default": {},
+              "title": "By Repo",
+              "type": "object"
+            },
+            "global": {
+              "$ref": "#/components/schemas/TokenBucket"
+            }
+          },
+          "required": [
+            "global"
+          ],
+          "title": "TokenUsageResponse",
           "type": "object"
         },
         "ValidationError": {
@@ -3494,6 +4334,17 @@
                 }
               ],
               "title": "Done At"
+            },
+            "effort": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Effort"
             },
             "folder": {
               "anyOf": [
@@ -3876,6 +4727,29 @@
           "title": "WorkItemDetailResponse",
           "type": "object"
         },
+        "WorkItemEffortResponse": {
+          "properties": {
+            "effort": {
+              "title": "Effort",
+              "type": "string"
+            },
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "ok": {
+              "title": "Ok",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok",
+            "id",
+            "effort"
+          ],
+          "title": "WorkItemEffortResponse",
+          "type": "object"
+        },
         "WorkItemLastRun": {
           "properties": {
             "context_pct": {
@@ -4056,6 +4930,62 @@
             }
           },
           "summary": "Dev Read"
+        }
+      },
+      "/dev/harness/foundation": {
+        "get": {
+          "description": "SuperMe's repo-agnostic identity + machinery \u2014 the Foundations surface. SELF.md is WHO\n(all modes); the per-mode charters are WHAT-MODE (hand-authored, editable). Plus the LEARNED\nuniversal constitution (always-on rules the learning loop published), per mode.",
+          "operationId": "dev_harness_foundation_dev_harness_foundation_get",
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/FoundationResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            }
+          },
+          "summary": "Dev Harness Foundation"
+        },
+        "put": {
+          "description": "Save edits to an identity/charter file (SELF.md / dev-charter / core-charter). These are the\nhand-authored system-prompt sources; takes effect on the next turn (assembled per turn).",
+          "operationId": "dev_harness_foundation_save_dev_harness_foundation_put",
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FoundationFileBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/FoundationFileSaveResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Harness Foundation Save"
         }
       },
       "/dev/harness/plugin-file": {
@@ -4309,6 +5239,104 @@
             }
           },
           "summary": "Dev Harness Published Toggle"
+        }
+      },
+      "/dev/harness/published/{proposal_id}/file": {
+        "get": {
+          "description": "The raw markdown source of a published artifact \u2014 for the Published-tab preview/edit.",
+          "operationId": "dev_harness_published_file_dev_harness_published__proposal_id__file_get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "proposal_id",
+              "required": true,
+              "schema": {
+                "title": "Proposal Id",
+                "type": "integer"
+              }
+            },
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "default": "global",
+                "title": "Context Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/PublishedFileResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Harness Published File"
+        },
+        "put": {
+          "description": "Save edits to a published artifact's source. Takes effect on the next dev turn.",
+          "operationId": "dev_harness_published_file_save_dev_harness_published__proposal_id__file_put",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "proposal_id",
+              "required": true,
+              "schema": {
+                "title": "Proposal Id",
+                "type": "integer"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublishedFileBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/PublishedFileSaveResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Harness Published File Save"
         }
       },
       "/dev/inbox": {
@@ -5491,6 +6519,56 @@
           "summary": "Dev Work Item Detail"
         }
       },
+      "/dev/work-items/{item_id}/effort": {
+        "post": {
+          "description": "Configure the reasoning effort a work-item's runs use (plan + bound chat) \u2014 reconfigurable\nanytime from the review popup. Persisted to `item.md` frontmatter.",
+          "operationId": "dev_work_item_set_effort_dev_work_items__item_id__effort_post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "item_id",
+              "required": true,
+              "schema": {
+                "title": "Item Id",
+                "type": "string"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EffortBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/WorkItemEffortResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Work Item Set Effort"
+        }
+      },
       "/dev/work-items/{item_id}/model": {
         "post": {
           "description": "Configure the model a work-item's runs use (plan + bound chat) \u2014 reconfigurable anytime\nfrom the review popup. Persisted to `item.md` frontmatter.",
@@ -5858,6 +6936,156 @@
           "summary": "Repos Overview"
         }
       },
+      "/repos/{repo_id}/effort": {
+        "post": {
+          "description": "Set (or clear) one repo's reasoning-effort override. Clearing falls back to the system default.",
+          "operationId": "set_repo_effort_repos__repo_id__effort_post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "repo_id",
+              "required": true,
+              "schema": {
+                "title": "Repo Id",
+                "type": "string"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepoEffortBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/RepoEffortResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Set Repo Effort"
+        }
+      },
+      "/repos/{repo_id}/learning": {
+        "post": {
+          "description": "Opt one repo in/out of automatic capture. The global master switch still gates everything;\nthis lets a single repo sit out even when the master is on.",
+          "operationId": "set_repo_learning_repos__repo_id__learning_post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "repo_id",
+              "required": true,
+              "schema": {
+                "title": "Repo Id",
+                "type": "string"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/RepoLearningResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Set Repo Learning"
+        }
+      },
+      "/repos/{repo_id}/meta": {
+        "post": {
+          "description": "Set a repo's VISUAL tag: display color and/or icon (emoji). A field omitted (None) is left\nunchanged; an empty string clears it (falls back to the hashed-palette default / no icon).",
+          "operationId": "set_repo_meta_repos__repo_id__meta_post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "repo_id",
+              "required": true,
+              "schema": {
+                "title": "Repo Id",
+                "type": "string"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepoMetaBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/RepoMetaResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Set Repo Meta"
+        }
+      },
       "/repos/{repo_id}/model": {
         "post": {
           "description": "Set (or clear) one repo's model override. Clearing falls back to the system default.",
@@ -6153,6 +7381,45 @@
           "summary": "System Overview"
         }
       },
+      "/system/effort": {
+        "post": {
+          "description": "Set (or clear) the system-wide default reasoning effort \u2014 the floor below per-repo overrides.",
+          "operationId": "set_system_effort_system_effort_post",
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemEffortBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/SystemEffortResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Set System Effort"
+        }
+      },
       "/system/learning": {
         "post": {
           "description": "Flip the learning master switch (idle / phase / completion sweeps). Off by default \u2014 background\nlearning spends tokens unattended. Capture is fully automatic, so this governs all of it.",
@@ -6229,6 +7496,105 @@
             }
           },
           "summary": "Set System Model"
+        }
+      },
+      "/system/sweep": {
+        "post": {
+          "description": "Tune the capture-sweep triggers: idle threshold, heartbeat cadence, and the min-new-user-message\ngate. Any omitted field is left unchanged. Takes effect without a daemon restart (the heartbeat\nreads the cadence each iteration).",
+          "operationId": "set_system_sweep_system_sweep_post",
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SweepConfigBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/SweepConfigResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Set System Sweep"
+        }
+      },
+      "/tokens": {
+        "get": {
+          "description": "System-wide token usage: global total + two reconciling breakdowns (semantic `by_category`\ntree + systematic `by_type`) + per-scope/per-feature splits, and the same per repo. Feeds the\nobservability strip + the orbit's per-repo signal. All SuperMe-context spend.",
+          "operationId": "token_usage_tokens_get",
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/TokenUsageResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            }
+          },
+          "summary": "Token Usage"
+        }
+      },
+      "/tokens/timeseries": {
+        "get": {
+          "description": "Per-day token usage for the trend graph. `tz_offset` is minutes to ADD to UTC to reach the\ncaller's local time (the FE sends `-getTimezoneOffset()`), so days bucket on the owner's day.",
+          "operationId": "token_timeseries_tokens_timeseries_get",
+          "parameters": [
+            {
+              "in": "query",
+              "name": "tz_offset",
+              "required": false,
+              "schema": {
+                "default": 0,
+                "title": "Tz Offset",
+                "type": "integer"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/TokenTimeseriesResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Token Timeseries"
         }
       }
     }

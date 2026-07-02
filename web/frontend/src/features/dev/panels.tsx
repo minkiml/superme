@@ -1,19 +1,19 @@
 import { useState, useEffect } from 'react'
-import { ChevronRight, Plus, Trash2, Clock, CornerDownRight, GitBranch, ArrowRight, Pencil, X, Bot, Sparkles, Loader2, MessageSquareText, ListChecks } from 'lucide-react'
+import { ChevronRight, Plus, Trash2, Clock, CornerDownRight, GitBranch, ArrowRight, X, Bot, Sparkles, Loader2, MessageSquareText, ListChecks } from 'lucide-react'
 import Dropdown from '@/ui/Dropdown'
 import Markdown from '@/ui/Markdown'
 import { addInbox, updateInbox, deleteInbox, pushInbox, artifactPath, type WorkItem, type InboxEntry, type InboxKind } from '@/lib/api'
-import { fmtLocal, fmtTokens, fmtDuration, fmtModel } from '@/lib/format'
+import { fmtLocal, fmtTokens, fmtDuration, fmtModel, MODELS as MODEL_CATALOG, EFFORTS as EFFORT_CATALOG, DEFAULT_EFFORT } from '@/lib/format'
 import { PHASES, PHASE_LABEL, STATUS_COLOR, STATUS_LABEL, primaryStatus, Empty } from './common'
 
-// Models selectable per run on a work-item card. Default is Sonnet (latest); the others are
-// available to pick at launch. Values are CLI aliases the daemon resolves.
-export const RUN_MODELS = [
-  { value: 'sonnet', label: 'Sonnet' },
-  { value: 'haiku', label: 'Haiku' },
-  { value: 'opus', label: 'Opus' },
-]
-export const DEFAULT_RUN_MODEL = 'sonnet'
+// Models selectable per run on a work-item card. Default is Sonnet; the values are CLI aliases the
+// daemon resolves to the latest concrete model. Labels come from the canonical model catalog.
+export const RUN_MODELS = MODEL_CATALOG.map((m) => ({ value: m.key, label: m.label }))
+// The concrete Sonnet id (the `sonnet` alias lags — see lib/format.ts / core/models.py).
+export const DEFAULT_RUN_MODEL = 'claude-sonnet-5'
+// Reasoning-effort levels selectable per run, alongside the model. Default "medium".
+export const RUN_EFFORTS = EFFORT_CATALOG.map((e) => ({ value: e.key, label: e.label }))
+export const DEFAULT_RUN_EFFORT = DEFAULT_EFFORT
 
 // Shared dev-knowledge store views — the bodies for Workspace (work-items) and Inbox. Rendered
 // both by the main Development map (in-panel zooms) and reusable elsewhere. v2 work-item model
@@ -153,12 +153,11 @@ function WorkCard({
         bound ? 'border-accent ring-2 ring-accent/40' : it.blocked ? 'border-danger/40' : 'border-line'
       } ${clickable ? 'cursor-pointer transition hover:border-accent hover:shadow-md' : ''}`}
     >
-      <div className="flex items-center gap-1.5">
-        <span className="min-w-0 flex-1 truncate font-mono text-[10px] text-faint">{it.id}</span>
+      <div className="flex items-start gap-1.5">
+        <div className="min-w-0 flex-1 text-[12.5px] leading-snug text-fg">{it.title}</div>
         <BranchInfo it={it} />
         <StatusBadge it={it} />
       </div>
-      <div className="mt-1 text-[12.5px] leading-snug text-fg">{it.title}</div>
       {it.blocked && (
         <div className="mt-1.5">
           <BlockedChip it={it} />
@@ -260,7 +259,6 @@ export function PlanList({ items, onBind, onPlan, onDelete, running, boundItemId
                       header={
                         <>
                           <StatusBadge it={it} />
-                          <span className="shrink-0 font-mono text-xs text-muted">{it.id}</span>
                           <span className="min-w-0 flex-1 truncate text-sm text-fg">{it.title}</span>
                           {boundItemId === it.id && (
                             <span className="inline-flex items-center gap-0.5 text-[10px] text-accent-text" title="Bound to the chat">
@@ -379,11 +377,12 @@ const KIND_OPTS = [
   { value: 'note', label: 'note' },
   { value: 'question', label: 'question' },
 ]
-const KIND_COLUMNS: { kind: InboxKind; label: string }[] = [
-  { kind: 'todo', label: 'Todo' },
-  { kind: 'idea', label: 'Idea' },
-  { kind: 'note', label: 'Note' },
-  { kind: 'question', label: 'Question' },
+// Each capture kind gets a distinct marker color (amber / purple / blue / rose).
+const KIND_COLUMNS: { kind: InboxKind; label: string; color: string }[] = [
+  { kind: 'todo', label: 'Todo', color: '#fbbf24' },
+  { kind: 'idea', label: 'Idea', color: '#a78bfa' },
+  { kind: 'note', label: 'Note', color: '#60a5fa' },
+  { kind: 'question', label: 'Question', color: '#fb7185' },
 ]
 
 // The inbox is the active capture queue, laid out as columns by kind. Resolving an item clears
@@ -454,13 +453,16 @@ export function InboxView({
           const its = open.filter((e) => e.kind === col.kind)
           return (
             <div key={col.kind} className="flex min-h-[5rem] flex-col rounded-lg border border-line bg-surface">
-              <div className="flex items-center justify-between border-b border-line px-3 py-1.5">
-                <span className="text-xs font-medium text-fg">{col.label}</span>
-                <span className="text-[11px] text-faint">{its.length}</span>
+              <div className="flex items-center justify-between border-b border-line px-3 py-2">
+                <span className="flex items-center gap-2 text-sm font-semibold text-fg">
+                  <span className="h-2.5 w-2.5 rounded-[3px]" style={{ backgroundColor: col.color }} />
+                  {col.label}
+                </span>
+                <span className="rounded-full bg-hover px-2 py-0.5 text-xs font-medium tabular-nums text-muted">{its.length}</span>
               </div>
               <div className="max-h-[70vh] flex-1 space-y-1 overflow-y-auto p-1.5">
                 {its.length === 0 ? (
-                  <div className="px-1.5 py-2 text-[11px] text-faint">—</div>
+                  <div className="px-1.5 py-2 text-[12px] text-faint">—</div>
                 ) : (
                   its.map((e) => (
                     <InboxCard
@@ -493,9 +495,16 @@ function InboxCard({
   onDelete: () => void
 }) {
   const [editing, setEditing] = useState(false)
+  const [confirmDel, setConfirmDel] = useState(false)
 
+  // The whole card is the click target (like a work-item card) → opens the edit view. Action
+  // controls stop propagation so they don't also trip the edit-open.
   return (
-    <div className="group rounded-md px-2 py-1.5 hover:bg-hover">
+    <div
+      onClick={() => setEditing(true)}
+      title="Edit this item"
+      className="group cursor-pointer rounded-md border border-transparent px-2.5 py-2 transition hover:border-line hover:bg-hover"
+    >
       {editing && (
         <InboxEditModal
           e={e}
@@ -503,40 +512,51 @@ function InboxCard({
           onSave={(patch) => { onSave(patch); setEditing(false) }}
         />
       )}
-      <div className="flex items-start gap-1.5">
+      <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
           {e.title ? (
-            <div className="text-[13px] font-medium leading-snug text-fg">{e.title}</div>
+            <div className="text-[14px] font-medium leading-snug text-fg">{e.title}</div>
           ) : (
-            <div className="text-[13px] font-medium italic leading-snug text-faint">Untitled</div>
+            <div className="text-[14px] font-medium italic leading-snug text-faint">Untitled</div>
           )}
-          <div className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-muted">{e.text}</div>
+          <div className="mt-1 line-clamp-2 text-[12.5px] leading-snug text-muted">{e.text}</div>
         </div>
-        <div className="mt-0.5 flex shrink-0 items-center gap-0.5 opacity-0 group-hover:opacity-100">
-          <button
-            title="Edit"
-            onClick={() => setEditing(true)}
-            className="rounded p-0.5 text-faint hover:bg-surface hover:text-fg"
-          >
-            <Pencil size={13} />
-          </button>
-          <button
-            title="Push to workspace — creates a queued work-item"
-            onClick={onPush}
-            className="rounded p-0.5 text-faint hover:bg-surface hover:text-accent"
-          >
-            <ArrowRight size={14} />
-          </button>
-          <button
-            title="Drop — hard-deletes the item"
-            onClick={onDelete}
-            className="rounded p-0.5 text-faint hover:bg-surface hover:text-danger"
-          >
-            <Trash2 size={14} />
-          </button>
+        <div className="mt-0.5 flex shrink-0 items-center gap-1" onClick={(ev) => ev.stopPropagation()}>
+          {confirmDel ? (
+            <>
+              <button
+                title="Confirm delete — removes this item permanently"
+                onClick={() => onDelete()}
+                className="rounded-md bg-danger/15 px-2 py-1 text-[11px] font-medium text-danger hover:bg-danger hover:text-on-accent"
+              >
+                Delete
+              </button>
+              <button title="Cancel" onClick={() => setConfirmDel(false)} className="rounded p-1 text-faint hover:text-fg">
+                <X size={13} />
+              </button>
+            </>
+          ) : (
+            <>
+              {/* Push — the primary action, made prominent (tinted pill, always visible). */}
+              <button
+                title="Push to workspace — creates a queued work-item"
+                onClick={onPush}
+                className="inline-flex items-center gap-1 rounded-md bg-accent-soft px-2 py-1 text-[11px] font-medium text-accent-text transition hover:bg-accent hover:text-on-accent"
+              >
+                Push <ArrowRight size={12} />
+              </button>
+              <button
+                title="Drop — delete this item"
+                onClick={() => setConfirmDel(true)}
+                className="rounded p-1 text-faint opacity-0 transition hover:text-danger group-hover:opacity-100"
+              >
+                <Trash2 size={14} />
+              </button>
+            </>
+          )}
         </div>
       </div>
-      <div className="mt-1 flex items-center gap-2 text-[10px] text-faint">
+      <div className="mt-1.5 flex items-center gap-2 text-[11px] text-faint">
         {e.origin === 'agent' && (
           <span className="inline-flex items-center gap-0.5 text-accent" title="Proposed by an agent">
             <Bot size={11} /> agent
@@ -564,9 +584,11 @@ function InboxEditModal({
   const [kind, setKind] = useState<InboxKind>(e.kind)
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onCancel}>
+    // Absolute (not fixed) so it centers over the dashboard column and leaves the chat rail
+    // interactive — same containment as the work-item review popup.
+    <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/50 p-4" onClick={onCancel}>
       <div
-        className="w-full max-w-md rounded-lg border border-line bg-surface p-4 shadow-xl"
+        className="w-full max-w-lg rounded-lg border border-line bg-surface p-4 shadow-xl"
         onClick={(ev) => ev.stopPropagation()}
       >
         <div className="mb-3 flex items-center justify-between">
@@ -587,8 +609,7 @@ function InboxEditModal({
             />
           </div>
           <textarea
-            className="w-full resize-none rounded border border-line bg-sunken px-2 py-1.5 text-sm text-fg outline-none focus:border-accent"
-            rows={4}
+            className="min-h-[16rem] w-full flex-1 resize-none rounded border border-line bg-sunken px-2 py-1.5 text-sm leading-relaxed text-fg outline-none focus:border-accent"
             value={text}
             onChange={(ev) => setText(ev.target.value)}
           />

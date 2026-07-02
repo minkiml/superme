@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Hammer, X } from 'lucide-react'
 import ChatHeader from './ChatHeader'
 import MessageList from './MessageList'
@@ -30,6 +30,9 @@ export default function ChatPanel({
   binding = null,
   onUnbind,
   onBindingSession,
+  tag,
+  modelOverride,
+  effortOverride,
 }: {
   contextId?: string
   contexts?: ContextRef[]
@@ -40,6 +43,9 @@ export default function ChatPanel({
   binding?: DevBinding | null
   onUnbind?: () => void
   onBindingSession?: (sessionId: string) => void
+  tag?: { color: string; icon: string | null; isHub: boolean }
+  modelOverride?: string | null // the context's current /model selection (for the picker)
+  effortOverride?: string | null // the context's current /effort selection (for the picker)
 }) {
   const ctxLabel = contexts.find((c) => c.id === contextId)?.label ?? contextId
   const [input, setInput] = useState('')
@@ -51,26 +57,35 @@ export default function ChatPanel({
     onResult: (text, sessionId) => {
       sessions.appendMessage({ role: 'superme', text })
       if (sessionId) {
-        sessions.claimSession(sessionId)
-        // The bound item owns its thread — surface a freshly-created session id up so the
-        // binding resumes it next time (the daemon also persists it onto the work-item).
+        // A bound turn's session belongs to the work-item, not the context's general chat —
+        // claim it transiently (persist=false) so it doesn't overwrite the remembered general
+        // session; the item owns it (surfaced up + persisted onto the work-item below).
+        sessions.claimSession(sessionId, !binding)
         if (binding && sessionId !== binding.sessionId) onBindingSession?.(sessionId)
       }
     },
     onError: (message) => sessions.appendMessage({ role: 'superme', text: '⚠ ' + message }),
   })
 
-  // Binding take-over: open the item's dev thread (resume its session, or a fresh chat if it
-  // has none yet). Keyed on the work-item id so re-binding a different item re-opens.
-  const boundItemRef = useRef<string | null>(null)
+  // Binding take-over: open the item's dev thread (resume its session, or a fresh chat if it has
+  // none yet) — TRANSIENTLY, so it doesn't clobber the context's general session. When the binding
+  // is dropped (unbind, Inbox tab, or switching to core), restore the general session. Keyed on
+  // the work-item id, plus a first-mount guard so a fresh mount's own resume isn't overridden.
+  const boundItemRef = useRef<string | null | undefined>(undefined)
   useEffect(() => {
     const id = binding?.workItemId ?? null
+    const first = boundItemRef.current === undefined
     if (id === boundItemRef.current) return
     boundItemRef.current = id
     socket.clearStream()
     socket.clearMeta() // the model·context% readout belongs to a turn, not a session — reset it
-    if (binding?.sessionId) sessions.openSession(binding.sessionId)
-    else sessions.newChat()
+    if (binding) {
+      if (binding.sessionId) sessions.openSession(binding.sessionId, false)
+      else sessions.newChat(false)
+    } else if (!first) {
+      // Unbound after having been bound — go back to the remembered general session.
+      sessions.resumeStored()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [binding?.workItemId])
 
@@ -82,6 +97,12 @@ export default function ChatPanel({
     if (!socket.send(text, sessions.sessionRef.current, { mode, workItemId: binding?.workItemId })) return
     sessions.appendMessage({ role: 'you', text })
     setInput('')
+  }
+
+  // Send an exact command (e.g. the model picker's `/model opus`) without touching the input box.
+  function sendCommand(text: string) {
+    if (!socket.send(text, sessions.sessionRef.current, { mode, workItemId: binding?.workItemId })) return
+    sessions.appendMessage({ role: 'you', text })
   }
 
   function openSession(id: string) {
@@ -103,11 +124,16 @@ export default function ChatPanel({
   const confirmTitle = sessions.sessions.find((s) => s.id === confirmId)?.title
 
   return (
-    <div className="relative flex h-full min-h-0 flex-col border-l border-line bg-surface">
+    <div
+      className="relative flex h-full min-h-0 flex-col border-l border-line bg-surface"
+      // The chat rail's accent follows the mode: core = mint (pastel green), dev = blue.
+      style={{ ['--chat-accent' as string]: mode === 'core' ? 'var(--c-core)' : 'var(--c-dev)' } as CSSProperties}
+    >
       <ChatHeader
         ready={socket.ready}
         contexts={contexts}
         contextId={contextId}
+        tag={tag}
         onContextChange={onContextChange}
         busy={socket.busy}
         onCollapse={onCollapse}
@@ -146,6 +172,7 @@ export default function ChatPanel({
         approval={socket.approval}
         ctxLabel={ctxLabel}
         onAnswer={socket.answer}
+        tone={mode === 'core' ? 'core' : 'dev'}
       />
 
       <Composer
@@ -157,6 +184,9 @@ export default function ChatPanel({
         commands={socket.commands}
         ctxLabel={ctxLabel}
         onPaletteOpen={socket.refreshCommands}
+        modelOverride={modelOverride}
+        effortOverride={effortOverride}
+        onSelectModel={(model, effort) => sendCommand(`/model ${model} ${effort}`)}
       />
 
       {drawerOpen && (

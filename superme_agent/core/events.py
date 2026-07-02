@@ -39,11 +39,15 @@ class Status:
 
 @dataclass
 class Usage:
-    """A live token snapshot for the in-flight turn (cumulative for this run so far)."""
+    """A live token snapshot for ONE assistant step (per-step delta — accumulated by the run
+    ledger). `usage` is the raw SDK usage dict for this step, carrying all four token types
+    (input / cache_creation / cache_read / output) so the ledger can keep them separate and
+    never drop cache_read; `total_tokens` remains the legacy critical-sum (excludes cache_read)."""
     total_tokens: int = 0
     input_tokens: int = 0
     output_tokens: int = 0
     context_pct: int | None = None   # context-window fill so far (approx; default window)
+    usage: dict | None = None        # raw per-step SDK usage dict (all four token types + extras)
 
 
 @dataclass
@@ -53,7 +57,8 @@ class Result:
     context_pct: int | None = None
     context_window: int | None = None
     session_id: str | None = None
-    tokens: int | None = None   # total tokens for this run (final, authoritative)
+    tokens: int | None = None   # total tokens for this run (final, authoritative; legacy critical-sum)
+    usage: dict | None = None   # raw WHOLE-TURN SDK usage dict (finish-time fallback; not re-accumulated)
 
 
 TurnEvent = Init | TextDelta | Status | Usage | Result

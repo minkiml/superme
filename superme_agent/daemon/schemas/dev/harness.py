@@ -36,6 +36,37 @@ class PaletteResponse(BaseModel):
     commands: list[str]
 
 
+class FoundationFile(BaseModel):
+    """One universal identity/charter file — SuperMe's repo-agnostic machinery (Foundations)."""
+    key: str            # stable id (self | dev-charter | core-charter)
+    label: str          # display name
+    scope: str          # universal | dev | core
+    path: str           # absolute source path
+    present: bool       # the file exists on disk
+    body: str           # raw markdown (empty when absent)
+
+
+class ConstitutionEntry(BaseModel):
+    """One LEARNED universal constitution item (always-on rule) for a mode."""
+    mode: str                       # dev | core
+    slug: str
+    enabled: bool
+    title: str
+    body: str
+    source: str | None = None
+    created: str | None = None
+
+
+class FoundationResponse(BaseModel):
+    files: list[FoundationFile]
+    constitutions: list[ConstitutionEntry]
+
+
+class FoundationFileSaveResponse(BaseModel):
+    ok: bool
+    key: str
+
+
 class PluginFileResponse(BaseModel):
     """The raw markdown of one skill/agent (popup preview/edit source)."""
     scope: str
@@ -80,5 +111,20 @@ class PublishedToggleResponse(BaseModel):
 class PublishedDeleteResponse(BaseModel):
     """ok + proposal_id + `removed` (the delete_published result) carried via extra."""
     model_config = ConfigDict(extra="allow")
+    ok: bool
+    proposal_id: int
+
+
+class PublishedFileResponse(BaseModel):
+    """The editable source of a published artifact — its raw markdown + resolved path."""
+    proposal_id: int
+    form: str
+    scope: str
+    slug: str
+    path: str
+    content: str
+
+
+class PublishedFileSaveResponse(BaseModel):
     ok: bool
     proposal_id: int

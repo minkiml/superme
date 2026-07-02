@@ -334,6 +334,31 @@ class DevKnowledgeService:
         item.write_text(f"---\n{fm}\n---\n{body}")
         return True
 
+    def set_work_item_effort(self, dev_root: Path, item_id: str, effort: str) -> bool:
+        """Set a work-item's configured reasoning `effort` (low|medium|high) — used by its runs
+        (plan + bound chat). Mirrors `set_work_item_model`: inserts the field if absent, line-based
+        rewrite preserving frontmatter shape, bumps `updated_at`. Returns True if the file changed."""
+        item = Path(dev_root) / "work-items" / item_id / "item.md"
+        if not item.exists():
+            return False
+        text = item.read_text()
+        meta, body = _parse_md(text)
+        if str(meta.get("effort")) == str(effort):
+            return False
+        m = _FRONTMATTER.match(text)
+        if not m:
+            return False
+        fm = m.group(1)
+        if re.search(r"(?m)^effort:", fm):
+            fm = re.sub(r"(?m)^effort:.*$", f"effort: {effort}", fm)
+        elif re.search(r"(?m)^model:", fm):
+            fm = re.sub(r"(?m)^(model:.*)$", rf"\1\neffort: {effort}", fm)  # sits next to model
+        else:
+            fm = fm.rstrip() + f"\neffort: {effort}"
+        fm = re.sub(r"(?m)^updated_at:.*$", f"updated_at: {date.today().isoformat()}", fm)
+        item.write_text(f"---\n{fm}\n---\n{body}")
+        return True
+
     def set_work_item_session(self, dev_root: Path, item_id: str, session_id: str | None) -> bool:
         """Persist the agent `session_id` onto a work-item's frontmatter — the item is the
         durable home of its dev thread (resume from here next time). Line-based rewrite to

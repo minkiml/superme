@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react'
-import { X, ArrowRight, Sparkles, Trash2, Check, Loader2, FileText, ListChecks, ScrollText, History, Terminal, Bot, Wrench, Archive } from 'lucide-react'
+import { X, ArrowRight, Sparkles, Trash2, Check, Loader2, FileText, ListChecks, ScrollText, History, Terminal, Bot, Wrench, Archive, BookOpen, FolderSearch, Search, SquareTerminal, FilePen, Globe } from 'lucide-react'
 import Markdown from '@/ui/Markdown'
 import Dropdown from '@/ui/Dropdown'
 import {
-  getWorkItemDetail, getWorkItemArtifacts, advanceWorkItem, completeWorkItem, setWorkItemModel, getDevLog,
+  getWorkItemDetail, getWorkItemArtifacts, advanceWorkItem, completeWorkItem, setWorkItemModel, setWorkItemEffort, getDevLog,
   type WorkItem, type WorkItemDetail, type DevEvent, type RunArtifact,
 } from '@/lib/api'
 import { fmtModel, fmtTokens, fmtLocal } from '@/lib/format'
-import { StatusBadge, isPlannable, RUN_MODELS, DEFAULT_RUN_MODEL } from './panels'
+import { StatusBadge, isPlannable, RUN_MODELS, DEFAULT_RUN_MODEL, RUN_EFFORTS, DEFAULT_RUN_EFFORT } from './panels'
 import { PHASE_LABEL } from './common'
 
 // The work-item review popup — the decision surface. Clicking a card opens this: a structured
@@ -20,7 +20,7 @@ export default function WorkItemModal({
   it: WorkItem
   contextId: string
   onClose: () => void
-  onPlan: (it: WorkItem, model?: string) => void // fire a headless plan run (queued items)
+  onPlan: (it: WorkItem, model?: string, effort?: string) => void // fire a headless plan run (queued items)
   onDelete: (it: WorkItem) => void // hard-delete (caller confirms)
   onChanged: () => void // reload the board after an advance
 }) {
@@ -33,6 +33,7 @@ export default function WorkItemModal({
   // Model is configured here (the card no longer carries it) — used by "Plan it". Defaults to
   // the last run's model, else Sonnet.
   const [model, setModel] = useState(it.model ?? DEFAULT_RUN_MODEL)
+  const [effort, setEffort] = useState(it.effort ?? DEFAULT_RUN_EFFORT)
 
   useEffect(() => {
     let alive = true
@@ -68,7 +69,7 @@ export default function WorkItemModal({
   const queued = isPlannable(it) // a never-planned plan/design item — the "Plan it" gate
 
   function plan() {
-    onPlan(it, model)
+    onPlan(it, model, effort)
     onClose()
   }
 
@@ -81,6 +82,17 @@ export default function WorkItemModal({
       onChanged()
     } catch (e) {
       setErr(`Couldn't set model — ${e}`)
+    }
+  }
+
+  // Reconfigure the item's reasoning effort — persists to item.md; future runs use it.
+  async function changeEffort(e: string) {
+    setEffort(e)
+    try {
+      await setWorkItemEffort(it.id, e, contextId)
+      onChanged()
+    } catch (err) {
+      setErr(`Couldn't set effort — ${err}`)
     }
   }
 
@@ -117,7 +129,10 @@ export default function WorkItemModal({
       onClick={onClose}
     >
       <div
-        className="my-auto w-full max-w-2xl rounded-xl border border-line bg-surface shadow-xl"
+        // max-h-full + flex-col keeps the modal inside the visible column on any screen — the
+        // header/tabs/actions stay pinned and only the body scrolls, instead of the whole popup
+        // running off the bottom.
+        className="my-auto flex max-h-full w-full max-w-3xl flex-col rounded-xl border border-line bg-surface shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -161,8 +176,8 @@ export default function WorkItemModal({
           ))}
         </div>
 
-        {/* Body */}
-        <div className="max-h-[60vh] space-y-5 overflow-y-auto px-4 py-4">
+        {/* Body — flexes to fill the capped modal height and scrolls on its own. */}
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-4">
           {tab === 'execution' ? (
             <ArtifactsTab artifacts={artifacts} archived={detail?.execution ?? null} />
           ) : err && !detail ? (
@@ -181,12 +196,16 @@ export default function WorkItemModal({
                       <li key={i} className="flex items-start gap-2 text-sm">
                         <span
                           className={`mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded border ${
-                            t.done ? 'border-success bg-success/15 text-success' : 'border-line text-transparent'
+                            t.done ? 'border-success bg-success/15 text-success' : 'border-faint bg-sunken text-transparent'
                           }`}
                         >
                           <Check size={11} />
                         </span>
-                        <span className={t.done ? 'text-muted line-through' : 'text-fg'}>{t.text}</span>
+                        {/* Task text is Markdown too — render inline so `code` picks up the dev tint and
+                            **bold** the shared emphasis color, matching the Plan/PRD previews. */}
+                        <span className={`min-w-0 flex-1 ${t.done ? 'text-muted line-through' : 'text-fg'}`}>
+                          <Markdown text={t.text} tone="dev" />
+                        </span>
                       </li>
                     ))}
                   </ul>
@@ -196,12 +215,12 @@ export default function WorkItemModal({
               </Section>
 
               <Section icon={FileText} title="Plan">
-                {detail.plan ? <Markdown text={detail.plan} /> : <Empty>No plan recorded yet.</Empty>}
+                {detail.plan ? <Markdown text={detail.plan} variant="doc" tone="dev" /> : <Empty>No plan recorded yet.</Empty>}
               </Section>
 
               {detail.prd && (
                 <Section icon={ScrollText} title="PRD / design">
-                  <Markdown text={detail.prd} />
+                  <Markdown text={detail.prd} variant="doc" tone="dev" />
                 </Section>
               )}
 
@@ -231,8 +250,9 @@ export default function WorkItemModal({
             </span>
           ) : (
             <>
-              {/* Model config — always shown + reconfigurable; drives plan + bound-chat runs. */}
+              {/* Model + effort config — always shown + reconfigurable; drive plan + bound-chat runs. */}
               <Dropdown value={model} options={RUN_MODELS} onChange={changeModel} title="Model this item's runs use (plan + chat)" />
+              <Dropdown value={effort} options={RUN_EFFORTS} onChange={changeEffort} title="Reasoning effort this item's runs use (plan + chat)" />
               {queued ? (
                 <button
                   onClick={plan}
@@ -325,11 +345,28 @@ function Empty({ children }: { children: React.ReactNode }) {
 
 // The Artifacts tab — the call-trail of tools / sub-agents / skills the item's runs invoked,
 // grouped by run (newest run first), in call order within each run.
-const KIND_STYLE: Record<string, { icon: typeof Terminal; cls: string }> = {
-  subagent: { icon: Bot, cls: 'text-accent-text' },
-  skill: { icon: Sparkles, cls: 'text-warn' },
-  mcp: { icon: Wrench, cls: 'text-success' },
-  tool: { icon: Terminal, cls: 'text-muted' },
+// Each call gets a distinct icon + color so the trail is scannable. Resolved by tool NAME first
+// (Read/Glob/Grep/Bash/Agent/…), then by kind (skill/subagent/mcp) for anything else.
+const CALL_STYLE: Record<string, { icon: typeof Terminal; color: string }> = {
+  read: { icon: BookOpen, color: '#60a5fa' },        // blue
+  glob: { icon: FolderSearch, color: '#a78bfa' },    // purple
+  grep: { icon: Search, color: '#fbbf24' },          // amber
+  bash: { icon: SquareTerminal, color: '#34d399' },  // emerald
+  edit: { icon: FilePen, color: '#fb7185' },         // rose
+  write: { icon: FilePen, color: '#fb7185' },
+  agent: { icon: Bot, color: '#818cf8' },            // indigo — the agent (Task) robot head
+  task: { icon: Bot, color: '#818cf8' },
+  webfetch: { icon: Globe, color: '#22d3ee' },       // cyan
+  websearch: { icon: Globe, color: '#22d3ee' },
+}
+const KIND_STYLE: Record<string, { icon: typeof Terminal; color: string }> = {
+  subagent: { icon: Bot, color: '#818cf8' },
+  skill: { icon: Sparkles, color: '#e0a35a' },       // warn amber
+  mcp: { icon: Wrench, color: '#5fe3b3' },            // success
+  tool: { icon: Terminal, color: '#8b93a1' },        // muted
+}
+function callVisual(a: RunArtifact) {
+  return CALL_STYLE[(a.name ?? '').toLowerCase()] ?? KIND_STYLE[a.kind] ?? KIND_STYLE.tool
 }
 
 function ArtifactsTab({ artifacts, archived }: { artifacts: RunArtifact[]; archived: string | null }) {
@@ -342,7 +379,7 @@ function ArtifactsTab({ artifacts, archived }: { artifacts: RunArtifact[]; archi
             <Archive size={12} /> Archived trace
             <span className="font-mono text-[10px] normal-case text-faint">artifacts/execution.md</span>
           </div>
-          <Markdown text={archived} />
+          <Markdown text={archived} variant="doc" tone="dev" />
         </div>
       )
     }
@@ -364,11 +401,11 @@ function ArtifactsTab({ artifacts, archived }: { artifacts: RunArtifact[]; archi
           </div>
           <ol className="space-y-0.5">
             {g.items.map((a) => {
-              const { icon: Icon, cls } = KIND_STYLE[a.kind] ?? KIND_STYLE.tool
+              const { icon: Icon, color } = callVisual(a)
               return (
                 <li key={a.id} className="flex items-baseline gap-2 text-xs">
                   <span className="w-5 shrink-0 text-right font-mono text-[10px] text-faint">{a.seq}</span>
-                  <Icon size={12} className={`shrink-0 translate-y-0.5 ${cls}`} />
+                  <Icon size={12} className="shrink-0 translate-y-0.5" style={{ color }} />
                   <span className="min-w-0 flex-1 truncate" title={`${a.name}${a.description ? ' - ' + a.description : ''}`}>
                     <span className="text-fg">{a.name}</span>
                     {a.description && <span className="text-faint"> - {a.description}</span>}

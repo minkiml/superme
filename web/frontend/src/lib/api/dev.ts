@@ -50,6 +50,7 @@ export type WorkItem = {
   run_model?: string | null // model of the in-flight run
   run_context_pct?: number | null // live context-window fill of the in-flight run
   model?: string | null // model to show on the card (live run's, else last run's)
+  effort?: string | null // configured reasoning effort (low|medium|high) its runs use
   context_pct?: number | null // context fill to show on the card (live run's, else last run's)
   total_tokens?: number // accumulated tokens across all finished runs
   last_run?: { tokens: number; duration_ms: number | null; model?: string | null; context_pct?: number | null } | null
@@ -129,6 +130,18 @@ export type HarnessScope = {
 export function getHarnessPlugins(): Promise<{ scopes: HarnessScope[] }> {
   return getJSON('/api/dev/harness/plugins')
 }
+// Foundations — SuperMe's universal identity + charter files (SELF.md + per-mode charters,
+// hand-authored + editable) plus the LEARNED universal constitution (always-on rules), per mode.
+export type FoundationFile = Schema<'FoundationFile'>
+export type FoundationConstitution = Schema<'ConstitutionEntry'>
+export function getFoundation(): Promise<{ files: FoundationFile[]; constitutions: FoundationConstitution[] }> {
+  return getJSON('/api/dev/harness/foundation')
+}
+// Save an identity/charter file (key = self | dev-charter | core-charter). Effective next turn.
+export function saveFoundationFile(key: string, content: string): Promise<{ ok: boolean; key: string }> {
+  return sendJSON('/api/dev/harness/foundation', 'PUT', { key, content })
+}
+
 export type HarnessFile = { scope: string; kind: string; name: string; path: string; content: string }
 export function getHarnessFile(scope: string, kind: string, name: string): Promise<HarnessFile> {
   return getJSON(`/api/dev/harness/plugin-file?scope=${q(scope)}&kind=${q(kind)}&name=${q(name)}`)
@@ -173,6 +186,14 @@ export function deletePublished(
   contextId = 'global',
 ): Promise<{ ok: boolean; proposal_id: number; removed: boolean }> {
   return sendJSON(`/api/dev/harness/published/${proposalId}?context_id=${q(contextId)}`, 'DELETE', undefined)
+}
+// Read / edit a published artifact's raw markdown source (Published-tab preview + edit).
+export type PublishedFile = Schema<'PublishedFileResponse'>
+export function getPublishedFile(proposalId: number, contextId = 'global'): Promise<PublishedFile> {
+  return getJSON(`/api/dev/harness/published/${proposalId}/file?context_id=${q(contextId)}`)
+}
+export function savePublishedFile(proposalId: number, content: string, contextId = 'global'): Promise<{ ok: boolean; proposal_id: number }> {
+  return sendJSON(`/api/dev/harness/published/${proposalId}/file`, 'PUT', { content, context_id: contextId })
 }
 // Manage-Harness stat tiles — the candidate pool + learned-knowledge gauges, with drill-down.
 // All strict transport types (the stats payload is a fixed shape), derived directly.
@@ -437,10 +458,11 @@ export function pushInbox(id: number, contextId = 'global'): Promise<PushResult>
 export type PlanResult = Schema<'PlanResponse'>
 // `model` is the per-run model choice (e.g. 'sonnet' | 'haiku' | 'opus'); omit for the
 // default (latest Sonnet).
-export function planWorkItem(itemId: string, contextId = 'global', model?: string): Promise<PlanResult> {
+export function planWorkItem(itemId: string, contextId = 'global', model?: string, effort?: string): Promise<PlanResult> {
   return sendJSON(`/api/dev/work-items/${q(itemId)}/plan`, 'POST', {
     context_id: contextId,
     model: model ?? null,
+    effort: effort ?? null,
   })
 }
 
@@ -493,4 +515,10 @@ export function completeWorkItem(itemId: string, contextId = 'global'): Promise<
 // from the review popup; persisted to item.md frontmatter.
 export function setWorkItemModel(itemId: string, model: string, contextId = 'global'): Promise<{ ok: boolean; id: string; model: string }> {
   return sendJSON(`/api/dev/work-items/${q(itemId)}/model`, 'POST', { context_id: contextId, model })
+}
+
+// Configure the reasoning effort a work-item's runs use (plan + bound chat) — reconfigurable
+// anytime from the review popup; persisted to item.md frontmatter.
+export function setWorkItemEffort(itemId: string, effort: string, contextId = 'global'): Promise<{ ok: boolean; id: string; effort: string }> {
+  return sendJSON(`/api/dev/work-items/${q(itemId)}/effort`, 'POST', { context_id: contextId, effort })
 }

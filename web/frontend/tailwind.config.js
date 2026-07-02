@@ -23,6 +23,21 @@ export default {
         success: 'var(--c-success)',
         danger: 'var(--c-danger)',
         warn: 'var(--c-warn)',
+        // legacy aliases (pre-renovation dev surfaces reference these) → map onto the tiers
+        card: 'var(--c-surface)', // == surface
+        'accent-fg': 'var(--c-on-accent)', // == on-accent
+        bg: 'var(--c-app)', // == app
+        // scope accents — dev/core/universal color-coding
+        dev: 'var(--c-dev)',
+        core: 'var(--c-core)',
+        universal: 'var(--c-universal)',
+      },
+      fontFamily: {
+        sans: ['Inter Variable', 'Hanken Grotesk Variable', 'system-ui', '-apple-system', 'sans-serif'],
+        mono: ['IBM Plex Mono', 'ui-monospace', 'monospace'],
+      },
+      backgroundImage: {
+        iris: 'var(--grad-iris)', // the iridescent brand gradient
       },
     },
   },

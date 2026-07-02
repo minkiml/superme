@@ -15,11 +15,12 @@ from ..app_state import agent as _agent, dev as _dev, dev_store as _dev_store, \
     spine as _spine, sessions as _sessions
 from ..deps import cache_slash as _cache_slash
 from ...core import Init, Usage, Result, Status, scoped_writes_approve, deny_all
+from ...core.models import MODEL_TIERS
 
 log = logging.getLogger("superme-agent")
 
-# Work-items default to the latest Sonnet; the surface may pick another model per run.
-DEFAULT_RUN_MODEL = "sonnet"
+# Work-items default to the latest Sonnet (concrete id — the `sonnet` alias lags; see core/models.py).
+DEFAULT_RUN_MODEL = MODEL_TIERS["sonnet"]
 
 
 def _set_status(ctx, item_id: str, status: str) -> None:
@@ -52,22 +53,21 @@ def _begin_run(ctx, context_id: str, item_id: str, kind: str = "plan",
 
 def _bump_run_tokens(context_id: str, item_id: str, total_tokens: int,
                      context_pct: int | None = None) -> None:
-    """Accumulate an item's live token count and update context fill from a Usage snapshot.
-
-    Each Usage event carries one step's (one API call's) tokens, so the spine SUMS them for the
-    running total — `tokens` is monotonic across the run. Context fill is a point-in-time window
-    measure, so latest-wins is correct there."""
+    """Update an item's LIVE in-flight estimate (legacy token counter + context fill) from a Usage
+    snapshot. The authoritative per-type accounting is written once at finish from the whole-turn
+    Result usage (see _end_run) — per-step Usage events are cumulative-for-the-turn snapshots."""
     _spine.bump_item_run(context_id, item_id, add_tokens=total_tokens, ctx_pct=context_pct)
 
 
 def _end_run(ctx, context_id: str, item_id: str, tokens: int | None,
-             status: str = "waiting") -> None:
+             status: str = "waiting", usage: dict | None = None) -> None:
     """Close out a run: finalize its spine row (keeping the accumulated live token sum, or the
     passed Result aggregate as a fallback) and set the work-item's resting status (the agent
-    stopped → the owner's move). `kind` is recovered from the running row for the end event."""
+    stopped → the owner's move). `kind` is recovered from the running row for the end event.
+    `usage` is the whole-turn final dict — the typed-column fallback if no per-step Usage arrived."""
     info = _spine.live_run(context_id, item_id)
     kind = (info or {}).get("feature", "plan")
-    _spine.finish_item_run(context_id, item_id, fallback_tokens=tokens)
+    _spine.finish_item_run(context_id, item_id, fallback_tokens=tokens, usage=usage)
     # The persisted figure prefers the accumulated live sum (set on the row by _bump_run_tokens);
     # `tokens` (the Result aggregate) only applied if no Usage steps arrived. Read it back to log.
     total = (info or {}).get("tokens") or tokens or 0
@@ -117,7 +117,7 @@ def _log_artifact(repo_id: str, item_id: str, ev: Status) -> None:
 
 
 async def _run_headless_plan(ctx, context_id: str, item_id: str, item_dir: Path,
-                             model: str | None = None) -> None:
+                             model: str | None = None, effort: str | None = None) -> None:
     """Drive one /plan turn for `item_id` with no surface attached, then clear run-state.
 
     Always a FRESH pass (resume=None): a headless plan re-reads the item and re-plans from
@@ -140,11 +140,13 @@ async def _run_headless_plan(ctx, context_id: str, item_id: str, item_dir: Path,
         f"skill's autonomous-run instructions."
     )
     final_tokens = None
+    final_usage = None
     try:
         async for ev in _agent.run_turn(
             ctx, prompt,
             resume=None,   # fresh pass — re-plan re-does the work, doesn't resume "already done"
             model=model,
+            effort=effort or _spine.effective_effort(context_id),  # item → repo → system → medium
             approve=scoped_writes_approve(item_dir, deny_all),
         ):
             if isinstance(ev, Usage):
@@ -153,6 +155,7 @@ async def _run_headless_plan(ctx, context_id: str, item_id: str, item_dir: Path,
                 _log_artifact(context_id, item_id, ev)
             elif isinstance(ev, Result):
                 final_tokens = ev.tokens
+                final_usage = ev.usage
                 _sessions.record(ctx, ev.session_id)
                 if ev.session_id:
                     try:
@@ -168,7 +171,7 @@ async def _run_headless_plan(ctx, context_id: str, item_id: str, item_dir: Path,
         log.exception("headless plan run failed for %s", item_id)
     finally:
         # Run finished (or died) — the agent is no longer working, so it's the owner's move.
-        _end_run(ctx, context_id, item_id, final_tokens, "waiting")
+        _end_run(ctx, context_id, item_id, final_tokens, "waiting", final_usage)
         log.info("headless plan: done for %s", item_id)
 
 

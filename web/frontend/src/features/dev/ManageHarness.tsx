@@ -8,6 +8,7 @@ import {
   getProposals, approveProposal, updateStagedArtifact, publishProposal, rejectProposal, dropProposal,
   getMemoryStats, runDistill, getHarnessPlugins, getHarnessFile, saveHarnessFile,
   getPublished, togglePublished, deletePublished, getProposalExecution,
+  getPublishedFile, savePublishedFile,
   type MemoryProposal, type ProposalCandidate, type MemoryStats,
   type EvalReport, type HarnessScope, type HarnessEntry, type PublishedItem, type PublishedForm,
   type ProposalStep,
@@ -71,6 +72,17 @@ export default function ManageHarness({ contextId = 'global' }: { contextId?: st
 // a preview/edit popup over its source. Per-repo operational artifacts are deliberately excluded.
 const CATEGORY_FALLBACK = 'uncategorized'
 
+// Scope column order + tint — matches the Identity & charters ordering (UNIVERSAL · DEV · CORE):
+// shared reads as the universal scope (purple), dev = blue, core = green.
+const SCOPE_ORDER: Record<string, number> = { shared: 0, dev: 1, core: 2 }
+const SCOPE_TONE: Record<string, 'universal' | 'dev' | 'core'> = { shared: 'universal', dev: 'dev', core: 'core' }
+// Category chip tint per scope — matches Identity & charters (shared = purple, dev = blue, core = green).
+const SCOPE_CHIP: Record<string, string> = {
+  shared: 'bg-universal/10 text-universal',
+  dev: 'bg-dev/10 text-dev',
+  core: 'bg-core/10 text-core',
+}
+
 // For the preview, drop the YAML frontmatter block (it's shown as chips in the header + editable in
 // edit mode) so the rendered markdown is just the body.
 function stripFrontmatter(text: string): string {
@@ -78,79 +90,115 @@ function stripFrontmatter(text: string): string {
   return m ? text.slice(m[0].length) : text
 }
 
-function HarnessPlugins() {
+// Learned+published items are pulled out of their normal category into a single amber "LEARNED"
+// group (regardless of scope), so learned machinery stands apart from the shipped harness.
+const LEARNED_CAT = 'LEARNED'
+
+export function HarnessPlugins({ only, learned, publishedByKey, onGovernanceChange }: {
+  only?: 'skill' | 'agent'
+  learned?: Set<string>
+  publishedByKey?: Map<string, PublishedItem> // `${kind}:${name}` → published item (enables edit/toggle/delete)
+  onGovernanceChange?: () => void             // parent reloads its published/learned state after a toggle/delete
+} = {}) {
   const [scopes, setScopes] = useState<HarnessScope[] | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [open, setOpen] = useState<{ scope: string; entry: HarnessEntry } | null>(null)
+  const [openPub, setOpenPub] = useState<PublishedItem | null>(null) // a learned item opened for govern/edit
 
-  useEffect(() => {
-    let alive = true
+  const load = useCallback(() => {
     getHarnessPlugins()
-      .then((d) => alive && setScopes(d.scopes))
-      .catch((e) => alive && setErr(String(e)))
-    return () => { alive = false }
+      .then((d) => setScopes(d.scopes))
+      .catch((e) => setErr(String(e)))
   }, [])
+  useEffect(() => { load() }, [load])
+
+  const isLearned = (e: HarnessEntry) => learned?.has(`${e.kind}:${e.name}`) ?? false
+  const govChanged = () => { load(); onGovernanceChange?.() }
 
   if (err) return <div className="text-sm text-danger">Could not load: {err}</div>
   if (!scopes) return <div className="flex items-center gap-2 text-sm text-muted"><Loader2 size={14} className="animate-spin" /> Loading…</div>
 
   return (
-    <div className="space-y-6">
-      <p className="text-sm text-muted">
-        SuperMe's own skills and agents, grouped by the scope that loads them and labelled by
-        category. These ship with the harness (universal) — per-project additions aren't shown here.
-        Click any one to preview or edit it.
-      </p>
-      {scopes.map((s) => {
-        const entries = [...s.agents, ...s.skills]
-        // Group by category, then sort categories alphabetically (fallback bucket last).
-        const byCat = new Map<string, HarnessEntry[]>()
-        for (const e of entries) {
-          const cat = e.category || CATEGORY_FALLBACK
-          if (!byCat.has(cat)) byCat.set(cat, [])
-          byCat.get(cat)!.push(e)
-        }
-        const cats = [...byCat.keys()].sort((a, b) =>
-          a === CATEGORY_FALLBACK ? 1 : b === CATEGORY_FALLBACK ? -1 : a.localeCompare(b),
-        )
-        return (
-          <section key={s.scope}>
-            <div className="mb-2 flex items-baseline gap-2">
-              <h2 className="text-sm font-semibold text-fg">{s.label}</h2>
-              <span className="text-xs text-faint">{s.note} · {s.plugin}</span>
-            </div>
-            {entries.length === 0 ? (
-              <Empty>No skills or agents in this scope yet.</Empty>
-            ) : (
-              <div className="space-y-3">
-                {cats.map((cat) => (
-                  <div key={cat}>
-                    <div className="mb-1.5 flex items-center gap-2">
-                      <span className="rounded bg-accent-soft px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-accent-text">
-                        {cat}
-                      </span>
-                      <span className="text-[10px] text-faint">{byCat.get(cat)!.length}</span>
-                    </div>
-                    <div className="space-y-2">
-                      {byCat.get(cat)!
-                        .sort((a, b) => (a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === 'agent' ? -1 : 1))
-                        .map((e) => (
-                          <HarnessRow key={`${e.kind}-${e.name}`} entry={e} onClick={() => setOpen({ scope: s.scope, entry: e })} />
-                        ))}
-                    </div>
-                  </div>
-                ))}
+    <div className="space-y-4">
+      {!only && (
+        <p className="text-sm text-muted">
+          SuperMe's own skills and agents, grouped by the scope that loads them and labelled by
+          category. These ship with the harness (universal) — per-project additions aren't shown here.
+          Click any one to preview or edit it.
+        </p>
+      )}
+      {/* One column per scope (Dev · Core · Shared) rather than a long vertical list. */}
+      <div className="grid gap-4 md:grid-cols-3">
+        {[...scopes].sort((a, b) => (SCOPE_ORDER[a.scope] ?? 9) - (SCOPE_ORDER[b.scope] ?? 9)).map((s) => {
+          const entries = only === 'agent' ? [...s.agents] : only === 'skill' ? [...s.skills] : [...s.agents, ...s.skills]
+          // Group by category — learned items collapse into the LEARNED bucket.
+          const byCat = new Map<string, HarnessEntry[]>()
+          for (const e of entries) {
+            const cat = isLearned(e) ? LEARNED_CAT : (e.category || CATEGORY_FALLBACK)
+            if (!byCat.has(cat)) byCat.set(cat, [])
+            byCat.get(cat)!.push(e)
+          }
+          // Order: real categories (alpha), then uncategorized, then LEARNED last.
+          const rank = (c: string) => (c === LEARNED_CAT ? 3 : c === CATEGORY_FALLBACK ? 2 : 1)
+          const cats = [...byCat.keys()].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b))
+          return (
+            <section key={s.scope} className="rounded-xl border border-line bg-surface p-3.5">
+              <div className="mb-3">
+                <h2 className="text-[13px] font-semibold text-fg">{s.label}</h2>
+                <span className="text-[11px] text-faint">{s.note}</span>
               </div>
-            )}
-          </section>
-        )
-      })}
+              {entries.length === 0 ? (
+                <p className="text-[12px] text-faint">None in this scope.</p>
+              ) : (
+                <div className="space-y-3">
+                  {cats.map((cat) => {
+                    const chipCls = cat === LEARNED_CAT
+                      ? 'bg-warn/15 text-warn'
+                      : (SCOPE_CHIP[s.scope] ?? 'bg-accent-soft text-accent-text')
+                    return (
+                      <div key={cat}>
+                        <div className="mb-1.5 flex items-center gap-2">
+                          <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${chipCls}`}>
+                            {cat}
+                          </span>
+                          <span className="text-[10px] text-faint">{byCat.get(cat)!.length}</span>
+                        </div>
+                        <div className="space-y-2">
+                          {byCat.get(cat)!
+                            .sort((a, b) => (a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === 'agent' ? -1 : 1))
+                            .map((e) => {
+                              const pub = publishedByKey?.get(`${e.kind}:${e.name}`)
+                              return (
+                                <HarnessRow
+                                  key={`${e.kind}-${e.name}`} entry={e} showKind={!only}
+                                  onClick={() => (pub ? setOpenPub(pub) : setOpen({ scope: s.scope, entry: e }))}
+                                />
+                              )
+                            })}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </section>
+          )
+        })}
+      </div>
       {open && <HarnessFileModal scope={open.scope} entry={open.entry} onClose={() => setOpen(null)} />}
+      {openPub && (
+        <PublishedFileModal
+          item={openPub} contextId="global" showScope={false}
+          onClose={() => setOpenPub(null)}
+          onSaved={() => { setOpenPub(null); govChanged() }}
+          onGovernanceChange={govChanged}
+        />
+      )}
     </div>
   )
 }
 
-function HarnessRow({ entry, onClick }: { entry: HarnessEntry; onClick: () => void }) {
+function HarnessRow({ entry, onClick, showKind = true, learned = false }: { entry: HarnessEntry; onClick: () => void; showKind?: boolean; learned?: boolean }) {
   const isAgent = entry.kind === 'agent'
   const Icon = isAgent ? Bot : Sparkles
   return (
@@ -159,13 +207,20 @@ function HarnessRow({ entry, onClick }: { entry: HarnessEntry; onClick: () => vo
       className="group w-full rounded-lg border border-line bg-card p-3 text-left transition hover:border-accent hover:bg-hover"
     >
       <div className="flex items-center gap-2">
-        <Icon size={14} className={isAgent ? 'text-accent-text' : 'text-muted'} />
-        <span className="font-mono text-sm text-fg">{entry.name}</span>
-        <span className="rounded bg-hover px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-faint group-hover:bg-card">
-          {entry.kind}
-        </span>
+        <Icon size={14} className="text-muted" />
+        <span className="min-w-0 truncate font-mono text-sm text-fg">{entry.name}</span>
+        {learned && (
+          <span className="shrink-0 rounded bg-warn/15 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-warn" title="Learned + published by the learning loop">
+            learned
+          </span>
+        )}
+        {showKind && (
+          <span className="rounded bg-hover px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-faint group-hover:bg-card">
+            {entry.kind}
+          </span>
+        )}
         {isAgent && entry.model && <span className="text-[11px] text-faint">{entry.model}</span>}
-        <Pencil size={12} className="ml-auto text-faint opacity-0 transition group-hover:opacity-100" />
+        <Pencil size={12} className="ml-auto shrink-0 text-faint opacity-0 transition group-hover:opacity-100" />
       </div>
     </button>
   )
@@ -205,7 +260,7 @@ function HarnessFileModal({ scope, entry, onClose }: { scope: string; entry: Har
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
       <div
-        className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-line bg-app shadow-xl"
+        className="flex max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-line bg-app shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-2 border-b border-line px-4 py-3">
@@ -259,7 +314,7 @@ function HarnessFileModal({ scope, entry, onClose }: { scope: string; entry: Har
               className="h-[60vh] w-full resize-none rounded-md border border-line bg-surface p-3 font-mono text-[12.5px] leading-relaxed text-fg outline-none focus:border-accent"
             />
           ) : (
-            <Markdown text={stripFrontmatter(content)} variant="doc" />
+            <Markdown text={stripFrontmatter(content)} variant="doc" tone={SCOPE_TONE[scope]} />
           )}
         </div>
       </div>
@@ -280,11 +335,12 @@ const PUB_FORM_META: Record<PublishedForm, { label: string; icon: typeof Bot; bl
 const pubScopeLabel = (s: string) =>
   s === 'universal_dev' ? 'universal' : s === 'repo_dev' ? 'repo' : s
 
-function PublishedInventory({ contextId }: { contextId: string }) {
+export function PublishedInventory({ contextId }: { contextId: string }) {
   const [items, setItems] = useState<PublishedItem[] | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [busy, setBusy] = useState<number | null>(null)        // proposal_id mid-flight
   const [confirmDel, setConfirmDel] = useState<number | null>(null)
+  const [open, setOpen] = useState<PublishedItem | null>(null) // item open in the preview/edit modal
 
   const load = useCallback(() => {
     getPublished(contextId)
@@ -310,11 +366,12 @@ function PublishedInventory({ contextId }: { contextId: string }) {
   const present = items.filter((i) => i.present)
   const forms: PublishedForm[] = ['constitution', 'skill', 'agent']
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex items-start justify-between gap-3">
         <p className="text-sm text-muted">
-          Artifacts the learning loop has published into the live harness. Disable to suspend one
-          without losing it, or delete to remove it for good — either takes effect on the next dev turn.
+          Artifacts the learning loop has published into the live harness. Click one to preview or
+          edit it; disable to suspend it, or delete to remove it from everywhere — each takes effect
+          on the next dev turn.
         </p>
         <button
           onClick={load}
@@ -327,86 +384,198 @@ function PublishedInventory({ contextId }: { contextId: string }) {
       {present.length === 0 ? (
         <Empty>Nothing published yet — approve a forged artifact at gate 2 and it lands here.</Empty>
       ) : (
-        forms.map((form) => {
-          const rows = present.filter((i) => i.form === form)
-          if (!rows.length) return null
-          const { label, icon: Icon, blurb } = PUB_FORM_META[form]
-          return (
-            <section key={form}>
-              <div className="mb-2 flex items-baseline gap-2">
-                <h2 className="text-sm font-semibold text-fg">{label}</h2>
-                <span className="text-xs text-faint">{blurb} · {rows.length}</span>
-              </div>
-              <div className="space-y-2">
-                {rows.map((it) => {
-                  const rowBusy = busy === it.proposal_id
-                  const confirming = confirmDel === it.proposal_id
-                  return (
-                    <div
-                      key={it.proposal_id}
-                      className={`rounded-lg border border-line bg-card p-3 ${it.enabled ? '' : 'opacity-60'}`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <Icon size={14} className="text-muted" />
-                        <span className="text-sm text-fg">{it.title}</span>
-                        <span className="rounded bg-hover px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-faint">
-                          {pubScopeLabel(it.scope)}
-                        </span>
-                        {!it.enabled && (
-                          <span className="text-[10px] uppercase tracking-wide text-faint">disabled</span>
-                        )}
-                        <div className="ml-auto flex items-center gap-1">
-                          <button
-                            onClick={() => toggle(it)}
-                            disabled={rowBusy}
-                            title={it.enabled ? 'Disable' : 'Enable'}
-                            className="rounded p-1 text-muted hover:bg-hover hover:text-fg disabled:opacity-50"
-                          >
-                            {rowBusy ? <Loader2 size={16} className="animate-spin" />
-                              : it.enabled ? <ToggleRight size={18} className="text-accent-text" />
-                              : <ToggleLeft size={18} />}
-                          </button>
-                          {confirming ? (
-                            <>
-                              <button
-                                onClick={() => remove(it)}
-                                disabled={rowBusy}
-                                className="rounded-md bg-danger/10 px-2 py-1 text-[11px] text-danger hover:bg-danger/20 disabled:opacity-50"
-                              >
-                                Delete
-                              </button>
-                              <button
-                                onClick={() => setConfirmDel(null)}
-                                className="rounded-md px-1.5 py-1 text-[11px] text-muted hover:bg-hover"
-                              >
-                                Cancel
-                              </button>
-                            </>
-                          ) : (
-                            <button
-                              onClick={() => setConfirmDel(it.proposal_id)}
-                              disabled={rowBusy}
-                              title="Delete"
-                              className="rounded p-1 text-muted hover:bg-hover hover:text-danger disabled:opacity-50"
-                            >
-                              <Trash2 size={14} />
+        // One column per form (Constitution · Skills · Agents) — mirrors the Foundations card grid.
+        <div className="grid gap-4 md:grid-cols-3">
+          {forms.map((form) => {
+            const rows = present.filter((i) => i.form === form)
+            const { label, icon: Icon, blurb } = PUB_FORM_META[form]
+            return (
+              <section key={form} className="rounded-xl border border-line bg-surface p-3.5">
+                <div className="mb-3">
+                  <div className="flex items-baseline gap-2">
+                    <Icon size={13} className="translate-y-0.5 text-muted" />
+                    <h2 className="text-[13px] font-semibold text-fg">{label}</h2>
+                    <span className="ml-auto text-[11px] text-faint">{rows.length}</span>
+                  </div>
+                  <span className="text-[11px] text-faint">{blurb}</span>
+                </div>
+                {rows.length === 0 ? (
+                  <p className="text-[12px] text-faint">None published.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {rows.map((it) => {
+                      const rowBusy = busy === it.proposal_id
+                      const confirming = confirmDel === it.proposal_id
+                      return (
+                        <div key={it.proposal_id} className={`rounded-lg border border-line bg-card ${it.enabled ? '' : 'opacity-60'}`}>
+                          <div className="flex items-center gap-1.5 px-2.5 py-2">
+                            <button onClick={() => setOpen(it)} className="group flex min-w-0 flex-1 items-center gap-1.5 text-left" title="Preview / edit">
+                              <span className="min-w-0 truncate text-[13px] text-fg">{it.title}</span>
+                              <span className="shrink-0 rounded bg-hover px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-faint">
+                                {pubScopeLabel(it.scope)}
+                              </span>
+                              <Pencil size={11} className="shrink-0 text-faint opacity-0 transition group-hover:opacity-100" />
                             </button>
+                            <button
+                              onClick={() => toggle(it)}
+                              disabled={rowBusy}
+                              title={it.enabled ? 'Disable' : 'Enable'}
+                              className="shrink-0 rounded p-0.5 text-muted hover:text-fg disabled:opacity-50"
+                            >
+                              {rowBusy ? <Loader2 size={15} className="animate-spin" />
+                                : it.enabled ? <ToggleRight size={17} className="text-accent-text" />
+                                : <ToggleLeft size={17} />}
+                            </button>
+                            {!confirming && (
+                              <button
+                                onClick={() => setConfirmDel(it.proposal_id)}
+                                disabled={rowBusy}
+                                title="Delete from everywhere"
+                                className="shrink-0 rounded p-0.5 text-muted hover:text-danger disabled:opacity-50"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            )}
+                          </div>
+                          {confirming && (
+                            <div className="flex items-center gap-2 border-t border-line px-2.5 py-1.5 text-[11px]">
+                              <span className="text-muted">Delete everywhere?</span>
+                              <button onClick={() => remove(it)} disabled={rowBusy} className="ml-auto rounded bg-danger/10 px-2 py-0.5 text-danger hover:bg-danger/20 disabled:opacity-50">Delete</button>
+                              <button onClick={() => setConfirmDel(null)} className="rounded px-1.5 py-0.5 text-muted hover:bg-hover">Cancel</button>
+                            </div>
                           )}
                         </div>
-                      </div>
-                      <div className="mt-1 flex items-center gap-2 pl-6 text-[11px] text-faint">
-                        <span className="font-mono">{it.slug}</span>
-                        {it.created && <span>· {fmtLocalDate(it.created)}</span>}
-                      </div>
-                      {it.summary && <p className="mt-1 pl-6 text-xs text-muted">{it.summary}</p>}
-                    </div>
-                  )
-                })}
-              </div>
-            </section>
-          )
-        })
+                      )
+                    })}
+                  </div>
+                )}
+              </section>
+            )
+          })}
+        </div>
       )}
+      {open && (
+        <PublishedFileModal
+          item={open}
+          contextId={contextId}
+          onClose={() => setOpen(null)}
+          onSaved={() => { setOpen(null); load() }}
+          onGovernanceChange={load}
+        />
+      )}
+    </div>
+  )
+}
+
+// Preview + edit one published artifact's raw markdown (constitution / SKILL.md / agent.md). Loads
+// the file, renders it; "Edit" swaps to a textarea; "Save" writes it back (next dev turn).
+function PublishedFileModal({ item, contextId, onClose, onSaved, onGovernanceChange, showScope = true }: {
+  item: PublishedItem; contextId: string; onClose: () => void; onSaved: () => void
+  onGovernanceChange?: () => void // called after an enable/disable or delete so the opener can refresh
+  showScope?: boolean // hide the scope chip where it's redundant (Foundations = always universal)
+}) {
+  const [content, setContent] = useState<string | null>(null)
+  const [draft, setDraft] = useState('')
+  const [editing, setEditing] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [enabled, setEnabled] = useState(item.enabled)
+  const [confirmDel, setConfirmDel] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  useEffect(() => {
+    let alive = true
+    getPublishedFile(item.proposal_id, contextId)
+      .then((f) => { if (alive) { setContent(f.content); setDraft(f.content) } })
+      .catch((e) => alive && setErr(String(e)))
+    return () => { alive = false }
+  }, [item.proposal_id, contextId])
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && !editing && onClose()
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose, editing])
+
+  const Icon = PUB_FORM_META[item.form].icon
+  const body = content ? content.replace(/^---\n[\s\S]*?\n---\n?/, '') : ''
+
+  async function save() {
+    setBusy(true); setErr(null)
+    try { await savePublishedFile(item.proposal_id, draft, contextId); onSaved() }
+    catch (e) { setErr(String(e)); setBusy(false) }
+  }
+  async function toggleEnabled() {
+    setBusy(true); setErr(null)
+    try { await togglePublished(item.proposal_id, !enabled, contextId); setEnabled(!enabled); onGovernanceChange?.() }
+    catch (e) { setErr(String(e)) } finally { setBusy(false) }
+  }
+  async function del() {
+    setBusy(true); setErr(null)
+    try { await deletePublished(item.proposal_id, contextId); onGovernanceChange?.(); onClose() }
+    catch (e) { setErr(String(e)); setBusy(false) }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div className="flex max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-line bg-app shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-2 border-b border-line px-4 py-3">
+          <Icon size={15} className="text-muted" />
+          <span className="text-sm font-semibold text-fg">{item.title}</span>
+          <span className="rounded bg-warn/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-warn">learned</span>
+          {showScope && (
+            <span className="rounded bg-hover px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-faint">{pubScopeLabel(item.scope)}</span>
+          )}
+          <div className="ml-auto flex items-center gap-1.5">
+            {!editing && (
+              <>
+                <button onClick={toggleEnabled} disabled={busy} title={enabled ? 'Disable' : 'Enable'}
+                  className="rounded p-1 text-muted hover:bg-hover hover:text-fg disabled:opacity-50">
+                  {enabled ? <ToggleRight size={17} className="text-accent-text" /> : <ToggleLeft size={17} />}
+                </button>
+                {confirmDel ? (
+                  <span className="flex items-center gap-1">
+                    <button onClick={del} disabled={busy} className="rounded bg-danger/10 px-2 py-1 text-[11px] text-danger hover:bg-danger/20 disabled:opacity-50">Delete</button>
+                    <button onClick={() => setConfirmDel(false)} className="rounded px-1.5 py-1 text-[11px] text-muted hover:bg-hover">Cancel</button>
+                  </span>
+                ) : (
+                  <button onClick={() => setConfirmDel(true)} disabled={busy} title="Delete from everywhere"
+                    className="rounded p-1 text-muted hover:bg-hover hover:text-danger disabled:opacity-50">
+                    <Trash2 size={13} />
+                  </button>
+                )}
+                <span className="mx-0.5 h-4 w-px bg-line" />
+              </>
+            )}
+            {!editing ? (
+              <button onClick={() => { setDraft(content ?? ''); setEditing(true) }} disabled={content === null}
+                className="flex items-center gap-1 rounded-md border border-line px-2 py-1 text-xs text-muted hover:bg-hover hover:text-fg disabled:opacity-50">
+                <Pencil size={12} /> Edit
+              </button>
+            ) : (
+              <>
+                <button onClick={() => { setEditing(false); setDraft(content ?? '') }} disabled={busy}
+                  className="rounded-md border border-line px-2 py-1 text-xs text-muted hover:bg-hover hover:text-fg disabled:opacity-50">Cancel</button>
+                <button onClick={save} disabled={busy || draft === content || !draft.trim()}
+                  className="flex items-center gap-1 rounded-md bg-accent px-2 py-1 text-xs text-on-accent hover:opacity-90 disabled:opacity-50">
+                  {busy ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} Save
+                </button>
+              </>
+            )}
+            <button onClick={onClose} className="rounded p-1 text-muted hover:bg-hover hover:text-fg"><X size={16} /></button>
+          </div>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          {err && <div className="mb-2 text-sm text-danger">{err}</div>}
+          {content === null ? (
+            <div className="flex items-center gap-2 text-sm text-muted"><Loader2 size={14} className="animate-spin" /> Loading…</div>
+          ) : editing ? (
+            <textarea value={draft} onChange={(e) => setDraft(e.target.value)} spellCheck={false}
+              className="h-[60vh] w-full resize-none rounded-md border border-line bg-surface p-3 font-mono text-[12.5px] leading-relaxed text-fg outline-none focus:border-accent" />
+          ) : (
+            <Markdown text={body} variant="doc" tone="dev" />
+          )}
+        </div>
+      </div>
     </div>
   )
 }
@@ -422,7 +591,7 @@ function ViewPlaceholder() {
 
 // --- Memory governance ----------------------------------------------------------------------
 
-function MemoryGovernance({ contextId }: { contextId: string }) {
+export function MemoryGovernance({ contextId }: { contextId: string }) {
   const [props, setProps] = useState<MemoryProposal[]>([])
   const [stats, setStats] = useState<MemoryStats | null>(null)
   const [err, setErr] = useState<string | null>(null)
@@ -650,7 +819,7 @@ function StatPopup({
       onClick={onClose}
     >
       <div
-        className="max-h-[80vh] w-full max-w-lg overflow-hidden rounded-xl border border-line bg-app shadow-xl"
+        className="max-h-[80vh] w-full max-w-2xl overflow-hidden rounded-xl border border-line bg-app shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-2 border-b border-line px-4 py-3">
@@ -1006,7 +1175,7 @@ function ProposalModal({
       onClick={onClose}
     >
       <div
-        className="flex h-[80vh] max-h-[680px] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-xl"
+        className="flex h-[80vh] max-h-[680px] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

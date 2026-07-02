@@ -11,6 +11,9 @@
     "gen:ws": "json2ts src/lib/api/generated/ws-schema.json -o src/lib/api/generated/ws.ts --no-additionalProperties"
   },
   "dependencies": {
+    "@fontsource-variable/hanken-grotesk": "^5.2.8",
+    "@fontsource-variable/inter": "^5.2.8",
+    "@fontsource/ibm-plex-mono": "^5.2.7",
     "lucide-react": "^1.18.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
