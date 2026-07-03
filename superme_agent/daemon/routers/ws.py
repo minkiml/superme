@@ -171,6 +171,7 @@ async def ws_agent(ws: WebSocket) -> None:
                     approve=turn_approve,
                     extra_mcp_servers=turn_mcp,
                     enforce_silent=True,   # user-facing chat: hide+block internal `access: silent` skills
+                    scope_reads=True,      # L2 read-guard: keep reads inside the host's scope
                 ):
                     if isinstance(ev, Usage) and began_run:
                         _bump_run_tokens(ctx.id, work_item_id, ev.total_tokens, ev.context_pct)

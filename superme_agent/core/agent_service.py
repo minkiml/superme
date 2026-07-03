@@ -21,7 +21,7 @@ from claude_agent_sdk import (
 )
 
 from ..runtime.config import (
-    SELF_FILE, CHARTER_FILES, LOCAL_HARNESS_DIR, CONSTITUTION_DIR, plugins_for,
+    SELF_FILE, CHARTER_FILES, HARNESS_DIR, LOCAL_HARNESS_DIR, CONSTITUTION_DIR, plugins_for,
 )
 from .models import normalize_model
 from .operational import constitution_catalog, silent_skill_names
@@ -94,6 +94,20 @@ def _context_usage(usage: dict | None, model_usage: dict | None, model: str | No
     return round(used / window * 100), window
 
 
+def _read_roots(ctx: Context) -> list[Path]:
+    """The host's allowed-read roots for the L2 guard (context-model-spec §3): its working root
+    (cwd) + its whole working-knowledge tree + the universal harness + its own local harness.
+    Everything else (other repos, the rest of SuperMe's system code) is out of scope. For the hub,
+    cwd is the SuperMe repo root, which already contains the harness/local-harness/knowledge — so
+    the hub reads broadly, a repo host narrowly, from the same rule."""
+    roots = [ctx.cwd, HARNESS_DIR]
+    if ctx.internal_root:
+        roots.append(ctx.internal_root)          # this host's <id>-knowledge tree
+    if ctx.id:
+        roots.append(LOCAL_HARNESS_DIR / ctx.id)  # this host's local harness (both modes)
+    return roots
+
+
 class AgentService:
     """Runs SDK turns for any surface, emitting TurnEvents."""
 
@@ -136,7 +150,7 @@ class AgentService:
 
     def _build_options(
         self, ctx: Context, *, resume, model, approve: ApproveFn, extra_mcp_servers,
-        enforce_silent: bool = False, effort: str | None = None,
+        enforce_silent: bool = False, effort: str | None = None, scope_reads: bool = False,
     ) -> ClaudeAgentOptions:
         # Assemble layer-2 append: persona (WHO) + mode charter (WHAT MODE) + preamble
         # (WHERE) + persona_append (per-project extra). Mode falls back to core.
@@ -200,7 +214,14 @@ class AgentService:
                 **(extra_mcp_servers or {}),
             },
             permission_mode="default",
-            can_use_tool=build_can_use_tool(approve, blocked_skills=blocked),
+            # L2 read-guard on user-facing turns (chat / work-item): keep Read/Grep/Glob inside the
+            # host's scope. Headless runs pass scope_reads=False — they are hermetic + write-sandboxed
+            # and read their own /tmp scratch, which the guard would otherwise deny.
+            can_use_tool=build_can_use_tool(
+                approve, blocked_skills=blocked,
+                cwd=ctx.cwd if scope_reads else None,
+                read_roots=_read_roots(ctx) if scope_reads else None,
+            ),
             # SuperMe owns its OWN log+memory subsystem — it must never read from or write to
             # Claude Code's native auto-memory store (~/.claude/projects/<hash>/memory/). That
             # feature is ON by default and is NOT gated by setting_sources, so we disable it
@@ -221,6 +242,7 @@ class AgentService:
         approve: ApproveFn,
         extra_mcp_servers: dict | None = None,
         enforce_silent: bool = False,
+        scope_reads: bool = False,
     ) -> AsyncIterator[TurnEvent]:
         """Run one turn against `ctx`, yielding TurnEvents.
 
@@ -236,6 +258,7 @@ class AgentService:
         options = self._build_options(
             ctx, resume=resume, model=model, approve=approve,
             extra_mcp_servers=extra_mcp_servers, enforce_silent=enforce_silent, effort=effort,
+            scope_reads=scope_reads,
         )
         resolved_model = None
         # Context-window fill is measured from a SINGLE API call, not the turn aggregate.

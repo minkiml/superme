@@ -31,6 +31,39 @@ ApproveFn = Callable[[str, dict], Awaitable[bool]]
 # Tools that write to the filesystem (reads are covered by the safe-tool policy).
 _WRITE_TOOLS = {"Write", "Edit", "MultiEdit", "NotebookEdit"}
 
+# File-reading tools the L2 read-guard scopes to the host's allowlist (context-model-spec §3).
+# Bash is deliberately NOT here — the SDK has no fs-sandbox mode, so shell reads are the accepted
+# ceiling (L3, deferred). This guard is defense-in-depth over the by-construction scoping.
+_READ_TOOLS = {"Read", "Grep", "Glob"}
+
+
+def _read_target(tool_input: dict) -> str | None:
+    """The path a Read/Grep/Glob call targets. Read → `file_path`; Grep/Glob → `path` (the search
+    root; absent means the agent's cwd, which is always in scope)."""
+    return tool_input.get("file_path") or tool_input.get("path")
+
+
+def path_in_scope(target: str, cwd: Path, roots: list[Path]) -> bool:
+    """True if `target` resolves inside any allowed root. Relative paths resolve against `cwd`
+    (the agent's working root, which differs from the daemon process cwd). Fail-OPEN on an
+    unparseable path — the guard is defense-in-depth, not the primary boundary, so a weird path
+    is deferred to normal handling rather than hard-denied."""
+    try:
+        p = Path(target)
+        if not p.is_absolute():
+            p = cwd / p
+        p = p.resolve()
+    except (OSError, ValueError):
+        return True
+    for r in roots:
+        try:
+            rr = r.resolve()
+        except (OSError, ValueError):
+            continue
+        if p == rr or rr in p.parents:
+            return True
+    return False
+
 
 async def deny_all(tool_name: str, tool_input: dict) -> bool:
     """An ApproveFn that denies everything — the fallback for a headless run with no human."""
@@ -110,13 +143,19 @@ def _invoked_skill_names(tool_name: str, input_data: dict) -> list[str]:
     return out
 
 
-def build_can_use_tool(approve: ApproveFn, *, blocked_skills: set[str] | None = None):
+def build_can_use_tool(approve: ApproveFn, *, blocked_skills: set[str] | None = None,
+                       cwd: Path | None = None, read_roots: list[Path] | None = None):
     """Wrap a surface's ApproveFn into the SDK `can_use_tool` callback.
 
     Safe (read-only) tools auto-allow; everything else defers to `approve`. `blocked_skills` (the
     `access: silent` set) are denied OUTRIGHT before the safe-tool check — even though `Skill` is a
     safe tool — so internal machinery (forge-*) can't be invoked from a user-facing turn. The owning
     sub-run passes no `blocked_skills`, so it can still invoke them.
+
+    `read_roots` (with `cwd` to resolve relatives) enables the **L2 read-guard**: a Read/Grep/Glob
+    whose target falls outside the host's allowlist is denied before the safe-tool auto-allow, so a
+    host cannot read another repo's files or the bulk of SuperMe's own source. Omit both to disable
+    the guard (e.g. a hermetic headless run that governs paths its own way).
     """
 
     async def can_use_tool(
@@ -128,6 +167,14 @@ def build_can_use_tool(approve: ApproveFn, *, blocked_skills: set[str] | None = 
                 return PermissionResultDeny(
                     message="This is an internal SuperMe skill — it runs only inside the learning "
                             "pipeline, not from chat.")
+        # L2 read-guard: keep reads inside the host's scope (before the safe-tool auto-allow).
+        if read_roots and cwd is not None and tool_name in _READ_TOOLS:
+            target = _read_target(input_data)
+            if target and not path_in_scope(target, cwd, read_roots):
+                log.info("out-of-scope read blocked: %s %s", tool_name, target)
+                return PermissionResultDeny(
+                    message="Out of scope — this host may read only its own project directory, its "
+                            "knowledge tree, and the SuperMe harness. That path is outside its scope.")
         if is_safe(tool_name, input_data):
             return PermissionResultAllow()
         approved = await approve(tool_name, input_data)
