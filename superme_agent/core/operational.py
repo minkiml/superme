@@ -197,6 +197,7 @@ def read_constitution_dir(directory: Path, *, origin: str) -> list[dict]:
         out.append({
             "slug": meta.get("name") or p.stem,
             "enabled": _is_enabled(meta),
+            "description": meta.get("description"),  # the always-resident catalog line (directive / when-to-apply)
             "scope": meta.get("scope"),
             "source": meta.get("source"),
             "created": meta.get("created"),
@@ -216,14 +217,39 @@ def list_constitution(mode: str, universal_dir: Path, repo_dir: Path | None) -> 
     return items
 
 
-def assemble_constitution(mode: str, universal_dir: Path, repo_dir: Path | None) -> str:
-    """The always-on system-prompt block: concatenate the bodies of ENABLED constitution items
-    (universal first, then per-repo). Empty string when there are none — caller appends verbatim."""
-    bodies = [it["body"] for it in list_constitution(mode, universal_dir, repo_dir) if it["enabled"]]
-    if not bodies:
+def constitution_catalog(mode: str, universal_dir: Path, repo_dir: Path | None) -> str:
+    """The always-on constitution CATALOG: one frontmatter line per ENABLED in-scope item
+    (universal first, then per-repo) — name + its self-sufficient description. Bodies are NOT
+    dumped; the agent pulls a body on demand via `pull_constitution(name)`. Empty string when
+    there are none. This is the frontmatter-first loading model (context-model-spec §1/§2): the
+    directive/when-to-apply lives in the always-resident description; the body is elaboration.
+    """
+    items = [it for it in list_constitution(mode, universal_dir, repo_dir) if it["enabled"]]
+    if not items:
         return ""
-    header = "## Learned constitution (operational — always in force)"
-    return header + "\n\n" + "\n\n".join(f"- {b}" if "\n" not in b else b for b in bodies)
+    lines = []
+    for it in items:
+        desc = (it.get("description") or "").strip() or "(no description — pull to read)"
+        lines.append(f"- **{it['slug']}** — {desc}")
+    header = (
+        "## Constitution catalog (operational directives — in force)\n"
+        "These directives are IN FORCE; follow them. Each line is a constitution item; call "
+        "`pull_constitution(name)` to load its full body (rationale, examples, detail) when you "
+        "need more than the line states."
+    )
+    return header + "\n\n" + "\n".join(lines)
+
+
+def resolve_constitution(mode: str, universal_dir: Path, repo_dir: Path | None,
+                         name: str) -> dict | None:
+    """Find one ENABLED in-scope constitution by name (slug), or None. Backs the
+    `pull_constitution` tool — scope is enforced by the dirs the caller passes (only the host's
+    universal + repo homes), so an out-of-scope item is simply not found."""
+    want = (name or "").strip().lower()
+    for it in list_constitution(mode, universal_dir, repo_dir):
+        if it["enabled"] and it["slug"].strip().lower() == want:
+            return it
+    return None
 
 
 # --------------------------------------------------------------------------- publish (gate-2)
@@ -330,7 +356,7 @@ def publish_artifact(output_form: str, target_scope: str, repo_id: str | None, *
 
 # --------------------------------------------------------------------------- runtime management (#6)
 # Post-publish, the owner governs live artifacts. Constitution carries an `enabled` frontmatter flag
-# the loader already honors (assemble_constitution filters on it). Skills/agents load via Claude
+# the loader already honors (the catalog + pull_constitution filter on it). Skills/agents load via Claude
 # Code's OWN plugin scanner, which only looks in `<plugin>/skills/` + `<plugin>/agents/` and ignores
 # frontmatter — so "disable" there means moving the artifact into a `.disabled/` shadow at the plugin
 # root (a sibling the scanner never descends into). Enable moves it back; delete removes it outright.

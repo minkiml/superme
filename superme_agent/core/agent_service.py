@@ -24,7 +24,8 @@ from ..runtime.config import (
     SELF_FILE, CHARTER_FILES, LOCAL_HARNESS_DIR, CONSTITUTION_DIR, plugins_for,
 )
 from .models import normalize_model
-from .operational import assemble_constitution, silent_skill_names
+from .operational import constitution_catalog, silent_skill_names
+from ..harness.tools.base_tools import make_base_mcp_server
 from .context import Context
 from .events import Init, TextDelta, Status, Usage, Result, TurnEvent
 from .permissions import ApproveFn, build_can_use_tool
@@ -152,15 +153,15 @@ class AgentService:
             local_charter = op_home / "charter.local.md"
             if local_charter.is_file():
                 parts.append(local_charter.read_text())
-        # Learned CONSTITUTION (WI-8): always-on operational content the self-learning loop published
-        # — universal (harness/constitution/<mode>) + this repo's (op_home/constitution). Only ENABLED
-        # items, assembled into the prompt every turn. Empty string when there are none.
-        constitution = assemble_constitution(
-            ctx.mode, CONSTITUTION_DIR / ctx.mode,
-            (op_home / "constitution") if op_home is not None else None,
-        )
-        if constitution:
-            parts.append(constitution)
+        # Constitution CATALOG (context-model-spec §1/§2): frontmatter-first. The always-on context
+        # carries only the catalog (name + description) of ENABLED in-scope items — universal
+        # (harness/constitution/<mode>) + this repo's (op_home/constitution); bodies are pulled on
+        # demand via the `pull_constitution` tool (mounted below). Empty string when there are none.
+        const_universal = CONSTITUTION_DIR / ctx.mode
+        const_repo = (op_home / "constitution") if op_home is not None else None
+        catalog = constitution_catalog(ctx.mode, const_universal, const_repo)
+        if catalog:
+            parts.append(catalog)
         append = "\n\n".join(parts) + self._context_preamble(ctx)
         if ctx.persona_append:
             append += f"\n\n{ctx.persona_append}"
@@ -191,7 +192,13 @@ class AgentService:
             # slash palette = SuperMe's mode-scoped skills + the native environment.
             skills="all",
 
-            mcp_servers=extra_mcp_servers or {},    # surface-specific tools (e.g. Slack readers)
+            # Base tools (every mode) + surface-specific (e.g. Slack readers, the dev server).
+            # `superme` = pull_constitution, bound to THIS host's constitution homes so it only
+            # ever serves in-scope items (context-model-spec §2).
+            mcp_servers={
+                "superme": make_base_mcp_server(ctx.mode, const_universal, const_repo),
+                **(extra_mcp_servers or {}),
+            },
             permission_mode="default",
             can_use_tool=build_can_use_tool(approve, blocked_skills=blocked),
             # SuperMe owns its OWN log+memory subsystem — it must never read from or write to

@@ -11,6 +11,9 @@ write rules belong here too.
 SAFE_TOOLS = {
     "Read", "Glob", "Grep", "NotebookRead",
     "WebSearch", "WebFetch", "TodoWrite", "Skill", "Agent",
+    # Base tool (every mode): read-only on-demand loader for a constitution body by name.
+    # Must never prompt — the frontmatter-first model depends on cheap pulls.
+    "mcp__superme__pull_constitution",
     # The agent's read-only Slack readers (in-process MCP tools).
     "mcp__slack__read_channel", "mcp__slack__read_thread",
     # The dev agent's read-only activity-log reader (PRD §4.9).
