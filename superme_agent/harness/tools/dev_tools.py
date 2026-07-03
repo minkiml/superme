@@ -311,6 +311,48 @@ def _propose_memory(*, store, context_id, **_):
     return propose_memory
 
 
+# --------------------------------------------------------------------------- inbox (read-only)
+# The inbox is DB-backed (not files), so it gets a tool rather than native Read (spec §5). Scoped
+# to THIS host's context_id server-side, so it can only ever see its own queue. Read-only for now;
+# mutation (agent-authored items, behind a human gate) is the deferred write-variant.
+
+class InboxArgs(TypedDict, total=False):
+    status: Annotated[str, "filter by status (e.g. 'open'); omit for all"]
+    limit: Annotated[int, "max rows (default 50, cap 200)"]
+
+
+def _fmt_inbox(rows: list[dict]) -> str:
+    """Render inbox rows compactly (open first, newest first — the store's order)."""
+    if not rows:
+        return "(inbox empty)"
+    out = []
+    for r in rows:
+        head = f"#{r['id']} · {r.get('status') or 'open'} · {r.get('kind') or 'note'}"
+        if r.get("tag"):
+            head += f" · {r['tag']}"
+        if r.get("routed_to"):
+            head += f" → {r['routed_to']}"
+        if r.get("origin"):
+            head += f" · from {r['origin']}"
+        title = r.get("title") or (r.get("text") or "").strip().replace("\n", " ")
+        out.append(f"- {head}: {title[:200]}")
+    return "\n".join(out)
+
+
+def _list_inbox(*, store, context_id, **_):
+    async def list_inbox(args: dict) -> dict:
+        try:
+            rows = store.list_inbox(context_id)
+        except Exception as e:
+            return _err(f"Could not read the inbox: {e}")
+        status = _s(args, "status")
+        if status:
+            rows = [r for r in rows if (r.get("status") or "open") == status]
+        rows = rows[:max(1, min(int(args.get("limit") or 50), 200))]
+        return _ok(_fmt_inbox(rows))
+    return list_inbox
+
+
 # --------------------------------------------------------------------------- the registry
 
 DEV_TOOLS: list[ToolSpec] = [
@@ -318,6 +360,11 @@ DEV_TOOLS: list[ToolSpec] = [
         "dev_log",
         "Read this repo's development activity log (events table), newest first.",
         DevLogArgs, _dev_log,
+    ),
+    ToolSpec(
+        "list_inbox",
+        "Read this repo's inbox — captured items awaiting triage/routing, open first.",
+        InboxArgs, _list_inbox,
     ),
     ToolSpec(
         "file_candidate",

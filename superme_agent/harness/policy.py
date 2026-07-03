@@ -18,6 +18,8 @@ SAFE_TOOLS = {
     "mcp__slack__read_channel", "mcp__slack__read_thread",
     # The dev agent's read-only activity-log reader (PRD §4.9).
     "mcp__dev__dev_log",
+    # The dev agent's read-only inbox reader (context-model-spec §5) — scoped to its own queue.
+    "mcp__dev__list_inbox",
     # Capture SWEEP (WI-8) — the `capture` sub-agent's pen; files a candidate row from a swept
     # conversation slice. Nothing is applied here (the owner gate is downstream).
     "mcp__dev__file_candidate",
