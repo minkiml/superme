@@ -46,11 +46,38 @@ def _sum_tokens(usage: dict | None) -> int:
     ))
 
 
-def _context_usage(usage: dict | None, model_usage: dict | None, model: str | None):
+def _window_from_model_usage(model_usage: dict | None, model: str | None) -> int | None:
+    """Pull the model's true contextWindow out of the SDK's model_usage dict, if present.
+
+    Only the ResultMessage carries model_usage, so per-step frames can't read it — the
+    caller caches the returned value per model and passes it back as `window_hint` so
+    streaming and the final result divide by the SAME window (else they diverge 5×, e.g.
+    a 1M-window Sonnet session read as 200k mid-stream but 1M at turn end).
+    """
+    if not model_usage:
+        return None
+    entry = model_usage.get(model) if model else None
+    entry = entry or next((v for v in model_usage.values() if isinstance(v, dict)), None)
+    if entry and entry.get("contextWindow"):
+        return entry["contextWindow"]
+    return None
+
+
+def _context_usage(usage: dict | None, model_usage: dict | None, model: str | None,
+                   window_hint: int | None = None):
     """Approximate context-window fill. Returns (percent, window_tokens) or None.
 
-    The last turn's prompt (input + both cache buckets) plus its output ≈ the tokens
-    now sitting in the context window. Divide by the model's contextWindow.
+    `usage` MUST be a SINGLE API call's usage (e.g. one AssistantMessage), not a turn
+    aggregate: input + both cache buckets ≈ the prompt that was in the window, plus its
+    output. A turn-aggregate double-counts cache reads across tool round-trips and inflates
+    the fill 2–3×.
+
+    The window (denominator) is the model's real contextWindow — a per-model, per-session
+    property (Sonnet 5 negotiates 1M here, Opus 1M, others differ): from `model_usage` when
+    present (ResultMessage), else the cached `window_hint` (so per-step frames match the
+    result). We DELIBERATELY do NOT fall back to a fixed guess — a %'d against the wrong
+    window is a false reading, worse than none — so when the real window is unknown we
+    return None and the surface simply shows no fill.
     """
     if not usage:
         return None
@@ -60,12 +87,7 @@ def _context_usage(usage: dict | None, model_usage: dict | None, model: str | No
         + usage.get("cache_read_input_tokens", 0)
         + usage.get("output_tokens", 0)
     )
-    window = 200_000
-    if model_usage:
-        entry = model_usage.get(model) if model else None
-        entry = entry or next((v for v in model_usage.values() if isinstance(v, dict)), None)
-        if entry and entry.get("contextWindow"):
-            window = entry["contextWindow"]
+    window = _window_from_model_usage(model_usage, model) or window_hint
     if not used or not window:
         return None
     return round(used / window * 100), window
@@ -81,6 +103,10 @@ class AgentService:
         self._charters = {
             mode: path.read_text() for mode, path in CHARTER_FILES.items() if path.exists()
         }
+        # Real contextWindow per model, learned from ResultMessage.model_usage (the only
+        # place the SDK reports it). Lets per-step Usage frames divide by the same window
+        # the Result does, instead of the 200k default. Warms after the first turn/model.
+        self._window_by_model: dict[str, int] = {}
 
     def _context_preamble(self, ctx: Context) -> str:
         """A short note telling the agent which context it's operating in."""
@@ -205,6 +231,13 @@ class AgentService:
             extra_mcp_servers=extra_mcp_servers, enforce_silent=enforce_silent, effort=effort,
         )
         resolved_model = None
+        # Context-window fill is measured from a SINGLE API call, not the turn aggregate.
+        # ResultMessage.usage SUMS input/cache across every internal round-trip in the turn,
+        # so a multi-tool turn re-reads the same context N times and the sum balloons to N×
+        # the real occupancy (a simple 2-call turn then reads *lower* than a 3-call one — the
+        # "% dropped after a simple query" bug). The last AssistantMessage is the fullest
+        # single prompt (history + all tool exchanges), so its usage ≈ true window fill.
+        last_step_usage: dict | None = None
         async with ClaudeSDKClient(options=options) as client:
             await client.query(prompt)
             async for message in client.receive_response():
@@ -230,7 +263,9 @@ class AgentService:
                     # counter while the turn is still in flight.
                     step_usage = getattr(message, "usage", None)
                     if step_usage:
-                        cu = _context_usage(step_usage, None, resolved_model)
+                        last_step_usage = dict(step_usage)  # fullest single prompt so far
+                        cu = _context_usage(step_usage, None, resolved_model,
+                                            window_hint=self._window_by_model.get(resolved_model))
                         yield Usage(
                             total_tokens=_sum_tokens(step_usage),
                             input_tokens=step_usage.get("input_tokens", 0),
@@ -239,8 +274,17 @@ class AgentService:
                             usage=dict(step_usage),
                         )
                 elif isinstance(message, ResultMessage):
-                    usage = _context_usage(message.usage, message.model_usage, resolved_model)
+                    # Fill % from the last single call (true occupancy); window size from
+                    # model_usage (only present on the ResultMessage). tokens/usage below stay
+                    # the turn aggregate — that IS the correct cost/billing total.
+                    usage = _context_usage(
+                        last_step_usage or message.usage, message.model_usage, resolved_model,
+                        window_hint=self._window_by_model.get(resolved_model),
+                    )
                     pct, window = usage if usage else (None, None)
+                    # Cache the real window so this model's next per-step frames match (not 200k).
+                    if window and resolved_model:
+                        self._window_by_model[resolved_model] = window
                     text = (
                         message.result
                         if message.subtype == "success"
