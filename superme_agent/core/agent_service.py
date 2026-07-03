@@ -135,17 +135,27 @@ class AgentService:
             f"You are operating in {where}. "
             f"Context: `{ctx.label}` · working directory: `{ctx.cwd}`."
         )
-        # In dev mode, anchor the agent to its dev-knowledge tree with ABSOLUTE paths. It does
-        # NOT live under the cwd (it's under `superme-knowledge/<id>-knowledge/dev/`), so relative
-        # paths silently miss. (The old `memory/` fact store is retired — learned operational content
-        # now lives as constitution/skill/agent in the harness; see WI-8.)
-        if ctx.mode == "dev" and ctx.internal_root:
-            dev_root = ctx.internal_root / "dev"
-            text += (
-                f"\n\nYour **dev-knowledge root** is `{dev_root}` (it is NOT under the working "
-                f"directory above); work-items live at `{dev_root}/work-items/`. Use this absolute "
-                f"path when you read or write dev-knowledge."
-            )
+        # Anchor the host's knowledge trees with ABSOLUTE paths — they live under
+        # `superme-knowledge/<id>-knowledge/`, NOT under the cwd, so relative paths silently miss.
+        # The charter references these *relatively* ("this context's dev-knowledge", "core
+        # knowledge"); these lines are what bind those references to THIS host's concrete trees.
+        # (The old `memory/` fact store is retired — learned operational content now lives as
+        # constitution/skill/agent in the harness; see WI-8.)
+        if ctx.internal_root:
+            core_root = ctx.knowledge_root or (ctx.internal_root / "core")
+            if ctx.mode == "dev":
+                dev_root = ctx.internal_root / "dev"
+                text += (
+                    f"\n\nYour **dev-knowledge root** is `{dev_root}` (NOT under the working "
+                    f"directory above); work-items live at `{dev_root}/work-items/`. Use this "
+                    f"absolute path to read or write dev-knowledge. This host's **core knowledge** "
+                    f"is at `{core_root}` (read-only in dev — see the charter)."
+                )
+            else:
+                text += (
+                    f"\n\nYour **core-knowledge home** is `{core_root}` (NOT under the working "
+                    f"directory above). Use this absolute path to read or grow core knowledge."
+                )
         return text
 
     def _build_options(
