@@ -309,29 +309,32 @@ def ensure_plugin_manifest(root: Path, name: str) -> None:
         indent=2) + "\n")
 
 
-def render_constitution_file(body: str, *, slug: str, scope: str, source: str, created: str) -> str:
-    """Wrap a constitution statement in the one-file-per-item format (frontmatter carries `enabled`,
-    so runtime on/off is a flag flip, not a delete)."""
-    fm = (f"---\nname: {slug}\nenabled: true\nscope: {scope}\nsource: {source}\n"
-          f"created: {created}\ncategory: learned\n---\n")
-    return fm + body.strip() + "\n"
-
-
 def publish_artifact(output_form: str, target_scope: str, repo_id: str | None, *,
                      slug: str, content: str, source: str = "agent",
                      created: str = "") -> str:
     """Gate-2 publish — write a PUBLISHED operational artifact to its live home and return the path.
-    `content` is the write phase's final artifact: for constitution it's the bare statement (wrapped
-    here); for skill/agent it's the complete SKILL.md / agent.md. Every form is stamped
-    `category: learned` (provenance). Raises ReservedScope for `core`."""
+    `content` is the write phase's final artifact, frontmatter-first for every form: constitution
+    carries a `description` (+ optional body); skill/agent are the complete SKILL.md / agent.md. The
+    server-side fields (name, runtime `enabled`, scope, provenance) are stamped here as defaults —
+    never clobbering what the agent authored. Every form is stamped `category: learned`. Raises
+    ReservedScope for `core`."""
     slug = slugify(slug)
     if output_form == "constitution":
         home = constitution_home(target_scope, repo_id)
         home.mkdir(parents=True, exist_ok=True)
-        text = render_constitution_file(content, slug=slug, scope=target_scope,
-                                        source=source, created=created)
+        # Stamp the server-side frontmatter onto the agent's frontmatter-first artifact (the
+        # `description` + optional body it authored), same with_frontmatter_default path skill/agent
+        # use. `enabled` frontmatter lets runtime on/off be a flag flip, not a delete.
+        content = with_frontmatter_default(content, "name", slug)
+        content = with_frontmatter_default(content, "enabled", "true")
+        content = with_frontmatter_default(content, "scope", target_scope)
+        if source:
+            content = with_frontmatter_default(content, "source", source)
+        if created:
+            content = with_frontmatter_default(content, "created", created)
+        content = with_frontmatter_default(content, "category", "learned")
         path = home / f"{slug}.md"
-        path.write_text(text)
+        path.write_text(content if content.endswith("\n") else content + "\n")
         return str(path)
     if output_form in ("skill", "agent"):
         root = plugin_root(target_scope, repo_id)

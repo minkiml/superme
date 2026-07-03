@@ -63,10 +63,13 @@ _RUBRIC = {
         "inputs, missing return contract, reliance on conversation it can't see."
     ),
     "constitution": (
-        "You are auditing a constitution item — a single always-on directive injected into an "
-        "agent's system prompt every turn. Two lenses:\n"
-        "1) CLARITY — is it ONE unambiguous, actionable directive (not vague, not an essay, not "
-        "several rules bundled together)?\n"
+        "You are auditing a constitution item — frontmatter-first: a `description` (the always-"
+        "resident catalog line the agent sees) plus an optional body it pulls on demand. Two "
+        "lenses:\n"
+        "1) CLARITY — is the `description` ONE coherent, self-sufficient line? For a rule, an "
+        "unambiguous, actionable directive; for a reference/contract, a clear statement of what it "
+        "covers and when to pull it. Not vague, not several rules bundled with 'and'. A substantive "
+        "body is fine for a reference — judge the description, and that the body matches it.\n"
         "2) CONFLICT — compare it against the existing in-force rules provided below; does it "
         "contradict, duplicate, or undercut any of them?"
     ),
@@ -215,13 +218,16 @@ def _run_claude(prompt, model, *, extra_args=None, timeout=TIMEOUT_S):
 def _trial_run(form, artifact, *, task, model):
     """Ballpark the ARTIFACT's OWN run cost (not the review's) on one synthetic task.
 
-    A constitution never "runs" — it is always-on text injected into the system prompt every turn,
-    so its real resource cost is the per-turn token overhead it adds; we estimate that from length
-    (~4 chars/token) and do no model call. A skill/agent does run, so we exercise its body once on a
-    synthetic task, read-only and turn-bounded — safe (can't mutate the machine), cheap, and still
-    reflective of real work. Returns a metrics dict tagged with `kind` so the UI can render it."""
+    A constitution never "runs" — it is frontmatter-first, so only its `description` (the catalog
+    line) is always-resident; the body is pulled on demand. Its per-turn overhead is therefore the
+    description, which we estimate from length (~4 chars/token) with no model call. A skill/agent
+    does run, so we exercise its body once on a synthetic task, read-only and turn-bounded — safe
+    (can't mutate the machine), cheap, and reflective of real work. Returns a metrics dict tagged
+    with `kind` so the UI can render it."""
     if form == "constitution":
-        toks = max(1, (len(artifact.strip()) + 3) // 4)
+        m = re.search(r"^description:\s*(.+)$", artifact, re.MULTILINE)
+        resident = m.group(1).strip() if m else artifact.strip()
+        toks = max(1, (len(resident) + 3) // 4)
         return {"kind": "overhead", "tokens_per_turn": toks}
     body = _strip_frontmatter(artifact)
     label = "skill" if form == "skill" else "worker brief"

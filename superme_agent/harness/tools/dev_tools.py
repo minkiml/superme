@@ -142,9 +142,9 @@ class StageArtifactArgs(TypedDict, total=False):
     # The write subagent authors the FINAL artifact and stages it here. Which proposal it belongs to
     # (and where it will publish) is bound server-side from the write run — the agent supplies only
     # the finished content.
-    content: Required[Annotated[str, ("the complete final artifact: for constitution the bare statement "
-                                      "body (no frontmatter); for skill the full SKILL.md; for agent the "
-                                      "full agent.md — clean, concise, on-point")]]
+    content: Required[Annotated[str, ("the complete final artifact, frontmatter-first: for constitution "
+                                      "a `description` (+ optional body); for skill the full SKILL.md; for "
+                                      "agent the full agent.md — clean, concise, on-point")]]
     eval_report: Annotated[str, ("the forge_kit eval report as a JSON string (the last line eval.py "
                                  "printed) — the behavioural verdict shown to the gate-2 reviewer")]
     note: Annotated[str, "one optional line on a choice you made, for the gate-2 reviewer"]

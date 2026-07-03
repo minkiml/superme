@@ -114,21 +114,40 @@ def _check_meta(fm, body, *, expected_name, want_tools, errors, warnings):
 
 
 def lint_constitution(text, *, expected_name, errors, warnings):
-    """A constitution item is a BARE statement — a single always-on directive. The publish step
-    wraps it in frontmatter, so the artifact itself must carry none."""
-    fm, _ = _split_frontmatter(text)
-    if fm is not None and fm is not False:
-        errors.append("A constitution artifact is a bare statement — strip the frontmatter; the "
-                      "publish step adds `enabled`/scope/etc. itself.")
-    stmt = text.strip()
-    if not stmt:
-        errors.append("The statement is empty.")
+    """A constitution is frontmatter-first: a required `description` (the always-resident catalog
+    line — a rule's directive, or a reference's what + when-to-pull) plus an OPTIONAL body (a rule's
+    why/example, or a reference's substance). `name` and the runtime/provenance fields
+    (enabled/scope/source/created/category) are stamped at publish, so the authored artifact need
+    only carry `description` (+ optional body)."""
+    fm, body = _split_frontmatter(text)
+    if fm is None:
+        errors.append("A constitution must open with a '---' frontmatter block carrying a "
+                      "`description` (the always-on catalog line).")
         return
-    if len(stmt) > 1000:
-        warnings.append(f"Statement is {len(stmt)} chars — a constitution rule should be one crisp "
-                        "directive, not an essay; consider whether this is really a skill.")
-    if "<" in stmt and ">" in stmt:
-        warnings.append("Statement contains placeholder-looking <...> text — make it concrete.")
+    if fm is False:
+        errors.append("Frontmatter is malformed (unclosed fence or invalid YAML).")
+        return
+    name = str(fm.get("name", "")).strip()   # optional — publish injects it from the slug
+    if name:
+        if not NAME_RE.match(name):
+            errors.append(f"`name` '{name}' must be kebab-case (lowercase, digits, single hyphens).")
+        if expected_name and name != expected_name:
+            errors.append(f"`name` '{name}' must match the publish slug '{expected_name}'.")
+    desc = str(fm.get("description", "")).strip()
+    if not desc:
+        errors.append("Frontmatter is missing `description` — the always-resident catalog line "
+                      "(a rule's directive, or a reference's what + when-to-pull); it cannot be blank.")
+    elif len(desc) > MAX_DESC:
+        errors.append(f"`description` is {len(desc)} chars (max {MAX_DESC}).")
+    elif "<" in desc or ">" in desc:
+        errors.append("`description` must not contain angle brackets (< or >) — make it concrete.")
+    b = body.strip()
+    if b:
+        if b.lower() == desc.lower():
+            warnings.append("The body just restates the `description` — omit it (the description is "
+                            "already always-resident), or make the body real elaboration / substance.")
+        elif len(b.splitlines()) > SKILL_BODY_HARD:
+            errors.append(f"Body is {len(b.splitlines())} lines (ceiling {SKILL_BODY_HARD}) — trim.")
 
 
 def main():
