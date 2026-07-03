@@ -1019,6 +1019,109 @@ class SystemSpine:
         from .models import DEFAULT_MODEL, normalize_model
         return normalize_model(self.get_system_model() or self.system_config().default_model) or DEFAULT_MODEL
 
+    # --- per-agent model (the autonomous background sub-agents; owner-tunable) ------------------
+    # SOURCE OF TRUTH = each sub-agent's own `.md` frontmatter `model:` field (two-way sync with the
+    # config UI). The daemon's orchestrator turn reads the SAME value via resolve_agent_model(), so
+    # the trigger turn and the sub-agent always run the same model. Falls back to the code preset
+    # (core.models.AGENT_MODELS) only if the file is missing or has no model set.
+    @staticmethod
+    def _agent_md_path(feature: str):
+        from .models import AGENT_MD_NAME
+        from ..runtime.config import DEV_PLUGIN_DIR
+        name = AGENT_MD_NAME.get(feature)
+        return (DEV_PLUGIN_DIR / "agents" / f"{name}.md") if name else None
+
+    def _agent_file_model(self, feature: str) -> str | None:
+        """The raw `model:` from the sub-agent's `.md` frontmatter (None if absent/unreadable)."""
+        from .operational import parse_frontmatter
+        path = self._agent_md_path(feature)
+        if not path or not path.is_file():
+            return None
+        try:
+            meta, _ = parse_frontmatter(path.read_text())
+        except Exception:
+            return None
+        return meta.get("model") or None
+
+    def resolve_agent_model(self, feature: str) -> str:
+        """The concrete, latest model a background sub-agent should run on: its `.md` frontmatter
+        model re-pinned to its tier's CURRENT concrete id (auto-tracks MODEL_TIERS) → else the code
+        preset. Never None. The orchestrator turn uses this; reconcile keeps the `.md` matching."""
+        from .models import agent_model, track_to_latest
+        return track_to_latest(self._agent_file_model(feature)) or agent_model(feature)
+
+    def set_agent_model(self, feature: str, model: str | None) -> None:
+        """Write a sub-agent's model into its `.md` frontmatter (the source of truth). Accepts a TIER
+        (`sonnet`) or a concrete id; stores the tier's CURRENT concrete so the CLI runs the latest
+        version (a bare alias would resolve to an older one). model=None falls back to the preset."""
+        from .models import agent_model, track_to_latest
+        from .operational import set_frontmatter_field
+        path = self._agent_md_path(feature)
+        if not path or not path.is_file():
+            raise ValueError(f"no agent .md for feature '{feature}'")
+        set_frontmatter_field(path, "model", track_to_latest(model) or agent_model(feature))
+
+    _AGENT_EFFORT_DEFAULT = "medium"
+    _AGENT_EFFORTS = ("low", "medium", "high")
+
+    def _agent_file_effort(self, feature: str) -> str | None:
+        """The raw `effort:` from the sub-agent's `.md` frontmatter (None if absent/unreadable)."""
+        from .operational import parse_frontmatter
+        path = self._agent_md_path(feature)
+        if not path or not path.is_file():
+            return None
+        try:
+            meta, _ = parse_frontmatter(path.read_text())
+        except Exception:
+            return None
+        return meta.get("effort") or None
+
+    def resolve_agent_effort(self, feature: str) -> str:
+        """The reasoning effort a background sub-agent runs at: its `.md` `effort:` field → else the
+        'medium' default. The runners pass this to the SDK turn (so it's not the opaque default)."""
+        eff = (self._agent_file_effort(feature) or "").strip().lower()
+        return eff if eff in self._AGENT_EFFORTS else self._AGENT_EFFORT_DEFAULT
+
+    def set_agent_effort(self, feature: str, effort: str | None) -> None:
+        """Write a sub-agent's reasoning effort into its `.md` frontmatter (source of truth)."""
+        from .operational import set_frontmatter_field
+        path = self._agent_md_path(feature)
+        if not path or not path.is_file():
+            raise ValueError(f"no agent .md for feature '{feature}'")
+        eff = (effort or "").strip().lower()
+        set_frontmatter_field(path, "effort", eff if eff in self._AGENT_EFFORTS else self._AGENT_EFFORT_DEFAULT)
+
+    def reconcile_agent_models(self) -> None:
+        """Re-pin every learning sub-agent's `.md` model to its tier's CURRENT concrete id, so a
+        single MODEL_TIERS bump propagates to the files (the sub-agent reads the raw frontmatter).
+        A no-op when they already match. Run at daemon startup."""
+        from .models import AGENT_MODEL_FEATURES, track_to_latest
+        from .operational import set_frontmatter_field
+        for feat in AGENT_MODEL_FEATURES:
+            cur = self._agent_file_model(feat)
+            latest = track_to_latest(cur)
+            path = self._agent_md_path(feat)
+            if latest and cur and latest != cur and path and path.is_file():
+                set_frontmatter_field(path, "model", latest)
+
+    def agent_model_config(self) -> list[dict]:
+        """The tunable background sub-agents, in display order: for each, its label, scope, the tier
+        it tracks (`sonnet`/`opus`/`haiku`), and the concrete model that tier currently resolves to."""
+        from .models import (AGENT_MODEL_FEATURES, AGENT_MODEL_LABELS, AGENT_MODEL_SCOPE,
+                             agent_model, track_to_latest, model_family)
+        out: list[dict] = []
+        for feat in AGENT_MODEL_FEATURES:
+            model = track_to_latest(self._agent_file_model(feat)) or agent_model(feat)
+            out.append({
+                "feature": feat,
+                "label": AGENT_MODEL_LABELS.get(feat, feat.title()),
+                "scope": AGENT_MODEL_SCOPE,
+                "tier": model_family(model) or "",
+                "model": model,
+                "effort": self.resolve_agent_effort(feat),
+            })
+        return out
+
     # --- reasoning effort (mirrors model: per-repo override + system default, floor "medium") ----
     DEFAULT_EFFORT = "medium"
 

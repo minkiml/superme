@@ -34,7 +34,7 @@ export default function CoreDashboard({ repo, onExit }: { repo: OrbitRepo; onExi
       <div className="grid flex-1 place-items-center p-6">
         <div className="max-w-sm text-center">
           <span className="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-2xl border border-line bg-surface">
-            <LayoutDashboard size={20} style={{ color: isHub ? 'var(--c-universal)' : c }} />
+            <LayoutDashboard size={20} style={{ color: isHub ? 'rgb(var(--c-universal))' : c }} />
           </span>
           <h2 className="text-[15px] font-semibold text-fg">Core dashboard</h2>
           <p className="mt-2 text-[13px] leading-relaxed text-muted">

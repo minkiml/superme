@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Hammer, RefreshCw, ArrowLeft, ArrowRight, Boxes, Inbox, Circle, Clock, Check, Bot, X, Archive } from 'lucide-react'
+import { Hammer, RefreshCw, ArrowLeft, ArrowRight, Boxes, Inbox, Circle, Clock, Check, Bot, Archive } from 'lucide-react'
 import PageHeader from '@/ui/PageHeader'
 import Dropdown from '@/ui/Dropdown'
+import Modal from '@/ui/Modal'
 import { getDev, planWorkItem, deleteWorkItem, type DevData, type DevGlance, type InboxEntry, type WorkItem } from '@/lib/api'
 import { fmtLocalDate } from '@/lib/format'
 import { WorkspaceKanban, PlanList, InboxView, isActive } from './panels'
@@ -256,7 +257,7 @@ function StoreCard({
     <button
       onClick={onClick}
       className={`group flex flex-col rounded-xl border bg-surface px-3.5 py-3 text-left shadow-sm transition hover:border-accent ${
-        selected ? 'border-accent ring-1 ring-accent/30' : 'border-line'
+        selected ? 'border-accent ring-1 ring-accent' : 'border-line'
       } ${className}`}
     >
       <div className="flex items-center gap-2">
@@ -339,13 +340,13 @@ function StatusDots({ item, total }: { item: Record<string, number>; total: numb
 // The work-item stat row — moved out of the page top to sit under the Workspace panel header.
 function WorkspaceStats({ g, onShowShipped }: { g: DevGlance; onShowShipped: () => void }) {
   const cell = (label: string, n: number, tone = 'text-fg') => (
-    <div className="flex items-baseline gap-1.5">
-      <span className={`text-base font-semibold tabular-nums ${tone}`}>{n}</span>
-      <span className="text-[11px] uppercase tracking-wide text-muted">{label}</span>
+    <div className="flex flex-col">
+      <span className={`text-xl font-semibold leading-none tabular-nums ${tone}`}>{n}</span>
+      <span className="mt-1 text-[10px] uppercase tracking-wide text-muted">{label}</span>
     </div>
   )
   return (
-    <div className="mb-4 flex flex-wrap items-center gap-x-5 gap-y-2 rounded-lg border border-line bg-sunken/50 px-3.5 py-2">
+    <div className="mb-4 flex flex-wrap items-center gap-x-7 gap-y-3 rounded-xl bg-sunken px-4 py-3">
       {cell('in progress', g.by_status.in_progress ?? 0, 'text-accent-text')}
       {cell('waiting', g.by_status.waiting ?? 0, 'text-warn')}
       {cell('queued', g.by_status.queued ?? 0)}
@@ -378,41 +379,36 @@ function ShippedList({
 }) {
   const sorted = [...items].sort((a, b) => (b.done_at ?? '').localeCompare(a.done_at ?? ''))
   return (
-    <div
-      className="absolute inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:p-8"
-      onClick={onClose}
+    <Modal
+      onClose={onClose}
+      maxW="max-w-lg"
+      z="z-40"
+      contain
+      title={
+        <span className="flex items-center gap-2">
+          <Archive size={15} className="text-success" /> Shipped work
+          <span className="rounded-full bg-hover px-2 py-0.5 text-[10px] font-medium tabular-nums text-muted">{sorted.length}</span>
+        </span>
+      }
     >
-      <div
-        className="my-auto w-full max-w-lg rounded-xl border border-line bg-surface shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center gap-2 border-b border-line px-4 py-3">
-          <Archive size={15} className="text-success" />
-          <h2 className="text-[15px] font-semibold text-fg">Shipped work</h2>
-          <span className="rounded-full bg-hover px-2 py-0.5 text-[10px] text-muted">{sorted.length}</span>
-          <button onClick={onClose} aria-label="Close" className="ml-auto rounded p-1 text-muted hover:bg-hover hover:text-fg">
-            <X size={16} />
-          </button>
-        </div>
-        <div className="max-h-[60vh] overflow-y-auto p-2">
-          {sorted.length === 0 ? (
-            <div className="p-4 text-sm text-faint">No completed work yet.</div>
-          ) : (
-            sorted.map((it) => (
-              <button
-                key={it.id}
-                onClick={() => onOpen(it.id)}
-                className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left hover:bg-hover"
-              >
-                <Check size={13} className="shrink-0 text-success" />
-                <span className="min-w-0 flex-1 truncate text-sm text-fg">{it.title || it.id}</span>
-                <span className="shrink-0 font-mono text-[10px] text-faint">{fmtLocalDate(it.done_at)}</span>
-              </button>
-            ))
-          )}
-        </div>
+      <div className="max-h-[60vh] overflow-y-auto p-2">
+        {sorted.length === 0 ? (
+          <div className="p-4 text-sm text-faint">No completed work yet.</div>
+        ) : (
+          sorted.map((it) => (
+            <button
+              key={it.id}
+              onClick={() => onOpen(it.id)}
+              className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left hover:bg-hover"
+            >
+              <Check size={13} className="shrink-0 text-success" />
+              <span className="min-w-0 flex-1 truncate text-sm text-fg">{it.title || it.id}</span>
+              <span className="shrink-0 font-mono text-[10px] text-faint">{fmtLocalDate(it.done_at)}</span>
+            </button>
+          ))
+        )}
       </div>
-    </div>
+    </Modal>
   )
 }
 
@@ -432,7 +428,7 @@ function ZoomPanel({
   children: React.ReactNode
 }) {
   return (
-    <div className="rounded-xl border border-line bg-surface">
+    <div className="rounded-xl bg-surface shadow-sm">
       <div className="flex items-center gap-2.5 border-b border-line px-3 py-2.5">
         {onBack && (
           <button

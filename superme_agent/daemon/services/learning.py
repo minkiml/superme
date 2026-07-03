@@ -20,7 +20,6 @@ from ..app_state import agent as _agent, dev_store as _dev_store, spine as _spin
     sessions as _sessions
 from ..deps import cache_slash as _cache_slash, proposal_slug as _proposal_slug
 from ...core import Init, Usage, Result, deny_all, learning_write_approve
-from ...core.models import agent_model
 from ...gateway import contexts
 from ...harness.tools.dev_tools import make_dev_mcp_server
 from ...runtime.config import HARNESS_DIR, CONSTITUTION_DIR
@@ -61,7 +60,8 @@ async def _run_headless_distill(ctx, context_id: str, run_id: int) -> None:
         async for ev in _agent.run_turn(
             ctx, prompt,
             resume=None,
-            model=agent_model("distill"),     # preset tier → latest concrete (never the CLI default)
+            model=_spine.resolve_agent_model("distill"),   # its .md tier → latest concrete (never the lagging CLI alias)
+            effort=_spine.resolve_agent_effort("distill"),  # its .md effort field (default medium)
             approve=deny_all,                 # distill writes only via DB tools (pre-approved), not files
             extra_mcp_servers=turn_mcp,
         ):
@@ -217,7 +217,8 @@ async def _run_headless_write(ctx, context_id: str, proposal_id: int, run_id: in
         async for ev in _agent.run_turn(
             ctx, _write_prompt(prop, slug=slug, workspace=workspace, existing_path=existing_path),
             resume=None,
-            model=agent_model("write"),       # preset tier → latest concrete (never the CLI default)
+            model=_spine.resolve_agent_model("write"),   # its .md tier → latest concrete (never the lagging CLI alias)
+            effort=_spine.resolve_agent_effort("write"),  # its .md effort field (default medium)
             # forge needs Bash (forge_kit) + Write (draft into the scratch workspace); both are
             # auto-allowed for this hermetic, disposable run. stage_artifact stays DB-only (safe).
             approve=learning_write_approve(workspace),
@@ -335,7 +336,8 @@ async def run_sweep(ctx, session_id: str, focus: str | None = None) -> dict:
     try:
         async for ev in _agent.run_turn(
             ctx, prompt, resume=None,
-            model=agent_model("sweep"),       # preset tier → latest concrete (never the CLI default)
+            model=_spine.resolve_agent_model("sweep"),   # its .md tier → latest concrete (never the lagging CLI alias)
+            effort=_spine.resolve_agent_effort("sweep"),  # its .md effort field (default medium)
             approve=deny_all,                 # capture writes only via the file_candidate DB tool
             extra_mcp_servers=turn_mcp,
         ):

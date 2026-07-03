@@ -3,6 +3,7 @@ import { X, ArrowRight, Pencil } from 'lucide-react'
 import { fmtTokens } from '@/lib/format'
 import { featureColor } from '@/lib/palette'
 import { RepoIcon } from '@/lib/repoIcons'
+import Modal from '@/ui/Modal'
 import TagEditor from './TagEditor'
 import type { OrbitRepo } from './useCommandStats'
 
@@ -56,8 +57,7 @@ export default function RepoInspector({
 
   return (
     <>
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-6 backdrop-blur-sm" onClick={onClose}>
-      <div className="w-full max-w-md overflow-hidden rounded-2xl border border-line bg-app shadow-2xl" onClick={(e) => e.stopPropagation()}>
+    <Modal onClose={onClose} maxW="max-w-md">
         {/* header */}
         <div className="flex items-center gap-3 border-b border-line px-5 py-4">
           {/* the visual tag — click to edit its color / icon */}
@@ -120,30 +120,29 @@ export default function RepoInspector({
 
           {/* per-scope live stats */}
           <section className="flex gap-3">
-            <ScopeCol name="dev" color="var(--c-dev)" s={repo.scopes.dev} />
-            <ScopeCol name="core" color="var(--c-core)" s={repo.scopes.core} />
+            <ScopeCol name="dev" color="rgb(var(--c-dev))" s={repo.scopes.dev} />
+            <ScopeCol name="core" color="rgb(var(--c-core))" s={repo.scopes.core} />
           </section>
 
           {/* navigators — dev (blue) first, then core (mint) */}
           <section className="flex gap-3">
             <button
               onClick={() => onOpenDev?.(repo)}
-              style={{ borderColor: 'var(--c-dev)' }}
+              style={{ borderColor: 'rgb(var(--c-dev))' }}
               className="flex flex-1 items-center justify-between rounded-lg border bg-surface px-3.5 py-2.5 text-[14px] font-medium text-fg transition hover:bg-hover"
             >
               Open dev workspace <ArrowRight size={15} className="text-dev" />
             </button>
             <button
               onClick={() => onOpenCore?.(repo)}
-              style={{ borderColor: 'var(--c-core)' }}
+              style={{ borderColor: 'rgb(var(--c-core))' }}
               className="flex flex-1 items-center justify-between rounded-lg border bg-surface px-3.5 py-2.5 text-[14px] font-medium text-fg transition hover:bg-hover"
             >
               Open core dashboard <ArrowRight size={15} className="text-core" />
             </button>
           </section>
         </div>
-      </div>
-    </div>
+    </Modal>
     {editingTag && (
       <TagEditor repo={repo} onClose={() => setEditingTag(false)} onSaved={(patch) => onTagSaved?.(repo.id, patch)} />
     )}

@@ -206,6 +206,12 @@ export type DistillResult = Omit<Schema<'DistillResponse'>, 'status'> & {
 export function getMemoryStats(contextId = 'global'): Promise<MemoryStats> {
   return getJSON(`/api/dev/memory/stats?context_id=${q(contextId)}`)
 }
+// Per-repo learning rollup — candidate + learned-artifact counts across all repos, each split
+// dev/core, plus the cross-repo totals. Powers the Learning tile drill-in.
+export type LearningRollup = Schema<'LearningRollupResponse'>
+export function getLearningRollup(): Promise<LearningRollup> {
+  return getJSON('/api/dev/memory/rollup')
+}
 export function runDistill(contextId = 'global'): Promise<DistillResult> {
   return sendJSON(`/api/dev/memory/distill?context_id=${q(contextId)}`, 'POST', {})
 }
@@ -337,85 +343,10 @@ export function dropProposal(
   return sendJSON(`/api/dev/memory/proposals/${id}/drop`, 'POST', { context_id: contextId })
 }
 
-// Model manifest — the canonical dev-knowledge schema (shared structure) with this
-// context's live entity counts overlaid. Rendered by the Model sub-tab.
-export type SchemaField = { f: string; t: string; note?: string }
-export type ModelEntity = {
-  id: string
-  label: string
-  store: string
-  storage?: string // the storage kind, e.g. "SQLite row" / "markdown + YAML frontmatter"
-  schema?: SchemaField[] // typed fields (proper schema view)
-  summary?: string
-  fields?: string[] // legacy flat field list (fallback)
-}
-export type ModelEdge = { from: string; to: string; label?: string; reserved?: boolean }
-
-export type ModelLifecycleSpec = {
-  phase?: { states: string[]; loops?: { from: string; to: string }[]; note?: string }
-  status?: { states: string[]; note?: string }
-  'work-graph'?: { note?: string }
-}
-
-// The operating model — the dev-knowledge process/agentic graph (the lead panel).
-export type OpActor = { id: string; label: string; reserved?: boolean }
-export type OpNode = {
-  id: string
-  label: string
-  actor?: string
-  x: number
-  y: number
-  reserved?: boolean
-  kind?: string // e.g. 'gate'
-  lifecycle?: boolean // node whose detail is the work-item lifecycle
-  detail?: string
-}
-export type OpEdge = { from: string; to: string; label?: string; reserved?: boolean }
-export type OperatingModel = { note?: string; actors: OpActor[]; nodes: OpNode[]; edges: OpEdge[] }
-
-// Context stack — what fills a turn's context window (rendered on the Model lookup page).
-export type LayerSource = { label: string; scope?: 'native' | 'mode'; note?: string }
-export type ContextLayer = {
-  n: number
-  name: string
-  cls: string
-  scope?: 'native' | 'mode' | 'mixed'
-  src?: string
-  sources?: LayerSource[]
-}
-export type ContextAgent = {
-  id: string
-  label: string
-  knowledge: string
-  append: string
-  skills: string
-  reserved?: boolean
-}
-export type ContextStack = { layers: ContextLayer[]; agents: ContextAgent[] }
-
-// Skills & sub-agents, scoped per mode.
-export type SkillEntry = { name: string; kind: 'skill' | 'subagent'; reserved?: boolean }
-export type SkillsSpec = { dev: SkillEntry[]; core: SkillEntry[]; shared?: SkillEntry[] }
-
-export type DevModel = {
-  exists: boolean
-  context_id: string
-  version?: number
-  entities: ModelEntity[]
-  lifecycle: ModelLifecycleSpec
-  context_stack?: ContextStack
-  skills?: SkillsSpec
-  operating_model?: OperatingModel
-}
-
 const q = encodeURIComponent
 
 export function getDev(contextId = 'global'): Promise<DevData> {
   return getJSON(`/api/dev?context_id=${q(contextId)}`)
-}
-
-export function getModel(contextId = 'global'): Promise<DevModel> {
-  return getJSON(`/api/dev/model?context_id=${q(contextId)}`)
 }
 
 // Quick-capture: add an item to the context's inbox queue (no approval gate). Title is

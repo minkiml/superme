@@ -338,6 +338,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/system/agent-models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Agent Models
+         * @description The tunable background agents (sweep/distill/write) with their preset, override, and effective
+         *     model — the autonomous learning runners that pick up a model from config, not a per-turn choice.
+         */
+        get: operations["get_agent_models_system_agent_models_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/system/agent-models/{feature}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set Agent Model
+         * @description Set a background sub-agent's model TIER and/or reasoning effort — written into its own `.md`
+         *     frontmatter (the source of truth). Send either field; both are applied when present.
+         */
+        post: operations["set_agent_model_system_agent_models__feature__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/system/learning": {
         parameters: {
             query?: never;
@@ -964,6 +1006,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/dev/memory/rollup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Dev Memory Rollup
+         * @description The Learning tile drill-in: per-repo counts of captured candidates + published/learned
+         *     artifacts, each split dev/core. Learned is counted the SAME way `/dev/memory/stats` does
+         *     (published proposals reconciled with on-disk presence) so the numbers reconcile across surfaces.
+         */
+        get: operations["dev_memory_rollup_dev_memory_rollup_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/dev/memory/distill": {
         parameters: {
             query?: never;
@@ -1192,6 +1256,37 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AgentModelBody */
+        AgentModelBody: {
+            /** Model */
+            model?: string | null;
+            /** Effort */
+            effort?: string | null;
+        };
+        /**
+         * AgentModelRow
+         * @description One tunable background sub-agent: the TIER it tracks (sonnet/opus/haiku — the pick) and the
+         *     concrete model that tier currently resolves to (what actually runs), plus its label and scope.
+         */
+        AgentModelRow: {
+            /** Feature */
+            feature: string;
+            /** Label */
+            label: string;
+            /** Scope */
+            scope: string;
+            /** Tier */
+            tier: string;
+            /** Model */
+            model: string;
+            /** Effort */
+            effort: string;
+        };
+        /** AgentModelsResponse */
+        AgentModelsResponse: {
+            /** Agents */
+            agents: components["schemas"]["AgentModelRow"][];
+        };
         /** ApproveBody */
         ApproveBody: {
             /**
@@ -1855,6 +1950,26 @@ export interface components {
             /** Learning Enabled */
             learning_enabled: boolean;
         };
+        /** LearningRollupRepo */
+        LearningRollupRepo: {
+            /** Repo Id */
+            repo_id: string;
+            /** Label */
+            label: string;
+            candidates: components["schemas"]["ScopeCount"];
+            learned: components["schemas"]["ScopeCount"];
+        };
+        /**
+         * LearningRollupResponse
+         * @description Per-repo learning counts (captured candidates + published/learned artifacts), each split by
+         *     dev/core scope, plus the cross-repo totals. Powers the Learning tile drill-in.
+         */
+        LearningRollupResponse: {
+            /** Repos */
+            repos: components["schemas"]["LearningRollupRepo"][];
+            candidates: components["schemas"]["ScopeCount"];
+            learned: components["schemas"]["ScopeCount"];
+        };
         /**
          * ManifestEntity
          * @description One model.yaml entity (the dev-knowledge schema's nodes). Lenient (extra='allow', all
@@ -2436,6 +2551,27 @@ export interface components {
             history: components["schemas"]["RunRow"][];
             /** Running */
             running: number;
+        };
+        /**
+         * ScopeCount
+         * @description A count split by knowledge scope: dev (repo_dev + universal_dev) vs core.
+         */
+        ScopeCount: {
+            /**
+             * Dev
+             * @default 0
+             */
+            dev: number;
+            /**
+             * Core
+             * @default 0
+             */
+            core: number;
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
         };
         /**
          * SessionBubble
@@ -3443,6 +3579,61 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SystemEffortResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_agent_models_system_agent_models_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentModelsResponse"];
+                };
+            };
+        };
+    };
+    set_agent_model_system_agent_models__feature__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                feature: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentModelBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentModelsResponse"];
                 };
             };
             /** @description Validation Error */
@@ -4529,6 +4720,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dev_memory_rollup_dev_memory_rollup_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LearningRollupResponse"];
                 };
             };
         };

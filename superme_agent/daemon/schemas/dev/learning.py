@@ -54,6 +54,28 @@ class MemoryStatsResponse(BaseModel):
     knowledge: KnowledgeStat
 
 
+class ScopeCount(BaseModel):
+    """A count split by knowledge scope: dev (repo_dev + universal_dev) vs core."""
+    dev: int = 0
+    core: int = 0
+    total: int = 0
+
+
+class LearningRollupRepo(BaseModel):
+    repo_id: str
+    label: str
+    candidates: ScopeCount
+    learned: ScopeCount
+
+
+class LearningRollupResponse(BaseModel):
+    """Per-repo learning counts (captured candidates + published/learned artifacts), each split by
+    dev/core scope, plus the cross-repo totals. Powers the Learning tile drill-in."""
+    repos: list[LearningRollupRepo]
+    candidates: ScopeCount
+    learned: ScopeCount
+
+
 # --- distill / sweep ops (branch-variant; exclude_unset on the routes) ---
 
 class DistillResponse(BaseModel):

@@ -83,6 +83,21 @@ class SystemModelResponse(BaseModel):
     effective: str | None = None
 
 
+class AgentModelRow(BaseModel):
+    """One tunable background sub-agent: the TIER it tracks (sonnet/opus/haiku — the pick) and the
+    concrete model that tier currently resolves to (what actually runs), plus its label and scope."""
+    feature: str
+    label: str
+    scope: str
+    tier: str
+    model: str
+    effort: str
+
+
+class AgentModelsResponse(BaseModel):
+    agents: list[AgentModelRow]
+
+
 class LearningResponse(BaseModel):
     ok: bool
     learning_enabled: bool

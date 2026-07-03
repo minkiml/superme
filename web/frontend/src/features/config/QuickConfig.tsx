@@ -1,12 +1,13 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { SlidersHorizontal, Loader2, Check } from 'lucide-react'
 import Dropdown from '@/ui/Dropdown'
+import Toggle from '@/ui/Toggle'
 import { RepoIcon } from '@/lib/repoIcons'
-import { MODELS as MODEL_CATALOG, EFFORTS as EFFORT_CATALOG } from '@/lib/format'
+import { MODELS as MODEL_CATALOG, EFFORTS as EFFORT_CATALOG, fmtModel } from '@/lib/format'
 import {
   getSystem, setSystemModel, setSystemLearning, setRepoModel, setRepoLearning, setSweepConfig,
-  setSystemEffort, setRepoEffort,
-  type SystemOverview, type ModelAlias,
+  setSystemEffort, setRepoEffort, getAgentModels, setAgentModel, setAgentEffort,
+  type SystemOverview, type ModelAlias, type AgentModels,
 } from '@/lib/api'
 import type { CommandStats, OrbitRepo } from '@/features/shell/useCommandStats'
 
@@ -22,17 +23,11 @@ const SYSTEM_EFFORTS: { value: string; label: string }[] = EFFORT_CATALOG.map((e
 // Per-repo pickers add "System default" ("" = inherit the system default set above).
 const MODELS = [{ value: '', label: 'System default' }, ...SYSTEM_MODELS]
 const EFFORTS = [{ value: '', label: 'System default' }, ...SYSTEM_EFFORTS]
-
-function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <button
-      onClick={() => onChange(!on)}
-      className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${on ? 'bg-core' : 'bg-hover'}`}
-    >
-      <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-app transition-all ${on ? 'left-[18px]' : 'left-0.5'}`} />
-    </button>
-  )
-}
+// Background-agent model pickers: the VALUE is the tier (`sonnet` — the daemon auto-tracks it to the
+// latest concrete), but the LABEL shows the concrete version ("Sonnet 5") to read consistently with
+// the per-repo pickers. Tier family is parsed from each catalog id (`claude-sonnet-5` → `sonnet`).
+const familyOf = (id: string) => (id.startsWith('claude-') ? id.split('-')[1] : id)
+const AGENT_TIERS = MODEL_CATALOG.map((m) => ({ value: familyOf(m.key), label: m.label }))
 
 export default function QuickConfig({ stats }: { stats: CommandStats }) {
   const [sys, setSys] = useState<SystemOverview | null>(null)
@@ -86,6 +81,16 @@ export default function QuickConfig({ stats }: { stats: CommandStats }) {
           ) : (
             <SweepTuning sys={sys} onChange={setSys} />
           )}
+        </section>
+
+        {/* Background agents */}
+        <section className="mb-8">
+          <div className="mb-1 text-[12px] font-semibold uppercase tracking-wider text-muted">Background agents</div>
+          <p className="mb-3 text-[12px] text-faint">
+            The model tier each universal sub-agent (Capture, Distill, Forge) runs on when the daemon fires it
+            autonomously. Pick a tier — it auto-tracks that tier’s latest version. Writes the agent’s own <code>.md</code>.
+          </p>
+          <BackgroundAgents />
         </section>
 
         {/* Per-repo overrides */}
@@ -152,6 +157,75 @@ function SystemDefaults({ sys, onChange }: { sys: SystemOverview; onChange: (s: 
         </div>
         <Toggle on={sys.learning_enabled} onChange={changeLearning} />
       </div>
+    </div>
+  )
+}
+
+// The background-agent model table — one row per autonomous learning agent (sweep/distill/write).
+// Each runs its code-level PRESET unless overridden; "Preset" clears the override. Self-contained
+// (fetches its own state) since these live outside the SystemOverview payload.
+function BackgroundAgents() {
+  const [data, setData] = useState<AgentModels | null>(null)
+
+  useEffect(() => {
+    let alive = true
+    getAgentModels().then((d) => alive && setData(d)).catch(() => {})
+    return () => { alive = false }
+  }, [])
+
+  function changeModel(feature: string, v: string) {
+    // Optimistic: reflect the pick immediately, then persist to the agent's .md. The response
+    // carries the re-read rows (source of truth = the frontmatter).
+    setData((d) => d && { agents: d.agents.map((a) => (a.feature === feature ? { ...a, tier: v } : a)) })
+    setAgentModel(feature, v).then(setData).catch(() => {})
+  }
+  function changeEffort(feature: string, v: string) {
+    setData((d) => d && { agents: d.agents.map((a) => (a.feature === feature ? { ...a, effort: v } : a)) })
+    setAgentEffort(feature, v).then(setData).catch(() => {})
+  }
+
+  if (!data) {
+    return (
+      <div className="flex items-center gap-2 text-sm text-muted">
+        <Loader2 size={14} className="animate-spin" /> Loading…
+      </div>
+    )
+  }
+  return (
+    <div className="overflow-hidden rounded-xl border border-line">
+      {data.agents.map((a, i) => (
+          <div
+            key={a.feature}
+            className={`flex items-center justify-between gap-3 bg-surface px-4 py-3 ${i < data.agents.length - 1 ? 'border-b border-line' : ''}`}
+          >
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[14px] text-fg">{a.label}</span>
+                {/* Scope tag (muted) — these learning sub-agents are universal, dev-scope. */}
+                <span className="text-[12px] text-faint capitalize">– {a.scope}</span>
+              </div>
+              <div className="text-[12px] text-faint">runs on {fmtModel(a.model)}</div>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <Dropdown
+                value={a.tier}
+                options={AGENT_TIERS}
+                onChange={(v) => changeModel(a.feature, v)}
+                align="right"
+                width="w-32"
+                title={`${a.label} agent model tier`}
+              />
+              <Dropdown
+                value={a.effort}
+                options={SYSTEM_EFFORTS}
+                onChange={(v) => changeEffort(a.feature, v)}
+                align="right"
+                width="w-28"
+                title={`${a.label} agent reasoning effort`}
+              />
+            </div>
+          </div>
+      ))}
     </div>
   )
 }

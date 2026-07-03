@@ -8,52 +8,55 @@
    `:root` is a clean cool-light fallback. Three surface tiers give depth:
    sidebar (deepest) < app < surface (cards). Scope accents: dev=blue,
    core=mint, universal=lavender. Components reference the semantic tokens
-   only — never raw colors — so the whole cockpit re-themes from here. */
+   only — never raw colors — so the whole cockpit re-themes from here.
+   Values are space-separated RGB CHANNELS (not hex) so Tailwind's `/opacity`
+   modifiers resolve (`rgb(var(--c-x) / <alpha-value>)`); use `rgb(var(--c-x))`
+   when referencing a token directly in CSS/inline styles. */
 :root {
-  --c-app: #f4f5f7;
-  --c-sidebar: #eceef1;
-  --c-surface: #ffffff;
-  --c-sunken: #eef0f3;
-  --c-hover: #e7e9ee;
-  --c-line: #dfe2e8;
-  --c-fg: #1c2024;
-  --c-muted: #5c626c;
-  --c-faint: #9aa0ab;
-  --c-accent: #3b82f6;
-  --c-accent-soft: #e4edfd;
-  --c-accent-text: #2563eb;
-  --c-on-accent: #ffffff;
-  --c-success: #128a5b;
-  --c-danger: #d0453b;
-  --c-warn: #b4791f;
+  --c-app: 244 245 247;
+  --c-sidebar: 236 238 241;
+  --c-surface: 255 255 255;
+  --c-sunken: 238 240 243;
+  --c-hover: 231 233 238;
+  --c-line: 223 226 232;
+  --c-fg: 28 32 36;
+  --c-muted: 92 98 108;
+  --c-faint: 154 160 171;
+  --c-accent: 59 130 246;
+  --c-accent-soft: 228 237 253;
+  --c-accent-text: 37 99 235;
+  --c-on-accent: 255 255 255;
+  --c-success: 18 138 91;
+  --c-danger: 208 69 59;
+  --c-warn: 180 121 31;
   /* scope accents */
-  --c-dev: #3b82f6;
-  --c-core: #12a878;
-  --c-universal: #7c6cf0;
+  --c-dev: 59 130 246;
+  --c-core: 18 168 120;
+  --c-universal: 124 108 240;
   color-scheme: light;
 }
 
 .dark {
-  --c-app: #0d0e11; /* scene area (mid) */
-  --c-sidebar: #08090b; /* nav rail (deepest) */
-  --c-surface: #16181d; /* cards, rail, panels (lightest) */
-  --c-sunken: #101216; /* inputs, code */
-  --c-hover: #1e2128; /* hover/active fills, pills */
-  --c-line: #262a31; /* borders, separators */
-  --c-fg: #e7e9ee; /* primary text */
-  --c-muted: #99a0ac; /* secondary text */
-  --c-faint: #5f6572; /* tertiary / hints */
-  --c-accent: #6ea8fe; /* interactive accent (dev blue) */
-  --c-accent-soft: #17263f; /* accent subtle background */
-  --c-accent-text: #a7c7ff; /* accent-colored text/icons */
-  --c-on-accent: #08121f; /* text on an accent fill */
-  --c-success: #5fe3b3;
-  --c-danger: #f0796f;
-  --c-warn: #e0a35a;
+  --c-app: 13 14 17; /* scene area (mid) */
+  --c-sidebar: 8 9 11; /* nav rail (deepest) */
+  --c-surface: 22 24 29; /* cards, rail, panels (lightest) */
+  --c-sunken: 16 18 22; /* inputs, code */
+  --c-hover: 30 33 40; /* hover/active fills, pills */
+  --c-line: 38 42 49; /* borders, separators */
+  --c-fg: 231 233 238; /* primary text */
+  --c-muted: 153 160 172; /* secondary text */
+  --c-faint: 95 101 114; /* tertiary / hints */
+  --c-accent: 110 168 254; /* interactive accent (dev blue) */
+  --c-accent-soft: 23 38 63; /* accent subtle background */
+  --c-accent-text: 167 199 255; /* accent-colored text/icons */
+  --c-on-accent: 8 18 31; /* text on an accent fill */
+  --c-success: 95 227 179;
+  --c-danger: 240 121 111;
+  --c-warn: 224 163 90;
   /* scope accents */
-  --c-dev: #6ea8fe;
-  --c-core: #5fe3b3;
-  --c-universal: #b9a7f7;
+  --c-dev: 110 168 254;
+  --c-core: 95 227 179;
+  --c-universal: 185 167 247;
   color-scheme: dark;
 }
 
@@ -72,8 +75,8 @@ body,
 }
 
 body {
-  background: var(--c-app);
-  color: var(--c-fg);
+  background: rgb(var(--c-app));
+  color: rgb(var(--c-fg));
   font-family: 'Inter Variable', 'Hanken Grotesk Variable', system-ui, -apple-system, sans-serif;
   font-size: 15px;
   -webkit-font-smoothing: antialiased;
@@ -84,9 +87,9 @@ body {
 select {
   appearance: none;
   -webkit-appearance: none;
-  background-color: var(--c-sunken);
-  color: var(--c-fg);
-  border: 1px solid var(--c-line);
+  background-color: rgb(var(--c-sunken));
+  color: rgb(var(--c-fg));
+  border: 1px solid rgb(var(--c-line));
   border-radius: 8px;
   padding: 6px 28px 6px 10px;
   font-size: 13px;
@@ -98,7 +101,7 @@ select {
 }
 select:focus {
   outline: none;
-  border-color: var(--c-accent);
+  border-color: rgb(var(--c-accent));
 }
 select.bare {
   background-color: transparent;
@@ -116,7 +119,7 @@ select.bare {
   height: 10px;
 }
 *::-webkit-scrollbar-thumb {
-  background: var(--c-line);
+  background: rgb(var(--c-line));
   border-radius: 6px;
   border: 2px solid transparent;
   background-clip: padding-box;

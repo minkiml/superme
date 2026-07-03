@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { RefreshCw, Loader2, User, Bot, Server, ChevronDown } from 'lucide-react'
 import { getDevLog, type DevEvent } from '@/lib/api'
 import { fmtLocal } from '@/lib/format'
+import TabBar from '@/ui/TabBar'
 import { Empty } from './common'
 
 const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000
@@ -50,19 +51,12 @@ export default function ActivityLog({ contextId }: { contextId: string }) {
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-3xl p-6">
         <div className="mb-4 flex items-center gap-2">
-          <div className="inline-flex rounded-lg border border-line bg-surface p-0.5">
-            {SCOPES.map((s) => (
-              <button
-                key={s.id}
-                onClick={() => setScope(s.id)}
-                className={`rounded-md px-3 py-1 text-[13px] font-medium transition ${
-                  scope === s.id ? 'bg-hover text-fg' : 'text-muted hover:text-fg'
-                }`}
-              >
-                {s.label}
-              </button>
-            ))}
-          </div>
+          <TabBar
+            variant="outlined"
+            value={scope}
+            onChange={setScope}
+            tabs={SCOPES.map((s) => [s.id, s.label] as [string, string])}
+          />
           <span className="text-[12px] text-faint">{shown.length} events{showAll ? '' : ' · last 2 days'}</span>
           <button
             onClick={load}

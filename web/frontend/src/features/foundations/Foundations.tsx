@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Layers, FileText, X, Loader2, ScrollText, Pencil, Save, Sparkles, Bot } from 'lucide-react'
 import Markdown from '@/ui/Markdown'
 import { getFoundation, saveFoundationFile, getPublished, getHarnessPlugins, type FoundationFile, type FoundationConstitution, type PublishedItem } from '@/lib/api'
-import { HarnessPlugins } from '@/features/dev/ManageHarness'
+import { HarnessPlugins } from '@/features/dev/HarnessPlugins'
 import { Empty } from '@/features/dev/common'
 
 // Foundations — SuperMe's repo-agnostic identity + machinery (Tier-2 nav). Sections: the

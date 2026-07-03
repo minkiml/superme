@@ -37,8 +37,53 @@ AGENT_MODELS: dict[str, str] = {
 }
 _AGENT_MODEL_FLOOR = "sonnet"
 
+# The autonomous background agents that run on a PRESET (no user pick) and are owner-tunable from the
+# Quick-config UI, in display order. Each is one of the learning-pipeline runners wired to consult a
+# spine override before falling back to its AGENT_MODELS preset. (`plan` is omitted — plan runs take
+# the work-item's picked model / system default, not a standing background preset.)
+# Each learning run-feature drives one universal sub-agent whose `.md` frontmatter is the SOURCE OF
+# TRUTH for the model it runs on (sweep→capture, distill→distill, write→forge). The config UI
+# two-way-syncs that frontmatter, and the daemon's orchestrator turn reads the same value — so the
+# trigger turn and the sub-agent always run the same, latest model. All three are dev-scope.
+AGENT_MODEL_FEATURES: tuple[str, ...] = ("sweep", "distill", "write")
+AGENT_MD_NAME: dict[str, str] = {"sweep": "capture", "distill": "distill", "write": "forge"}
+AGENT_MODEL_LABELS: dict[str, str] = {
+    "sweep": "Capture",
+    "distill": "Distill",
+    "write": "Forge",
+    "plan": "Plan",
+}
+AGENT_MODEL_SCOPE = "dev"  # the learning sub-agents are all universal dev-scope
+
 # Reset tokens that clear an override (→ None).
 _RESET = ("reset", "default", "clear")
+
+
+def model_family(m: str | None) -> str | None:
+    """The tier FAMILY of any model value — the stable name that survives version bumps:
+      • a tier alias (`sonnet`) → `sonnet`
+      • a concrete id (`claude-sonnet-5`, `claude-opus-4-8`) → `sonnet` / `opus` (parsed from the id)
+    Returns None if it can't be determined. Lets us re-pin an agent to its tier's LATEST concrete
+    without storing a separate tier field — the family lives inside the concrete id itself."""
+    if not m:
+        return None
+    m = m.strip().lower()
+    if m in MODEL_TIERS:
+        return m
+    parts = m.split("-")  # claude-<family>-<version…>
+    if len(parts) >= 2 and parts[0] == "claude":
+        return parts[1]
+    return None
+
+
+def track_to_latest(m: str | None) -> str | None:
+    """Resolve a model value to its tier's CURRENT concrete id (so it auto-tracks MODEL_TIERS): a
+    known family → the pinned latest concrete; anything else → normalized as-is. This is what makes
+    `pick a tier once, get the newest version forever (after one MODEL_TIERS bump)` work."""
+    fam = model_family(m)
+    if fam and fam in MODEL_TIERS:
+        return MODEL_TIERS[fam]
+    return normalize_model(m)
 
 
 def normalize_model(m: str | None) -> str | None:

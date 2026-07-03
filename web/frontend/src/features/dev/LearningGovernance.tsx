@@ -1,327 +1,26 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  Wrench, Sparkles, Check, X, Trash2, Loader2, RefreshCw, ToggleLeft, ToggleRight, Eye, Brain,
-  Bot, Boxes, Pencil, Save, FileText, Layers, Send, FileCode, Gauge, Terminal,
+  Sparkles, Check, X, Trash2, Loader2, RefreshCw, ToggleLeft, ToggleRight, Brain,
+  Bot, Pencil, Save, FileText, Layers, Send, FileCode, Gauge, Terminal,
 } from 'lucide-react'
 import Markdown from '@/ui/Markdown'
+import Modal from '@/ui/Modal'
+import SectionHeader from '@/ui/SectionHeader'
 import {
   getProposals, approveProposal, updateStagedArtifact, publishProposal, rejectProposal, dropProposal,
-  getMemoryStats, runDistill, getHarnessPlugins, getHarnessFile, saveHarnessFile,
-  getPublished, togglePublished, deletePublished, getProposalExecution,
-  getPublishedFile, savePublishedFile,
+  getMemoryStats, runDistill, getProposalExecution,
+  getPublished, togglePublished, deletePublished, getPublishedFile, savePublishedFile,
   type MemoryProposal, type ProposalCandidate, type MemoryStats,
-  type EvalReport, type HarnessScope, type HarnessEntry, type PublishedItem, type PublishedForm,
-  type ProposalStep,
+  type EvalReport, type PublishedItem, type PublishedForm, type ProposalStep,
 } from '@/lib/api'
 import { fmtLocalDate, fmtLocal } from '@/lib/format'
 import { Empty } from './common'
 
-// Manage Harness (PRD §4.10.4) — the GOVERNANCE surface for SuperMe's own machinery. Tab 1
-// ("Learning") is the tier-C pipeline: candidate/knowledge gauges + the two-gate review queue (gate
-// distill's proposals → forge → publish), each proposal carrying its own execution trace. Tab 2
-// ("Published") is the live inventory of learned artifacts (enable/disable/delete). Tab 3 ("Skills
-// & Agents") lists SuperMe's OWN universal skills/agents per scope. Tab 4 ("View") is reserved for
-// the planned context-stack viewer. (The legacy dev/memory "Applied facts" store is retired — WI-8.)
-
-const TABS = [
-  { id: 'memory', label: 'Learning', icon: Brain },
-  { id: 'published', label: 'Published', icon: Send },
-  { id: 'harness', label: 'Skills & Agents', icon: Boxes },
-  { id: 'view', label: 'View', icon: Eye },
-] as const
-type TabId = (typeof TABS)[number]['id']
-
-export default function ManageHarness({ contextId = 'global' }: { contextId?: string }) {
-  const [tab, setTab] = useState<TabId>('memory')
-  return (
-    <div className="h-full overflow-y-auto">
-    <div className="mx-auto max-w-3xl p-6">
-      <div className="mb-4 flex items-center gap-2">
-        <Wrench size={18} className="text-accent-text" />
-        <h1 className="text-lg font-semibold text-fg">Manage Harness</h1>
-      </div>
-      <div className="mb-5 flex gap-1 border-b border-line">
-        {TABS.map((t) => {
-          const Icon = t.icon
-          const on = tab === t.id
-          return (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={`flex items-center gap-1.5 border-b-2 px-3 py-1.5 text-sm transition ${
-                on ? 'border-accent text-fg' : 'border-transparent text-muted hover:text-fg'
-              }`}
-            >
-              <Icon size={14} /> {t.label}
-            </button>
-          )
-        })}
-      </div>
-      {tab === 'memory' && <MemoryGovernance contextId={contextId} />}
-      {tab === 'published' && <PublishedInventory contextId={contextId} />}
-      {tab === 'harness' && <HarnessPlugins />}
-      {tab === 'view' && <ViewPlaceholder />}
-    </div>
-    </div>
-  )
-}
-
-// --- Skills & Agents (WI-8) -----------------------------------------------------------------
-// Inventory of SuperMe's OWN universal skills + agents, grouped by the scope that loads them
-// (Dev / Core / Shared) and sub-grouped by the `category` frontmatter field. Click a row to open
-// a preview/edit popup over its source. Per-repo operational artifacts are deliberately excluded.
-const CATEGORY_FALLBACK = 'uncategorized'
-
-// Scope column order + tint — matches the Identity & charters ordering (UNIVERSAL · DEV · CORE):
-// shared reads as the universal scope (purple), dev = blue, core = green.
-const SCOPE_ORDER: Record<string, number> = { shared: 0, dev: 1, core: 2 }
-const SCOPE_TONE: Record<string, 'universal' | 'dev' | 'core'> = { shared: 'universal', dev: 'dev', core: 'core' }
-// Category chip tint per scope — matches Identity & charters (shared = purple, dev = blue, core = green).
-const SCOPE_CHIP: Record<string, string> = {
-  shared: 'bg-universal/10 text-universal',
-  dev: 'bg-dev/10 text-dev',
-  core: 'bg-core/10 text-core',
-}
-
-// For the preview, drop the YAML frontmatter block (it's shown as chips in the header + editable in
-// edit mode) so the rendered markdown is just the body.
-function stripFrontmatter(text: string): string {
-  const m = text.match(/^---\n[\s\S]*?\n---\n?/)
-  return m ? text.slice(m[0].length) : text
-}
-
-// Learned+published items are pulled out of their normal category into a single amber "LEARNED"
-// group (regardless of scope), so learned machinery stands apart from the shipped harness.
-const LEARNED_CAT = 'LEARNED'
-
-export function HarnessPlugins({ only, learned, publishedByKey, onGovernanceChange }: {
-  only?: 'skill' | 'agent'
-  learned?: Set<string>
-  publishedByKey?: Map<string, PublishedItem> // `${kind}:${name}` → published item (enables edit/toggle/delete)
-  onGovernanceChange?: () => void             // parent reloads its published/learned state after a toggle/delete
-} = {}) {
-  const [scopes, setScopes] = useState<HarnessScope[] | null>(null)
-  const [err, setErr] = useState<string | null>(null)
-  const [open, setOpen] = useState<{ scope: string; entry: HarnessEntry } | null>(null)
-  const [openPub, setOpenPub] = useState<PublishedItem | null>(null) // a learned item opened for govern/edit
-
-  const load = useCallback(() => {
-    getHarnessPlugins()
-      .then((d) => setScopes(d.scopes))
-      .catch((e) => setErr(String(e)))
-  }, [])
-  useEffect(() => { load() }, [load])
-
-  const isLearned = (e: HarnessEntry) => learned?.has(`${e.kind}:${e.name}`) ?? false
-  const govChanged = () => { load(); onGovernanceChange?.() }
-
-  if (err) return <div className="text-sm text-danger">Could not load: {err}</div>
-  if (!scopes) return <div className="flex items-center gap-2 text-sm text-muted"><Loader2 size={14} className="animate-spin" /> Loading…</div>
-
-  return (
-    <div className="space-y-4">
-      {!only && (
-        <p className="text-sm text-muted">
-          SuperMe's own skills and agents, grouped by the scope that loads them and labelled by
-          category. These ship with the harness (universal) — per-project additions aren't shown here.
-          Click any one to preview or edit it.
-        </p>
-      )}
-      {/* One column per scope (Dev · Core · Shared) rather than a long vertical list. */}
-      <div className="grid gap-4 md:grid-cols-3">
-        {[...scopes].sort((a, b) => (SCOPE_ORDER[a.scope] ?? 9) - (SCOPE_ORDER[b.scope] ?? 9)).map((s) => {
-          const entries = only === 'agent' ? [...s.agents] : only === 'skill' ? [...s.skills] : [...s.agents, ...s.skills]
-          // Group by category — learned items collapse into the LEARNED bucket.
-          const byCat = new Map<string, HarnessEntry[]>()
-          for (const e of entries) {
-            const cat = isLearned(e) ? LEARNED_CAT : (e.category || CATEGORY_FALLBACK)
-            if (!byCat.has(cat)) byCat.set(cat, [])
-            byCat.get(cat)!.push(e)
-          }
-          // Order: real categories (alpha), then uncategorized, then LEARNED last.
-          const rank = (c: string) => (c === LEARNED_CAT ? 3 : c === CATEGORY_FALLBACK ? 2 : 1)
-          const cats = [...byCat.keys()].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b))
-          return (
-            <section key={s.scope} className="rounded-xl border border-line bg-surface p-3.5">
-              <div className="mb-3">
-                <h2 className="text-[13px] font-semibold text-fg">{s.label}</h2>
-                <span className="text-[11px] text-faint">{s.note}</span>
-              </div>
-              {entries.length === 0 ? (
-                <p className="text-[12px] text-faint">None in this scope.</p>
-              ) : (
-                <div className="space-y-3">
-                  {cats.map((cat) => {
-                    const chipCls = cat === LEARNED_CAT
-                      ? 'bg-warn/15 text-warn'
-                      : (SCOPE_CHIP[s.scope] ?? 'bg-accent-soft text-accent-text')
-                    return (
-                      <div key={cat}>
-                        <div className="mb-1.5 flex items-center gap-2">
-                          <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${chipCls}`}>
-                            {cat}
-                          </span>
-                          <span className="text-[10px] text-faint">{byCat.get(cat)!.length}</span>
-                        </div>
-                        <div className="space-y-2">
-                          {byCat.get(cat)!
-                            .sort((a, b) => (a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === 'agent' ? -1 : 1))
-                            .map((e) => {
-                              const pub = publishedByKey?.get(`${e.kind}:${e.name}`)
-                              return (
-                                <HarnessRow
-                                  key={`${e.kind}-${e.name}`} entry={e} showKind={!only}
-                                  onClick={() => (pub ? setOpenPub(pub) : setOpen({ scope: s.scope, entry: e }))}
-                                />
-                              )
-                            })}
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </section>
-          )
-        })}
-      </div>
-      {open && <HarnessFileModal scope={open.scope} entry={open.entry} onClose={() => setOpen(null)} />}
-      {openPub && (
-        <PublishedFileModal
-          item={openPub} contextId="global" showScope={false}
-          onClose={() => setOpenPub(null)}
-          onSaved={() => { setOpenPub(null); govChanged() }}
-          onGovernanceChange={govChanged}
-        />
-      )}
-    </div>
-  )
-}
-
-function HarnessRow({ entry, onClick, showKind = true, learned = false }: { entry: HarnessEntry; onClick: () => void; showKind?: boolean; learned?: boolean }) {
-  const isAgent = entry.kind === 'agent'
-  const Icon = isAgent ? Bot : Sparkles
-  return (
-    <button
-      onClick={onClick}
-      className="group w-full rounded-lg border border-line bg-card p-3 text-left transition hover:border-accent hover:bg-hover"
-    >
-      <div className="flex items-center gap-2">
-        <Icon size={14} className="text-muted" />
-        <span className="min-w-0 truncate font-mono text-sm text-fg">{entry.name}</span>
-        {learned && (
-          <span className="shrink-0 rounded bg-warn/15 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-warn" title="Learned + published by the learning loop">
-            learned
-          </span>
-        )}
-        {showKind && (
-          <span className="rounded bg-hover px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-faint group-hover:bg-card">
-            {entry.kind}
-          </span>
-        )}
-        {isAgent && entry.model && <span className="text-[11px] text-faint">{entry.model}</span>}
-        <Pencil size={12} className="ml-auto shrink-0 text-faint opacity-0 transition group-hover:opacity-100" />
-      </div>
-    </button>
-  )
-}
-
-// Preview + edit one skill/agent's raw markdown. Loads the file, renders it; "Edit" swaps to a
-// textarea and "Save" writes it back (takes effect on the next dev turn).
-function HarnessFileModal({ scope, entry, onClose }: { scope: string; entry: HarnessEntry; onClose: () => void }) {
-  const [content, setContent] = useState<string | null>(null)
-  const [draft, setDraft] = useState('')
-  const [editing, setEditing] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [err, setErr] = useState<string | null>(null)
-
-  useEffect(() => {
-    let alive = true
-    getHarnessFile(scope, entry.kind, entry.name)
-      .then((f) => { if (alive) { setContent(f.content); setDraft(f.content) } })
-      .catch((e) => alive && setErr(String(e)))
-    return () => { alive = false }
-  }, [scope, entry.kind, entry.name])
-
-  async function save() {
-    setBusy(true); setErr(null)
-    try {
-      await saveHarnessFile(scope, entry.kind, entry.name, draft)
-      setContent(draft)
-      setEditing(false)
-    } catch (e) {
-      setErr(String(e))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const Icon = entry.kind === 'agent' ? Bot : Sparkles
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div
-        className="flex max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-line bg-app shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center gap-2 border-b border-line px-4 py-3">
-          <Icon size={15} className="text-accent-text" />
-          <span className="font-mono text-sm text-fg">{entry.name}</span>
-          <span className="rounded bg-hover px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-faint">{entry.kind}</span>
-          {entry.category && (
-            <span className="rounded bg-accent-soft px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-accent-text">{entry.category}</span>
-          )}
-          <div className="ml-auto flex items-center gap-1.5">
-            {!editing ? (
-              <button
-                onClick={() => setEditing(true)}
-                disabled={content === null}
-                className="flex items-center gap-1 rounded-md border border-line px-2 py-1 text-xs text-muted hover:bg-hover hover:text-fg disabled:opacity-50"
-              >
-                <Pencil size={12} /> Edit
-              </button>
-            ) : (
-              <>
-                <button
-                  onClick={() => { setEditing(false); setDraft(content ?? '') }}
-                  disabled={busy}
-                  className="rounded-md border border-line px-2 py-1 text-xs text-muted hover:bg-hover hover:text-fg disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={save}
-                  disabled={busy || draft === content}
-                  className="flex items-center gap-1 rounded-md bg-accent px-2 py-1 text-xs text-white hover:opacity-90 disabled:opacity-50"
-                >
-                  {busy ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} Save
-                </button>
-              </>
-            )}
-            <button onClick={onClose} className="rounded p-1 text-muted hover:bg-hover hover:text-fg">
-              <X size={16} />
-            </button>
-          </div>
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">
-          {err && <div className="mb-2 text-sm text-danger">{err}</div>}
-          {content === null ? (
-            <div className="flex items-center gap-2 text-sm text-muted"><Loader2 size={14} className="animate-spin" /> Loading…</div>
-          ) : editing ? (
-            <textarea
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              spellCheck={false}
-              className="h-[60vh] w-full resize-none rounded-md border border-line bg-surface p-3 font-mono text-[12.5px] leading-relaxed text-fg outline-none focus:border-accent"
-            />
-          ) : (
-            <Markdown text={stripFrontmatter(content)} variant="doc" tone={SCOPE_TONE[scope]} />
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
+// Learning governance surfaces (PRD §4.10.4) — the tier-C pipeline hosted in the Dev workspace's
+// Learning tab: `MemoryGovernance` (candidate gauges + the two-gate distill→forge→publish review
+// queue, each proposal carrying its execution trace) and `PublishedInventory` (the live inventory
+// of learned artifacts). `PublishedFileModal` is exported for Foundations' skills/agents surface.
+// Was split out of the old ManageHarness.
 // --- Published inventory (#6 runtime management) --------------------------------------------
 // The LEARNED artifacts the owner published into the live harness, keyed by their proposal (so
 // SuperMe's shipped skills never appear). Disable suspends one without losing it (constitution =
@@ -390,7 +89,7 @@ export function PublishedInventory({ contextId }: { contextId: string }) {
             const rows = present.filter((i) => i.form === form)
             const { label, icon: Icon, blurb } = PUB_FORM_META[form]
             return (
-              <section key={form} className="rounded-xl border border-line bg-surface p-3.5">
+              <section key={form} className="rounded-xl bg-sunken p-3.5">
                 <div className="mb-3">
                   <div className="flex items-baseline gap-2">
                     <Icon size={13} className="translate-y-0.5 text-muted" />
@@ -407,7 +106,7 @@ export function PublishedInventory({ contextId }: { contextId: string }) {
                       const rowBusy = busy === it.proposal_id
                       const confirming = confirmDel === it.proposal_id
                       return (
-                        <div key={it.proposal_id} className={`rounded-lg border border-line bg-card ${it.enabled ? '' : 'opacity-60'}`}>
+                        <div key={it.proposal_id} className={`rounded-lg bg-surface shadow-sm ${it.enabled ? '' : 'opacity-60'}`}>
                           <div className="flex items-center gap-1.5 px-2.5 py-2">
                             <button onClick={() => setOpen(it)} className="group flex min-w-0 flex-1 items-center gap-1.5 text-left" title="Preview / edit">
                               <span className="min-w-0 truncate text-[13px] text-fg">{it.title}</span>
@@ -469,7 +168,7 @@ export function PublishedInventory({ contextId }: { contextId: string }) {
 
 // Preview + edit one published artifact's raw markdown (constitution / SKILL.md / agent.md). Loads
 // the file, renders it; "Edit" swaps to a textarea; "Save" writes it back (next dev turn).
-function PublishedFileModal({ item, contextId, onClose, onSaved, onGovernanceChange, showScope = true }: {
+export function PublishedFileModal({ item, contextId, onClose, onSaved, onGovernanceChange, showScope = true }: {
   item: PublishedItem; contextId: string; onClose: () => void; onSaved: () => void
   onGovernanceChange?: () => void // called after an enable/disable or delete so the opener can refresh
   showScope?: boolean // hide the scope chip where it's redundant (Foundations = always universal)
@@ -516,9 +215,8 @@ function PublishedFileModal({ item, contextId, onClose, onSaved, onGovernanceCha
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div className="flex max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-line bg-app shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center gap-2 border-b border-line px-4 py-3">
+    <Modal onClose={onClose} column maxW="max-w-3xl">
+        <div className="flex shrink-0 items-center gap-2 border-b border-line px-4 py-3">
           <Icon size={15} className="text-muted" />
           <span className="text-sm font-semibold text-fg">{item.title}</span>
           <span className="rounded bg-warn/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-warn">learned</span>
@@ -575,17 +273,7 @@ function PublishedFileModal({ item, contextId, onClose, onSaved, onGovernanceCha
             <Markdown text={body} variant="doc" tone="dev" />
           )}
         </div>
-      </div>
-    </div>
-  )
-}
-
-function ViewPlaceholder() {
-  return (
-    <Empty>
-      The <span className="text-muted">View</span> tab — the full context-stack map (persona,
-      mode-append, the layers SuperMe loads) — is planned and tracked as a work-item.
-    </Empty>
+    </Modal>
   )
 }
 
@@ -773,7 +461,7 @@ function StatTile({
   return (
     <button
       onClick={onClick}
-      className="group flex items-center gap-3 rounded-xl border border-line bg-surface px-4 py-3 text-left transition hover:border-accent/40 hover:bg-hover"
+      className="group flex items-center gap-3 rounded-xl border border-line bg-surface px-4 py-3 text-left shadow-sm transition hover:border-accent hover:bg-hover"
     >
       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-accent-text">
         <Icon size={17} />
@@ -814,25 +502,17 @@ function StatPopup({
 }) {
   const isCand = kind === 'candidates'
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-      onClick={onClose}
-    >
-      <div
-        className="max-h-[80vh] w-full max-w-2xl overflow-hidden rounded-xl border border-line bg-app shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center gap-2 border-b border-line px-4 py-3">
+    <Modal
+      onClose={onClose}
+      maxW="max-w-2xl"
+      title={
+        <span className="flex items-center gap-2">
           {isCand ? <Sparkles size={16} className="text-accent-text" /> : <Brain size={16} className="text-accent-text" />}
-          <h2 className="text-sm font-semibold text-fg">
-            {isCand ? 'Candidates to distill' : 'Learned knowledge'}
-          </h2>
-          <button onClick={onClose} className="ml-auto rounded p-1 text-muted hover:bg-hover hover:text-fg">
-            <X size={15} />
-          </button>
-        </div>
-
-        <div className="max-h-[calc(80vh-3rem)] space-y-3 overflow-y-auto px-4 py-3">
+          {isCand ? 'Candidates to distill' : 'Learned knowledge'}
+        </span>
+      }
+    >
+        <div className="max-h-[70vh] space-y-3 overflow-y-auto px-4 py-3">
           {isCand ? (
             <>
               <div className="flex items-center gap-3 text-[12px] text-muted">
@@ -846,7 +526,7 @@ function StatPopup({
               ) : (
                 <div className="space-y-1.5">
                   {stats.candidates.items.map((c) => (
-                    <div key={c.id} className="rounded-lg border border-line bg-surface px-3 py-2">
+                    <div key={c.id} className="rounded-lg bg-surface px-3 py-2 shadow-sm">
                       <div className="text-[13px] text-fg">{c.signal}</div>
                       <div className="mt-1 flex items-center gap-2 text-[10px] text-faint">
                         {c.form_hint && <span className="rounded bg-hover px-1.5 py-0.5">{c.form_hint}</span>}
@@ -874,7 +554,7 @@ function StatPopup({
               ) : (
                 <div className="space-y-1.5">
                   {stats.knowledge.items.map((f) => (
-                    <div key={f.name} className={`rounded-lg border border-line bg-surface px-3 py-2 ${f.enabled ? '' : 'opacity-50'}`}>
+                    <div key={f.name} className={`rounded-lg bg-surface px-3 py-2 shadow-sm ${f.enabled ? '' : 'opacity-50'}`}>
                       <div className="flex items-baseline gap-2">
                         <span className="truncate text-[13px] text-fg">{f.description || f.name}</span>
                         <span className="ml-auto shrink-0 rounded bg-hover px-1.5 py-0.5 text-[10px] text-muted">{f.type}</span>
@@ -891,8 +571,7 @@ function StatPopup({
             </>
           )}
         </div>
-      </div>
-    </div>
+    </Modal>
   )
 }
 
@@ -918,7 +597,7 @@ function ReviewQueue({
 }) {
   const [open, setOpen] = useState<MemoryProposal | null>(null)
   return (
-    <section className="mb-6 rounded-xl border border-accent/30 bg-accent/[0.04] p-3">
+    <section className="mb-6 rounded-xl border border-line p-3">
       <div className="mb-2 flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-accent-text">
         <Sparkles size={12} /> Review queue <span className="text-faint">· {proposals.length} pending</span>
       </div>
@@ -963,8 +642,8 @@ function ProposalCard({ p, onOpen }: { p: MemoryProposal; onOpen: () => void }) 
   return (
     <button
       onClick={onOpen}
-      className={`flex h-full flex-col gap-2 rounded-xl border bg-surface px-3 py-2.5 text-left transition hover:bg-hover ${
-        writing ? 'border-accent/50' : 'border-line hover:border-accent/40'
+      className={`flex h-full flex-col gap-2 rounded-xl border bg-surface px-3 py-2.5 text-left shadow-sm transition hover:bg-hover ${
+        writing ? 'border-accent' : 'border-line hover:border-accent'
       }`}
     >
       <div className="flex items-center gap-1.5">
@@ -1170,14 +849,8 @@ function ProposalModal({
   ]
 
   return (
-    <div
-      className="absolute inset-0 z-40 flex items-center justify-center bg-black/50 p-4 sm:p-8"
-      onClick={onClose}
-    >
-      <div
-        className="flex h-[80vh] max-h-[680px] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <Modal onClose={onClose} contain maxW="max-w-3xl" z="z-40">
+      <div className="flex h-[80vh] max-h-[680px] w-full flex-col">
         {/* Header */}
         <div className="flex shrink-0 items-start gap-2 border-b border-line px-4 py-3">
           <div className="min-w-0 flex-1">
@@ -1245,7 +918,7 @@ function ProposalModal({
                     <button
                       onClick={saveArtifact}
                       disabled={busy !== null || artifactDraft.trim() === (cur.staged_artifact ?? '').trim() || !artifactDraft.trim()}
-                      className="flex items-center gap-1 rounded-md bg-accent px-2 py-1 text-[11px] font-medium text-accent-fg hover:opacity-90 disabled:opacity-50"
+                      className="flex items-center gap-1 rounded-md bg-accent px-2 py-1 text-[11px] font-medium text-on-accent hover:opacity-90 disabled:opacity-50"
                     >
                       {busy === 'saveArtifact' ? <Loader2 size={11} className="animate-spin" /> : <Save size={11} />} Save
                     </button>
@@ -1324,7 +997,7 @@ function ProposalModal({
                             value={answers[q.question] ?? ''}
                             onChange={(e) => setAnswers((a) => ({ ...a, [q.question]: e.target.value }))}
                             placeholder={q.suggested ? `default: ${q.suggested}` : 'your answer…'}
-                            className="mt-1.5 w-full rounded border border-line bg-bg px-2 py-1 text-[12px] text-fg outline-none focus:border-accent"
+                            className="mt-1.5 w-full rounded border border-line bg-app px-2 py-1 text-[12px] text-fg outline-none focus:border-accent"
                           />
                         ) : (
                           cur.clarification_answers && (
@@ -1364,7 +1037,7 @@ function ProposalModal({
                 onClick={approve}
                 disabled={busy !== null || blockingUnanswered}
                 title="Gate 1 — approve the intent; the write phase authors the artifact."
-                className="inline-flex items-center gap-1 rounded-md bg-accent px-2.5 py-1 text-[12px] font-medium text-accent-fg transition hover:opacity-90 disabled:opacity-50"
+                className="inline-flex items-center gap-1 rounded-md bg-accent px-2.5 py-1 text-[12px] font-medium text-on-accent transition hover:opacity-90 disabled:opacity-50"
               >
                 {busy === 'approve' ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
                 Approve → write
@@ -1375,7 +1048,7 @@ function ProposalModal({
                 onClick={publish}
                 disabled={busy !== null || editingArtifact}
                 title={editingArtifact ? 'Save or cancel your edit first.' : 'Gate 2 — write the staged artifact to its live operational home.'}
-                className="inline-flex items-center gap-1 rounded-md bg-accent px-2.5 py-1 text-[12px] font-medium text-accent-fg transition hover:opacity-90 disabled:opacity-50"
+                className="inline-flex items-center gap-1 rounded-md bg-accent px-2.5 py-1 text-[12px] font-medium text-on-accent transition hover:opacity-90 disabled:opacity-50"
               >
                 {busy === 'publish' ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
                 Publish
@@ -1406,7 +1079,7 @@ function ProposalModal({
           </div>
         </div>
       </div>
-    </div>
+    </Modal>
   )
 }
 
@@ -1453,7 +1126,7 @@ function CandidateBlock({ c }: { c: ProposalCandidate }) {
 function PSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <h3 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-faint">{title}</h3>
+      <SectionHeader className="mb-1.5">{title}</SectionHeader>
       {children}
     </div>
   )

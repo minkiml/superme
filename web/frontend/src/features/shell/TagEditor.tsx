@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { X, Loader2, Check } from 'lucide-react'
+import Modal from '@/ui/Modal'
 import { PALETTE, colorFor } from '@/lib/palette'
 import { REPO_ICONS, REPO_ICON_KEYS, RepoIcon } from '@/lib/repoIcons'
 import { setRepoMeta } from '@/lib/api'
@@ -35,8 +36,7 @@ export default function TagEditor({
   }
 
   return (
-    <div className="fixed inset-0 z-[60] grid place-items-center bg-black/60 p-6 backdrop-blur-sm" onClick={onClose}>
-      <div className="w-full max-w-xs overflow-hidden rounded-2xl border border-line bg-app shadow-2xl" onClick={(e) => e.stopPropagation()}>
+    <Modal onClose={onClose} maxW="max-w-xs" z="z-[60]" scrim="bg-black/60">
         <div className="flex items-center gap-2.5 border-b border-line px-4 py-3">
           <span
             className="grid h-8 w-8 place-items-center rounded-lg text-[13px] font-semibold text-app"
@@ -108,7 +108,6 @@ export default function TagEditor({
             {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Save
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   )
 }

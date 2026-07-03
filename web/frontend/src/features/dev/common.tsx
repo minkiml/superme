@@ -11,6 +11,14 @@ export const PHASES: { key: string; label: string }[] = [
 ]
 export const PHASE_LABEL: Record<string, string> = Object.fromEntries(PHASES.map((p) => [p.key, p.label]))
 
+// Per-phase accent token (dot + column rail) — reads left→right as the pipeline advances:
+// plan = dev-blue (thinking), build = warn-amber (in flight), done = success-green (shipped).
+export const PHASE_ACCENT: Record<string, string> = {
+  plan_design: 'dev',
+  build_eval: 'warn',
+  done: 'success',
+}
+
 // Display status = active status, plus the two non-status display states: `done`
 // (completion — derived from done_at) and `blocked` (derived overlay).
 export const STATUS_COLOR: Record<string, string> = {
@@ -20,6 +28,17 @@ export const STATUS_COLOR: Record<string, string> = {
   dropped: 'text-faint',
   done: 'text-success',
   blocked: 'text-danger',
+}
+
+// Left-edge accent stripe per display status — a fast scan cue on work-cards (literal classes so
+// Tailwind keeps them). Overrides only the card's left border color; width comes from `border-l-2`.
+export const STATUS_STRIPE: Record<string, string> = {
+  queued: 'border-l-line',
+  in_progress: 'border-l-accent',
+  waiting: 'border-l-warn',
+  dropped: 'border-l-faint',
+  done: 'border-l-success',
+  blocked: 'border-l-danger',
 }
 
 export const STATUS_LABEL: Record<string, string> = {

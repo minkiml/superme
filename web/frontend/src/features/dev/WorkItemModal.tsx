@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { X, ArrowRight, Sparkles, Trash2, Check, Loader2, FileText, ListChecks, ScrollText, History, Terminal, Bot, Wrench, Archive, BookOpen, FolderSearch, Search, SquareTerminal, FilePen, Globe } from 'lucide-react'
 import Markdown from '@/ui/Markdown'
 import Dropdown from '@/ui/Dropdown'
+import Modal from '@/ui/Modal'
+import SectionHeader from '@/ui/SectionHeader'
 import {
   getWorkItemDetail, getWorkItemArtifacts, advanceWorkItem, completeWorkItem, setWorkItemModel, setWorkItemEffort, getDevLog,
   type WorkItem, type WorkItemDetail, type DevEvent, type RunArtifact,
@@ -122,21 +124,12 @@ export default function WorkItemModal({
   }
 
   return (
-    <div
-      // Absolute (not fixed) so the overlay covers only the dashboard column — the chat rail
-      // stays visible and interactive, letting you read the plan and discuss it side by side.
-      className="absolute inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:p-8"
-      onClick={onClose}
-    >
-      <div
-        // max-h-full + flex-col keeps the modal inside the visible column on any screen — the
-        // header/tabs/actions stay pinned and only the body scrolls, instead of the whole popup
-        // running off the bottom.
-        className="my-auto flex max-h-full w-full max-w-3xl flex-col rounded-xl border border-line bg-surface shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
+    // Contained (not viewport-fixed) so the overlay covers only the dashboard column — the chat
+    // rail stays interactive for side-by-side read + discuss. `column` pins the header/tabs/actions
+    // and scrolls only the body.
+    <Modal onClose={onClose} contain column maxW="max-w-3xl" z="z-40">
         {/* Header */}
-        <div className="flex items-start gap-2 border-b border-line px-4 py-3">
+        <div className="flex shrink-0 items-start gap-2 border-b border-line px-4 py-3">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5">
               <span className="font-mono text-[10px] text-faint">{it.id}</span>
@@ -159,7 +152,7 @@ export default function WorkItemModal({
         </div>
 
         {/* Tabs — Review (the plan/tasks/history digest) · Execution (the call-trail) */}
-        <div className="flex gap-1 border-b border-line px-4">
+        <div className="flex shrink-0 gap-1 border-b border-line px-4">
           {([['review', 'Review', FileText], ['execution', 'Execution', Terminal]] as const).map(([id, label, Icon]) => (
             <button
               key={id}
@@ -243,7 +236,7 @@ export default function WorkItemModal({
 
         {/* Actions — the item's control surface. Queued → configure model + Plan it; planned →
             Approve to advance; Drop (plan/design). Discussion happens in the auto-bound chat. */}
-        <div className="flex items-center gap-2 border-t border-line px-4 py-3">
+        <div className="flex shrink-0 items-center gap-2 border-t border-line px-4 py-3">
           {running ? (
             <span className="inline-flex items-center gap-1.5 text-xs text-accent-text">
               <Loader2 size={14} className="animate-spin" /> Planning…
@@ -311,8 +304,7 @@ export default function WorkItemModal({
             </button>
           )}
         </div>
-      </div>
-    </div>
+    </Modal>
   )
 }
 
@@ -331,9 +323,9 @@ function RunMeta({ it }: { it: WorkItem }) {
 function Section({ icon: Icon, title, children }: { icon: typeof FileText; title: string; children: React.ReactNode }) {
   return (
     <section>
-      <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted">
+      <SectionHeader className="mb-1.5 flex items-center gap-1.5">
         <Icon size={12} /> {title}
-      </div>
+      </SectionHeader>
       {children}
     </section>
   )

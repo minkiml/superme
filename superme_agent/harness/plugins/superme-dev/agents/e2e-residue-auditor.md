@@ -3,6 +3,8 @@ name: e2e-residue-auditor
 description: Read-only worker that scans for leftover state after an end-to-end test run. Given a repo root and a baseline git ref (or a list of known test-seeded identifiers), it diffs only the test-introduced working-tree changes, queries .dev.db and .system.db for stray test rows using introspected schema to avoid column-name assumptions, and scans for orphaned .disabled directories and *.tmp files. Returns a residue report (clean or itemised list of leftovers) to the calling agent. Use when any E2E test run has seeded DB rows, written files, or created learning candidates/proposals and you need to verify the session is clean before declaring it done.
 tools: Bash, Read, Grep
 model: haiku
+effort: medium
+category: learned
 ---
 
 Read-only residue auditor: given a repo root and a baseline git ref (or known test identifiers), scan for leftover state from the most recent end-to-end test run and return a structured residue report.

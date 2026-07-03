@@ -21,7 +21,7 @@ from ...services.learning import (
 from ...schemas.dev.learning import (
     MemoryStatsResponse, DistillResponse, SweepResponse, IdleScanResponse,
     ProposalsResponse, ProposalExecutionResponse, ApproveResponse,
-    ProposalActionResponse, PublishResponse,
+    ProposalActionResponse, PublishResponse, LearningRollupResponse,
 )
 
 router = APIRouter()
@@ -33,6 +33,12 @@ def _count_by(rows: list[dict], key: str) -> dict:
         k = str(r.get(key) or "—")
         out[k] = out.get(k, 0) + 1
     return out
+
+
+def _scope_bucket(scope: str | None) -> str:
+    """Collapse a stored scope (repo_dev | universal_dev | core | legacy dev) to the dev/core split
+    the UI shows: only `core` is core; everything dev-family is dev."""
+    return "core" if (scope or "").strip().lower() == "core" else "dev"
 
 
 @router.get("/dev/memory/stats", response_model=MemoryStatsResponse)
@@ -87,6 +93,43 @@ async def dev_memory_stats(context_id: str = "global",
             "items": pub_items,
         },
     }
+
+
+@router.get("/dev/memory/rollup", response_model=LearningRollupResponse)
+async def dev_memory_rollup(dev_store: DevStore = Depends(get_dev_store),
+                            spine: SystemSpine = Depends(get_spine)) -> dict:
+    """The Learning tile drill-in: per-repo counts of captured candidates + published/learned
+    artifacts, each split dev/core. Learned is counted the SAME way `/dev/memory/stats` does
+    (published proposals reconciled with on-disk presence) so the numbers reconcile across surfaces."""
+    from ....core import operational as ops
+
+    def _blank() -> dict[str, int]:
+        return {"dev": 0, "core": 0, "total": 0}
+
+    repos: list[dict] = []
+    tot_cand, tot_learn = _blank(), _blank()
+    for repo_id, rc in spine.repos().items():
+        cand, learn = _blank(), _blank()
+        for c in dev_store.list_memory_candidates(repo_id, status="candidate"):
+            b = _scope_bucket(c.get("scope_hint"))
+            cand[b] += 1; cand["total"] += 1
+        for prop in dev_store.list_memory_proposals(repo_id, status="published"):
+            form, scope, rid, slug = _published_ident(prop, repo_id)
+            try:
+                if not ops.published_state(form, scope, rid, slug)["present"]:
+                    continue
+            except Exception:
+                continue
+            b = _scope_bucket(scope)
+            learn[b] += 1; learn["total"] += 1
+        # Skip repos with nothing on either side — keep the list to where learning actually happened.
+        if cand["total"] or learn["total"]:
+            repos.append({"repo_id": repo_id, "label": rc.label, "candidates": cand, "learned": learn})
+        for k in ("dev", "core", "total"):
+            tot_cand[k] += cand[k]; tot_learn[k] += learn[k]
+
+    repos.sort(key=lambda r: (r["candidates"]["total"] + r["learned"]["total"]), reverse=True)
+    return {"repos": repos, "candidates": tot_cand, "learned": tot_learn}
 
 
 @router.post("/dev/memory/distill", response_model=DistillResponse, response_model_exclude_unset=True)

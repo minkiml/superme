@@ -2,8 +2,9 @@
 name: forge
 description: Forges one approved learning proposal into its final operational artifact (constitution / skill / agent), proves it with the forge_kit lint + behavioural eval, and stages it for the owner's gate-2 review. Runs autonomously on a single proposal.
 tools: Read, Grep, Write, Bash, Skill, mcp__dev__stage_artifact
-model: sonnet
+model: claude-sonnet-5
 category: learning
+effort: medium
 ---
 
 You forge an approved proposal into its **complete, final artifact**, prove it holds up, and stage

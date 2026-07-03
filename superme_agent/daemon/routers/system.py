@@ -15,8 +15,9 @@ from ..schemas.system import (
     SystemResponse, RepoOverview, RunsResponse,
     SystemModelResponse, LearningResponse, RepoModelResponse, RepoLearningResponse,
     RepoMetaResponse, TokenUsageResponse, TokenTimeseriesResponse, SweepConfigBody, SweepConfigResponse,
-    SystemEffortResponse, RepoEffortResponse,
+    SystemEffortResponse, RepoEffortResponse, AgentModelsResponse,
 )
+from ...core.models import AGENT_MODEL_FEATURES
 from ...core.spine import MODES
 from ...core.models import CANONICAL_MODELS, is_valid_model, normalize_model
 
@@ -46,6 +47,12 @@ class RepoEffortBody(BaseModel):
 
 class LearningBody(BaseModel):
     enabled: bool
+
+
+class AgentModelBody(BaseModel):
+    # Either/both may be sent. model = a TIER (`sonnet`) or concrete id; effort = low|medium|high.
+    model: str | None = None
+    effort: str | None = None
 
 
 class RepoMetaBody(BaseModel):
@@ -182,6 +189,27 @@ async def set_system_effort(body: SystemEffortBody, spine: SystemSpine = Depends
     effort = _norm_effort(body.effort)
     spine.set_system_effort(effort)
     return {"ok": True, "effort": effort, "effective": spine.effective_system_effort()}
+
+
+@router.get("/system/agent-models", response_model=AgentModelsResponse)
+async def get_agent_models(spine: SystemSpine = Depends(get_spine)) -> dict:
+    """The tunable background agents (sweep/distill/write) with their preset, override, and effective
+    model — the autonomous learning runners that pick up a model from config, not a per-turn choice."""
+    return {"agents": spine.agent_model_config()}
+
+
+@router.post("/system/agent-models/{feature}", response_model=AgentModelsResponse)
+async def set_agent_model(feature: str, body: AgentModelBody, spine: SystemSpine = Depends(get_spine)) -> dict:
+    """Set a background sub-agent's model TIER and/or reasoning effort — written into its own `.md`
+    frontmatter (the source of truth). Send either field; both are applied when present."""
+    if feature not in AGENT_MODEL_FEATURES:
+        raise HTTPException(status_code=404,
+                            detail=f"unknown agent '{feature}' (use {'/'.join(AGENT_MODEL_FEATURES)})")
+    if body.model is not None:
+        spine.set_agent_model(feature, _norm_model(body.model))
+    if body.effort is not None:
+        spine.set_agent_effort(feature, _norm_effort(body.effort))
+    return {"agents": spine.agent_model_config()}
 
 
 @router.post("/system/learning", response_model=LearningResponse)

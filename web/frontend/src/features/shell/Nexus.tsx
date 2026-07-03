@@ -103,7 +103,7 @@ export default function Nexus({
                 y1={50}
                 x2={p.x}
                 y2={p.y}
-                stroke={on ? repo.color : 'var(--c-line)'}
+                stroke={on ? repo.color : 'rgb(var(--c-line))'}
                 strokeWidth={on ? 0.5 : 0.15}
               />
             )

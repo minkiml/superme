@@ -23,6 +23,9 @@ async def lifespan(app: FastAPI):
     # Flip any runs orphaned by a previous daemon's exit (running → aborted). Was at module import
     # before; doing it here keeps app_state import side-effect-free and runs it once per app start.
     app_state.spine.reconcile()
+    # Re-pin the learning sub-agents' `.md` model to their tier's current concrete id (so a
+    # MODEL_TIERS bump auto-propagates to the files). No-op when already current.
+    app_state.spine.reconcile_agent_models()
 
     task = asyncio.create_task(_idle_sweep_loop())
     log.info("idle sweep loop started (every %ds, idle threshold %ds, auto-learning=%s)",

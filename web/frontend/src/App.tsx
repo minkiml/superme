@@ -6,6 +6,8 @@ import NavColumn, { type NavRow } from '@/features/shell/NavColumn'
 import Nexus from '@/features/shell/Nexus'
 import RepoInspector from '@/features/shell/RepoInspector'
 import TokenDrilldown from '@/features/shell/TokenDrilldown'
+import AgentsDrilldown from '@/features/shell/AgentsDrilldown'
+import LearningDrilldown from '@/features/shell/LearningDrilldown'
 import { useCommandStats, type OrbitRepo } from '@/features/shell/useCommandStats'
 import DevWorkspace from '@/features/dev/DevWorkspace'
 import CoreDashboard from '@/features/core/CoreDashboard'
@@ -35,7 +37,7 @@ export default function App() {
   const [chatMode, setChatMode] = useState<ChatMode>('dev') // dev-chater | core-chater
   const [selectedId, setSelectedId] = useState<string | null>(null) // orbit node → inspector
   const [connecting, setConnecting] = useState(false)
-  const [tokenDrill, setTokenDrill] = useState(false) // Tokens tile → drill-in
+  const [drill, setDrill] = useState<string | null>(null) // which global-strip tile is drilled in
   // Per-repo destination that takes over the main area (Dev workspace / Core dashboard).
   const [dest, setDest] = useState<{ repo: OrbitRepo; kind: 'dev' | 'core' } | null>(null)
   // Chat ⇄ work-item binding: clicking a work-item takes the chat rail over as that item's dev
@@ -75,7 +77,7 @@ export default function App() {
   return (
     <div className="flex h-full flex-col bg-app font-sans text-fg">
       <TopBar />
-      <GlobalStrip stats={stats} onDetails={(id) => id === 'tokens' && setTokenDrill(true)} />
+      <GlobalStrip stats={stats} onDetails={setDrill} />
 
       <div className="flex min-h-0 flex-1">
         <NavColumn
@@ -155,7 +157,9 @@ export default function App() {
         }}
         onTagSaved={(id, patch) => setTagOverrides((o) => ({ ...o, [id]: patch }))}
       />
-      {tokenDrill && <TokenDrilldown stats={stats} onClose={() => setTokenDrill(false)} />}
+      {drill === 'tokens' && <TokenDrilldown stats={stats} onClose={() => setDrill(null)} />}
+      {drill === 'ops' && <AgentsDrilldown stats={stats} onClose={() => setDrill(null)} />}
+      {drill === 'learning' && <LearningDrilldown onClose={() => setDrill(null)} />}
       {connecting && <ConnectModal onClose={() => setConnecting(false)} />}
     </div>
   )

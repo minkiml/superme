@@ -127,7 +127,7 @@ export default function ChatPanel({
     <div
       className="relative flex h-full min-h-0 flex-col border-l border-line bg-surface"
       // The chat rail's accent follows the mode: core = mint (pastel green), dev = blue.
-      style={{ ['--chat-accent' as string]: mode === 'core' ? 'var(--c-core)' : 'var(--c-dev)' } as CSSProperties}
+      style={{ ['--chat-accent' as string]: mode === 'core' ? 'rgb(var(--c-core))' : 'rgb(var(--c-dev))' } as CSSProperties}
     >
       <ChatHeader
         ready={socket.ready}

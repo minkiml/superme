@@ -4,6 +4,7 @@ description: Expert code reviewer. Use for quality, security, and maintainabilit
 tools: Read, Grep, Glob
 model: sonnet
 category: general 
+effort: medium
 ---
 
 You are a senior code reviewer. Read the relevant files, then report concrete

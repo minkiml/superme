@@ -14,6 +14,7 @@
     "GET /dev/log",
     "GET /dev/memory/proposals",
     "GET /dev/memory/proposals/{proposal_id}/execution",
+    "GET /dev/memory/rollup",
     "GET /dev/memory/stats",
     "GET /dev/model",
     "GET /dev/palette",
@@ -29,6 +30,7 @@
     "GET /sessions",
     "GET /sessions/{session_id}",
     "GET /system",
+    "GET /system/agent-models",
     "GET /tokens",
     "GET /tokens/timeseries",
     "PATCH /dev/harness/published/{proposal_id}",
@@ -53,6 +55,7 @@
     "POST /repos/{repo_id}/learning",
     "POST /repos/{repo_id}/meta",
     "POST /repos/{repo_id}/model",
+    "POST /system/agent-models/{feature}",
     "POST /system/effort",
     "POST /system/learning",
     "POST /system/model",
@@ -66,6 +69,89 @@
   "openapi": {
     "components": {
       "schemas": {
+        "AgentModelBody": {
+          "properties": {
+            "effort": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Effort"
+            },
+            "model": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Model"
+            }
+          },
+          "title": "AgentModelBody",
+          "type": "object"
+        },
+        "AgentModelRow": {
+          "description": "One tunable background sub-agent: the TIER it tracks (sonnet/opus/haiku \u2014 the pick) and the\nconcrete model that tier currently resolves to (what actually runs), plus its label and scope.",
+          "properties": {
+            "effort": {
+              "title": "Effort",
+              "type": "string"
+            },
+            "feature": {
+              "title": "Feature",
+              "type": "string"
+            },
+            "label": {
+              "title": "Label",
+              "type": "string"
+            },
+            "model": {
+              "title": "Model",
+              "type": "string"
+            },
+            "scope": {
+              "title": "Scope",
+              "type": "string"
+            },
+            "tier": {
+              "title": "Tier",
+              "type": "string"
+            }
+          },
+          "required": [
+            "feature",
+            "label",
+            "scope",
+            "tier",
+            "model",
+            "effort"
+          ],
+          "title": "AgentModelRow",
+          "type": "object"
+        },
+        "AgentModelsResponse": {
+          "properties": {
+            "agents": {
+              "items": {
+                "$ref": "#/components/schemas/AgentModelRow"
+              },
+              "title": "Agents",
+              "type": "array"
+            }
+          },
+          "required": [
+            "agents"
+          ],
+          "title": "AgentModelsResponse",
+          "type": "object"
+        },
         "ApproveBody": {
           "properties": {
             "answers": {
@@ -1824,6 +1910,57 @@
           "title": "LearningResponse",
           "type": "object"
         },
+        "LearningRollupRepo": {
+          "properties": {
+            "candidates": {
+              "$ref": "#/components/schemas/ScopeCount"
+            },
+            "label": {
+              "title": "Label",
+              "type": "string"
+            },
+            "learned": {
+              "$ref": "#/components/schemas/ScopeCount"
+            },
+            "repo_id": {
+              "title": "Repo Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "repo_id",
+            "label",
+            "candidates",
+            "learned"
+          ],
+          "title": "LearningRollupRepo",
+          "type": "object"
+        },
+        "LearningRollupResponse": {
+          "description": "Per-repo learning counts (captured candidates + published/learned artifacts), each split by\ndev/core scope, plus the cross-repo totals. Powers the Learning tile drill-in.",
+          "properties": {
+            "candidates": {
+              "$ref": "#/components/schemas/ScopeCount"
+            },
+            "learned": {
+              "$ref": "#/components/schemas/ScopeCount"
+            },
+            "repos": {
+              "items": {
+                "$ref": "#/components/schemas/LearningRollupRepo"
+              },
+              "title": "Repos",
+              "type": "array"
+            }
+          },
+          "required": [
+            "repos",
+            "candidates",
+            "learned"
+          ],
+          "title": "LearningRollupResponse",
+          "type": "object"
+        },
         "ManifestEntity": {
           "additionalProperties": true,
           "description": "One model.yaml entity (the dev-knowledge schema's nodes). Lenient (extra='allow', all\noptional) so a richer/older manifest never 500s, but typing `entities` to this validates each\nrow IS a structured object \u2014 a malformed entry (e.g. a bare string) becomes a clear server-side\nerror at request time rather than a silent FE render crash (R5).",
@@ -3517,6 +3654,28 @@
             "running"
           ],
           "title": "RunsResponse",
+          "type": "object"
+        },
+        "ScopeCount": {
+          "description": "A count split by knowledge scope: dev (repo_dev + universal_dev) vs core.",
+          "properties": {
+            "core": {
+              "default": 0,
+              "title": "Core",
+              "type": "integer"
+            },
+            "dev": {
+              "default": 0,
+              "title": "Dev",
+              "type": "integer"
+            },
+            "total": {
+              "default": 0,
+              "title": "Total",
+              "type": "integer"
+            }
+          },
+          "title": "ScopeCount",
           "type": "object"
         },
         "SessionBubble": {
@@ -6029,6 +6188,25 @@
           "summary": "Memory Proposal Reject"
         }
       },
+      "/dev/memory/rollup": {
+        "get": {
+          "description": "The Learning tile drill-in: per-repo counts of captured candidates + published/learned\nartifacts, each split dev/core. Learned is counted the SAME way `/dev/memory/stats` does\n(published proposals reconciled with on-disk presence) so the numbers reconcile across surfaces.",
+          "operationId": "dev_memory_rollup_dev_memory_rollup_get",
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/LearningRollupResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            }
+          },
+          "summary": "Dev Memory Rollup"
+        }
+      },
       "/dev/memory/stats": {
         "get": {
           "description": "Manage-Harness stat tiles (PRD \u00a74.10.4): the two pipeline gauges + drill-down detail.\n\n- `candidates` \u2014 the un-distilled capture pool (what a distill run would consume).\n- `knowledge`  \u2014 what's been LEARNED + published: the live constitution/skill/agent artifacts\n  (proposal-driven, reconciled with on-disk enabled state \u2014 same source as the Published tab).\nEach carries enough detail to render a popup without a second round-trip.",
@@ -7379,6 +7557,75 @@
             }
           },
           "summary": "System Overview"
+        }
+      },
+      "/system/agent-models": {
+        "get": {
+          "description": "The tunable background agents (sweep/distill/write) with their preset, override, and effective\nmodel \u2014 the autonomous learning runners that pick up a model from config, not a per-turn choice.",
+          "operationId": "get_agent_models_system_agent_models_get",
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/AgentModelsResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            }
+          },
+          "summary": "Get Agent Models"
+        }
+      },
+      "/system/agent-models/{feature}": {
+        "post": {
+          "description": "Set a background sub-agent's model TIER and/or reasoning effort \u2014 written into its own `.md`\nfrontmatter (the source of truth). Send either field; both are applied when present.",
+          "operationId": "set_agent_model_system_agent_models__feature__post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "feature",
+              "required": true,
+              "schema": {
+                "title": "Feature",
+                "type": "string"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentModelBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/AgentModelsResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Set Agent Model"
         }
       },
       "/system/effort": {

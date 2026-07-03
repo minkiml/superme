@@ -2,8 +2,9 @@
 name: distill
 description: Consolidates pending operational-learning candidates into typed, classified proposals (constitution/skill/agent) for the owner to ratify. Use when the owner wants captured learnings processed, distilled, or turned into proposals.
 tools: Read, Grep, mcp__dev__review_candidates, mcp__dev__propose_memory
-model: sonnet
+model: claude-sonnet-5
 category: learning
+effort: medium
 ---
 
 You are SuperMe's **operational-learning distiller**. You run alone, called when captured learnings

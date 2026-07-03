@@ -2,9 +2,13 @@ import { useState, useEffect } from 'react'
 import { ChevronRight, Plus, Trash2, Clock, CornerDownRight, GitBranch, ArrowRight, X, Bot, Sparkles, Loader2, MessageSquareText, ListChecks } from 'lucide-react'
 import Dropdown from '@/ui/Dropdown'
 import Markdown from '@/ui/Markdown'
+import Modal from '@/ui/Modal'
 import { addInbox, updateInbox, deleteInbox, pushInbox, artifactPath, type WorkItem, type InboxEntry, type InboxKind } from '@/lib/api'
 import { fmtLocal, fmtTokens, fmtDuration, fmtModel, MODELS as MODEL_CATALOG, EFFORTS as EFFORT_CATALOG, DEFAULT_EFFORT } from '@/lib/format'
-import { PHASES, PHASE_LABEL, STATUS_COLOR, STATUS_LABEL, primaryStatus, Empty } from './common'
+import { PHASES, PHASE_LABEL, PHASE_ACCENT, STATUS_COLOR, STATUS_LABEL, STATUS_STRIPE, primaryStatus, Empty } from './common'
+
+// Phase accent → literal dot class (Tailwind needs the full string present in source).
+const PHASE_DOT: Record<string, string> = { dev: 'bg-dev', warn: 'bg-warn', success: 'bg-success' }
 
 // Models selectable per run on a work-item card. Default is Sonnet; the values are CLI aliases the
 // daemon resolves to the latest concrete model. Labels come from the canonical model catalog.
@@ -97,15 +101,17 @@ export function WorkspaceKanban({ items, onOpen, running, boundItemId }: { items
     <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
       {PHASES.map((ph) => {
         const col = byPhase(ph.key)
+        const dot = PHASE_DOT[PHASE_ACCENT[ph.key] ?? 'dev'] ?? 'bg-line'
         return (
-          <div key={ph.key} className="flex min-h-[6rem] flex-col rounded-lg bg-sunken/60 p-1.5">
-            <div className="flex items-center justify-between px-1.5 py-1">
-              <span className="text-[11px] font-medium uppercase tracking-wide text-muted">{ph.label}</span>
-              <span className="text-[11px] text-faint">{col.length}</span>
+          <div key={ph.key} className="flex min-h-[7rem] flex-col rounded-xl bg-sunken p-2">
+            <div className="mb-2 flex items-center gap-2 px-1">
+              <span className={`h-1.5 w-1.5 rounded-full ${dot}`} />
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-fg">{ph.label}</span>
+              <span className="ml-auto rounded-full bg-hover px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-muted">{col.length}</span>
             </div>
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               {col.length === 0 ? (
-                <div className="px-1.5 py-2 text-[11px] text-faint">—</div>
+                <div className="px-1.5 py-3 text-center text-[11px] text-faint">—</div>
               ) : (
                 col.map((it) => (
                   <WorkCard
@@ -145,12 +151,13 @@ function WorkCard({
   // The card is a pure glance + entry point: clicking opens the review popup AND binds the
   // chat. All actions (model config, Plan it, Approve, Drop) live in the popup now.
   const showFooter = running || hasTelemetry || !!it.tasks
+  const stripe = STATUS_STRIPE[primaryStatus(it)] ?? 'border-l-line'
   return (
     <div
       onClick={clickable ? () => onOpen!(it) : undefined}
       title={clickable ? 'Open review + chat for this work-item' : undefined}
-      className={`rounded-md border bg-surface px-2.5 py-2 shadow-sm ${
-        bound ? 'border-accent ring-2 ring-accent/40' : it.blocked ? 'border-danger/40' : 'border-line'
+      className={`rounded-md border border-line border-l-2 bg-surface px-2.5 py-2 shadow-sm ${
+        bound ? 'border-l-accent ring-2 ring-accent' : it.blocked ? 'border-l-danger' : stripe
       } ${clickable ? 'cursor-pointer transition hover:border-accent hover:shadow-md' : ''}`}
     >
       <div className="flex items-start gap-1.5">
@@ -377,13 +384,21 @@ const KIND_OPTS = [
   { value: 'note', label: 'note' },
   { value: 'question', label: 'question' },
 ]
-// Each capture kind gets a distinct marker color (amber / purple / blue / rose).
-const KIND_COLUMNS: { kind: InboxKind; label: string; color: string }[] = [
-  { kind: 'todo', label: 'Todo', color: '#fbbf24' },
-  { kind: 'idea', label: 'Idea', color: '#a78bfa' },
-  { kind: 'note', label: 'Note', color: '#60a5fa' },
-  { kind: 'question', label: 'Question', color: '#fb7185' },
+// Each capture kind gets a distinct token-driven marker (warn / universal / dev / danger) so the
+// palette re-themes from the design tokens, not per-file hex.
+const KIND_COLUMNS: { kind: InboxKind; label: string; dot: string }[] = [
+  { kind: 'todo', label: 'Todo', dot: 'bg-warn' },
+  { kind: 'idea', label: 'Idea', dot: 'bg-universal' },
+  { kind: 'note', label: 'Note', dot: 'bg-dev' },
+  { kind: 'question', label: 'Question', dot: 'bg-danger' },
 ]
+// Left-edge stripe per kind (mirrors the work-card status stripe) — literal classes for Tailwind.
+const KIND_STRIPE: Record<string, string> = {
+  todo: 'border-l-warn',
+  idea: 'border-l-universal',
+  note: 'border-l-dev',
+  question: 'border-l-danger',
+}
 
 // The inbox is the active capture queue, laid out as columns by kind. Resolving an item clears
 // it from view (kept in the DB). Quick-capture drops into whichever kind is selected.
@@ -452,15 +467,15 @@ export function InboxView({
         {KIND_COLUMNS.map((col) => {
           const its = open.filter((e) => e.kind === col.kind)
           return (
-            <div key={col.kind} className="flex min-h-[5rem] flex-col rounded-lg border border-line bg-surface">
+            <div key={col.kind} className="flex min-h-[5rem] flex-col rounded-xl border border-line bg-surface">
               <div className="flex items-center justify-between border-b border-line px-3 py-2">
                 <span className="flex items-center gap-2 text-sm font-semibold text-fg">
-                  <span className="h-2.5 w-2.5 rounded-[3px]" style={{ backgroundColor: col.color }} />
+                  <span className={`h-2.5 w-2.5 rounded-[3px] ${col.dot}`} />
                   {col.label}
                 </span>
                 <span className="rounded-full bg-hover px-2 py-0.5 text-xs font-medium tabular-nums text-muted">{its.length}</span>
               </div>
-              <div className="max-h-[70vh] flex-1 space-y-1 overflow-y-auto p-1.5">
+              <div className="max-h-[70vh] flex-1 space-y-1.5 overflow-y-auto p-1.5">
                 {its.length === 0 ? (
                   <div className="px-1.5 py-2 text-[12px] text-faint">—</div>
                 ) : (
@@ -503,7 +518,7 @@ function InboxCard({
     <div
       onClick={() => setEditing(true)}
       title="Edit this item"
-      className="group cursor-pointer rounded-md border border-transparent px-2.5 py-2 transition hover:border-line hover:bg-hover"
+      className={`group cursor-pointer rounded-md border border-line border-l-2 ${KIND_STRIPE[e.kind] ?? 'border-l-line'} bg-surface px-2.5 py-2 shadow-sm transition hover:border-accent hover:bg-hover`}
     >
       {editing && (
         <InboxEditModal
@@ -584,19 +599,10 @@ function InboxEditModal({
   const [kind, setKind] = useState<InboxKind>(e.kind)
 
   return (
-    // Absolute (not fixed) so it centers over the dashboard column and leaves the chat rail
+    // Contained (not viewport-fixed) so it overlays the dashboard column and leaves the chat rail
     // interactive — same containment as the work-item review popup.
-    <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/50 p-4" onClick={onCancel}>
-      <div
-        className="w-full max-w-lg rounded-lg border border-line bg-surface p-4 shadow-xl"
-        onClick={(ev) => ev.stopPropagation()}
-      >
-        <div className="mb-3 flex items-center justify-between">
-          <span className="text-sm font-semibold text-fg">Edit inbox item</span>
-          <button onClick={onCancel} className="rounded p-0.5 text-faint hover:text-fg" title="Cancel">
-            <X size={16} />
-          </button>
-        </div>
+    <Modal onClose={onCancel} title="Edit inbox item" maxW="max-w-lg" z="z-40" contain>
+      <div className="p-4">
         <div className="space-y-2">
           <div className="flex items-center gap-2">
             <Dropdown value={kind} options={KIND_OPTS} onChange={(v) => setKind(v as InboxKind)} />
@@ -615,11 +621,11 @@ function InboxEditModal({
           />
         </div>
         <div className="mt-3 flex justify-end gap-2">
-          <button className="rounded bg-hover px-3 py-1.5 text-xs text-fg" onClick={onCancel}>
+          <button className="rounded-md bg-hover px-3 py-1.5 text-xs text-fg hover:text-fg" onClick={onCancel}>
             Cancel
           </button>
           <button
-            className="rounded bg-accent px-3 py-1.5 text-xs text-on-accent disabled:opacity-40"
+            className="rounded-md bg-accent px-3 py-1.5 text-xs text-on-accent hover:opacity-90 disabled:opacity-40"
             disabled={!text.trim()}
             onClick={() => onSave({ title: title.trim() || null, text: text.trim() || e.text, kind })}
           >
@@ -627,7 +633,7 @@ function InboxEditModal({
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   )
 }
 

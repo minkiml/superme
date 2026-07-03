@@ -2,19 +2,22 @@ import { useCallback, useEffect, useState } from 'react'
 import { Activity, RefreshCw, Loader2, Loader, ChevronDown } from 'lucide-react'
 import { colorFor, featureColor } from '@/lib/palette'
 import { RepoIcon } from '@/lib/repoIcons'
-import { fmtTokens, fmtLocal, fmtModel } from '@/lib/format'
+import { fmtTokens, fmtLocal, fmtModel, fmtDuration } from '@/lib/format'
 import { getRuns, type Run } from '@/lib/api'
 import type { CommandStats, OrbitRepo } from '@/features/shell/useCommandStats'
 import { Empty } from '@/features/dev/common'
 
 // Global Activity — the command-centre run feed across ALL repos (SuperMe's own agent work; the
 // owner's external Claude Code sessions are excluded). One row per spine run: repo · feature ·
-// scope · model · tokens · ctx% · status · when. Defaults to the last 2 days; "See more" loads
+// scope · model · tokens · took · status · when. Defaults to the last 2 days; "See more" loads
 // the older history on demand. Colored by repo (swatch) + feature (chip) so it stays scannable.
 
 const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000
 // Shared column template so the header and every row align exactly.
-const COLS = 'grid grid-cols-[1.4fr_72px_48px_1fr_84px_60px_72px_100px] items-center gap-3'
+const COLS = 'grid grid-cols-[1.4fr_72px_48px_1fr_84px_64px_72px_100px] items-center gap-3'
+
+// How long a run took (start→end). Live/unfinished runs have no end yet.
+const took = (r: Run) => (r.ended_at ? fmtDuration(Date.parse(r.ended_at) - Date.parse(r.started_at)) : '—')
 
 const STATUS_TINT: Record<string, string> = {
   running: 'text-dev',
@@ -94,7 +97,7 @@ export default function GlobalActivity({ stats }: { stats: CommandStats }) {
               <span>Scope</span>
               <span>Model</span>
               <span className="text-right">Tokens</span>
-              <span className="text-right">Ctx</span>
+              <span className="text-right">Took</span>
               <span>Status</span>
               <span className="text-right">When</span>
             </div>
@@ -133,14 +136,14 @@ function RunRow({ r, meta, last }: { r: Run; meta: { label: string; color: strin
       </span>
       <span
         className="justify-self-start rounded px-1.5 py-0.5 text-[11px] font-medium"
-        style={{ color: featureColor(r.feature), backgroundColor: 'var(--c-hover)' }}
+        style={{ color: featureColor(r.feature), backgroundColor: 'rgb(var(--c-hover))' }}
       >
         {r.feature}
       </span>
       <span className="text-[11px] text-faint">{r.mode}</span>
       <span className="truncate text-[11px] text-muted" title={r.model ?? undefined}>{r.model ? fmtModel(r.model) : '—'}</span>
       <span className="text-right font-mono text-[11px] text-muted">{fmtTokens(r.tokens)}</span>
-      <span className="text-right font-mono text-[11px] text-faint">{r.ctx_pct != null ? `${r.ctx_pct}%` : '—'}</span>
+      <span className="text-right font-mono text-[11px] text-faint">{took(r)}</span>
       <span className={`flex items-center gap-1 text-[11px] ${STATUS_TINT[r.status] ?? 'text-faint'}`}>
         {r.status === 'running' && <Loader size={11} className="animate-spin" />}
         {r.status}

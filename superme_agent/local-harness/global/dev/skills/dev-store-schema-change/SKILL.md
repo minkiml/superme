@@ -1,6 +1,7 @@
 ---
 name: dev-store-schema-change
 description: Executes the complete five-step procedure for shipping a dev-store schema change in the superme repo. Use when a column is added, renamed, or removed in dev_store.py or the .dev.db schema — prevents silent migration no-ops, missing decoder updates, and stale model.yaml entries that cause new fields to be invisible in API responses.
+category: learned
 ---
 
 # Dev-Store Schema-Change Procedure

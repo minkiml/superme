@@ -4,8 +4,9 @@ import { colorFor } from '@/lib/palette'
 import { RepoIcon } from '@/lib/repoIcons'
 import type { OrbitRepo } from '@/features/shell/useCommandStats'
 import type { WorkItem } from '@/lib/api'
+import TabBar from '@/ui/TabBar'
 import DevDashboard from './DevDashboard'
-import { MemoryGovernance, PublishedInventory } from './ManageHarness'
+import { MemoryGovernance, PublishedInventory } from './LearningGovernance'
 import ActivityLog from './ActivityLog'
 
 // The Dev workspace — the per-repo Tier-2 detail surface, reached from an orbit node's inspector
@@ -189,19 +190,13 @@ function LearningTab({ contextId }: { contextId: string }) {
   return (
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-3xl p-6">
-        <div className="mb-5 inline-flex rounded-lg border border-line bg-surface p-0.5">
-          {(['review', 'published'] as const).map((v) => (
-            <button
-              key={v}
-              onClick={() => setView(v)}
-              className={`rounded-md px-3 py-1 text-[13px] font-medium capitalize transition ${
-                view === v ? 'bg-hover text-fg' : 'text-muted hover:text-fg'
-              }`}
-            >
-              {v}
-            </button>
-          ))}
-        </div>
+        <TabBar
+          className="mb-5"
+          variant="outlined"
+          value={view}
+          onChange={setView}
+          tabs={[['review', 'Review'], ['published', 'Published']] as const}
+        />
         {view === 'review' ? <MemoryGovernance contextId={contextId} /> : <PublishedInventory contextId={contextId} />}
       </div>
     </div>

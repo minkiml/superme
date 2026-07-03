@@ -38,6 +38,37 @@ def parse_frontmatter(text: str) -> tuple[dict, str]:
     return meta, m.group(2).strip()
 
 
+def set_frontmatter_field(path: Path, key: str, value: str) -> None:
+    """Update (or insert) a single scalar frontmatter `key: value` in a `.md`, preserving every
+    other line + the body verbatim (line-level edit, not a re-dump). Used to two-way-sync an agent's
+    `model:` from the config UI into its own `.md` — the artifact stays the source of truth."""
+    text = path.read_text()
+    m = _FM.match(text)
+    if not m:  # no frontmatter yet — prepend a minimal block
+        path.write_text(f"---\n{key}: {value}\n---\n\n{text}")
+        return
+    lines = m.group(1).splitlines()
+    for i, line in enumerate(lines):
+        if line.partition(":")[0].strip() == key:
+            lines[i] = f"{key}: {value}"
+            break
+    else:
+        lines.append(f"{key}: {value}")
+    path.write_text(f"---\n{chr(10).join(lines)}\n---\n{m.group(2)}")
+
+
+def with_frontmatter_default(text: str, key: str, value: str) -> str:
+    """Return `text` with `key: value` ensured in its frontmatter — inserted only if absent (an
+    existing value is left untouched). Used to give every forged agent a default `effort` field."""
+    m = _FM.match(text or "")
+    if not m:
+        return f"---\n{key}: {value}\n---\n\n{text or ''}"
+    keys = [ln.partition(":")[0].strip() for ln in m.group(1).splitlines()]
+    if key in keys:
+        return text
+    return f"---\n{m.group(1)}\n{key}: {value}\n---\n{m.group(2)}"
+
+
 def _read_plugin(plugin_dir: Path) -> dict:
     """One universal plugin's SuperMe-authored skills + agents, read from their frontmatter.
     Skills live at `<plugin>/skills/<name>/SKILL.md`, agents at `<plugin>/agents/<name>.md`."""
@@ -256,7 +287,7 @@ def render_constitution_file(body: str, *, slug: str, scope: str, source: str, c
     """Wrap a constitution statement in the one-file-per-item format (frontmatter carries `enabled`,
     so runtime on/off is a flag flip, not a delete)."""
     fm = (f"---\nname: {slug}\nenabled: true\nscope: {scope}\nsource: {source}\n"
-          f"created: {created}\n---\n")
+          f"created: {created}\ncategory: learned\n---\n")
     return fm + body.strip() + "\n"
 
 
@@ -265,7 +296,8 @@ def publish_artifact(output_form: str, target_scope: str, repo_id: str | None, *
                      created: str = "") -> str:
     """Gate-2 publish — write a PUBLISHED operational artifact to its live home and return the path.
     `content` is the write phase's final artifact: for constitution it's the bare statement (wrapped
-    here); for skill/agent it's the complete SKILL.md / agent.md. Raises ReservedScope for `core`."""
+    here); for skill/agent it's the complete SKILL.md / agent.md. Every form is stamped
+    `category: learned` (provenance). Raises ReservedScope for `core`."""
     slug = slugify(slug)
     if output_form == "constitution":
         home = constitution_home(target_scope, repo_id)
@@ -279,10 +311,17 @@ def publish_artifact(output_form: str, target_scope: str, repo_id: str | None, *
         root = plugin_root(target_scope, repo_id)
         if target_scope == "repo_dev":
             ensure_plugin_manifest(root, f"{repo_id}-dev")
+        # Every learned artifact is stamped `category: learned` — the provenance marker that
+        # separates learning-loop output (visible) from shipped machinery (`category: learning`,
+        # hidden from the palette). Injected only if the forge phase didn't already set a category.
+        content = with_frontmatter_default(content, "category", "learned")
         if output_form == "skill":
             path = root / "skills" / slug / "SKILL.md"
         else:
             path = root / "agents" / f"{slug}.md"
+            # Every forged agent gets a default reasoning effort (owner-tunable later); a background
+            # runner reads this field. Injected only if the forge phase didn't already set one.
+            content = with_frontmatter_default(content, "effort", "medium")
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content if content.endswith("\n") else content + "\n")
         return str(path)

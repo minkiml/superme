@@ -97,6 +97,21 @@ export function setSystemLearning(enabled: boolean): Promise<{ ok: boolean; lear
   return sendJSON('/api/system/learning', 'POST', { enabled })
 }
 
+// The tunable background agents (sweep/distill/write) — each runs on a code-level preset model,
+// optionally overridden by the owner. Reading returns each agent's preset, override, and effective
+// concrete model; writing sets (or clears, with null) one agent's override.
+export type AgentModels = Schema<'AgentModelsResponse'>
+export type AgentModelRow = Schema<'AgentModelRow'>
+export function getAgentModels(): Promise<AgentModels> {
+  return getJSON('/api/system/agent-models')
+}
+export function setAgentModel(feature: string, model: string | null): Promise<AgentModels> {
+  return sendJSON(`/api/system/agent-models/${encodeURIComponent(feature)}`, 'POST', { model })
+}
+export function setAgentEffort(feature: string, effort: string): Promise<AgentModels> {
+  return sendJSON(`/api/system/agent-models/${encodeURIComponent(feature)}`, 'POST', { effort })
+}
+
 // Tune the capture-sweep triggers: idle threshold (s), heartbeat cadence (s), and the min new
 // user-message gate. Omit a field to leave it unchanged. Takes effect without a daemon restart.
 export type SweepConfig = Schema<'SweepConfigResponse'>
