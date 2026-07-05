@@ -201,6 +201,7 @@ def read_constitution_dir(directory: Path, *, origin: str) -> list[dict]:
             "scope": meta.get("scope"),
             "source": meta.get("source"),
             "created": meta.get("created"),
+            "updated": meta.get("updated"),  # last-edited stamp; evolving constitutions bump it
             "origin": origin,
             "path": str(p),
             "body": body.strip(),
@@ -332,6 +333,7 @@ def publish_artifact(output_form: str, target_scope: str, repo_id: str | None, *
             content = with_frontmatter_default(content, "source", source)
         if created:
             content = with_frontmatter_default(content, "created", created)
+            content = with_frontmatter_default(content, "updated", created)
         content = with_frontmatter_default(content, "category", "learned")
         path = home / f"{slug}.md"
         path.write_text(content if content.endswith("\n") else content + "\n")
