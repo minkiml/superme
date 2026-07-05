@@ -204,7 +204,7 @@ export default function Foundations() {
           body={openConst.body}
           enabled={openConst.enabled}
           learned={learned.has(`constitution:${openConst.slug}`)}
-          tint="universal"
+          tint={openConst.mode === 'core' ? 'core' : 'dev'}
           onClose={() => setOpenConst(null)}
           onToggled={load}
         />
@@ -235,7 +235,7 @@ function ConstitutionRow({ c, learned = false, onToggled, onOpen }: { c: Foundat
           {learned && <span className="shrink-0 rounded bg-warn/15 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-warn">learned</span>}
           {!c.enabled && <span className="text-[10px] uppercase tracking-wide text-faint">disabled</span>}
         </button>
-        <Toggle on={c.enabled} onChange={toggle} onColor="bg-universal" disabled={busy} title={c.enabled ? 'Disable' : 'Enable'} />
+        <Toggle on={c.enabled} onChange={toggle} onColor={c.mode === 'core' ? 'bg-core' : 'bg-dev'} disabled={busy} title={c.enabled ? 'Disable' : 'Enable'} />
       </div>
     </div>
   )
