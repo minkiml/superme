@@ -18,7 +18,7 @@ from ...schemas.dev.harness import (
     FoundationResponse, FoundationFileSaveResponse, HarnessPluginsResponse, PaletteResponse,
     PluginFileResponse, PluginFileSaveResponse, PublishedResponse, PublishedToggleResponse,
     PublishedDeleteResponse, PublishedFileResponse, PublishedFileSaveResponse,
-    ConstitutionsResponse, ConstitutionToggleResponse,
+    ConstitutionsResponse, ConstitutionToggleResponse, LocalPluginsResponse,
 )
 
 log = logging.getLogger("superme-agent")
@@ -39,20 +39,33 @@ async def dev_harness_plugins() -> dict:
         dev_dir=DEV_PLUGIN_DIR, core_dir=CORE_PLUGIN_DIR, shared_dir=SHARED_PLUGIN_DIR)}
 
 
-def _resolve_plugin_file(scope: str, kind: str, name: str):
+@router.get("/dev/harness/local-plugins", response_model=LocalPluginsResponse,
+            response_model_exclude_unset=True)
+async def dev_harness_local_plugins(context_id: str = "global") -> dict:
+    """This host's OWN local-harness skills + agents (its `local-harness/<id>/dev` plugin tree) — the
+    per-repo Artifacts tab. Flat: the dev workspace is already dev-scoped, so no scope split."""
+    from ....core.operational import _read_plugin
+    from ....runtime.config import LOCAL_HARNESS_DIR
+    plug = _read_plugin(LOCAL_HARNESS_DIR / context_id / "dev")
+    return {"context_id": context_id, "skills": plug["skills"], "agents": plug["agents"]}
+
+
+def _resolve_plugin_file(scope: str, kind: str, name: str, context_id: str = "global"):
     from ....core.operational import resolve_plugin_file
-    from ....runtime.config import DEV_PLUGIN_DIR, CORE_PLUGIN_DIR, SHARED_PLUGIN_DIR
+    from ....runtime.config import DEV_PLUGIN_DIR, CORE_PLUGIN_DIR, SHARED_PLUGIN_DIR, LOCAL_HARNESS_DIR
     p = resolve_plugin_file(scope, kind, name, dev_dir=DEV_PLUGIN_DIR,
-                            core_dir=CORE_PLUGIN_DIR, shared_dir=SHARED_PLUGIN_DIR)
+                            core_dir=CORE_PLUGIN_DIR, shared_dir=SHARED_PLUGIN_DIR,
+                            local_dir=LOCAL_HARNESS_DIR / context_id / "dev")
     if p is None or not p.is_file():
         raise HTTPException(status_code=404, detail="skill/agent not found")
     return p
 
 
 @router.get("/dev/harness/plugin-file", response_model=PluginFileResponse)
-async def dev_harness_plugin_file(scope: str, kind: str, name: str) -> dict:
-    """The raw markdown of one SuperMe skill/agent — the popup's preview + edit source."""
-    p = _resolve_plugin_file(scope, kind, name)
+async def dev_harness_plugin_file(scope: str, kind: str, name: str, context_id: str = "global") -> dict:
+    """The raw markdown of one SuperMe skill/agent — the popup's preview + edit source. `scope='local'`
+    reads this host's own `local-harness/<context_id>/dev` tree."""
+    p = _resolve_plugin_file(scope, kind, name, context_id)
     return {"scope": scope, "kind": kind, "name": name, "path": str(p), "content": p.read_text()}
 
 
@@ -61,13 +74,14 @@ class PluginFileBody(BaseModel):
     kind: str
     name: str
     content: str
+    context_id: str = "global"
 
 
 @router.put("/dev/harness/plugin-file", response_model=PluginFileSaveResponse)
 async def dev_harness_plugin_file_save(body: PluginFileBody) -> dict:
     """Save edits to one SuperMe skill/agent file (the popup's edit mode). Takes effect on the next
     dev turn (plugins are read per-turn); no daemon restart needed for content edits."""
-    p = _resolve_plugin_file(body.scope, body.kind, body.name)
+    p = _resolve_plugin_file(body.scope, body.kind, body.name, body.context_id)
     if not (body.content or "").strip():
         raise HTTPException(status_code=400, detail="content is empty")
     p.write_text(body.content)

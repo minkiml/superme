@@ -148,16 +148,31 @@ export default function Foundations() {
 
         {tab === 'constitution' && (
           <section>
-            <p className="mb-3 text-[12px] text-faint">Learned universal rules — always-on. Published constitution artifacts land here.</p>
-            {consts.length === 0 ? (
-              <Empty>No universal constitution learned yet — published constitution artifacts land here.</Empty>
-            ) : (
-              <div className="space-y-2">
-                {consts.map((c) => (
-                  <ConstitutionRow key={`${c.mode}-${c.slug}`} c={c} learned={learned.has(`constitution:${c.slug}`)} onToggled={load} />
-                ))}
-              </div>
-            )}
+            <p className="mb-3 text-[12px] text-faint">Universal constitution — always-on rules, grouped by the mode that loads them. Toggle to control what loads.</p>
+            {/* One column per mode (Dev · Core) — matches the Skills/Agents split; no shared column
+                (a constitution is always mode-scoped). */}
+            <div className="grid gap-4 md:grid-cols-2">
+              {(['dev', 'core'] as const).map((mode) => {
+                const rows = consts.filter((c) => c.mode === mode)
+                return (
+                  <section key={mode} className="rounded-xl border border-line bg-surface p-3.5">
+                    <div className="mb-3">
+                      <h2 className={`text-[13px] font-semibold ${mode === 'dev' ? 'text-dev' : 'text-core'}`}>{mode === 'dev' ? 'Dev' : 'Core'}</h2>
+                      <span className="text-[11px] text-faint">loaded in {mode} mode</span>
+                    </div>
+                    {rows.length === 0 ? (
+                      <p className="text-[12px] text-faint">None in this scope.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {rows.map((c) => (
+                          <ConstitutionRow key={`${c.mode}-${c.slug}`} c={c} learned={learned.has(`constitution:${c.slug}`)} onToggled={load} />
+                        ))}
+                      </div>
+                    )}
+                  </section>
+                )
+              })}
+            </div>
           </section>
         )}
 

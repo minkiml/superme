@@ -130,6 +130,11 @@ export type HarnessScope = {
 export function getHarnessPlugins(): Promise<{ scopes: HarnessScope[] }> {
   return getJSON('/api/dev/harness/plugins')
 }
+// A single host's OWN local-harness skills + agents (its local-harness/<id>/dev tree) — the per-repo
+// Artifacts tab. Flat (no scope split; the dev workspace is already dev-scoped).
+export function getLocalPlugins(contextId = 'global'): Promise<{ context_id: string; skills: HarnessEntry[]; agents: HarnessEntry[] }> {
+  return getJSON(`/api/dev/harness/local-plugins?context_id=${q(contextId)}`)
+}
 // Foundations — SuperMe's universal identity + charter files (SELF.md + per-mode charters,
 // hand-authored + editable) plus the LEARNED universal constitution (always-on rules), per mode.
 export type FoundationFile = Schema<'FoundationFile'>
@@ -143,11 +148,12 @@ export function saveFoundationFile(key: string, content: string): Promise<{ ok: 
 }
 
 export type HarnessFile = { scope: string; kind: string; name: string; path: string; content: string }
-export function getHarnessFile(scope: string, kind: string, name: string): Promise<HarnessFile> {
-  return getJSON(`/api/dev/harness/plugin-file?scope=${q(scope)}&kind=${q(kind)}&name=${q(name)}`)
+// `scope='local'` reads/writes a host's own local-harness tree — pass its contextId.
+export function getHarnessFile(scope: string, kind: string, name: string, contextId = 'global'): Promise<HarnessFile> {
+  return getJSON(`/api/dev/harness/plugin-file?scope=${q(scope)}&kind=${q(kind)}&name=${q(name)}&context_id=${q(contextId)}`)
 }
-export function saveHarnessFile(scope: string, kind: string, name: string, content: string): Promise<{ ok: boolean }> {
-  return sendJSON('/api/dev/harness/plugin-file', 'PUT', { scope, kind, name, content })
+export function saveHarnessFile(scope: string, kind: string, name: string, content: string, contextId = 'global'): Promise<{ ok: boolean }> {
+  return sendJSON('/api/dev/harness/plugin-file', 'PUT', { scope, kind, name, content, context_id: contextId })
 }
 
 // Published inventory (#6 runtime management) — the LEARNED artifacts the owner published, keyed by

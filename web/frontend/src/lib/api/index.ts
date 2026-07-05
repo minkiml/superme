@@ -27,6 +27,7 @@ export {
   getFoundation,
   saveFoundationFile,
   getHarnessPlugins,
+  getLocalPlugins,
   getHarnessFile,
   saveHarnessFile,
   getPalette,

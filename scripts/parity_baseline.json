@@ -8,6 +8,7 @@
     "GET /dev",
     "GET /dev/harness/constitutions",
     "GET /dev/harness/foundation",
+    "GET /dev/harness/local-plugins",
     "GET /dev/harness/plugin-file",
     "GET /dev/harness/plugins",
     "GET /dev/harness/published",
@@ -1926,6 +1927,36 @@
           "title": "LearningRollupResponse",
           "type": "object"
         },
+        "LocalPluginsResponse": {
+          "description": "A single host's OWN local-harness skills + agents (its `local-harness/<id>/dev` plugin tree) \u2014\nflat (no dev/core/shared split; the dev workspace is already mode-scoped).",
+          "properties": {
+            "agents": {
+              "items": {
+                "$ref": "#/components/schemas/PluginEntry"
+              },
+              "title": "Agents",
+              "type": "array"
+            },
+            "context_id": {
+              "title": "Context Id",
+              "type": "string"
+            },
+            "skills": {
+              "items": {
+                "$ref": "#/components/schemas/PluginEntry"
+              },
+              "title": "Skills",
+              "type": "array"
+            }
+          },
+          "required": [
+            "context_id",
+            "skills",
+            "agents"
+          ],
+          "title": "LocalPluginsResponse",
+          "type": "object"
+        },
         "ManagedConstitution": {
           "description": "One constitution for management \u2014 dir-scanned (provenance-agnostic: hand-authored + learned\nalike), keyed by (scope, slug). Powers the enable/disable surfaces for ALL constitutions.",
           "properties": {
@@ -2230,6 +2261,11 @@
           "properties": {
             "content": {
               "title": "Content",
+              "type": "string"
+            },
+            "context_id": {
+              "default": "global",
+              "title": "Context Id",
               "type": "string"
             },
             "kind": {
@@ -5204,9 +5240,50 @@
           "summary": "Dev Harness Foundation Save"
         }
       },
+      "/dev/harness/local-plugins": {
+        "get": {
+          "description": "This host's OWN local-harness skills + agents (its `local-harness/<id>/dev` plugin tree) \u2014 the\nper-repo Artifacts tab. Flat: the dev workspace is already dev-scoped, so no scope split.",
+          "operationId": "dev_harness_local_plugins_dev_harness_local_plugins_get",
+          "parameters": [
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "default": "global",
+                "title": "Context Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/LocalPluginsResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Harness Local Plugins"
+        }
+      },
       "/dev/harness/plugin-file": {
         "get": {
-          "description": "The raw markdown of one SuperMe skill/agent \u2014 the popup's preview + edit source.",
+          "description": "The raw markdown of one SuperMe skill/agent \u2014 the popup's preview + edit source. `scope='local'`\nreads this host's own `local-harness/<context_id>/dev` tree.",
           "operationId": "dev_harness_plugin_file_dev_harness_plugin_file_get",
           "parameters": [
             {
@@ -5233,6 +5310,16 @@
               "required": true,
               "schema": {
                 "title": "Name",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "default": "global",
+                "title": "Context Id",
                 "type": "string"
               }
             }

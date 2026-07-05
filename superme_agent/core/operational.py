@@ -97,11 +97,14 @@ def _read_plugin(plugin_dir: Path) -> dict:
 
 
 def resolve_plugin_file(scope: str, kind: str, name: str, *,
-                        dev_dir: Path, core_dir: Path, shared_dir: Path) -> Path | None:
+                        dev_dir: Path, core_dir: Path, shared_dir: Path,
+                        local_dir: Path | None = None) -> Path | None:
     """Map (scope, kind, name) → the on-disk artifact path, or None if it doesn't resolve safely.
     Path-traversal-safe: `name` may not contain separators, and the result must sit inside the
-    scope's plugin dir. `kind` is 'skill' (`skills/<name>/SKILL.md`) or 'agent' (`agents/<name>.md`)."""
-    base = {"dev": dev_dir, "core": core_dir, "shared": shared_dir}.get(scope)
+    scope's plugin dir. `kind` is 'skill' (`skills/<name>/SKILL.md`) or 'agent' (`agents/<name>.md`).
+    `scope='local'` (with `local_dir` = a host's `local-harness/<id>/<mode>`) resolves that host's own
+    plugin tree."""
+    base = {"dev": dev_dir, "core": core_dir, "shared": shared_dir, "local": local_dir}.get(scope)
     if base is None:
         return None
     name = (name or "").strip()

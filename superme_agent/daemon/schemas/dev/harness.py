@@ -30,6 +30,14 @@ class HarnessPluginsResponse(BaseModel):
     scopes: list[PluginScope]
 
 
+class LocalPluginsResponse(BaseModel):
+    """A single host's OWN local-harness skills + agents (its `local-harness/<id>/dev` plugin tree) —
+    flat (no dev/core/shared split; the dev workspace is already mode-scoped)."""
+    context_id: str
+    skills: list[PluginEntry]
+    agents: list[PluginEntry]
+
+
 class PaletteResponse(BaseModel):
     context_id: str
     mode: str

@@ -640,6 +640,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/dev/harness/local-plugins": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Dev Harness Local Plugins
+         * @description This host's OWN local-harness skills + agents (its `local-harness/<id>/dev` plugin tree) — the
+         *     per-repo Artifacts tab. Flat: the dev workspace is already dev-scoped, so no scope split.
+         */
+        get: operations["dev_harness_local_plugins_dev_harness_local_plugins_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/dev/harness/plugin-file": {
         parameters: {
             query?: never;
@@ -649,7 +670,8 @@ export interface paths {
         };
         /**
          * Dev Harness Plugin File
-         * @description The raw markdown of one SuperMe skill/agent — the popup's preview + edit source.
+         * @description The raw markdown of one SuperMe skill/agent — the popup's preview + edit source. `scope='local'`
+         *     reads this host's own `local-harness/<context_id>/dev` tree.
          */
         get: operations["dev_harness_plugin_file_dev_harness_plugin_file_get"];
         /**
@@ -1986,6 +2008,19 @@ export interface components {
             learned: components["schemas"]["ScopeCount"];
         };
         /**
+         * LocalPluginsResponse
+         * @description A single host's OWN local-harness skills + agents (its `local-harness/<id>/dev` plugin tree) —
+         *     flat (no dev/core/shared split; the dev workspace is already mode-scoped).
+         */
+        LocalPluginsResponse: {
+            /** Context Id */
+            context_id: string;
+            /** Skills */
+            skills: components["schemas"]["PluginEntry"][];
+            /** Agents */
+            agents: components["schemas"]["PluginEntry"][];
+        };
+        /**
          * ManagedConstitution
          * @description One constitution for management — dir-scanned (provenance-agnostic: hand-authored + learned
          *     alike), keyed by (scope, slug). Powers the enable/disable surfaces for ALL constitutions.
@@ -2098,6 +2133,11 @@ export interface components {
             name: string;
             /** Content */
             content: string;
+            /**
+             * Context Id
+             * @default global
+             */
+            context_id: string;
         };
         /**
          * PluginFileResponse
@@ -4093,12 +4133,44 @@ export interface operations {
             };
         };
     };
+    dev_harness_local_plugins_dev_harness_local_plugins_get: {
+        parameters: {
+            query?: {
+                context_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LocalPluginsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     dev_harness_plugin_file_dev_harness_plugin_file_get: {
         parameters: {
             query: {
                 scope: string;
                 kind: string;
                 name: string;
+                context_id?: string;
             };
             header?: never;
             path?: never;
