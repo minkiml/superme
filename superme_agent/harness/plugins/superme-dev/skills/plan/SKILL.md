@@ -25,8 +25,8 @@ understand the item's intent.
 
 ## 2. Size it up — interview only if it earns it
 
-Pull what the item needs: relevant code, the contract (`internal/dev/README.md` / `model.yaml`) if
-unsure, linked items. Then:
+Pull what the item needs: relevant code, the dev-knowledge contract (pull the
+`dev-knowledge-structure` constitution) if unsure, linked items. Then:
 
 - **Straightforward** (clear intent, contained change, one obvious design) → go straight to the plan;
   don't interrogate over an easy task.

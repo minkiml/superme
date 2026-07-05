@@ -1,10 +1,10 @@
-"""Dev meta routes: /dev (parsed knowledge + inbox + glance + run telemetry), /dev/model, /dev/log."""
+"""Dev meta routes: /dev (parsed knowledge + inbox + glance + run telemetry), /dev/log."""
 
 from fastapi import APIRouter, Depends
 
 from ...app_state import DevKnowledgeService, DevStore, SystemSpine, get_dev, get_dev_store, get_spine
 from ...deps import dev_root
-from ...schemas.dev.meta import DevReadResponse, DevModelResponse, DevLogResponse
+from ...schemas.dev.meta import DevReadResponse, DevLogResponse
 
 router = APIRouter()
 
@@ -30,16 +30,6 @@ async def dev_read(context_id: str = "global",
     dev.enrich_work_items(root, data["work_items"], live_by_item, stats)
     data["running"] = sorted(live_by_item.keys())
     return data
-
-
-@router.get("/dev/model", response_model=DevModelResponse, response_model_exclude_unset=True)
-async def dev_model(context_id: str = "global", dev: DevKnowledgeService = Depends(get_dev)) -> dict:
-    """The canonical dev-knowledge model manifest (the shared *shape* of dev-knowledge).
-
-    Shared schema, falling back to the global reference home when a context has none."""
-    model = dev.read_model(dev_root(context_id), dev_root("global"))
-    model["context_id"] = context_id
-    return model
 
 
 @router.get("/dev/log", response_model=DevLogResponse)

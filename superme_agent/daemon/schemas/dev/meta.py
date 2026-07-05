@@ -1,6 +1,6 @@
-"""Response schemas for the dev meta routes (routers/dev/meta.py): /dev, /dev/model, /dev/log."""
+"""Response schemas for the dev meta routes (routers/dev/meta.py): /dev, /dev/log."""
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 from .work_items import WorkItem
 from .inbox import InboxRow
@@ -35,38 +35,6 @@ class DevReadResponse(BaseModel):
     glance: Glance
     context_id: str
     running: list[str]
-
-
-class ManifestEntity(BaseModel):
-    """One model.yaml entity (the dev-knowledge schema's nodes). Lenient (extra='allow', all
-    optional) so a richer/older manifest never 500s, but typing `entities` to this validates each
-    row IS a structured object — a malformed entry (e.g. a bare string) becomes a clear server-side
-    error at request time rather than a silent FE render crash (R5)."""
-    model_config = ConfigDict(extra="allow")
-    id: str | None = None
-    label: str | None = None
-    store: str | None = None
-    storage: str | None = None
-    schema_: list | None = Field(default=None, alias="schema")
-    summary: str | None = None
-    fields: list | None = None
-
-
-class DevModelResponse(BaseModel):
-    """The dev-knowledge model manifest (model.yaml) + envelope. The manifest body is dynamic YAML,
-    so the known sections are declared for documentation and extra='allow' carries anything else;
-    a partial manifest validates too (sections optional, route uses exclude_unset). `entities` is
-    validated as structured rows (R5); the looser sections stay dict-typed (documented stretch)."""
-    model_config = ConfigDict(extra="allow")
-    version: int | None = None
-    entities: list[ManifestEntity] | None = None
-    lifecycle: dict | None = None
-    knowledge_layers: dict | None = None
-    operating_model: dict | None = None
-    context_stack: dict | None = None
-    skills: dict | None = None
-    exists: bool
-    context_id: str
 
 
 class DevLogEvent(BaseModel):

@@ -595,28 +595,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/dev/model": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Dev Model
-         * @description The canonical dev-knowledge model manifest (the shared *shape* of dev-knowledge).
-         *
-         *     Shared schema, falling back to the global reference home when a context has none.
-         */
-        get: operations["dev_model_dev_model_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/dev/log": {
         parameters: {
             query?: never;
@@ -1474,45 +1452,6 @@ export interface components {
             count: number;
         };
         /**
-         * DevModelResponse
-         * @description The dev-knowledge model manifest (model.yaml) + envelope. The manifest body is dynamic YAML,
-         *     so the known sections are declared for documentation and extra='allow' carries anything else;
-         *     a partial manifest validates too (sections optional, route uses exclude_unset). `entities` is
-         *     validated as structured rows (R5); the looser sections stay dict-typed (documented stretch).
-         */
-        DevModelResponse: {
-            /** Version */
-            version?: number | null;
-            /** Entities */
-            entities?: components["schemas"]["ManifestEntity"][] | null;
-            /** Lifecycle */
-            lifecycle?: {
-                [key: string]: unknown;
-            } | null;
-            /** Knowledge Layers */
-            knowledge_layers?: {
-                [key: string]: unknown;
-            } | null;
-            /** Operating Model */
-            operating_model?: {
-                [key: string]: unknown;
-            } | null;
-            /** Context Stack */
-            context_stack?: {
-                [key: string]: unknown;
-            } | null;
-            /** Skills */
-            skills?: {
-                [key: string]: unknown;
-            } | null;
-            /** Exists */
-            exists: boolean;
-            /** Context Id */
-            context_id: string;
-        } & {
-            [key: string]: unknown;
-        };
-        /**
          * DevReadResponse
          * @description A context's parsed dev knowledge: work-items (enriched) + inbox queue + glance + live runs.
          */
@@ -1969,31 +1908,6 @@ export interface components {
             repos: components["schemas"]["LearningRollupRepo"][];
             candidates: components["schemas"]["ScopeCount"];
             learned: components["schemas"]["ScopeCount"];
-        };
-        /**
-         * ManifestEntity
-         * @description One model.yaml entity (the dev-knowledge schema's nodes). Lenient (extra='allow', all
-         *     optional) so a richer/older manifest never 500s, but typing `entities` to this validates each
-         *     row IS a structured object — a malformed entry (e.g. a bare string) becomes a clear server-side
-         *     error at request time rather than a silent FE render crash (R5).
-         */
-        ManifestEntity: {
-            /** Id */
-            id?: string | null;
-            /** Label */
-            label?: string | null;
-            /** Store */
-            store?: string | null;
-            /** Storage */
-            storage?: string | null;
-            /** Schema */
-            schema?: unknown[] | null;
-            /** Summary */
-            summary?: string | null;
-            /** Fields */
-            fields?: unknown[] | null;
-        } & {
-            [key: string]: unknown;
         };
         /** MemoryStatsResponse */
         MemoryStatsResponse: {
@@ -4005,37 +3919,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DevReadResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    dev_model_dev_model_get: {
-        parameters: {
-            query?: {
-                context_id?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DevModelResponse"];
                 };
             };
             /** @description Validation Error */

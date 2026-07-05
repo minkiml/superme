@@ -419,27 +419,6 @@ class DevKnowledgeService:
     # Published inventory; auto-accrued knowledge lives in the knowledge tree. The reader/writer
     # methods (list_memory / read_memory_index / apply_fact / set_fact_enabled) were removed here.
 
-    def read_model(self, dev_root: Path, fallback_root: Path | None = None) -> dict:
-        """The canonical model manifest (model.yaml): the shared *shape* of dev-knowledge.
-
-        The model is shared structure, so a context with no manifest of its own falls back
-        to the global reference home's.
-        """
-        empty = {"exists": False, "entities": [], "edges": [], "lifecycle": {}, "flow": []}
-        path = Path(dev_root) / "model.yaml"
-        if not path.exists() and fallback_root is not None:
-            path = Path(fallback_root) / "model.yaml"
-        if not path.exists():
-            return empty
-        try:
-            model = yaml.safe_load(path.read_text()) or {}
-        except yaml.YAMLError:
-            return empty
-        if not isinstance(model, dict):
-            return empty
-        model["exists"] = True
-        return model
-
     # --- internals --------------------------------------------------------------
 
     def _read_work_items(self, base: Path) -> list[dict]:

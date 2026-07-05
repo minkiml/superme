@@ -16,7 +16,6 @@
     "GET /dev/memory/proposals/{proposal_id}/execution",
     "GET /dev/memory/rollup",
     "GET /dev/memory/stats",
-    "GET /dev/model",
     "GET /dev/palette",
     "GET /dev/work-items/{item_id}/artifacts",
     "GET /dev/work-items/{item_id}/detail",
@@ -598,111 +597,6 @@
             "count"
           ],
           "title": "DevLogResponse",
-          "type": "object"
-        },
-        "DevModelResponse": {
-          "additionalProperties": true,
-          "description": "The dev-knowledge model manifest (model.yaml) + envelope. The manifest body is dynamic YAML,\nso the known sections are declared for documentation and extra='allow' carries anything else;\na partial manifest validates too (sections optional, route uses exclude_unset). `entities` is\nvalidated as structured rows (R5); the looser sections stay dict-typed (documented stretch).",
-          "properties": {
-            "context_id": {
-              "title": "Context Id",
-              "type": "string"
-            },
-            "context_stack": {
-              "anyOf": [
-                {
-                  "additionalProperties": true,
-                  "type": "object"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Context Stack"
-            },
-            "entities": {
-              "anyOf": [
-                {
-                  "items": {
-                    "$ref": "#/components/schemas/ManifestEntity"
-                  },
-                  "type": "array"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Entities"
-            },
-            "exists": {
-              "title": "Exists",
-              "type": "boolean"
-            },
-            "knowledge_layers": {
-              "anyOf": [
-                {
-                  "additionalProperties": true,
-                  "type": "object"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Knowledge Layers"
-            },
-            "lifecycle": {
-              "anyOf": [
-                {
-                  "additionalProperties": true,
-                  "type": "object"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Lifecycle"
-            },
-            "operating_model": {
-              "anyOf": [
-                {
-                  "additionalProperties": true,
-                  "type": "object"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Operating Model"
-            },
-            "skills": {
-              "anyOf": [
-                {
-                  "additionalProperties": true,
-                  "type": "object"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Skills"
-            },
-            "version": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Version"
-            }
-          },
-          "required": [
-            "exists",
-            "context_id"
-          ],
-          "title": "DevModelResponse",
           "type": "object"
         },
         "DevReadResponse": {
@@ -1959,93 +1853,6 @@
             "learned"
           ],
           "title": "LearningRollupResponse",
-          "type": "object"
-        },
-        "ManifestEntity": {
-          "additionalProperties": true,
-          "description": "One model.yaml entity (the dev-knowledge schema's nodes). Lenient (extra='allow', all\noptional) so a richer/older manifest never 500s, but typing `entities` to this validates each\nrow IS a structured object \u2014 a malformed entry (e.g. a bare string) becomes a clear server-side\nerror at request time rather than a silent FE render crash (R5).",
-          "properties": {
-            "fields": {
-              "anyOf": [
-                {
-                  "items": {},
-                  "type": "array"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Fields"
-            },
-            "id": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Id"
-            },
-            "label": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Label"
-            },
-            "schema": {
-              "anyOf": [
-                {
-                  "items": {},
-                  "type": "array"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Schema"
-            },
-            "storage": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Storage"
-            },
-            "store": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Store"
-            },
-            "summary": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Summary"
-            }
-          },
-          "title": "ManifestEntity",
           "type": "object"
         },
         "MemoryStatsResponse": {
@@ -6246,47 +6053,6 @@
             }
           },
           "summary": "Dev Memory Stats"
-        }
-      },
-      "/dev/model": {
-        "get": {
-          "description": "The canonical dev-knowledge model manifest (the shared *shape* of dev-knowledge).\n\nShared schema, falling back to the global reference home when a context has none.",
-          "operationId": "dev_model_dev_model_get",
-          "parameters": [
-            {
-              "in": "query",
-              "name": "context_id",
-              "required": false,
-              "schema": {
-                "default": "global",
-                "title": "Context Id",
-                "type": "string"
-              }
-            }
-          ],
-          "responses": {
-            "200": {
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "$ref": "#/components/schemas/DevModelResponse"
-                  }
-                }
-              },
-              "description": "Successful Response"
-            },
-            "422": {
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "$ref": "#/components/schemas/HTTPValidationError"
-                  }
-                }
-              },
-              "description": "Validation Error"
-            }
-          },
-          "summary": "Dev Model"
         }
       },
       "/dev/palette": {

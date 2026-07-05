@@ -8,7 +8,7 @@ import Dropdown from '@/ui/Dropdown'
 import { GLOBAL, type ContextRef } from '@/lib/contexts'
 
 // System space: browse / edit / inject the RAW knowledge files of a context — the native
-// file view that used to be the whole "Me" tab. The context (Global + each connected
+// file view that used to be the whole "Me" tab. The context (SuperMe Hub + each connected
 // domain) is picked from the dropdown.
 export default function ManageKnowledge({
   domains = [],
@@ -17,7 +17,7 @@ export default function ManageKnowledge({
   domains?: ContextRef[]
   initialContext?: string
 }) {
-  const subs = [{ id: GLOBAL.id, label: 'Global' }, ...domains.map((d) => ({ id: d.id, label: d.label }))]
+  const subs = [{ id: GLOBAL.id, label: 'SuperMe Hub' }, ...domains.map((d) => ({ id: d.id, label: d.label }))]
   const [ctx, setCtx] = useState(initialContext)
   const [selected, setSelected] = useState<string | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
