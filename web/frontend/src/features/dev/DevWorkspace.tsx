@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, GitBranch, Brain, Activity, ChevronsUpDown, Check } from 'lucide-react'
+import { ArrowLeft, GitBranch, Brain, Package, Activity, ChevronsUpDown, Check } from 'lucide-react'
 import { colorFor } from '@/lib/palette'
 import { RepoIcon } from '@/lib/repoIcons'
 import type { OrbitRepo } from '@/features/shell/useCommandStats'
@@ -7,6 +7,7 @@ import type { WorkItem } from '@/lib/api'
 import TabBar from '@/ui/TabBar'
 import DevDashboard from './DevDashboard'
 import { MemoryGovernance, PublishedInventory } from './LearningGovernance'
+import ArtifactsTab from './ArtifactsTab'
 import ActivityLog from './ActivityLog'
 
 // The Dev workspace — the per-repo Tier-2 detail surface, reached from an orbit node's inspector
@@ -14,10 +15,11 @@ import ActivityLog from './ActivityLog'
 // the three heavy dev surfaces for ONE repo: the plan→build pipeline, the learning governance queue,
 // and the per-repo activity log. Scoped by contextId (the repo id; only global is fully wired today).
 
-type Tab = 'pipeline' | 'learning' | 'activity'
+type Tab = 'pipeline' | 'learning' | 'artifacts' | 'activity'
 const TABS: { id: Tab; label: string; icon: typeof GitBranch }[] = [
   { id: 'pipeline', label: 'Pipeline', icon: GitBranch },
   { id: 'learning', label: 'Learning', icon: Brain },
+  { id: 'artifacts', label: 'Artifacts', icon: Package },
   { id: 'activity', label: 'Activity', icon: Activity },
 ]
 
@@ -107,6 +109,7 @@ export default function DevWorkspace({
           />
         )}
         {tab === 'learning' && <LearningTab contextId={repo.id} />}
+        {tab === 'artifacts' && <ArtifactsTab contextId={repo.id} />}
         {tab === 'activity' && <ActivityLog contextId={repo.id} />}
       </div>
     </div>

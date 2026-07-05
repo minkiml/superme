@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Layers, FileText, X, Loader2, ScrollText, Pencil, Save, Sparkles, Bot } from 'lucide-react'
 import Markdown from '@/ui/Markdown'
-import { getFoundation, saveFoundationFile, getPublished, getHarnessPlugins, type FoundationFile, type FoundationConstitution, type PublishedItem } from '@/lib/api'
+import Toggle from '@/ui/Toggle'
+import { getFoundation, saveFoundationFile, getPublished, getHarnessPlugins, toggleConstitution, type FoundationFile, type FoundationConstitution, type PublishedItem } from '@/lib/api'
 import { HarnessPlugins } from '@/features/dev/HarnessPlugins'
 import { Empty } from '@/features/dev/common'
 
@@ -153,7 +154,7 @@ export default function Foundations() {
             ) : (
               <div className="space-y-2">
                 {consts.map((c) => (
-                  <ConstitutionRow key={`${c.mode}-${c.slug}`} c={c} learned={learned.has(`constitution:${c.slug}`)} />
+                  <ConstitutionRow key={`${c.mode}-${c.slug}`} c={c} learned={learned.has(`constitution:${c.slug}`)} onToggled={load} />
                 ))}
               </div>
             )}
@@ -189,16 +190,31 @@ export default function Foundations() {
   )
 }
 
-function ConstitutionRow({ c, learned = false }: { c: FoundationConstitution; learned?: boolean }) {
+function ConstitutionRow({ c, learned = false, onToggled }: { c: FoundationConstitution; learned?: boolean; onToggled: () => void }) {
   const [open, setOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
+
+  async function toggle(v: boolean) {
+    setBusy(true)
+    try {
+      await toggleConstitution(c.slug, `universal_${c.mode}`, v)
+      onToggled()
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <div className={`rounded-lg border border-line bg-surface ${c.enabled ? '' : 'opacity-60'}`}>
-      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left">
-        <span className={`text-[10px] font-medium uppercase tracking-wider ${c.mode === 'dev' ? 'text-dev' : 'text-core'}`}>{c.mode}</span>
-        <span className="min-w-0 flex-1 truncate text-[14px] text-fg">{c.title}</span>
-        {learned && <span className="shrink-0 rounded bg-warn/15 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-warn">learned</span>}
-        {!c.enabled && <span className="text-[10px] uppercase tracking-wide text-faint">disabled</span>}
-      </button>
+      <div className="flex items-center gap-2 px-3.5 py-2.5">
+        <button onClick={() => setOpen((o) => !o)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
+          <span className={`text-[10px] font-medium uppercase tracking-wider ${c.mode === 'dev' ? 'text-dev' : 'text-core'}`}>{c.mode}</span>
+          <span className="min-w-0 flex-1 truncate text-[14px] text-fg">{c.title}</span>
+          {learned && <span className="shrink-0 rounded bg-warn/15 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-warn">learned</span>}
+          {!c.enabled && <span className="text-[10px] uppercase tracking-wide text-faint">disabled</span>}
+        </button>
+        <Toggle on={c.enabled} onChange={toggle} onColor="bg-universal" disabled={busy} title={c.enabled ? 'Disable' : 'Enable'} />
+      </div>
       {open && (
         <div className="border-t border-line px-3.5 py-3 text-[13px] text-muted">
           <Markdown text={c.body} variant="doc" />

@@ -6,6 +6,7 @@
     "DELETE /sessions/{session_id}",
     "GET /contexts",
     "GET /dev",
+    "GET /dev/harness/constitutions",
     "GET /dev/harness/foundation",
     "GET /dev/harness/plugin-file",
     "GET /dev/harness/plugins",
@@ -32,6 +33,7 @@
     "GET /system/agent-models",
     "GET /tokens",
     "GET /tokens/timeseries",
+    "PATCH /dev/harness/constitutions/{slug}",
     "PATCH /dev/harness/published/{proposal_id}",
     "PATCH /dev/inbox/{item_id}",
     "PATCH /dev/memory/proposals/{proposal_id}/artifact",
@@ -465,6 +467,75 @@
             "body"
           ],
           "title": "ConstitutionEntry",
+          "type": "object"
+        },
+        "ConstitutionToggleBody": {
+          "properties": {
+            "context_id": {
+              "default": "global",
+              "title": "Context Id",
+              "type": "string"
+            },
+            "enabled": {
+              "title": "Enabled",
+              "type": "boolean"
+            },
+            "scope": {
+              "title": "Scope",
+              "type": "string"
+            }
+          },
+          "required": [
+            "enabled",
+            "scope"
+          ],
+          "title": "ConstitutionToggleBody",
+          "type": "object"
+        },
+        "ConstitutionToggleResponse": {
+          "additionalProperties": true,
+          "description": "ok + slug + scope + the operational toggle result (present/enabled).",
+          "properties": {
+            "ok": {
+              "title": "Ok",
+              "type": "boolean"
+            },
+            "scope": {
+              "title": "Scope",
+              "type": "string"
+            },
+            "slug": {
+              "title": "Slug",
+              "type": "string"
+            }
+          },
+          "required": [
+            "ok",
+            "slug",
+            "scope"
+          ],
+          "title": "ConstitutionToggleResponse",
+          "type": "object"
+        },
+        "ConstitutionsResponse": {
+          "properties": {
+            "constitutions": {
+              "items": {
+                "$ref": "#/components/schemas/ManagedConstitution"
+              },
+              "title": "Constitutions",
+              "type": "array"
+            },
+            "context_id": {
+              "title": "Context Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "context_id",
+            "constitutions"
+          ],
+          "title": "ConstitutionsResponse",
           "type": "object"
         },
         "ContextResponse": {
@@ -1853,6 +1924,94 @@
             "learned"
           ],
           "title": "LearningRollupResponse",
+          "type": "object"
+        },
+        "ManagedConstitution": {
+          "description": "One constitution for management \u2014 dir-scanned (provenance-agnostic: hand-authored + learned\nalike), keyed by (scope, slug). Powers the enable/disable surfaces for ALL constitutions.",
+          "properties": {
+            "body": {
+              "title": "Body",
+              "type": "string"
+            },
+            "created": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Created"
+            },
+            "description": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Description"
+            },
+            "enabled": {
+              "title": "Enabled",
+              "type": "boolean"
+            },
+            "mode": {
+              "title": "Mode",
+              "type": "string"
+            },
+            "origin": {
+              "title": "Origin",
+              "type": "string"
+            },
+            "scope": {
+              "title": "Scope",
+              "type": "string"
+            },
+            "slug": {
+              "title": "Slug",
+              "type": "string"
+            },
+            "source": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
+            },
+            "title": {
+              "title": "Title",
+              "type": "string"
+            },
+            "updated": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Updated"
+            }
+          },
+          "required": [
+            "slug",
+            "scope",
+            "mode",
+            "origin",
+            "enabled",
+            "title",
+            "body"
+          ],
+          "title": "ManagedConstitution",
           "type": "object"
         },
         "MemoryStatsResponse": {
@@ -4896,6 +5055,97 @@
             }
           },
           "summary": "Dev Read"
+        }
+      },
+      "/dev/harness/constitutions": {
+        "get": {
+          "description": "Every constitution in this context's scope: universal-dev + this host's local (`repo_dev`),\neach with live `enabled` state. Core is deferred (no core constitutions yet).",
+          "operationId": "dev_harness_constitutions_dev_harness_constitutions_get",
+          "parameters": [
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "default": "global",
+                "title": "Context Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ConstitutionsResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Harness Constitutions"
+        }
+      },
+      "/dev/harness/constitutions/{slug}": {
+        "patch": {
+          "description": "Enable/disable ANY constitution by (scope, slug) \u2014 no proposal needed. A disabled constitution\nleaves the always-on catalog AND becomes unpullable (both filter on `enabled`), so it is fully\ninert. Effective on the next dev turn.",
+          "operationId": "dev_harness_constitution_toggle_dev_harness_constitutions__slug__patch",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "slug",
+              "required": true,
+              "schema": {
+                "title": "Slug",
+                "type": "string"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConstitutionToggleBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ConstitutionToggleResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Harness Constitution Toggle"
         }
       },
       "/dev/harness/foundation": {

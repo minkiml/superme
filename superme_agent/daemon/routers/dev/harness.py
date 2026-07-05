@@ -18,6 +18,7 @@ from ...schemas.dev.harness import (
     FoundationResponse, FoundationFileSaveResponse, HarnessPluginsResponse, PaletteResponse,
     PluginFileResponse, PluginFileSaveResponse, PublishedResponse, PublishedToggleResponse,
     PublishedDeleteResponse, PublishedFileResponse, PublishedFileSaveResponse,
+    ConstitutionsResponse, ConstitutionToggleResponse,
 )
 
 log = logging.getLogger("superme-agent")
@@ -210,6 +211,65 @@ async def dev_harness_published_toggle(proposal_id: int, body: PublishedToggleBo
         scope="dev", actor="owner",
         meta={"proposal_id": proposal_id, "form": form, "enabled": body.enabled})
     return {"ok": True, "proposal_id": proposal_id, **res}
+
+
+# --- Constitutions: govern ALL constitutions by (scope, slug) --------------------------------
+# Unlike the Published inventory (proposal-keyed → learned only), this is a DISK SCAN, so it covers
+# hand-authored + system + learned constitutions alike — universal and this host's local — giving the
+# owner enable/disable control over the whole constitution catalog, not just what the loop published.
+@router.get("/dev/harness/constitutions", response_model=ConstitutionsResponse)
+async def dev_harness_constitutions(context_id: str = "global") -> dict:
+    """Every constitution in this context's scope: universal-dev + this host's local (`repo_dev`),
+    each with live `enabled` state. Core is deferred (no core constitutions yet)."""
+    from ....core.operational import read_constitution_dir
+    from ....runtime.config import CONSTITUTION_DIR, LOCAL_HARNESS_DIR
+    out = []
+
+    def collect(items: list, scope: str, mode: str) -> None:
+        for it in items:
+            out.append({
+                "slug": it["slug"], "scope": scope, "mode": mode, "origin": it["origin"],
+                "enabled": it["enabled"], "title": it["slug"].replace("-", " "),
+                "description": it.get("description"), "body": it["body"],
+                "source": it.get("source"), "created": it.get("created"),
+                "updated": it.get("updated"),
+            })
+
+    collect(read_constitution_dir(CONSTITUTION_DIR / "dev", origin="universal"), "universal_dev", "dev")
+    collect(read_constitution_dir(LOCAL_HARNESS_DIR / context_id / "dev" / "constitution",
+                                  origin="repo"), "repo_dev", "dev")
+    return {"context_id": context_id, "constitutions": out}
+
+
+class ConstitutionToggleBody(BaseModel):
+    enabled: bool
+    scope: str                       # universal_dev | repo_dev
+    context_id: str = "global"
+
+
+@router.patch("/dev/harness/constitutions/{slug}", response_model=ConstitutionToggleResponse,
+              response_model_exclude_unset=True)
+async def dev_harness_constitution_toggle(slug: str, body: ConstitutionToggleBody,
+                                          dev_store: DevStore = Depends(get_dev_store)) -> dict:
+    """Enable/disable ANY constitution by (scope, slug) — no proposal needed. A disabled constitution
+    leaves the always-on catalog AND becomes unpullable (both filter on `enabled`), so it is fully
+    inert. Effective on the next dev turn."""
+    from ....core import operational as ops
+    if body.scope not in ("universal_dev", "repo_dev"):
+        raise HTTPException(status_code=400, detail=f"scope '{body.scope}' is not manageable")
+    repo_id = body.context_id if body.scope == "repo_dev" else None
+    try:
+        res = ops.set_published_enabled("constitution", body.scope, repo_id, slug, body.enabled)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"toggle failed: {e}")
+    if res is None:
+        raise HTTPException(status_code=404, detail="constitution not found on disk")
+    dev_store.log_event(
+        body.context_id, "harness.toggled",
+        f"{'Enabled' if body.enabled else 'Disabled'} constitution '{slug}'",
+        scope="dev", actor="owner",
+        meta={"scope": body.scope, "slug": slug, "enabled": body.enabled})
+    return {"ok": True, "slug": slug, "scope": body.scope, **res}
 
 
 @router.delete("/dev/harness/published/{proposal_id}", response_model=PublishedDeleteResponse,

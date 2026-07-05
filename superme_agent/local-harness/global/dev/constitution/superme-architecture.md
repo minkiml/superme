@@ -6,6 +6,7 @@ source: system
 category: reference
 created: 2026-07-05
 updated: 2026-07-05
+enabled: true
 ---
 
 The map of SuperMe's own codebase and the rules that keep a change from silently breaking the

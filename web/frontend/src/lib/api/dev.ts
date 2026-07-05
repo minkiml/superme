@@ -187,6 +187,22 @@ export function deletePublished(
 ): Promise<{ ok: boolean; proposal_id: number; removed: boolean }> {
   return sendJSON(`/api/dev/harness/published/${proposalId}?context_id=${q(contextId)}`, 'DELETE', undefined)
 }
+// Constitutions — govern ALL constitutions by (scope, slug), not just learning-published ones.
+// A disk scan, so it covers hand-authored + system + learned alike: universal (dev) + this host's
+// local. Disabling flips the `enabled` frontmatter flag the catalog + pull both honor (fully inert).
+export type ManagedConstitution = Schema<'ManagedConstitution'>
+export function getConstitutions(contextId = 'global'): Promise<{ context_id: string; constitutions: ManagedConstitution[] }> {
+  return getJSON(`/api/dev/harness/constitutions?context_id=${q(contextId)}`)
+}
+export function toggleConstitution(
+  slug: string,
+  scope: string,
+  enabled: boolean,
+  contextId = 'global',
+): Promise<{ ok: boolean; slug: string; scope: string; present: boolean; enabled: boolean }> {
+  return sendJSON(`/api/dev/harness/constitutions/${q(slug)}`, 'PATCH', { enabled, scope, context_id: contextId })
+}
+
 // Read / edit a published artifact's raw markdown source (Published-tab preview + edit).
 export type PublishedFile = Schema<'PublishedFileResponse'>
 export function getPublishedFile(proposalId: number, contextId = 'global'): Promise<PublishedFile> {

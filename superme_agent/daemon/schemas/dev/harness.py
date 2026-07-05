@@ -108,6 +108,35 @@ class PublishedToggleResponse(BaseModel):
     proposal_id: int
 
 
+class ManagedConstitution(BaseModel):
+    """One constitution for management — dir-scanned (provenance-agnostic: hand-authored + learned
+    alike), keyed by (scope, slug). Powers the enable/disable surfaces for ALL constitutions."""
+    slug: str
+    scope: str                       # universal_dev | repo_dev  (the toggle key)
+    mode: str                        # dev | core
+    origin: str                      # universal | repo (local to this host)
+    enabled: bool
+    title: str
+    description: str | None = None
+    body: str
+    source: str | None = None
+    created: str | None = None
+    updated: str | None = None
+
+
+class ConstitutionsResponse(BaseModel):
+    context_id: str
+    constitutions: list[ManagedConstitution]
+
+
+class ConstitutionToggleResponse(BaseModel):
+    """ok + slug + scope + the operational toggle result (present/enabled)."""
+    model_config = ConfigDict(extra="allow")
+    ok: bool
+    slug: str
+    scope: str
+
+
 class PublishedDeleteResponse(BaseModel):
     """ok + proposal_id + `removed` (the delete_published result) carried via extra."""
     model_config = ConfigDict(extra="allow")

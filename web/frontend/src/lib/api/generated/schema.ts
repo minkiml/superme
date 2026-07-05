@@ -762,6 +762,49 @@ export interface paths {
         patch: operations["dev_harness_published_toggle_dev_harness_published__proposal_id__patch"];
         trace?: never;
     };
+    "/dev/harness/constitutions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Dev Harness Constitutions
+         * @description Every constitution in this context's scope: universal-dev + this host's local (`repo_dev`),
+         *     each with live `enabled` state. Core is deferred (no core constitutions yet).
+         */
+        get: operations["dev_harness_constitutions_dev_harness_constitutions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dev/harness/constitutions/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Dev Harness Constitution Toggle
+         * @description Enable/disable ANY constitution by (scope, slug) — no proposal needed. A disabled constitution
+         *     leaves the always-on catalog AND becomes unpullable (both filter on `enabled`), so it is fully
+         *     inert. Effective on the next dev turn.
+         */
+        patch: operations["dev_harness_constitution_toggle_dev_harness_constitutions__slug__patch"];
+        trace?: never;
+    };
     "/dev/harness/published/{proposal_id}/file": {
         parameters: {
             query?: never;
@@ -1396,6 +1439,39 @@ export interface components {
             /** Created */
             created?: string | null;
         };
+        /** ConstitutionToggleBody */
+        ConstitutionToggleBody: {
+            /** Enabled */
+            enabled: boolean;
+            /** Scope */
+            scope: string;
+            /**
+             * Context Id
+             * @default global
+             */
+            context_id: string;
+        };
+        /**
+         * ConstitutionToggleResponse
+         * @description ok + slug + scope + the operational toggle result (present/enabled).
+         */
+        ConstitutionToggleResponse: {
+            /** Ok */
+            ok: boolean;
+            /** Slug */
+            slug: string;
+            /** Scope */
+            scope: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** ConstitutionsResponse */
+        ConstitutionsResponse: {
+            /** Context Id */
+            context_id: string;
+            /** Constitutions */
+            constitutions: components["schemas"]["ManagedConstitution"][];
+        };
         /**
          * ContextResponse
          * @description One live context (global or a connected domain) — what the surfaces render.
@@ -1908,6 +1984,35 @@ export interface components {
             repos: components["schemas"]["LearningRollupRepo"][];
             candidates: components["schemas"]["ScopeCount"];
             learned: components["schemas"]["ScopeCount"];
+        };
+        /**
+         * ManagedConstitution
+         * @description One constitution for management — dir-scanned (provenance-agnostic: hand-authored + learned
+         *     alike), keyed by (scope, slug). Powers the enable/disable surfaces for ALL constitutions.
+         */
+        ManagedConstitution: {
+            /** Slug */
+            slug: string;
+            /** Scope */
+            scope: string;
+            /** Mode */
+            mode: string;
+            /** Origin */
+            origin: string;
+            /** Enabled */
+            enabled: boolean;
+            /** Title */
+            title: string;
+            /** Description */
+            description?: string | null;
+            /** Body */
+            body: string;
+            /** Source */
+            source?: string | null;
+            /** Created */
+            created?: string | null;
+            /** Updated */
+            updated?: string | null;
         };
         /** MemoryStatsResponse */
         MemoryStatsResponse: {
@@ -4225,6 +4330,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PublishedToggleResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dev_harness_constitutions_dev_harness_constitutions_get: {
+        parameters: {
+            query?: {
+                context_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConstitutionsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dev_harness_constitution_toggle_dev_harness_constitutions__slug__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConstitutionToggleBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConstitutionToggleResponse"];
                 };
             };
             /** @description Validation Error */
