@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react'
 import { Layers, FileText, X, Loader2, ScrollText, Pencil, Save, Sparkles, Bot } from 'lucide-react'
 import Markdown from '@/ui/Markdown'
 import Toggle from '@/ui/Toggle'
+import ArtifactTabs from '@/ui/ArtifactTabs'
 import { getFoundation, saveFoundationFile, getPublished, getHarnessPlugins, toggleConstitution, type FoundationFile, type FoundationConstitution, type PublishedItem } from '@/lib/api'
 import { HarnessPlugins } from '@/features/dev/HarnessPlugins'
+import ConstitutionModal from '@/features/dev/ConstitutionModal'
 import { Empty } from '@/features/dev/common'
 
 // Foundations — SuperMe's repo-agnostic identity + machinery (Tier-2 nav). Sections: the
@@ -33,17 +35,12 @@ function preview(body: string): string {
 
 type Tab = 'constitution' | 'skills' | 'agents'
 
-const TABS: { key: Tab; label: string; icon: typeof ScrollText }[] = [
-  { key: 'constitution', label: 'Constitution', icon: ScrollText },
-  { key: 'skills', label: 'Skills', icon: Sparkles },
-  { key: 'agents', label: 'Agents', icon: Bot },
-]
-
 export default function Foundations() {
   const [files, setFiles] = useState<FoundationFile[] | null>(null)
   const [consts, setConsts] = useState<FoundationConstitution[]>([])
   const [err, setErr] = useState<string | null>(null)
   const [open, setOpen] = useState<FoundationFile | null>(null)
+  const [openConst, setOpenConst] = useState<FoundationConstitution | null>(null)
   const [tab, setTab] = useState<Tab>('constitution')
   // `${form}:${slug}` → published item for learned+published universal artifacts — used to badge
   // them and to open them with edit/enable-disable/delete governance.
@@ -125,26 +122,17 @@ export default function Foundations() {
 
         {/* Learned constitution + universal skills/agents — one segmented workspace so the three
             no longer stack and compete. Each tab gets a clean full canvas. */}
-        <div className="mb-4 flex items-center gap-1 border-b border-line">
-          {TABS.map((t) => {
-            const active = tab === t.key
-            const count =
-              t.key === 'constitution' ? consts.length : t.key === 'skills' ? pluginCounts?.skills ?? null : pluginCounts?.agents ?? null
-            return (
-              <button
-                key={t.key}
-                onClick={() => setTab(t.key)}
-                className={`-mb-px flex items-center gap-1.5 border-b-2 px-3 py-2 text-[13px] font-medium transition ${
-                  active ? 'border-universal text-fg' : 'border-transparent text-muted hover:text-fg'
-                }`}
-              >
-                <t.icon size={14} className={active ? 'text-universal' : ''} />
-                {t.label}
-                {count != null && <span className="text-[11px] text-faint">({count})</span>}
-              </button>
-            )
-          })}
-        </div>
+        <ArtifactTabs
+          className="mb-4"
+          tint="universal"
+          value={tab}
+          onChange={setTab}
+          tabs={[
+            { key: 'constitution', label: 'Constitution', icon: ScrollText, count: consts.length },
+            { key: 'skills', label: 'Skills', icon: Sparkles, count: pluginCounts?.skills ?? null },
+            { key: 'agents', label: 'Agents', icon: Bot, count: pluginCounts?.agents ?? null },
+          ]}
+        />
 
         {tab === 'constitution' && (
           <section>
@@ -165,7 +153,13 @@ export default function Foundations() {
                     ) : (
                       <div className="space-y-2">
                         {rows.map((c) => (
-                          <ConstitutionRow key={`${c.mode}-${c.slug}`} c={c} learned={learned.has(`constitution:${c.slug}`)} onToggled={load} />
+                          <ConstitutionRow
+                            key={`${c.mode}-${c.slug}`}
+                            c={c}
+                            learned={learned.has(`constitution:${c.slug}`)}
+                            onToggled={load}
+                            onOpen={() => setOpenConst(c)}
+                          />
                         ))}
                       </div>
                     )}
@@ -201,12 +195,25 @@ export default function Foundations() {
           }}
         />
       )}
+      {openConst && (
+        <ConstitutionModal
+          slug={openConst.slug}
+          scope={`universal_${openConst.mode}`}
+          title={openConst.title}
+          mode={openConst.mode}
+          body={openConst.body}
+          enabled={openConst.enabled}
+          learned={learned.has(`constitution:${openConst.slug}`)}
+          tint="universal"
+          onClose={() => setOpenConst(null)}
+          onToggled={load}
+        />
+      )}
     </div>
   )
 }
 
-function ConstitutionRow({ c, learned = false, onToggled }: { c: FoundationConstitution; learned?: boolean; onToggled: () => void }) {
-  const [open, setOpen] = useState(false)
+function ConstitutionRow({ c, learned = false, onToggled, onOpen }: { c: FoundationConstitution; learned?: boolean; onToggled: () => void; onOpen: () => void }) {
   const [busy, setBusy] = useState(false)
 
   async function toggle(v: boolean) {
@@ -222,7 +229,7 @@ function ConstitutionRow({ c, learned = false, onToggled }: { c: FoundationConst
   return (
     <div className={`rounded-lg border border-line bg-surface ${c.enabled ? '' : 'opacity-60'}`}>
       <div className="flex items-center gap-2 px-3.5 py-2.5">
-        <button onClick={() => setOpen((o) => !o)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
+        <button onClick={onOpen} className="flex min-w-0 flex-1 items-center gap-2 text-left" title="Preview">
           <span className={`text-[10px] font-medium uppercase tracking-wider ${c.mode === 'dev' ? 'text-dev' : 'text-core'}`}>{c.mode}</span>
           <span className="min-w-0 flex-1 truncate text-[14px] text-fg">{c.title}</span>
           {learned && <span className="shrink-0 rounded bg-warn/15 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-warn">learned</span>}
@@ -230,11 +237,6 @@ function ConstitutionRow({ c, learned = false, onToggled }: { c: FoundationConst
         </button>
         <Toggle on={c.enabled} onChange={toggle} onColor="bg-universal" disabled={busy} title={c.enabled ? 'Disable' : 'Enable'} />
       </div>
-      {open && (
-        <div className="border-t border-line px-3.5 py-3 text-[13px] text-muted">
-          <Markdown text={c.body} variant="doc" />
-        </div>
-      )}
     </div>
   )
 }

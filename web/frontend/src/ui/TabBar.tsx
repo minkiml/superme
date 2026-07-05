@@ -7,6 +7,7 @@ export default function TabBar<T extends string>({
   onChange,
   size = 'md',
   variant = 'filled',
+  full = false,
   className = '',
 }: {
   tabs: readonly (readonly [T, string])[]
@@ -14,6 +15,7 @@ export default function TabBar<T extends string>({
   onChange: (t: T) => void
   size?: 'sm' | 'md'
   variant?: 'filled' | 'outlined'
+  full?: boolean          // stretch to fill the row, each tab an equal share (e.g. Review | Published)
   className?: string
 }) {
   const text = size === 'sm' ? 'text-[12px]' : 'text-[13px]'
@@ -23,12 +25,12 @@ export default function TabBar<T extends string>({
   const shell = variant === 'outlined' ? 'border border-line bg-surface' : 'bg-hover'
   const selected = variant === 'outlined' ? 'bg-hover text-fg' : 'bg-surface text-fg'
   return (
-    <div className={`inline-flex rounded-lg ${shell} p-0.5 ${text} ${className}`}>
+    <div className={`${full ? 'flex w-full' : 'inline-flex'} rounded-lg ${shell} p-0.5 ${text} ${className}`}>
       {tabs.map(([t, lbl]) => (
         <button
           key={t}
           onClick={() => onChange(t)}
-          className={`rounded-md ${pad} font-medium ${value === t ? selected : 'text-muted hover:text-fg'}`}
+          className={`rounded-md ${pad} font-medium ${full ? 'flex-1 text-center' : ''} ${value === t ? selected : 'text-muted hover:text-fg'}`}
         >
           {lbl}
         </button>

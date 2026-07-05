@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  Sparkles, Check, X, Trash2, Loader2, RefreshCw, ToggleLeft, ToggleRight, Brain,
+  Sparkles, Check, X, Trash2, Loader2, RefreshCw, Brain,
   Bot, Pencil, Save, FileText, Layers, Send, FileCode, Gauge, Terminal,
 } from 'lucide-react'
 import Markdown from '@/ui/Markdown'
 import Modal from '@/ui/Modal'
+import Toggle from '@/ui/Toggle'
+import ArtifactTabs from '@/ui/ArtifactTabs'
 import SectionHeader from '@/ui/SectionHeader'
 import {
   getProposals, approveProposal, updateStagedArtifact, publishProposal, rejectProposal, dropProposal,
@@ -40,6 +42,7 @@ export function PublishedInventory({ contextId }: { contextId: string }) {
   const [busy, setBusy] = useState<number | null>(null)        // proposal_id mid-flight
   const [confirmDel, setConfirmDel] = useState<number | null>(null)
   const [open, setOpen] = useState<PublishedItem | null>(null) // item open in the preview/edit modal
+  const [form, setForm] = useState<PublishedForm>('constitution')
 
   const load = useCallback(() => {
     getPublished(contextId)
@@ -64,6 +67,7 @@ export function PublishedInventory({ contextId }: { contextId: string }) {
 
   const present = items.filter((i) => i.present)
   const forms: PublishedForm[] = ['constitution', 'skill', 'agent']
+  const rows = present.filter((i) => i.form === form)
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-3">
@@ -83,75 +87,61 @@ export function PublishedInventory({ contextId }: { contextId: string }) {
       {present.length === 0 ? (
         <Empty>Nothing published yet — approve a forged artifact at gate 2 and it lands here.</Empty>
       ) : (
-        // One column per form (Constitution · Skills · Agents) — mirrors the Foundations card grid.
-        <div className="grid gap-4 md:grid-cols-3">
-          {forms.map((form) => {
-            const rows = present.filter((i) => i.form === form)
-            const { label, icon: Icon, blurb } = PUB_FORM_META[form]
-            return (
-              <section key={form} className="rounded-xl bg-sunken p-3.5">
-                <div className="mb-3">
-                  <div className="flex items-baseline gap-2">
-                    <Icon size={13} className="translate-y-0.5 text-muted" />
-                    <h2 className="text-[13px] font-semibold text-fg">{label}</h2>
-                    <span className="ml-auto text-[11px] text-faint">{rows.length}</span>
+        // Constitution · Skills · Agents as tabs (matches Foundations + the Artifacts tab).
+        <>
+          <ArtifactTabs
+            tint="dev"
+            value={form}
+            onChange={setForm}
+            tabs={forms.map((f) => ({ key: f, label: PUB_FORM_META[f].label, icon: PUB_FORM_META[f].icon, count: present.filter((i) => i.form === f).length }))}
+          />
+          <p className="text-[12px] text-faint">{PUB_FORM_META[form].blurb}</p>
+          {rows.length === 0 ? (
+            <p className="text-[12px] text-faint">None published in this form.</p>
+          ) : (
+            <div className="space-y-2">
+              {rows.map((it) => {
+                const rowBusy = busy === it.proposal_id
+                const confirming = confirmDel === it.proposal_id
+                return (
+                  <div key={it.proposal_id} className={`rounded-lg border border-line bg-surface ${it.enabled ? '' : 'opacity-60'}`}>
+                    <div className="flex items-center gap-2 px-3.5 py-2.5">
+                      <button onClick={() => setOpen(it)} className="group flex min-w-0 flex-1 items-center gap-1.5 text-left" title="Preview / edit">
+                        <span className="min-w-0 truncate text-[14px] text-fg">{it.title}</span>
+                        <span className="shrink-0 rounded bg-hover px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-faint">
+                          {pubScopeLabel(it.scope)}
+                        </span>
+                        <Pencil size={11} className="shrink-0 text-faint opacity-0 transition group-hover:opacity-100" />
+                      </button>
+                      {rowBusy ? (
+                        <Loader2 size={15} className="animate-spin text-muted" />
+                      ) : (
+                        <Toggle on={it.enabled} onChange={() => toggle(it)} onColor="bg-dev" title={it.enabled ? 'Disable' : 'Enable'} />
+                      )}
+                      {!confirming && (
+                        <button
+                          onClick={() => setConfirmDel(it.proposal_id)}
+                          disabled={rowBusy}
+                          title="Delete from everywhere"
+                          className="shrink-0 rounded p-1 text-muted hover:text-danger disabled:opacity-50"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      )}
+                    </div>
+                    {confirming && (
+                      <div className="flex items-center gap-2 border-t border-line px-3.5 py-1.5 text-[11px]">
+                        <span className="text-muted">Delete everywhere?</span>
+                        <button onClick={() => remove(it)} disabled={rowBusy} className="ml-auto rounded bg-danger/10 px-2 py-0.5 text-danger hover:bg-danger/20 disabled:opacity-50">Delete</button>
+                        <button onClick={() => setConfirmDel(null)} className="rounded px-1.5 py-0.5 text-muted hover:bg-hover">Cancel</button>
+                      </div>
+                    )}
                   </div>
-                  <span className="text-[11px] text-faint">{blurb}</span>
-                </div>
-                {rows.length === 0 ? (
-                  <p className="text-[12px] text-faint">None published.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {rows.map((it) => {
-                      const rowBusy = busy === it.proposal_id
-                      const confirming = confirmDel === it.proposal_id
-                      return (
-                        <div key={it.proposal_id} className={`rounded-lg bg-surface shadow-sm ${it.enabled ? '' : 'opacity-60'}`}>
-                          <div className="flex items-center gap-1.5 px-2.5 py-2">
-                            <button onClick={() => setOpen(it)} className="group flex min-w-0 flex-1 items-center gap-1.5 text-left" title="Preview / edit">
-                              <span className="min-w-0 truncate text-[13px] text-fg">{it.title}</span>
-                              <span className="shrink-0 rounded bg-hover px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-faint">
-                                {pubScopeLabel(it.scope)}
-                              </span>
-                              <Pencil size={11} className="shrink-0 text-faint opacity-0 transition group-hover:opacity-100" />
-                            </button>
-                            <button
-                              onClick={() => toggle(it)}
-                              disabled={rowBusy}
-                              title={it.enabled ? 'Disable' : 'Enable'}
-                              className="shrink-0 rounded p-0.5 text-muted hover:text-fg disabled:opacity-50"
-                            >
-                              {rowBusy ? <Loader2 size={15} className="animate-spin" />
-                                : it.enabled ? <ToggleRight size={17} className="text-accent-text" />
-                                : <ToggleLeft size={17} />}
-                            </button>
-                            {!confirming && (
-                              <button
-                                onClick={() => setConfirmDel(it.proposal_id)}
-                                disabled={rowBusy}
-                                title="Delete from everywhere"
-                                className="shrink-0 rounded p-0.5 text-muted hover:text-danger disabled:opacity-50"
-                              >
-                                <Trash2 size={13} />
-                              </button>
-                            )}
-                          </div>
-                          {confirming && (
-                            <div className="flex items-center gap-2 border-t border-line px-2.5 py-1.5 text-[11px]">
-                              <span className="text-muted">Delete everywhere?</span>
-                              <button onClick={() => remove(it)} disabled={rowBusy} className="ml-auto rounded bg-danger/10 px-2 py-0.5 text-danger hover:bg-danger/20 disabled:opacity-50">Delete</button>
-                              <button onClick={() => setConfirmDel(null)} className="rounded px-1.5 py-0.5 text-muted hover:bg-hover">Cancel</button>
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-              </section>
-            )
-          })}
-        </div>
+                )
+              })}
+            </div>
+          )}
+        </>
       )}
       {open && (
         <PublishedFileModal
@@ -226,10 +216,7 @@ export function PublishedFileModal({ item, contextId, onClose, onSaved, onGovern
           <div className="ml-auto flex items-center gap-1.5">
             {!editing && (
               <>
-                <button onClick={toggleEnabled} disabled={busy} title={enabled ? 'Disable' : 'Enable'}
-                  className="rounded p-1 text-muted hover:bg-hover hover:text-fg disabled:opacity-50">
-                  {enabled ? <ToggleRight size={17} className="text-accent-text" /> : <ToggleLeft size={17} />}
-                </button>
+                <Toggle on={enabled} onChange={() => toggleEnabled()} onColor="bg-dev" disabled={busy} title={enabled ? 'Disable' : 'Enable'} />
                 {confirmDel ? (
                   <span className="flex items-center gap-1">
                     <button onClick={del} disabled={busy} className="rounded bg-danger/10 px-2 py-1 text-[11px] text-danger hover:bg-danger/20 disabled:opacity-50">Delete</button>

@@ -196,6 +196,7 @@ function LearningTab({ contextId }: { contextId: string }) {
         <TabBar
           className="mb-5"
           variant="outlined"
+          full
           value={view}
           onChange={setView}
           tabs={[['review', 'Review'], ['published', 'Published']] as const}
