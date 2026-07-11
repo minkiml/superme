@@ -1,20 +1,19 @@
 import { useState, useEffect } from 'react'
-import { ChevronRight, Plus, Trash2, Clock, CornerDownRight, GitBranch, ArrowRight, X, Bot, Sparkles, Loader2, MessageSquareText, ListChecks } from 'lucide-react'
+import { ChevronRight, Plus, Trash2, Clock, CornerDownRight, GitBranch, ArrowRight, X, Bot, User, Sparkles, Loader2, MessageSquareText, ListChecks } from 'lucide-react'
 import Dropdown from '@/ui/Dropdown'
 import Markdown from '@/ui/Markdown'
 import Modal from '@/ui/Modal'
 import { addInbox, updateInbox, deleteInbox, pushInbox, artifactPath, type WorkItem, type InboxEntry, type InboxKind } from '@/lib/api'
-import { fmtLocal, fmtTokens, fmtDuration, fmtModel, MODELS as MODEL_CATALOG, EFFORTS as EFFORT_CATALOG, DEFAULT_EFFORT } from '@/lib/format'
+import { fmtLocal, fmtTokens, fmtDuration, fmtModel, MODELS as MODEL_CATALOG, DEFAULT_MODEL, EFFORTS as EFFORT_CATALOG, DEFAULT_EFFORT } from '@/lib/format'
 import { PHASES, PHASE_LABEL, PHASE_ACCENT, STATUS_COLOR, STATUS_LABEL, STATUS_STRIPE, primaryStatus, Empty } from './common'
 
 // Phase accent → literal dot class (Tailwind needs the full string present in source).
 const PHASE_DOT: Record<string, string> = { dev: 'bg-dev', warn: 'bg-warn', success: 'bg-success' }
 
-// Models selectable per run on a work-item card. Default is Sonnet; the values are CLI aliases the
-// daemon resolves to the latest concrete model. Labels come from the canonical model catalog.
+// Models selectable per run on a work-item card. Values are the canonical catalog's concrete ids; the
+// daemon normalizes any value to the latest concrete at consumption. Labels come from the catalog.
 export const RUN_MODELS = MODEL_CATALOG.map((m) => ({ value: m.key, label: m.label }))
-// The concrete Sonnet id (the `sonnet` alias lags — see lib/format.ts / core/models.py).
-export const DEFAULT_RUN_MODEL = 'claude-sonnet-5'
+export const DEFAULT_RUN_MODEL = DEFAULT_MODEL
 // Reasoning-effort levels selectable per run, alongside the model. Default "medium".
 export const RUN_EFFORTS = EFFORT_CATALOG.map((e) => ({ value: e.key, label: e.label }))
 export const DEFAULT_RUN_EFFORT = DEFAULT_EFFORT
@@ -141,11 +140,16 @@ function WorkCard({
 }) {
   const clickable = !!onOpen
   const running = !!planning || !!it.running
-  const hasTotal = (it.total_tokens ?? 0) > 0
+  // Σ = the CURRENT phase's accumulated 3-type tokens (the card sits IN its phase column — the number
+  // sums every run made while the item was in this phase, NOT just the last run). Strictly per-phase:
+  // no fallback to the grand total, so it never leaks other phases' spend. Hidden until this phase has
+  // recorded tokens. The 4-type-per-phase figure is recorded behind it (phase_tokens_4type).
+  const phaseTok = it.phase ? it.phase_tokens?.[it.phase] ?? 0 : 0
+  const hasTotal = phaseTok > 0
   const telemetryParts = [
     it.model ? fmtModel(it.model) : null,
     it.context_pct != null ? `ctx ${it.context_pct}%` : null,
-    hasTotal ? `Σ ${fmtTokens(it.total_tokens ?? 0)} tok` : null,
+    hasTotal ? `Σ ${fmtTokens(phaseTok)} tok` : null,
   ] as const
   const hasTelemetry = telemetryParts.some(Boolean)
   // The card is a pure glance + entry point: clicking opens the review popup AND binds the
@@ -572,8 +576,13 @@ function InboxCard({
         </div>
       </div>
       <div className="mt-1.5 flex items-center gap-2 text-[11px] text-faint">
-        {e.origin === 'agent' && (
-          <span className="inline-flex items-center gap-0.5 text-accent" title="Proposed by an agent">
+        {e.origin?.includes('user') && (
+          <span className="inline-flex items-center gap-0.5 text-success" title="Created / contributed by you">
+            <User size={11} /> user
+          </span>
+        )}
+        {e.origin?.includes('agent') && (
+          <span className="inline-flex items-center gap-0.5 text-accent" title="An agent contributed to this item">
             <Bot size={11} /> agent
           </span>
         )}

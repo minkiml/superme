@@ -31,7 +31,7 @@ import json
 import logging
 import sqlite3
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import yaml
@@ -106,6 +106,8 @@ class RepoConfig:
     layer: str = "local"          # "global" | "local"
     persona_append: str = ""
     extra_mcp: list = field(default_factory=list)
+    onboarding: str | None = None  # "project-init" | "retrofit" — the connect-time choice that
+    # selects the onboarding front door until memory is established; None = let the owner pick.
 
     def __post_init__(self):
         if not self.label:
@@ -135,7 +137,7 @@ class RepoConfig:
         return self.operational_home(scope) / "constitution"
 
     def to_dict(self) -> dict:
-        return {
+        d = {
             "id": self.id,
             "label": self.label,
             "cwd": str(self.cwd),
@@ -143,6 +145,9 @@ class RepoConfig:
             "persona_append": self.persona_append,
             "extra_mcp": list(self.extra_mcp),
         }
+        if self.onboarding:
+            d["onboarding"] = self.onboarding
+        return d
 
 
 def load_system_config(path: Path = SYSTEM_CONFIG_FILE) -> SystemConfig:
@@ -183,6 +188,7 @@ def load_repos(path: Path = REPOS_CONFIG_FILE) -> dict[str, RepoConfig]:
             layer=spec.get("layer") or ("global" if rid == "global" else "local"),
             persona_append=(spec.get("persona_append") or "").strip(),
             extra_mcp=spec.get("extra_mcp") or [],
+            onboarding=spec.get("onboarding") or None,
         )
     return out
 
@@ -238,16 +244,19 @@ class SystemSpine:
 
     @staticmethod
     def _display_tokens(row) -> int:
-        """The reconciling per-run token amount for DISPLAY (activity log, run cards): the four typed
-        columns (INCLUDING cache_read) if present, else the legacy scalar for pre-migration rows. This
-        is the SAME definition the token dashboard sums, so a run's number matches across surfaces."""
+        """The reconciling per-run token amount for DISPLAY (activity log, run cards): the THREE main
+        typed columns — input + cache_creation + output — EXCLUDING cache_read (cheap re-reads of
+        already-cached context, which otherwise dwarf the number ~1000× and drown the real "new work"
+        signal). Falls back to the legacy scalar for pre-migration rows (already a 3-type sum). This is
+        the SAME 3-type definition the token dashboard's default (`total`) sums, so a run's number
+        reconciles across surfaces; the full 4-type volume lives behind the dashboard's toggle."""
         typed = ((row["tok_input"] or 0) + (row["tok_cache_creation"] or 0)
-                 + (row["tok_cache_read"] or 0) + (row["tok_output"] or 0))
+                 + (row["tok_output"] or 0))
         return typed if typed > 0 else (row["tokens"] or 0)
 
     def _run_dict(self, r) -> dict:
-        """Row → dict for a `run` row, with `tokens` overridden to the full display amount (see
-        _display_tokens) so every run-returning surface reconciles with the token dashboard."""
+        """Row → dict for a `run` row, with `tokens` overridden to the 3-type display amount (see
+        _display_tokens) so every run-returning surface reconciles with the token dashboard default."""
         d = dict(r)
         d["tokens"] = self._display_tokens(r)
         return d
@@ -266,13 +275,21 @@ class SystemSpine:
                        surface TEXT NOT NULL DEFAULT 'web',
                        cwd TEXT NOT NULL,
                        thread_ts TEXT,
+                       item_id TEXT,
                        resumable INTEGER NOT NULL DEFAULT 1,
                        created_at TEXT NOT NULL,
                        updated_at TEXT NOT NULL
                    )"""
             )
+            # `item_id` is the durable, IMMUTABLE identity stamp (work-item-session-recognition-prd):
+            # non-NULL ⇒ this is a WORK-ITEM session, permanently tied to one primary work-item;
+            # NULL ⇒ a GENERAL (free-discussion) session. Set once by an actual work-item workflow
+            # (never minted manually), it is the SINGLE source of truth the daemon reads to center
+            # the agent + drive the write-sandbox / run-lock / telemetry. Additive ALTER below.
+            self._ensure_columns(c, "session", {"item_id": "TEXT"})
             c.execute("CREATE INDEX IF NOT EXISTS idx_session_repo ON session(repo_id, mode)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_session_cwd ON session(cwd)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_session_item ON session(item_id)")
             # RUN — an execution: a turn within a session, OR a standalone workflow pass.
             # Written at START (status=running) so live + historical live in ONE table, ONE
             # query (decision 4). `session_id` is NULL for standalone workflow runs (distill),
@@ -295,6 +312,7 @@ class SystemSpine:
                        tok_output INTEGER NOT NULL DEFAULT 0,
                        raw_usage TEXT,
                        ctx_pct INTEGER,
+                       phase TEXT,
                        started_at TEXT NOT NULL,
                        ended_at TEXT
                    )"""
@@ -313,6 +331,10 @@ class SystemSpine:
                 "tok_cache_read": "INTEGER NOT NULL DEFAULT 0",
                 "tok_output": "INTEGER NOT NULL DEFAULT 0",
                 "raw_usage": "TEXT",
+                # The work-item phase this run happened IN (plan_design / build_eval / …), stamped at
+                # run open so a work-item's tokens can be accumulated per-phase. NULL for chat/headless
+                # (non-item) runs and for item runs opened before this column existed.
+                "phase": "TEXT",
             })
             c.execute("CREATE INDEX IF NOT EXISTS idx_run_guard ON run(repo_id, mode, feature, status)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_run_item ON run(repo_id, item_id)")
@@ -391,6 +413,25 @@ class SystemSpine:
                    )"""
             )
             c.execute("CREATE INDEX IF NOT EXISTS idx_artifact_item ON run_artifact(repo_id, item_id)")
+            # RUN_EVENT — the per-RUN observability trail (any run, incl. session-less headless):
+            # the prompt that triggered it, the assistant's reply text, and every tool/skill/agent
+            # call, in `seq` order. Keyed by `run_id` (item_id optional) so each Activity row — one
+            # run — has its own thread, distinct from the whole-session transcript. Kept as durable
+            # telemetry like the run row (the throwaway SDK transcript is separate).
+            c.execute(
+                """CREATE TABLE IF NOT EXISTS run_event (
+                       id INTEGER PRIMARY KEY AUTOINCREMENT,
+                       run_id INTEGER,
+                       repo_id TEXT NOT NULL,
+                       item_id TEXT,
+                       seq INTEGER NOT NULL,
+                       kind TEXT NOT NULL,
+                       name TEXT NOT NULL,
+                       description TEXT,
+                       created_at TEXT NOT NULL
+                   )"""
+            )
+            c.execute("CREATE INDEX IF NOT EXISTS idx_event_run ON run_event(run_id)")
             # SWEEP_WATERMARK — the capture sweep's per-session swept position (WI-8). `position`
             # is the count of chat messages already swept for a session; every sweep advances it
             # to the transcript head, so a message is NEVER swept twice (content-level idempotency).
@@ -412,6 +453,30 @@ class SystemSpine:
 
     def repo(self, repo_id: str) -> RepoConfig | None:
         return self.repos().get(repo_id)
+
+    def add_repo(self, rc: RepoConfig) -> RepoConfig:
+        """Register a new repo: APPEND its entry to config/repos.yaml (text-append, not a whole-file
+        re-dump — so the header comments + existing formatting survive). Since `repos()` re-reads the
+        file every call, the repo goes live at once — no restart. The knowledge home is NOT seeded:
+        it's created lazily on first write, and onboarding authors general/ from scratch. Raises
+        ValueError on a duplicate id or cwd."""
+        import textwrap
+        current = self.repos()
+        if rc.id in current:
+            raise ValueError(f"repo id '{rc.id}' already exists")
+        if any(_norm(x.cwd) == _norm(rc.cwd) for x in current.values()):
+            raise ValueError(f"a repo is already connected at {rc.cwd}")
+        # The new entry keyed by id (the id key is redundant under the block, so drop it).
+        spec = {k: v for k, v in rc.to_dict().items() if k != "id"}
+        block = textwrap.indent(yaml.safe_dump({rc.id: spec}, sort_keys=False), "  ")
+        path = Path(self._repos_config_path)
+        text = path.read_text() if path.exists() else ""
+        if "repos:" not in text:                       # fresh/empty file → start the mapping
+            text = (text.rstrip() + "\n\nrepos:\n") if text.strip() else "repos:\n"
+        elif not text.endswith("\n"):
+            text += "\n"
+        path.write_text(text + block)
+        return rc
 
     def repo_for_cwd(self, cwd) -> str | None:
         """Reverse-resolve a cwd to a repo id (the logical key for a session)."""
@@ -467,6 +532,62 @@ class SystemSpine:
         with self._conn() as c:
             return self._get_session(c, session_id)
 
+    def session_item(self, session_id: str | None) -> str | None:
+        """The work-item this session is stamped to, or None for a general session (or unknown id).
+        This stamp is the SINGLE source of truth for whether a session is a work-item session —
+        the daemon reads it to center the agent + drive the sandbox / run-lock / telemetry."""
+        if not session_id:
+            return None
+        with self._conn() as c:
+            r = c.execute("SELECT item_id FROM session WHERE id=?", (session_id,)).fetchone()
+            return (r["item_id"] if r else None) or None
+
+    def session_is_onboarding(self, session_id: str | None) -> bool:
+        """True if this session ever ran an onboarding turn (any `feature='onboarding'` run on it).
+        Onboarding sessions are SuperMe walking the owner through project-init/retrofit — the turns
+        are dense with SuperMe reciting its own skills/guides, so the capture sweep skips them
+        wholesale (the owner-anchored capture filter is the semantic backstop; this is the coarse
+        structural one). A one-time, any-project process → nothing durable to mine from it."""
+        if not session_id:
+            return False
+        with self._conn() as c:
+            r = c.execute(
+                "SELECT 1 FROM run WHERE session_id=? AND feature='onboarding' LIMIT 1",
+                (session_id,)).fetchone()
+            return r is not None
+
+    def stamp_session_item(self, session_id: str, item_id: str) -> bool:
+        """Stamp a session's durable work-item identity — write-once (IMMUTABLE): only sets item_id
+        when it is currently NULL, so a work-item session can never be re-pointed to a different item
+        (work-item-session-recognition-prd). Idempotent if already stamped to the same item. Returns
+        True if this call set it. Called at the two existing session-persistence points (bound-turn
+        finish, headless /plan) — never from a user-facing 'create session' path, which is what keeps
+        work-item sessions from being minted manually."""
+        if not session_id or not item_id:
+            return False
+        with self._conn() as c:
+            cur = c.execute(
+                "UPDATE session SET item_id=?, updated_at=? WHERE id=? AND item_id IS NULL",
+                (item_id, _now(), session_id),
+            )
+            return cur.rowcount > 0
+
+    def backfill_session_items(self, pairs: list[tuple[str, str]]) -> int:
+        """One-time migration: stamp each (session_id, item_id) whose session row is not yet stamped,
+        so work-items already carrying a session_id aren't stranded as 'general'. Write-once, so it
+        never clobbers an existing stamp. Returns the number of rows newly stamped."""
+        n = 0
+        with self._conn() as c:
+            for session_id, item_id in pairs:
+                if not session_id or not item_id:
+                    continue
+                cur = c.execute(
+                    "UPDATE session SET item_id=? WHERE id=? AND item_id IS NULL",
+                    (item_id, session_id),
+                )
+                n += cur.rowcount
+        return n
+
     def sessions_for_cwd(self, cwd, *, resumable_only: bool = True) -> list[dict]:
         """Sessions that ran in a workspace (the web picker). Resumable-only by design — a
         standalone workflow never creates a Session, so this can't surface one."""
@@ -488,9 +609,23 @@ class SystemSpine:
             return r["id"] if r else None
 
     def forget_session(self, session_id: str) -> bool:
+        """The SINGLE session-cascade (session-agent-lifecycle-prd): remove a session AND everything
+        keyed to it — its runs, their run_events + run_artifacts, and its sweep watermarks — so no
+        stale dead item is left dangling. KNOWLEDGE is never touched (general docs / work-items /
+        memory are repo/item-keyed, not session-keyed — operational ⟂ knowledge), so a session delete
+        keeps the value the work produced. Both callers use this; forget keeps the transcript FILE,
+        purge also removes it. Idempotent. Returns True if a session row existed."""
+        if not session_id:
+            return False
         with self._conn() as c:
-            cur = c.execute("DELETE FROM session WHERE id=?", (session_id,))
+            run_ids = [r[0] for r in c.execute("SELECT id FROM run WHERE session_id=?", (session_id,))]
+            if run_ids:
+                ph = ",".join("?" * len(run_ids))
+                c.execute(f"DELETE FROM run_event WHERE run_id IN ({ph})", run_ids)
+                c.execute(f"DELETE FROM run_artifact WHERE run_id IN ({ph})", run_ids)
+                c.execute("DELETE FROM run WHERE session_id=?", (session_id,))
             c.execute("DELETE FROM sweep_watermark WHERE session_id=?", (session_id,))
+            cur = c.execute("DELETE FROM session WHERE id=?", (session_id,))
             return cur.rowcount > 0
 
     # --- capture-sweep watermark (WI-8) -----------------------------------------
@@ -537,7 +672,7 @@ class SystemSpine:
             return cur.lastrowid
 
     def start_item_run(self, repo_id: str, *, mode: str = "dev", feature: str = "plan",
-                       item_id: str, model: str | None = None) -> int | None:
+                       item_id: str, model: str | None = None, phase: str | None = None) -> int | None:
         """Atomically open a run for a work-item IFF none is already in flight for it — the per-item
         run-lock enforced at the data layer (R5). The cheap SELECT short-circuits the common case, but
         the guarantee is the `idx_run_one_live` UNIQUE index: a racing second insert raises
@@ -553,9 +688,9 @@ class SystemSpine:
                 return None
             try:
                 cur = c.execute(
-                    "INSERT INTO run (repo_id,mode,feature,session_id,item_id,status,model,started_at)"
-                    " VALUES (?,?,?,?,?,'running',?,?)",
-                    (repo_id, mode, feature, None, item_id, model, _now()),
+                    "INSERT INTO run (repo_id,mode,feature,session_id,item_id,status,model,phase,started_at)"
+                    " VALUES (?,?,?,?,?,'running',?,?,?)",
+                    (repo_id, mode, feature, None, item_id, model, phase, _now()),
                 )
             except sqlite3.IntegrityError:
                 return None  # lost the race — another begin opened the run first
@@ -721,6 +856,7 @@ class SystemSpine:
         """Drop all run rows for a work-item (called when the item is hard-deleted)."""
         with self._conn() as c:
             c.execute("DELETE FROM run_artifact WHERE repo_id=? AND item_id=?", (repo_id, item_id))
+            c.execute("DELETE FROM run_event WHERE repo_id=? AND item_id=?", (repo_id, item_id))
             cur = c.execute("DELETE FROM run WHERE repo_id=? AND item_id=?", (repo_id, item_id))
             return cur.rowcount
 
@@ -746,6 +882,42 @@ class SystemSpine:
                 (run_id, repo_id, item_id, seq, kind, name, description, _now()),
             )
 
+    # --- run events (the per-RUN observability trail: prompt · reply · tool/skill/agent calls) ---
+    def log_run_event(self, *, repo_id: str, kind: str, name: str, description: str | None = None,
+                      run_id: int | None = None, item_id: str | None = None) -> None:
+        """Append one event to a run's trail (`seq` orders within the run). Pass `run_id` directly
+        (chat / headless), or `item_id` to resolve the item's currently-running run. Best-effort —
+        never raises into the turn loop."""
+        try:
+            with self._conn() as c:
+                if run_id is None and item_id is not None:
+                    r = c.execute(
+                        "SELECT id FROM run WHERE repo_id=? AND item_id=? AND status='running'"
+                        " ORDER BY datetime(started_at) DESC LIMIT 1", (repo_id, item_id),
+                    ).fetchone()
+                    run_id = r["id"] if r else None
+                if run_id is None:
+                    return  # no run to attach to — drop rather than orphan
+                seq = c.execute(
+                    "SELECT COALESCE(MAX(seq),0)+1 AS n FROM run_event WHERE run_id=?", (run_id,),
+                ).fetchone()["n"]
+                c.execute(
+                    "INSERT INTO run_event (run_id,repo_id,item_id,seq,kind,name,description,created_at)"
+                    " VALUES (?,?,?,?,?,?,?,?)",
+                    (run_id, repo_id, item_id, seq, kind, name, description, _now()),
+                )
+        except Exception:  # noqa: BLE001 — telemetry must never break a turn
+            pass
+
+    def events_for_run(self, run_id: int) -> list[dict]:
+        """The full per-run trail (prompt · replies · calls), in order — powers the Activity trace."""
+        with self._conn() as c:
+            rows = c.execute(
+                "SELECT id, seq, kind, name, description, created_at FROM run_event"
+                " WHERE run_id=? ORDER BY seq ASC", (int(run_id),),
+            ).fetchall()
+            return [dict(r) for r in rows]
+
     def artifacts_for_item(self, repo_id: str, item_id: str) -> list[dict]:
         """Every artifact a work-item's runs called, oldest-first within each run, newest run
         first — the call-trail for the work-item detail's Artifacts tab."""
@@ -770,16 +942,22 @@ class SystemSpine:
         with self._conn() as c:
             rows = c.execute(
                 f"SELECT item_id, tokens, tok_input, tok_cache_creation, tok_cache_read, tok_output,"
-                f" model, ctx_pct, started_at, ended_at FROM run"
+                f" model, ctx_pct, phase, started_at, ended_at FROM run"
                 f" WHERE {' AND '.join(where)} ORDER BY datetime(started_at)", args,
             ).fetchall()
         for r in rows:
             s = out.setdefault(r["item_id"], {"total_tokens": 0, "runs": 0, "last_tokens": 0,
                                               "last_duration_ms": None, "last_model": None,
-                                              "last_context_pct": None})
-            toks = self._display_tokens(r)  # full amount (incl cache_read), matches the dashboard
+                                              "last_context_pct": None, "by_phase": {}, "by_phase_cr": {}})
+            toks = self._display_tokens(r)  # 3-type (excl cache_read), matches the dashboard default
             s["total_tokens"] += toks
             s["runs"] += 1
+            # Per-phase accumulation, BOTH bases: `by_phase` = 3-type (what the card shows), `by_phase_cr`
+            # = cache_read (so 4-type-per-phase = by_phase + by_phase_cr is recorded behind it). A run's
+            # tokens land in the phase it ran in (Stage D); pre-phase-column runs bucket under "unknown".
+            ph = r["phase"] or "unknown"
+            s["by_phase"][ph] = s["by_phase"].get(ph, 0) + toks
+            s["by_phase_cr"][ph] = s["by_phase_cr"].get(ph, 0) + (r["tok_cache_read"] or 0)
             s["last_tokens"] = toks
             s["last_duration_ms"] = _duration_ms(r["started_at"], r["ended_at"])
             s["last_model"] = r["model"]
@@ -804,10 +982,12 @@ class SystemSpine:
           • Breakdown 2 — SYSTEMATIC (`by_type`): input / cache_creation / cache_read / output,
             plus a `legacy` bucket for pre-migration rows that only have the old collapsed scalar.
 
-        Per row, the accounted amount = the four typed columns if present, else the legacy `tokens`
-        scalar (pre-split rows). cache_read is NEVER dropped. Sums EVERY run row, so in-flight spend
-        is included. SuperMe-context only. Back-compat: `total`/`by_scope`/`by_feature` are retained
-        for existing readers. (v1 caveat: forge-eval subprocess spend isn't in the spine yet.)"""
+        Per row, the accounted amount = input + cache_creation + output (3-type, EXCLUDES cache_read)
+        if the typed columns are present, else the legacy `tokens` scalar (pre-split rows, already
+        3-type). `total` and every by_* bucket sum this 3-type amount — cache_read is kept in `by_type`
+        (never lost) so the full 4-type volume = `total + by_type["cache_read"]` (the dashboard toggle).
+        Sums EVERY run row, so in-flight spend is included. SuperMe-context only. Back-compat:
+        `total`/`by_scope`/`by_feature` are retained. (v1 caveat: forge-eval spend isn't in the spine.)"""
         from .token_taxonomy import category_for, CATEGORY_ORDER
         typed = "tok_input+tok_cache_creation+tok_cache_read+tok_output"
         with self._conn() as c:
@@ -823,13 +1003,18 @@ class SystemSpine:
             return {"input": 0, "cache_creation": 0, "cache_read": 0, "output": 0, "legacy": 0}
 
         def _add_type(d: dict, r) -> int:
+            # by_type accumulates ALL four components (cache_read included, so it stays inspectable);
+            # the RETURNED accounted amount is 3-type (EXCLUDES cache_read) — that's what `total` and
+            # every by_* bucket sum, so the dashboard default + activity + work-item all read 3-type.
+            # The full 4-type volume = total + by_type["cache_read"] (the dashboard toggle adds it).
             d["input"] += r["ti"]; d["cache_creation"] += r["tcc"]
             d["cache_read"] += r["tcr"]; d["output"] += r["to_"]; d["legacy"] += r["legacy"]
-            return r["ti"] + r["tcc"] + r["tcr"] + r["to_"] + r["legacy"]
+            return r["ti"] + r["tcc"] + r["to_"] + r["legacy"]
 
         total = 0
         by_scope: dict[str, int] = {}
         by_feature: dict[str, int] = {}
+        by_feature_cr: dict[str, int] = {}  # per-feature cache_read, so "By operation" can render 4-type
         by_type = _blank_type()
         by_category: dict[str, dict] = {}
         by_repo: dict[str, dict] = {}
@@ -838,6 +1023,7 @@ class SystemSpine:
             total += amt
             by_scope[r["mode"]] = by_scope.get(r["mode"], 0) + amt
             by_feature[r["feature"]] = by_feature.get(r["feature"], 0) + amt
+            by_feature_cr[r["feature"]] = by_feature_cr.get(r["feature"], 0) + r["tcr"]
             cat = category_for(r["feature"])
             cnode = by_category.setdefault(cat, {"total": 0, "features": {}})
             cnode["total"] += amt
@@ -867,6 +1053,7 @@ class SystemSpine:
                 "total": total,
                 "by_scope": by_scope,
                 "by_feature": by_feature,
+                "by_feature_cache_read": by_feature_cr,
                 "by_type": by_type,
                 "by_category": by_category,
             },
@@ -893,19 +1080,33 @@ class SystemSpine:
                 " FROM run WHERE started_at IS NOT NULL GROUP BY day ORDER BY day",
                 (modifier,),
             ).fetchall()
+        by_day = {r["day"]: r for r in rows if r["day"]}
         days: list[dict] = []
         cumulative = 0
-        for r in rows:
-            if not r["day"]:
-                continue
-            total = r["ti"] + r["tcc"] + r["tcr"] + r["to_"] + r["legacy"]
-            cumulative += total
-            days.append({
-                "day": r["day"],
-                "input": r["ti"], "cache_creation": r["tcc"], "cache_read": r["tcr"],
-                "output": r["to_"], "legacy": r["legacy"],
-                "total": total, "cumulative": cumulative, "runs": r["n"] or 0,
-            })
+        if by_day:
+            # Emit a CONTIGUOUS day axis: walk every calendar day from the first to the last with data
+            # and fill gaps with a zero-day, so days with no runs aren't silently skipped (the bars
+            # would otherwise mis-space and the date axis lie). Cumulative stays flat across zero-days.
+            start, end = date.fromisoformat(min(by_day)), date.fromisoformat(max(by_day))
+            d = start
+            while d <= end:
+                key = d.isoformat()
+                r = by_day.get(key)
+                ti, tcc, tcr, to_, legacy, n = (
+                    (r["ti"], r["tcc"], r["tcr"], r["to_"], r["legacy"], r["n"] or 0)
+                    if r else (0, 0, 0, 0, 0, 0)
+                )
+                # `total` is 3-type (EXCLUDES cache_read) to match the dashboard default; cache_read is
+                # still carried as its own field so the stacked/toggle view can show the full volume.
+                total = ti + tcc + to_ + legacy
+                cumulative += total
+                days.append({
+                    "day": key,
+                    "input": ti, "cache_creation": tcc, "cache_read": tcr,
+                    "output": to_, "legacy": legacy,
+                    "total": total, "cumulative": cumulative, "runs": n,
+                })
+                d += timedelta(days=1)
         return {"days": days, "total": cumulative}
 
     # --- computed repo live-status (NOT stored — derived from runs) -------------
@@ -968,7 +1169,14 @@ class SystemSpine:
                 f"SELECT COUNT(*) FROM run WHERE repo_id=? AND mode=? AND item_id IS NULL "
                 f"AND status='running' AND feature IN ({qmarks})",
                 (repo_id, mode, *learn)).fetchone()[0]
-        return {"items_running": items_running, "learn_running": learn_running}
+            # Onboarding (project-init/retrofit) is a workflow agent too (session-agent-lifecycle-prd):
+            # an unestablished repo's general dev turn runs as feature='onboarding'. Count it running.
+            onboarding_running = c.execute(
+                "SELECT COUNT(*) FROM run WHERE repo_id=? AND mode=? AND item_id IS NULL "
+                "AND status='running' AND feature='onboarding'",
+                (repo_id, mode)).fetchone()[0]
+        return {"items_running": items_running, "learn_running": learn_running,
+                "onboarding_running": onboarding_running}
 
     # --- model overrides --------------------------------------------------------
     def get_model_override(self, repo_id: str) -> str | None:
@@ -1045,21 +1253,25 @@ class SystemSpine:
 
     def resolve_agent_model(self, feature: str) -> str:
         """The concrete, latest model a background sub-agent should run on: its `.md` frontmatter
-        model re-pinned to its tier's CURRENT concrete id (auto-tracks MODEL_TIERS) → else the code
-        preset. Never None. The orchestrator turn uses this; reconcile keeps the `.md` matching."""
+        tier alias resolved to its tier's CURRENT concrete id (auto-tracks MODEL_TIERS) → else the code
+        preset. Never None. This is the consumption point — the runners pass it to run_turn, so the
+        alias on disk becomes the latest concrete here (never the lagging CLI alias)."""
         from .models import agent_model, track_to_latest
         return track_to_latest(self._agent_file_model(feature)) or agent_model(feature)
 
     def set_agent_model(self, feature: str, model: str | None) -> None:
-        """Write a sub-agent's model into its `.md` frontmatter (the source of truth). Accepts a TIER
-        (`sonnet`) or a concrete id; stores the tier's CURRENT concrete so the CLI runs the latest
-        version (a bare alias would resolve to an older one). model=None falls back to the preset."""
-        from .models import agent_model, track_to_latest
+        """Write a sub-agent's model into its `.md` frontmatter (the source of truth), stored as a TIER
+        ALIAS (`sonnet`/`opus`/`haiku`) — the canonical on-disk form everywhere. SuperMe resolves the
+        alias to the latest concrete id at CONSUMPTION (resolve_agent_model → run_turn's normalize), so
+        the file stays version-agnostic and a MODEL_TIERS bump needs no file rewrite. Accepts an alias
+        or a concrete id (the tier is derived); model=None falls back to the preset tier."""
+        from .models import AGENT_MODELS, model_family
         from .operational import set_frontmatter_field
         path = self._agent_md_path(feature)
         if not path or not path.is_file():
             raise ValueError(f"no agent .md for feature '{feature}'")
-        set_frontmatter_field(path, "model", track_to_latest(model) or agent_model(feature))
+        alias = model_family(model) or AGENT_MODELS.get(feature) or "sonnet"
+        set_frontmatter_field(path, "model", alias)
 
     _AGENT_EFFORT_DEFAULT = "medium"
     _AGENT_EFFORTS = ("low", "medium", "high")
@@ -1091,18 +1303,38 @@ class SystemSpine:
         eff = (effort or "").strip().lower()
         set_frontmatter_field(path, "effort", eff if eff in self._AGENT_EFFORTS else self._AGENT_EFFORT_DEFAULT)
 
+    def reconcile_model_overrides(self) -> None:
+        """Normalize the picker overrides (system default + every per-repo/context override) to their
+        TIER ALIAS (`sonnet`) — the canonical DB form, matching the agent-model files. Migrates any
+        legacy concrete id (`claude-sonnet-5`) back to its alias so old picks auto-track a MODEL_TIERS
+        bump. Idempotent; run at daemon startup alongside reconcile_agent_models()."""
+        from .models import model_family
+        with self._conn() as c:
+            row = c.execute("SELECT value FROM system_setting WHERE key='default_model'").fetchone()
+            if row and row["value"]:
+                alias = model_family(row["value"])
+                if alias and alias != row["value"]:
+                    c.execute("UPDATE system_setting SET value=?, updated_at=? WHERE key='default_model'",
+                              (alias, _now()))
+            for r in c.execute("SELECT repo_id, model FROM model_override").fetchall():
+                alias = model_family(r["model"])
+                if alias and alias != r["model"]:
+                    c.execute("UPDATE model_override SET model=?, updated_at=? WHERE repo_id=?",
+                              (alias, _now(), r["repo_id"]))
+
     def reconcile_agent_models(self) -> None:
-        """Re-pin every learning sub-agent's `.md` model to its tier's CURRENT concrete id, so a
-        single MODEL_TIERS bump propagates to the files (the sub-agent reads the raw frontmatter).
-        A no-op when they already match. Run at daemon startup."""
-        from .models import AGENT_MODEL_FEATURES, track_to_latest
+        """Normalize every learning sub-agent's `.md` model to its TIER ALIAS (`sonnet`) — the canonical
+        on-disk form. Consumption resolves the concrete latest via resolve_agent_model(), so files never
+        carry a concrete id. Idempotent; migrates any legacy concrete id back to its alias. Run at daemon
+        startup."""
+        from .models import AGENT_MODEL_FEATURES, model_family
         from .operational import set_frontmatter_field
         for feat in AGENT_MODEL_FEATURES:
             cur = self._agent_file_model(feat)
-            latest = track_to_latest(cur)
+            alias = model_family(cur)
             path = self._agent_md_path(feat)
-            if latest and cur and latest != cur and path and path.is_file():
-                set_frontmatter_field(path, "model", latest)
+            if alias and cur and alias != cur and path and path.is_file():
+                set_frontmatter_field(path, "model", alias)
 
     def agent_model_config(self) -> list[dict]:
         """The tunable background sub-agents, in display order: for each, its label, scope, the tier

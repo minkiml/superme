@@ -13,7 +13,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Annotated, Required, TypedDict
 
-from ...core.operational import resolve_constitution, list_constitution
+from ...core.operational import (
+    resolve_constitution, list_constitution, rank_assets_by_relevance, adopt_repo_assets,
+)
 from .registry import ToolSpec, build_mcp_server
 
 
@@ -29,21 +31,67 @@ class PullConstitutionArgs(TypedDict, total=False):
     name: Required[Annotated[str, "the constitution's name, exactly as listed in the catalog"]]
 
 
-def _pull_constitution(*, mode: str, universal_dir: Path, repo_dir: Path | None, **_):
-    """Resolve a catalog name → the item's full body. Scope is enforced by the dirs bound here
-    (only the host's universal + repo constitution homes), so an out-of-scope name just misses."""
+def _pull_constitution(*, mode: str, universal_dir: Path, repo_dir: Path | None,
+                       activated: set | None = None, **_):
+    """Resolve a catalog name → the item's full body. Scope is enforced by the dirs + active-set bound
+    here (universal + repo + this repo's activated ASSET items), so an out-of-scope name misses."""
     async def pull_constitution(args: dict) -> dict:
         name = str(args.get("name") or "").strip()
         if not name:
             return _err("Pass `name` — the constitution to load (see the catalog).")
-        it = resolve_constitution(mode, universal_dir, repo_dir, name)
+        it = resolve_constitution(mode, universal_dir, repo_dir, name, activated=activated)
         if it is None:
             avail = ", ".join(
-                i["slug"] for i in list_constitution(mode, universal_dir, repo_dir) if i["enabled"]
+                i["slug"] for i in list_constitution(mode, universal_dir, repo_dir, activated=activated)
+                if i["enabled"]
             ) or "(none)"
             return _err(f"No in-scope constitution named '{name}'. Available: {avail}")
         return _ok(it["body"])
     return pull_constitution
+
+
+class SuggestAssetsArgs(TypedDict, total=False):
+    spec: Required[Annotated[str, "the project spec / stack / approach text to match against"]]
+    limit: Annotated[int, "max suggestions to return (default 8)"]
+
+
+def _suggest_assets(*, activated: set | None = None, repo_dir: Path | None = None, **_):
+    """The spec→asset bridge, run by onboarding: relevance-rank the shared ASSET POOL against the
+    project spec and AUTO-ADOPT (enable) the confidently-relevant items for this repo. Confident = the
+    spec shares a term with the asset's slug or description, not merely its body. The owner then curates
+    them in the dashboard (disable / drop / + Add). The pool is shared; adoption is per-repo (no copy)."""
+    async def suggest_assets(args: dict) -> dict:
+        spec = str(args.get("spec") or "").strip()
+        if not spec:
+            return _err("Pass `spec` — the project's stack/approach text to match against.")
+        try:
+            limit = max(1, min(20, int(args.get("limit") or 8)))
+        except (TypeError, ValueError):
+            limit = 8
+        ranked = rank_assets_by_relevance(spec, activated, limit=limit)
+        if not ranked:
+            return _ok("No knowledge assets look relevant to this spec.")
+        confident = [r for r in ranked if r["confident"] and not r["activated"]]
+        newly = set(adopt_repo_assets(repo_dir, [r["slug"] for r in confident]))
+        adopted = [r for r in confident if r["slug"] in newly]
+        maybe = [r for r in ranked if r["slug"] not in newly and not r["activated"]]
+
+        def _row(r: dict) -> str:
+            return f"- **{r['slug']}** — {(r.get('description') or '').strip()}"
+
+        out: list[str] = []
+        if adopted:
+            out.append("**Auto-adopted & enabled for this repo** — curate in the dashboard "
+                       "(disable, drop, or + Add more):")
+            out += [_row(r) for r in adopted]
+        if maybe:
+            out.append(("\n" if out else "") + "**Also possibly relevant** — + Add from the dashboard "
+                       "if you want them:")
+            out += [_row(r) for r in maybe]
+        if not out:
+            return _ok("The relevant assets are already active for this repo; nothing new to adopt.")
+        return _ok("\n".join(out))
+    return suggest_assets
 
 
 BASE_TOOLS: list[ToolSpec] = [
@@ -52,11 +100,19 @@ BASE_TOOLS: list[ToolSpec] = [
         "Load a constitution's full body by name (from the always-on catalog).",
         PullConstitutionArgs, _pull_constitution,
     ),
+    ToolSpec(
+        "suggest_assets",
+        "Search and rank the shared knowledge-asset pool against a project spec and auto-adopt the "
+        "confidently-relevant items for this repo. Onboarding only.",
+        SuggestAssetsArgs, _suggest_assets,
+    ),
 ]
 
 
-def make_base_mcp_server(mode: str, universal_dir: Path, repo_dir: Path | None):
+def make_base_mcp_server(mode: str, universal_dir: Path, repo_dir: Path | None,
+                         activated: set | None = None):
     """Build the `superme` MCP server (base tools, every mode), bound to this host's constitution
-    homes so `pull_constitution` only ever serves in-scope items."""
+    homes + this repo's activated asset-slug set (`activated`), so `pull_constitution`/`suggest_assets`
+    only ever serve in-scope + activated items. The asset pool location is fixed (config.ASSET_DIR)."""
     return build_mcp_server("superme", BASE_TOOLS, mode=mode,
-                            universal_dir=universal_dir, repo_dir=repo_dir)
+                            universal_dir=universal_dir, repo_dir=repo_dir, activated=activated)

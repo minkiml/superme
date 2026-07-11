@@ -53,10 +53,16 @@ async def dev_memory_stats(context_id: str = "global",
     Each carries enough detail to render a popup without a second round-trip."""
     from ....core import operational as ops
     cands = dev_store.list_memory_candidates(context_id, status="candidate")
-    pending = dev_store.list_memory_proposals(context_id, status="proposed")
+    all_props = dev_store.list_memory_proposals(context_id)   # every status, one read
+    # The pipeline is a 4-slot funnel — candidate → pending → drafted → learned — each its own tile
+    # number (so nothing vanishes between stages, the way a drafted proposal did under a proposed-only
+    # "pending" count). `pending` = awaiting gate-1 / being forged (proposed + writing); `drafted` =
+    # forged + staged, awaiting the gate-2 publish; `learned` = published + present on disk.
+    pending = [p for p in all_props if p.get("status") in ("proposed", "writing")]
+    drafted = [p for p in all_props if p.get("status") == "drafted"]
     # Published learned artifacts (the post-WI-8 "learned knowledge" — facts are retired).
     pub_items = []
-    for prop in dev_store.list_memory_proposals(context_id, status="published"):
+    for prop in [p for p in all_props if p.get("status") == "published"]:
         form, scope, repo_id, slug = _published_ident(prop, context_id)
         try:
             st = ops.published_state(form, scope, repo_id, slug)
@@ -74,6 +80,7 @@ async def dev_memory_stats(context_id: str = "global",
         "candidates": {
             "total": len(cands),
             "pending_proposals": len(pending),
+            "drafted_proposals": len(drafted),
             "by_form": _count_by(cands, "form_hint"),
             "items": [
                 {"id": c["id"], "signal": c["signal"], "form_hint": c.get("form_hint"),
@@ -107,29 +114,40 @@ async def dev_memory_rollup(dev_store: DevStore = Depends(get_dev_store),
         return {"dev": 0, "core": 0, "total": 0}
 
     repos: list[dict] = []
-    tot_cand, tot_learn = _blank(), _blank()
+    tot_cand, tot_pend, tot_draft, tot_learn = _blank(), _blank(), _blank(), _blank()
     for repo_id, rc in spine.repos().items():
-        cand, learn = _blank(), _blank()
+        cand, pend, draft, learn = _blank(), _blank(), _blank(), _blank()
         for c in dev_store.list_memory_candidates(repo_id, status="candidate"):
             b = _scope_bucket(c.get("scope_hint"))
             cand[b] += 1; cand["total"] += 1
-        for prop in dev_store.list_memory_proposals(repo_id, status="published"):
-            form, scope, rid, slug = _published_ident(prop, repo_id)
-            try:
-                if not ops.published_state(form, scope, rid, slug)["present"]:
+        # Proposals in flight, bucketed by target_scope: pending (proposed/writing) + drafted (gate-2).
+        for prop in dev_store.list_memory_proposals(repo_id):
+            b = _scope_bucket(prop.get("target_scope"))
+            if prop.get("status") in ("proposed", "writing"):
+                pend[b] += 1; pend["total"] += 1
+            elif prop.get("status") == "drafted":
+                draft[b] += 1; draft["total"] += 1
+            elif prop.get("status") == "published":
+                form, scope, rid, slug = _published_ident(prop, repo_id)
+                try:
+                    if not ops.published_state(form, scope, rid, slug)["present"]:
+                        continue
+                except Exception:
                     continue
-            except Exception:
-                continue
-            b = _scope_bucket(scope)
-            learn[b] += 1; learn["total"] += 1
-        # Skip repos with nothing on either side — keep the list to where learning actually happened.
-        if cand["total"] or learn["total"]:
-            repos.append({"repo_id": repo_id, "label": rc.label, "candidates": cand, "learned": learn})
+                lb = _scope_bucket(scope)
+                learn[lb] += 1; learn["total"] += 1
+        # Skip repos with nothing anywhere — keep the list to where learning actually happened.
+        if cand["total"] or pend["total"] or draft["total"] or learn["total"]:
+            repos.append({"repo_id": repo_id, "label": rc.label, "candidates": cand,
+                          "pending": pend, "drafted": draft, "learned": learn})
         for k in ("dev", "core", "total"):
-            tot_cand[k] += cand[k]; tot_learn[k] += learn[k]
+            tot_cand[k] += cand[k]; tot_pend[k] += pend[k]
+            tot_draft[k] += draft[k]; tot_learn[k] += learn[k]
 
-    repos.sort(key=lambda r: (r["candidates"]["total"] + r["learned"]["total"]), reverse=True)
-    return {"repos": repos, "candidates": tot_cand, "learned": tot_learn}
+    repos.sort(key=lambda r: (r["candidates"]["total"] + r["pending"]["total"]
+                              + r["drafted"]["total"] + r["learned"]["total"]), reverse=True)
+    return {"repos": repos, "candidates": tot_cand, "pending": tot_pend,
+            "drafted": tot_draft, "learned": tot_learn}
 
 
 @router.post("/dev/memory/distill", response_model=DistillResponse, response_model_exclude_unset=True)

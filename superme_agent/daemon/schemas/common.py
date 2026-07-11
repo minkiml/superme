@@ -20,7 +20,11 @@ Deliberately NOT locked (model-generated / free-form, so a Literal could 500): p
 from typing import Literal
 
 # --- work-item lifecycle (D-018) ---
-WorkPhase = Literal["plan_design", "build_eval", "done"]
+# `triage` is the intake/classification phase a pushed item passes through before plan_design (the
+# two-tier scaffold: an item is classified onto a deliverable/wave, owner-approved, then advances to
+# plan_design). The value is reserved in the contract now; the triage BEHAVIOUR (auto-classify +
+# approval gate) lands with the workspace-workflow. `create_work_item` still enters at plan_design.
+WorkPhase = Literal["triage", "plan_design", "build_eval", "done"]
 WorkStatus = Literal["queued", "in_progress", "waiting", "dropped"]
 
 # --- inbox triage ---

@@ -71,10 +71,35 @@ class RepoOverview(BaseModel):
     scopes: dict[str, RepoScope]
 
 
+class RepoConnectResponse(BaseModel):
+    """A freshly connected repo — the new orbit node. `onboarding` is the connect-time choice
+    (project-init | retrofit) that its dev workspace launches until memory is established."""
+    id: str
+    label: str
+    cwd: str
+    onboarding: str | None = None
+
+
 class RunsResponse(BaseModel):
     live: list[RunRow]
     history: list[RunRow]
     running: int
+
+
+class RunEventRow(BaseModel):
+    """One entry of a run's event trail: a prompt, an assistant reply block, or a tool/skill/agent
+    call. `kind` ∈ prompt | reply | tool | skill | agent; `name` is the label, `description` the body."""
+    id: int
+    seq: int
+    kind: str
+    name: str
+    description: str | None = None
+    created_at: str
+
+
+class RunTraceResponse(BaseModel):
+    run_id: int
+    events: list[RunEventRow]
 
 
 class SystemModelResponse(BaseModel):
@@ -174,6 +199,9 @@ class TokenBucket(BaseModel):
     total: int
     by_scope: dict[str, int] = {}
     by_feature: dict[str, int] = {}
+    # Per-feature cache_read (global only) — lets the drilldown's "By operation" tab render 4-type
+    # (per-feature 3-type + this) when the owner toggles cache_read on. Empty on per-repo buckets.
+    by_feature_cache_read: dict[str, int] = {}
     by_type: TokenTypeSplit = TokenTypeSplit()
     by_category: dict[str, CategoryNode] = {}
 

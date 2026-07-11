@@ -1,7 +1,7 @@
 """Context — the surface-agnostic binding for one agent run.
 
-A Context says *who/where* a turn runs: the global root ("Me") or a specific
-local/project (sub-SuperMe). It generalizes the Slack-era "workspace" concept so the
+A Context says *who/where* a turn runs: the global root ("SuperMe hub") or a
+specific local/project (a project host). It generalizes the Slack-era "workspace" concept so the
 same Core code path serves every surface and both harness layers.
 
   layer          "global" (the root SuperMe) | "local" (a project sub-SuperMe)

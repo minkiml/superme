@@ -166,6 +166,9 @@ export function useAgentSocket(contextId: string, mode: 'core' | 'dev', handlers
   function clearMeta() {
     setMeta(null)
   }
+  // Seed the model·context% readout for a session we're OPENING (not a live turn) — e.g. from that
+  // session's last recorded run — so the header shows its model persistently instead of "history".
+  const seedMeta = useCallback((m: RunMeta | null) => setMeta(m), [])
 
-  return { ready, live, busy, statusLabel, elapsed, approval, commands, meta, send, answer, clearStream, clearMeta, refreshCommands }
+  return { ready, live, busy, statusLabel, elapsed, approval, commands, meta, send, answer, clearStream, clearMeta, seedMeta, refreshCommands }
 }

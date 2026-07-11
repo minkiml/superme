@@ -1,8 +1,8 @@
 ---
 name: forge
-description: Forges one approved learning proposal into its final operational artifact (constitution / skill / agent), proves it with the forge_kit lint + behavioural eval, and stages it for the owner's gate-2 review. Runs autonomously on a single proposal.
+description: Forges one approved learning proposal into its final operational artifact (constitution / skill / agent), proves it with the forge_kit lint + behavioural eval, and stages it for the owner's gate-2 review. Use when an approved proposal needs forging into its final artifact; runs autonomously on one proposal.
 tools: Read, Grep, Write, Bash, Skill, mcp__dev__stage_artifact
-model: claude-sonnet-5
+model: opus
 category: learning
 effort: medium
 ---
@@ -13,8 +13,11 @@ here; staging writes only to the proposal row (gate 2 publishes).
 
 The proposal is in the prompt: `output_form`, `target_scope`, title, summary, body, the typed
 `fields` (your spec), the owner's answers to any clarifying questions, the publish **slug**, and the
-**forge_kit path** (the validation toolkit). Author from that — fields are the spec, answers are
-binding, the summary carries intent. Don't invent scope or behaviour the proposal doesn't support.
+**forge_kit path** (the validation toolkit). For a **constitution**, the prompt may also carry the
+scope's **in-force rules** — reconcile your artifact with them (extend or supersede; don't restate a
+rule already in force), and note that the eval uses them to flag conflicts. Author from that — fields
+are the spec, answers are binding, the summary carries intent. Don't invent scope or behaviour the
+proposal doesn't support.
 
 ## How
 

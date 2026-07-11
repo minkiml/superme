@@ -32,9 +32,11 @@ except ImportError:  # the harness env ships pyyaml; degrade loudly rather than 
 NAME_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 MAX_DESC = 1024          # routing budget — the only metadata an agent sees when choosing
 MAX_NAME = 64
-# A LEARNED artifact must use a model ALIAS, never a pinned full ID: pinned IDs go stale (or, like a
-# hallucinated `claude-sonnet-4-5`, were never valid), whereas aliases always resolve to the current
-# model. So lint allows only these.
+# A LEARNED artifact must use a model ALIAS, never a pinned full ID. Aliases are the canonical on-disk
+# form everywhere in SuperMe; the backend resolves them to the latest concrete id at consumption
+# (core/models.py MODEL_TIERS → resolve_agent_model / normalize_model). A pinned id would go stale (or,
+# like a hallucinated `claude-sonnet-4-5`, be invalid) and needs a file rewrite on every model bump. So
+# lint allows only these.
 MODEL_ALIASES = {"sonnet", "opus", "haiku", "inherit"}
 SKILL_BODY_HARD = 500    # spec ceiling for SKILL.md
 LEAN_BODY_WARN = 200     # a *learned* skill/agent should be tighter than the ceiling

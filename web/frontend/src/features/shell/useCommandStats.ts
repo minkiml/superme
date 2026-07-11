@@ -29,7 +29,7 @@ export type CommandStats = {
   projects: number // connected repos, Me (global) excluded
   opsRunning: number
   opsLive: number
-  learn: { candidates: number; pending: number; learned: number }
+  learn: { candidates: number; pending: number; drafted: number; learned: number }
   hub: OrbitRepo | null // Me / global — the orbit center
   nodes: OrbitRepo[] // connected projects orbiting the hub
 }
@@ -41,7 +41,7 @@ const EMPTY: CommandStats = {
   projects: 0,
   opsRunning: 0,
   opsLive: 0,
-  learn: { candidates: 0, pending: 0, learned: 0 },
+  learn: { candidates: 0, pending: 0, drafted: 0, learned: 0 },
   hub: null,
   nodes: [],
 }
@@ -94,6 +94,7 @@ export function useCommandStats(pollMs = 5000): CommandStats {
           learn: {
             candidates: cand?.total ?? 0,
             pending: cand?.pending_proposals ?? 0,
+            drafted: cand?.drafted_proposals ?? 0,
             learned: know?.facts_total ?? 0,
           },
           hub,

@@ -6,6 +6,9 @@
     "DELETE /sessions/{session_id}",
     "GET /contexts",
     "GET /dev",
+    "GET /dev/general",
+    "GET /dev/general/{name}",
+    "GET /dev/harness/assets",
     "GET /dev/harness/constitutions",
     "GET /dev/harness/foundation",
     "GET /dev/harness/local-plugins",
@@ -19,21 +22,26 @@
     "GET /dev/memory/rollup",
     "GET /dev/memory/stats",
     "GET /dev/palette",
+    "GET /dev/project-status",
+    "GET /dev/roadmap",
     "GET /dev/work-items/{item_id}/artifacts",
     "GET /dev/work-items/{item_id}/detail",
     "GET /docs",
     "GET /docs/{slug}",
+    "GET /fs/browse",
     "GET /health",
     "GET /knowledge/file",
     "GET /knowledge/tree",
     "GET /repos",
     "GET /runs",
+    "GET /runs/{run_id}/trace",
     "GET /sessions",
     "GET /sessions/{session_id}",
     "GET /system",
     "GET /system/agent-models",
     "GET /tokens",
     "GET /tokens/timeseries",
+    "PATCH /dev/harness/assets/{slug}",
     "PATCH /dev/harness/constitutions/{slug}",
     "PATCH /dev/harness/published/{proposal_id}",
     "PATCH /dev/inbox/{item_id}",
@@ -52,7 +60,9 @@
     "POST /dev/work-items/{item_id}/effort",
     "POST /dev/work-items/{item_id}/model",
     "POST /dev/work-items/{item_id}/plan",
+    "POST /dev/work-items/{item_id}/scaffold",
     "POST /knowledge/inject",
+    "POST /repos",
     "POST /repos/{repo_id}/effort",
     "POST /repos/{repo_id}/learning",
     "POST /repos/{repo_id}/meta",
@@ -62,6 +72,7 @@
     "POST /system/learning",
     "POST /system/model",
     "POST /system/sweep",
+    "PUT /dev/general/{name}",
     "PUT /dev/harness/foundation",
     "PUT /dev/harness/plugin-file",
     "PUT /dev/harness/published/{proposal_id}/file",
@@ -298,6 +309,289 @@
           "title": "ArtifactRef",
           "type": "object"
         },
+        "AssetActionBody": {
+          "properties": {
+            "action": {
+              "title": "Action",
+              "type": "string"
+            },
+            "context_id": {
+              "default": "global",
+              "title": "Context Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "title": "AssetActionBody",
+          "type": "object"
+        },
+        "AssetActionResponse": {
+          "description": "Result of a per-repo asset action (adopt / enable / disable / drop).",
+          "properties": {
+            "action": {
+              "title": "Action",
+              "type": "string"
+            },
+            "adopted": {
+              "title": "Adopted",
+              "type": "boolean"
+            },
+            "enabled": {
+              "title": "Enabled",
+              "type": "boolean"
+            },
+            "ok": {
+              "title": "Ok",
+              "type": "boolean"
+            },
+            "slug": {
+              "title": "Slug",
+              "type": "string"
+            }
+          },
+          "required": [
+            "ok",
+            "slug",
+            "action",
+            "adopted",
+            "enabled"
+          ],
+          "title": "AssetActionResponse",
+          "type": "object"
+        },
+        "AssetItem": {
+          "description": "One asset-pool item \u2014 `adopted` (in this repo's list) + `enabled` (adopted and not off).",
+          "properties": {
+            "adopted": {
+              "title": "Adopted",
+              "type": "boolean"
+            },
+            "body": {
+              "title": "Body",
+              "type": "string"
+            },
+            "description": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Description"
+            },
+            "enabled": {
+              "title": "Enabled",
+              "type": "boolean"
+            },
+            "slug": {
+              "title": "Slug",
+              "type": "string"
+            },
+            "title": {
+              "title": "Title",
+              "type": "string"
+            }
+          },
+          "required": [
+            "slug",
+            "title",
+            "body",
+            "adopted",
+            "enabled"
+          ],
+          "title": "AssetItem",
+          "type": "object"
+        },
+        "AssetsResponse": {
+          "properties": {
+            "assets": {
+              "items": {
+                "$ref": "#/components/schemas/AssetItem"
+              },
+              "title": "Assets",
+              "type": "array"
+            },
+            "context_id": {
+              "title": "Context Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "context_id",
+            "assets"
+          ],
+          "title": "AssetsResponse",
+          "type": "object"
+        },
+        "BoardDeliverable": {
+          "properties": {
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "items": {
+              "items": {
+                "$ref": "#/components/schemas/BoardItem"
+              },
+              "title": "Items",
+              "type": "array"
+            },
+            "rollup": {
+              "$ref": "#/components/schemas/Rollup"
+            },
+            "title": {
+              "title": "Title",
+              "type": "string"
+            },
+            "waves": {
+              "items": {
+                "$ref": "#/components/schemas/BoardWave"
+              },
+              "title": "Waves",
+              "type": "array"
+            }
+          },
+          "required": [
+            "id",
+            "title",
+            "waves",
+            "items",
+            "rollup"
+          ],
+          "title": "BoardDeliverable",
+          "type": "object"
+        },
+        "BoardItem": {
+          "description": "A work-item as it appears on the board \u2014 status + dates are the item's own, rendered live.",
+          "properties": {
+            "date": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date"
+            },
+            "done_at": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Done At"
+            },
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "phase": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "triage",
+                    "plan_design",
+                    "build_eval",
+                    "done"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Phase"
+            },
+            "status": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "queued",
+                    "in_progress",
+                    "waiting",
+                    "dropped"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            },
+            "title": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Title"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "title": "BoardItem",
+          "type": "object"
+        },
+        "BoardWave": {
+          "properties": {
+            "deliverable": {
+              "title": "Deliverable",
+              "type": "string"
+            },
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "items": {
+              "items": {
+                "$ref": "#/components/schemas/BoardItem"
+              },
+              "title": "Items",
+              "type": "array"
+            },
+            "rollup": {
+              "$ref": "#/components/schemas/Rollup"
+            },
+            "status": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            },
+            "title": {
+              "title": "Title",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "title",
+            "deliverable",
+            "items",
+            "rollup"
+          ],
+          "title": "BoardWave",
+          "type": "object"
+        },
         "CandidateStatItem": {
           "properties": {
             "captured_at": {
@@ -369,6 +663,10 @@
               "title": "By Form",
               "type": "object"
             },
+            "drafted_proposals": {
+              "title": "Drafted Proposals",
+              "type": "integer"
+            },
             "items": {
               "items": {
                 "$ref": "#/components/schemas/CandidateStatItem"
@@ -388,6 +686,7 @@
           "required": [
             "total",
             "pending_proposals",
+            "drafted_proposals",
             "by_form",
             "items"
           ],
@@ -1215,6 +1514,171 @@
           "title": "FoundationResponse",
           "type": "object"
         },
+        "FsBrowseResponse": {
+          "properties": {
+            "entries": {
+              "items": {
+                "$ref": "#/components/schemas/FsEntry"
+              },
+              "title": "Entries",
+              "type": "array"
+            },
+            "locked": {
+              "default": false,
+              "title": "Locked",
+              "type": "boolean"
+            },
+            "parent": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Parent"
+            },
+            "path": {
+              "title": "Path",
+              "type": "string"
+            }
+          },
+          "required": [
+            "path",
+            "parent",
+            "entries"
+          ],
+          "title": "FsBrowseResponse",
+          "type": "object"
+        },
+        "FsEntry": {
+          "properties": {
+            "empty": {
+              "default": true,
+              "title": "Empty",
+              "type": "boolean"
+            },
+            "has_code": {
+              "default": false,
+              "title": "Has Code",
+              "type": "boolean"
+            },
+            "is_git": {
+              "default": false,
+              "title": "Is Git",
+              "type": "boolean"
+            },
+            "name": {
+              "title": "Name",
+              "type": "string"
+            },
+            "path": {
+              "title": "Path",
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "path"
+          ],
+          "title": "FsEntry",
+          "type": "object"
+        },
+        "GeneralDoc": {
+          "properties": {
+            "name": {
+              "title": "Name",
+              "type": "string"
+            },
+            "present": {
+              "title": "Present",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "name",
+            "present"
+          ],
+          "title": "GeneralDoc",
+          "type": "object"
+        },
+        "GeneralDocResponse": {
+          "properties": {
+            "content": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Content"
+            },
+            "name": {
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "title": "GeneralDocResponse",
+          "type": "object"
+        },
+        "GeneralDocSaveBody": {
+          "properties": {
+            "content": {
+              "title": "Content",
+              "type": "string"
+            },
+            "context_id": {
+              "default": "global",
+              "title": "Context Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "content"
+          ],
+          "title": "GeneralDocSaveBody",
+          "type": "object"
+        },
+        "GeneralDocSaveResponse": {
+          "properties": {
+            "name": {
+              "title": "Name",
+              "type": "string"
+            },
+            "ok": {
+              "title": "Ok",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok",
+            "name"
+          ],
+          "title": "GeneralDocSaveResponse",
+          "type": "object"
+        },
+        "GeneralDocsResponse": {
+          "properties": {
+            "docs": {
+              "items": {
+                "$ref": "#/components/schemas/GeneralDoc"
+              },
+              "title": "Docs",
+              "type": "array"
+            }
+          },
+          "required": [
+            "docs"
+          ],
+          "title": "GeneralDocsResponse",
+          "type": "object"
+        },
         "Glance": {
           "additionalProperties": true,
           "description": "The dashboard glance summary (counts + bucketed item stubs).",
@@ -1573,19 +2037,16 @@
               "type": "string"
             },
             "origin": {
-              "anyOf": [
-                {
-                  "enum": [
-                    "user",
-                    "agent"
-                  ],
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Origin"
+              "default": [],
+              "items": {
+                "enum": [
+                  "user",
+                  "agent"
+                ],
+                "type": "string"
+              },
+              "title": "Origin",
+              "type": "array"
             },
             "routed_to": {
               "anyOf": [
@@ -1881,11 +2342,17 @@
             "candidates": {
               "$ref": "#/components/schemas/ScopeCount"
             },
+            "drafted": {
+              "$ref": "#/components/schemas/ScopeCount"
+            },
             "label": {
               "title": "Label",
               "type": "string"
             },
             "learned": {
+              "$ref": "#/components/schemas/ScopeCount"
+            },
+            "pending": {
               "$ref": "#/components/schemas/ScopeCount"
             },
             "repo_id": {
@@ -1897,18 +2364,26 @@
             "repo_id",
             "label",
             "candidates",
+            "pending",
+            "drafted",
             "learned"
           ],
           "title": "LearningRollupRepo",
           "type": "object"
         },
         "LearningRollupResponse": {
-          "description": "Per-repo learning counts (captured candidates + published/learned artifacts), each split by\ndev/core scope, plus the cross-repo totals. Powers the Learning tile drill-in.",
+          "description": "Per-repo learning counts across the 4-slot pipeline (candidates \u00b7 pending \u00b7 drafted \u00b7 learned),\neach split by dev/core scope, plus the cross-repo totals. Powers the Learning tile drill-in.",
           "properties": {
             "candidates": {
               "$ref": "#/components/schemas/ScopeCount"
             },
+            "drafted": {
+              "$ref": "#/components/schemas/ScopeCount"
+            },
             "learned": {
+              "$ref": "#/components/schemas/ScopeCount"
+            },
+            "pending": {
               "$ref": "#/components/schemas/ScopeCount"
             },
             "repos": {
@@ -1922,6 +2397,8 @@
           "required": [
             "repos",
             "candidates",
+            "pending",
+            "drafted",
             "learned"
           ],
           "title": "LearningRollupResponse",
@@ -2087,6 +2564,56 @@
             "model"
           ],
           "title": "ModelBody",
+          "type": "object"
+        },
+        "Orphan": {
+          "description": "A referential-integrity break \u2014 a pointer to an id the anchor docs don't define.",
+          "properties": {
+            "deliverable": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Deliverable"
+            },
+            "items": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Items"
+            },
+            "reason": {
+              "title": "Reason",
+              "type": "string"
+            },
+            "wave": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Wave"
+            }
+          },
+          "required": [
+            "reason"
+          ],
+          "title": "Orphan",
           "type": "object"
         },
         "PaletteResponse": {
@@ -2395,6 +2922,39 @@
             "agents"
           ],
           "title": "PluginScope",
+          "type": "object"
+        },
+        "ProjectStatusResponse": {
+          "description": "Whether this project's memory is established (PRD defines \u22651 deliverable). The dev workspace\ngates on it: an un-established repo shows the onboarding front door instead of the work tabs.\n`onboard_mode` is the connect-time choice (project-init | retrofit) the front door launches\ndirectly; null \u21d2 the repo predates connect-flow, so the landing offers both paths to pick.",
+          "properties": {
+            "docs": {
+              "items": {
+                "$ref": "#/components/schemas/GeneralDoc"
+              },
+              "title": "Docs",
+              "type": "array"
+            },
+            "established": {
+              "title": "Established",
+              "type": "boolean"
+            },
+            "onboard_mode": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Onboard Mode"
+            }
+          },
+          "required": [
+            "established",
+            "docs"
+          ],
+          "title": "ProjectStatusResponse",
           "type": "object"
         },
         "Proposal": {
@@ -3123,6 +3683,70 @@
           "title": "PublishedToggleResponse",
           "type": "object"
         },
+        "RepoConnectBody": {
+          "properties": {
+            "kind": {
+              "title": "Kind",
+              "type": "string"
+            },
+            "label": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Label"
+            },
+            "path": {
+              "title": "Path",
+              "type": "string"
+            }
+          },
+          "required": [
+            "path",
+            "kind"
+          ],
+          "title": "RepoConnectBody",
+          "type": "object"
+        },
+        "RepoConnectResponse": {
+          "description": "A freshly connected repo \u2014 the new orbit node. `onboarding` is the connect-time choice\n(project-init | retrofit) that its dev workspace launches until memory is established.",
+          "properties": {
+            "cwd": {
+              "title": "Cwd",
+              "type": "string"
+            },
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "label": {
+              "title": "Label",
+              "type": "string"
+            },
+            "onboarding": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Onboarding"
+            }
+          },
+          "required": [
+            "id",
+            "label",
+            "cwd"
+          ],
+          "title": "RepoConnectResponse",
+          "type": "object"
+        },
         "RepoEffortBody": {
           "properties": {
             "effort": {
@@ -3486,6 +4110,14 @@
               "title": "By Feature",
               "type": "object"
             },
+            "by_feature_cache_read": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "default": {},
+              "title": "By Feature Cache Read",
+              "type": "object"
+            },
             "by_scope": {
               "additionalProperties": {
                 "type": "integer"
@@ -3518,6 +4150,93 @@
             "total"
           ],
           "title": "RepoTokens",
+          "type": "object"
+        },
+        "RoadmapBoardResponse": {
+          "properties": {
+            "deliverables": {
+              "items": {
+                "$ref": "#/components/schemas/BoardDeliverable"
+              },
+              "title": "Deliverables",
+              "type": "array"
+            },
+            "orphans": {
+              "items": {
+                "$ref": "#/components/schemas/Orphan"
+              },
+              "title": "Orphans",
+              "type": "array"
+            }
+          },
+          "required": [
+            "deliverables",
+            "orphans"
+          ],
+          "title": "RoadmapBoardResponse",
+          "type": "object"
+        },
+        "Rollup": {
+          "properties": {
+            "done": {
+              "title": "Done",
+              "type": "integer"
+            },
+            "total": {
+              "title": "Total",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "done",
+            "total"
+          ],
+          "title": "Rollup",
+          "type": "object"
+        },
+        "RunEventRow": {
+          "description": "One entry of a run's event trail: a prompt, an assistant reply block, or a tool/skill/agent\ncall. `kind` \u2208 prompt | reply | tool | skill | agent; `name` is the label, `description` the body.",
+          "properties": {
+            "created_at": {
+              "title": "Created At",
+              "type": "string"
+            },
+            "description": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Description"
+            },
+            "id": {
+              "title": "Id",
+              "type": "integer"
+            },
+            "kind": {
+              "title": "Kind",
+              "type": "string"
+            },
+            "name": {
+              "title": "Name",
+              "type": "string"
+            },
+            "seq": {
+              "title": "Seq",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "id",
+            "seq",
+            "kind",
+            "name",
+            "created_at"
+          ],
+          "title": "RunEventRow",
           "type": "object"
         },
         "RunRow": {
@@ -3629,6 +4348,27 @@
           "title": "RunRow",
           "type": "object"
         },
+        "RunTraceResponse": {
+          "properties": {
+            "events": {
+              "items": {
+                "$ref": "#/components/schemas/RunEventRow"
+              },
+              "title": "Events",
+              "type": "array"
+            },
+            "run_id": {
+              "title": "Run Id",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "run_id",
+            "events"
+          ],
+          "title": "RunTraceResponse",
+          "type": "object"
+        },
         "RunsResponse": {
           "properties": {
             "history": {
@@ -3656,6 +4396,39 @@
             "running"
           ],
           "title": "RunsResponse",
+          "type": "object"
+        },
+        "ScaffoldBody": {
+          "properties": {
+            "context_id": {
+              "default": "global",
+              "title": "Context Id",
+              "type": "string"
+            },
+            "deliverable": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Deliverable"
+            },
+            "wave": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Wave"
+            }
+          },
+          "title": "ScaffoldBody",
           "type": "object"
         },
         "ScopeCount": {
@@ -3765,11 +4538,33 @@
           "type": "object"
         },
         "SessionSummary": {
-          "description": "A session's picker entry.",
+          "description": "A session's picker entry. `item_id`/`item_title` are set when the session is stamped to a\nwork-item (work-item-session-recognition-prd) \u2014 the chat rail derives its work-item indicator\nfrom these, so it's correct however the session was opened (card or picker) and clears on switch.",
           "properties": {
             "id": {
               "title": "Id",
               "type": "string"
+            },
+            "item_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Item Id"
+            },
+            "item_title": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Item Title"
             },
             "message_count": {
               "title": "Message Count",
@@ -4180,6 +4975,14 @@
               "title": "By Feature",
               "type": "object"
             },
+            "by_feature_cache_read": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "default": {},
+              "title": "By Feature Cache Read",
+              "type": "object"
+            },
             "by_scope": {
               "additionalProperties": {
                 "type": "integer"
@@ -4459,6 +5262,17 @@
               ],
               "title": "Created At"
             },
+            "deliverable": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Deliverable"
+            },
             "depth": {
               "anyOf": [
                 {
@@ -4558,6 +5372,7 @@
               "anyOf": [
                 {
                   "enum": [
+                    "triage",
                     "plan_design",
                     "build_eval",
                     "done"
@@ -4569,6 +5384,34 @@
                 }
               ],
               "title": "Phase"
+            },
+            "phase_tokens": {
+              "anyOf": [
+                {
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Phase Tokens"
+            },
+            "phase_tokens_4type": {
+              "anyOf": [
+                {
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Phase Tokens 4Type"
             },
             "root_id": {
               "anyOf": [
@@ -4710,6 +5553,17 @@
                 }
               ],
               "title": "Updated At"
+            },
+            "wave": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Wave"
             }
           },
           "required": [
@@ -4980,6 +5834,47 @@
           "title": "WorkItemModelResponse",
           "type": "object"
         },
+        "WorkItemScaffoldResponse": {
+          "description": "Result of setting a root work-item's anchor pointer (wave OR deliverable).",
+          "properties": {
+            "deliverable": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Deliverable"
+            },
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "ok": {
+              "title": "Ok",
+              "type": "boolean"
+            },
+            "wave": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Wave"
+            }
+          },
+          "required": [
+            "ok",
+            "id"
+          ],
+          "title": "WorkItemScaffoldResponse",
+          "type": "object"
+        },
         "WorkItemTasks": {
           "properties": {
             "done": {
@@ -5091,6 +5986,236 @@
             }
           },
           "summary": "Dev Read"
+        }
+      },
+      "/dev/general": {
+        "get": {
+          "description": "The anchor-doc set with presence flags (project-prd \u00b7 spec \u00b7 roadmap \u00b7 architecture \u00b7 resources).",
+          "operationId": "dev_general_docs_dev_general_get",
+          "parameters": [
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "default": "global",
+                "title": "Context Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/GeneralDocsResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev General Docs"
+        }
+      },
+      "/dev/general/{name}": {
+        "get": {
+          "description": "One anchor doc's raw markdown (content is null if the file doesn't exist yet). 404 unknown name.",
+          "operationId": "dev_general_doc_dev_general__name__get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "name",
+              "required": true,
+              "schema": {
+                "title": "Name",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "default": "global",
+                "title": "Context Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/GeneralDocResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev General Doc"
+        },
+        "put": {
+          "description": "Overwrite one anchor doc (creating its folder if needed). 404 on an unknown name.",
+          "operationId": "dev_general_doc_save_dev_general__name__put",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "name",
+              "required": true,
+              "schema": {
+                "title": "Name",
+                "type": "string"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeneralDocSaveBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/GeneralDocSaveResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev General Doc Save"
+        }
+      },
+      "/dev/harness/assets": {
+        "get": {
+          "description": "The shared asset pool (opt-in constitutional knowledge, e.g. `sql-expert`), each flagged with\nwhether THIS repo has ADOPTED and ENABLED it. The pool is shared; adoption is per-repo (no body\ncopy). Onboarding auto-adopts the confidently-relevant ones; the owner curates from here.",
+          "operationId": "dev_harness_assets_dev_harness_assets_get",
+          "parameters": [
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "default": "global",
+                "title": "Context Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/AssetsResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Harness Assets"
+        }
+      },
+      "/dev/harness/assets/{slug}": {
+        "patch": {
+          "description": "Per-repo asset curation: `adopt` (+ Add), `enable`/`disable` (toggle, keeps adoption), or `drop`\n(un-adopt). Writes the repo's `.assets` list \u2014 no body copy. Takes effect on the next dev turn.",
+          "operationId": "dev_harness_asset_action_dev_harness_assets__slug__patch",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "slug",
+              "required": true,
+              "schema": {
+                "title": "Slug",
+                "type": "string"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetActionBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/AssetActionResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Harness Asset Action"
         }
       },
       "/dev/harness/constitutions": {
@@ -6443,6 +7568,88 @@
           "summary": "Dev Palette"
         }
       },
+      "/dev/project-status": {
+        "get": {
+          "description": "Whether this project's memory is established (its PRD defines \u22651 deliverable) + the doc-set\npresence flags + the connect-time onboarding choice. The dev workspace gates on `established`:\nfalse \u21d2 show the onboarding front door, launching `onboard_mode` when it's set.",
+          "operationId": "dev_project_status_dev_project_status_get",
+          "parameters": [
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "default": "global",
+                "title": "Context Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ProjectStatusResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Project Status"
+        }
+      },
+      "/dev/roadmap": {
+        "get": {
+          "description": "The roadmap board: deliverable \u2192 wave \u2192 its live work-item instances + rollup, plus any\nreferential-integrity orphans (an item/wave pointing at an id the anchor docs don't define).",
+          "operationId": "dev_roadmap_dev_roadmap_get",
+          "parameters": [
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "default": "global",
+                "title": "Context Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/RoadmapBoardResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Roadmap"
+        }
+      },
       "/dev/sweep": {
         "post": {
           "description": "Ops/debug hook: force a capture sweep over ONE named session, run to completion (so the\ncaller gets the result), with an optional `focus` steer. The everyday triggers are fully\nautomatic (phase/idle); this is the by-id escape hatch for debugging or a targeted re-sweep \u2014\nthe ONLY remaining caller that supplies `focus`.",
@@ -6950,6 +8157,56 @@
           "summary": "Dev Work Item Plan"
         }
       },
+      "/dev/work-items/{item_id}/scaffold": {
+        "post": {
+          "description": "Set a root work-item's anchor pointer \u2014 `wave` (resolves its deliverable) or `deliverable`\ndirectly. Pass one; the other clears to null. 404 if the item is missing.",
+          "operationId": "dev_work_item_scaffold_dev_work_items__item_id__scaffold_post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "item_id",
+              "required": true,
+              "schema": {
+                "title": "Item Id",
+                "type": "string"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScaffoldBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/WorkItemScaffoldResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Work Item Scaffold"
+        }
+      },
       "/docs": {
         "get": {
           "description": "List the docs (slug + title), overview first, then alphabetical by title.",
@@ -7007,6 +8264,47 @@
             }
           },
           "summary": "Docs Read"
+        }
+      },
+      "/fs/browse": {
+        "get": {
+          "description": "List the sub-directories of `path` (default: the owner's home). Directories only \u2014 the\npicker chooses a project folder. 400 if the path escapes home or isn't a directory.",
+          "operationId": "fs_browse_fs_browse_get",
+          "parameters": [
+            {
+              "in": "query",
+              "name": "path",
+              "required": false,
+              "schema": {
+                "default": "",
+                "title": "Path",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/FsBrowseResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Fs Browse"
         }
       },
       "/health": {
@@ -7215,6 +8513,43 @@
             }
           },
           "summary": "Repos Overview"
+        },
+        "post": {
+          "description": "Connect a domain: register a new repo into the spine and seed its knowledge home. `kind`\n(new|existing) is stored on the repo and selects its onboarding front door (project-init |\nretrofit). New dirs are created (must be empty); existing dirs must already be a directory.",
+          "operationId": "connect_repo_repos_post",
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepoConnectBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/RepoConnectResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Connect Repo"
         }
       },
       "/repos/{repo_id}/effort": {
@@ -7474,9 +8809,49 @@
           "summary": "Runs Overview"
         }
       },
+      "/runs/{run_id}/trace": {
+        "get": {
+          "description": "One run's event trail \u2014 the prompt that opened it, the assistant's reply text, and each\ntool/skill/agent call, in order. Per-RUN (not per-session), so each Activity row has its own\nthread; works for headless runs too. Empty list when nothing was recorded.",
+          "operationId": "run_trace_runs__run_id__trace_get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "run_id",
+              "required": true,
+              "schema": {
+                "title": "Run Id",
+                "type": "integer"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/RunTraceResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Run Trace"
+        }
+      },
       "/sessions": {
         "get": {
-          "description": "SuperMe's own past sessions for a context, newest first. `mode` (core|dev) scopes.",
+          "description": "SuperMe's own past sessions for a context, newest first. `mode` (core|dev) scopes. A session\nstamped to a work-item carries its `item_id` + resolved `item_title`, so the chat rail can show\n(and clear) the work-item indicator straight from the session, not client-held binding state.",
           "operationId": "sessions_list_sessions_get",
           "parameters": [
             {

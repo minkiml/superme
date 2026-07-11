@@ -1,23 +1,26 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, GitBranch, Brain, Package, Activity, ChevronsUpDown, Check } from 'lucide-react'
+import { ArrowLeft, GitBranch, Map, Brain, Package, Activity, ChevronsUpDown, Check, Loader2 } from 'lucide-react'
 import { colorFor } from '@/lib/palette'
 import { RepoIcon } from '@/lib/repoIcons'
 import type { OrbitRepo } from '@/features/shell/useCommandStats'
-import type { WorkItem } from '@/lib/api'
+import { getProjectStatus, type WorkItem } from '@/lib/api'
 import TabBar from '@/ui/TabBar'
 import DevDashboard from './DevDashboard'
+import RoadmapTab from './RoadmapTab'
 import { MemoryGovernance, PublishedInventory } from './LearningGovernance'
 import ArtifactsTab from './ArtifactsTab'
 import ActivityLog from './ActivityLog'
+import OnboardingLanding, { type OnboardMode } from './OnboardingLanding'
 
 // The Dev workspace — the per-repo Tier-2 detail surface, reached from an orbit node's inspector
 // ("Open dev workspace"). It takes over the main area (the shell owns the header + tabs) and holds
 // the three heavy dev surfaces for ONE repo: the plan→build pipeline, the learning governance queue,
 // and the per-repo activity log. Scoped by contextId (the repo id; only global is fully wired today).
 
-type Tab = 'pipeline' | 'learning' | 'artifacts' | 'activity'
+type Tab = 'pipeline' | 'roadmap' | 'learning' | 'artifacts' | 'activity'
 const TABS: { id: Tab; label: string; icon: typeof GitBranch }[] = [
   { id: 'pipeline', label: 'Pipeline', icon: GitBranch },
+  { id: 'roadmap', label: 'Roadmap', icon: Map },
   { id: 'learning', label: 'Learning', icon: Brain },
   { id: 'artifacts', label: 'Artifacts', icon: Package },
   { id: 'activity', label: 'Activity', icon: Activity },
@@ -31,6 +34,7 @@ export default function DevWorkspace({
   onBindItem,
   onUnbindItem,
   boundItemId,
+  onStartOnboarding,
 }: {
   repo: OrbitRepo
   onExit: () => void
@@ -39,10 +43,40 @@ export default function DevWorkspace({
   onBindItem?: (it: WorkItem, contextId: string) => void // clicking a work-item binds the chat to it
   onUnbindItem?: () => void
   boundItemId?: string | null
+  onStartOnboarding?: (repoId: string, mode: OnboardMode) => void // launch a guided onboarding session
 }) {
   const [tab, setTab] = useState<Tab>('pipeline')
   const isHub = repo.id === 'global'
   const c = colorFor(repo.id)
+
+  // Onboarding gate (S5·B): a repo whose project memory isn't established yet (PRD defines no
+  // deliverables) shows the onboarding front door instead of the work tabs — you can't take on work
+  // before there's memory. null = still checking. Re-checkable after the owner finishes onboarding.
+  const [established, setEstablished] = useState<boolean | null>(null)
+  const [onboardMode, setOnboardMode] = useState<OnboardMode | null>(null)
+  function checkStatus() {
+    setEstablished(null)
+    getProjectStatus(repo.id)
+      .then((s) => {
+        setEstablished(s.established)
+        setOnboardMode((s.onboard_mode as OnboardMode | null) ?? null)
+      })
+      .catch(() => setEstablished(true)) // fail-open: a status hiccup shouldn't wall off the workspace
+  }
+  useEffect(checkStatus, [repo.id])
+
+  // Auto-flip to the work tabs the moment onboarding establishes memory: while the front door is up
+  // (established === false), poll project-status; establishment (the agent writes the PRD's first
+  // deliverable) flips it without a manual "Recheck". Stops as soon as it's established.
+  useEffect(() => {
+    if (established !== false) return
+    const t = setInterval(() => {
+      getProjectStatus(repo.id)
+        .then((s) => { if (s.established) setEstablished(true) })
+        .catch(() => {})
+    }, 5000)
+    return () => clearInterval(t)
+  }, [established, repo.id])
 
   // The other repos you can hop to (current one excluded) — hub first, then connected projects.
   const others = repos.filter((r) => r.id !== repo.id)
@@ -77,40 +111,59 @@ export default function DevWorkspace({
           )}
         </div>
 
-        <div className="mt-3 flex gap-1">
-          {TABS.map((t) => {
-            const Icon = t.icon
-            const on = tab === t.id
-            return (
-              <button
-                key={t.id}
-                onClick={() => setTab(t.id)}
-                style={on ? { color: c, borderColor: c } : undefined}
-                className={`flex items-center gap-1.5 border-b-2 px-3 py-2 text-[13px] font-medium transition ${
-                  on ? '' : 'border-transparent text-muted hover:text-fg'
-                }`}
-              >
-                <Icon size={14} /> {t.label}
-              </button>
-            )
-          })}
-        </div>
+        {/* the work tabs appear only once memory is established — the gate hides them otherwise */}
+        {established === true && (
+          <div className="mt-3 flex gap-1">
+            {TABS.map((t) => {
+              const Icon = t.icon
+              const on = tab === t.id
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => setTab(t.id)}
+                  style={on ? { color: c, borderColor: c } : undefined}
+                  className={`flex items-center gap-1.5 border-b-2 px-3 py-2 text-[13px] font-medium transition ${
+                    on ? '' : 'border-transparent text-muted hover:text-fg'
+                  }`}
+                >
+                  <Icon size={14} /> {t.label}
+                </button>
+              )
+            })}
+          </div>
+        )}
+        {established !== true && <div className="h-3" />}
       </div>
 
-      {/* tab body */}
+      {/* body — onboarding front door until memory is established, then the work tabs */}
       <div className="min-h-0 flex-1 overflow-hidden">
-        {tab === 'pipeline' && (
-          <DevDashboard
-            contextId={repo.id}
-            embedded
-            onBindItem={onBindItem}
-            onUnbindItem={onUnbindItem}
-            boundItemId={boundItemId}
+        {established === null ? (
+          <div className="flex h-full items-center justify-center gap-2 text-sm text-muted">
+            <Loader2 size={15} className="animate-spin" /> Checking project memory…
+          </div>
+        ) : established === false ? (
+          <OnboardingLanding
+            repoLabel={isHub ? 'SuperMe Hub' : repo.label}
+            mode={onboardMode}
+            onStart={(mode) => onStartOnboarding?.(repo.id, mode)}
           />
+        ) : (
+          <>
+            {tab === 'pipeline' && (
+              <DevDashboard
+                contextId={repo.id}
+                embedded
+                onBindItem={onBindItem}
+                onUnbindItem={onUnbindItem}
+                boundItemId={boundItemId}
+              />
+            )}
+            {tab === 'roadmap' && <RoadmapTab contextId={repo.id} />}
+            {tab === 'learning' && <LearningTab contextId={repo.id} />}
+            {tab === 'artifacts' && <ArtifactsTab contextId={repo.id} />}
+            {tab === 'activity' && <ActivityLog contextId={repo.id} />}
+          </>
         )}
-        {tab === 'learning' && <LearningTab contextId={repo.id} />}
-        {tab === 'artifacts' && <ArtifactsTab contextId={repo.id} />}
-        {tab === 'activity' && <ActivityLog contextId={repo.id} />}
       </div>
     </div>
   )
@@ -188,6 +241,8 @@ function RepoSwitcher({ current, others, onSwitch }: { current: OrbitRepo; other
 // Learning — the tier-C governance surface for this repo: the review queue (candidate/knowledge
 // gauges + distill proposals through the two gates) and the published-artifact inventory. Skills &
 // Agents live in Foundations (they're universal, not per-repo), so they're deliberately not here.
+// (The pooled-knowledge asset pool lives in Artifacts → Constitution — it's a constitution surface,
+// not a learning one.)
 function LearningTab({ contextId }: { contextId: string }) {
   const [view, setView] = useState<'review' | 'published'>('review')
   return (
@@ -201,7 +256,8 @@ function LearningTab({ contextId }: { contextId: string }) {
           onChange={setView}
           tabs={[['review', 'Review'], ['published', 'Published']] as const}
         />
-        {view === 'review' ? <MemoryGovernance contextId={contextId} /> : <PublishedInventory contextId={contextId} />}
+        {view === 'review' && <MemoryGovernance contextId={contextId} />}
+        {view === 'published' && <PublishedInventory contextId={contextId} />}
       </div>
     </div>
   )

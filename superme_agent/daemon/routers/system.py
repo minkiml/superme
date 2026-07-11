@@ -5,6 +5,8 @@ DONE) plus the model-config writes (system default + per-repo override) and the 
 """
 
 import logging
+import re
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -12,14 +14,14 @@ from pydantic import BaseModel
 from ..app_state import SystemSpine, get_spine, dev as _dev
 from ..deps import dev_root
 from ..schemas.system import (
-    SystemResponse, RepoOverview, RunsResponse,
+    SystemResponse, RepoOverview, RepoConnectResponse, RunsResponse, RunTraceResponse,
     SystemModelResponse, LearningResponse, RepoModelResponse, RepoLearningResponse,
     RepoMetaResponse, TokenUsageResponse, TokenTimeseriesResponse, SweepConfigBody, SweepConfigResponse,
     SystemEffortResponse, RepoEffortResponse, AgentModelsResponse,
 )
 from ...core.models import AGENT_MODEL_FEATURES
-from ...core.spine import MODES
-from ...core.models import CANONICAL_MODELS, is_valid_model, normalize_model
+from ...core.spine import MODES, RepoConfig
+from ...core.models import CANONICAL_MODELS, is_valid_model, model_family, normalize_model
 
 router = APIRouter()
 log = logging.getLogger("superme-agent")
@@ -62,14 +64,16 @@ class RepoMetaBody(BaseModel):
 
 
 def _norm_model(m: str | None) -> str | None:
-    """Validate + normalize a model (tier alias OR concrete id) to the concrete id it runs; '' /
-    'reset' / 'default' → None (clear). Raises on an unrecognized value. (models.py is the catalog.)"""
+    """Validate a model (tier alias OR concrete id) and store it as its TIER ALIAS (`sonnet`) — the
+    canonical on-disk/DB form everywhere; the concrete latest is resolved only at consumption (so a
+    saved pick auto-tracks a MODEL_TIERS bump instead of pinning to an old concrete id). '' / 'reset'
+    / 'default' → None (clear). Raises on an unrecognized value. (models.py is the catalog.)"""
     if not m or m.strip().lower() in ("reset", "default", "inherit"):
         return None
     if not is_valid_model(m):
         raise HTTPException(status_code=400,
                             detail=f"unknown model '{m}' (use {'/'.join(CANONICAL_MODELS)})")
-    return normalize_model(m)
+    return model_family(m) or normalize_model(m)
 
 
 def _norm_effort(e: str | None) -> str | None:
@@ -105,6 +109,49 @@ async def system_overview(spine: SystemSpine = Depends(get_spine)) -> dict:
     return data
 
 
+class RepoConnectBody(BaseModel):
+    path: str                    # absolute dir to link (created if kind=new)
+    label: str | None = None     # display name (defaults to the dir name)
+    kind: str                    # "new" (greenfield → project-init) | "existing" (code → retrofit)
+
+
+def _slug(s: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", (s or "").lower()).strip("-")
+
+
+@router.post("/repos", response_model=RepoConnectResponse)
+async def connect_repo(body: RepoConnectBody, spine: SystemSpine = Depends(get_spine)) -> dict:
+    """Connect a domain: register a new repo into the spine and seed its knowledge home. `kind`
+    (new|existing) is stored on the repo and selects its onboarding front door (project-init |
+    retrofit). New dirs are created (must be empty); existing dirs must already be a directory."""
+    kind = (body.kind or "").strip()
+    if kind not in ("new", "existing"):
+        raise HTTPException(status_code=422, detail="kind must be 'new' or 'existing'")
+    p = Path(body.path).expanduser()
+    if kind == "existing":
+        if not p.is_dir():
+            raise HTTPException(status_code=400, detail="directory does not exist")
+    else:  # new — create it, but refuse to reuse a non-empty dir
+        if p.exists() and any(p.iterdir()):
+            raise HTTPException(status_code=400, detail="target directory is not empty")
+        p.mkdir(parents=True, exist_ok=True)
+    p = p.resolve()
+    label = (body.label or p.name).strip() or p.name
+    existing = spine.repos()
+    base = _slug(label) or _slug(p.name) or "project"
+    rid, i = base, 2
+    while rid in existing:                       # unique id
+        rid, i = f"{base}-{i}", i + 1
+    onboarding = "project-init" if kind == "new" else "retrofit"
+    rc = RepoConfig(id=rid, label=label, cwd=p, layer="local", onboarding=onboarding)
+    try:
+        spine.add_repo(rc)
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+    log.info("connected repo '%s' (%s) at %s [%s]", rid, label, p, onboarding)
+    return {"id": rid, "label": label, "cwd": str(p), "onboarding": onboarding}
+
+
 @router.get("/repos", response_model=list[RepoOverview])
 async def repos_overview(spine: SystemSpine = Depends(get_spine)) -> list[dict]:
     """Every repo × scope: static meta + computed live status (active/idle, last activity,
@@ -131,8 +178,8 @@ async def repos_overview(spine: SystemSpine = Depends(get_spine)) -> list[dict]:
                 "current_item": st["current_item"],
                 "last_activity": st["last_activity"],
                 "sessions": spine.session_count(rc.id, scope) + lar["learn_running"],
-                "agents": active_items + lar["learn_running"],
-                "running": lar["items_running"] + lar["learn_running"],
+                "agents": active_items + lar["learn_running"] + lar["onboarding_running"],
+                "running": lar["items_running"] + lar["learn_running"] + lar["onboarding_running"],
             }
         meta = spine.get_repo_meta(rc.id)
         out.append({
@@ -158,6 +205,14 @@ async def runs_overview(context_id: str | None = None, limit: int = 50,
         live = spine.live_runs()
         history = spine.recent_runs(limit=limit)
     return {"live": live, "history": history, "running": len(live)}
+
+
+@router.get("/runs/{run_id}/trace", response_model=RunTraceResponse)
+async def run_trace(run_id: int, spine: SystemSpine = Depends(get_spine)) -> dict:
+    """One run's event trail — the prompt that opened it, the assistant's reply text, and each
+    tool/skill/agent call, in order. Per-RUN (not per-session), so each Activity row has its own
+    thread; works for headless runs too. Empty list when nothing was recorded."""
+    return {"run_id": run_id, "events": spine.events_for_run(run_id)}
 
 
 @router.get("/tokens", response_model=TokenUsageResponse)
@@ -242,7 +297,7 @@ async def set_repo_model(repo_id: str, body: RepoModelBody, spine: SystemSpine =
     model = _norm_model(body.model)
     spine.set_model_override(repo_id, model)
     return {"ok": True, "repo_id": repo_id, "model": model,
-            "effective": model or spine.effective_system_model()}
+            "effective": normalize_model(model) or spine.effective_system_model()}
 
 
 @router.post("/repos/{repo_id}/effort", response_model=RepoEffortResponse)

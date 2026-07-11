@@ -1,6 +1,6 @@
 """Context resolution — surface-facing id -> Core Context.
 
-The global root ("Me") plus connected projects ("domains"). Domains are defined in the
+The global root ("SuperMe hub") plus connected projects ("domains"). Domains are defined in the
 spine's repo registry (config/repos.yaml); each resolves to its cwd and a knowledge home
 in the central knowledge repo at `superme-knowledge/<id>-knowledge/` (renovation §4.11.2 —
 centralized for all repos, not under each project's cwd). Each home splits into `core/`
@@ -70,7 +70,7 @@ def resolve(context_id: str | None, mode: str = "core") -> Context:
         rc = repos.get(GLOBAL_ID)
     if rc is None:  # repos.yaml empty/missing — synthesize a minimal global so we never crash
         from ..runtime.config import ROOT_DIR
-        rc = RepoConfig(id=GLOBAL_ID, label="Me", cwd=ROOT_DIR, layer="global")
+        rc = RepoConfig(id=GLOBAL_ID, label="SuperMe hub", cwd=ROOT_DIR, layer="global")
     return _context_from_repo(rc, mode)
 
 

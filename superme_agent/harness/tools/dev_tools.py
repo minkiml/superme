@@ -84,6 +84,26 @@ def _fmt_candidates(rows: list[dict]) -> str:
     return "\n\n".join(out)
 
 
+def _fmt_proposals(rows: list[dict]) -> str:
+    """Render the OPEN proposals for distill to consolidate against — enough for it to spot a
+    standing proposal that already covers a learning (id, status, form/scope, cluster, title,
+    summary, the candidates it already draws on) so it can merge into it rather than duplicate."""
+    if not rows:
+        return "(no open proposals — nothing to consolidate against)"
+    out = []
+    for r in rows:
+        head = f"#{r['id']} · {r['status']} · {r.get('output_form')}/{r.get('target_scope')}"
+        if r.get("cluster"):
+            head += f" · cluster={r['cluster']}"
+        cids = r.get("candidate_ids") or []
+        block = [head, f"  title: {r['title']}"]
+        if r.get("summary"):
+            block.append(f"  summary: {r['summary']}")
+        block.append(f"  draws on: {', '.join('#' + str(i) for i in cids) if cids else '—'}")
+        out.append("\n".join(block))
+    return "\n\n".join(out)
+
+
 def _ids(raw) -> list[int]:
     """Parse a candidate-id list from a comma/space-separated string or a list (MCP args arrive
     as either). Non-numeric tokens are skipped; order-independent, de-duplicated."""
@@ -155,6 +175,11 @@ class ReviewCandidatesArgs(TypedDict, total=False):
     limit: Annotated[int, "max rows (default 100, cap 500)"]
 
 
+class DropCandidatesArgs(TypedDict, total=False):
+    candidate_ids: Required[Annotated[str, "candidate ids to drop, comma-separated"]]
+    reason: Annotated[str, "one short phrase why (e.g. 'self-recitation', 'too-thin') — logged only"]
+
+
 class ProposeMemoryArgs(TypedDict, total=False):
     title: Required[Annotated[str, "short headline"]]
     body: Required[Annotated[str, "the consolidated proposal narrative"]]
@@ -169,6 +194,21 @@ class ProposeMemoryArgs(TypedDict, total=False):
     apply_target: Annotated[str, "drafted destination slug"]
     cluster: Annotated[str, "optional grouping label"]
     confidence: Annotated[str, "high | medium | low"]
+
+
+class ReviewProposalsArgs(TypedDict, total=False):
+    # No args — reads all OPEN proposals in this context (the set distill consolidates against).
+    pass
+
+
+class MergeProposalArgs(TypedDict, total=False):
+    proposal_id: Required[Annotated[int, "the existing OPEN proposal to fold the candidate(s) into"]]
+    candidate_ids: Required[Annotated[str, "the NEW source candidate ids to merge in, comma-separated"]]
+    title: Annotated[str, "optional — enriched headline (omit to keep the existing one)"]
+    body: Annotated[str, "optional — the re-consolidated narrative incorporating the new substance"]
+    summary: Annotated[str, "optional — refreshed purpose · usage · why-raised"]
+    fields: Annotated[str, "optional — updated form-specific fields (JSON), same shape as propose_memory"]
+    confidence: Annotated[str, "optional — refreshed high|medium|low (recurrence usually raises it)"]
 
 
 # --------------------------------------------------------------------------- handler factories
@@ -267,6 +307,26 @@ def _review_candidates(*, store, context_id, **_):
     return review_candidates
 
 
+def _drop_candidates(*, store, context_id, **_):
+    async def drop_candidates(args: dict) -> dict:
+        ids = _ids(args.get("candidate_ids"))
+        if not ids:
+            return _err("Pass `candidate_ids` (comma-separated) — the candidates to drop.")
+        reason = _s(args, "reason")
+        try:
+            n = store.delete_memory_candidates(context_id, ids)
+            store.log_event(
+                context_id, "memory.dropped",
+                f"Distill dropped {n} candidate(s){f' ({reason})' if reason else ''}: "
+                f"{', '.join('#' + str(i) for i in ids)}",
+                scope="dev", actor="agent",
+                meta={"candidate_ids": ids, "reason": reason, "deleted": n})
+        except Exception as e:
+            return _err(f"Could not drop the candidates: {e}")
+        return _ok(f"Dropped {n} candidate(s) permanently{f' — {reason}' if reason else ''}.")
+    return drop_candidates
+
+
 def _propose_memory(*, store, context_id, **_):
     def j(args: dict, k: str):
         raw = _s(args, k)
@@ -311,6 +371,64 @@ def _propose_memory(*, store, context_id, **_):
     return propose_memory
 
 
+def _review_proposals(*, store, context_id, **_):
+    """Distill's cross-run consolidation lens: the OPEN proposals already standing in this context.
+    Distill reads this alongside the candidate pool so a learning captured again in a later session
+    can MERGE into the proposal that already covers it, instead of minting a parallel one."""
+    async def review_proposals(args: dict) -> dict:
+        try:
+            rows = store.list_memory_proposals(context_id)
+        except Exception as e:
+            return _err(f"Could not read the proposal pool: {e}")
+        open_rows = [r for r in rows if r.get("status") in ("proposed", "writing", "drafted")]
+        return _ok(_fmt_proposals(open_rows))
+    return review_proposals
+
+
+def _merge_into_proposal(*, store, context_id, **_):
+    def j(args: dict, k: str):
+        raw = _s(args, k)
+        if not raw:
+            return None
+        try:
+            return json.loads(raw)
+        except (ValueError, TypeError):
+            return None
+
+    async def merge_into_proposal(args: dict) -> dict:
+        try:
+            pid = int(args.get("proposal_id"))
+        except (TypeError, ValueError):
+            return _err("Pass a numeric `proposal_id` (the open proposal to merge into).")
+        ids = _ids(args.get("candidate_ids"))
+        if not ids:
+            return _err("Pass `candidate_ids` — the new candidates to fold into the proposal.")
+        try:
+            prop = store.merge_memory_proposal(
+                pid, context_id, add_candidate_ids=ids,
+                title=_s(args, "title"), body=_s(args, "body"),
+                summary=_s(args, "summary"), fields=j(args, "fields"),
+                confidence=_s(args, "confidence"))
+        except ValueError as e:
+            return _err(str(e))
+        except Exception as e:
+            return _err(f"Could not merge into the proposal: {e}")
+        if prop is None:
+            return _err(f"No proposal #{pid} in this context to merge into.")
+        store.log_event(
+            context_id, "memory.merged",
+            f"Merged candidate(s) {', '.join('#' + str(i) for i in ids)} into proposal #{pid} "
+            f"({prop['output_form']}/{prop['target_scope']}): {prop['title']}",
+            scope="dev", actor="agent",
+            meta={"proposal_id": pid, "candidate_ids": ids, "reforged": prop.get("reforged")})
+        note = (" It was already forged, so it's reset to `proposed` for re-forge with the fuller "
+                "candidate set.") if prop.get("reforged") else ""
+        return _ok(
+            f"Merged {len(ids)} candidate(s) into proposal #{pid} — it now draws on "
+            f"{len(prop['candidate_ids'])} candidate(s), status: {prop['status']}.{note}")
+    return merge_into_proposal
+
+
 # --------------------------------------------------------------------------- inbox (read-only)
 # The inbox is DB-backed (not files), so it gets a tool rather than native Read (spec §5). Scoped
 # to THIS host's context_id server-side, so it can only ever see its own queue. Read-only for now;
@@ -332,8 +450,9 @@ def _fmt_inbox(rows: list[dict]) -> str:
             head += f" · {r['tag']}"
         if r.get("routed_to"):
             head += f" → {r['routed_to']}"
-        if r.get("origin"):
-            head += f" · from {r['origin']}"
+        origin = r.get("origin")
+        if origin:
+            head += f" · from {', '.join(origin) if isinstance(origin, list) else origin}"
         title = r.get("title") or (r.get("text") or "").strip().replace("\n", " ")
         out.append(f"- {head}: {title[:200]}")
     return "\n".join(out)
@@ -353,9 +472,73 @@ def _list_inbox(*, store, context_id, **_):
     return list_inbox
 
 
-# --------------------------------------------------------------------------- the registry
+# --------------------------------------------------------------------------- inbox (create — sanctioned)
+# The one WRITE a general (non-work-item) session may make (work-item-session-recognition-prd): the
+# sanctioned front door for turning a discussion into a proper ticket. Caller-agnostic — the skill
+# that drives it synthesizes the content; this tool just performs the controlled inbox write (it can
+# touch nothing else, so it can't be abused to smuggle implementation past the general-session
+# guardrail). Origin is stamped `agent`; the owner triages/pushes it into a work-item downstream.
 
-DEV_TOOLS: list[ToolSpec] = [
+class CreateInboxItemArgs(TypedDict, total=False):
+    title: Required[Annotated[str, "short, on-point headline for the ticket"]]
+    body: Required[Annotated[str, ("the item content — a crisp synthesis of intent + the on-point "
+                                   "context/decisions and any pointers or references (work-item ids, "
+                                   "paths, doc names). NOT a raw transcript dump")]]
+    kind: Annotated[str, "note | idea | todo | question (default note)"]
+
+
+def _create_inbox_item(*, store, context_id, **_):
+    async def create_inbox_item(args: dict) -> dict:
+        title, body = _s(args, "title"), _s(args, "body")
+        if not title or not body:
+            return _err("An inbox item needs both `title` and `body` (a crisp synthesis, not a dump).")
+        try:
+            row = store.add_inbox(
+                context_id, body, kind=_s(args, "kind") or "note",
+                title=title, origin=["agent"], source="agent",
+            )
+        except Exception as e:
+            return _err(f"Could not create the inbox item: {e}")
+        return _ok(f"Created inbox item #{row['id']} — \"{title}\". "
+                   f"It's in the Inbox for the owner to review and push into a work-item.")
+    return create_inbox_item
+
+
+class AppendInboxItemArgs(TypedDict, total=False):
+    item_id: Required[Annotated[int, "the existing inbox item's id to augment"]]
+    addition: Required[Annotated[str, ("the NEW, on-point content from this discussion to append — "
+                                       "what the existing item doesn't already cover. Never a rewrite; "
+                                       "the existing text is preserved and this is added under it")]]
+
+
+def _append_inbox_item(*, store, context_id, **_):
+    async def append_inbox_item(args: dict) -> dict:
+        addition = _s(args, "addition")
+        try:
+            item_id = int(args.get("item_id"))
+        except (TypeError, ValueError):
+            return _err("Pass a numeric `item_id` (the existing inbox item to append to).")
+        if not addition:
+            return _err("Nothing to append — pass `addition` (the new content this discussion adds).")
+        try:
+            row = store.append_inbox(item_id, addition, origin_add="agent")
+        except Exception as e:
+            return _err(f"Could not append to the inbox item: {e}")
+        if row is None:
+            return _err(f"No inbox item #{item_id} to append to.")
+        return _ok(f"Appended to inbox item #{row['id']} — \"{row.get('title') or ''}\" "
+                   f"(existing content untouched; origin now {', '.join(row.get('origin') or [])}).")
+    return append_inbox_item
+
+
+# --------------------------------------------------------------------------- the registry
+# Two tiers. The MAIN set is what a normal dev chat turn gets: read activity, read the inbox, and the
+# two SANCTIONED itemize writes. The LEARNING set is the pipeline sub-agents' pens (capture / distill
+# / forge) — they must NOT reach the main chat agent, or it will short-circuit the automatic
+# capture→distill→forge flow by filing candidates/proposals itself (there is no chat-side learning
+# surface by design). Those tools are added only for the disposable headless runs (`learning=True`).
+
+_MAIN_DEV_TOOLS: list[ToolSpec] = [
     ToolSpec(
         "dev_log",
         "Read this repo's development activity log (events table), newest first.",
@@ -366,6 +549,20 @@ DEV_TOOLS: list[ToolSpec] = [
         "Read this repo's inbox — captured items awaiting triage/routing, open first.",
         InboxArgs, _list_inbox,
     ),
+    ToolSpec(
+        "create_inbox_item",
+        "Create one inbox item (ticket) from a discussion — the sanctioned way to itemize real work.",
+        CreateInboxItemArgs, _create_inbox_item,
+    ),
+    ToolSpec(
+        "append_inbox_item",
+        "Append new discussion content onto an EXISTING inbox item (never edits it) — the dedup path.",
+        AppendInboxItemArgs, _append_inbox_item,
+    ),
+]
+
+# Pipeline-only pens — capture files candidates, distill reviews/proposes/drops, forge stages.
+_LEARNING_DEV_TOOLS: list[ToolSpec] = [
     ToolSpec(
         "file_candidate",
         "File one durable operational learning found in a swept conversation slice as a candidate.",
@@ -386,13 +583,34 @@ DEV_TOOLS: list[ToolSpec] = [
         "File one consolidated operational-learning proposal from processed candidates.",
         ProposeMemoryArgs, _propose_memory,
     ),
+    ToolSpec(
+        "review_proposals",
+        "Read the OPEN proposals already standing (so distill can merge into one instead of duplicating).",
+        ReviewProposalsArgs, _review_proposals,
+    ),
+    ToolSpec(
+        "merge_into_proposal",
+        "Fold new candidate(s) into an existing open proposal — cross-run consolidation of a recurring learning.",
+        MergeProposalArgs, _merge_into_proposal,
+    ),
+    ToolSpec(
+        "drop_candidates",
+        "Permanently drop candidates that fail distill's gate (keeps the pool lean — quality over quantity).",
+        DropCandidatesArgs, _drop_candidates,
+    ),
 ]
 
+DEV_TOOLS: list[ToolSpec] = _MAIN_DEV_TOOLS + _LEARNING_DEV_TOOLS   # full set (for reference/tests)
 
-def make_dev_mcp_server(store, context_id: str, **deps):
-    """Build the `dev` MCP server (dev_log + the learning-pipeline tools) bound to one context's
-    event store. Optional deps thread per-turn state to specific tools (ignored by the rest):
-    `origin_session_id` + `capture_source` (provenance bound onto `file_candidate`'s rows during a
-    sweep sub-run), `proposal_id` + `staged_path` (bound onto `stage_artifact` during a write run).
-    Capture is fully automatic (idle + phase-advance sweeps) — there is no chat-side capture tool."""
-    return build_mcp_server("dev", DEV_TOOLS, store=store, context_id=context_id, **deps)
+
+def make_dev_mcp_server(store, context_id: str, *, learning: bool = False, **deps):
+    """Build the `dev` MCP server bound to one context's event store. By default it exposes only the
+    MAIN dev tools (activity log, inbox read + the sanctioned itemize writes) — a normal chat turn.
+    The disposable learning runs (capture/distill/forge) pass `learning=True` to also get the
+    pipeline pens; those must never reach the main chat agent (it would bypass automatic capture).
+
+    Optional deps thread per-turn state to specific learning tools (ignored by the rest):
+    `origin_session_id` + `capture_source` (provenance bound onto `file_candidate` during a sweep),
+    `proposal_id` + `staged_path` (bound onto `stage_artifact` during a write run)."""
+    tools = _MAIN_DEV_TOOLS + (_LEARNING_DEV_TOOLS if learning else [])
+    return build_mcp_server("dev", tools, store=store, context_id=context_id, **deps)

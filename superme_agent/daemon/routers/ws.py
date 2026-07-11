@@ -25,8 +25,9 @@ from ..protocol import (
 from ..schemas.ws import TurnFrame, ApprovalResponseFrame
 from ..services.runs import (
     DEFAULT_RUN_MODEL, _begin_run, _end_run, _bump_run_tokens, _log_artifact,
+    capture_prompt, capture_event,
 )
-from ...core import Init, Usage, Result, Status, scoped_writes_approve
+from ...core import Init, Usage, Result, Status, TextDelta, scoped_writes_approve
 from ...gateway import contexts
 from ...harness.tools.dev_tools import make_dev_mcp_server
 from ...runtime.config import DAEMON_APPROVAL_TIMEOUT
@@ -34,6 +35,38 @@ from ...runtime.config import DAEMON_APPROVAL_TIMEOUT
 log = logging.getLogger("superme-agent")
 
 router = APIRouter()
+
+
+# --- session-aware per-turn append (work-item-session-recognition-prd) -----------------------
+# A dev session is either a WORK-ITEM session (stamped to one primary item → Focus block, centering
+# the agent on it) or a GENERAL session (unstamped → Guard block, discussion-only). Pointer-only by
+# design: the Focus block names the item + where its materials live and tells the agent to dig in on
+# demand — no artifact contents are inlined, keeping ctx% honest. Assembled here (the daemon knows
+# the stamp); Core just appends what it's handed.
+
+def _focus_block(item_id: str, item: dict, item_dir) -> str:
+    title = item.get("title") or item_id
+    phase = item.get("phase") or "—"
+    return (
+        f"## Focus\n"
+        f"This session is dedicated to work-item **{item_id} — \"{title}\"** (phase: {phase}). "
+        f"This is your primary work-item to work on; the user's questions are centred on this "
+        f"item's content unless they explicitly point elsewhere. Its materials live at "
+        f"`{item_dir}/` — read them on demand to ground your answers rather than guessing. "
+        f"You may still read other work-items and repo knowledge when relevant."
+    )
+
+
+_GUARD_BLOCK = (
+    "## General session\n"
+    "This session is NOT tied to any work-item. You MAY author and maintain this project's `general/` "
+    "memory docs — this is where onboarding (project-init / retrofit) and routine anchor-doc upkeep "
+    "happen; if the project has no project memory yet, establishing it is the right work here. But do NOT "
+    "implement or edit the project's real code, or mutate work-items, in this session (no code writes, "
+    "commits, installs, or migrations — including via shell); that work happens inside a work-item. "
+    "When implementation work surfaces, don't attempt it — offer to itemize it, and on the user's "
+    "go-ahead run the create-inbox-item skill."
+)
 
 
 @router.websocket("/ws/agent")
@@ -90,9 +123,18 @@ async def ws_agent(ws: WebSocket) -> None:
                 break  # client disconnected
             ctx = contexts.resolve(msg.context_id, msg.mode or "core")
             prompt = msg.prompt
-            # When a turn is bound to a work-item (dev surface), the item owns its thread:
-            # resume from it and persist the session back onto it.
-            work_item_id = msg.work_item_id
+            # Work-item identity is SERVER-AUTHORITATIVE (work-item-session-recognition-prd Q7): the
+            # session's durable `item_id` stamp — NOT the client payload — decides whether this turn
+            # is a work-item turn, and drives ALL of centering + write-sandbox + run-lock + telemetry.
+            # Rule: if the resumed session already EXISTS, its stamp wins (a work-item session stays
+            # centered even when reopened straight from the picker with no payload; a general session
+            # can't be spoofed into item behavior by a stale/rogue payload). Only at a session's BIRTH
+            # (no resume row yet) do we trust the opening workflow's payload — that first turn is what
+            # mints + stamps the session. Dev surface only; core turns never bind.
+            resumed = _spine.get_session(msg.resume) if msg.resume else None
+            work_item_id = (resumed.get("item_id") or None) if resumed is not None else msg.work_item_id
+            if ctx.mode != "dev":
+                work_item_id = None
 
             # Shared command layer: non-native commands (/model) are handled here and
             # answered directly — no agent turn. Everything else (incl. native /compact,
@@ -128,6 +170,29 @@ async def ws_agent(ws: WebSocket) -> None:
             # anything else (real code) still prompt the human. (plan/design-era policy.)
             turn_approve = approve
             began_run = False
+            item_run_id = None  # the run id when bound to a work-item (for the per-run event trail)
+            # Session-aware per-turn append (work-item-session-recognition-prd): a work-item session
+            # gets a Focus block (centered on its item); a general dev session gets a Guard block
+            # (discussion-only). Assembled here (the daemon knows the session's stamp) and handed to
+            # the agent. `gate_general` hard-gates mutating tools for a general dev session.
+            session_append = None
+            gate_general = ctx.mode == "dev" and not work_item_id
+            # The one write a general dev session may make: authoring/maintaining this project's
+            # `general/` memory (onboarding via project-init/retrofit, or anchor-doc upkeep). Writes
+            # there are auto-allowed by the guardrail; real-code writes stay denied+nudged.
+            general_write_root = (
+                (ctx.internal_root / "dev" / "general")
+                if gate_general and ctx.internal_root else None
+            )
+            # Is this general dev turn an ONBOARDING turn? (session-agent-lifecycle-prd, Bug 3.) An
+            # unestablished dev repo's general session IS the onboarding workflow — establishing the
+            # project's memory — so its runs are tagged `onboarding` (a workflow agent that counts in
+            # the AGENTS `running` metric), vs plain `chat` which never counts. Auto-retires: once the
+            # project is established, further general turns are ordinary `chat` again.
+            is_onboarding = bool(
+                gate_general and ctx.internal_root
+                and not _dev.project_established(ctx.internal_root / "dev")
+            )
             # NOTE: the agent no longer writes `memory/` files during a turn — capture (automatic
             # sweeps) and processing (`distill`) write DB rows, and apply/publish are owner-gated
             # daemon-side writes. So the old `scoped_writes_approve(memory/)` sandbox here is gone
@@ -142,13 +207,22 @@ async def ws_agent(ws: WebSocket) -> None:
                 # unless the surface sent an explicit per-turn override.
                 model = model or item.get("model") or DEFAULT_RUN_MODEL
                 effort = effort or item.get("effort")
-                _begin_run(ctx, ctx.id, work_item_id, "chat", model)
-                began_run = True
+                item_run_id = _begin_run(ctx, ctx.id, work_item_id, "chat", model, phase=item.get("phase"))
+                began_run = item_run_id is not None
+                session_append = _focus_block(work_item_id, item, item_dir)
+            elif ctx.mode == "dev":
+                session_append = _GUARD_BLOCK
             # UNBOUND (general) chat still spends tokens — record a lightweight run so it is fully
             # accounted (Interactive category), never silent. No item-status flip / no run-lock; just
             # telemetry + the authoritative per-type usage written at finish. session_id is attached
             # at finish so per-session grouping works.
-            chat_run_id = None if began_run else _spine.start_run(ctx.id, mode=ctx.mode, feature="chat")
+            chat_run_id = None if began_run else _spine.start_run(
+                ctx.id, mode=ctx.mode, feature="onboarding" if is_onboarding else "chat")
+            # The run this turn is accounted to — the per-run event trail (prompt · reply · calls)
+            # keys on this id so each Activity row has its own thread (Activity trace popup).
+            active_run_id = item_run_id if began_run else chat_run_id
+            if active_run_id:
+                capture_prompt(ctx.id, prompt, run_id=active_run_id, item_id=work_item_id)
             # Dev-mode turns get the dev MCP server: `dev_log` (read the activity log on demand) +
             # the learning-pipeline tools (review_candidates / propose_memory). Capture is fully
             # automatic — there is no chat-side capture tool; the idle + phase-advance sweeps own it.
@@ -161,6 +235,8 @@ async def ws_agent(ws: WebSocket) -> None:
             final_usage = None
             final_session = None
             final_model = None
+            final_ctx = None   # the turn's end-of-turn context-window fill (persisted so the chat
+                               # header can show a session's ctx% on reopen, not just live)
             try:
                 async for ev in _agent.run_turn(
                     ctx,
@@ -172,6 +248,9 @@ async def ws_agent(ws: WebSocket) -> None:
                     extra_mcp_servers=turn_mcp,
                     enforce_silent=True,   # user-facing chat: hide+block internal `access: silent` skills
                     scope_reads=True,      # L2 read-guard: keep reads inside the host's scope
+                    system_append=session_append,       # Focus (work-item) / Guard (general) block
+                    gate_general_mutations=gate_general, # hard-gate mutations in a general dev session
+                    general_write_root=general_write_root,  # …except writing this project's general/ memory
                 ):
                     if isinstance(ev, Usage) and began_run:
                         _bump_run_tokens(ctx.id, work_item_id, ev.total_tokens, ev.context_pct)
@@ -184,23 +263,33 @@ async def ws_agent(ws: WebSocket) -> None:
                         final_usage = ev.usage
                         final_session = ev.session_id
                         final_model = ev.model
+                        final_ctx = ev.context_pct
                         _sessions.record(ctx, ev.session_id)
                         if work_item_id and ev.session_id and ctx.internal_root:
                             try:
                                 _dev.set_work_item_session(
                                     ctx.internal_root / "dev", work_item_id, ev.session_id
                                 )
+                                # Reverse stamp: the session now durably KNOWS its work-item
+                                # (work-item-session-recognition-prd). Write-once/immutable — this is
+                                # a work-item session's birth. From here on the daemon reads this stamp
+                                # (not the client payload) to center + sandbox + lock + telemetry.
+                                _spine.stamp_session_item(ev.session_id, work_item_id)
                             except Exception:
                                 log.exception("failed to persist session to work-item %s", work_item_id)
                     elif isinstance(ev, Init):
                         _cache_slash(ctx.id, ev.slash_commands)
+                    # Per-run observability trail (any run, bound or unbound): the assistant's reply
+                    # text + each tool/skill/agent call, keyed to this run for the Activity trace.
+                    if active_run_id and isinstance(ev, (Status, TextDelta)):
+                        capture_event(ctx.id, ev, run_id=active_run_id, item_id=work_item_id)
                     await ws.send_json(event_to_frame(ev))
                 # Turn done — the agent has stopped, so the item now awaits the owner.
                 if began_run:
                     _end_run(ctx, ctx.id, work_item_id, final_tokens, "waiting", final_usage)
                 elif chat_run_id:
                     _spine.finish_run(chat_run_id, usage=final_usage, session_id=final_session,
-                                      model=final_model)
+                                      model=final_model, ctx_pct=final_ctx)
                 # No chat-side capture: the conversation is swept automatically (idle-timeout +
                 # phase-advance/completion), so nothing fires here per-turn.
             except Exception as e:
@@ -208,7 +297,7 @@ async def ws_agent(ws: WebSocket) -> None:
                     _end_run(ctx, ctx.id, work_item_id, final_tokens, "waiting", final_usage)
                 elif chat_run_id:
                     _spine.finish_run(chat_run_id, status="aborted", usage=final_usage,
-                                      session_id=final_session, model=final_model)
+                                      session_id=final_session, model=final_model, ctx_pct=final_ctx)
                 log.exception("turn failed")
                 try:
                     await ws.send_json(error_frame(str(e)))

@@ -85,10 +85,17 @@ SYSTEM_DB_FILE = APP_DIR / ".system.db"              # live: session, run, model
 KNOWLEDGE_REPO_DIR = Path(
     os.environ.get("SUPERME_KNOWLEDGE_REPO", str(ROOT_DIR / "superme-knowledge"))
 )
+# No seed template: a newly connected repo's knowledge home is created lazily on first write
+# (write_general_doc / work-item / inbox all mkdir), and onboarding (project-init / retrofit)
+# authors general/ from scratch against the general-dev-knowledge-asset guides.
 # Per-repo OPERATIONAL home (additive over the universal harness/): under the CODE tree,
 # keyed by repo id × mode — `local-harness/<id>/<mode>` (renovation §4.11.1). This is the
 # relocation of the old knowledge-tree `practice/<mode>` — operational lives with the code.
 LOCAL_HARNESS_DIR = APP_DIR / "local-harness"
+# Shared ASSET pool: pickable constitutional-knowledge items (e.g. sql-expert) that ANY repo can
+# activate for itself (per-repo opt-in, no body copy). Distinct from the universal harness/constitution
+# (always-on) and from the plugins' doc-authoring `references/`. One shared folder, all repos draw from it.
+ASSET_DIR = LOCAL_HARNESS_DIR / "asset"
 # Channel→workspace state {channel: {workspace, locked}}, managed live from Slack
 # (not committed; per-environment).
 CHANNELS_FILE = APP_DIR / ".channel_workspaces.json"

@@ -212,23 +212,125 @@ def read_constitution_dir(directory: Path, *, origin: str) -> list[dict]:
     return out
 
 
-def list_constitution(mode: str, universal_dir: Path, repo_dir: Path | None) -> list[dict]:
-    """All constitution items for a mode: universal (applies everywhere) + this repo's. Includes
-    disabled items (the manage UI needs them); callers filter on `enabled` as needed."""
+# --- ASSET pool (opt-in constitutional knowledge, activated per repo) ------------------------
+# `local-harness/asset/` (config.ASSET_DIR) holds constitutional KNOWLEDGE (e.g. sql-expert) that is
+# NOT universal — any repo can EQUIP it for itself. A repo activates slugs by reference (no body copy):
+# the active set is a plain slug list at `<repo constitution home>/.assets`. Default empty ⇒ a new repo
+# carries zero assets. One shared pool, all repos draw from it. (Distinct from the plugins'
+# doc-authoring `references/`, which are the "how to write each general doc" guides.)
+
+
+def read_asset_pool(asset_dir: Path | None = None) -> list[dict]:
+    """The asset pool: opt-in items in the shared `local-harness/asset/`, tagged origin='asset'."""
+    from ..runtime.config import ASSET_DIR
+    return read_constitution_dir(Path(asset_dir or ASSET_DIR), origin="asset")
+
+
+def _repo_asset_file(repo_dir: Path) -> Path:
+    """The adopted-asset list for a repo — a `.assets` file in its constitution home."""
+    return Path(repo_dir) / ".assets"
+
+
+def repo_asset_states(repo_dir: Path | None) -> dict[str, bool]:
+    """The asset-pool items a repo has ADOPTED → {slug: enabled}. `.assets` lines are `slug`
+    (adopted + enabled) or `slug  # off` (adopted but disabled). Empty / no file ⇒ {}."""
+    if repo_dir is None:
+        return {}
+    f = _repo_asset_file(repo_dir)
+    if not f.is_file():
+        return {}
+    states: dict[str, bool] = {}
+    for ln in f.read_text().splitlines():
+        s = ln.strip()
+        if not s:
+            continue
+        slug = s.split("#", 1)[0].strip()
+        if slug:
+            states[slug] = "# off" not in s
+    return states
+
+
+def _write_asset_states(repo_dir: Path, states: dict[str, bool]) -> None:
+    """Serialize the adopted map back to `.assets` (creating the repo home if needed)."""
+    f = _repo_asset_file(repo_dir)
+    f.parent.mkdir(parents=True, exist_ok=True)
+    lines = [slug if en else f"{slug}  # off" for slug, en in sorted(states.items())]
+    f.write_text(("\n".join(lines) + "\n") if lines else "")
+
+
+def list_repo_assets(repo_dir: Path | None) -> set[str]:
+    """ENABLED asset slugs for a repo — the set that drives the constitution catalog / context build.
+    Adopted-but-disabled items are excluded."""
+    return {slug for slug, en in repo_asset_states(repo_dir).items() if en}
+
+
+def set_repo_asset(repo_dir: Path | None, slug: str, enabled: bool) -> dict[str, bool]:
+    """Enable/disable one adopted asset (adopting it first if absent — this backs the manual `+ Add`
+    and the enable/disable toggle). Disabling KEEPS adoption. Returns the new adopted map. No body
+    is ever copied."""
+    if repo_dir is None:
+        return {}
+    states = repo_asset_states(repo_dir)
+    states[slug] = enabled
+    _write_asset_states(repo_dir, states)
+    return states
+
+
+def adopt_repo_assets(repo_dir: Path | None, slugs: list[str]) -> list[str]:
+    """Bulk-adopt (enabled) any not-yet-adopted slugs — the onboarding auto-adopt. Already-adopted
+    items (including ones the owner disabled) are left untouched. Returns the newly adopted slugs."""
+    if repo_dir is None:
+        return []
+    states = repo_asset_states(repo_dir)
+    newly = [s for s in slugs if s not in states]
+    for s in newly:
+        states[s] = True
+    if newly:
+        _write_asset_states(repo_dir, states)
+    return newly
+
+
+def drop_repo_asset(repo_dir: Path | None, slug: str) -> dict[str, bool]:
+    """Un-adopt one asset entirely (remove its line) — the `Drop` action. Returns the new map."""
+    if repo_dir is None:
+        return {}
+    states = repo_asset_states(repo_dir)
+    states.pop(slug, None)
+    _write_asset_states(repo_dir, states)
+    return states
+
+
+def _activated_asset_items(activated: set[str] | None, asset_dir: Path | None = None) -> list[dict]:
+    """Asset-pool items a repo has ENABLED (and that aren't globally killed via `enabled`)."""
+    if not activated:
+        return []
+    return [it for it in read_asset_pool(asset_dir) if it["slug"] in activated]
+
+
+def list_constitution(mode: str, universal_dir: Path, repo_dir: Path | None, *,
+                      activated: set[str] | None = None, asset_dir: Path | None = None) -> list[dict]:
+    """All constitution items in a repo's scope: universal (applies everywhere) + this repo's
+    authored + the ASSET-pool items it has ACTIVATED. Includes disabled items (the manage UI needs
+    them); callers filter on `enabled` as needed. `activated` is the repo's active asset-slug set;
+    `asset_dir` overrides the shared pool location (tests)."""
     items = read_constitution_dir(universal_dir, origin="universal")
     if repo_dir is not None:
         items += read_constitution_dir(repo_dir, origin="repo")
+    items += _activated_asset_items(activated, asset_dir)
     return items
 
 
-def constitution_catalog(mode: str, universal_dir: Path, repo_dir: Path | None) -> str:
+def constitution_catalog(mode: str, universal_dir: Path, repo_dir: Path | None, *,
+                         activated: set[str] | None = None, asset_dir: Path | None = None) -> str:
     """The always-on constitution CATALOG: one frontmatter line per ENABLED in-scope item
-    (universal first, then per-repo) — name + its self-sufficient description. Bodies are NOT
-    dumped; the agent pulls a body on demand via `pull_constitution(name)`. Empty string when
-    there are none. This is the frontmatter-first loading model (context-model-spec §1/§2): the
-    directive/when-to-apply lives in the always-resident description; the body is elaboration.
+    (universal + this repo's authored + its activated ASSET-pool items) — name + its self-sufficient
+    description. Bodies are NOT dumped; the agent pulls a body on demand via `pull_constitution(name)`.
+    Empty string when there are none. Frontmatter-first loading model (context-model-spec §1/§2): the
+    directive/when-to-apply lives in the always-resident description.
     """
-    items = [it for it in list_constitution(mode, universal_dir, repo_dir) if it["enabled"]]
+    items = [it for it in list_constitution(mode, universal_dir, repo_dir,
+                                            activated=activated, asset_dir=asset_dir)
+             if it["enabled"]]
     if not items:
         return ""
     lines = []
@@ -244,13 +346,60 @@ def constitution_catalog(mode: str, universal_dir: Path, repo_dir: Path | None) 
     return header + "\n\n" + "\n".join(lines)
 
 
-def resolve_constitution(mode: str, universal_dir: Path, repo_dir: Path | None,
-                         name: str) -> dict | None:
-    """Find one ENABLED in-scope constitution by name (slug), or None. Backs the
-    `pull_constitution` tool — scope is enforced by the dirs the caller passes (only the host's
-    universal + repo homes), so an out-of-scope item is simply not found."""
+# Tiny stopword set for the relevance ranker — enough to keep matches meaningful without a
+# dependency. Not exhaustive; the goal is signal, not linguistics.
+_STOP = frozenset((
+    "the a an and or of to in on for with is are be this that these those it its as at by from "
+    "you your we our they their he she i me my not no do does done can will would should may might "
+    "use used using when where what which who how why into over under out up down off no yes than "
+    "then them so if but also more most some any all each per via etc eg ie about across only just"
+).split())
+
+
+def _terms(text: str) -> set[str]:
+    """Lowercased word set, length ≥ 3, minus stopwords — the unit the relevance score compares."""
+    import re
+    return {w for w in re.findall(r"[a-z0-9]+", (text or "").lower()) if len(w) >= 3 and w not in _STOP}
+
+
+def rank_assets_by_relevance(
+    spec_text: str, activated: set[str] | None = None, *, asset_dir: Path | None = None, limit: int = 8,
+) -> list[dict]:
+    """Rank the ASSET POOL by keyword overlap with `spec_text` — the spec→asset bridge: a project's
+    stated stack/approach surfaces the knowledge assets it implies, which the owner can then activate
+    for this repo. Deterministic (no embeddings): a term shared with an item's slug or description
+    (the signal-dense catalog line) counts double vs. one only in its body. Items with zero overlap
+    are dropped. Each result carries `activated` (already on for this repo) so the caller can
+    foreground the relevant-but-not-yet-active ones. Read-only — activating stays the owner's gate."""
+    want = _terms(spec_text)
+    if not want:
+        return []
+    active = activated or set()
+    ranked: list[dict] = []
+    for it in read_asset_pool(asset_dir):
+        head = _terms(f"{it['slug']} {it.get('description') or ''}")
+        body = _terms(it.get("body") or "")
+        hits = want & (head | body)
+        if not hits:
+            continue
+        score = 2 * len(want & head) + len(want & (body - head))
+        ranked.append({
+            "slug": it["slug"], "description": it.get("description"),
+            "activated": it["slug"] in active, "score": score,
+            "confident": bool(want & head),  # matched the slug/description, not merely the body
+            "matched": sorted(want & head | (want & body), key=lambda t: (t not in head, t))[:6],
+        })
+    ranked.sort(key=lambda r: r["score"], reverse=True)
+    return ranked[:limit]
+
+
+def resolve_constitution(mode: str, universal_dir: Path, repo_dir: Path | None, name: str, *,
+                         activated: set[str] | None = None, asset_dir: Path | None = None) -> dict | None:
+    """Find one ENABLED in-scope constitution by name (slug), or None. Backs the `pull_constitution`
+    tool — scope is enforced by the dirs/active-set the caller passes (universal + repo + activated
+    ASSET items), so an out-of-scope or un-activated item is simply not found."""
     want = (name or "").strip().lower()
-    for it in list_constitution(mode, universal_dir, repo_dir):
+    for it in list_constitution(mode, universal_dir, repo_dir, activated=activated, asset_dir=asset_dir):
         if it["enabled"] and it["slug"].strip().lower() == want:
             return it
     return None

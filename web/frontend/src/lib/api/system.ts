@@ -44,6 +44,20 @@ export function getRepos(): Promise<RepoOverview[]> {
   return getJSON('/api/repos')
 }
 
+// --- connect a domain (register a new repo) + the folder picker it uses -----------------------
+export type FsBrowse = Schema<'FsBrowseResponse'>
+export type ConnectedRepo = Schema<'RepoConnectResponse'>
+
+// Browse directories under the owner's home (bounded there) for the connect folder picker.
+export function browseFs(path?: string): Promise<FsBrowse> {
+  return getJSON(`/api/fs/browse${path ? `?path=${encodeURIComponent(path)}` : ''}`)
+}
+// Register a new repo. kind='new' creates an (empty) dir → project-init; 'existing' points at
+// code → retrofit. The choice is stored and drives the repo's onboarding front door.
+export function connectRepo(body: { path: string; label?: string; kind: 'new' | 'existing' }): Promise<ConnectedRepo> {
+  return sendJSON('/api/repos', 'POST', body)
+}
+
 export function getTokens(): Promise<TokenUsage> {
   return getJSON('/api/tokens')
 }
@@ -58,6 +72,13 @@ export function getTokenTimeseries(): Promise<TokenTimeseries> {
 export function getRuns(contextId?: string, limit = 50): Promise<RunsData> {
   const ctx = contextId ? `context_id=${encodeURIComponent(contextId)}&` : ''
   return getJSON(`/api/runs?${ctx}limit=${limit}`)
+}
+
+// One run's per-run event trail (prompt · reply · tool/skill/agent calls) for the Activity trace popup.
+export type RunEvent = Schema<'RunEventRow'>
+export type RunTrace = Schema<'RunTraceResponse'>
+export function getRunTrace(runId: number): Promise<RunTrace> {
+  return getJSON(`/api/runs/${runId}/trace`)
 }
 
 type ModelSetResult = { ok: boolean; model: string | null; effective: string | null }

@@ -193,6 +193,9 @@ class SessionStore:
                 "mode": sess_mode,
                 "updated_at": scan["updated_at"],
                 "message_count": scan["message_count"],
+                # The durable work-item stamp (work-item-session-recognition-prd): non-null ⇒ this is
+                # a WORK-ITEM session. The title is resolved by the router (it has the dev service).
+                "item_id": rec.get("item_id") or None,
             })
         out.sort(key=lambda s: s["updated_at"], reverse=True)
         return out

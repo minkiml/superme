@@ -38,9 +38,11 @@ _FRONTMATTER = re.compile(r"^---\s*\n(.*?)\n---\s*\n?(.*)$", re.DOTALL)
 def _slug(s: str) -> str | None:
     return re.sub(r"[^a-z0-9]+", "-", (s or "").strip().lower()).strip("-") or None
 
-# Display order for the work-item lifecycle (D-018). phase: plan_design → build_eval → done.
+# Display order for the work-item lifecycle (D-018). phase: triage → plan_design → build_eval → done.
 # status (active): queued · in_progress · waiting · dropped — completion is a phase, not a status.
-_PHASE_RANK = {"plan_design": 0, "build_eval": 1, "done": 2}
+# `triage` = the pre-plan intake/classification phase (reserved; behaviour lands with the workspace
+# workflow). Ranked first so intake items sort ahead of planned work.
+_PHASE_RANK = {"triage": 0, "plan_design": 1, "build_eval": 2, "done": 3}
 _STATUS_RANK = {"in_progress": 0, "waiting": 1, "queued": 2, "dropped": 3}
 
 
@@ -79,6 +81,107 @@ def _parse_md(text: str) -> tuple[dict, str]:
     if not isinstance(meta, dict):
         meta = {}
     return meta, m.group(2)
+
+
+# --- general/ anchor docs: parse the readable deliverable/wave lists -------------
+# The anchor docs carry NO frontmatter (see the dev-knowledge-structure constitution). Deliverables
+# and waves live as clean id-tagged lists in the body: `- **<id>** — Title` under project-prd.md's
+# `## Deliverables`, and `**<id>** — Title` under each `## <deliverable-id> …` heading in roadmap.md.
+# A wave line may carry a curated status glyph (✓ done · ▸ active · · planned). These parsers are
+# deliberately forgiving; example snippets inside ``` fences are skipped so they don't parse as data.
+ANCHOR_DOCS = ("project-prd", "spec", "roadmap", "architecture")  # + resources/index.md
+_DELIVERABLE_RE = re.compile(r"^-\s+\*\*(?P<id>[^*]+?)\*\*\s*[—–-]\s*(?P<title>.+?)\s*$", re.M)
+_WAVE_RE = re.compile(r"\*\*(?P<id>[^*]+?)\*\*\s*[—–-]\s*(?P<title>.+?)\s*$")
+_HEADING_RE = re.compile(r"^#{2,6}\s+(?P<id>\S+)")
+_GLYPHS = {"✓": "done", "▸": "active", "·": "planned"}
+
+
+def _strip_fences(text: str) -> str:
+    """Drop ``` fenced code blocks so example snippets don't parse as real entries."""
+    out, fence = [], False
+    for line in text.splitlines():
+        if line.lstrip().startswith("```"):
+            fence = not fence
+            continue
+        if not fence:
+            out.append(line)
+    return "\n".join(out)
+
+
+def _section(text: str, heading: str) -> str:
+    """Body under a `## <heading>` (case-insensitive), up to the next heading."""
+    out, grab = [], False
+    for line in text.splitlines():
+        h = re.match(r"^#{1,6}\s+(.*)$", line)
+        if h:
+            grab = h.group(1).strip().lower() == heading.lower()
+            continue
+        if grab:
+            out.append(line)
+    return "\n".join(out)
+
+
+def _deemph(s: str) -> str:
+    """Strip markdown emphasis (`**`, `*`, `_`, backticks) so a title renders as plain text."""
+    return re.sub(r"[*_`]", "", s).strip()
+
+
+def _parse_deliverables(prd_text: str) -> list[dict]:
+    """project-prd.md `## Deliverables` → [{id, title}] (in document order)."""
+    body = _section(_strip_fences(prd_text or ""), "Deliverables")
+    return [{"id": _deemph(m.group("id")), "title": _deemph(m.group("title"))}
+            for m in _DELIVERABLE_RE.finditer(body)]
+
+
+def _parse_waves(roadmap_text: str) -> list[dict]:
+    """roadmap.md → [{id, title, deliverable, status}] — waves grouped under each `## <d-id> …`."""
+    waves, current = [], None
+    for line in _strip_fences(roadmap_text or "").splitlines():
+        h = _HEADING_RE.match(line)
+        if h:
+            current = h.group("id").strip()
+            continue
+        if current is None:
+            continue
+        m = _WAVE_RE.search(line)
+        if not m:
+            continue
+        glyph = next((_GLYPHS[c] for c in line if c in _GLYPHS), None)
+        waves.append({"id": _deemph(m.group("id")), "title": _deemph(m.group("title")),
+                      "deliverable": current, "status": glyph})
+    return waves
+
+
+def _first_para(text: str, cap: int = 240) -> str | None:
+    """First real paragraph of a doc (skip headings/blockquotes/blanks), collapsed + length-capped."""
+    buf: list[str] = []
+    for ln in (text or "").splitlines():
+        s = ln.strip()
+        if not s or s.startswith("#") or s.startswith(">"):
+            if buf:
+                break
+            continue
+        buf.append(s)
+    if not buf:
+        return None
+    para = " ".join(buf)
+    return para if len(para) <= cap else para[:cap].rsplit(" ", 1)[0] + "…"
+
+
+def _item_view(it: dict) -> dict:
+    """The board's per-item projection: identity + phase/status + the one relevant date (as display
+    strings — the board never does date math, and a stringified date keeps the wire shape simple)."""
+    done_at, updated, created = it.get("done_at"), it.get("updated_at"), it.get("created_at")
+    date_val = done_at or (updated if it.get("status") in ("in_progress", "waiting") else None) or created
+    return {"id": it.get("id"), "title": it.get("title"), "phase": it.get("phase"),
+            "status": it.get("status"),
+            "done_at": str(done_at) if done_at else None,
+            "date": str(date_val) if date_val else None}
+
+
+def _rollup(views: list[dict]) -> dict:
+    """{done, total} for a set of item views — done = completed (done_at set)."""
+    return {"done": sum(1 for v in views if v.get("done_at")), "total": len(views)}
 
 
 class DevKnowledgeService:
@@ -137,6 +240,25 @@ class DevKnowledgeService:
             wid = it.get("id")
             s = stats.get(wid, {})
             it["total_tokens"] = s.get("total_tokens", 0)
+            # Per-phase token accumulation (Stage D), BOTH bases recorded: `phase_tokens` = 3-type
+            # (input+cache_write+output — what the card shows for its current phase) and
+            # `phase_tokens_4type` = full volume (3-type + cache_read) behind it.
+            by_phase = dict(s.get("by_phase", {}))
+            by_phase_cr = dict(s.get("by_phase_cr", {}))
+            # Legacy runs (made before the phase column existed) carry no phase → the "unknown" bucket.
+            # Attribute them to the item's CURRENT phase: an item rarely leaves its first phase, and every
+            # NEW run is stamped, so this only ever re-homes legacy spend (and is exact for the common
+            # never-advanced case — e.g. an item that's lived entirely in plan_design shows its full total).
+            cur = it.get("phase")
+            if cur:
+                u = by_phase.pop("unknown", 0)
+                if u:
+                    by_phase[cur] = by_phase.get(cur, 0) + u
+                ucr = by_phase_cr.pop("unknown", 0)
+                if ucr:
+                    by_phase_cr[cur] = by_phase_cr.get(cur, 0) + ucr
+            it["phase_tokens"] = by_phase
+            it["phase_tokens_4type"] = {p: by_phase.get(p, 0) + by_phase_cr.get(p, 0) for p in by_phase}
             it["last_run"] = (
                 {"tokens": s.get("last_tokens", 0), "duration_ms": s.get("last_duration_ms"),
                  "model": s.get("last_model"), "context_pct": s.get("last_context_pct")}
@@ -310,9 +432,12 @@ class DevKnowledgeService:
 
     def set_work_item_model(self, dev_root: Path, item_id: str, model: str) -> bool:
         """Set a work-item's configured `model` (the agent model its runs use — plan + bound
-        chat). Reconfigurable anytime. Inserts the field if absent (older items predate it).
-        Line-based rewrite preserving frontmatter shape, bumping `updated_at`. Returns True if
-        the file changed."""
+        chat), stored as its TIER ALIAS (`sonnet`) — the canonical on-disk form; the concrete latest
+        is resolved at consumption (the run normalizes), so the pick auto-tracks a MODEL_TIERS bump.
+        Reconfigurable anytime. Inserts the field if absent (older items predate it). Line-based
+        rewrite preserving frontmatter shape, bumping `updated_at`. Returns True if the file changed."""
+        from .models import model_family
+        model = model_family(model) or model
         item = Path(dev_root) / "work-items" / item_id / "item.md"
         if not item.exists():
             return False
@@ -399,6 +524,152 @@ class DevKnowledgeService:
         fm = re.sub(r"(?m)^updated_at:.*$", f"updated_at: {date.today().isoformat()}", fm)
         item.write_text(f"---\n{fm}\n---\n{body}")
         return True
+
+    def set_work_item_scaffold(
+        self, dev_root: Path, item_id: str, *, wave: str | None = None, deliverable: str | None = None
+    ) -> bool:
+        """Set a ROOT work-item's anchor-scaffold pointer — `wave: <id>` (which resolves its
+        deliverable) or `deliverable: <id>` directly. Pass one; the other is cleared to null.
+        Inserts the fields (next to parent_id) if absent. Bumps `updated_at`. Returns True if changed."""
+        item = Path(dev_root) / "work-items" / item_id / "item.md"
+        if not item.exists():
+            return False
+        text = item.read_text()
+        m = _FRONTMATTER.match(text)
+        if not m:
+            return False
+        _meta, body = _parse_md(text)
+        fm = m.group(1)
+
+        def _set(fm: str, key: str, val: str) -> str:
+            if re.search(rf"(?m)^{key}:", fm):
+                return re.sub(rf"(?m)^{key}:.*$", f"{key}: {val}", fm)
+            if re.search(r"(?m)^parent_id:", fm):
+                return re.sub(r"(?m)^(parent_id:.*)$", rf"\1\n{key}: {val}", fm)
+            return fm.rstrip() + f"\n{key}: {val}"
+
+        fm = _set(fm, "wave", wave or "null")
+        fm = _set(fm, "deliverable", deliverable or "null")
+        fm = re.sub(r"(?m)^updated_at:.*$", f"updated_at: {date.today().isoformat()}", fm)
+        item.write_text(f"---\n{fm}\n---\n{body}")
+        return True
+
+    # --- general/ anchor docs ---------------------------------------------------
+
+    def _general_path(self, dev_root: Path, name: str) -> Path | None:
+        """Resolve an anchor-doc name to its path (guards the name — no traversal)."""
+        if name == "resources":
+            return Path(dev_root) / "general" / "resources" / "index.md"
+        if name in ANCHOR_DOCS:
+            return Path(dev_root) / "general" / f"{name}.md"
+        return None
+
+    def general_docs(self, dev_root: Path) -> list[dict]:
+        """The anchor-doc set with presence flags (for the dashboard's Knowledge surface)."""
+        out = []
+        for name in (*ANCHOR_DOCS, "resources"):
+            p = self._general_path(dev_root, name)
+            out.append({"name": name, "present": bool(p and p.exists())})
+        return out
+
+    def read_general_doc(self, dev_root: Path, name: str) -> str | None:
+        """Raw text of one anchor doc, or None (unknown name or missing file)."""
+        p = self._general_path(dev_root, name)
+        return p.read_text() if (p and p.exists()) else None
+
+    def project_established(self, dev_root: Path) -> bool:
+        """True once this project's memory exists — the PRD defines at least one deliverable (the
+        spine the roadmap and work-items point at). A blank/missing general/ is 'not established':
+        the dev workspace routes such a repo to onboarding (project-init / retrofit) as a hard front
+        door before any work surfaces open. Keying on deliverables (not file presence) means a fresh
+        repo — whose general/ doesn't exist yet — reads as un-established until onboarding fills it."""
+        prd = self.read_general_doc(dev_root, "project-prd")
+        return bool(prd and _parse_deliverables(prd))
+
+    def write_general_doc(self, dev_root: Path, name: str, text: str) -> bool:
+        """Overwrite one anchor doc (creating its folder if needed). False on an unknown name."""
+        p = self._general_path(dev_root, name)
+        if not p:
+            return False
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(text)
+        return True
+
+    def roadmap_board(self, dev_root: Path, items: list[dict] | None = None) -> dict:
+        """Join the anchor scaffold (project-prd deliverables + roadmap waves) with the live
+        work-items (grouped by each item's own `wave:`/`deliverable:` pointer) into the board tree:
+        deliverable → wave → its item views + rollup. Status/date come from the items; the wave's
+        curated glyph comes from the roadmap. `orphans` surfaces referential-integrity breaks
+        (a pointer to an id the anchor docs don't define)."""
+        root = Path(dev_root)
+        deliverables = _parse_deliverables(self.read_general_doc(dev_root, "project-prd") or "")
+        waves = _parse_waves(self.read_general_doc(dev_root, "roadmap") or "")
+        if items is None:
+            items = self._read_work_items(root / "work-items")
+
+        by_wave: dict[str, list] = {}
+        by_deliv: dict[str, list] = {}
+        for it in items:
+            if it.get("wave"):
+                by_wave.setdefault(str(it["wave"]), []).append(_item_view(it))
+            elif it.get("deliverable"):
+                by_deliv.setdefault(str(it["deliverable"]), []).append(_item_view(it))
+            # items with neither pointer are simply off the board
+
+        deliv_ids = {d["id"] for d in deliverables}
+        wave_ids = {w["id"] for w in waves}
+        dmap = {d["id"]: {**d, "waves": [], "items": []} for d in deliverables}
+        orphans: list[dict] = []
+
+        for w in waves:
+            node = {**w, "items": by_wave.get(w["id"], []), "rollup": _rollup(by_wave.get(w["id"], []))}
+            if w["deliverable"] in dmap:
+                dmap[w["deliverable"]]["waves"].append(node)
+            else:  # a wave under a deliverable the PRD doesn't define
+                orphans.append({"reason": "wave-deliverable", "wave": w["id"], "deliverable": w["deliverable"]})
+        for d_id, views in by_deliv.items():
+            if d_id in dmap:
+                dmap[d_id]["items"] = views
+            else:
+                orphans.append({"reason": "item-deliverable", "deliverable": d_id, "items": [v["id"] for v in views]})
+        for w_id, views in by_wave.items():
+            if w_id not in wave_ids:
+                orphans.append({"reason": "item-wave", "wave": w_id, "items": [v["id"] for v in views]})
+
+        # deliverable rollup = its waves' items + its direct items
+        result = []
+        for d in dmap.values():
+            all_views = [v for wv in d["waves"] for v in wv["items"]] + d["items"]
+            result.append({**d, "rollup": _rollup(all_views)})
+        return {"deliverables": result, "orphans": orphans}
+
+    def orient_digest(self, dev_root: Path, items: list[dict] | None = None) -> str | None:
+        """The thin always-on ORIENT line for the dev preamble — what this project is, which waves are
+        active, and what's in progress — generated from the anchor docs + live work-items. Kept tiny
+        (it's a permanent per-turn cost); None when there's nothing yet (no general/ docs)."""
+        prd = self.read_general_doc(dev_root, "project-prd")
+        line = _first_para(prd) if prd else None
+        board = self.roadmap_board(dev_root, items)
+        active = [(w["title"], w["deliverable"]) for d in board["deliverables"]
+                  for w in d["waves"] if w.get("status") == "active"]
+        if items is None:
+            items = self._read_work_items(Path(dev_root) / "work-items")
+        inprog = [it for it in items
+                  if it.get("status") in ("in_progress", "waiting") and not it.get("done_at")]
+        if not (line or active or inprog):
+            # Cold start: no project memory yet. Make the empty state VISIBLE (not silence) so the
+            # charter's "Before there is any memory" rule fires — establish it before building.
+            return ("**No project memory yet.** Establishing it is your first task — project-init for a "
+                    "new/empty repo, retrofit for existing code (see the charter). Don't build until it exists.")
+        out: list[str] = []
+        if line:
+            out.append(line)
+        if active:
+            out.append("Active: " + " · ".join(f"{t} ({d})" for t, d in active))
+        if inprog:
+            out.append("In progress: " + " · ".join(
+                f"{it.get('title') or it.get('id')} [{it.get('phase')}]" for it in inprog[:6]))
+        return "\n".join(out)
 
     def delete_work_item(self, dev_root: Path, item_id: str) -> bool:
         """Hard-delete a work-item folder (item.md, artifacts/ and any branch-offs nested

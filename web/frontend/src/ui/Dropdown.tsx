@@ -68,8 +68,14 @@ export default function Dropdown({
       if (ref.current?.contains(t) || menuRef.current?.contains(t)) return
       setOpen(false)
     }
-    // The menu is fixed-positioned from a one-time rect; any scroll/resize detaches it → close.
-    const onMove = () => setOpen(false)
+    // The menu is fixed-positioned from a one-time rect; an ANCESTOR scroll/resize detaches it →
+    // close. But scrolling INSIDE the menu's own list must NOT close it (the capture listener sees
+    // that scroll too), so exempt targets within the menu.
+    const onMove = (e?: Event) => {
+      const t = e?.target
+      if (t instanceof Node && menuRef.current?.contains(t)) return
+      setOpen(false)
+    }
     document.addEventListener('mousedown', onDoc)
     window.addEventListener('scroll', onMove, true)
     window.addEventListener('resize', onMove)

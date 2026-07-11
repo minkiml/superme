@@ -46,7 +46,7 @@ async def dev_inbox_add(body: InboxBody, dev_store: DevStore = Depends(get_dev_s
     dev_store.log_event(
         body.context_id, "inbox.add",
         f"Captured: {(row.get('title') or row.get('text') or '')[:80]}",
-        actor=("agent" if row.get("origin") == "agent" else "owner"),
+        actor=("agent" if "agent" in (row.get("origin") or []) else "owner"),
         meta={"inbox_id": row["id"], "kind": row.get("kind")},
     )
     return row

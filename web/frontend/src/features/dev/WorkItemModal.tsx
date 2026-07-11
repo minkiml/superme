@@ -8,7 +8,7 @@ import {
   getWorkItemDetail, getWorkItemArtifacts, advanceWorkItem, completeWorkItem, setWorkItemModel, setWorkItemEffort, getDevLog,
   type WorkItem, type WorkItemDetail, type DevEvent, type RunArtifact,
 } from '@/lib/api'
-import { fmtModel, fmtTokens, fmtLocal } from '@/lib/format'
+import { fmtModel, fmtTokens, fmtLocal, toModelKey } from '@/lib/format'
 import { StatusBadge, isPlannable, RUN_MODELS, DEFAULT_RUN_MODEL, RUN_EFFORTS, DEFAULT_RUN_EFFORT } from './panels'
 import { PHASE_LABEL } from './common'
 
@@ -34,7 +34,7 @@ export default function WorkItemModal({
   const [advancing, setAdvancing] = useState(false)
   // Model is configured here (the card no longer carries it) — used by "Plan it". Defaults to
   // the last run's model, else Sonnet.
-  const [model, setModel] = useState(it.model ?? DEFAULT_RUN_MODEL)
+  const [model, setModel] = useState(toModelKey(it.model) || DEFAULT_RUN_MODEL)
   const [effort, setEffort] = useState(it.effort ?? DEFAULT_RUN_EFFORT)
 
   useEffect(() => {
@@ -308,8 +308,8 @@ export default function WorkItemModal({
   )
 }
 
-// The run telemetry line — full detail (model · context fill · total tokens), the data that
-// came off the card face.
+// The run telemetry line — full detail (model · context fill · total tokens). Tokens are 3-type
+// (input + cache write + output, excl. cache read) — the same basis as the Activity log + token tile.
 function RunMeta({ it }: { it: WorkItem }) {
   const bits = [
     it.model && fmtModel(it.model),

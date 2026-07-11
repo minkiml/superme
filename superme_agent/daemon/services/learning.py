@@ -19,7 +19,8 @@ from pathlib import Path
 from ..app_state import agent as _agent, dev_store as _dev_store, spine as _spine, \
     sessions as _sessions
 from ..deps import cache_slash as _cache_slash, proposal_slug as _proposal_slug
-from ...core import Init, Usage, Result, deny_all, learning_write_approve
+from .runs import capture_prompt, capture_event
+from ...core import Init, Usage, Result, Status, TextDelta, deny_all, learning_write_approve
 from ...gateway import contexts
 from ...harness.tools.dev_tools import make_dev_mcp_server
 from ...runtime.config import HARNESS_DIR, CONSTITUTION_DIR
@@ -51,7 +52,7 @@ async def _run_headless_distill(ctx, context_id: str, run_id: int) -> None:
     props_before = len(_dev_store.list_memory_proposals(context_id, status="proposed"))
     _dev_store.log_event(context_id, "distill.start", f"Started distill · {cands_before} candidate(s)",
                          scope="dev", actor="daemon", meta={"candidates": cands_before})
-    turn_mcp = {"dev": make_dev_mcp_server(_dev_store, ctx.id)}
+    turn_mcp = {"dev": make_dev_mcp_server(_dev_store, ctx.id, learning=True)}
     run_status = "done"
     session_id = None
     run_model = None
@@ -73,6 +74,10 @@ async def _run_headless_distill(ctx, context_id: str, run_id: int) -> None:
                 run_usage = ev.usage          # whole-turn usage — typed-column fallback at finish
             elif isinstance(ev, Init):
                 _cache_slash(ctx.id, ev.slash_commands)
+            # Per-run trail for the Activity trace: this headless run's reply text + tool/skill/agent
+            # calls (its throwaway session transcript is disposed, so this is the only record).
+            if isinstance(ev, (Status, TextDelta)):
+                capture_event(context_id, ev, run_id=run_id)
             # NB: never _sessions.record — distill is sessionless; its transcript is disposed below.
     except Exception:
         log.exception("headless distill run failed for %s", context_id)
@@ -207,7 +212,7 @@ async def _run_headless_write(ctx, context_id: str, proposal_id: int, run_id: in
                          f"Started write · proposal #{proposal_id} ({prop['output_form']}/{prop['target_scope']})",
                          scope="dev", actor="daemon",
                          meta={"proposal_id": proposal_id, "staged_path": staged_path})
-    turn_mcp = {"dev": make_dev_mcp_server(_dev_store, ctx.id,
+    turn_mcp = {"dev": make_dev_mcp_server(_dev_store, ctx.id, learning=True,
                                            proposal_id=proposal_id, staged_path=staged_path)}
     run_status = "done"
     session_id = None
@@ -232,6 +237,10 @@ async def _run_headless_write(ctx, context_id: str, proposal_id: int, run_id: in
                 run_usage = ev.usage          # whole-turn usage — typed-column fallback at finish
             elif isinstance(ev, Init):
                 _cache_slash(ctx.id, ev.slash_commands)
+            # Per-run trail for the Activity trace: this headless run's reply text + tool/skill/agent
+            # calls (its throwaway session transcript is disposed, so this is the only record).
+            if isinstance(ev, (Status, TextDelta)):
+                capture_event(context_id, ev, run_id=run_id)
     except Exception:
         log.exception("headless write run failed for proposal %s", proposal_id)
         run_status = "aborted"
@@ -292,6 +301,12 @@ async def run_sweep(ctx, session_id: str, focus: str | None = None) -> dict:
     context_id = ctx.id
     if session_id in _sweeping:
         return {"status": "already_running", "session_id": session_id}
+    # Onboarding sessions are never swept: SuperMe walking the owner through project-init/retrofit is
+    # dense with SuperMe reciting its own skills/guides (nothing owner-originated to mine), and it's a
+    # one-time, any-project process. Single choke — every trigger bottoms out here, so this one guard
+    # covers the idle loop, the phase/completion hooks, and the manual /dev/sweep path alike.
+    if _spine.session_is_onboarding(session_id):
+        return {"status": "skipped_onboarding", "session_id": session_id}
     try:
         messages = _sessions.transcript_messages(ctx, session_id)
     except Exception:
@@ -327,7 +342,8 @@ async def run_sweep(ctx, session_id: str, focus: str | None = None) -> dict:
         "--- end slice ---"
     )
     # Bind provenance server-side: the agent supplies substance, we stamp which session it came from.
-    turn_mcp = {"dev": make_dev_mcp_server(_dev_store, context_id, origin_session_id=session_id)}
+    turn_mcp = {"dev": make_dev_mcp_server(_dev_store, context_id, learning=True,
+                                           origin_session_id=session_id)}
     run_status = "done"
     sub_session = None
     run_model = None
@@ -349,6 +365,10 @@ async def run_sweep(ctx, session_id: str, focus: str | None = None) -> dict:
                 run_usage = ev.usage          # whole-turn usage — typed-column fallback at finish
             elif isinstance(ev, Init):
                 _cache_slash(ctx.id, ev.slash_commands)
+            # Per-run trail for the Activity trace: this headless run's reply text + tool/skill/agent
+            # calls (its throwaway session transcript is disposed, so this is the only record).
+            if isinstance(ev, (Status, TextDelta)):
+                capture_event(context_id, ev, run_id=run_id)
             # NB: never _sessions.record — the sweep is sessionless; its transcript is disposed below.
     except Exception:
         log.exception("capture sweep run failed for %s (session %s)", context_id, session_id)
@@ -440,6 +460,8 @@ async def _sweep_idle_sessions(idle_seconds: int | None = None, min_user_msgs: i
             if rec.get("mode") != "dev":
                 continue
             sid = rec["id"]
+            if _spine.session_is_onboarding(sid):
+                continue  # onboarding sessions are never swept (run_sweep guards too; skip early)
             scanned += 1
             mtime = _sessions.transcript_mtime(ctx, sid)
             if mtime is None or (now - mtime) < idle_seconds:

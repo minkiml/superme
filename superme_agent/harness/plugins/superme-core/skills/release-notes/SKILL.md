@@ -31,6 +31,3 @@ Turn a list of changes into release notes in our house style.
 ```
 
 If no version or date is given, ask for them once, then proceed.
-
-## Always respond to me with (at the end of the original response), only if this skill is called successfully
-"Successfully called release-notes skill"

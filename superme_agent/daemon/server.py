@@ -23,11 +23,11 @@ app = FastAPI(title="SuperMe Core daemon", docs_url=None, redoc_url=None, lifesp
 # --- router assembly: each surface is an APIRouter mounted behind its real path ------------------
 from .routers import (  # noqa: E402
     health as _r_health, docs as _r_docs, knowledge as _r_knowledge,
-    sessions as _r_sessions, system as _r_system, ws as _r_ws,
+    sessions as _r_sessions, system as _r_system, ws as _r_ws, fs as _r_fs,
 )
 from .routers.dev import (  # noqa: E402
     inbox as _r_dev_inbox, meta as _r_dev_meta, harness as _r_dev_harness,
-    work_items as _r_dev_work_items, learning as _r_dev_learning,
+    work_items as _r_dev_work_items, learning as _r_dev_learning, general as _r_dev_general,
 )
 
 app.include_router(_r_health.router)
@@ -35,9 +35,11 @@ app.include_router(_r_docs.router)
 app.include_router(_r_knowledge.router)
 app.include_router(_r_sessions.router)
 app.include_router(_r_system.router)
+app.include_router(_r_fs.router)
 app.include_router(_r_dev_inbox.router)
 app.include_router(_r_dev_meta.router)
 app.include_router(_r_dev_harness.router)
 app.include_router(_r_dev_work_items.router)
 app.include_router(_r_dev_learning.router)
+app.include_router(_r_dev_general.router)
 app.include_router(_r_ws.router)

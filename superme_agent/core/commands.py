@@ -13,7 +13,7 @@ dispatch. Per-context model overrides are persisted and applied to later turns.
 import logging
 
 from .context import Context
-from .models import MODEL_TIERS, is_valid_model, normalize_model
+from .models import MODEL_TIERS, is_valid_model, model_family, normalize_model
 from .spine import SystemSpine, get_spine
 
 log = logging.getLogger("superme-agent")
@@ -65,9 +65,10 @@ class CommandLayer:
         if marg in ("reset", "default", "clear"):
             self._spine.set_model_override(ctx.id, None); msgs.append("Model **default**")
         elif is_valid_model(marg):
-            # Store the CONCRETE id (alias → its pinned newest) so what's picked is what runs.
-            concrete = normalize_model(marg)
-            self._spine.set_model_override(ctx.id, concrete); msgs.append(f"Model **{concrete}**")
+            # Store the TIER ALIAS (`sonnet`) — the canonical form; the concrete latest is resolved at
+            # consumption (agent_service normalizes), so the pick auto-tracks a MODEL_TIERS bump.
+            alias = model_family(marg) or normalize_model(marg)
+            self._spine.set_model_override(ctx.id, alias); msgs.append(f"Model **{alias}**")
         else:
             return f"Unknown model `{marg}`. Choose one of: {mopts}."
         # Effort half (optional token).

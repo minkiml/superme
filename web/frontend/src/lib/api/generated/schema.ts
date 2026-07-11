@@ -154,7 +154,9 @@ export interface paths {
         };
         /**
          * Sessions List
-         * @description SuperMe's own past sessions for a context, newest first. `mode` (core|dev) scopes.
+         * @description SuperMe's own past sessions for a context, newest first. `mode` (core|dev) scopes. A session
+         *     stamped to a work-item carries its `item_id` + resolved `item_title`, so the chat rail can show
+         *     (and clear) the work-item indicator straight from the session, not client-held binding state.
          */
         get: operations["sessions_list_sessions_get"];
         put?: never;
@@ -227,7 +229,13 @@ export interface paths {
          */
         get: operations["repos_overview_repos_get"];
         put?: never;
-        post?: never;
+        /**
+         * Connect Repo
+         * @description Connect a domain: register a new repo into the spine and seed its knowledge home. `kind`
+         *     (new|existing) is stored on the repo and selects its onboarding front door (project-init |
+         *     retrofit). New dirs are created (must be empty); existing dirs must already be a directory.
+         */
+        post: operations["connect_repo_repos_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -247,6 +255,28 @@ export interface paths {
          *     or omit for the system-wide log. `running` is the live count for a quick gauge.
          */
         get: operations["runs_overview_runs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/runs/{run_id}/trace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Run Trace
+         * @description One run's event trail — the prompt that opened it, the assistant's reply text, and each
+         *     tool/skill/agent call, in order. Per-RUN (not per-session), so each Activity row has its own
+         *     thread; works for headless runs too. Empty list when nothing was recorded.
+         */
+        get: operations["run_trace_runs__run_id__trace_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -499,6 +529,27 @@ export interface paths {
          *     unchanged; an empty string clears it (falls back to the hashed-palette default / no icon).
          */
         post: operations["set_repo_meta_repos__repo_id__meta_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/fs/browse": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Fs Browse
+         * @description List the sub-directories of `path` (default: the owner's home). Directories only — the
+         *     picker chooses a project folder. 400 if the path escapes home or isn't a directory.
+         */
+        get: operations["fs_browse_fs_browse_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -827,6 +878,49 @@ export interface paths {
         patch: operations["dev_harness_constitution_toggle_dev_harness_constitutions__slug__patch"];
         trace?: never;
     };
+    "/dev/harness/assets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Dev Harness Assets
+         * @description The shared asset pool (opt-in constitutional knowledge, e.g. `sql-expert`), each flagged with
+         *     whether THIS repo has ADOPTED and ENABLED it. The pool is shared; adoption is per-repo (no body
+         *     copy). Onboarding auto-adopts the confidently-relevant ones; the owner curates from here.
+         */
+        get: operations["dev_harness_assets_dev_harness_assets_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dev/harness/assets/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Dev Harness Asset Action
+         * @description Per-repo asset curation: `adopt` (+ Add), `enable`/`disable` (toggle, keeps adoption), or `drop`
+         *     (un-adopt). Writes the repo's `.assets` list — no body copy. Takes effect on the next dev turn.
+         */
+        patch: operations["dev_harness_asset_action_dev_harness_assets__slug__patch"];
+        trace?: never;
+    };
     "/dev/harness/published/{proposal_id}/file": {
         parameters: {
             query?: never;
@@ -867,6 +961,27 @@ export interface paths {
          *     item lands at `waiting` when done. Poll GET /dev (`running`) for the live planning state.
          */
         post: operations["dev_work_item_plan_dev_work_items__item_id__plan_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dev/work-items/{item_id}/scaffold": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dev Work Item Scaffold
+         * @description Set a root work-item's anchor pointer — `wave` (resolves its deliverable) or `deliverable`
+         *     directly. Pass one; the other clears to null. 404 if the item is missing.
+         */
+        post: operations["dev_work_item_scaffold_dev_work_items__item_id__scaffold_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1295,6 +1410,93 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/dev/general": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Dev General Docs
+         * @description The anchor-doc set with presence flags (project-prd · spec · roadmap · architecture · resources).
+         */
+        get: operations["dev_general_docs_dev_general_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dev/project-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Dev Project Status
+         * @description Whether this project's memory is established (its PRD defines ≥1 deliverable) + the doc-set
+         *     presence flags + the connect-time onboarding choice. The dev workspace gates on `established`:
+         *     false ⇒ show the onboarding front door, launching `onboard_mode` when it's set.
+         */
+        get: operations["dev_project_status_dev_project_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dev/general/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Dev General Doc
+         * @description One anchor doc's raw markdown (content is null if the file doesn't exist yet). 404 unknown name.
+         */
+        get: operations["dev_general_doc_dev_general__name__get"];
+        /**
+         * Dev General Doc Save
+         * @description Overwrite one anchor doc (creating its folder if needed). 404 on an unknown name.
+         */
+        put: operations["dev_general_doc_save_dev_general__name__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dev/roadmap": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Dev Roadmap
+         * @description The roadmap board: deliverable → wave → its live work-item instances + rollup, plus any
+         *     referential-integrity orphans (an item/wave pointing at an id the anchor docs don't define).
+         */
+        get: operations["dev_roadmap_dev_roadmap_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1395,6 +1597,101 @@ export interface components {
             /** Path */
             path: string;
         };
+        /** AssetActionBody */
+        AssetActionBody: {
+            /** Action */
+            action: string;
+            /**
+             * Context Id
+             * @default global
+             */
+            context_id: string;
+        };
+        /**
+         * AssetActionResponse
+         * @description Result of a per-repo asset action (adopt / enable / disable / drop).
+         */
+        AssetActionResponse: {
+            /** Ok */
+            ok: boolean;
+            /** Slug */
+            slug: string;
+            /** Action */
+            action: string;
+            /** Adopted */
+            adopted: boolean;
+            /** Enabled */
+            enabled: boolean;
+        };
+        /**
+         * AssetItem
+         * @description One asset-pool item — `adopted` (in this repo's list) + `enabled` (adopted and not off).
+         */
+        AssetItem: {
+            /** Slug */
+            slug: string;
+            /** Title */
+            title: string;
+            /** Description */
+            description?: string | null;
+            /** Body */
+            body: string;
+            /** Adopted */
+            adopted: boolean;
+            /** Enabled */
+            enabled: boolean;
+        };
+        /** AssetsResponse */
+        AssetsResponse: {
+            /** Context Id */
+            context_id: string;
+            /** Assets */
+            assets: components["schemas"]["AssetItem"][];
+        };
+        /** BoardDeliverable */
+        BoardDeliverable: {
+            /** Id */
+            id: string;
+            /** Title */
+            title: string;
+            /** Waves */
+            waves: components["schemas"]["BoardWave"][];
+            /** Items */
+            items: components["schemas"]["BoardItem"][];
+            rollup: components["schemas"]["Rollup"];
+        };
+        /**
+         * BoardItem
+         * @description A work-item as it appears on the board — status + dates are the item's own, rendered live.
+         */
+        BoardItem: {
+            /** Id */
+            id: string;
+            /** Title */
+            title?: string | null;
+            /** Phase */
+            phase?: ("triage" | "plan_design" | "build_eval" | "done") | null;
+            /** Status */
+            status?: ("queued" | "in_progress" | "waiting" | "dropped") | null;
+            /** Done At */
+            done_at?: string | null;
+            /** Date */
+            date?: string | null;
+        };
+        /** BoardWave */
+        BoardWave: {
+            /** Id */
+            id: string;
+            /** Title */
+            title: string;
+            /** Deliverable */
+            deliverable: string;
+            /** Status */
+            status?: string | null;
+            /** Items */
+            items: components["schemas"]["BoardItem"][];
+            rollup: components["schemas"]["Rollup"];
+        };
         /** CandidateStatItem */
         CandidateStatItem: {
             /** Id */
@@ -1416,6 +1713,8 @@ export interface components {
             total: number;
             /** Pending Proposals */
             pending_proposals: number;
+            /** Drafted Proposals */
+            drafted_proposals: number;
             /** By Form */
             by_form: {
                 [key: string]: number;
@@ -1732,6 +2031,78 @@ export interface components {
             /** Constitutions */
             constitutions: components["schemas"]["ConstitutionEntry"][];
         };
+        /** FsBrowseResponse */
+        FsBrowseResponse: {
+            /** Path */
+            path: string;
+            /** Parent */
+            parent: string | null;
+            /** Entries */
+            entries: components["schemas"]["FsEntry"][];
+            /**
+             * Locked
+             * @default false
+             */
+            locked: boolean;
+        };
+        /** FsEntry */
+        FsEntry: {
+            /** Name */
+            name: string;
+            /** Path */
+            path: string;
+            /**
+             * Is Git
+             * @default false
+             */
+            is_git: boolean;
+            /**
+             * Has Code
+             * @default false
+             */
+            has_code: boolean;
+            /**
+             * Empty
+             * @default true
+             */
+            empty: boolean;
+        };
+        /** GeneralDoc */
+        GeneralDoc: {
+            /** Name */
+            name: string;
+            /** Present */
+            present: boolean;
+        };
+        /** GeneralDocResponse */
+        GeneralDocResponse: {
+            /** Name */
+            name: string;
+            /** Content */
+            content?: string | null;
+        };
+        /** GeneralDocSaveBody */
+        GeneralDocSaveBody: {
+            /**
+             * Context Id
+             * @default global
+             */
+            context_id: string;
+            /** Content */
+            content: string;
+        };
+        /** GeneralDocSaveResponse */
+        GeneralDocSaveResponse: {
+            /** Ok */
+            ok: boolean;
+            /** Name */
+            name: string;
+        };
+        /** GeneralDocsResponse */
+        GeneralDocsResponse: {
+            /** Docs */
+            docs: components["schemas"]["GeneralDoc"][];
+        };
         /**
          * Glance
          * @description The dashboard glance summary (counts + bucketed item stubs).
@@ -1891,8 +2262,11 @@ export interface components {
             updated_at: string;
             /** Title */
             title?: string | null;
-            /** Origin */
-            origin?: ("user" | "agent") | null;
+            /**
+             * Origin
+             * @default []
+             */
+            origin: ("user" | "agent")[];
         };
         /** InjectBody */
         InjectBody: {
@@ -1994,17 +2368,21 @@ export interface components {
             /** Label */
             label: string;
             candidates: components["schemas"]["ScopeCount"];
+            pending: components["schemas"]["ScopeCount"];
+            drafted: components["schemas"]["ScopeCount"];
             learned: components["schemas"]["ScopeCount"];
         };
         /**
          * LearningRollupResponse
-         * @description Per-repo learning counts (captured candidates + published/learned artifacts), each split by
-         *     dev/core scope, plus the cross-repo totals. Powers the Learning tile drill-in.
+         * @description Per-repo learning counts across the 4-slot pipeline (candidates · pending · drafted · learned),
+         *     each split by dev/core scope, plus the cross-repo totals. Powers the Learning tile drill-in.
          */
         LearningRollupResponse: {
             /** Repos */
             repos: components["schemas"]["LearningRollupRepo"][];
             candidates: components["schemas"]["ScopeCount"];
+            pending: components["schemas"]["ScopeCount"];
+            drafted: components["schemas"]["ScopeCount"];
             learned: components["schemas"]["ScopeCount"];
         };
         /**
@@ -2067,6 +2445,20 @@ export interface components {
             context_id: string;
             /** Model */
             model: string;
+        };
+        /**
+         * Orphan
+         * @description A referential-integrity break — a pointer to an id the anchor docs don't define.
+         */
+        Orphan: {
+            /** Reason */
+            reason: string;
+            /** Wave */
+            wave?: string | null;
+            /** Deliverable */
+            deliverable?: string | null;
+            /** Items */
+            items?: string[] | null;
         };
         /** PaletteResponse */
         PaletteResponse: {
@@ -2183,6 +2575,21 @@ export interface components {
             skills: components["schemas"]["PluginEntry"][];
             /** Agents */
             agents: components["schemas"]["PluginEntry"][];
+        };
+        /**
+         * ProjectStatusResponse
+         * @description Whether this project's memory is established (PRD defines ≥1 deliverable). The dev workspace
+         *     gates on it: an un-established repo shows the onboarding front door instead of the work tabs.
+         *     `onboard_mode` is the connect-time choice (project-init | retrofit) the front door launches
+         *     directly; null ⇒ the repo predates connect-flow, so the landing offers both paths to pick.
+         */
+        ProjectStatusResponse: {
+            /** Established */
+            established: boolean;
+            /** Onboard Mode */
+            onboard_mode?: string | null;
+            /** Docs */
+            docs: components["schemas"]["GeneralDoc"][];
         };
         /**
          * Proposal
@@ -2415,6 +2822,30 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** RepoConnectBody */
+        RepoConnectBody: {
+            /** Path */
+            path: string;
+            /** Label */
+            label?: string | null;
+            /** Kind */
+            kind: string;
+        };
+        /**
+         * RepoConnectResponse
+         * @description A freshly connected repo — the new orbit node. `onboarding` is the connect-time choice
+         *     (project-init | retrofit) that its dev workspace launches until memory is established.
+         */
+        RepoConnectResponse: {
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Cwd */
+            cwd: string;
+            /** Onboarding */
+            onboarding?: string | null;
+        };
         /** RepoEffortBody */
         RepoEffortBody: {
             /** Effort */
@@ -2543,6 +2974,13 @@ export interface components {
                 [key: string]: number;
             };
             /**
+             * By Feature Cache Read
+             * @default {}
+             */
+            by_feature_cache_read: {
+                [key: string]: number;
+            };
+            /**
              * @default {
              *       "input": 0,
              *       "cache_creation": 0,
@@ -2564,6 +3002,39 @@ export interface components {
              * @default 0
              */
             runs: number;
+        };
+        /** RoadmapBoardResponse */
+        RoadmapBoardResponse: {
+            /** Deliverables */
+            deliverables: components["schemas"]["BoardDeliverable"][];
+            /** Orphans */
+            orphans: components["schemas"]["Orphan"][];
+        };
+        /** Rollup */
+        Rollup: {
+            /** Done */
+            done: number;
+            /** Total */
+            total: number;
+        };
+        /**
+         * RunEventRow
+         * @description One entry of a run's event trail: a prompt, an assistant reply block, or a tool/skill/agent
+         *     call. `kind` ∈ prompt | reply | tool | skill | agent; `name` is the label, `description` the body.
+         */
+        RunEventRow: {
+            /** Id */
+            id: number;
+            /** Seq */
+            seq: number;
+            /** Kind */
+            kind: string;
+            /** Name */
+            name: string;
+            /** Description */
+            description?: string | null;
+            /** Created At */
+            created_at: string;
         };
         /**
          * RunRow
@@ -2602,6 +3073,13 @@ export interface components {
             /** Ended At */
             ended_at?: string | null;
         };
+        /** RunTraceResponse */
+        RunTraceResponse: {
+            /** Run Id */
+            run_id: number;
+            /** Events */
+            events: components["schemas"]["RunEventRow"][];
+        };
         /** RunsResponse */
         RunsResponse: {
             /** Live */
@@ -2610,6 +3088,18 @@ export interface components {
             history: components["schemas"]["RunRow"][];
             /** Running */
             running: number;
+        };
+        /** ScaffoldBody */
+        ScaffoldBody: {
+            /**
+             * Context Id
+             * @default global
+             */
+            context_id: string;
+            /** Wave */
+            wave?: string | null;
+            /** Deliverable */
+            deliverable?: string | null;
         };
         /**
          * ScopeCount
@@ -2671,7 +3161,9 @@ export interface components {
         };
         /**
          * SessionSummary
-         * @description A session's picker entry.
+         * @description A session's picker entry. `item_id`/`item_title` are set when the session is stamped to a
+         *     work-item (work-item-session-recognition-prd) — the chat rail derives its work-item indicator
+         *     from these, so it's correct however the session was opened (card or picker) and clears on switch.
          */
         SessionSummary: {
             /** Id */
@@ -2686,6 +3178,10 @@ export interface components {
             updated_at: string;
             /** Message Count */
             message_count: number;
+            /** Item Id */
+            item_id?: string | null;
+            /** Item Title */
+            item_title?: string | null;
         };
         /**
          * SweepConfigBody
@@ -2827,6 +3323,13 @@ export interface components {
              * @default {}
              */
             by_feature: {
+                [key: string]: number;
+            };
+            /**
+             * By Feature Cache Read
+             * @default {}
+             */
+            by_feature_cache_read: {
                 [key: string]: number;
             };
             /**
@@ -2983,10 +3486,14 @@ export interface components {
             root_id?: string | null;
             /** Parent Id */
             parent_id?: string | null;
+            /** Wave */
+            wave?: string | null;
+            /** Deliverable */
+            deliverable?: string | null;
             /** Title */
             title?: string | null;
             /** Phase */
-            phase?: ("plan_design" | "build_eval" | "done") | null;
+            phase?: ("triage" | "plan_design" | "build_eval" | "done") | null;
             /** Status */
             status?: ("queued" | "in_progress" | "waiting" | "dropped") | null;
             /** Model */
@@ -3017,6 +3524,14 @@ export interface components {
             blocked?: boolean | null;
             /** Total Tokens */
             total_tokens?: number | null;
+            /** Phase Tokens */
+            phase_tokens?: {
+                [key: string]: number;
+            } | null;
+            /** Phase Tokens 4Type */
+            phase_tokens_4type?: {
+                [key: string]: number;
+            } | null;
             last_run?: components["schemas"]["WorkItemLastRun"] | null;
             /** Running */
             running?: boolean | null;
@@ -3114,6 +3629,20 @@ export interface components {
             id: string;
             /** Model */
             model: string;
+        };
+        /**
+         * WorkItemScaffoldResponse
+         * @description Result of setting a root work-item's anchor pointer (wave OR deliverable).
+         */
+        WorkItemScaffoldResponse: {
+            /** Ok */
+            ok: boolean;
+            /** Id */
+            id: string;
+            /** Wave */
+            wave?: string | null;
+            /** Deliverable */
+            deliverable?: string | null;
         };
         /** WorkItemTasks */
         WorkItemTasks: {
@@ -3502,6 +4031,39 @@ export interface operations {
             };
         };
     };
+    connect_repo_repos_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RepoConnectBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RepoConnectResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     runs_overview_runs_get: {
         parameters: {
             query?: {
@@ -3521,6 +4083,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RunsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_trace_runs__run_id__trace_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunTraceResponse"];
                 };
             };
             /** @description Validation Error */
@@ -3899,6 +4492,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RepoMetaResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    fs_browse_fs_browse_get: {
+        parameters: {
+            query?: {
+                path?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FsBrowseResponse"];
                 };
             };
             /** @description Validation Error */
@@ -4481,6 +5105,72 @@ export interface operations {
             };
         };
     };
+    dev_harness_assets_dev_harness_assets_get: {
+        parameters: {
+            query?: {
+                context_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dev_harness_asset_action_dev_harness_assets__slug__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssetActionBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetActionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     dev_harness_published_file_dev_harness_published__proposal_id__file_get: {
         parameters: {
             query?: {
@@ -4571,6 +5261,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PlanResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dev_work_item_scaffold_dev_work_items__item_id__scaffold_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScaffoldBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkItemScaffoldResponse"];
                 };
             };
             /** @description Validation Error */
@@ -5192,6 +5917,167 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProposalActionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dev_general_docs_dev_general_get: {
+        parameters: {
+            query?: {
+                context_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GeneralDocsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dev_project_status_dev_project_status_get: {
+        parameters: {
+            query?: {
+                context_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dev_general_doc_dev_general__name__get: {
+        parameters: {
+            query?: {
+                context_id?: string;
+            };
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GeneralDocResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dev_general_doc_save_dev_general__name__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GeneralDocSaveBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GeneralDocSaveResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dev_roadmap_dev_roadmap_get: {
+        parameters: {
+            query?: {
+                context_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoadmapBoardResponse"];
                 };
             };
             /** @description Validation Error */

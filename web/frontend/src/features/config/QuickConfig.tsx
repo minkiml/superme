@@ -3,7 +3,7 @@ import { SlidersHorizontal, Loader2, Check } from 'lucide-react'
 import Dropdown from '@/ui/Dropdown'
 import Toggle from '@/ui/Toggle'
 import { RepoIcon } from '@/lib/repoIcons'
-import { MODELS as MODEL_CATALOG, EFFORTS as EFFORT_CATALOG, fmtModel } from '@/lib/format'
+import { MODELS as MODEL_CATALOG, EFFORTS as EFFORT_CATALOG, fmtModel, toModelKey } from '@/lib/format'
 import {
   getSystem, setSystemModel, setSystemLearning, setRepoModel, setRepoLearning, setSweepConfig,
   setSystemEffort, setRepoEffort, getAgentModels, setAgentModel, setAgentEffort,
@@ -322,7 +322,7 @@ function SweepTuning({ sys, onChange }: { sys: SystemOverview; onChange: (s: Sys
 
 function RepoRow({ repo, last }: { repo: OrbitRepo; last: boolean }) {
   const isHub = repo.id === 'global'
-  const [model, setModel] = useState(repo.modelOverride ?? '')
+  const [model, setModel] = useState(toModelKey(repo.modelOverride))
   const [effort, setEffort] = useState(repo.effortOverride ?? '')
   const [learning, setLearning] = useState(repo.learningEnabled)
 

@@ -14,7 +14,7 @@ from pathlib import Path
 from ..app_state import agent as _agent, dev as _dev, dev_store as _dev_store, \
     spine as _spine, sessions as _sessions
 from ..deps import cache_slash as _cache_slash
-from ...core import Init, Usage, Result, Status, scoped_writes_approve, deny_all
+from ...core import Init, Usage, Result, Status, TextDelta, scoped_writes_approve, deny_all
 from ...core.models import MODEL_TIERS
 
 log = logging.getLogger("superme-agent")
@@ -34,21 +34,22 @@ def _set_status(ctx, item_id: str, status: str) -> None:
 
 
 def _begin_run(ctx, context_id: str, item_id: str, kind: str = "plan",
-               model: str | None = None) -> bool:
+               model: str | None = None, phase: str | None = None) -> int | None:
     """Mark an item as running, atomically: open a spine run row (status=running) ONLY if the item
     isn't already running, then flip the work-item to in_progress and log the start. The running row
     IS the live state (no in-memory mirror) and IS the per-item run-lock. Returns False without any
     side effect if a run was already in flight (the caller turns that into a 409), so the lock can't
-    be lost to a check-then-start race (R5)."""
+    be lost to a check-then-start race (R5). `phase` stamps the item's current phase onto the run so
+    tokens can be accumulated per-phase (Stage D)."""
     run_id = _spine.start_item_run(context_id, mode=ctx.mode, feature=kind,
-                                   item_id=item_id, model=model)
+                                   item_id=item_id, model=model, phase=phase)
     if run_id is None:
-        return False  # already running — no status flip, no event
+        return None  # already running — no status flip, no event
     _set_status(ctx, item_id, "in_progress")
     # Run start — item-scoped. PRD §4.9.
     _dev_store.log_event(context_id, f"{kind}.start", f"Started {kind} run",
                          item_id=item_id, actor="daemon", meta={"model": model})
-    return True
+    return run_id  # the live run id — the caller keys its per-run event trail on it
 
 
 def _bump_run_tokens(context_id: str, item_id: str, total_tokens: int,
@@ -80,14 +81,27 @@ def _end_run(ctx, context_id: str, item_id: str, tokens: int | None,
 # Tool-use blocks the agent emits (Status events) → a (kind, head, detail) triple. `head` is the
 # call type ("Read", "skill", "subagent", "mcp"); `detail` is the specific target (filename, skill
 # name, sub-agent name…). The UI shows "head - detail" (detail dimmed), like the CLI's call lines.
+def _short_path(p, keep: int = 4) -> str:
+    """A readable file path for the trace: the last `keep` segments (so the containing folders show,
+    not just the basename), prefixed with `…/` when the head is elided. Absolute paths are too long
+    and the UI truncates the TAIL (the filename) — this keeps the meaningful end intact."""
+    parts = [x for x in str(p or "").split("/") if x]
+    if not parts:
+        return ""
+    return "/".join(parts) if len(parts) <= keep else "…/" + "/".join(parts[-keep:])
+
+
 def _artifact_desc(tool_name: str, ti: dict) -> tuple[str, str, str]:
     """Map a tool-use to (kind, head, detail). kind ∈ tool|subagent|skill|mcp."""
     ti = ti or {}
-    base = lambda p: str(p).rsplit("/", 1)[-1] if p else ""
-    if tool_name == "Task":
-        sub = ti.get("subagent_type") or ti.get("subagentType") or "agent"
-        d = ti.get("description") or ""
-        return "subagent", "subagent", (f"{sub} — {d}" if d else str(sub))
+    base = _short_path
+    # Sub-agent spawn — arrives as either the `Task` or the `Agent` tool depending on SDK build. Render
+    # it "Agent - <type>" (same label·detail shape as skills: "skill - <name>"), so the trace says WHICH
+    # agent ran (e.g. `superme-dev:capture`) instead of a generic "Agent". kind=subagent → the Bot icon.
+    if tool_name in ("Task", "Agent"):
+        sub = (ti.get("subagent_type") or ti.get("subagentType") or ti.get("agent_type")
+               or ti.get("agentType") or ti.get("name") or "agent")
+        return "subagent", "Agent", str(sub)
     if tool_name == "Skill":
         # The skill identity may arrive under any of several keys depending on the SDK build.
         name = (ti.get("command") or ti.get("name") or ti.get("skill")
@@ -104,6 +118,9 @@ def _artifact_desc(tool_name: str, ti: dict) -> tuple[str, str, str]:
         return "tool", tool_name, str(ti.get("pattern", ""))
     if tool_name in ("WebFetch", "WebSearch"):
         return "tool", tool_name, str(ti.get("url") or ti.get("query") or "")[:60]
+    if tool_name == "ToolSearch":
+        # what it searched for — the deferred-tool query (e.g. "select:Read,Edit" or keywords).
+        return "tool", "ToolSearch", str(ti.get("query", ""))[:60]
     return "tool", tool_name, ""
 
 
@@ -114,6 +131,32 @@ def _log_artifact(repo_id: str, item_id: str, ev: Status) -> None:
         _spine.log_artifact(repo_id, item_id, kind=kind, name=head, description=detail)
     except Exception:
         log.exception("failed to log artifact %s for %s", getattr(ev, "tool_name", "?"), item_id)
+
+
+# --- per-run event trail (universal observability: prompt · reply · calls, keyed by run_id) -------
+_PROMPT_CAP = 4000   # a run's trigger prompt, trimmed
+_REPLY_CAP = 8000    # one assistant text block, trimmed
+
+
+def capture_prompt(repo_id: str, prompt: str, *, run_id: int | None = None,
+                   item_id: str | None = None) -> None:
+    """Record the prompt that opened a run as the first entry of its trail."""
+    _spine.log_run_event(repo_id=repo_id, kind="prompt", name="prompt",
+                         description=(prompt or "").strip()[:_PROMPT_CAP], run_id=run_id, item_id=item_id)
+
+
+def capture_event(repo_id: str, ev, *, run_id: int | None = None, item_id: str | None = None) -> None:
+    """Record one turn event onto a run's trail: a Status → its tool/skill/agent call, a TextDelta →
+    an assistant reply block. Anything else is ignored. Best-effort (log_run_event never raises)."""
+    if isinstance(ev, Status):
+        kind, head, detail = _artifact_desc(ev.tool_name, ev.tool_input or {})
+        _spine.log_run_event(repo_id=repo_id, kind=kind, name=head, description=detail,
+                             run_id=run_id, item_id=item_id)
+    elif isinstance(ev, TextDelta):
+        txt = (ev.text or "").strip()
+        if txt:
+            _spine.log_run_event(repo_id=repo_id, kind="reply", name="reply", description=txt[:_REPLY_CAP],
+                                 run_id=run_id, item_id=item_id)
 
 
 async def _run_headless_plan(ctx, context_id: str, item_id: str, item_dir: Path,
@@ -160,6 +203,9 @@ async def _run_headless_plan(ctx, context_id: str, item_id: str, item_dir: Path,
                 if ev.session_id:
                     try:
                         _dev.set_work_item_session(dev_root, item_id, ev.session_id)
+                        # Reverse stamp: the fresh headless-plan session is a work-item session,
+                        # born here — stamp its durable identity (work-item-session-recognition-prd).
+                        _spine.stamp_session_item(ev.session_id, item_id)
                     except Exception:
                         log.exception("headless plan: failed to persist session to %s", item_id)
                     # The replaced thread is now stale — purge it so the picker stays clean.
@@ -167,6 +213,10 @@ async def _run_headless_plan(ctx, context_id: str, item_id: str, item_dir: Path,
                         _sessions.purge(ctx, prev_session)
             elif isinstance(ev, Init):
                 _cache_slash(ctx.id, ev.slash_commands)
+            # Per-run trail for the Activity trace: the reply text + each call, keyed to this run
+            # (resolved from the item's running row). Parallel to the work-item run_artifact log.
+            if isinstance(ev, (Status, TextDelta)):
+                capture_event(context_id, ev, item_id=item_id)
     except Exception:
         log.exception("headless plan run failed for %s", item_id)
     finally:

@@ -12,7 +12,7 @@ operational elements **on top**, loaded only when the agent runs in that repo ×
 
 ```
 local-harness/
-├─ global/        the global "Me" repo
+├─ global/        the global "SuperMe hub" repo
 │  ├─ core/       operational elements active in global × core
 │  └─ dev/        operational elements active in global × dev
 └─ dummy/         a registered project repo

@@ -20,7 +20,7 @@ class InboxRow(BaseModel):
     created_at: str
     updated_at: str
     title: str | None = None
-    origin: InboxOrigin | None = None
+    origin: list[InboxOrigin] = []  # an item can accrue multiple origins (e.g. ['user','agent'])
 
 
 class InboxPushResponse(BaseModel):

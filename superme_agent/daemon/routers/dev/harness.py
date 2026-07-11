@@ -19,6 +19,7 @@ from ...schemas.dev.harness import (
     PluginFileResponse, PluginFileSaveResponse, PublishedResponse, PublishedToggleResponse,
     PublishedDeleteResponse, PublishedFileResponse, PublishedFileSaveResponse,
     ConstitutionsResponse, ConstitutionToggleResponse, LocalPluginsResponse,
+    AssetsResponse, AssetActionResponse,
 )
 
 log = logging.getLogger("superme-agent")
@@ -284,6 +285,54 @@ async def dev_harness_constitution_toggle(slug: str, body: ConstitutionToggleBod
         scope="dev", actor="owner",
         meta={"scope": body.scope, "slug": slug, "enabled": body.enabled})
     return {"ok": True, "slug": slug, "scope": body.scope, **res}
+
+
+# --- asset pool (per-repo opt-in constitutional knowledge) ------------------------------------
+
+@router.get("/dev/harness/assets", response_model=AssetsResponse)
+async def dev_harness_assets(context_id: str = "global") -> dict:
+    """The shared asset pool (opt-in constitutional knowledge, e.g. `sql-expert`), each flagged with
+    whether THIS repo has ADOPTED and ENABLED it. The pool is shared; adoption is per-repo (no body
+    copy). Onboarding auto-adopts the confidently-relevant ones; the owner curates from here."""
+    from ....core.operational import read_asset_pool, repo_asset_states
+    from ....runtime.config import LOCAL_HARNESS_DIR
+    states = repo_asset_states(LOCAL_HARNESS_DIR / context_id / "dev" / "constitution")
+    out = [{
+        "slug": it["slug"], "title": it["slug"].replace("-", " "),
+        "description": it.get("description"), "body": it["body"],
+        "adopted": it["slug"] in states, "enabled": states.get(it["slug"], False),
+    } for it in read_asset_pool()]
+    return {"context_id": context_id, "assets": out}
+
+
+class AssetActionBody(BaseModel):
+    action: str  # 'adopt' | 'enable' | 'disable' | 'drop'
+    context_id: str = "global"
+
+
+@router.patch("/dev/harness/assets/{slug}", response_model=AssetActionResponse)
+async def dev_harness_asset_action(slug: str, body: AssetActionBody,
+                                   dev_store: DevStore = Depends(get_dev_store)) -> dict:
+    """Per-repo asset curation: `adopt` (+ Add), `enable`/`disable` (toggle, keeps adoption), or `drop`
+    (un-adopt). Writes the repo's `.assets` list — no body copy. Takes effect on the next dev turn."""
+    from ....core.operational import read_asset_pool, set_repo_asset, drop_repo_asset
+    from ....runtime.config import LOCAL_HARNESS_DIR
+    if slug not in {it["slug"] for it in read_asset_pool()}:
+        raise HTTPException(status_code=404, detail="asset not found in the pool")
+    home = LOCAL_HARNESS_DIR / body.context_id / "dev" / "constitution"
+    if body.action == "drop":
+        states = drop_repo_asset(home, slug)
+    elif body.action in ("adopt", "enable"):
+        states = set_repo_asset(home, slug, True)
+    elif body.action == "disable":
+        states = set_repo_asset(home, slug, False)
+    else:
+        raise HTTPException(status_code=400, detail=f"unknown action '{body.action}'")
+    dev_store.log_event(
+        body.context_id, "harness.asset", f"Asset '{slug}' — {body.action}",
+        scope="dev", actor="owner", meta={"slug": slug, "action": body.action})
+    return {"ok": True, "slug": slug, "action": body.action,
+            "adopted": slug in states, "enabled": states.get(slug, False)}
 
 
 @router.delete("/dev/harness/published/{proposal_id}", response_model=PublishedDeleteResponse,

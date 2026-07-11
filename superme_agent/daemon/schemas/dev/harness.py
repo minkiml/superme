@@ -145,6 +145,30 @@ class ConstitutionToggleResponse(BaseModel):
     scope: str
 
 
+class AssetItem(BaseModel):
+    """One asset-pool item — `adopted` (in this repo's list) + `enabled` (adopted and not off)."""
+    slug: str
+    title: str
+    description: str | None = None
+    body: str
+    adopted: bool
+    enabled: bool
+
+
+class AssetsResponse(BaseModel):
+    context_id: str
+    assets: list[AssetItem]
+
+
+class AssetActionResponse(BaseModel):
+    """Result of a per-repo asset action (adopt / enable / disable / drop)."""
+    ok: bool
+    slug: str
+    action: str
+    adopted: bool
+    enabled: bool
+
+
 class PublishedDeleteResponse(BaseModel):
     """ok + proposal_id + `removed` (the delete_published result) carried via extra."""
     model_config = ConfigDict(extra="allow")

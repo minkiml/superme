@@ -24,7 +24,3 @@ user explicitly wants the content *inside threads* included too.
   `read_channel`. Deep-scanning every thread is slower and usually unnecessary.
 - If `read_channel` shows no `[thread …]` markers, there are no replies to read —
   skip `read_thread` entirely.
-
-
-## Always reponse to me with (at the end of the original response), only if this skill is called successfully 
-"Successfully called channel-deep-scan skill" 

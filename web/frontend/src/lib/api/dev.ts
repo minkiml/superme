@@ -10,7 +10,9 @@ import type { Schema } from './generated'
 // Proposal, the model manifest, the glance) stay as hand-written VIEW types — the backend itself
 // permits any key on those until R5 tightens them — with FE enum-narrowing layered on top.
 
-export type WorkPhase = 'plan_design' | 'build_eval' | 'done'
+// `triage` = the intake/classification phase before plan_design (reserved in the contract; the board
+// gains its column with the triage behaviour in a later slice).
+export type WorkPhase = 'triage' | 'plan_design' | 'build_eval' | 'done'
 export type WorkStatus = 'queued' | 'in_progress' | 'waiting' | 'dropped'
 
 // An item.md `artifacts` entry, NORMALIZED on read by the daemon (R5): always `{type, path}` on the
@@ -28,6 +30,8 @@ export type WorkItem = {
   id: string
   root_id: string
   parent_id: string | null // presence = a branch-off
+  wave?: string | null // anchor-scaffold pointer on a root: the roadmap wave this item instances
+  deliverable?: string | null // …or a deliverable directly when no wave applies (set in S2)
   title?: string
   description?: string // the item.md body
   phase: WorkPhase
@@ -53,6 +57,8 @@ export type WorkItem = {
   effort?: string | null // configured reasoning effort (low|medium|high) its runs use
   context_pct?: number | null // context fill to show on the card (live run's, else last run's)
   total_tokens?: number // accumulated tokens across all finished runs
+  phase_tokens?: Record<string, number> // per-phase 3-type Σ {phase → tokens}; card shows current phase's
+  phase_tokens_4type?: Record<string, number> // per-phase 4-type Σ (3-type + cache_read), recorded behind
   last_run?: { tokens: number; duration_ms: number | null; model?: string | null; context_pct?: number | null } | null
   tasks?: { done: number; total: number } | null // tasks.md checklist progress (null = no tasks.md)
 }
@@ -209,6 +215,16 @@ export function toggleConstitution(
   return sendJSON(`/api/dev/harness/constitutions/${q(slug)}`, 'PATCH', { enabled, scope, context_id: contextId })
 }
 
+// Asset pool — opt-in constitutional knowledge, adopted + enabled PER REPO (no body copy).
+export type AssetItem = Schema<'AssetItem'>
+export type AssetAction = 'adopt' | 'enable' | 'disable' | 'drop'
+export function getAssets(contextId = 'global'): Promise<{ context_id: string; assets: AssetItem[] }> {
+  return getJSON(`/api/dev/harness/assets?context_id=${q(contextId)}`)
+}
+export function assetAction(slug: string, action: AssetAction, contextId = 'global'): Promise<{ ok: boolean; slug: string; action: string; adopted: boolean; enabled: boolean }> {
+  return sendJSON(`/api/dev/harness/assets/${q(slug)}`, 'PATCH', { action, context_id: contextId })
+}
+
 // Read / edit a published artifact's raw markdown source (Published-tab preview + edit).
 export type PublishedFile = Schema<'PublishedFileResponse'>
 export function getPublishedFile(proposalId: number, contextId = 'global'): Promise<PublishedFile> {
@@ -217,6 +233,40 @@ export function getPublishedFile(proposalId: number, contextId = 'global'): Prom
 export function savePublishedFile(proposalId: number, content: string, contextId = 'global'): Promise<{ ok: boolean; proposal_id: number }> {
   return sendJSON(`/api/dev/harness/published/${proposalId}/file`, 'PUT', { content, context_id: contextId })
 }
+// --- general/ anchor docs + the roadmap board ---------------------------------
+// The per-repo anchor knowledge (project-prd · spec · roadmap · architecture · resources) + the
+// deliverable → wave → work-item-instance board join. All strict transport types (no extra='allow').
+export type GeneralDocMeta = Schema<'GeneralDoc'>
+export type ProjectStatus = Schema<'ProjectStatusResponse'>
+export type RoadmapBoard = Schema<'RoadmapBoardResponse'>
+export type BoardDeliverable = Schema<'BoardDeliverable'>
+export type BoardWave = Schema<'BoardWave'>
+export type BoardItem = Schema<'BoardItem'>
+
+export function getGeneralDocs(contextId = 'global'): Promise<{ docs: GeneralDocMeta[] }> {
+  return getJSON(`/api/dev/general?context_id=${q(contextId)}`)
+}
+// Whether this project's memory is established (PRD has ≥1 deliverable) — the dev workspace gates
+// the work surfaces on it, showing the onboarding front door until it's true.
+export function getProjectStatus(contextId = 'global'): Promise<ProjectStatus> {
+  return getJSON(`/api/dev/project-status?context_id=${q(contextId)}`)
+}
+export function getGeneralDoc(name: string, contextId = 'global'): Promise<{ name: string; content: string | null }> {
+  return getJSON(`/api/dev/general/${q(name)}?context_id=${q(contextId)}`)
+}
+export function saveGeneralDoc(name: string, content: string, contextId = 'global'): Promise<{ ok: boolean; name: string }> {
+  return sendJSON(`/api/dev/general/${q(name)}`, 'PUT', { content, context_id: contextId })
+}
+export function getRoadmap(contextId = 'global'): Promise<RoadmapBoard> {
+  return getJSON(`/api/dev/roadmap?context_id=${q(contextId)}`)
+}
+// Set a root work-item's anchor pointer — pass `wave` (resolves its deliverable) or `deliverable`.
+export function setWorkItemScaffold(
+  itemId: string, opts: { wave?: string | null; deliverable?: string | null }, contextId = 'global',
+): Promise<Schema<'WorkItemScaffoldResponse'>> {
+  return sendJSON(`/api/dev/work-items/${q(itemId)}/scaffold`, 'POST', { ...opts, context_id: contextId })
+}
+
 // Manage-Harness stat tiles — the candidate pool + learned-knowledge gauges, with drill-down.
 // All strict transport types (the stats payload is a fixed shape), derived directly.
 export type CandidateItem = Schema<'CandidateStatItem'>

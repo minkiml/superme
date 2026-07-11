@@ -45,6 +45,12 @@ class WorkItem(BaseModel):
     id: str
     root_id: str | None = None
     parent_id: str | None = None
+    # Two-tier anchor-scaffold pointer, set on a ROOT work-item: `wave` = the roadmap wave this item
+    # is an instance of (resolves its deliverable), or `deliverable` directly when no wave applies.
+    # Self-describing / derived by scan, like root_id/parent_id. Written in S2; declared here as the
+    # contract so the wire shape is stable.
+    wave: str | None = None
+    deliverable: str | None = None
     title: str | None = None
     phase: WorkPhase | None = None
     status: WorkStatus | None = None
@@ -67,6 +73,10 @@ class WorkItem(BaseModel):
     blocked: bool | None = None
     # --- run telemetry (the /dev route) ---
     total_tokens: int | None = None
+    # Per-phase token accumulation {phase → Σ}, both bases: `phase_tokens` = 3-type (what the card
+    # shows for its current phase), `phase_tokens_4type` = full volume (3-type + cache_read) behind it.
+    phase_tokens: dict[str, int] | None = None
+    phase_tokens_4type: dict[str, int] | None = None
     last_run: WorkItemLastRun | None = None
     running: bool | None = None
     run_started_at: float | None = None
@@ -148,3 +158,11 @@ class WorkItemAdvanceResponse(BaseModel):
     phase: str
     # `from` is a Python keyword → alias it; FastAPI serializes by alias, emitting "from".
     from_: str = Field(alias="from")
+
+
+class WorkItemScaffoldResponse(BaseModel):
+    """Result of setting a root work-item's anchor pointer (wave OR deliverable)."""
+    ok: bool
+    id: str
+    wave: str | None = None
+    deliverable: str | None = None

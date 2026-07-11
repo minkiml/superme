@@ -4,12 +4,13 @@ import TabBar from '@/ui/TabBar'
 import Empty from '@/ui/Empty'
 import { getLearningRollup, type LearningRollup } from '@/lib/api'
 
-// The Learning tile drill-in — the two pipeline pools as PER-REPO counts, each split dev/core:
-// Candidates (captured, awaiting distill/ratify) and Learned (published artifacts). Counts only —
-// the item-level detail lives in each repo's Dev workspace, not here. dev = repo_dev + universal_dev.
+// The Learning tile drill-in — the 4-slot pipeline as PER-REPO counts, each split dev/core:
+// Candidates (captured, awaiting distill) → Pending (proposed, awaiting gate-1) → Drafted (forged,
+// awaiting gate-2 publish) → Learned (published artifacts). Counts only — the item-level detail lives
+// in each repo's Dev workspace, not here. dev = repo_dev + universal_dev.
 
 type ScopeCount = LearningRollup['candidates']
-type Tab = 'candidates' | 'learned'
+type Tab = 'candidates' | 'pending' | 'drafted' | 'learned'
 
 const label = (repoId: string, l: string) => (repoId === 'global' ? 'SuperMe Hub' : l)
 
@@ -57,18 +58,29 @@ export default function LearningDrilldown({ onClose }: { onClose: () => void }) 
     getLearningRollup().then(setData).catch(() => {})
   }, [])
 
+  // The active slot's per-repo rows + cross-repo total — the tile's four numbers, drillable.
+  const slot: Record<Tab, { total: ScopeCount; pick: (r: LearningRollup['repos'][number]) => ScopeCount; noun: string }> = {
+    candidates: { total: data?.candidates ?? { dev: 0, core: 0, total: 0 }, pick: (r) => r.candidates, noun: 'candidates' },
+    pending: { total: data?.pending ?? { dev: 0, core: 0, total: 0 }, pick: (r) => r.pending, noun: 'pending' },
+    drafted: { total: data?.drafted ?? { dev: 0, core: 0, total: 0 }, pick: (r) => r.drafted, noun: 'drafted' },
+    learned: { total: data?.learned ?? { dev: 0, core: 0, total: 0 }, pick: (r) => r.learned, noun: 'learned' },
+  }
+  const s = slot[tab]
+
   return (
     <Modal onClose={onClose} title="Learning">
       <div className="px-5 pt-4">
-        <TabBar tabs={[['candidates', 'Candidates'], ['learned', 'Learned']]} value={tab} onChange={setTab} />
+        <TabBar
+          tabs={[['candidates', 'Candidates'], ['pending', 'Pending'], ['drafted', 'Drafted'], ['learned', 'Learned']]}
+          value={tab}
+          onChange={setTab}
+        />
       </div>
       <div className="max-h-[60vh] overflow-y-auto p-5">
         {!data ? (
           <Empty>Loading…</Empty>
-        ) : tab === 'candidates' ? (
-          <Pool rows={data.repos.map((r) => ({ repo_id: r.repo_id, label: r.label, c: r.candidates }))} total={data.candidates} noun="candidates" />
         ) : (
-          <Pool rows={data.repos.map((r) => ({ repo_id: r.repo_id, label: r.label, c: r.learned }))} total={data.learned} noun="learned" />
+          <Pool rows={data.repos.map((r) => ({ repo_id: r.repo_id, label: r.label, c: s.pick(r) }))} total={s.total} noun={s.noun} />
         )}
       </div>
     </Modal>

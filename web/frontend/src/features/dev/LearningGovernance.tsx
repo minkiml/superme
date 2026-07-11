@@ -583,10 +583,18 @@ function ReviewQueue({
   onChange: () => void
 }) {
   const [open, setOpen] = useState<MemoryProposal | null>(null)
+  // The stats tile counts `pending` = every OPEN proposal (proposed + writing + drafted). This queue
+  // shows exactly that set, so we break it down by badge state here (proposed = gate-1, drafted =
+  // gate-2) rather than re-using the word "pending" — the sub-counts sum to the tile's pending total.
+  const proposed = proposals.filter((p) => p.status === 'proposed').length
+  const drafted = proposals.filter((p) => p.status === 'drafted').length
+  const writing = proposals.filter((p) => p.status === 'writing').length
   return (
     <section className="mb-6 rounded-xl border border-line p-3">
       <div className="mb-2 flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-accent-text">
-        <Sparkles size={12} /> Review queue <span className="text-faint">· {proposals.length} pending</span>
+        <Sparkles size={12} /> Review queue <span className="text-faint">
+          · {proposed} proposed{writing ? ` · ${writing} writing` : ''}{drafted ? ` · ${drafted} drafted` : ''}
+        </span>
       </div>
       <p className="mb-3 text-[11px] text-faint">
         The <code className="text-muted">distill</code> agent proposed these from captured candidates.
@@ -661,6 +669,7 @@ function ProposalCard({ p, onOpen }: { p: MemoryProposal; onOpen: () => void }) 
 // lifecycle timeline: filed by distill → approved → forge run start/end → artifact edits → publish.
 const STEP_META: Record<string, { label: string; tint: string }> = {
   'memory.proposed': { label: 'Filed', tint: 'text-muted' },
+  'memory.merged': { label: 'Merged in', tint: 'text-accent-text' },
   'memory.approved': { label: 'Approved', tint: 'text-accent-text' },
   'write.start': { label: 'Forge started', tint: 'text-accent-text' },
   'write.end': { label: 'Forge finished', tint: 'text-fg' },
@@ -928,9 +937,7 @@ function ProposalModal({
                   className="h-[42vh] w-full resize-none rounded-md border border-line bg-app px-3 py-2.5 font-mono text-[12px] leading-relaxed text-fg outline-none focus:border-accent"
                 />
               ) : (
-                <pre className="whitespace-pre-wrap break-words rounded-md border border-line bg-app px-3 py-2.5 text-[12px] leading-relaxed text-muted">
-                  {cur.staged_artifact}
-                </pre>
+                <StagedArtifactPreview content={cur.staged_artifact ?? ''} />
               )}
             </PSection>
           ) : tab === 'candidates' ? (
@@ -947,11 +954,11 @@ function ProposalModal({
             <>
               {cur.summary && (
                 <PSection title="Summary">
-                  <p className="whitespace-pre-line text-[13px] leading-relaxed text-muted">{cur.summary}</p>
+                  <p className="whitespace-pre-line text-[13px] leading-relaxed text-fg">{cur.summary}</p>
                 </PSection>
               )}
               <PSection title="Body">
-                <div className="text-[13px] text-muted">
+                <div className="text-[13px] text-fg">
                   <Markdown text={cur.body} />
                 </div>
               </PSection>
@@ -961,7 +968,7 @@ function ProposalModal({
                     {Object.entries(fields).map(([k, v]) => (
                       <div key={k} className="grid grid-cols-[7rem_1fr] gap-2 text-[12px]">
                         <dt className="font-mono text-faint">{k}</dt>
-                        <dd className="text-muted">{typeof v === 'string' ? v : JSON.stringify(v)}</dd>
+                        <dd className="text-fg">{typeof v === 'string' ? v : JSON.stringify(v)}</dd>
                       </div>
                     ))}
                   </dl>
@@ -1125,6 +1132,25 @@ function relArtifactPath(p: string): string {
   return i >= 0 ? '.' + p.slice(i) : p
 }
 
+// Render a STAGED artifact (pre-publish — not yet a file on disk) the same way PublishedFileModal
+// renders a live one: YAML frontmatter as a compact meta block, the markdown body as a real doc.
+// So the gate-2 preview reads like the published artifact will, not a raw text dump.
+function StagedArtifactPreview({ content }: { content: string }) {
+  const fm = content.match(/^---\n([\s\S]*?)\n---\n?/)
+  const front = fm ? fm[1] : ''
+  const body = fm ? content.slice(fm[0].length) : content
+  return (
+    <div className="rounded-md border border-line bg-app px-3.5 py-3">
+      {front && (
+        <pre className="mb-3 overflow-x-auto whitespace-pre-wrap break-words rounded border border-line bg-sunken px-2.5 py-2 font-mono text-[11px] leading-relaxed text-muted">
+          {front}
+        </pre>
+      )}
+      <Markdown text={body} variant="doc" tone="dev" />
+    </div>
+  )
+}
+
 // "Agent at work" indicator — a robot head + label that blink together as one unit. Wrap the icon
 // AND its text so the whole thing pulses in sync (callers pass the label as children).
 function AgentWorking({ size = 14, className = '', children }: { size?: number; className?: string; children: React.ReactNode }) {
@@ -1226,14 +1252,14 @@ function EvalReportView({ report }: { report: EvalReport }) {
           {Array.isArray(report.summary) ? (
             <ul className="space-y-1">
               {report.summary.map((b, i) => (
-                <li key={i} className="flex gap-1.5 text-[13px] leading-snug text-muted">
+                <li key={i} className="flex gap-1.5 text-[13px] leading-snug text-fg">
                   <span className="text-faint">•</span>
                   <span>{b}</span>
                 </li>
               ))}
             </ul>
           ) : (
-            <p className="text-[13px] leading-relaxed text-muted">{report.summary}</p>
+            <p className="text-[13px] leading-relaxed text-fg">{report.summary}</p>
           )}
         </PSection>
       )}

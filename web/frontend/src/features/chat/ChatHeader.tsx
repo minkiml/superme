@@ -115,7 +115,7 @@ export default function ChatHeader({
           {meta && (meta.model || meta.pct != null) ? (
             <>
               {meta.model && formatModel(meta.model)}
-              {meta.pct != null && meta.window && ` · ${meta.pct}%`}
+              {meta.pct != null && ` · ${meta.pct}%`}
             </>
           ) : (
             'history'

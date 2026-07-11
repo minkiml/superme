@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
-import { ScrollText, Loader2, Bot, Sparkles, Pencil, Save, X } from 'lucide-react'
+import { ScrollText, Loader2, Bot, Sparkles, Pencil, Save, X, Plus, Trash2, Check } from 'lucide-react'
 import Markdown from '@/ui/Markdown'
 import Modal from '@/ui/Modal'
 import Toggle from '@/ui/Toggle'
 import ArtifactTabs from '@/ui/ArtifactTabs'
 import {
   getConstitutions, toggleConstitution, getLocalPlugins, getHarnessFile, saveHarnessFile,
+  getAssets, assetAction, type AssetItem, type AssetAction,
   type ManagedConstitution, type HarnessEntry,
 } from '@/lib/api'
 import ConstitutionModal from './ConstitutionModal'
@@ -28,6 +29,7 @@ type Sub = 'constitution' | 'skills' | 'agents'
 export default function ArtifactsTab({ contextId }: { contextId: string }) {
   const [sub, setSub] = useState<Sub>('constitution')
   const [consts, setConsts] = useState<ManagedConstitution[] | null>(null)
+  const [assets, setAssets] = useState<AssetItem[] | null>(null)
   const [skills, setSkills] = useState<HarnessEntry[] | null>(null)
   const [agents, setAgents] = useState<HarnessEntry[] | null>(null)
   const [err, setErr] = useState<string | null>(null)
@@ -37,6 +39,9 @@ export default function ArtifactsTab({ contextId }: { contextId: string }) {
   function load() {
     getConstitutions(contextId)
       .then((d) => setConsts(d.constitutions.filter((c) => c.origin === 'repo')))
+      .catch((e) => setErr(String(e)))
+    getAssets(contextId)
+      .then((r) => setAssets(r.assets))
       .catch((e) => setErr(String(e)))
     getLocalPlugins(contextId)
       .then((d) => { setSkills(d.skills); setAgents(d.agents) })
@@ -69,15 +74,41 @@ export default function ArtifactsTab({ contextId }: { contextId: string }) {
         {err && <div className="mb-3 text-sm text-danger">Couldn’t load — {err}</div>}
 
         {sub === 'constitution' && (
-          <ListOrState list={consts} empty="No local constitutions for this host yet — forge one, and it lands here.">
-            {(items) => (
-              <div className="space-y-2">
-                {items.map((c) => (
-                  <ConstitutionRow key={c.slug} c={c} contextId={contextId} onToggled={load} onOpen={() => setOpenConst(c)} />
-                ))}
+          <div className="space-y-6">
+            {/* Repo-authored — constitutions forged for this host */}
+            <section>
+              <SectionLabel title="Local" hint="Local (project) constitutions" />
+              <ListOrState list={consts} empty="No local constitutions for this host yet — forge one, and it lands here.">
+                {(items) => (
+                  <div className="space-y-2">
+                    {items.map((c) => (
+                      <ConstitutionRow key={c.slug} c={c} contextId={contextId} onToggled={load} onOpen={() => setOpenConst(c)} />
+                    ))}
+                  </div>
+                )}
+              </ListOrState>
+            </section>
+
+            {/* Pooled knowledge — shared asset pool; onboarding auto-adopts, owner curates per-repo */}
+            <section>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <div className="flex items-baseline gap-2">
+                  <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted">Expertise</h2>
+                  <span className="text-[11px] text-faint">Expertise adopted for this repo</span>
+                </div>
+                {assets && <AddAsset pool={assets.filter((a) => !a.adopted)} contextId={contextId} onAdded={load} />}
               </div>
-            )}
-          </ListOrState>
+              <ListOrState list={assets ? assets.filter((a) => a.adopted) : null} empty="No expertise adopted for this repo yet.">
+                {(items) => (
+                  <div className="space-y-2">
+                    {items.map((a) => (
+                      <AssetRow key={a.slug} it={a} contextId={contextId} onChanged={load} />
+                    ))}
+                  </div>
+                )}
+              </ListOrState>
+            </section>
+          </div>
         )}
         {sub === 'skills' && (
           <ListOrState list={skills} empty="No local skills for this host yet.">
@@ -107,6 +138,115 @@ export default function ArtifactsTab({ contextId }: { contextId: string }) {
       )}
       {openPlugin && <LocalFileModal contextId={contextId} entry={openPlugin} onClose={() => setOpenPlugin(null)} />}
     </div>
+  )
+}
+
+function SectionLabel({ title, hint }: { title: string; hint: string }) {
+  return (
+    <div className="mb-2 flex items-baseline gap-2">
+      <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted">{title}</h2>
+      <span className="text-[11px] text-faint">{hint}</span>
+    </div>
+  )
+}
+
+// A pooled knowledge asset ADOPTED by this repo (shared across repos, local-harness/asset/, no body
+// copy). Enable/disable keeps it adopted; Drop un-adopts it (it returns to the + Add picker).
+function AssetRow({ it, contextId, onChanged }: { it: AssetItem; contextId: string; onChanged: () => void }) {
+  const [busy, setBusy] = useState(false)
+  async function act(action: AssetAction) {
+    setBusy(true)
+    try {
+      await assetAction(it.slug, action, contextId)
+      onChanged()
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className={`rounded-lg border border-line bg-surface ${it.enabled ? '' : 'opacity-60'}`}>
+      <div className="flex items-start gap-2 px-3.5 py-2.5">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-medium uppercase tracking-wider text-dev">pool</span>
+            <span className="min-w-0 truncate text-[14px] text-fg">{it.title}</span>
+            <span className="font-mono text-[10px] text-faint">{it.slug}</span>
+            {!it.enabled && <span className="text-[10px] uppercase tracking-wide text-faint">off</span>}
+          </div>
+          {it.description && <p className="mt-1 text-[12px] leading-relaxed text-muted">{it.description}</p>}
+        </div>
+        <div className="flex shrink-0 items-center gap-3 pt-0.5">
+          <button onClick={() => act('drop')} disabled={busy} title="Drop from this repo" className="text-faint hover:text-fg disabled:opacity-40">
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+          <Toggle on={it.enabled} onChange={(v) => act(v ? 'enable' : 'disable')} onColor="bg-dev" disabled={busy} title={it.enabled ? 'Disable for this repo' : 'Enable for this repo'} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// The + Add popup — batch-adopt un-adopted assets from the shared pool into this repo (enabled).
+// A modal so it scales to a long pool: multi-select, then Add (N) or Cancel.
+function AddAsset({ pool, contextId, onAdded }: { pool: AssetItem[]; contextId: string; onAdded: () => void }) {
+  const [open, setOpen] = useState(false)
+  const [sel, setSel] = useState<Set<string>>(new Set())
+  const [busy, setBusy] = useState(false)
+  function toggle(slug: string) {
+    setSel((s) => { const n = new Set(s); n.has(slug) ? n.delete(slug) : n.add(slug); return n })
+  }
+  function close() { setOpen(false); setSel(new Set()) }
+  async function add() {
+    if (sel.size === 0) return
+    setBusy(true)
+    try {
+      await Promise.all([...sel].map((slug) => assetAction(slug, 'adopt', contextId)))
+      close()
+      onAdded()
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <>
+      <button onClick={() => setOpen(true)} className="flex items-center gap-1 rounded-md border border-line px-2 py-1 text-[11px] text-muted hover:text-fg" title="Add pooled assets">
+        <Plus className="h-3 w-3" /> Add
+      </button>
+      {open && (
+        <Modal onClose={close} title="Add expertise" maxW="max-w-lg" column>
+          <div className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 py-3">
+            {pool.length === 0 && (
+              <div className="px-4 py-10 text-center text-[12px] text-muted">
+                All pooled expertise is already adopted or no list is available for this project.
+              </div>
+            )}
+            {pool.map((a) => {
+              const on = sel.has(a.slug)
+              return (
+                <button key={a.slug} onClick={() => toggle(a.slug)} className={`flex w-full items-start gap-2.5 rounded-lg border px-3 py-2 text-left ${on ? 'border-dev bg-hover' : 'border-line bg-surface hover:bg-hover'}`}>
+                  <span className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border ${on ? 'border-dev bg-dev text-white' : 'border-line'}`}>
+                    {on && <Check className="h-3 w-3" />}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-2">
+                      <span className="truncate text-[13px] text-fg">{a.title}</span>
+                      <span className="font-mono text-[10px] text-faint">{a.slug}</span>
+                    </span>
+                    {a.description && <p className="mt-0.5 text-[11px] leading-relaxed text-muted">{a.description}</p>}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+          <div className="flex items-center justify-end gap-2 border-t border-line px-4 py-3">
+            <button onClick={close} disabled={busy} className="rounded-md px-3 py-1.5 text-[12px] text-muted hover:text-fg">Cancel</button>
+            <button onClick={add} disabled={busy || sel.size === 0} className="rounded-md bg-dev px-3 py-1.5 text-[12px] font-medium text-white disabled:opacity-40">
+              {busy ? 'Adding…' : `Add${sel.size ? ` (${sel.size})` : ''}`}
+            </button>
+          </div>
+        </Modal>
+      )}
+    </>
   )
 }
 

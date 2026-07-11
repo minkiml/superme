@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Check, ChevronLeft } from 'lucide-react'
-import { MODELS, EFFORTS } from '@/lib/format'
+import { MODELS, EFFORTS, toModelKey } from '@/lib/format'
 
 // The chat model+effort picker — replaces the generic "/" palette once the input resolves to
 // exactly "/model". Two steps: pick a model, then pick a reasoning effort. On the effort pick it
@@ -19,7 +19,7 @@ export default function ModelPicker({
 
   const modelRows = [
     { value: 'reset', label: 'Default', blurb: 'Inherit the system / repo default', selected: !currentModel },
-    ...MODELS.map((m) => ({ value: m.key, label: m.label, blurb: m.blurb, selected: currentModel === m.key })),
+    ...MODELS.map((m) => ({ value: m.key, label: m.label, blurb: m.blurb, selected: toModelKey(currentModel) === m.key })),
   ]
   const effortRows = [
     { value: 'reset', label: 'Default', blurb: 'Inherit the system / repo default', selected: !currentEffort },

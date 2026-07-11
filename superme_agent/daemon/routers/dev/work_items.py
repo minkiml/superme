@@ -22,6 +22,7 @@ from ...services.learning import _fire_sweep_bg
 from ...schemas.dev.work_items import (
     PlanResponse, WorkItemDeleteResponse, WorkItemDetailResponse, WorkItemArtifactsResponse,
     WorkItemCompleteResponse, WorkItemModelResponse, WorkItemEffortResponse, WorkItemAdvanceResponse,
+    WorkItemScaffoldResponse,
 )
 
 log = logging.getLogger("superme-agent")
@@ -58,10 +59,28 @@ async def dev_work_item_plan(item_id: str, body: PlanBody,
         dev.set_work_item_effort(dev_root, item_id, body.effort)  # remember the choice for later runs
     # Atomic begin: opens the run, flips to in_progress, logs — or returns False (already running),
     # the per-item run-lock enforced at the data layer (no check-then-start window). 409 on contention.
-    if not _begin_run(ctx, body.context_id, item_id, "plan", model):
+    if not _begin_run(ctx, body.context_id, item_id, "plan", model, phase=item.get("phase")):
         raise HTTPException(status_code=409, detail="a run is already in progress for this item")
     asyncio.create_task(_run_headless_plan(ctx, body.context_id, item_id, item_dir, model, effort))
     return {"ok": True, "status": "planning", "work_item_id": item_id, "model": model}
+
+
+class ScaffoldBody(BaseModel):
+    context_id: str = "global"
+    wave: str | None = None         # the roadmap wave this item instances (resolves its deliverable)
+    deliverable: str | None = None  # …or a deliverable directly when no wave applies
+
+
+@router.post("/dev/work-items/{item_id}/scaffold", response_model=WorkItemScaffoldResponse)
+def dev_work_item_scaffold(item_id: str, body: ScaffoldBody,
+                           dev: DevKnowledgeService = Depends(get_dev)) -> dict:
+    """Set a root work-item's anchor pointer — `wave` (resolves its deliverable) or `deliverable`
+    directly. Pass one; the other clears to null. 404 if the item is missing."""
+    dev_root = _dev_root(body.context_id)
+    if not dev.read_work_item(dev_root, item_id):
+        raise HTTPException(status_code=404, detail="work-item not found")
+    dev.set_work_item_scaffold(dev_root, item_id, wave=body.wave, deliverable=body.deliverable)
+    return {"ok": True, "id": item_id, "wave": body.wave, "deliverable": body.deliverable}
 
 
 @router.delete("/dev/work-items/{item_id}", response_model=WorkItemDeleteResponse)

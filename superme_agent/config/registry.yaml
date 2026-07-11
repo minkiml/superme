@@ -11,7 +11,7 @@ workspaces:
   dummy:
     cwd: "/Users/cooma/Developer/my_docs/dummy_project"
     label: "Dummy Project"   # display name in the cockpit (defaults to the key)
-    persona_append: "You are operating in the DUMMY_PROJECT workspace; say so briefly when you start a task here."
+    persona_append: ""
 
   # More examples:
   # stock:

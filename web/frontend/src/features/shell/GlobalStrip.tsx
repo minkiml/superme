@@ -12,7 +12,7 @@ const TILES: Tile[] = [
   { id: 'tokens', label: 'Tokens', icon: Coins, hint: 'per repo · feature · scope', dot: 'bg-dev', drill: true, value: (s) => fmtTokens(s.tokensTotal) },
   { id: 'projects', label: 'Projects', icon: FolderKanban, hint: 'connected', dot: 'bg-core', value: (s) => String(s.projects) },
   { id: 'ops', label: 'Agents', icon: Cpu, hint: 'running / live', dot: 'bg-universal', drill: true, value: (s) => `${s.opsRunning}/${s.opsLive}` },
-  { id: 'learning', label: 'Learning', icon: GraduationCap, hint: 'candidates / pending / learned', dot: 'bg-warn', drill: true, value: (s) => `${s.learn.candidates}/${s.learn.pending}/${s.learn.learned}` },
+  { id: 'learning', label: 'Learning', icon: GraduationCap, hint: 'candidate / pending / drafted / learned', dot: 'bg-warn', drill: true, value: (s) => `${s.learn.candidates}/${s.learn.pending}/${s.learn.drafted}/${s.learn.learned}` },
 ]
 
 export default function GlobalStrip({ stats, onDetails }: { stats: CommandStats; onDetails?: (id: string) => void }) {

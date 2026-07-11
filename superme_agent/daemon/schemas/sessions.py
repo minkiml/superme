@@ -10,13 +10,17 @@ class SessionBubble(BaseModel):
 
 
 class SessionSummary(BaseModel):
-    """A session's picker entry."""
+    """A session's picker entry. `item_id`/`item_title` are set when the session is stamped to a
+    work-item (work-item-session-recognition-prd) — the chat rail derives its work-item indicator
+    from these, so it's correct however the session was opened (card or picker) and clears on switch."""
     id: str
     title: str
     surface: str
     mode: str
     updated_at: str
     message_count: int
+    item_id: str | None = None
+    item_title: str | None = None
 
 
 class SessionDetail(BaseModel):

@@ -15,6 +15,7 @@ import Foundations from '@/features/foundations/Foundations'
 import GlobalActivity from '@/features/activity/GlobalActivity'
 import QuickConfig from '@/features/config/QuickConfig'
 import ChatPanel, { type DevBinding } from '@/features/chat/ChatPanel'
+import ConnectModal from '@/features/shell/ConnectModal'
 import { GLOBAL, type ContextRef } from '@/lib/contexts'
 import { listContexts, type ChatMode } from '@/lib/api'
 
@@ -43,6 +44,9 @@ export default function App() {
   // Chat ⇄ work-item binding: clicking a work-item takes the chat rail over as that item's dev
   // thread (opens its session, tags sends). Lifted here so DevWorkspace and ChatPanel can share it.
   const [binding, setBinding] = useState<DevBinding | null>(null)
+  // A one-shot prompt to seed into the chat rail (onboarding launch) — set here, sent once by
+  // ChatPanel when its socket is ready, then cleared via onSeedConsumed.
+  const [seedPrompt, setSeedPrompt] = useState<string | null>(null)
   // Optimistic tag overrides — a saved tag shows instantly, before the /repos poll confirms it.
   const [tagOverrides, setTagOverrides] = useState<Record<string, { color: string; icon: string | null }>>({})
   const rawStats = useCommandStats()
@@ -94,7 +98,7 @@ export default function App() {
               repo={dest.repo}
               onExit={() => setDest(null)}
               repos={[stats.hub, ...stats.nodes].filter((r): r is OrbitRepo => !!r)}
-              onSwitch={(r) => setDest({ repo: r, kind: 'dev' })}
+              onSwitch={(r) => { setDest({ repo: r, kind: 'dev' }); setBinding(null); setChatContext(r.id); setChatMode('dev') }}
               boundItemId={binding?.workItemId ?? null}
               onBindItem={(it, ctx) => {
                 // Take the chat over as this item's dev thread and reveal the rail.
@@ -104,6 +108,14 @@ export default function App() {
                 setChatOpen(true)
               }}
               onUnbindItem={() => setBinding(null)}
+              onStartOnboarding={(repoId, mode) => {
+                // Point the chat rail at this repo's dev thread and seed the onboarding kickoff.
+                setBinding(null)
+                setChatContext(repoId)
+                setChatMode('dev')
+                setChatOpen(true)
+                setSeedPrompt(onboardingKickoff(mode))
+              }}
             />
           ) : dest?.kind === 'core' ? (
             <CoreDashboard repo={dest.repo} onExit={() => setDest(null)} />
@@ -128,6 +140,8 @@ export default function App() {
             onBindingSession={(sid) => setBinding((b) => (b ? { ...b, sessionId: sid } : b))}
             modelOverride={chatRepo?.modelOverride ?? null}
             effortOverride={chatRepo?.effortOverride ?? null}
+            seedPrompt={seedPrompt}
+            onSeedConsumed={() => setSeedPrompt(null)}
           />
         </div>
         {!chatOpen && (
@@ -150,37 +164,43 @@ export default function App() {
         onOpenDev={(r) => {
           setSelectedId(null)
           setDest({ repo: r, kind: 'dev' })
+          // The chat rail follows you to the repo you open (dev workspace → its dev thread).
+          setBinding(null)
+          setChatContext(r.id)
+          setChatMode('dev')
         }}
         onOpenCore={(r) => {
           setSelectedId(null)
           setDest({ repo: r, kind: 'core' })
+          setBinding(null)
+          setChatContext(r.id)
+          setChatMode('core')
         }}
         onTagSaved={(id, patch) => setTagOverrides((o) => ({ ...o, [id]: patch }))}
       />
       {drill === 'tokens' && <TokenDrilldown stats={stats} onClose={() => setDrill(null)} />}
       {drill === 'ops' && <AgentsDrilldown stats={stats} onClose={() => setDrill(null)} />}
       {drill === 'learning' && <LearningDrilldown onClose={() => setDrill(null)} />}
-      {connecting && <ConnectModal onClose={() => setConnecting(false)} />}
+      {connecting && (
+        <ConnectModal
+          onClose={() => setConnecting(false)}
+          onConnected={() => {
+            setConnecting(false)
+            // Refresh the chat context list so the new repo is selectable; the orbit poll (/repos)
+            // surfaces its node within a few seconds, from which the owner opens onboarding.
+            listContexts().then((cs) => cs.length && setContexts(cs)).catch(() => {})
+          }}
+        />
+      )}
     </div>
   )
 }
 
-// Placeholder: connecting a new domain is real backend work (repo registration) deferred to the
-// end of the renovation. For now this just explains what it will do.
-function ConnectModal({ onClose }: { onClose: () => void }) {
-  return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-6 backdrop-blur-sm" onClick={onClose}>
-      <div className="w-full max-w-sm rounded-2xl border border-line bg-app p-6 text-center shadow-2xl" onClick={(e) => e.stopPropagation()}>
-        <div className="mx-auto mb-3 grid h-10 w-10 place-items-center rounded-xl bg-iris" />
-        <h2 className="text-[15px] font-semibold text-fg">Connect a domain</h2>
-        <p className="mt-2 text-[13px] text-muted">
-          Point SuperMe at a new project repo to add it to the orbit. Registration is wired up at the
-          end of the renovation — for now, domains are connected in the repo config.
-        </p>
-        <button onClick={onClose} className="mt-5 rounded-lg border border-line bg-surface px-4 py-2 text-[13px] font-medium text-fg hover:border-faint">
-          Got it
-        </button>
-      </div>
-    </div>
-  )
+// The onboarding kickoff message seeded into the dev chat — names the skill explicitly so routing is
+// reliable, and states the project's starting condition so the skill picks the right posture.
+function onboardingKickoff(mode: 'project-init' | 'retrofit'): string {
+  return mode === 'project-init'
+    ? "This project has no SuperMe memory yet, and it's a new/greenfield project. Run **project-init**: grill me to establish the anchor docs (PRD, spec, roadmap, architecture), then draft them for my approval."
+    : "This project has no SuperMe memory yet, and it's an existing codebase. Run **retrofit**: comprehend the code, clarify the intent with me, then draft the anchor docs for my approval."
 }
+

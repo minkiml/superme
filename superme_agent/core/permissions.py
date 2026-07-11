@@ -12,6 +12,7 @@ that callback to the SDK's `can_use_tool` interface, applying the safe-tool poli
 """
 
 import logging
+import shlex
 from pathlib import Path
 from typing import Awaitable, Callable
 
@@ -30,6 +31,123 @@ ApproveFn = Callable[[str, dict], Awaitable[bool]]
 
 # Tools that write to the filesystem (reads are covered by the safe-tool policy).
 _WRITE_TOOLS = {"Write", "Edit", "MultiEdit", "NotebookEdit"}
+
+# Tools with no SuperMe surface handling → denied with feedback so the agent falls back naturally.
+# `AskUserQuestion` renders a structured picker in Claude Code, but SuperMe's chat is plain
+# conversation (no picker, no way to return a selection) — so the agent must just ASK IN TEXT.
+_SURFACE_UNSUPPORTED = {"AskUserQuestion"}
+_ASK_IN_TEXT_NUDGE = (
+    "The AskUserQuestion tool isn't available in this chat surface. Ask the user your question(s) as "
+    "plain conversational text instead — one at a time, with your recommended answer — and wait for "
+    "their reply in the next message."
+)
+
+# General-session guardrail (work-item-session-recognition-prd): the mutating tools a GENERAL
+# (non-work-item) dev session may NOT use — all real dev work must flow through a work-item + its
+# session. Denied with FEEDBACK, no user prompt, so the agent re-thinks and pivots to itemizing.
+# The sanctioned itemize tool (mcp__*__create_inbox_item) is NOT here, so it stays allowed — the
+# one write a general session may make. Bash is deliberately absent (dual-use: read-only inspection
+# stays useful; the Guard block soft-restricts mutating shell commands). Named mutating work-item /
+# knowledge MCP tools can be added here as they become agent-reachable.
+_GENERAL_SESSION_BLOCKED = set(_WRITE_TOOLS)
+_GENERAL_SESSION_NUDGE = (
+    "Mutating the project's real code (writing/editing files or implementing) is disabled in a "
+    "general discussion session — all real dev work must happen inside a work-item and its session. "
+    "Authoring the project's `general/` memory docs (onboarding via project-init/retrofit, or "
+    "maintaining an anchor doc) is allowed and not what this blocks. If what you're about to do is "
+    "real implementation work, don't try it here: propose itemizing it into an inbox item (the "
+    "create-inbox-item skill) so it can be picked up and done properly."
+)
+
+
+# --- read-only shell classifier (session-agent-lifecycle-prd, Bug 1) ------------------------------
+# Read-only `Bash` is the same access an agent already has via Read/Grep/Glob (auto-allowed), so it
+# shouldn't prompt. But Bash is unsandboxable, so this classifier is FAIL-CLOSED: it returns True only
+# for a command it can PROVE is read-only; anything ambiguous → False (falls through to the normal
+# prompt/deny, never a silent auto-allow). Conservative by design — a false negative just costs a
+# prompt; a false positive would be a hole.
+_READONLY_BASH_CMDS = frozenset({
+    "ls", "pwd", "cat", "head", "tail", "wc", "stat", "file", "tree", "du", "df", "echo", "printf",
+    "date", "whoami", "id", "hostname", "uname", "env", "which", "type", "basename", "dirname",
+    "realpath", "readlink", "grep", "egrep", "fgrep", "rg", "ag", "sort", "uniq", "cut", "comm",
+    "diff", "cmp", "nl", "column", "tac", "rev", "fold", "join", "paste", "look", "strings",
+    "hexdump", "xxd", "od", "md5", "md5sum", "shasum", "sha1sum", "sha256sum", "true", "test", "[",
+    "wc", "tr", "expr", "seq", "yes", "cksum", "sum",
+})
+# Shell metacharacters that could hide a write / arbitrary execution → refuse outright.
+_BASH_UNSAFE_SUBSTR = (">", "<", "`", "$(", "${", ">>", "|&", "&>", "\n")
+# find primaries that mutate or execute.
+_FIND_MUTATORS = ("-delete", "-exec", "-execdir", "-ok", "-okdir", "-fprint", "-fprintf", "-fls")
+# git read-only subcommands (pure inspection; ambiguous/mutating ones fall through to a prompt).
+_GIT_READONLY = frozenset({
+    "status", "log", "diff", "show", "rev-parse", "ls-files", "ls-tree", "cat-file", "describe",
+    "blame", "shortlog", "reflog", "name-rev", "show-ref", "for-each-ref", "whatchanged", "grep",
+    "count-objects", "rev-list", "symbolic-ref", "var", "help", "branch", "tag", "remote",
+})
+# For git branch/tag/remote/stash/config, any of these args flips it to a mutation → refuse.
+_GIT_MUTATING_ARGS = ("-d", "-D", "-m", "-M", "--delete", "--move", "--add", "--set", "--unset",
+                      "--remove", "-f", "--force", "add", "set", "rename", "prune", "set-url",
+                      "set-head", "push", "pop", "apply", "drop", "clear", "create")
+_BASH_SEPARATORS = frozenset({";", "&&", "||", "|", "&"})
+
+
+def _segment_read_only(seg: list[str]) -> bool:
+    """One pipeline segment (already split on shell operators) — is its command read-only?"""
+    if not seg:
+        return True
+    head = seg[0]
+    # An inline env assignment (`FOO=bar cmd`) hides the real command → refuse.
+    if "=" in head and not head.startswith("-"):
+        return False
+    if head == "git":
+        sub = seg[1] if len(seg) > 1 else ""
+        if sub not in _GIT_READONLY:
+            return False
+        return not any(a in _GIT_MUTATING_ARGS for a in seg[2:])
+    if head == "find":
+        return not any(tok in _FIND_MUTATORS for tok in seg)
+    if head in ("sed", "awk", "gawk"):
+        return not any(t == "-i" or t.startswith("-i") for t in seg)   # in-place edit
+    if head == "sort":
+        return "-o" not in seg          # `sort -o` writes a file
+    return head in _READONLY_BASH_CMDS
+
+
+def is_read_only_bash(command: str) -> bool:
+    """PROVE a shell command is read-only (fail-closed). True only when every pipeline segment is a
+    known read-only command with no redirection, command-substitution, or in-place/mutating flags."""
+    if not command or not command.strip():
+        return False
+    if any(bad in command for bad in _BASH_UNSAFE_SUBSTR):
+        return False
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        return False                    # unbalanced quotes etc. → not provable
+    seg: list[str] = []
+    for tok in tokens:
+        if tok in _BASH_SEPARATORS:
+            if not _segment_read_only(seg):
+                return False
+            seg = []
+        else:
+            seg.append(tok)
+    return _segment_read_only(seg)
+
+
+def _write_target_under(input_data: dict, root: Path) -> bool:
+    """True if a write tool's target path resolves inside `root`. Fail-CLOSED (no/unparseable path
+    → False): the general-session gate treats an unclear write as out-of-scope, so only a clearly
+    in-`root` write (the project's `general/` memory) escapes the deny."""
+    path = input_data.get("file_path") or input_data.get("path")
+    if not path:
+        return False
+    try:
+        target = Path(path).resolve()
+        r = root.resolve()
+    except (OSError, ValueError):
+        return False
+    return target == r or r in target.parents
 
 # File-reading tools the L2 read-guard scopes to the host's allowlist (context-model-spec §3).
 # Bash is deliberately NOT here — the SDK has no fs-sandbox mode, so shell reads are the accepted
@@ -144,7 +262,9 @@ def _invoked_skill_names(tool_name: str, input_data: dict) -> list[str]:
 
 
 def build_can_use_tool(approve: ApproveFn, *, blocked_skills: set[str] | None = None,
-                       cwd: Path | None = None, read_roots: list[Path] | None = None):
+                       cwd: Path | None = None, read_roots: list[Path] | None = None,
+                       gate_general_mutations: bool = False,
+                       general_write_root: Path | None = None):
     """Wrap a surface's ApproveFn into the SDK `can_use_tool` callback.
 
     Safe (read-only) tools auto-allow; everything else defers to `approve`. `blocked_skills` (the
@@ -156,6 +276,14 @@ def build_can_use_tool(approve: ApproveFn, *, blocked_skills: set[str] | None = 
     whose target falls outside the host's allowlist is denied before the safe-tool auto-allow, so a
     host cannot read another repo's files or the bulk of SuperMe's own source. Omit both to disable
     the guard (e.g. a hermetic headless run that governs paths its own way).
+
+    `gate_general_mutations` enables the **general-session guardrail** (work-item-session-recognition-
+    prd): in a GENERAL (non-work-item) dev session, mutating tools are denied WITH FEEDBACK and NO
+    user prompt — the agent gets a nudge to itemize instead and re-thinks. The sanctioned itemize tool
+    is not in the blocked set, so it stays allowed. `general_write_root` carves the one exception:
+    writes whose target is inside it (the project's `general/` memory home) are AUTO-allowed, so
+    onboarding (project-init/retrofit authoring the anchor docs) and routine anchor-doc maintenance
+    work in a general session while real-code writes stay denied.
     """
 
     async def can_use_tool(
@@ -167,6 +295,29 @@ def build_can_use_tool(approve: ApproveFn, *, blocked_skills: set[str] | None = 
                 return PermissionResultDeny(
                     message="This is an internal SuperMe skill — it runs only inside the learning "
                             "pipeline, not from chat.")
+        # Surface-unsupported tools (e.g. AskUserQuestion) → deny with a nudge to ask in plain text.
+        if tool_name in _SURFACE_UNSUPPORTED:
+            log.info("surface-unsupported tool denied: %s (ask in text)", tool_name)
+            return PermissionResultDeny(message=_ASK_IN_TEXT_NUDGE)
+        # General-session guardrail: hard-deny mutating tools with a nudge, no user prompt. Placed
+        # before the safe-tool check and before `approve`, so the human is never interrupted — the
+        # agent self-corrects toward itemizing (the deny message is its feedback).
+        if gate_general_mutations and tool_name in _GENERAL_SESSION_BLOCKED:
+            # The one allowed write: authoring/maintaining the project's `general/` memory (onboarding
+            # + anchor-doc upkeep). Auto-allow it (autonomous, no prompt); deny everything else.
+            if general_write_root is not None and _write_target_under(input_data, general_write_root):
+                return PermissionResultAllow()
+            log.info("general-session guardrail denied %s (nudge to itemize)", tool_name)
+            return PermissionResultDeny(message=_GENERAL_SESSION_NUDGE)
+        # Shell: read-only commands are the same access as Read/Grep/Glob → auto-allow (no prompt).
+        # A mutating shell command in a general session is denied+nudged (same rule as the write
+        # tools — "no code mutation, including via shell"); elsewhere it defers to approval as before.
+        if tool_name == "Bash":
+            if is_read_only_bash(input_data.get("command", "")):
+                return PermissionResultAllow()
+            if gate_general_mutations:
+                log.info("general-session guardrail denied mutating Bash (nudge to itemize)")
+                return PermissionResultDeny(message=_GENERAL_SESSION_NUDGE)
         # L2 read-guard: keep reads inside the host's scope (before the safe-tool auto-allow).
         if read_roots and cwd is not None and tool_name in _READ_TOOLS:
             target = _read_target(input_data)

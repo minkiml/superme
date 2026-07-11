@@ -1,8 +1,8 @@
 ---
 name: standup
-description: "Compose a development standup from the activity log and work-item state — what moved, what's left, what's next."
+description: "Compose a development standup from the activity log and work-item state — what moved, what's left, what's next. Use when the owner asks to catch up on development progress: a standup or recap, 'what did we do yesterday', 'where are things', 'what's next', or a count/provenance question about past activity."
 argument-hint: "the question (optional — e.g. a day, or a work-item to focus on)"
-category: general 
+category: general
 ---
 
 # Standup
@@ -66,7 +66,7 @@ You can pick these up from the workspace, or want me to resume one from here? An
 - **Translate state**, never raw enums: `plan_design/queued`→"not planned yet" ·
   `plan_design/in_progress`→"being planned now" · `plan_design/waiting`→"plan ready, awaiting your
   approval" · `build_eval/*`→"in build" · `done`→"done".
-- **No bookkeeping tally**; new incoming ideas get one forward-looking line by content.
+- New incoming ideas get one forward-looking line by content.
 - **Explain any number** cited; **close with a resume offer**.
 
 If nothing moved, say so plainly ("Quiet day on the actual work") and offer the board state.

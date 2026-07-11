@@ -1,0 +1,2 @@
+old slack-specialized superme code - outdated
+old slack connector (re-integration is required)

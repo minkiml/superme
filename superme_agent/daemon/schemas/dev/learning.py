@@ -25,6 +25,7 @@ class CandidateStatItem(BaseModel):
 class CandidatesStat(BaseModel):
     total: int
     pending_proposals: int
+    drafted_proposals: int
     by_form: dict[str, int]
     items: list[CandidateStatItem]
 
@@ -65,14 +66,18 @@ class LearningRollupRepo(BaseModel):
     repo_id: str
     label: str
     candidates: ScopeCount
+    pending: ScopeCount
+    drafted: ScopeCount
     learned: ScopeCount
 
 
 class LearningRollupResponse(BaseModel):
-    """Per-repo learning counts (captured candidates + published/learned artifacts), each split by
-    dev/core scope, plus the cross-repo totals. Powers the Learning tile drill-in."""
+    """Per-repo learning counts across the 4-slot pipeline (candidates · pending · drafted · learned),
+    each split by dev/core scope, plus the cross-repo totals. Powers the Learning tile drill-in."""
     repos: list[LearningRollupRepo]
     candidates: ScopeCount
+    pending: ScopeCount
+    drafted: ScopeCount
     learned: ScopeCount
 
 

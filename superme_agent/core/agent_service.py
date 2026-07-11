@@ -24,7 +24,10 @@ from ..runtime.config import (
     SELF_FILE, CHARTER_FILES, HARNESS_DIR, LOCAL_HARNESS_DIR, CONSTITUTION_DIR, plugins_for,
 )
 from .models import normalize_model
-from .operational import constitution_catalog, silent_skill_names
+from .operational import constitution_catalog, list_repo_assets, silent_skill_names
+from .dev_knowledge import DevKnowledgeService
+
+_DEV = DevKnowledgeService()  # stateless — reused to build the dev Orient digest
 from ..harness.tools.base_tools import make_base_mcp_server
 from .context import Context
 from .events import Init, TextDelta, Status, Usage, Result, TurnEvent
@@ -126,10 +129,10 @@ class AgentService:
     def _context_preamble(self, ctx: Context) -> str:
         """A short note telling the agent which context it's operating in."""
         if ctx.layer == "global":
-            where = ("the owner's top-level **global SuperMe** — their cross-domain "
-                     "identity and knowledge, not any single project")
+            where = ("the **SuperMe hub** — the owner's home host: their cross-domain "
+                     "self, and SuperMe's own codebase")
         else:
-            where = f"a **local / project sub-SuperMe** (`{ctx.id}`)"
+            where = f"a **project host** (`{ctx.id}`)"
         text = (
             f"\n\n## Operating context\n"
             f"You are operating in {where}. "
@@ -147,10 +150,20 @@ class AgentService:
                 dev_root = ctx.internal_root / "dev"
                 text += (
                     f"\n\nYour **dev-knowledge root** is `{dev_root}` (NOT under the working "
-                    f"directory above); work-items live at `{dev_root}/work-items/`. Use this "
-                    f"absolute path to read or write dev-knowledge. This host's **core knowledge** "
-                    f"is at `{core_root}` (read-only in dev — see the charter)."
+                    f"directory above): the `general/` anchor docs are at `{dev_root}/general/` and "
+                    f"work-items at `{dev_root}/work-items/`. Use these absolute paths to read or write "
+                    f"dev-knowledge. This host's **core knowledge** is at `{core_root}` (read-only in "
+                    f"dev — see the charter)."
                 )
+                # ORIENT (S3): a thin always-on digest of THIS project — what it is + active waves +
+                # in-progress items — regenerated from the anchor docs each turn so a cold session is
+                # oriented without reading. Guarded: a parse hiccup must never break a turn.
+                try:
+                    digest = _DEV.orient_digest(dev_root)
+                except Exception:  # noqa: BLE001 — orientation is best-effort, never fatal
+                    digest = None
+                if digest:
+                    text += f"\n\n## This project (orientation)\n{digest}"
             else:
                 text += (
                     f"\n\nYour **core-knowledge home** is `{core_root}` (NOT under the working "
@@ -161,6 +174,8 @@ class AgentService:
     def _build_options(
         self, ctx: Context, *, resume, model, approve: ApproveFn, extra_mcp_servers,
         enforce_silent: bool = False, effort: str | None = None, scope_reads: bool = False,
+        system_append: str | None = None, gate_general_mutations: bool = False,
+        general_write_root: Path | None = None,
     ) -> ClaudeAgentOptions:
         # Assemble layer-2 append: persona (WHO) + mode charter (WHAT MODE) + preamble
         # (WHERE) + persona_append (per-project extra). Mode falls back to core.
@@ -183,12 +198,22 @@ class AgentService:
         # demand via the `pull_constitution` tool (mounted below). Empty string when there are none.
         const_universal = CONSTITUTION_DIR / ctx.mode
         const_repo = (op_home / "constitution") if op_home is not None else None
-        catalog = constitution_catalog(ctx.mode, const_universal, const_repo)
+        # Asset pool (opt-in constitutional knowledge): the shared `local-harness/asset/` pool; this
+        # repo activates slugs via its `.assets` list. A new repo activates none — so its catalog
+        # carries only the true universals + anything it has explicitly turned on.
+        activated_assets = list_repo_assets(const_repo)
+        catalog = constitution_catalog(ctx.mode, const_universal, const_repo, activated=activated_assets)
         if catalog:
             parts.append(catalog)
         append = "\n\n".join(parts) + self._context_preamble(ctx)
         if ctx.persona_append:
             append += f"\n\n{ctx.persona_append}"
+        # Per-turn, session-aware append (work-item-session-recognition-prd): the Focus block (a
+        # work-item session, centering the agent on its item) or the Guard block (a general session,
+        # discussion-only). Assembled by the daemon, which knows the session's durable item stamp;
+        # Core stays session-agnostic (it has no spine), so it just appends what it's handed.
+        if system_append:
+            append += f"\n\n{system_append}"
         # User-facing turns may not invoke `access: silent` skills (forge-* — internal pipeline
         # machinery); the owning sub-run leaves enforce_silent False so it still can. Computed from
         # the same plugin set the turn loads.
@@ -220,7 +245,8 @@ class AgentService:
             # `superme` = pull_constitution, bound to THIS host's constitution homes so it only
             # ever serves in-scope items (context-model-spec §2).
             mcp_servers={
-                "superme": make_base_mcp_server(ctx.mode, const_universal, const_repo),
+                "superme": make_base_mcp_server(ctx.mode, const_universal, const_repo,
+                                                activated=activated_assets),
                 **(extra_mcp_servers or {}),
             },
             permission_mode="default",
@@ -231,6 +257,8 @@ class AgentService:
                 approve, blocked_skills=blocked,
                 cwd=ctx.cwd if scope_reads else None,
                 read_roots=_read_roots(ctx) if scope_reads else None,
+                gate_general_mutations=gate_general_mutations,
+                general_write_root=general_write_root,
             ),
             # SuperMe owns its OWN log+memory subsystem — it must never read from or write to
             # Claude Code's native auto-memory store (~/.claude/projects/<hash>/memory/). That
@@ -253,6 +281,9 @@ class AgentService:
         extra_mcp_servers: dict | None = None,
         enforce_silent: bool = False,
         scope_reads: bool = False,
+        system_append: str | None = None,
+        gate_general_mutations: bool = False,
+        general_write_root: Path | None = None,
     ) -> AsyncIterator[TurnEvent]:
         """Run one turn against `ctx`, yielding TurnEvents.
 
@@ -268,7 +299,9 @@ class AgentService:
         options = self._build_options(
             ctx, resume=resume, model=model, approve=approve,
             extra_mcp_servers=extra_mcp_servers, enforce_silent=enforce_silent, effort=effort,
-            scope_reads=scope_reads,
+            scope_reads=scope_reads, system_append=system_append,
+            gate_general_mutations=gate_general_mutations,
+            general_write_root=general_write_root,
         )
         resolved_model = None
         # Context-window fill is measured from a SINGLE API call, not the turn aggregate.
