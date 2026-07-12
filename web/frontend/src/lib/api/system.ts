@@ -62,6 +62,17 @@ export function getTokens(): Promise<TokenUsage> {
   return getJSON('/api/tokens')
 }
 
+// TEMPORARY internals inventory — live snapshot of the DB schemas + agent tool surface (Internals
+// tab). Types inlined (not codegen) since this whole surface is a deletable scaffold.
+export type InvColumn = { name: string; type: string; pk: boolean; notnull: boolean }
+export type InvTable = { name: string; columns: InvColumn[]; sql: string | null; rows: number | null }
+export type InvDatabase = { name: string; path: string; present: boolean; tables: InvTable[] }
+export type InvTool = { name: string; description: string; surface: string; params: { name: string; required: boolean }[] }
+export type Inventory = { databases: InvDatabase[]; tools: InvTool[] }
+export function getInventory(): Promise<Inventory> {
+  return getJSON('/api/system/inventory')
+}
+
 // Per-day token usage for the trend graph. Sends the browser's local tz as minutes to ADD to UTC
 // (−getTimezoneOffset()), so the daemon buckets days on the owner's local day.
 export function getTokenTimeseries(): Promise<TokenTimeseries> {

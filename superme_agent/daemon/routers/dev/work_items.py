@@ -39,7 +39,8 @@ class PlanBody(BaseModel):
 
 @router.post("/dev/work-items/{item_id}/plan", response_model=PlanResponse)
 async def dev_work_item_plan(item_id: str, body: PlanBody,
-                             dev: DevKnowledgeService = Depends(get_dev)) -> dict:
+                             dev: DevKnowledgeService = Depends(get_dev),
+                             spine: SystemSpine = Depends(get_spine)) -> dict:
     """Fire a headless /plan turn for a work-item — the "Plan it" quick-action. Flips the
     item to in_progress immediately, then returns; the agent works in the background and the
     item lands at `waiting` when done. Poll GET /dev (`running`) for the live planning state."""
@@ -51,12 +52,14 @@ async def dev_work_item_plan(item_id: str, body: PlanBody,
         raise HTTPException(status_code=404, detail="work-item not found")
     dev_root = ctx.internal_root / "dev"
     item = dev.read_work_item(dev_root, item_id) or {}
-    model = body.model or item.get("model") or DEFAULT_RUN_MODEL
     if body.model:
         dev.set_work_item_model(dev_root, item_id, body.model)  # remember the choice for later runs
-    effort = body.effort or item.get("effort")  # None here → _run_headless_plan falls to repo/system/medium
     if body.effort:
         dev.set_work_item_effort(dev_root, item_id, body.effort)  # remember the choice for later runs
+    # Same precedence as an interactive turn (session-model-precedence): explicit body pick → the
+    # item's configured value → this repo's default → the system default.
+    model = spine.effective_model(body.context_id, per_call=body.model, item_model=item.get("model"))
+    effort = spine.effective_effort(body.context_id, per_call=body.effort, item_effort=item.get("effort"))
     # Atomic begin: opens the run, flips to in_progress, logs — or returns False (already running),
     # the per-item run-lock enforced at the data layer (no check-then-start window). 409 on contention.
     if not _begin_run(ctx, body.context_id, item_id, "plan", model, phase=item.get("phase")):
@@ -104,7 +107,7 @@ async def dev_work_item_delete(item_id: str, context_id: str = "global",
 
     session_id = item.get("session_id")
     if session_id:
-        sessions.purge(ctx, session_id)
+        sessions.delete(ctx, session_id, cause="deleted")  # hard delete; run trace preserved + labeled
     # Remove the inbox row this item was pushed from (routed_to == item_id), if any.
     inbox_removed = None
     for row in dev_store.list_inbox(context_id):
@@ -112,10 +115,9 @@ async def dev_work_item_delete(item_id: str, context_id: str = "global",
             dev_store.delete_inbox(row["id"])
             inbox_removed = row["id"]
     deleted = dev.delete_work_item(dev_root, item_id)
-    spine.delete_item_runs(context_id, item_id)   # drop this item's runs (live + historical)
-    dev_store.delete_events(context_id, item_id)  # wipe the item's own events
-    # Record the drop as a DEV-NATIVE event (item_id=None) so it survives the wipe above and
-    # stays visible in the repo's activity log. PRD §4.9.
+    spine.release_item_runs(context_id, item_id)  # close any live run; KEEP the run history
+    # The item's dev-activity events are historical trace → PRESERVED (never wiped). The item.drop
+    # marker below records the deletion itself in the repo's activity log.
     dev_store.log_event(context_id, "item.drop",
                         f"Deleted work-item: {item.get('title') or item_id}",
                         actor="owner", meta={"item_id": item_id})
@@ -185,10 +187,10 @@ async def dev_work_item_complete(item_id: str, context_id: str = "global",
     #    sweep but STILL purge (disk reclamation is not a learning concern).
     session_id = item.get("session_id")
     if spine.learning_enabled_for(context_id):
-        _fire_sweep_bg(ctx, session_id, then_purge=True)
+        _fire_sweep_bg(ctx, session_id, then_delete="retired")
     elif session_id:
-        sessions.purge(ctx, session_id)
-    runs_freed = spine.delete_item_runs(context_id, item_id)
+        sessions.delete(ctx, session_id, cause="retired")  # workflow done → retired
+    runs_freed = spine.release_item_runs(context_id, item_id)
     dev_store.log_event(context_id, "item.complete",
                         f"Completed + archived: {item.get('title') or item_id}",
                         item_id=item_id, actor="owner", meta={"runs_freed": runs_freed})

@@ -1,7 +1,7 @@
 ---
 name: capture
 description: Sweeps a conversation slice for durable operational learnings and files each as a candidate. Use when SuperMe's deterministic capture sweep hands you the slice of dev conversation since the last sweep, to mine autonomously.
-tools: Read, Grep, mcp__dev__dev_log, mcp__dev__file_candidate
+tools: Read, Grep, mcp__dev__read_dev_log, mcp__dev__file_candidate
 model: sonnet
 category: learning
 effort: medium
@@ -43,7 +43,7 @@ file nothing, that's a **miss**; an empty sweep is correct only when the slice h
    preference or convention they stated, a decision they drove. Some slices yield zero; one where the
    Owner lays down several conventions yields several.
 2. **Extract.** State each learning so it stands alone — the rule or procedure, not "the thing we just
-   discussed". Use Read/Grep/`dev_log` to confirm a concrete pointer for evidence; the slice is the
+   discussed". Use Read/Grep/`read_dev_log` to confirm a concrete pointer for evidence; the slice is the
    authoritative substance, so corroborate, don't re-derive.
 3. **Scope** (optional): `scope_hint` — `repo_dev` (this project — the default) | `universal_dev` (any
    project) | `core` (SuperMe's character). Widen past `repo_dev` only when clearly not project-specific.

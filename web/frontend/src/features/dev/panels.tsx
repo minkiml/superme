@@ -517,20 +517,18 @@ function InboxCard({
   const [confirmDel, setConfirmDel] = useState(false)
 
   // The whole card is the click target (like a work-item card) → opens the edit view. Action
-  // controls stop propagation so they don't also trip the edit-open.
+  // controls stop propagation so they don't also trip the edit-open. The edit modal is a SIBLING
+  // of the card, never a descendant: if it lived inside the card's onClick, every click within the
+  // modal (Cancel / Save / the X) would bubble up and re-fire setEditing(true) — so the modal could
+  // never close. (The card isn't positioned, so it was never the `contain` modal's containing block;
+  // moving the modal out of it doesn't change where the modal renders.)
   return (
+    <>
     <div
       onClick={() => setEditing(true)}
       title="Edit this item"
       className={`group cursor-pointer rounded-md border border-line border-l-2 ${KIND_STRIPE[e.kind] ?? 'border-l-line'} bg-surface px-2.5 py-2 shadow-sm transition hover:border-accent hover:bg-hover`}
     >
-      {editing && (
-        <InboxEditModal
-          e={e}
-          onCancel={() => setEditing(false)}
-          onSave={(patch) => { onSave(patch); setEditing(false) }}
-        />
-      )}
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
           {e.title ? (
@@ -590,6 +588,14 @@ function InboxCard({
         <span>{fmtLocal(e.created_at)}</span>
       </div>
     </div>
+    {editing && (
+      <InboxEditModal
+        e={e}
+        onCancel={() => setEditing(false)}
+        onSave={(patch) => { onSave(patch); setEditing(false) }}
+      />
+    )}
+    </>
   )
 }
 

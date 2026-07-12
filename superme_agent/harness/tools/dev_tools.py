@@ -538,16 +538,31 @@ def _append_inbox_item(*, store, context_id, **_):
 # capture→distill→forge flow by filing candidates/proposals itself (there is no chat-side learning
 # surface by design). Those tools are added only for the disposable headless runs (`learning=True`).
 
+# Read-only tools available to EVERY dev turn (main chat + learning runs). Naming: every read is
+# `read_*` so the tool surface is scannable. The learning-pool reads (`read_candidates`/`read_proposals`)
+# live here — not in the learning-only set — because they mutate nothing: a general session should be
+# able to answer "what learning is pending?" (the UI already shows it). Only the learning WRITE pens
+# stay gated (below), so the main agent can't file learnings by hand and bypass automatic sweep-capture.
 _MAIN_DEV_TOOLS: list[ToolSpec] = [
     ToolSpec(
-        "dev_log",
-        "Read this repo's development activity log (events table), newest first.",
+        "read_dev_log",
+        "Read this repo's dev event log (harness · work-item · learning events), newest first.",
         DevLogArgs, _dev_log,
     ),
     ToolSpec(
-        "list_inbox",
+        "read_inbox",
         "Read this repo's inbox — captured items awaiting triage/routing, open first.",
         InboxArgs, _list_inbox,
+    ),
+    ToolSpec(
+        "read_candidates",
+        "Read the operational-learning candidate pool (what capture has filed), newest first.",
+        ReviewCandidatesArgs, _review_candidates,
+    ),
+    ToolSpec(
+        "read_proposals",
+        "Read the OPEN operational-learning proposals already standing, newest first.",
+        ReviewProposalsArgs, _review_proposals,
     ),
     ToolSpec(
         "create_inbox_item",
@@ -561,7 +576,9 @@ _MAIN_DEV_TOOLS: list[ToolSpec] = [
     ),
 ]
 
-# Pipeline-only pens — capture files candidates, distill reviews/proposes/drops, forge stages.
+# Pipeline-only WRITE pens — capture files candidates, distill proposes/merges/drops, forge stages.
+# These must never reach the main chat agent (it would bypass automatic capture). The learning-pool
+# READS moved to the main set above; only the mutating pens remain gated here.
 _LEARNING_DEV_TOOLS: list[ToolSpec] = [
     ToolSpec(
         "file_candidate",
@@ -574,19 +591,9 @@ _LEARNING_DEV_TOOLS: list[ToolSpec] = [
         StageArtifactArgs, _stage_artifact,
     ),
     ToolSpec(
-        "review_candidates",
-        "Read the operational learning candidate pool for processing, newest first.",
-        ReviewCandidatesArgs, _review_candidates,
-    ),
-    ToolSpec(
         "propose_memory",
         "File one consolidated operational-learning proposal from processed candidates.",
         ProposeMemoryArgs, _propose_memory,
-    ),
-    ToolSpec(
-        "review_proposals",
-        "Read the OPEN proposals already standing (so distill can merge into one instead of duplicating).",
-        ReviewProposalsArgs, _review_proposals,
     ),
     ToolSpec(
         "merge_into_proposal",
@@ -605,9 +612,10 @@ DEV_TOOLS: list[ToolSpec] = _MAIN_DEV_TOOLS + _LEARNING_DEV_TOOLS   # full set (
 
 def make_dev_mcp_server(store, context_id: str, *, learning: bool = False, **deps):
     """Build the `dev` MCP server bound to one context's event store. By default it exposes only the
-    MAIN dev tools (activity log, inbox read + the sanctioned itemize writes) — a normal chat turn.
-    The disposable learning runs (capture/distill/forge) pass `learning=True` to also get the
-    pipeline pens; those must never reach the main chat agent (it would bypass automatic capture).
+    MAIN dev tools (the `read_*` reads over the event log · inbox · learning pool, plus the sanctioned
+    inbox itemize writes) — a normal chat turn. The disposable learning runs (capture/distill/forge)
+    pass `learning=True` to also get the WRITE pens; those must never reach the main chat agent (it
+    would bypass automatic capture).
 
     Optional deps thread per-turn state to specific learning tools (ignored by the rest):
     `origin_session_id` + `capture_source` (provenance bound onto `file_candidate` during a sweep),

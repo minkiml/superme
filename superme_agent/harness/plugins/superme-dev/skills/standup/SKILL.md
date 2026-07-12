@@ -10,7 +10,7 @@ category: general
 Answer the owner's catch-up questions with a composed, human-readable brief about the **real work** —
 what each item is about, what was actually done, what remains — then offer to resume. The owner cares
 about work progress, not bookkeeping: never tally queue housekeeping (captured / merged / dropped /
-pushed). Compose from the activity **LOG** (`dev_log`) ⋈ **work-item briefs** ⋈ a forward suggestion.
+pushed). Compose from the activity **LOG** (`read_dev_log`) ⋈ **work-item briefs** ⋈ a forward suggestion.
 Selective briefs, never a dump.
 
 ## 1. Classify
@@ -21,9 +21,9 @@ Selective briefs, never a dump.
 
 ## 2. Pull the LOG, split work from plumbing
 
-Call `dev_log`. Pass `day` for date questions (resolved in the owner's local timezone) — never build a
-date filter yourself. Retrospective: `dev_log(day="yesterday"|"YYYY-MM-DD")`. Current state:
-`dev_log(day="today")` + `dev_log(limit=30)`. One item: `dev_log(item_id="<id>")`.
+Call `read_dev_log`. Pass `day` for date questions (resolved in the owner's local timezone) — never build a
+date filter yourself. Retrospective: `read_dev_log(day="yesterday"|"YYYY-MM-DD")`. Current state:
+`read_dev_log(day="today")` + `read_dev_log(limit=30)`. One item: `read_dev_log(item_id="<id>")`.
 
 Sort the events:
 
@@ -83,4 +83,4 @@ e.g. "It was created by merging two earlier inbox notes, on June 22."
 2. **Tallying housekeeping** — "N merged, M dropped" is plumbing; foreground real work.
 3. **Dumping artifacts** — approach line + first open task, never whole files or the whole LOG.
 4. **Raw enums** — translate `plan_design/waiting` to plain English.
-5. **Your own date filter** — pass `day` to `dev_log`; naive UTC dates miss events.
+5. **Your own date filter** — pass `day` to `read_dev_log`; naive UTC dates miss events.

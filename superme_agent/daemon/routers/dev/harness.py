@@ -19,6 +19,7 @@ from ...schemas.dev.harness import (
     PluginFileResponse, PluginFileSaveResponse, PublishedResponse, PublishedToggleResponse,
     PublishedDeleteResponse, PublishedFileResponse, PublishedFileSaveResponse,
     ConstitutionsResponse, ConstitutionToggleResponse, LocalPluginsResponse,
+    ConstitutionFileResponse, ConstitutionFileSaveResponse,
     AssetsResponse, AssetActionResponse,
 )
 
@@ -285,6 +286,59 @@ async def dev_harness_constitution_toggle(slug: str, body: ConstitutionToggleBod
         scope="dev", actor="owner",
         meta={"scope": body.scope, "slug": slug, "enabled": body.enabled})
     return {"ok": True, "slug": slug, "scope": body.scope, **res}
+
+
+# --- Constitution edit: raw-file GET/PUT (frontmatter intact) ---------------------------------
+def _resolve_constitution_file(scope: str, slug: str, context_id: str) -> Path:
+    """The on-disk `.md` for one constitution, by (scope, slug). Universal lives under
+    `constitution/<mode>/`; a host's local under `local-harness/<ctx>/<mode>/constitution/`. Matches
+    on the item's slug (frontmatter `name` or filename stem), not a bare `<slug>.md` guess."""
+    from ....core.operational import read_constitution_dir
+    from ....runtime.config import CONSTITUTION_DIR, LOCAL_HARNESS_DIR
+    if scope.startswith("universal_"):
+        mode = scope.split("_", 1)[1]
+        home, origin = CONSTITUTION_DIR / mode, "universal"
+    elif scope.startswith("repo_"):
+        mode = scope.split("_", 1)[1]
+        home, origin = LOCAL_HARNESS_DIR / context_id / mode / "constitution", "repo"
+    else:
+        raise HTTPException(status_code=400, detail=f"scope '{scope}' is not editable")
+    for it in read_constitution_dir(home, origin=origin):
+        if it["slug"] == slug:
+            return Path(it["path"])
+    raise HTTPException(status_code=404, detail=f"constitution '{slug}' not found in scope '{scope}'")
+
+
+@router.get("/dev/harness/constitution-file", response_model=ConstitutionFileResponse)
+async def dev_harness_constitution_file(slug: str, scope: str, context_id: str = "global") -> dict:
+    """The raw markdown (frontmatter intact) of one constitution — the popup's edit source. The
+    catalog GET returns only the stripped body + description, so editing pulls the full file here."""
+    p = _resolve_constitution_file(scope, slug, context_id)
+    return {"slug": slug, "scope": scope, "path": str(p), "content": p.read_text()}
+
+
+class ConstitutionFileBody(BaseModel):
+    slug: str
+    scope: str                       # universal_dev | repo_dev (| _core)
+    content: str
+    context_id: str = "global"
+
+
+@router.put("/dev/harness/constitution-file", response_model=ConstitutionFileSaveResponse)
+async def dev_harness_constitution_file_save(body: ConstitutionFileBody,
+                                             dev_store: DevStore = Depends(get_dev_store)) -> dict:
+    """Save edits to one constitution file (the popup's edit mode) — the full raw markdown, frontmatter
+    kept so `enabled`/`description` survive. Takes effect on the next dev turn (constitutions are read
+    per-turn); no daemon restart needed."""
+    p = _resolve_constitution_file(body.scope, body.slug, body.context_id)
+    if not (body.content or "").strip():
+        raise HTTPException(status_code=400, detail="content is empty")
+    p.write_text(body.content)
+    log.info("saved constitution '%s' (%s)", body.slug, body.scope)
+    dev_store.log_event(
+        body.context_id, "harness.edited", f"Edited constitution '{body.slug}'",
+        scope="dev", actor="owner", meta={"scope": body.scope, "slug": body.slug})
+    return {"ok": True, "slug": body.slug, "scope": body.scope}
 
 
 # --- asset pool (per-repo opt-in constitutional knowledge) ------------------------------------

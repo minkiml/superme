@@ -6,7 +6,7 @@ import {
 import Modal from '@/ui/Modal'
 import Markdown from '@/ui/Markdown'
 import { RepoIcon } from '@/lib/repoIcons'
-import { featureColor } from '@/lib/palette'
+import { featureColor, featureLabel } from '@/lib/palette'
 import { fmtLocal, fmtTokens, fmtModel, fmtDuration } from '@/lib/format'
 import { getRunTrace, type Run, type RunEvent } from '@/lib/api'
 
@@ -80,7 +80,7 @@ export default function RunTraceModal({
           )}
           <span className="text-sm font-medium text-fg">{meta.label}</span>
           <span className="rounded px-1.5 py-0.5 text-[11px] font-medium" style={{ color: featureColor(run.feature), backgroundColor: 'rgb(var(--c-hover))' }}>
-            {run.feature}
+            {featureLabel(run.feature)}
           </span>
           <span className="text-[11px] text-faint">{run.mode}</span>
           <button onClick={onClose} className="ml-auto rounded p-1 text-muted hover:bg-hover hover:text-fg">

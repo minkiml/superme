@@ -28,8 +28,9 @@ export function readSession(id: string, contextId = 'global'): Promise<SessionDe
   return getJSON(`/api/sessions/${q(id)}?context_id=${q(contextId)}`)
 }
 
-// Remove a session. `purge: false` (default) = forget — drop from the list, keep the transcript on
-// disk. `purge: true` = disk-level delete — also remove the transcript JSONL (irreversible).
-export function deleteSession(id: string, contextId = 'global', purge = false): Promise<void> {
-  return sendJSON(`/api/sessions/${q(id)}?context_id=${q(contextId)}&purge=${purge}`, 'DELETE')
+// Delete a session — one tier only (session-deletion-trace-model): a hard delete of its row + its
+// transcript JSONL from disk (irreversible; it can't be reworked). Its run + token trace is
+// PRESERVED server-side and labeled `session_fate='deleted'`.
+export function deleteSession(id: string, contextId = 'global'): Promise<void> {
+  return sendJSON(`/api/sessions/${q(id)}?context_id=${q(contextId)}`, 'DELETE')
 }

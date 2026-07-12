@@ -24,6 +24,9 @@ class RunRow(BaseModel):
     ctx_pct: int | None = None
     started_at: str
     ended_at: str | None = None
+    # NULL while the origin session is live; 'deleted' / 'retired' once it's hard-deleted
+    # (session-deletion-trace-model) — the run + its trace are preserved, this labels the orphan.
+    session_fate: str | None = None
 
 
 class SystemResponse(BaseModel):

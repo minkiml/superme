@@ -19,7 +19,7 @@ advancing the phase is the owner's gate. Produce two artifacts always, a third o
 ## 1. Locate the item
 
 Resolve `work-items/<id>/` from the argument, the bound session, or the owner's message. Read `item.md`
-(intent + frontmatter) and skim `artifacts/`. For prior activity, call `dev_log` with this `item_id`.
+(intent + frontmatter) and skim `artifacts/`. For prior activity, call `read_dev_log` with this `item_id`.
 If the item is **not** in `plan_design`, stop — it's past the planning gate; say so. *Done when:* you
 understand the item's intent.
 

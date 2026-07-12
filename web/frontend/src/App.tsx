@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Radar, Layers, Activity, SlidersHorizontal, MessageSquareText } from 'lucide-react'
+import { Radar, Layers, Activity, SlidersHorizontal, MessageSquareText, Boxes } from 'lucide-react'
 import TopBar from '@/features/shell/TopBar'
 import GlobalStrip from '@/features/shell/GlobalStrip'
 import NavColumn, { type NavRow } from '@/features/shell/NavColumn'
@@ -14,6 +14,7 @@ import CoreDashboard from '@/features/core/CoreDashboard'
 import Foundations from '@/features/foundations/Foundations'
 import GlobalActivity from '@/features/activity/GlobalActivity'
 import QuickConfig from '@/features/config/QuickConfig'
+import Internals from '@/features/internals/Internals'
 import ChatPanel, { type DevBinding } from '@/features/chat/ChatPanel'
 import ConnectModal from '@/features/shell/ConnectModal'
 import { GLOBAL, type ContextRef } from '@/lib/contexts'
@@ -26,6 +27,7 @@ const NAV: NavRow[] = [
   { id: 'foundations', label: 'Foundations', icon: Layers },
   { id: 'activity', label: 'Activity', icon: Activity },
   { id: 'config', label: 'Quick config', icon: SlidersHorizontal },
+  { id: 'internals', label: 'Internals', icon: Boxes }, // TEMPORARY internals inventory — deletable
 ]
 
 // The renovated cockpit: full-width top bar + global stats strip, then a row of
@@ -75,6 +77,7 @@ export default function App() {
     if (active === 'foundations') return <Foundations />
     if (active === 'activity') return <GlobalActivity stats={stats} />
     if (active === 'config') return <QuickConfig stats={stats} />
+    if (active === 'internals') return <Internals />
     return <Nexus stats={stats} selectedId={selectedId} onSelectRepo={setSelectedId} onConnect={() => setConnecting(true)} />
   }
 
@@ -138,8 +141,6 @@ export default function App() {
             binding={binding && binding.contextId === chatContext && chatMode === 'dev' ? binding : null}
             onUnbind={() => setBinding(null)}
             onBindingSession={(sid) => setBinding((b) => (b ? { ...b, sessionId: sid } : b))}
-            modelOverride={chatRepo?.modelOverride ?? null}
-            effortOverride={chatRepo?.effortOverride ?? null}
             seedPrompt={seedPrompt}
             onSeedConsumed={() => setSeedPrompt(null)}
           />

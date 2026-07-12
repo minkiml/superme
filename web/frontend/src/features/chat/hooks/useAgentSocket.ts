@@ -128,16 +128,19 @@ export function useAgentSocket(contextId: string, mode: 'core' | 'dev', handlers
   function send(
     prompt: string,
     resume: string | null,
-    opts?: { mode?: 'core' | 'dev'; workItemId?: string },
+    opts?: { mode?: 'core' | 'dev'; workItemId?: string; model?: string | null; effort?: string | null },
   ): boolean {
     const ws = wsRef.current
     if (busy || !ws || ws.readyState !== WebSocket.OPEN) return false
+    // model/effort are the SESSION runtime override (the composer picker) — sent per-turn; they never
+    // persist a default. null = fall to the server precedence (work-item → repo → system).
     const frame: TurnFrame = {
       type: 'turn',
       prompt,
       context_id: contextId,
       resume,
-      model: null,
+      model: opts?.model ?? null,
+      effort: opts?.effort ?? null,
       mode: opts?.mode ?? 'core',
       work_item_id: opts?.workItemId ?? null,
     }

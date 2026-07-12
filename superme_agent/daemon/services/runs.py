@@ -208,9 +208,10 @@ async def _run_headless_plan(ctx, context_id: str, item_id: str, item_dir: Path,
                         _spine.stamp_session_item(ev.session_id, item_id)
                     except Exception:
                         log.exception("headless plan: failed to persist session to %s", item_id)
-                    # The replaced thread is now stale — purge it so the picker stays clean.
+                    # The replaced thread is superseded — delete it so the picker stays clean; its
+                    # run trace is preserved + labeled 'retired'.
                     if prev_session and prev_session != ev.session_id:
-                        _sessions.purge(ctx, prev_session)
+                        _sessions.delete(ctx, prev_session, cause="retired")
             elif isinstance(ev, Init):
                 _cache_slash(ctx.id, ev.slash_commands)
             # Per-run trail for the Activity trace: the reply text + each call, keyed to this run

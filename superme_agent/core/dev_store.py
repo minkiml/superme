@@ -378,12 +378,9 @@ class DevStore:
         mine.sort(key=lambda e: (e.get("created_at") or "", e.get("id") or 0))
         return mine[:limit]
 
-    def delete_events(self, context_id: str, item_id: str) -> int:
-        """Drop an item's events when the work-item is hard-deleted. Dev-native events
-        (item_id NULL) are never touched by this."""
-        with self._conn() as c:
-            cur = c.execute("DELETE FROM events WHERE context_id=? AND item_id=?", (context_id, item_id))
-            return cur.rowcount
+    # (delete_events removed — dev-activity events are historical trace and are never deleted; a
+    # deleted work-item keeps its events, and the item.drop marker records the deletion.
+    # session-deletion-trace-model.)
 
     def _row_event(self, r: sqlite3.Row) -> dict:
         d = dict(r)

@@ -214,6 +214,14 @@ export function toggleConstitution(
 ): Promise<{ ok: boolean; slug: string; scope: string; present: boolean; enabled: boolean }> {
   return sendJSON(`/api/dev/harness/constitutions/${q(slug)}`, 'PATCH', { enabled, scope, context_id: contextId })
 }
+// The raw markdown (frontmatter intact) of one constitution — the popup's edit source + save. The
+// catalog GET returns only the stripped body, so editing pulls/saves the whole file through here.
+export function getConstitutionFile(slug: string, scope: string, contextId = 'global'): Promise<{ slug: string; scope: string; path: string; content: string }> {
+  return getJSON(`/api/dev/harness/constitution-file?slug=${q(slug)}&scope=${q(scope)}&context_id=${q(contextId)}`)
+}
+export function saveConstitutionFile(slug: string, scope: string, content: string, contextId = 'global'): Promise<{ ok: boolean; slug: string; scope: string }> {
+  return sendJSON('/api/dev/harness/constitution-file', 'PUT', { slug, scope, content, context_id: contextId })
+}
 
 // Asset pool — opt-in constitutional knowledge, adopted + enabled PER REPO (no body copy).
 export type AssetItem = Schema<'AssetItem'>

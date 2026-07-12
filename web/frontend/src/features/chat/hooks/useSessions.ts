@@ -62,10 +62,11 @@ export function useSessions(contextId: string, mode: ChatMode = 'core') {
     else newChat()
   }
 
-  // Forget (default) keeps the transcript on disk; purge=true deletes it from disk too.
-  async function removeSession(id: string, purge = false) {
+  // One hard delete: drops the session row + its transcript from disk (its run trace is preserved
+  // server-side). If the deleted session is the one open here, fall back to a fresh chat.
+  async function removeSession(id: string) {
     try {
-      await deleteSession(id, contextId, purge)
+      await deleteSession(id, contextId)
     } catch {
       /* ignore */
     }

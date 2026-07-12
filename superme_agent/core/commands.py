@@ -7,13 +7,15 @@ place, so web and Slack behave identically once Slack becomes a daemon client (B
 
 `handle()` returns a reply string if it owned the command (the surface shows it, no
 agent turn runs); it returns None for anything else, which falls through to native
-dispatch. Per-context model overrides are persisted and applied to later turns.
+dispatch. `/model` is now informational only — the model/effort for a chat are a
+per-session runtime override set from the composer's picker (sent on the socket frame),
+never a persisted default (session-model-precedence).
 """
 
 import logging
 
 from .context import Context
-from .models import MODEL_TIERS, is_valid_model, model_family, normalize_model
+from .models import MODEL_TIERS
 from .spine import SystemSpine, get_spine
 
 log = logging.getLogger("superme-agent")
@@ -25,19 +27,12 @@ EFFORT_LEVELS = ("low", "medium", "high")
 
 
 class CommandLayer:
-    """Surface-neutral dispatch for non-native slash commands. Per-repo model overrides are
-    persisted in the system spine (the `model_override` table, keyed by repo id) — WI-3."""
+    """Surface-neutral dispatch for non-native slash commands. Today only `/model`, which is
+    informational (the picker sets a per-session runtime model/effort; repo/system defaults are
+    set in Quick config)."""
 
     def __init__(self, spine: SystemSpine | None = None):
         self._spine = spine or get_spine()
-
-    def model_override(self, ctx: Context) -> str | None:
-        """The model alias chosen for this context via /model, or None for default."""
-        return self._spine.get_model_override(ctx.id)
-
-    def effort_override(self, ctx: Context) -> str | None:
-        """The reasoning effort chosen for this context via /effort, or None for default."""
-        return self._spine.get_effort_override(ctx.id)
 
     def handle(self, ctx: Context, prompt: str) -> str | None:
         """Run a shared command, or return None to let native dispatch handle it."""
@@ -45,38 +40,18 @@ class CommandLayer:
             return None
         name, _, arg = prompt[1:].partition(" ")
         if name.lower() == "model":
-            return self._model(ctx, arg.strip().lower())
+            return self._model(ctx)
         return None  # not ours — /compact, /clear, skills, … pass through natively
 
-    def _model(self, ctx: Context, arg: str) -> str:
-        """`/model` — set the model and (optionally) the reasoning effort together:
-        `/model <opus|sonnet|haiku> [low|medium|high]`. Either token may be `reset`/`default` to
-        clear that override. Effort is folded in here so the chat has one picker, not two."""
+    def _model(self, ctx: Context) -> str:
+        """`/model` — informational only. The chat model + effort are set from the composer's model
+        picker and apply to THIS session as a runtime override (sent per-turn on the socket frame);
+        they NEVER change a persisted default. The repo default and system default are set in Quick
+        config. Kept as an intercepted command so a typed `/model` gets this pointer instead of
+        silently writing a persisted override (session-model-precedence)."""
         mopts, eopts = " | ".join(MODEL_ALIASES), " | ".join(EFFORT_LEVELS)
-        parts = arg.split()
-        marg = parts[0] if parts else ""
-        earg = parts[1] if len(parts) > 1 else ""
-        if not marg or marg in ("show", "status", "?"):
-            cur, cure = self._spine.get_model_override(ctx.id), self._spine.get_effort_override(ctx.id)
-            return (f"Model: **{cur or 'default'}**, effort: **{cure or 'default'}**. "
-                    f"Set with `/model <{mopts}> [{eopts}]`.")
-        # Model half (required token).
-        msgs: list[str] = []
-        if marg in ("reset", "default", "clear"):
-            self._spine.set_model_override(ctx.id, None); msgs.append("Model **default**")
-        elif is_valid_model(marg):
-            # Store the TIER ALIAS (`sonnet`) — the canonical form; the concrete latest is resolved at
-            # consumption (agent_service normalizes), so the pick auto-tracks a MODEL_TIERS bump.
-            alias = model_family(marg) or normalize_model(marg)
-            self._spine.set_model_override(ctx.id, alias); msgs.append(f"Model **{alias}**")
-        else:
-            return f"Unknown model `{marg}`. Choose one of: {mopts}."
-        # Effort half (optional token).
-        if earg:
-            if earg in ("reset", "default", "clear"):
-                self._spine.set_effort_override(ctx.id, None); msgs.append("effort **default**")
-            elif earg in EFFORT_LEVELS:
-                self._spine.set_effort_override(ctx.id, earg); msgs.append(f"effort **{earg}**")
-            else:
-                msgs.append(f"(ignored unknown effort `{earg}`)")
-        return ", ".join(msgs) + " for this session."
+        repo_default = self._spine.get_model_override(ctx.id)
+        return (f"Set the model for **this chat** with the model picker next to the composer — it "
+                f"applies to this session only (never the repo default). This repo's default is "
+                f"**{repo_default or 'the system default'}**; change repo/system defaults in Quick "
+                f"config. Models: {mopts} · effort: {eopts}.")

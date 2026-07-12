@@ -13,7 +13,7 @@ author the ticket; you never start the work itself.
 
 ## Step 1 - Check the Item Inbox first
 
-Call `list_inbox` and scan the open items for one that already covers this work (same target + intent).
+Call `read_inbox` and scan the open items for one that already covers this work (same target + intent).
 
 - **No match** → it's a new ticket → step 2.
 - **Match, already captures what we discussed** → do NOT write. Reference it and stop:
@@ -43,7 +43,7 @@ Then call `create_inbox_item(title, body, kind)`.
 
 ## Step 3 - Augment (existing item)
 
-You reach here when `list_inbox` matched an item that covers this work but is MISSING something this
+You reach here when `read_inbox` matched an item that covers this work but is MISSING something this
 discussion just added. Never re-file it and never edit its existing text.
 
 1. **Isolate what's genuinely new** — the specific facet(s) the existing item doesn't already state
@@ -72,7 +72,7 @@ genuinely distinct, unrelated pieces of work.
 
 ## Examples
 
-**Create.** Discussion concludes the run-trace header should show a status pill. You call `list_inbox`
+**Create.** Discussion concludes the run-trace header should show a status pill. You call `read_inbox`
 — nothing matches — so it's a new ticket:
 
 - title: `Status pill on run trace header in Activity dashboard`
@@ -87,7 +87,7 @@ genuinely distinct, unrelated pieces of work.
   ```
 - confirm: `Filed inbox item #58 — "Status pill on run trace header in Activity dashboard". In your Item Inbox to review & push into a work-item.`
 
-**Augment.** Later, a discussion adds that the pill should also show elapsed duration. `list_inbox`
+**Augment.** Later, a discussion adds that the pill should also show elapsed duration. `read_inbox`
 now matches item #58 — which doesn't mention duration — so you append that one facet instead of filing
 a duplicate:
 
@@ -96,7 +96,7 @@ a duplicate:
 
 ## Common pitfalls
 
-1. **Skipping the Inbox check** — always `list_inbox` first; augment an existing item, don't re-file it.
+1. **Skipping the Inbox check** — always `read_inbox` first; augment an existing item, don't re-file it.
 2. **Dumping the transcript** — synthesize; the body is conclusions + on-point context, not the chat.
 3. **Inventing** — include only what was actually discussed.
 4. **Starting the work** — you author the ticket only; implementation happens later in its work-item.

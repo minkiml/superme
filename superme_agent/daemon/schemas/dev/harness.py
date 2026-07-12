@@ -91,6 +91,20 @@ class PluginFileSaveResponse(BaseModel):
     name: str
 
 
+class ConstitutionFileResponse(BaseModel):
+    """The raw markdown (frontmatter intact) of one constitution — the popup's edit source."""
+    slug: str
+    scope: str
+    path: str
+    content: str
+
+
+class ConstitutionFileSaveResponse(BaseModel):
+    ok: bool
+    slug: str
+    scope: str
+
+
 class PublishedRow(BaseModel):
     """One published LEARNED artifact, reconciled with live on-disk state."""
     proposal_id: int

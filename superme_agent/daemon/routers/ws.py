@@ -24,7 +24,7 @@ from ..protocol import (
 )
 from ..schemas.ws import TurnFrame, ApprovalResponseFrame
 from ..services.runs import (
-    DEFAULT_RUN_MODEL, _begin_run, _end_run, _bump_run_tokens, _log_artifact,
+    _begin_run, _end_run, _bump_run_tokens, _log_artifact,
     capture_prompt, capture_event,
 )
 from ...core import Init, Usage, Result, Status, TextDelta, scoped_writes_approve
@@ -144,16 +144,17 @@ async def ws_agent(ws: WebSocket) -> None:
                 await ws.send_json(result_frame(cmd_reply))
                 continue
 
-            # Model resolution, most-specific first: an explicit per-turn pick → this repo's
-            # persisted /model override → the system-wide default (Configure tab / system.yaml).
-            # None at the end = the host/CLI default.
-            model = msg.model or _commands.model_override(ctx) or _spine.effective_system_model()
+            # The bound work-item (if any): its configured model/effort feed resolution, and its
+            # folder sandboxes writes below. Empty dict when unbound. Read ONCE here.
+            item = ((_dev.read_work_item(ctx.internal_root / "dev", work_item_id) or {})
+                    if (work_item_id and ctx.internal_root) else {})
 
-            # Effort resolution mirrors model (per-turn → repo /effort override → system runtime →
-            # system.yaml), left nullable here so a bound work-item's own effort can fill below;
-            # the "medium" floor is applied last, just before the run.
-            effort = (msg.effort or _commands.effort_override(ctx)
-                      or _spine.get_system_effort() or _spine.system_config().default_effort)
+            # Model + effort resolved through the ONE precedence helper (session-model-precedence):
+            # per-turn/session pick (`msg.model` — the surface's runtime override; it NEVER persists
+            # to the repo default) → the work-item's configured model → this repo's default override
+            # → the system default. Effort mirrors it; the "medium" floor is applied at the run call.
+            model = _spine.effective_model(ctx.id, per_call=msg.model, item_model=item.get("model"))
+            effort = _spine.effective_effort(ctx.id, per_call=msg.effort, item_effort=item.get("effort"))
 
             # Run-lock: an item runs ONE agent at a time. If something is already working it
             # (a headless plan, or another bound turn), refuse rather than let two agents write
@@ -199,14 +200,10 @@ async def ws_agent(ws: WebSocket) -> None:
             # (PRD §4.10). Only the work-item folder is auto-write below.
             if work_item_id and ctx.internal_root:
                 item_dir = ctx.internal_root / "dev" / "work-items" / work_item_id
-                item = _dev.read_work_item(ctx.internal_root / "dev", work_item_id) or {}
-                # Auto-allow item-folder writes (autonomous planning within its own dir);
-                # anything else still defers to the surface approval.
+                # Auto-allow item-folder writes (autonomous planning within its own dir); anything
+                # else still defers to the surface approval. (`item` + `model`/`effort` were resolved
+                # above — the item's configured model already factored into `model`.)
                 turn_approve = scoped_writes_approve(item_dir, turn_approve)
-                # The item's configured model (frontmatter) drives its bound-chat turns too,
-                # unless the surface sent an explicit per-turn override.
-                model = model or item.get("model") or DEFAULT_RUN_MODEL
-                effort = effort or item.get("effort")
                 item_run_id = _begin_run(ctx, ctx.id, work_item_id, "chat", model, phase=item.get("phase"))
                 began_run = item_run_id is not None
                 session_append = _focus_block(work_item_id, item, item_dir)
@@ -223,9 +220,9 @@ async def ws_agent(ws: WebSocket) -> None:
             active_run_id = item_run_id if began_run else chat_run_id
             if active_run_id:
                 capture_prompt(ctx.id, prompt, run_id=active_run_id, item_id=work_item_id)
-            # Dev-mode turns get the dev MCP server: `dev_log` (read the activity log on demand) +
-            # the learning-pipeline tools (review_candidates / propose_memory). Capture is fully
-            # automatic — there is no chat-side capture tool; the idle + phase-advance sweeps own it.
+            # Dev-mode turns get the dev MCP server: the `read_*` reads (event log · inbox · learning
+            # pool) + the inbox itemize writes. The learning WRITE pens stay learning-run-only. Capture is
+            # fully automatic — there is no chat-side capture tool; the idle + phase-advance sweeps own it.
             # Folder-as-scope: absent in core mode. PRD §4.9.
             turn_mcp = (
                 {"dev": make_dev_mcp_server(_dev_store, ctx.id)}

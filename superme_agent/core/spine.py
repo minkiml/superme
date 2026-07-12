@@ -335,6 +335,11 @@ class SystemSpine:
                 # run open so a work-item's tokens can be accumulated per-phase. NULL for chat/headless
                 # (non-item) runs and for item runs opened before this column existed.
                 "phase": "TEXT",
+                # The fate of this run's origin session (session-deletion-trace-model): NULL while the
+                # session is live; 'deleted' (owner drop) or 'retired' (natural workflow end) once the
+                # session is hard-deleted. The RUN itself is never deleted — this labels the trace whose
+                # session is gone, so activity can show a "session deleted/retired" badge.
+                "session_fate": "TEXT",
             })
             c.execute("CREATE INDEX IF NOT EXISTS idx_run_guard ON run(repo_id, mode, feature, status)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_run_item ON run(repo_id, item_id)")
@@ -608,22 +613,26 @@ class SystemSpine:
             r = c.execute("SELECT id FROM session WHERE thread_ts=?", (thread_ts,)).fetchone()
             return r["id"] if r else None
 
-    def forget_session(self, session_id: str) -> bool:
-        """The SINGLE session-cascade (session-agent-lifecycle-prd): remove a session AND everything
-        keyed to it — its runs, their run_events + run_artifacts, and its sweep watermarks — so no
-        stale dead item is left dangling. KNOWLEDGE is never touched (general docs / work-items /
-        memory are repo/item-keyed, not session-keyed — operational ⟂ knowledge), so a session delete
-        keeps the value the work produced. Both callers use this; forget keeps the transcript FILE,
-        purge also removes it. Idempotent. Returns True if a session row existed."""
+    def delete_session_record(self, session_id: str, *, cause: str = "deleted") -> bool:
+        """The one db-layer session removal (session-deletion-trace-model). Hard-deletes the
+        session's resume STATE — the `session` row + its transient `sweep_watermark` — and LABELS the
+        trace it leaves behind. The session's runs and their run_events + run_artifacts are the
+        permanent activity + token record and are **preserved** (monitoring logs are never deleted):
+        each run is stamped `session_fate=cause` so the activity log can show its origin session is
+        gone and why. Any still-live run is closed out (`running→aborted`, the boot reconciler's
+        terminal status) so nothing lingers as a ghost. KNOWLEDGE is never touched (general docs /
+        work-items / memory are repo/item-keyed — operational ⟂ knowledge). Orphaned `session_id` on
+        a preserved run is harmless: no read path joins `session`, so orphaned runs still surface in
+        the activity log + token stats. `cause`: 'deleted' (owner drop) | 'retired' (natural workflow
+        end). Idempotent; returns True if a session row existed. (Transcript-FILE deletion lives in
+        SessionStore — the spine owns only the db.)"""
         if not session_id:
             return False
+        now = _now()
         with self._conn() as c:
-            run_ids = [r[0] for r in c.execute("SELECT id FROM run WHERE session_id=?", (session_id,))]
-            if run_ids:
-                ph = ",".join("?" * len(run_ids))
-                c.execute(f"DELETE FROM run_event WHERE run_id IN ({ph})", run_ids)
-                c.execute(f"DELETE FROM run_artifact WHERE run_id IN ({ph})", run_ids)
-                c.execute("DELETE FROM run WHERE session_id=?", (session_id,))
+            c.execute("UPDATE run SET status='aborted', ended_at=? WHERE session_id=? AND status='running'",
+                      (now, session_id))
+            c.execute("UPDATE run SET session_fate=? WHERE session_id=?", (cause, session_id))
             c.execute("DELETE FROM sweep_watermark WHERE session_id=?", (session_id,))
             cur = c.execute("DELETE FROM session WHERE id=?", (session_id,))
             return cur.rowcount > 0
@@ -852,12 +861,18 @@ class SystemSpine:
         """The per-item run-lock: True iff any run is in flight for this work-item."""
         return self.live_run(repo_id, item_id) is not None
 
-    def delete_item_runs(self, repo_id: str, item_id: str) -> int:
-        """Drop all run rows for a work-item (called when the item is hard-deleted)."""
+    def release_item_runs(self, repo_id: str, item_id: str) -> int:
+        """When a work-item is hard-deleted, close out any run still in flight for it (so it can't
+        linger as a ghost 'running') but KEEP every run row and its events/artifacts — they are the
+        permanent activity + token record and outlive the item (an orphaned item_id is harmless; no
+        read path joins a work-item table). Returns the number of live runs closed out.
+
+        (Was delete_item_runs, which wiped the whole trail — the same never-delete-logs violation as
+        the old session cascade; see delete_session_record.)"""
         with self._conn() as c:
-            c.execute("DELETE FROM run_artifact WHERE repo_id=? AND item_id=?", (repo_id, item_id))
-            c.execute("DELETE FROM run_event WHERE repo_id=? AND item_id=?", (repo_id, item_id))
-            cur = c.execute("DELETE FROM run WHERE repo_id=? AND item_id=?", (repo_id, item_id))
+            cur = c.execute(
+                "UPDATE run SET status='aborted', ended_at=? WHERE repo_id=? AND item_id=? AND status='running'",
+                (_now(), repo_id, item_id))
             return cur.rowcount
 
     # --- run artifacts (the tool / sub-agent / skill call-trail per work-item) ---
@@ -1227,6 +1242,20 @@ class SystemSpine:
         from .models import DEFAULT_MODEL, normalize_model
         return normalize_model(self.get_system_model() or self.system_config().default_model) or DEFAULT_MODEL
 
+    def effective_model(self, repo_id: str, *, per_call: str | None = None,
+                        item_model: str | None = None) -> str:
+        """THE model-precedence resolver — the ONE choke every interactive/plan run resolves through
+        so the tiers can't drift apart (session-model-precedence). Most-specific first:
+          per_call (an explicit per-turn/session pick — the surface's runtime override)
+            → item_model (a work-item's configured model, for its bound runs)
+            → this repo's persisted default (`model_override[repo_id]`, set only by repo config)
+            → the system default (which itself floors to DEFAULT_MODEL, so this never returns None).
+        Aliases are kept — the concrete latest is resolved at consumption (agent_service normalizes),
+        so a pick auto-tracks a MODEL_TIERS bump. `per_call` is the session tier: the surface holds it
+        (e.g. the chat's per-session model) and passes it in; it NEVER writes the repo default."""
+        return (per_call or item_model or self.get_model_override(repo_id)
+                or self.effective_system_model())
+
     # --- per-agent model (the autonomous background sub-agents; owner-tunable) ------------------
     # SOURCE OF TRUTH = each sub-agent's own `.md` frontmatter `model:` field (two-way sync with the
     # config UI). The daemon's orchestrator turn reads the SAME value via resolve_agent_model(), so
@@ -1401,9 +1430,14 @@ class SystemSpine:
         """System default effort: runtime override → YAML default → the built-in 'medium' floor."""
         return self.get_system_effort() or self.system_config().default_effort or self.DEFAULT_EFFORT
 
-    def effective_effort(self, repo_id: str) -> str:
-        """The effort a turn for `repo_id` should use: per-repo override → system default → 'medium'."""
-        return self.get_effort_override(repo_id) or self.effective_system_effort()
+    def effective_effort(self, repo_id: str, *, per_call: str | None = None,
+                         item_effort: str | None = None) -> str:
+        """The effort a turn should use — mirrors effective_model's precedence, most-specific first:
+        per_call (per-turn/session pick) → item_effort (a work-item's configured effort) → this
+        repo's override → the system default (which floors to 'medium'). Never None. Callers with no
+        session/item context just pass repo_id (→ repo → system → floor)."""
+        return (per_call or item_effort or self.get_effort_override(repo_id)
+                or self.effective_system_effort())
 
     # --- learning master switch (WI-8) -------------------------------------------
     def get_learning_enabled(self) -> bool:

@@ -31,8 +31,6 @@ export default function ChatPanel({
   onUnbind,
   onBindingSession,
   tag,
-  modelOverride,
-  effortOverride,
   seedPrompt,
   onSeedConsumed,
 }: {
@@ -46,8 +44,6 @@ export default function ChatPanel({
   onUnbind?: () => void
   onBindingSession?: (sessionId: string) => void
   tag?: { color: string; icon: string | null; isHub: boolean }
-  modelOverride?: string | null // the context's current /model selection (for the picker)
-  effortOverride?: string | null // the context's current /effort selection (for the picker)
   seedPrompt?: string | null // a one-shot message to send once (onboarding launch); parent clears it
   onSeedConsumed?: () => void
 }) {
@@ -55,6 +51,12 @@ export default function ChatPanel({
   const [input, setInput] = useState('')
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [confirmId, setConfirmId] = useState<string | null>(null) // session pending "forget"
+  // The per-session model/effort runtime override (the composer picker). Held here and sent per-turn
+  // as msg.model / msg.effort — it NEVER writes a persisted default. Model re-derives from the
+  // session's last run on open (session-model-precedence); effort resets per session (runs don't
+  // record effort). null = follow the server precedence (work-item → repo → system).
+  const [sessionModel, setSessionModel] = useState<string | null>(null)
+  const [sessionEffort, setSessionEffort] = useState<string | null>(null)
 
   const sessions = useSessions(contextId, mode)
   const socket = useAgentSocket(contextId, mode, {
@@ -129,8 +131,10 @@ export default function ChatPanel({
   // it shows the model instead of "history". Only OVERWRITES on a found run — never clears here, so a
   // freshly-finished live turn's meta (or a brand-new session mid-turn) is left intact.
   useEffect(() => {
+    setSessionEffort(null)                     // effort isn't re-derivable from a run → reset per session
     const id = sessions.activeId
-    if (!id) return
+    if (!id) { setSessionModel(null); return } // new chat → follow the server default
+    setSessionModel(null)                      // default until this session's last run seeds it
     let alive = true
     getRuns(contextId)
       .then(({ live, history }) => {
@@ -139,6 +143,7 @@ export default function ChatPanel({
         if (!runs.length) return
         const last = runs.reduce((a, b) => (Date.parse(b.started_at) > Date.parse(a.started_at) ? b : a))
         socket.seedMeta({ model: last.model ?? null, pct: last.ctx_pct ?? null, window: null })
+        setSessionModel(last.model ?? null)    // re-apply the session's last model (session-model-precedence)
       })
       .catch(() => {})
     return () => { alive = false }
@@ -148,17 +153,13 @@ export default function ChatPanel({
   function send() {
     const text = input
     if (!text.trim()) return
-    // Carry the chat mode; a card binding also tags the work-item so the daemon persists
-    // the session to it. A general dev chat (no binding) sends mode=dev with no work-item.
-    if (!socket.send(text, sessions.sessionRef.current, { mode, workItemId: binding?.workItemId })) return
+    // Carry the chat mode + the per-session model/effort override; a card binding also tags the
+    // work-item so the daemon persists the session to it. A general dev chat (no binding) sends
+    // mode=dev with no work-item.
+    if (!socket.send(text, sessions.sessionRef.current,
+                     { mode, workItemId: binding?.workItemId, model: sessionModel, effort: sessionEffort })) return
     sessions.appendMessage({ role: 'you', text })
     setInput('')
-  }
-
-  // Send an exact command (e.g. the model picker's `/model opus`) without touching the input box.
-  function sendCommand(text: string) {
-    if (!socket.send(text, sessions.sessionRef.current, { mode, workItemId: binding?.workItemId })) return
-    sessions.appendMessage({ role: 'you', text })
   }
 
   // One-shot seed (onboarding launch): send the kickoff once the socket is ready, then tell the parent
@@ -260,9 +261,14 @@ export default function ChatPanel({
         commands={socket.commands}
         ctxLabel={ctxLabel}
         onPaletteOpen={socket.refreshCommands}
-        modelOverride={modelOverride}
-        effortOverride={effortOverride}
-        onSelectModel={(model, effort) => sendCommand(`/model ${model} ${effort}`)}
+        modelOverride={sessionModel}
+        effortOverride={sessionEffort}
+        onSelectModel={(model, effort) => {
+          // A pure FE state change — the session's runtime model/effort, sent on the next turn's
+          // frame. 'reset' clears back to the server default. NEVER writes a persisted default.
+          setSessionModel(model === 'reset' ? null : model)
+          setSessionEffort(effort === 'reset' ? null : effort)
+        }}
       />
 
       {drawerOpen && (
@@ -279,24 +285,18 @@ export default function ChatPanel({
 
       {confirmId && (
         <ConfirmDialog
-          title="Remove this session?"
+          title="Delete this session?"
           body={
             <>
-              {confirmTitle ? <span className="text-fg">“{confirmTitle}”</span> : 'This session'}:{' '}
-              <span className="text-fg">Forget</span> removes it from your list but keeps the transcript on
-              disk. <span className="text-fg">Delete from disk</span> also erases the transcript —
-              permanent, no recovery.
+              {confirmTitle ? <span className="text-fg">“{confirmTitle}”</span> : 'This session'} will be
+              permanently deleted — its transcript is erased and it can’t be reworked. Its activity &amp;
+              token history is kept.
             </>
           }
-          secondaryLabel="Forget"
-          onSecondary={() => {
-            sessions.removeSession(confirmId, false)
-            setConfirmId(null)
-          }}
-          confirmLabel="Delete from disk"
+          confirmLabel="Delete"
           onCancel={() => setConfirmId(null)}
           onConfirm={() => {
-            sessions.removeSession(confirmId, true)
+            sessions.removeSession(confirmId)
             setConfirmId(null)
           }}
         />

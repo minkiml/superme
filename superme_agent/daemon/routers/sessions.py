@@ -43,16 +43,12 @@ async def session_read(session_id: str, context_id: str = "global",
 
 
 @router.delete("/sessions/{session_id}", response_model=SessionDeleteResponse)
-async def session_delete(session_id: str, context_id: str = "global", purge: bool = False,
+async def session_delete(session_id: str, context_id: str = "global",
                          sessions: SessionStore = Depends(get_sessions)) -> dict:
-    """Remove a session. Two tiers (the owner chooses):
-      • forget (default) — drop it from the picker only; the transcript JSONL is LEFT on disk, so
-        it can still be referenced/recovered. This is the reversible "tidy my list" action.
-      • purge (`?purge=true`) — ALSO delete the transcript JSONL from disk. Irreversible disk-level
-        cleanup; leaves no trace (PRD §4.9 hygiene)."""
+    """Delete a session (session-deletion-trace-model). One tier only: a hard delete of the
+    session's resumable material — its spine row AND its transcript JSONL on disk — so it leaves the
+    picker and can't be reworked. Its runs + token trace are PRESERVED (never deleted) and stamped
+    `session_fate='deleted'` so the activity log shows the origin session is gone. Irreversible."""
     ctx = contexts.resolve(context_id)
-    if purge:
-        removed = sessions.purge(ctx, session_id)
-        return {"ok": True, "id": session_id, "purged": removed}
-    sessions.forget(ctx, session_id)
-    return {"ok": True, "id": session_id, "purged": False}
+    removed = sessions.delete(ctx, session_id, cause="deleted")
+    return {"ok": True, "id": session_id, "purged": removed}

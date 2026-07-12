@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { fmtTokens } from '@/lib/format'
-import { featureColor } from '@/lib/palette'
+import { featureColor, featureLabel } from '@/lib/palette'
 import Modal from '@/ui/Modal'
 import TabBar from '@/ui/TabBar'
 import Toggle from '@/ui/Toggle'
@@ -35,7 +35,7 @@ function FeatureBars({ tokens, full }: { tokens: TokenUsage; full: boolean }) {
   const base = tokens.global?.by_feature ?? {}
   const cr = tokens.global?.by_feature_cache_read ?? {}
   const rows: Row[] = Object.keys(base)
-    .map((f) => ({ key: f, label: f, value: (base[f] ?? 0) + (full ? cr[f] ?? 0 : 0), color: featureColor(f) }))
+    .map((f) => ({ key: f, label: featureLabel(f), value: (base[f] ?? 0) + (full ? cr[f] ?? 0 : 0), color: featureColor(f) }))
     .filter((r) => r.value > 0)
     .sort((a, b) => b.value - a.value)
   if (!rows.length) return <NoUsage />

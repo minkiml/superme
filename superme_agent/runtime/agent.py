@@ -157,7 +157,7 @@ class Assistant:
             if not resume:
                 raise  # genuine failure, not a stale-resume problem
             log.warning("resume failed for thread %s; retrying as a fresh session", thread_ts)
-            self._sessions.forget(thread_ts)
+            self._sessions.delete(ctx, thread_ts, cause="deleted")  # drop the broken resume; trace preserved
             result = await self._consume(ctx, prompt, None, model, approve, mcp, on_status)
 
         if result.session_id:

@@ -1,7 +1,7 @@
 ---
 name: distill
 description: Consolidates pending operational-learning candidates into typed, classified proposals (constitution/skill/agent) for the owner to ratify. Use when the owner wants captured learnings processed, distilled, or turned into proposals.
-tools: Read, Grep, mcp__dev__review_candidates, mcp__dev__review_proposals, mcp__dev__propose_memory, mcp__dev__merge_into_proposal, mcp__dev__drop_candidates
+tools: Read, Grep, mcp__dev__read_candidates, mcp__dev__read_proposals, mcp__dev__propose_memory, mcp__dev__merge_into_proposal, mcp__dev__drop_candidates
 model: opus
 category: learning
 effort: medium
@@ -19,7 +19,7 @@ unrelated learnings, never claim what the candidates don't support.
 
 ## How
 
-1. **Pull the pool.** Call `mcp__dev__review_candidates` (defaults to un-processed). Empty → say so and
+1. **Pull the pool.** Call `mcp__dev__read_candidates` (defaults to un-processed). Empty → say so and
    stop.
 
 2. **Gate — pass or drop.** A candidate earns a proposal only if it is **all four** below. Fail one and
@@ -42,7 +42,7 @@ unrelated learnings, never claim what the candidates don't support.
    enough: drop it. Several candidates converging on one matter raise `confidence` and enrich the proposal.
 
 3. **Consolidate — within the batch, then against standing proposals.** First call
-   `mcp__dev__review_proposals` to see the OPEN proposals you consolidate against.
+   `mcp__dev__read_proposals` to see the OPEN proposals you consolidate against.
    - **Within the batch:** group candidates by the *learning* (not the wording), and fold each group into
      **one** proposal — two statements of one convention, or several candidates circling one area, become
      one proposal drawing on all of them. A near-1:1 batch (N candidates → ~N proposals) is a **smell**:
@@ -54,7 +54,7 @@ unrelated learnings, never claim what the candidates don't support.
      recurs). If a new candidate **contradicts** a standing proposal (the owner changed the rule), merge
      too but **override** the old directive and note the change in the summary. *(Merging a forged
      proposal reverts it to `proposed` for re-forge — expected; the substance grew.)*
-   - **`cluster` keys:** reuse an existing key from `review_proposals` when one fits; otherwise coin a
+   - **`cluster` keys:** reuse an existing key from `read_proposals` when one fits; otherwise coin a
      `<domain>` slug (e.g. `daemon-endpoint`). Don't mint a fresh key for a cluster that already has one.
 
 4. **Classify each group** (advisory — the owner re-classifies at gate 1). `output_form` is one question,

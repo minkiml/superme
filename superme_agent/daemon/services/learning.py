@@ -35,7 +35,7 @@ FORGE_KIT = HARNESS_DIR / "forge_kit"   # the forge agent's lint + behavioural-e
 async def _run_headless_distill(ctx, context_id: str, run_id: int) -> None:
     """Drive one headless distill pass: a dev-mode turn whose only job is to invoke the `distill`
     sub-agent over the un-processed candidate pool. The sub-agent files proposals via the dev MCP
-    (review_candidates / propose_memory), so we inject that server for this turn. Fire-and-forget.
+    (read_candidates / propose_memory), so we inject that server for this turn. Fire-and-forget.
 
     The distill pass is a standalone, DISPOSABLE spine Run (started by the caller, finished here):
     it has NO session — its `ev.session_id` is deliberately NOT recorded, so it can't pollute the
@@ -409,10 +409,11 @@ SWEEP_POLL_SECONDS = 5 * 60      # how often the idle loop scans (the watermark 
 
 
 def _fire_sweep_bg(ctx, session_id: str | None, *, focus: str | None = None,
-                   then_purge: bool = False) -> None:
-    """Fire-and-forget a sweep so the triggering request returns immediately. `then_purge` chains a
-    transcript purge AFTER the sweep — for completion, where the transcript is reclaimed but the
-    sweep must read it first (so the purge can't happen synchronously in the endpoint)."""
+                   then_delete: str | None = None) -> None:
+    """Fire-and-forget a sweep so the triggering request returns immediately. `then_delete` (a
+    session_fate cause, e.g. 'retired') chains a full session delete AFTER the sweep — for
+    completion, where the transcript is reclaimed but the sweep must read it first (so the delete
+    can't happen synchronously in the endpoint). The run trace is preserved + labeled by the delete."""
     if not session_id:
         return
 
@@ -422,8 +423,8 @@ def _fire_sweep_bg(ctx, session_id: str | None, *, focus: str | None = None,
         except Exception:
             log.exception("background sweep failed for session %s", session_id)
         finally:
-            if then_purge:
-                _sessions.purge(ctx, session_id)
+            if then_delete:
+                _sessions.delete(ctx, session_id, cause=then_delete)
 
     asyncio.create_task(_job())
 

@@ -9,6 +9,7 @@
     "GET /dev/general",
     "GET /dev/general/{name}",
     "GET /dev/harness/assets",
+    "GET /dev/harness/constitution-file",
     "GET /dev/harness/constitutions",
     "GET /dev/harness/foundation",
     "GET /dev/harness/local-plugins",
@@ -39,6 +40,7 @@
     "GET /sessions/{session_id}",
     "GET /system",
     "GET /system/agent-models",
+    "GET /system/inventory",
     "GET /tokens",
     "GET /tokens/timeseries",
     "PATCH /dev/harness/assets/{slug}",
@@ -73,6 +75,7 @@
     "POST /system/model",
     "POST /system/sweep",
     "PUT /dev/general/{name}",
+    "PUT /dev/harness/constitution-file",
     "PUT /dev/harness/foundation",
     "PUT /dev/harness/plugin-file",
     "PUT /dev/harness/published/{proposal_id}/file",
@@ -713,6 +716,34 @@
           "title": "CategoryNode",
           "type": "object"
         },
+        "ColumnInfo": {
+          "properties": {
+            "name": {
+              "title": "Name",
+              "type": "string"
+            },
+            "notnull": {
+              "title": "Notnull",
+              "type": "boolean"
+            },
+            "pk": {
+              "title": "Pk",
+              "type": "boolean"
+            },
+            "type": {
+              "title": "Type",
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "type",
+            "pk",
+            "notnull"
+          ],
+          "title": "ColumnInfo",
+          "type": "object"
+        },
         "ConstitutionEntry": {
           "description": "One LEARNED universal constitution item (always-on rule) for a mode.",
           "properties": {
@@ -767,6 +798,86 @@
             "body"
           ],
           "title": "ConstitutionEntry",
+          "type": "object"
+        },
+        "ConstitutionFileBody": {
+          "properties": {
+            "content": {
+              "title": "Content",
+              "type": "string"
+            },
+            "context_id": {
+              "default": "global",
+              "title": "Context Id",
+              "type": "string"
+            },
+            "scope": {
+              "title": "Scope",
+              "type": "string"
+            },
+            "slug": {
+              "title": "Slug",
+              "type": "string"
+            }
+          },
+          "required": [
+            "slug",
+            "scope",
+            "content"
+          ],
+          "title": "ConstitutionFileBody",
+          "type": "object"
+        },
+        "ConstitutionFileResponse": {
+          "description": "The raw markdown (frontmatter intact) of one constitution \u2014 the popup's edit source.",
+          "properties": {
+            "content": {
+              "title": "Content",
+              "type": "string"
+            },
+            "path": {
+              "title": "Path",
+              "type": "string"
+            },
+            "scope": {
+              "title": "Scope",
+              "type": "string"
+            },
+            "slug": {
+              "title": "Slug",
+              "type": "string"
+            }
+          },
+          "required": [
+            "slug",
+            "scope",
+            "path",
+            "content"
+          ],
+          "title": "ConstitutionFileResponse",
+          "type": "object"
+        },
+        "ConstitutionFileSaveResponse": {
+          "properties": {
+            "ok": {
+              "title": "Ok",
+              "type": "boolean"
+            },
+            "scope": {
+              "title": "Scope",
+              "type": "string"
+            },
+            "slug": {
+              "title": "Slug",
+              "type": "string"
+            }
+          },
+          "required": [
+            "ok",
+            "slug",
+            "scope"
+          ],
+          "title": "ConstitutionFileSaveResponse",
           "type": "object"
         },
         "ConstitutionToggleBody": {
@@ -865,6 +976,37 @@
             "cwd"
           ],
           "title": "ContextResponse",
+          "type": "object"
+        },
+        "DatabaseInfo": {
+          "properties": {
+            "name": {
+              "title": "Name",
+              "type": "string"
+            },
+            "path": {
+              "title": "Path",
+              "type": "string"
+            },
+            "present": {
+              "title": "Present",
+              "type": "boolean"
+            },
+            "tables": {
+              "items": {
+                "$ref": "#/components/schemas/TableInfo"
+              },
+              "title": "Tables",
+              "type": "array"
+            }
+          },
+          "required": [
+            "name",
+            "path",
+            "present",
+            "tables"
+          ],
+          "title": "DatabaseInfo",
           "type": "object"
         },
         "DevLogEvent": {
@@ -2147,6 +2289,30 @@
             "content"
           ],
           "title": "InjectBody",
+          "type": "object"
+        },
+        "InventoryResponse": {
+          "properties": {
+            "databases": {
+              "items": {
+                "$ref": "#/components/schemas/DatabaseInfo"
+              },
+              "title": "Databases",
+              "type": "array"
+            },
+            "tools": {
+              "items": {
+                "$ref": "#/components/schemas/ToolInfo"
+              },
+              "title": "Tools",
+              "type": "array"
+            }
+          },
+          "required": [
+            "databases",
+            "tools"
+          ],
+          "title": "InventoryResponse",
           "type": "object"
         },
         "KnowledgeFileResponse": {
@@ -4306,6 +4472,17 @@
               "title": "Repo Id",
               "type": "string"
             },
+            "session_fate": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session Fate"
+            },
             "session_id": {
               "anyOf": [
                 {
@@ -4937,6 +5114,49 @@
           "title": "SystemResponse",
           "type": "object"
         },
+        "TableInfo": {
+          "properties": {
+            "columns": {
+              "items": {
+                "$ref": "#/components/schemas/ColumnInfo"
+              },
+              "title": "Columns",
+              "type": "array"
+            },
+            "name": {
+              "title": "Name",
+              "type": "string"
+            },
+            "rows": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Rows"
+            },
+            "sql": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sql"
+            }
+          },
+          "required": [
+            "name",
+            "columns"
+          ],
+          "title": "TableInfo",
+          "type": "object"
+        },
         "TaskItem": {
           "description": "One tasks.md checklist line.",
           "properties": {
@@ -5137,6 +5357,55 @@
             "global"
           ],
           "title": "TokenUsageResponse",
+          "type": "object"
+        },
+        "ToolInfo": {
+          "properties": {
+            "description": {
+              "title": "Description",
+              "type": "string"
+            },
+            "name": {
+              "title": "Name",
+              "type": "string"
+            },
+            "params": {
+              "items": {
+                "$ref": "#/components/schemas/ToolParam"
+              },
+              "title": "Params",
+              "type": "array"
+            },
+            "surface": {
+              "title": "Surface",
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "description",
+            "surface",
+            "params"
+          ],
+          "title": "ToolInfo",
+          "type": "object"
+        },
+        "ToolParam": {
+          "properties": {
+            "name": {
+              "title": "Name",
+              "type": "string"
+            },
+            "required": {
+              "title": "Required",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "name",
+            "required"
+          ],
+          "title": "ToolParam",
           "type": "object"
         },
         "ValidationError": {
@@ -6216,6 +6485,102 @@
             }
           },
           "summary": "Dev Harness Asset Action"
+        }
+      },
+      "/dev/harness/constitution-file": {
+        "get": {
+          "description": "The raw markdown (frontmatter intact) of one constitution \u2014 the popup's edit source. The\ncatalog GET returns only the stripped body + description, so editing pulls the full file here.",
+          "operationId": "dev_harness_constitution_file_dev_harness_constitution_file_get",
+          "parameters": [
+            {
+              "in": "query",
+              "name": "slug",
+              "required": true,
+              "schema": {
+                "title": "Slug",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "scope",
+              "required": true,
+              "schema": {
+                "title": "Scope",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "default": "global",
+                "title": "Context Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ConstitutionFileResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Harness Constitution File"
+        },
+        "put": {
+          "description": "Save edits to one constitution file (the popup's edit mode) \u2014 the full raw markdown, frontmatter\nkept so `enabled`/`description` survive. Takes effect on the next dev turn (constitutions are read\nper-turn); no daemon restart needed.",
+          "operationId": "dev_harness_constitution_file_save_dev_harness_constitution_file_put",
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConstitutionFileBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ConstitutionFileSaveResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Harness Constitution File Save"
         }
       },
       "/dev/harness/constitutions": {
@@ -8912,7 +9277,7 @@
       },
       "/sessions/{session_id}": {
         "delete": {
-          "description": "Remove a session. Two tiers (the owner chooses):\n\u2022 forget (default) \u2014 drop it from the picker only; the transcript JSONL is LEFT on disk, so\n  it can still be referenced/recovered. This is the reversible \"tidy my list\" action.\n\u2022 purge (`?purge=true`) \u2014 ALSO delete the transcript JSONL from disk. Irreversible disk-level\n  cleanup; leaves no trace (PRD \u00a74.9 hygiene).",
+          "description": "Delete a session (session-deletion-trace-model). One tier only: a hard delete of the\nsession's resumable material \u2014 its spine row AND its transcript JSONL on disk \u2014 so it leaves the\npicker and can't be reworked. Its runs + token trace are PRESERVED (never deleted) and stamped\n`session_fate='deleted'` so the activity log shows the origin session is gone. Irreversible.",
           "operationId": "session_delete_sessions__session_id__delete",
           "parameters": [
             {
@@ -8932,16 +9297,6 @@
                 "default": "global",
                 "title": "Context Id",
                 "type": "string"
-              }
-            },
-            {
-              "in": "query",
-              "name": "purge",
-              "required": false,
-              "schema": {
-                "default": false,
-                "title": "Purge",
-                "type": "boolean"
               }
             }
           ],
@@ -9143,6 +9498,25 @@
             }
           },
           "summary": "Set System Effort"
+        }
+      },
+      "/system/inventory": {
+        "get": {
+          "description": "A live snapshot of every SuperMe SQLite table (columns + row counts) and every agent-facing\ntool (surface + params). Read-only; introspected fresh on each call so it can't go stale.",
+          "operationId": "system_inventory_system_inventory_get",
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/InventoryResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            }
+          },
+          "summary": "System Inventory"
         }
       },
       "/system/learning": {

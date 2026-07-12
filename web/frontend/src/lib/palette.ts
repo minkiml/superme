@@ -30,14 +30,27 @@ export function colorFor(key: string): string {
 // family — NO blue and NO mint/green — so an operation bar never reads as the dev (blue) or core
 // (mint) scope color they sit beside. Fallback for an unknown feature stays a hashed hue.
 const FEATURE: Record<string, string> = {
-  sweep: '#fbbf24',   // amber
-  plan: '#a78bfa',    // violet
-  distill: '#d946ef', // fuchsia
-  write: '#f97316',   // orange
-  chat: '#fb7185',    // rose
-  design: '#f472b6',  // pink
+  sweep: '#fbbf24', capture: '#fbbf24',   // amber (sweep = capture agent)
+  plan: '#a78bfa',                        // violet
+  distill: '#d946ef',                     // fuchsia
+  write: '#f97316', forge: '#f97316',     // orange (write = forge agent)
+  chat: '#fb7185',                        // rose
+  design: '#f472b6',                      // pink
 }
 
 export function featureColor(feature: string): string {
   return FEATURE[feature] ?? colorFor(feature)
+}
+
+// Runs are stamped with the canonical feature key (`sweep`, `write`), but the owner-facing
+// vocabulary is the agent name (`capture`, `forge`) shown everywhere else (Quick config, skills,
+// agent .md). Map key → display label so the Activity chips read consistently. Unknown keys pass
+// through unchanged.
+const FEATURE_LABEL: Record<string, string> = {
+  sweep: 'capture',
+  write: 'forge',
+}
+
+export function featureLabel(feature: string): string {
+  return FEATURE_LABEL[feature] ?? feature
 }

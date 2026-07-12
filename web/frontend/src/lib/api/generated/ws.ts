@@ -22,6 +22,7 @@ export interface TurnFrame {
   context_id?: string | null;
   resume?: string | null;
   model?: string | null;
+  effort?: string | null;
   mode?: string | null;
   work_item_id?: string | null;
 }

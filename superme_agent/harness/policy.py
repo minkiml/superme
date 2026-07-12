@@ -18,10 +18,14 @@ SAFE_TOOLS = {
     "mcp__superme__suggest_assets",
     # The agent's read-only Slack readers (in-process MCP tools).
     "mcp__slack__read_channel", "mcp__slack__read_thread",
-    # The dev agent's read-only activity-log reader (PRD §4.9).
-    "mcp__dev__dev_log",
+    # The dev agent's read-only dev event-log reader (PRD §4.9).
+    "mcp__dev__read_dev_log",
     # The dev agent's read-only inbox reader (context-model-spec §5) — scoped to its own queue.
-    "mcp__dev__list_inbox",
+    "mcp__dev__read_inbox",
+    # Read-only learning-pool readers (2026-07-11): candidate pool + standing OPEN proposals. Moved
+    # into the general dev set so any session can answer "what learning is pending?" — mutate nothing.
+    "mcp__dev__read_candidates",
+    "mcp__dev__read_proposals",
     # The SANCTIONED itemize writes (work-item-session-recognition-prd): create one inbox item from a
     # discussion, or APPEND new discussion onto an existing item (the dedup path). Auto-allowed so a
     # general session can ticket work without a prompt; the one exemption to the general-session
@@ -31,16 +35,13 @@ SAFE_TOOLS = {
     # Capture SWEEP (WI-8) — the `capture` sub-agent's pen; files a candidate row from a swept
     # conversation slice. Nothing is applied here (the owner gate is downstream).
     "mcp__dev__file_candidate",
-    # Memory PROCESSING (PRD §4.10.2) — read the candidate pool, file consolidated proposals.
+    # Memory PROCESSING (PRD §4.10.2) — file consolidated proposals from the candidate pool.
     # Still pre-gate: a proposal is a reversible draft awaiting the owner's accept/reject; the
     # apply step (which writes memory/ files) is what's actually gated, downstream.
-    "mcp__dev__review_candidates",
     "mcp__dev__propose_memory",
-    # Cross-run consolidation (2026-07-11): read the standing OPEN proposals and fold a recurring
-    # learning into the one that already covers it, instead of minting a parallel proposal. Pre-gate
-    # and DB-only — mutates un-ratified proposal rows (reverts a re-enriched draft to proposed for
-    # re-forge); no disk write, nothing applied.
-    "mcp__dev__review_proposals",
+    # Cross-run consolidation (2026-07-11): fold a recurring learning into the OPEN proposal that
+    # already covers it, instead of minting a parallel proposal. Pre-gate and DB-only — mutates
+    # un-ratified proposal rows (reverts a re-enriched draft to proposed for re-forge); nothing applied.
     "mcp__dev__merge_into_proposal",
     # Distill's gate (2026-07-10): permanently drop candidates that fail the four-test filter, so
     # noise never accretes in the pool. Pre-gate and self-contained — deletes only un-ratified

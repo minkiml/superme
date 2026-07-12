@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Activity, RefreshCw, Loader2, ChevronDown } from 'lucide-react'
-import { colorFor, featureColor } from '@/lib/palette'
+import { Activity, RefreshCw, Loader2, ChevronDown, Link2Off } from 'lucide-react'
+import { colorFor, featureColor, featureLabel } from '@/lib/palette'
 import { RepoIcon } from '@/lib/repoIcons'
 import { fmtTokens, fmtLocal, fmtModel, fmtDuration } from '@/lib/format'
 import { getRuns, type Run } from '@/lib/api'
@@ -148,12 +148,20 @@ function RunRow({ r, meta, last, onOpen }: { r: Run; meta: { label: string; colo
           />
         )}
         <span className="truncate text-[13px] text-fg" title={meta.label}>{meta.label}</span>
+        {r.session_fate && (
+          <span
+            className="shrink-0 text-faint"
+            title={`Origin session ${r.session_fate} — this run's trace is preserved`}
+          >
+            <Link2Off size={12} />
+          </span>
+        )}
       </span>
       <span
         className="justify-self-start rounded px-1.5 py-0.5 text-[11px] font-medium"
         style={{ color: featureColor(r.feature), backgroundColor: 'rgb(var(--c-hover))' }}
       >
-        {r.feature}
+        {featureLabel(r.feature)}
       </span>
       <span className="text-[11px] text-faint">{r.mode}</span>
       <span className="truncate text-[11px] text-muted" title={r.model ?? undefined}>{r.model ? fmtModel(r.model) : '—'}</span>

@@ -83,17 +83,19 @@ class SessionStore:
         self._spine.record_session(session_id, ctx.cwd, surface="web", mode=ctx.mode,
                                    repo_id=ctx.id)
 
-    def forget(self, ctx: Context, session_id: str) -> None:
-        """Drop a session from the spine (the transcript file is left untouched)."""
-        self._spine.forget_session(session_id)
+    def delete(self, ctx: Context, session_id: str, *, cause: str = "deleted") -> bool:
+        """The single session deletion (session-deletion-trace-model). Hard-deletes the session's
+        resumable material — its spine row + its transcript JSONL on disk — so it leaves the picker
+        and can't be reworked (deletion means "won't rework this conversation"). Its RUNS +
+        run_events + run_artifacts (the activity + token trace) are PRESERVED and stamped
+        `session_fate=cause` — 'deleted' (owner drop) · 'retired' (natural workflow end). Dev-activity
+        events and knowledge are untouched. Returns True if the transcript file was removed.
 
-    def purge(self, ctx: Context, session_id: str) -> bool:
-        """Hard-delete a session: drop it from the index AND remove its transcript JSONL from
-        disk. Used by work-item delete to leave no trace (keeps the disk clean across the
-        plan/design test loop). Returns True if the transcript file was removed."""
+        This is the ONLY deletion — the former forget (index-only) / purge (index+transcript) two-tier
+        is gone; every delete is a full hard delete now."""
         if not session_id:
             return False
-        self._spine.forget_session(session_id)
+        self._spine.delete_session_record(session_id, cause=cause)
         return self.discard_transcript(ctx, session_id)
 
     def discard_transcript(self, ctx: Context, session_id: str) -> bool:

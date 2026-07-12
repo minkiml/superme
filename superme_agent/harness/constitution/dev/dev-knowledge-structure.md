@@ -9,8 +9,8 @@ category: reference
 # Dev-knowledge structure
 
 Your **dev-knowledge root** holds `general/` (anchor docs) and `work-items/<id>/` (all work-items, live
-and completed). Two stores are **not files** — the **inbox** (`list_inbox`) and activity **log**
-(`dev_log`) live in the ops DB, reached by tool.
+and completed). Two stores are **not files** — the **inbox** (`read_inbox`) and activity **log**
+(`read_dev_log`) live in the ops DB, reached by tool.
 
 ## general/ — the anchor docs
 Your durable model of THIS project. A **cache of understanding, not an archive**: essential-only; long

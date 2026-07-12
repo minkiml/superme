@@ -183,11 +183,10 @@ export interface paths {
         post?: never;
         /**
          * Session Delete
-         * @description Remove a session. Two tiers (the owner chooses):
-         *     • forget (default) — drop it from the picker only; the transcript JSONL is LEFT on disk, so
-         *       it can still be referenced/recovered. This is the reversible "tidy my list" action.
-         *     • purge (`?purge=true`) — ALSO delete the transcript JSONL from disk. Irreversible disk-level
-         *       cleanup; leaves no trace (PRD §4.9 hygiene).
+         * @description Delete a session (session-deletion-trace-model). One tier only: a hard delete of the
+         *     session's resumable material — its spine row AND its transcript JSONL on disk — so it leaves the
+         *     picker and can't be reworked. Its runs + token trace are PRESERVED (never deleted) and stamped
+         *     `session_fate='deleted'` so the activity log shows the origin session is gone. Irreversible.
          */
         delete: operations["session_delete_sessions__session_id__delete"];
         options?: never;
@@ -3072,6 +3071,8 @@ export interface components {
             started_at: string;
             /** Ended At */
             ended_at?: string | null;
+            /** Session Fate */
+            session_fate?: string | null;
         };
         /** RunTraceResponse */
         RunTraceResponse: {
@@ -3961,7 +3962,6 @@ export interface operations {
         parameters: {
             query?: {
                 context_id?: string;
-                purge?: boolean;
             };
             header?: never;
             path: {
