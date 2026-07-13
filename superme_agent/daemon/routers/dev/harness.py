@@ -120,6 +120,7 @@ async def dev_harness_foundation() -> dict:
         for it in read_constitution_dir(CONSTITUTION_DIR / mode, origin="universal"):
             constitutions.append({
                 "mode": mode, "slug": it["slug"], "enabled": it["enabled"],
+                "foundational": it.get("foundational", False),
                 "title": it["slug"].replace("-", " "), "body": it["body"],
                 "source": it.get("source"), "created": it.get("created"),
             })
@@ -245,7 +246,8 @@ async def dev_harness_constitutions(context_id: str = "global") -> dict:
         for it in items:
             out.append({
                 "slug": it["slug"], "scope": scope, "mode": mode, "origin": it["origin"],
-                "enabled": it["enabled"], "title": it["slug"].replace("-", " "),
+                "enabled": it["enabled"], "foundational": it.get("foundational", False),
+                "title": it["slug"].replace("-", " "),
                 "description": it.get("description"), "body": it["body"],
                 "source": it.get("source"), "created": it.get("created"),
                 "updated": it.get("updated"),
@@ -273,6 +275,15 @@ async def dev_harness_constitution_toggle(slug: str, body: ConstitutionToggleBod
     from ....core import operational as ops
     if body.scope not in ("universal_dev", "repo_dev"):
         raise HTTPException(status_code=400, detail=f"scope '{body.scope}' is not manageable")
+    # A foundational constitution is pinned always-on — a charter consults it by name, and disabling
+    # would dangle that pull. Refuse to turn one off (enabling is a no-op but harmless).
+    if not body.enabled:
+        p = _resolve_constitution_file(body.scope, slug, body.context_id)
+        from ....core.operational import parse_frontmatter, _is_foundational
+        if _is_foundational(parse_frontmatter(p.read_text())[0]):
+            raise HTTPException(
+                status_code=409,
+                detail=f"'{slug}' is foundational (a charter consults it by name) — it can't be disabled.")
     repo_id = body.context_id if body.scope == "repo_dev" else None
     try:
         res = ops.set_published_enabled("constitution", body.scope, repo_id, slug, body.enabled)

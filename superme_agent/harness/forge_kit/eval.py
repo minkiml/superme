@@ -151,7 +151,7 @@ def _run_footprint(env_obj):
     is 99% cheap cache re-reads. It is neither the context the worker held nor a coherent
     'consumption'. So we report what's actually meaningful:
       • context — the working set the worker held PER TURN ≈ cumulative input ÷ turns (what 'the
-        context showed'; ~tens of k, matching the run's context_pct).
+        context showed'; ~tens of k, matching the run's ctx_pct).
       • output  — net NEW text generated across the run (small; the real product of the work).
       • turns   — how many agentic steps it took.
     Cost (total_cost_usd) and time remain the truest billed measures. `modelUsage` is the cumulative

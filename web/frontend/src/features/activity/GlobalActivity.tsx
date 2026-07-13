@@ -21,7 +21,13 @@ const COLS = 'grid grid-cols-[1.4fr_72px_48px_1fr_84px_64px_100px] items-center 
 // How long a run took (start→end). Live/unfinished runs have no end yet.
 const took = (r: Run) => (r.ended_at ? fmtDuration(Date.parse(r.ended_at) - Date.parse(r.started_at)) : '—')
 
-export default function GlobalActivity({ stats }: { stats: CommandStats }) {
+export default function GlobalActivity({
+  stats,
+  onDiagnose,
+}: {
+  stats: CommandStats
+  onDiagnose?: (run: Run, query: string) => void
+}) {
   const [runs, setRuns] = useState<Run[] | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -124,7 +130,20 @@ export default function GlobalActivity({ stats }: { stats: CommandStats }) {
         )}
       </div>
 
-      {openRun && <RunTraceModal run={openRun} meta={metaFor(openRun.repo_id)} onClose={() => setOpenRun(null)} />}
+      {openRun && (
+        <RunTraceModal
+          run={openRun}
+          meta={metaFor(openRun.repo_id)}
+          onClose={() => setOpenRun(null)}
+          onDiagnose={
+            // A diagnosis run is already a read-only investigation — offering to diagnose it
+            // recursively nests without adding signal, so suppress the affordance on those rows.
+            onDiagnose && openRun.feature !== 'diagnosis'
+              ? (query) => { onDiagnose(openRun, query); setOpenRun(null) }
+              : undefined
+          }
+        />
+      )}
     </div>
   )
 }

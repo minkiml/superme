@@ -5,6 +5,7 @@ export { getTree, readFile, writeFile, injectNote, type TreeNode } from './knowl
 export {
   listSessions,
   readSession,
+  renameSession,
   deleteSession,
   type SessionMeta,
   type ChatMode,

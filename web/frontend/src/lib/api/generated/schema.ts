@@ -176,7 +176,9 @@ export interface paths {
         };
         /**
          * Session Read
-         * @description One session's title + replayable bubble history.
+         * @description One session's title + its most recent `limit` replayable bubbles (older ones skipped). The
+         *     chat's "See more" grows `limit` in steps of 10 to reveal older messages; `limit<=0` = the whole
+         *     transcript. The agent always resumes with full server-side context regardless.
          */
         get: operations["session_read_sessions__session_id__get"];
         put?: never;
@@ -191,7 +193,12 @@ export interface paths {
         delete: operations["session_delete_sessions__session_id__delete"];
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Session Rename
+         * @description Set (or clear) a session's owner TITLE override. A blank title reverts to the transcript-
+         *     derived title. The override is stored on the spine session row and wins in list/read.
+         */
+        patch: operations["session_rename_sessions__session_id__patch"];
         trace?: never;
     };
     "/system": {
@@ -528,6 +535,27 @@ export interface paths {
          *     unchanged; an empty string clears it (falls back to the hashed-palette default / no icon).
          */
         post: operations["set_repo_meta_repos__repo_id__meta_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/system/inventory": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * System Inventory
+         * @description A live snapshot of every SuperMe SQLite table (columns + row counts) and every agent-facing
+         *     tool (surface + params). Read-only; introspected fresh on each call so it can't go stale.
+         */
+        get: operations["system_inventory_system_inventory_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -875,6 +903,33 @@ export interface paths {
          *     inert. Effective on the next dev turn.
          */
         patch: operations["dev_harness_constitution_toggle_dev_harness_constitutions__slug__patch"];
+        trace?: never;
+    };
+    "/dev/harness/constitution-file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Dev Harness Constitution File
+         * @description The raw markdown (frontmatter intact) of one constitution — the popup's edit source. The
+         *     catalog GET returns only the stripped body + description, so editing pulls the full file here.
+         */
+        get: operations["dev_harness_constitution_file_dev_harness_constitution_file_get"];
+        /**
+         * Dev Harness Constitution File Save
+         * @description Save edits to one constitution file (the popup's edit mode) — the full raw markdown, frontmatter
+         *     kept so `enabled`/`description` survive. Takes effect on the next dev turn (constitutions are read
+         *     per-turn); no daemon restart needed.
+         */
+        put: operations["dev_harness_constitution_file_save_dev_harness_constitution_file_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/dev/harness/assets": {
@@ -1552,7 +1607,8 @@ export interface components {
         };
         /**
          * ArtifactCall
-         * @description One row of a work-item's run call-trail (tool / sub-agent / skill invocation).
+         * @description One row of a work-item's run call-trail (tool / sub-agent / skill invocation, or its result).
+         *     `tool_id` pairs a `result` row back to its call (concurrent tools return out of order).
          */
         ArtifactCall: {
             /** Id */
@@ -1565,11 +1621,13 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "tool" | "subagent" | "skill" | "mcp";
+            kind: "tool" | "subagent" | "skill" | "mcp" | "result";
             /** Name */
             name: string;
             /** Description */
             description?: string | null;
+            /** Tool Id */
+            tool_id?: string | null;
             /** Created At */
             created_at: string;
         };
@@ -1739,6 +1797,17 @@ export interface components {
                 [key: string]: number;
             };
         };
+        /** ColumnInfo */
+        ColumnInfo: {
+            /** Name */
+            name: string;
+            /** Type */
+            type: string;
+            /** Pk */
+            pk: boolean;
+            /** Notnull */
+            notnull: boolean;
+        };
         /**
          * ConstitutionEntry
          * @description One LEARNED universal constitution item (always-on rule) for a mode.
@@ -1750,6 +1819,11 @@ export interface components {
             slug: string;
             /** Enabled */
             enabled: boolean;
+            /**
+             * Foundational
+             * @default false
+             */
+            foundational: boolean;
             /** Title */
             title: string;
             /** Body */
@@ -1758,6 +1832,43 @@ export interface components {
             source?: string | null;
             /** Created */
             created?: string | null;
+        };
+        /** ConstitutionFileBody */
+        ConstitutionFileBody: {
+            /** Slug */
+            slug: string;
+            /** Scope */
+            scope: string;
+            /** Content */
+            content: string;
+            /**
+             * Context Id
+             * @default global
+             */
+            context_id: string;
+        };
+        /**
+         * ConstitutionFileResponse
+         * @description The raw markdown (frontmatter intact) of one constitution — the popup's edit source.
+         */
+        ConstitutionFileResponse: {
+            /** Slug */
+            slug: string;
+            /** Scope */
+            scope: string;
+            /** Path */
+            path: string;
+            /** Content */
+            content: string;
+        };
+        /** ConstitutionFileSaveResponse */
+        ConstitutionFileSaveResponse: {
+            /** Ok */
+            ok: boolean;
+            /** Slug */
+            slug: string;
+            /** Scope */
+            scope: string;
         };
         /** ConstitutionToggleBody */
         ConstitutionToggleBody: {
@@ -1805,6 +1916,17 @@ export interface components {
             layer: string;
             /** Cwd */
             cwd: string;
+        };
+        /** DatabaseInfo */
+        DatabaseInfo: {
+            /** Name */
+            name: string;
+            /** Path */
+            path: string;
+            /** Present */
+            present: boolean;
+            /** Tables */
+            tables: components["schemas"]["TableInfo"][];
         };
         /**
          * DevLogEvent
@@ -2253,8 +2375,6 @@ export interface components {
             status: "open" | "pushed";
             /** Routed To */
             routed_to?: string | null;
-            /** Source */
-            source?: string | null;
             /** Created At */
             created_at: string;
             /** Updated At */
@@ -2283,6 +2403,13 @@ export interface components {
              * @default global
              */
             context_id: string;
+        };
+        /** InventoryResponse */
+        InventoryResponse: {
+            /** Databases */
+            databases: components["schemas"]["DatabaseInfo"][];
+            /** Tools */
+            tools: components["schemas"]["ToolInfo"][];
         };
         /** KnowledgeFileResponse */
         KnowledgeFileResponse: {
@@ -2413,6 +2540,11 @@ export interface components {
             origin: string;
             /** Enabled */
             enabled: boolean;
+            /**
+             * Foundational
+             * @default false
+             */
+            foundational: boolean;
             /** Title */
             title: string;
             /** Description */
@@ -2486,8 +2618,8 @@ export interface components {
             ok: boolean;
             /** Status */
             status: string;
-            /** Work Item Id */
-            work_item_id: string;
+            /** Id */
+            id: string;
             /** Model */
             model: string;
         };
@@ -3018,8 +3150,9 @@ export interface components {
         };
         /**
          * RunEventRow
-         * @description One entry of a run's event trail: a prompt, an assistant reply block, or a tool/skill/agent
-         *     call. `kind` ∈ prompt | reply | tool | skill | agent; `name` is the label, `description` the body.
+         * @description One entry of a run's event trail: a prompt, an assistant reply block, a tool/skill/agent call,
+         *     or that call's `result`. `kind` ∈ prompt | reply | tool | mcp | skill | agent | subagent | result;
+         *     `name` is the label, `description` the body; `tool_id` pairs a result back to its call.
          */
         RunEventRow: {
             /** Id */
@@ -3032,6 +3165,8 @@ export interface components {
             name: string;
             /** Description */
             description?: string | null;
+            /** Tool Id */
+            tool_id?: string | null;
             /** Created At */
             created_at: string;
         };
@@ -3161,6 +3296,28 @@ export interface components {
             truncated: boolean;
         };
         /**
+         * SessionRenameBody
+         * @description Owner rename of a session. `title` blank/empty ⇒ clear the override (revert to derived).
+         */
+        SessionRenameBody: {
+            /**
+             * Context Id
+             * @default global
+             */
+            context_id: string;
+            /** Title */
+            title?: string | null;
+        };
+        /** SessionRenameResponse */
+        SessionRenameResponse: {
+            /** Ok */
+            ok: boolean;
+            /** Id */
+            id: string;
+            /** Title */
+            title: string;
+        };
+        /**
          * SessionSummary
          * @description A session's picker entry. `item_id`/`item_title` are set when the session is stamped to a
          *     work-item (work-item-session-recognition-prd) — the chat rail derives its work-item indicator
@@ -3183,6 +3340,8 @@ export interface components {
             item_id?: string | null;
             /** Item Title */
             item_title?: string | null;
+            /** Kind */
+            kind?: string | null;
         };
         /**
          * SweepConfigBody
@@ -3292,6 +3451,17 @@ export interface components {
             running: number;
             /** Repos */
             repos: string[];
+        };
+        /** TableInfo */
+        TableInfo: {
+            /** Name */
+            name: string;
+            /** Columns */
+            columns: components["schemas"]["ColumnInfo"][];
+            /** Sql */
+            sql?: string | null;
+            /** Rows */
+            rows?: number | null;
         };
         /**
          * TaskItem
@@ -3462,6 +3632,24 @@ export interface components {
                 [key: string]: components["schemas"]["RepoTokens"];
             };
         };
+        /** ToolInfo */
+        ToolInfo: {
+            /** Name */
+            name: string;
+            /** Description */
+            description: string;
+            /** Surface */
+            surface: string;
+            /** Params */
+            params: components["schemas"]["ToolParam"][];
+        };
+        /** ToolParam */
+        ToolParam: {
+            /** Name */
+            name: string;
+            /** Required */
+            required: boolean;
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -3542,10 +3730,10 @@ export interface components {
             run_tokens?: number | null;
             /** Run Model */
             run_model?: string | null;
-            /** Run Context Pct */
-            run_context_pct?: number | null;
-            /** Context Pct */
-            context_pct?: number | null;
+            /** Run Ctx Pct */
+            run_ctx_pct?: number | null;
+            /** Ctx Pct */
+            ctx_pct?: number | null;
             tasks?: components["schemas"]["WorkItemTasks"] | null;
         } & {
             [key: string]: unknown;
@@ -3619,8 +3807,8 @@ export interface components {
             duration_ms?: number | null;
             /** Model */
             model?: string | null;
-            /** Context Pct */
-            context_pct?: number | null;
+            /** Ctx Pct */
+            ctx_pct?: number | null;
         };
         /** WorkItemModelResponse */
         WorkItemModelResponse: {
@@ -3929,6 +4117,7 @@ export interface operations {
         parameters: {
             query?: {
                 context_id?: string;
+                limit?: number;
             };
             header?: never;
             path: {
@@ -3978,6 +4167,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SessionDeleteResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    session_rename_sessions__session_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SessionRenameBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionRenameResponse"];
                 };
             };
             /** @description Validation Error */
@@ -4501,6 +4725,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    system_inventory_system_inventory_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InventoryResponse"];
                 };
             };
         };
@@ -5092,6 +5336,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ConstitutionToggleResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dev_harness_constitution_file_dev_harness_constitution_file_get: {
+        parameters: {
+            query: {
+                slug: string;
+                scope: string;
+                context_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConstitutionFileResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dev_harness_constitution_file_save_dev_harness_constitution_file_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConstitutionFileBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConstitutionFileSaveResponse"];
                 };
             };
             /** @description Validation Error */

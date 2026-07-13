@@ -1,13 +1,12 @@
 import { useEffect, useState } from 'react'
-import {
-  Loader2, X, Terminal, MessageSquareText, BookOpen, FolderSearch, Search, SquareTerminal,
-  FilePen, Bot, Globe, Sparkles, Wrench,
-} from 'lucide-react'
+import { Loader2, X, Terminal, MessageSquareText, Stethoscope, ArrowRight } from 'lucide-react'
 import Modal from '@/ui/Modal'
 import Markdown from '@/ui/Markdown'
 import { RepoIcon } from '@/lib/repoIcons'
 import { featureColor, featureLabel } from '@/lib/palette'
 import { fmtLocal, fmtTokens, fmtModel, fmtDuration } from '@/lib/format'
+import { pairTrace } from '@/lib/trace'
+import { TraceRows } from '@/features/dev/ExecutionTrace'
 import { getRunTrace, type Run, type RunEvent } from '@/lib/api'
 
 // Run trace — the popup for one Activity row. Two tabs (mirroring the work-item detail's
@@ -15,45 +14,26 @@ import { getRunTrace, type Run, type RunEvent } from '@/lib/api'
 // (the call-trail of tools / sub-agents / skills, same layout as the work-item Execution tab). Everything
 // is scoped to THIS run (not the whole session), so each row has its own thread — works for headless runs.
 
-// Icon + color per call, resolved by tool NAME first then by kind — mirrors WorkItemModal's map so the
-// Activity trace and the work-item Execution tab read identically.
-const CALL_STYLE: Record<string, { icon: typeof Terminal; color: string }> = {
-  read: { icon: BookOpen, color: '#60a5fa' },
-  glob: { icon: FolderSearch, color: '#a78bfa' },
-  grep: { icon: Search, color: '#fbbf24' },
-  bash: { icon: SquareTerminal, color: '#34d399' },
-  edit: { icon: FilePen, color: '#fb7185' },
-  write: { icon: FilePen, color: '#fb7185' },
-  agent: { icon: Bot, color: '#818cf8' },
-  task: { icon: Bot, color: '#818cf8' },
-  webfetch: { icon: Globe, color: '#22d3ee' },
-  websearch: { icon: Globe, color: '#22d3ee' },
-}
-const KIND_STYLE: Record<string, { icon: typeof Terminal; color: string }> = {
-  agent: { icon: Bot, color: '#818cf8' },
-  subagent: { icon: Bot, color: '#818cf8' }, // a spawned sub-agent (Task/Agent) — named by its type
-  skill: { icon: Sparkles, color: '#e0a35a' },
-  tool: { icon: Terminal, color: '#8b93a1' },
-}
-function callVisual(e: RunEvent) {
-  return CALL_STYLE[(e.name ?? '').toLowerCase()] ?? KIND_STYLE[e.kind] ?? KIND_STYLE.tool
-}
-
-const CALL_KINDS = new Set(['tool', 'skill', 'agent', 'subagent'])
 type Tab = 'trace' | 'conversation'
 
 export default function RunTraceModal({
   run,
   meta,
   onClose,
+  onDiagnose,
 }: {
   run: Run
   meta: { label: string; color: string; icon: string | null }
   onClose: () => void
+  // Launch a read-only diagnosis session pointed at THIS run (session-kinds-diagnose). Absent ⇒ the
+  // Diagnose affordance is hidden (e.g. surfaces with no chat rail to receive the session).
+  onDiagnose?: (query: string) => void
 }) {
   const [events, setEvents] = useState<RunEvent[] | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [tab, setTab] = useState<Tab>('conversation')
+  const [diagOpen, setDiagOpen] = useState(false) // the inline "what feels off?" prompt box
+  const [query, setQuery] = useState('')
 
   useEffect(() => {
     let alive = true
@@ -65,7 +45,7 @@ export default function RunTraceModal({
 
   const took = run.ended_at ? fmtDuration(Date.parse(run.ended_at) - Date.parse(run.started_at)) : '—'
   const isHub = run.repo_id === 'global'
-  const calls = (events ?? []).filter((e) => CALL_KINDS.has(e.kind))
+  const calls = pairTrace(events ?? []) // each tool call paired with its result (result absorbed as an expandable)
   const convo = (events ?? []).filter((e) => e.kind === 'prompt' || e.kind === 'reply')
 
   return (
@@ -83,10 +63,51 @@ export default function RunTraceModal({
             {featureLabel(run.feature)}
           </span>
           <span className="text-[11px] text-faint">{run.mode}</span>
-          <button onClick={onClose} className="ml-auto rounded p-1 text-muted hover:bg-hover hover:text-fg">
-            <X size={16} />
-          </button>
+          <div className="ml-auto flex items-center gap-2">
+            {onDiagnose && (
+              <button
+                onClick={() => setDiagOpen((v) => !v)}
+                title="Open a diagnosis session on this run"
+                className={`flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition ${
+                  diagOpen ? 'border-dev text-dev' : 'border-line text-muted hover:bg-hover hover:text-fg'
+                }`}
+              >
+                <Stethoscope size={13} /> Diagnose
+              </button>
+            )}
+            <button onClick={onClose} className="rounded p-1 text-muted hover:bg-hover hover:text-fg">
+              <X size={16} />
+            </button>
+          </div>
         </div>
+
+        {/* diagnosis launcher — a read-only diagnosis session, pointed at this run, seeded with the
+            owner's question. The daemon injects this run's trace so the session starts oriented. */}
+        {onDiagnose && diagOpen && (
+          <div className="mt-2.5 rounded-lg border border-dev/40 bg-dev/5 p-2.5">
+            <textarea
+              autoFocus
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && query.trim()) onDiagnose(query.trim())
+              }}
+              rows={2}
+              placeholder="What feels off about this run? (e.g. “it claimed to file proposals that don't exist — check what actually happened”)"
+              className="w-full resize-none rounded-md border border-line bg-surface px-2.5 py-2 text-[13px] text-fg outline-none placeholder:text-faint focus:border-dev"
+            />
+            <div className="mt-2 flex items-center justify-between">
+              <span className="text-[11px] text-faint">Opens a read-only diagnosis session in the chat rail.</span>
+              <button
+                onClick={() => query.trim() && onDiagnose(query.trim())}
+                disabled={!query.trim()}
+                className="flex items-center gap-1 rounded-md bg-dev px-2.5 py-1 text-xs font-medium text-on-accent transition hover:opacity-90 disabled:opacity-50"
+              >
+                Start diagnosis <ArrowRight size={13} />
+              </button>
+            </div>
+          </div>
+        )}
         <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-faint">
           <span className="font-mono">#{run.id}</span>
           <Dot /> <span>{run.model ? fmtModel(run.model) : '—'}</span>
@@ -121,7 +142,16 @@ export default function RunTraceModal({
         ) : events === null ? (
           <div className="flex items-center gap-2 text-sm text-muted"><Loader2 size={14} className="animate-spin" /> Loading…</div>
         ) : tab === 'trace' ? (
-          <TraceTab run={run} calls={calls} />
+          calls.length === 0 ? (
+            <div className="text-sm text-faint">No tool / skill / sub-agent calls in this run.</div>
+          ) : (
+            <div>
+              <div className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-faint">
+                Run #{run.id} · {calls.length} call{calls.length === 1 ? '' : 's'}
+              </div>
+              <TraceRows rows={calls} time={(e) => fmtLocal(e.created_at)} />
+            </div>
+          )
         ) : (
           <ConversationTab convo={convo} tone={run.mode === 'dev' ? 'dev' : 'core'} />
         )}
@@ -132,37 +162,6 @@ export default function RunTraceModal({
 
 function Dot() {
   return <span className="text-faint/50">·</span>
-}
-
-// The call-trail — same layout as the work-item Execution tab: Run # · N calls, then seq · icon ·
-// name - description · timestamp, in call order.
-function TraceTab({ run, calls }: { run: Run; calls: RunEvent[] }) {
-  if (calls.length === 0) {
-    return <div className="text-sm text-faint">No tool / skill / sub-agent calls in this run.</div>
-  }
-  return (
-    <div>
-      <div className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-faint">
-        Run #{run.id} · {calls.length} call{calls.length === 1 ? '' : 's'}
-      </div>
-      <ol className="space-y-0.5">
-        {calls.map((e) => {
-          const { icon: Icon, color } = callVisual(e)
-          return (
-            <li key={e.id} className="flex items-baseline gap-2 text-xs">
-              <span className="w-5 shrink-0 text-right font-mono text-[10px] text-faint">{e.seq}</span>
-              <Icon size={12} className="shrink-0 translate-y-0.5" style={{ color }} />
-              <span className="min-w-0 flex-1 truncate" title={`${e.name}${e.description ? ' - ' + e.description : ''}`}>
-                <span className="text-fg">{e.name}</span>
-                {e.description && <span className="text-faint"> - {e.description}</span>}
-              </span>
-              <span className="shrink-0 font-mono text-[10px] text-faint">{fmtLocal(e.created_at)}</span>
-            </li>
-          )
-        })}
-      </ol>
-    </div>
-  )
 }
 
 // The readable conversation — the prompt that opened the run + the assistant's reply blocks.

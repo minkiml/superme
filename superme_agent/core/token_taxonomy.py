@@ -34,8 +34,14 @@ FEATURE_CATEGORY = {
     "plan": "workitem",
     "build": "workitem",
     "forge": "workitem",
-    # Interactive (owner-driven turns; bound chat still tags item_id for attribution)
+    # Interactive (owner-driven turns; bound chat still tags item_id for attribution).
     "chat": "interactive",
+    # onboarding (project-init/retrofit walkthrough) and diagnosis (owner inspecting a run) are
+    # deliberately bucketed under Other, not Interactive — they're meta/one-off work, not the main
+    # interactive dev spend. Registered explicitly (vs left unclassified) so it's a decision, not a
+    # "new unknown feature" self-flag; each still shows as its own named sub-bucket within Other.
+    "onboarding": "other",
+    "diagnosis": "other",
     # System / on-behalf features register here as they appear (e.g. "autotitle": "system").
 }
 

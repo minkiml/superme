@@ -65,7 +65,7 @@ async def dev_work_item_plan(item_id: str, body: PlanBody,
     if not _begin_run(ctx, body.context_id, item_id, "plan", model, phase=item.get("phase")):
         raise HTTPException(status_code=409, detail="a run is already in progress for this item")
     asyncio.create_task(_run_headless_plan(ctx, body.context_id, item_id, item_dir, model, effort))
-    return {"ok": True, "status": "planning", "work_item_id": item_id, "model": model}
+    return {"ok": True, "status": "planning", "id": item_id, "model": model}
 
 
 class ScaffoldBody(BaseModel):

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Layers, FileText, X, Loader2, ScrollText, Pencil, Save, Sparkles, Bot } from 'lucide-react'
+import { Layers, FileText, X, Loader2, ScrollText, Pencil, Save, Sparkles, Bot, Pin } from 'lucide-react'
 import Markdown from '@/ui/Markdown'
 import Toggle from '@/ui/Toggle'
 import ArtifactTabs from '@/ui/ArtifactTabs'
@@ -203,6 +203,7 @@ export default function Foundations() {
           mode={openConst.mode}
           body={openConst.body}
           enabled={openConst.enabled}
+          foundational={openConst.foundational}
           learned={learned.has(`constitution:${openConst.slug}`)}
           tint={openConst.mode === 'core' ? 'core' : 'dev'}
           onClose={() => setOpenConst(null)}
@@ -232,10 +233,15 @@ function ConstitutionRow({ c, learned = false, onToggled, onOpen }: { c: Foundat
         <button onClick={onOpen} className="flex min-w-0 flex-1 items-center gap-2 text-left" title="Preview">
           <span className={`text-[10px] font-medium uppercase tracking-wider ${c.mode === 'dev' ? 'text-dev' : 'text-core'}`}>{c.mode}</span>
           <span className="min-w-0 flex-1 truncate text-[14px] text-fg">{c.title}</span>
+          {c.foundational && <span className="shrink-0 rounded bg-universal/15 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-universal" title="A charter consults this by name — always on">foundational</span>}
           {learned && <span className="shrink-0 rounded bg-warn/15 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-warn">learned</span>}
           {!c.enabled && <span className="text-[10px] uppercase tracking-wide text-faint">disabled</span>}
         </button>
-        <Toggle on={c.enabled} onChange={toggle} onColor={c.mode === 'core' ? 'bg-core' : 'bg-dev'} disabled={busy} title={c.enabled ? 'Disable' : 'Enable'} />
+        {c.foundational ? (
+          <Pin size={14} className="shrink-0 text-faint" aria-label="Foundational — always on" />
+        ) : (
+          <Toggle on={c.enabled} onChange={toggle} onColor={c.mode === 'core' ? 'bg-core' : 'bg-dev'} disabled={busy} title={c.enabled ? 'Disable' : 'Enable'} />
+        )}
       </div>
     </div>
   )

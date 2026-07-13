@@ -3,8 +3,11 @@
 from fastapi import APIRouter, Depends, HTTPException
 
 from ..app_state import SessionStore, DevKnowledgeService, get_sessions, get_dev
-from ..schemas.sessions import SessionSummary, SessionDetail, SessionDeleteResponse
+from ..schemas.sessions import (
+    SessionSummary, SessionDetail, SessionDeleteResponse, SessionRenameBody, SessionRenameResponse,
+)
 from ...gateway import contexts
+from ...core.sessions import short_item_id
 
 router = APIRouter()
 
@@ -29,17 +32,40 @@ async def sessions_list(context_id: str = "global", mode: str | None = None,
                 item = dev.read_work_item(dev_root, iid) or {}
                 titles[iid] = item.get("title") or iid
             r["item_title"] = titles[iid]
+            # Upgrade the preset to the item's TITLE + its short id (keeps same-titled items apart) —
+            # but never over an owner rename.
+            if not r.get("has_override"):
+                r["title"] = f"Work-item · {titles[iid]} · {short_item_id(iid)}"
     return rows
 
 
 @router.get("/sessions/{session_id}", response_model=SessionDetail)
-async def session_read(session_id: str, context_id: str = "global",
+async def session_read(session_id: str, context_id: str = "global", limit: int = 10,
                        sessions: SessionStore = Depends(get_sessions)) -> dict:
-    """One session's title + replayable bubble history."""
-    data = sessions.read(contexts.resolve(context_id), session_id)
+    """One session's title + its most recent `limit` replayable bubbles (older ones skipped). The
+    chat's "See more" grows `limit` in steps of 10 to reveal older messages; `limit<=0` = the whole
+    transcript. The agent always resumes with full server-side context regardless."""
+    data = sessions.read(contexts.resolve(context_id), session_id, limit=limit)
     if data is None:
         raise HTTPException(status_code=404, detail="session not found")
     return data
+
+
+@router.patch("/sessions/{session_id}", response_model=SessionRenameResponse)
+async def session_rename(session_id: str, body: SessionRenameBody,
+                         sessions: SessionStore = Depends(get_sessions)) -> dict:
+    """Set (or clear) a session's owner TITLE override. A blank title reverts to the transcript-
+    derived title. The override is stored on the spine session row and wins in list/read."""
+    ctx = contexts.resolve(body.context_id)
+    if not sessions.rename(ctx, session_id, body.title):
+        raise HTTPException(status_code=404, detail="session not found")
+    clean = (body.title or "").strip()
+    if clean:
+        title = clean
+    else:  # cleared → re-derive the effective title from the transcript
+        d = sessions.read(ctx, session_id, limit=1)
+        title = d["title"] if d else session_id
+    return {"ok": True, "id": session_id, "title": title}
 
 
 @router.delete("/sessions/{session_id}", response_model=SessionDeleteResponse)

@@ -46,4 +46,4 @@ RunStatus = Literal["running", "done", "aborted", "waiting"]
 # --- activity log + call-trail ---
 EventScope = Literal["item", "dev", "global"]
 EventActor = Literal["owner", "agent", "daemon"]
-ArtifactKind = Literal["tool", "subagent", "skill", "mcp"]
+ArtifactKind = Literal["tool", "subagent", "skill", "mcp", "result"]

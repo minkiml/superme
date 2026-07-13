@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { listSessions, readSession, deleteSession, type SessionMeta, type ChatMode } from '@/lib/api'
+import { listSessions, readSession, renameSession, deleteSession, type SessionMeta, type ChatMode } from '@/lib/api'
 import type { Msg } from '../types'
 
 // Owns the conversation list + the active session's replayed bubbles, and the
@@ -35,16 +35,39 @@ export function useSessions(contextId: string, mode: ChatMode = 'core') {
     }
   }
 
-  // Replay a past session's bubbles (history lives in the SDK transcript).
+  // The replay window grows in pages of 10 via "See more" (limitRef is the synchronous truth for
+  // loadMore; msgLimit isn't needed as state — the message list itself drives rendering).
+  const PAGE = 10
+  const limitRef = useRef(PAGE)
+
+  async function fetchMessages(id: string, limit: number) {
+    const s = await readSession(id, contextId, limit)
+    setMessages(s.messages)
+    setOlderHidden(s.truncated ? s.total - s.messages.length : 0)
+  }
+
+  // Replay a past session's bubbles (history lives in the SDK transcript). Resets the window to the
+  // most recent page.
   async function openSession(id: string, persist = true) {
     setSession(id, persist)
+    limitRef.current = PAGE
     try {
-      const s = await readSession(id, contextId)
-      setMessages(s.messages)
-      setOlderHidden(s.truncated ? s.total - s.messages.length : 0)
+      await fetchMessages(id, PAGE)
     } catch {
       setMessages([])
       setOlderHidden(0)
+    }
+  }
+
+  // "See more": widen the replay window by another page and re-read (reveals 10 older bubbles).
+  async function loadMoreMessages() {
+    const id = sessionRef.current
+    if (!id) return
+    limitRef.current += PAGE
+    try {
+      await fetchMessages(id, limitRef.current)
+    } catch {
+      /* keep the current window on failure */
     }
   }
 
@@ -72,6 +95,18 @@ export function useSessions(contextId: string, mode: ChatMode = 'core') {
     }
     if (sessionRef.current === id) newChat()
     refreshSessions()
+  }
+
+  // Set (or clear, with a blank title) an owner title override. Optimistic — patch the list row
+  // immediately, then reconcile with the server's effective title (a clear re-derives it).
+  async function renameSessionTitle(id: string, title: string) {
+    setSessions((xs) => xs.map((s) => (s.id === id ? { ...s, title } : s)))
+    try {
+      const r = await renameSession(id, title, contextId)
+      setSessions((xs) => xs.map((s) => (s.id === id ? { ...s, title: r.title } : s)))
+    } catch {
+      refreshSessions() // revert to server truth on failure
+    }
   }
 
   // A finished turn may mint a brand-new session id — claim it (and list it if new). `persist`
@@ -105,6 +140,8 @@ export function useSessions(contextId: string, mode: ChatMode = 'core') {
     newChat,
     resumeStored,
     removeSession,
+    renameSessionTitle,
+    loadMoreMessages,
     claimSession,
     appendMessage,
   }

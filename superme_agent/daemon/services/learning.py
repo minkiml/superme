@@ -20,7 +20,7 @@ from ..app_state import agent as _agent, dev_store as _dev_store, spine as _spin
     sessions as _sessions
 from ..deps import cache_slash as _cache_slash, proposal_slug as _proposal_slug
 from .runs import capture_prompt, capture_event
-from ...core import Init, Usage, Result, Status, TextDelta, deny_all, learning_write_approve
+from ...core import Init, Usage, Result, Status, TextDelta, ToolResult, deny_all, learning_write_approve
 from ...gateway import contexts
 from ...harness.tools.dev_tools import make_dev_mcp_server
 from ...runtime.config import HARNESS_DIR, CONSTITUTION_DIR
@@ -67,7 +67,7 @@ async def _run_headless_distill(ctx, context_id: str, run_id: int) -> None:
             extra_mcp_servers=turn_mcp,
         ):
             if isinstance(ev, Usage):
-                _spine.bump_run(run_id, add_tokens=ev.total_tokens, ctx_pct=ev.context_pct)
+                _spine.bump_run(run_id, add_tokens=ev.total_tokens, ctx_pct=ev.ctx_pct)
             elif isinstance(ev, Result):
                 session_id = ev.session_id    # captured ONLY to dispose the throwaway transcript
                 run_model = ev.model          # the model the SDK resolved for this headless run
@@ -76,7 +76,7 @@ async def _run_headless_distill(ctx, context_id: str, run_id: int) -> None:
                 _cache_slash(ctx.id, ev.slash_commands)
             # Per-run trail for the Activity trace: this headless run's reply text + tool/skill/agent
             # calls (its throwaway session transcript is disposed, so this is the only record).
-            if isinstance(ev, (Status, TextDelta)):
+            if isinstance(ev, (Status, TextDelta, ToolResult)):
                 capture_event(context_id, ev, run_id=run_id)
             # NB: never _sessions.record — distill is sessionless; its transcript is disposed below.
     except Exception:
@@ -230,7 +230,7 @@ async def _run_headless_write(ctx, context_id: str, proposal_id: int, run_id: in
             extra_mcp_servers=turn_mcp,
         ):
             if isinstance(ev, Usage):
-                _spine.bump_run(run_id, add_tokens=ev.total_tokens, ctx_pct=ev.context_pct)
+                _spine.bump_run(run_id, add_tokens=ev.total_tokens, ctx_pct=ev.ctx_pct)
             elif isinstance(ev, Result):
                 session_id = ev.session_id
                 run_model = ev.model          # the model the SDK resolved for this headless run
@@ -239,7 +239,7 @@ async def _run_headless_write(ctx, context_id: str, proposal_id: int, run_id: in
                 _cache_slash(ctx.id, ev.slash_commands)
             # Per-run trail for the Activity trace: this headless run's reply text + tool/skill/agent
             # calls (its throwaway session transcript is disposed, so this is the only record).
-            if isinstance(ev, (Status, TextDelta)):
+            if isinstance(ev, (Status, TextDelta, ToolResult)):
                 capture_event(context_id, ev, run_id=run_id)
     except Exception:
         log.exception("headless write run failed for proposal %s", proposal_id)
@@ -307,6 +307,10 @@ async def run_sweep(ctx, session_id: str, focus: str | None = None) -> dict:
     # covers the idle loop, the phase/completion hooks, and the manual /dev/sweep path alike.
     if _spine.session_is_onboarding(session_id):
         return {"status": "skipped_onboarding", "session_id": session_id}
+    # Diagnosis sessions are never swept either: read-only meta-observation ABOUT a run, not dev work
+    # — mining it would feed diagnosis-of-diagnosis recursion + log noise (session-kinds-diagnose).
+    if _spine.session_is_diagnosis(session_id):
+        return {"status": "skipped_diagnosis", "session_id": session_id}
     try:
         messages = _sessions.transcript_messages(ctx, session_id)
     except Exception:
@@ -358,7 +362,7 @@ async def run_sweep(ctx, session_id: str, focus: str | None = None) -> dict:
             extra_mcp_servers=turn_mcp,
         ):
             if isinstance(ev, Usage):
-                _spine.bump_run(run_id, add_tokens=ev.total_tokens, ctx_pct=ev.context_pct)
+                _spine.bump_run(run_id, add_tokens=ev.total_tokens, ctx_pct=ev.ctx_pct)
             elif isinstance(ev, Result):
                 sub_session = ev.session_id   # captured ONLY to dispose the throwaway transcript
                 run_model = ev.model          # the model the SDK resolved for this headless run
@@ -367,7 +371,7 @@ async def run_sweep(ctx, session_id: str, focus: str | None = None) -> dict:
                 _cache_slash(ctx.id, ev.slash_commands)
             # Per-run trail for the Activity trace: this headless run's reply text + tool/skill/agent
             # calls (its throwaway session transcript is disposed, so this is the only record).
-            if isinstance(ev, (Status, TextDelta)):
+            if isinstance(ev, (Status, TextDelta, ToolResult)):
                 capture_event(context_id, ev, run_id=run_id)
             # NB: never _sessions.record — the sweep is sessionless; its transcript is disposed below.
     except Exception:
@@ -461,6 +465,8 @@ async def _sweep_idle_sessions(idle_seconds: int | None = None, min_user_msgs: i
             if rec.get("mode") != "dev":
                 continue
             sid = rec["id"]
+            if rec.get("kind") == "diagnosis":
+                continue  # diagnosis sessions are never swept (read-only meta; run_sweep guards too)
             if _spine.session_is_onboarding(sid):
                 continue  # onboarding sessions are never swept (run_sweep guards too; skip early)
             scanned += 1

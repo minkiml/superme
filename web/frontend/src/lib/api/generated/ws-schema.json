@@ -120,7 +120,7 @@
           ],
           "default": null
         },
-        "context_pct": {
+        "ctx_pct": {
           "anyOf": [
             {
               "type": "integer"
@@ -286,6 +286,28 @@
             }
           ],
           "default": null
+        },
+        "kind": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "subject_run_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "type": "object"
@@ -307,7 +329,7 @@
         "output_tokens": {
           "type": "integer"
         },
-        "context_pct": {
+        "ctx_pct": {
           "anyOf": [
             {
               "type": "integer"

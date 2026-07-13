@@ -2,6 +2,7 @@
 name: dev-knowledge-structure
 description: The dev-knowledge contract — the general/ anchor-doc set, the two-tier deliverable→wave scaffold, the work-item frontmatter schema (fields · phase/status enums · the wave/deliverable pointer), the roadmap/PRD list conventions, and the inbox row shape. Pull when you read or write a general/ doc or an item.md, or need exact fields/enum values.
 enabled: true
+foundational: true
 scope: universal_dev
 category: reference
 ---

@@ -20,7 +20,7 @@ class InboxBody(BaseModel):
 
 
 class InboxPatch(BaseModel):
-    status: str | None = None  # open | pushed | dropped
+    status: str | None = None  # open | pushed  (no 'dropped' state — dropping an inbox item is a hard delete)
     kind: str | None = None
     tag: str | None = None
     text: str | None = None
@@ -84,8 +84,6 @@ async def dev_inbox_push(item_id: int, body: InboxPushBody,
         dev_root(body.context_id),
         title=row.get("title") or row.get("text") or "",
         description=row.get("text") or "",
-        source=row.get("source"),
-        inbox_id=item_id,
     )
     updated = dev_store.push_inbox(item_id, wi["id"])
     # The inbox→workspace transition — item-scoped on the new work-item. PRD §4.9.

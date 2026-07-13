@@ -14,7 +14,7 @@ from pathlib import Path
 from ..app_state import agent as _agent, dev as _dev, dev_store as _dev_store, \
     spine as _spine, sessions as _sessions
 from ..deps import cache_slash as _cache_slash
-from ...core import Init, Usage, Result, Status, TextDelta, scoped_writes_approve, deny_all
+from ...core import Init, Usage, Result, Status, TextDelta, ToolResult, scoped_writes_approve, deny_all
 from ...core.models import MODEL_TIERS
 
 log = logging.getLogger("superme-agent")
@@ -52,26 +52,46 @@ def _begin_run(ctx, context_id: str, item_id: str, kind: str = "plan",
     return run_id  # the live run id — the caller keys its per-run event trail on it
 
 
-def _bump_run_tokens(context_id: str, item_id: str, total_tokens: int,
-                     context_pct: int | None = None) -> None:
-    """Update an item's LIVE in-flight estimate (legacy token counter + context fill) from a Usage
-    snapshot. The authoritative per-type accounting is written once at finish from the whole-turn
-    Result usage (see _end_run) — per-step Usage events are cumulative-for-the-turn snapshots."""
-    _spine.bump_item_run(context_id, item_id, add_tokens=total_tokens, ctx_pct=context_pct)
+class _LiveTokens:
+    """Per-run live token tally for an item's in-flight estimate, DEDUPED by message_id. The SDK
+    emits several Usage steps per API call sharing one message_id (one per content block), so
+    summing every step over-counts ~2-5x. Keep the latest 3-type value per message (usage can grow
+    within a message) and write their SUM absolutely to the running row — each call counted once, so
+    the card footer tracks accurately and lands on the authoritative finish figure. Older SDK builds
+    with no message_id fall back to summing (`_legacy`)."""
+
+    def __init__(self) -> None:
+        self._by_msg: dict[str, int] = {}
+        self._legacy = 0
+
+    def bump(self, context_id: str, item_id: str, ev) -> None:
+        mid = getattr(ev, "message_id", None)
+        if mid:
+            self._by_msg[mid] = ev.total_tokens   # latest wins
+        else:
+            self._legacy += ev.total_tokens
+        _spine.set_item_run_tokens(
+            context_id, item_id,
+            tokens=sum(self._by_msg.values()) + self._legacy, ctx_pct=ev.ctx_pct,
+        )
 
 
 def _end_run(ctx, context_id: str, item_id: str, tokens: int | None,
-             status: str = "waiting", usage: dict | None = None) -> None:
+             status: str = "waiting", usage: dict | None = None,
+             ctx_pct: int | None = None) -> None:
     """Close out a run: finalize its spine row (keeping the accumulated live token sum, or the
     passed Result aggregate as a fallback) and set the work-item's resting status (the agent
     stopped → the owner's move). `kind` is recovered from the running row for the end event.
-    `usage` is the whole-turn final dict — the typed-column fallback if no per-step Usage arrived."""
+    `usage` is the whole-turn final dict — the typed-column fallback if no per-step Usage arrived.
+    `ctx_pct` is the authoritative Result fill — persisted over the live-bump estimate (chat runs do
+    the same via finish_run), so an item card's ctx% matches the true end-of-turn occupancy."""
     info = _spine.live_run(context_id, item_id)
     kind = (info or {}).get("feature", "plan")
-    _spine.finish_item_run(context_id, item_id, fallback_tokens=tokens, usage=usage)
-    # The persisted figure prefers the accumulated live sum (set on the row by _bump_run_tokens);
-    # `tokens` (the Result aggregate) only applied if no Usage steps arrived. Read it back to log.
-    total = (info or {}).get("tokens") or tokens or 0
+    rid = _spine.finish_item_run(context_id, item_id, fallback_tokens=tokens, usage=usage, ctx_pct=ctx_pct)
+    # Log the AUTHORITATIVE total that finish just reconciled onto the row (3-type, excl. cache_read —
+    # the same basis the item card shows), NOT the pre-finish `info` snapshot, whose live `tokens` sums
+    # the cumulative-for-the-turn Usage snapshots and so over-counts (that mismatch was the "62k vs 305k").
+    total = _spine.run_tokens(rid) if rid else (tokens or 0)
     _set_status(ctx, item_id, status)
     # Run end — item-scoped, with the final token total. PRD §4.9.
     _dev_store.log_event(context_id, f"{kind}.end", f"Finished {kind} run · Σ {total} tok",
@@ -124,18 +144,37 @@ def _artifact_desc(tool_name: str, ti: dict) -> tuple[str, str, str]:
     return "tool", tool_name, ""
 
 
-def _log_artifact(repo_id: str, item_id: str, ev: Status) -> None:
-    """Best-effort: record a tool-use the item's run made. Never raises into the turn loop."""
-    try:
-        kind, head, detail = _artifact_desc(ev.tool_name, ev.tool_input or {})
-        _spine.log_artifact(repo_id, item_id, kind=kind, name=head, description=detail)
-    except Exception:
-        log.exception("failed to log artifact %s for %s", getattr(ev, "tool_name", "?"), item_id)
-
-
-# --- per-run event trail (universal observability: prompt · reply · calls, keyed by run_id) -------
+# --- per-run trail caps (both trails: run_artifact for work-items, run_event for Activity/diagnosis) ---
 _PROMPT_CAP = 4000   # a run's trigger prompt, trimmed
 _REPLY_CAP = 8000    # one assistant text block, trimmed
+_RESULT_CAP = 1200   # a tool's output, trimmed — enough to show what it returned without bloating the trail
+
+
+def _result_row(ev: ToolResult) -> tuple[str, str]:
+    """Map a ToolResult to (name, description) for a trail row: name = the tool that produced it
+    (the specific tool, e.g. `read_dev_log` / `Bash`, via the same _artifact_desc mapping the call
+    used), description = its capped output (error-flagged). It carries `ev.tool_id` so the FE can
+    pair it back to its call (concurrent tools return out of order — position can't pair them)."""
+    _, head, detail = _artifact_desc(ev.tool_name, {})
+    name = detail or head
+    body = (ev.content or "").strip()
+    if ev.is_error:
+        body = "[error] " + body
+    return name, body[:_RESULT_CAP]
+
+
+def _log_artifact(repo_id: str, item_id: str, ev) -> None:
+    """Best-effort: record a tool-use (Status) or its output (ToolResult) the item's run made onto
+    the run_artifact trail, carrying the tool_use id so result→call pairs. Never raises into the loop."""
+    try:
+        if isinstance(ev, ToolResult):
+            name, desc = _result_row(ev)
+            _spine.log_artifact(repo_id, item_id, kind="result", name=name, description=desc, tool_id=ev.tool_id)
+            return
+        kind, head, detail = _artifact_desc(ev.tool_name, ev.tool_input or {})
+        _spine.log_artifact(repo_id, item_id, kind=kind, name=head, description=detail, tool_id=ev.tool_id)
+    except Exception:
+        log.exception("failed to log artifact %s for %s", getattr(ev, "tool_name", "?"), item_id)
 
 
 def capture_prompt(repo_id: str, prompt: str, *, run_id: int | None = None,
@@ -146,12 +185,19 @@ def capture_prompt(repo_id: str, prompt: str, *, run_id: int | None = None,
 
 
 def capture_event(repo_id: str, ev, *, run_id: int | None = None, item_id: str | None = None) -> None:
-    """Record one turn event onto a run's trail: a Status → its tool/skill/agent call, a TextDelta →
-    an assistant reply block. Anything else is ignored. Best-effort (log_run_event never raises)."""
+    """Record one turn event onto a run's trail: a Status → its tool/skill/agent call, a ToolResult →
+    that call's (capped) output, a TextDelta → an assistant reply block. Anything else is ignored.
+    Best-effort (log_run_event never raises)."""
     if isinstance(ev, Status):
         kind, head, detail = _artifact_desc(ev.tool_name, ev.tool_input or {})
         _spine.log_run_event(repo_id=repo_id, kind=kind, name=head, description=detail,
-                             run_id=run_id, item_id=item_id)
+                             run_id=run_id, item_id=item_id, tool_id=ev.tool_id)
+    elif isinstance(ev, ToolResult):
+        name, desc = _result_row(ev)
+        # Record with the tool_use id so the FE pairs result→call exactly (concurrent tools return
+        # out of order). Empty output stays empty (the call just won't be expandable).
+        _spine.log_run_event(repo_id=repo_id, kind="result", name=name, description=desc,
+                             run_id=run_id, item_id=item_id, tool_id=ev.tool_id)
     elif isinstance(ev, TextDelta):
         txt = (ev.text or "").strip()
         if txt:
@@ -184,6 +230,7 @@ async def _run_headless_plan(ctx, context_id: str, item_id: str, item_dir: Path,
     )
     final_tokens = None
     final_usage = None
+    live = _LiveTokens()   # dedupes the Usage stream by message_id for an accurate live estimate
     try:
         async for ev in _agent.run_turn(
             ctx, prompt,
@@ -193,8 +240,8 @@ async def _run_headless_plan(ctx, context_id: str, item_id: str, item_dir: Path,
             approve=scoped_writes_approve(item_dir, deny_all),
         ):
             if isinstance(ev, Usage):
-                _bump_run_tokens(context_id, item_id, ev.total_tokens, ev.context_pct)
-            elif isinstance(ev, Status):
+                live.bump(context_id, item_id, ev)
+            elif isinstance(ev, (Status, ToolResult)):
                 _log_artifact(context_id, item_id, ev)
             elif isinstance(ev, Result):
                 final_tokens = ev.tokens
@@ -214,9 +261,9 @@ async def _run_headless_plan(ctx, context_id: str, item_id: str, item_dir: Path,
                         _sessions.delete(ctx, prev_session, cause="retired")
             elif isinstance(ev, Init):
                 _cache_slash(ctx.id, ev.slash_commands)
-            # Per-run trail for the Activity trace: the reply text + each call, keyed to this run
-            # (resolved from the item's running row). Parallel to the work-item run_artifact log.
-            if isinstance(ev, (Status, TextDelta)):
+            # Per-run trail for the Activity trace: the reply text + each call + its output, keyed to
+            # this run (resolved from the item's running row). Parallel to the work-item run_artifact log.
+            if isinstance(ev, (Status, TextDelta, ToolResult)):
                 capture_event(context_id, ev, item_id=item_id)
     except Exception:
         log.exception("headless plan run failed for %s", item_id)

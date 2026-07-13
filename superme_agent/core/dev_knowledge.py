@@ -17,6 +17,7 @@ Surface-agnostic: it operates on a `dev_root` Path and never knows who's calling
 import re
 import json
 import shutil
+import secrets
 from datetime import date, datetime
 from pathlib import Path
 
@@ -34,9 +35,6 @@ def _iso_epoch(iso: str | None) -> float | None:
 
 _FRONTMATTER = re.compile(r"^---\s*\n(.*?)\n---\s*\n?(.*)$", re.DOTALL)
 
-
-def _slug(s: str) -> str | None:
-    return re.sub(r"[^a-z0-9]+", "-", (s or "").strip().lower()).strip("-") or None
 
 # Display order for the work-item lifecycle (D-018). phase: triage → plan_design → build_eval → done.
 # status (active): queued · in_progress · waiting · dropped — completion is a phase, not a status.
@@ -234,7 +232,7 @@ class DevKnowledgeService:
         The daemon owns the spine, so it passes the run data in as plain dicts — `live_by_item`
         (item_id → live running row) and `stats` (item_id → accumulated run stats) — keeping this
         service free of any spine dependency. Adds the live (time/tokens while running) + accumulated
-        (total tokens, last run) + display (model, context_pct, tasks-progress) fields the cards show.
+        (total tokens, last run) + display (model, ctx_pct, tasks-progress) fields the cards show.
         """
         for it in items:
             wid = it.get("id")
@@ -261,7 +259,7 @@ class DevKnowledgeService:
             it["phase_tokens_4type"] = {p: by_phase.get(p, 0) + by_phase_cr.get(p, 0) for p in by_phase}
             it["last_run"] = (
                 {"tokens": s.get("last_tokens", 0), "duration_ms": s.get("last_duration_ms"),
-                 "model": s.get("last_model"), "context_pct": s.get("last_context_pct")}
+                 "model": s.get("last_model"), "ctx_pct": s.get("last_ctx_pct")}
                 if s.get("runs") else None
             )
             info = live_by_item.get(wid)
@@ -269,13 +267,13 @@ class DevKnowledgeService:
             it["run_started_at"] = _iso_epoch(info["started_at"]) if info else None
             it["run_tokens"] = info["tokens"] if info else None
             it["run_model"] = info.get("model") if info else None
-            it["run_context_pct"] = info.get("ctx_pct") if info else None
+            it["run_ctx_pct"] = info.get("ctx_pct") if info else None
             # The model to show: the live run's, else the item's CONFIGURED model (frontmatter — what
             # its runs use), else the last run's. Configured wins over telemetry so a reconfigured-
             # but-not-yet-rerun item shows what it WILL use.
             configured = it.get("model")
             it["model"] = (info.get("model") if info else None) or configured or s.get("last_model")
-            it["context_pct"] = info.get("ctx_pct") if info else s.get("last_context_pct")
+            it["ctx_pct"] = info.get("ctx_pct") if info else s.get("last_ctx_pct")
             it["tasks"] = self.task_progress(dev_root, wid)
 
     def create_work_item(
@@ -285,23 +283,27 @@ class DevKnowledgeService:
         description: str = "",
         *,
         session_id: str | None = None,
-        source: str | None = None,
-        inbox_id: int | None = None,
     ) -> dict:
         """Stamp a new top-level work-item from a pushed inbox item (D-018).
 
         Creates `work-items/<id>/{item.md, artifacts/}`, entering at phase=plan_design,
-        status=queued. The id is a unique slug of the title (the folder name IS the id — the
-        source of truth for the work-graph). Returns {id, folder}. The creation itself is
-        recorded as an `inbox.push` event in the LOG (PRD §4.9) — no per-item log.md file.
+        status=queued. The id is an OPAQUE token (12-hex), fully DECOUPLED from the title — identity
+        is a stable meaningless key, the human label lives only in the `title` field (best-practice
+        data modeling; cf. git object hashes — the UI surfaces meaning, not the folder name). The
+        folder name IS the id, so the work-graph's parent_id/root_id (derived from folder path parts
+        in `_read_work_items`) stay single-sourced and drift-free. Because identity carries nothing
+        from the title, a deleted item's id is never regenerated, so a later same-title item can
+        NEVER adopt its orphaned (permanent, never-delete-logs) runs/dev-events — the 305k-token
+        ghost post-mortem, 2026-07-13. Returns {id, folder}. The inbox→item provenance is recorded
+        by the caller: the `inbox.push` event (meta.inbox_id) + the `inbox.routed_to` reverse
+        pointer — so nothing about the origin needs to land in item.md.
         """
         wi = Path(dev_root) / "work-items"
         wi.mkdir(parents=True, exist_ok=True)
         title = (title or "").strip()
-        base = _slug(title) or "item"
-        wid, i = base, 2
-        while (wi / wid).exists():
-            wid, i = f"{base}-{i}", i + 1
+        wid = secrets.token_hex(6)                       # opaque 12-hex id == folder name (~2^48)
+        while (wi / wid).exists():                       # vanishingly rare live clash → re-roll
+            wid = secrets.token_hex(6)
         folder = wi / wid
         (folder / "artifacts").mkdir(parents=True, exist_ok=True)
 

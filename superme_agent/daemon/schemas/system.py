@@ -90,13 +90,15 @@ class RunsResponse(BaseModel):
 
 
 class RunEventRow(BaseModel):
-    """One entry of a run's event trail: a prompt, an assistant reply block, or a tool/skill/agent
-    call. `kind` ∈ prompt | reply | tool | skill | agent; `name` is the label, `description` the body."""
+    """One entry of a run's event trail: a prompt, an assistant reply block, a tool/skill/agent call,
+    or that call's `result`. `kind` ∈ prompt | reply | tool | mcp | skill | agent | subagent | result;
+    `name` is the label, `description` the body; `tool_id` pairs a result back to its call."""
     id: int
     seq: int
     kind: str
     name: str
     description: str | None = None
+    tool_id: str | None = None
     created_at: str
 
 

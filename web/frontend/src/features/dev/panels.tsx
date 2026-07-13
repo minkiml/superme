@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
-import { ChevronRight, Plus, Trash2, Clock, CornerDownRight, GitBranch, ArrowRight, X, Bot, User, Sparkles, Loader2, MessageSquareText, ListChecks } from 'lucide-react'
+import { Plus, Trash2, Clock, CornerDownRight, GitBranch, ArrowRight, X, Bot, User, Loader2, MessageSquareText, ListChecks } from 'lucide-react'
 import Dropdown from '@/ui/Dropdown'
 import Markdown from '@/ui/Markdown'
 import Modal from '@/ui/Modal'
-import { addInbox, updateInbox, deleteInbox, pushInbox, artifactPath, type WorkItem, type InboxEntry, type InboxKind } from '@/lib/api'
+import { addInbox, updateInbox, deleteInbox, pushInbox, type WorkItem, type InboxEntry, type InboxKind } from '@/lib/api'
 import { fmtLocal, fmtTokens, fmtDuration, fmtModel, MODELS as MODEL_CATALOG, DEFAULT_MODEL, EFFORTS as EFFORT_CATALOG, DEFAULT_EFFORT } from '@/lib/format'
 import { PHASES, PHASE_LABEL, PHASE_ACCENT, STATUS_COLOR, STATUS_LABEL, STATUS_STRIPE, primaryStatus, Empty } from './common'
 
@@ -88,7 +88,6 @@ export type WorkActions = {
 }
 
 // Delete is only offered while an item is in plan/design — past that gate code may be touched.
-const isDeletable = (it: WorkItem) => (it.phase ?? 'plan_design') === 'plan_design'
 
 // --- workspace: kanban by phase -------------------------------------------------
 
@@ -148,7 +147,7 @@ function WorkCard({
   const hasTotal = phaseTok > 0
   const telemetryParts = [
     it.model ? fmtModel(it.model) : null,
-    it.context_pct != null ? `ctx ${it.context_pct}%` : null,
+    it.ctx_pct != null ? `ctx ${it.ctx_pct}%` : null,
     hasTotal ? `Σ ${fmtTokens(phaseTok)} tok` : null,
   ] as const
   const hasTelemetry = telemetryParts.some(Boolean)
@@ -221,7 +220,7 @@ function RunMeter({ it }: { it: WorkItem }) {
       {it.run_model && <span className="text-muted">{fmtModel(it.run_model)}</span>}
       <LiveTimer startedAt={it.run_started_at} />
       {it.run_tokens != null && <span className="text-muted">· {fmtTokens(it.run_tokens)} tok</span>}
-      {it.run_context_pct != null && <span className="text-muted">· {it.run_context_pct}% ctx</span>}
+      {it.run_ctx_pct != null && <span className="text-muted">· {it.run_ctx_pct}% ctx</span>}
     </span>
   )
 }
@@ -246,137 +245,6 @@ function TaskProgress({ tasks }: { tasks: { done: number; total: number } }) {
         />
       </span>
     </span>
-  )
-}
-
-// --- workspace: plan list (grouped by phase, expandable) ------------------------
-
-export function PlanList({ items, onBind, onPlan, onDelete, running, boundItemId }: { items: WorkItem[] } & WorkActions) {
-  const visible = items.filter(isActive)
-  if (visible.length === 0) return <Empty>No active work-items.</Empty>
-  return (
-    <div className="space-y-6">
-      {PHASES.map((ph) => {
-        const rows = visible.filter((it) => (it.phase ?? 'plan_design') === ph.key)
-        if (!rows.length) return null
-        return (
-          <div key={ph.key}>
-            <div className="mb-2 text-xs font-medium uppercase tracking-wider text-faint">{ph.label}</div>
-            <div className="space-y-1.5">
-              {rows.map((it) => (
-                <div key={it.id} className="flex items-stretch gap-1.5">
-                  <div className="min-w-0 flex-1">
-                    <ExpandRow
-                      header={
-                        <>
-                          <StatusBadge it={it} />
-                          <span className="min-w-0 flex-1 truncate text-sm text-fg">{it.title}</span>
-                          {boundItemId === it.id && (
-                            <span className="inline-flex items-center gap-0.5 text-[10px] text-accent-text" title="Bound to the chat">
-                              <MessageSquareText size={11} /> chat
-                            </span>
-                          )}
-                          <BranchInfo it={it} />
-                        </>
-                      }
-                    >
-                      {it.blocked && <div className="mb-2"><BlockedChip it={it} /></div>}
-                      <Refs it={it} />
-                      {it.description && <Markdown text={it.description} />}
-                    </ExpandRow>
-                  </div>
-                  <RowActions it={it} onBind={onBind} onPlan={onPlan} onDelete={onDelete} planning={running?.includes(it.id)} />
-                </div>
-              ))}
-            </div>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-// Per-row actions for the plan list — kept OUTSIDE the ExpandRow's <button> (no nested
-// buttons): open-in-chat (bind) and the headless Plan-it for plannable items.
-function RowActions({
-  it, onBind, onPlan, onDelete, planning,
-}: {
-  it: WorkItem
-  onBind?: (it: WorkItem) => void
-  onPlan?: (it: WorkItem) => void
-  onDelete?: (it: WorkItem) => void
-  planning?: boolean
-}) {
-  const running = !!planning || !!it.running
-  // Plan-it only on a queued item (see isPlannable): forward-only once planned.
-  const showPlan = !!onPlan && isPlannable(it) && !running
-  const showDelete = !!onDelete && isDeletable(it) && !running
-  if (!onBind && !showPlan && !showDelete && !running) return null
-  return (
-    <div className="flex shrink-0 items-center gap-1.5">
-      {running ? (
-        <span className="px-1 text-[11px]"><RunMeter it={it} /></span>
-      ) : (
-        showPlan && (
-          <button
-            onClick={() => onPlan!(it)}
-            title="Plan it — a headless agent drafts the plan and moves it to in_progress"
-            aria-label="Plan it"
-            className="grid place-items-center rounded-md border border-line bg-surface p-1.5 text-muted hover:border-accent hover:text-accent-text"
-          >
-            <Sparkles size={14} />
-          </button>
-        )
-      )}
-      {onBind && (
-        <button
-          onClick={() => onBind(it)}
-          title="Open this work-item in the chat (dev)"
-          aria-label="Open in chat"
-          className="grid place-items-center rounded-md border border-line bg-surface p-1.5 text-muted hover:border-accent hover:text-accent-text"
-        >
-          <MessageSquareText size={14} />
-        </button>
-      )}
-      {showDelete && (
-        <button
-          onClick={() => onDelete!(it)}
-          title="Delete — hard-removes this item, its session, and its inbox row"
-          aria-label="Delete work-item"
-          className="grid place-items-center rounded-md border border-line bg-surface p-1.5 text-faint hover:border-danger hover:text-danger"
-        >
-          <Trash2 size={14} />
-        </button>
-      )}
-    </div>
-  )
-}
-
-function Refs({ it }: { it: WorkItem }) {
-  // Artifacts may be path strings or {type, path} entries — normalize to display strings so
-  // a structured entry never renders as an object (React throws on object children).
-  const rows: [string, string[] | undefined][] = [
-    ['blocked by', it.blocked_by],
-    ['branch of', it.parent_id ? [it.parent_id] : undefined],
-    ['branch-offs', it.children.length ? it.children : undefined],
-    ['session', it.session_id ? [it.session_id] : undefined],
-    ['artifacts', it.artifacts?.map(artifactPath)],
-  ]
-  const shown = rows.filter(([, v]) => v && v.length)
-  if (!shown.length) return null
-  return (
-    <div className="mb-2 flex flex-col gap-1 text-xs text-muted">
-      {shown.map(([label, vals]) => (
-        <div key={label} className="flex gap-2">
-          <span className="w-20 shrink-0 text-faint">{label}</span>
-          <span className="flex flex-wrap gap-1.5">
-            {vals!.map((v) => (
-              <code key={v} className="rounded bg-sunken px-1.5 py-0.5 text-[11px] text-fg">{v}</code>
-            ))}
-          </span>
-        </div>
-      ))}
-    </div>
   )
 }
 
@@ -649,31 +517,6 @@ function InboxEditModal({
         </div>
       </div>
     </Modal>
-  )
-}
-
-// --- shared ---------------------------------------------------------------------
-
-export function ExpandRow({ header, children }: { header: React.ReactNode; children: React.ReactNode }) {
-  const [open, setOpen] = useState(false)
-  const hasBody = Boolean(children)
-  return (
-    <div className="rounded-lg border border-line bg-surface">
-      <button
-        onClick={() => hasBody && setOpen((o) => !o)}
-        className={`flex w-full items-center gap-2 px-3 py-2 text-left ${hasBody ? 'hover:bg-hover' : 'cursor-default'}`}
-      >
-        {header}
-        {hasBody && (
-          <ChevronRight
-            size={14}
-            className="shrink-0 text-faint transition-transform"
-            style={{ transform: open ? 'rotate(90deg)' : 'none' }}
-          />
-        )}
-      </button>
-      {open && hasBody && <div className="border-t border-line px-3 py-3 text-sm text-fg">{children}</div>}
-    </div>
   )
 }
 

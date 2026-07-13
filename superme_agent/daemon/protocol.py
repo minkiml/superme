@@ -25,9 +25,9 @@ def event_to_frame(ev: TurnEvent) -> dict:
         return StatusFrame(tool_name=ev.tool_name, tool_input=ev.tool_input or {}).model_dump()
     if isinstance(ev, Usage):
         return UsageFrame(total_tokens=ev.total_tokens, input_tokens=ev.input_tokens,
-                          output_tokens=ev.output_tokens, context_pct=ev.context_pct).model_dump()
+                          output_tokens=ev.output_tokens, ctx_pct=ev.ctx_pct).model_dump()
     if isinstance(ev, Result):
-        return ResultFrame(text=ev.text, model=ev.model, context_pct=ev.context_pct,
+        return ResultFrame(text=ev.text, model=ev.model, ctx_pct=ev.ctx_pct,
                            context_window=ev.context_window, session_id=ev.session_id,
                            tokens=ev.tokens).model_dump()
     raise TypeError(f"unknown TurnEvent: {ev!r}")
@@ -39,11 +39,11 @@ def init_frame(slash_commands: list[str], model: str | None = None) -> dict:
     return InitFrame(slash_commands=slash_commands, model=model).model_dump()
 
 
-def result_frame(text: str, *, model: str | None = None, context_pct: int | None = None,
+def result_frame(text: str, *, model: str | None = None, ctx_pct: int | None = None,
                  context_window: int | None = None, session_id: str | None = None,
                  tokens: int | None = None) -> dict:
     """A direct result frame — the command-reply and run-lock-busy replies (no agent ran)."""
-    return ResultFrame(text=text, model=model, context_pct=context_pct,
+    return ResultFrame(text=text, model=model, ctx_pct=ctx_pct,
                        context_window=context_window, session_id=session_id,
                        tokens=tokens).model_dump()
 

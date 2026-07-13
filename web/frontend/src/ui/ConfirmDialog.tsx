@@ -12,6 +12,7 @@ export default function ConfirmDialog({
   onSecondary,
   onConfirm,
   onCancel,
+  z = 'z-30',
 }: {
   title: string
   body: ReactNode
@@ -22,10 +23,13 @@ export default function ConfirmDialog({
   onSecondary?: () => void
   onConfirm: () => void
   onCancel: () => void
+  // Stacking layer — bump above a modal that's meant to stay open behind the confirm (e.g. the
+  // work-item drilldown, which sits at z-40).
+  z?: string
 }) {
   return (
     <div
-      className="absolute inset-0 z-30 flex items-center justify-center bg-black/50 p-4"
+      className={`absolute inset-0 ${z} flex items-center justify-center bg-black/50 p-4`}
       onClick={onCancel}
     >
       <div

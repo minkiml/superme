@@ -18,6 +18,7 @@ from claude_agent_sdk import (
     AssistantMessage,
     ResultMessage,
     SystemMessage,
+    UserMessage,
 )
 
 from ..runtime.config import (
@@ -30,10 +31,31 @@ from .dev_knowledge import DevKnowledgeService
 _DEV = DevKnowledgeService()  # stateless — reused to build the dev Orient digest
 from ..harness.tools.base_tools import make_base_mcp_server
 from .context import Context
-from .events import Init, TextDelta, Status, Usage, Result, TurnEvent
+from .events import Init, TextDelta, Status, ToolResult, Usage, Result, TurnEvent
 from .permissions import ApproveFn, build_can_use_tool
 
 log = logging.getLogger("superme-agent")
+
+
+def _result_text(content) -> str:
+    """Flatten a ToolResultBlock's content to plain text for the trail. The SDK gives either a
+    string or a list of content blocks (text / image / …); we keep the text blocks and join them,
+    dropping non-text (images) — the run trail is a text record. Trimming/capping is the caller's
+    job (the trail applies its own cap)."""
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for b in content:
+            if isinstance(b, dict):
+                if b.get("type") == "text" and b.get("text"):
+                    parts.append(str(b["text"]))
+            elif hasattr(b, "text") and getattr(b, "text"):
+                parts.append(str(b.text))
+        return "\n".join(parts)
+    return str(content)
 
 
 def _sum_tokens(usage: dict | None) -> int:
@@ -311,6 +333,10 @@ class AgentService:
         # "% dropped after a simple query" bug). The last AssistantMessage is the fullest
         # single prompt (history + all tool exchanges), so its usage ≈ true window fill.
         last_step_usage: dict | None = None
+        # Correlate each tool RESULT (which arrives as a UserMessage carrying a tool_use_id, no
+        # name) back to the tool_use that spawned it, so the trail can label the result with the
+        # tool that produced it. Populated when a tool-use block is seen, read when its result lands.
+        tool_names: dict[str, str] = {}
         async with ClaudeSDKClient(options=options) as client:
             await client.query(prompt)
             async for message in client.receive_response():
@@ -331,7 +357,10 @@ class AgentService:
                             yield TextDelta(block.text)
                         elif hasattr(block, "name") and hasattr(block, "input"):
                             # A tool-use block — surface its own "what it's doing" indicator.
-                            yield Status(block.name, block.input or {})
+                            tuid = getattr(block, "id", None)
+                            if tuid:
+                                tool_names[tuid] = block.name
+                            yield Status(block.name, block.input or {}, tool_id=tuid)
                     # A live token snapshot for this step, so a surface can show a running
                     # counter while the turn is still in flight.
                     step_usage = getattr(message, "usage", None)
@@ -343,9 +372,31 @@ class AgentService:
                             total_tokens=_sum_tokens(step_usage),
                             input_tokens=step_usage.get("input_tokens", 0),
                             output_tokens=step_usage.get("output_tokens", 0),
-                            context_pct=cu[0] if cu else None,
+                            ctx_pct=cu[0] if cu else None,
                             usage=dict(step_usage),
+                            # Dedupe key for the live counter: many AssistantMessages of one API call
+                            # share this id (see Usage.message_id). None on older SDK builds → callers
+                            # fall back to summing.
+                            message_id=getattr(message, "message_id", None),
                         )
+                elif isinstance(message, UserMessage):
+                    # Tool RESULTS come back as a UserMessage of tool_result blocks. The live chat
+                    # UI never renders these (they're not streamed downstream — see event_to_frame),
+                    # but the per-run trail persists them so a full execution trace (call + output)
+                    # is available to the Activity view and the diagnosis agent (read-tool-output).
+                    content = getattr(message, "content", None)
+                    if isinstance(content, list):
+                        for block in content:
+                            if not hasattr(block, "content"):  # not a tool_result block
+                                continue
+                            tuid = getattr(block, "tool_use_id", None)
+                            name = tool_names.get(tuid or "", "tool")
+                            yield ToolResult(
+                                tool_name=name,
+                                content=_result_text(block.content),
+                                is_error=bool(getattr(block, "is_error", False)),
+                                tool_id=tuid,
+                            )
                 elif isinstance(message, ResultMessage):
                     # Fill % from the last single call (true occupancy); window size from
                     # model_usage (only present on the ResultMessage). tokens/usage below stay
@@ -366,7 +417,7 @@ class AgentService:
                     yield Result(
                         text=text or "I didn't produce a response.",
                         model=resolved_model,
-                        context_pct=pct,
+                        ctx_pct=pct,
                         context_window=window,
                         session_id=getattr(message, "session_id", None),
                         tokens=_sum_tokens(message.usage) or None,

@@ -16,7 +16,6 @@ class InboxRow(BaseModel):
     tag: str | None = None
     status: InboxStatus
     routed_to: str | None = None
-    source: str | None = None
     created_at: str
     updated_at: str
     title: str | None = None

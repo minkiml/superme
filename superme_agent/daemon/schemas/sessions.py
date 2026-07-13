@@ -21,6 +21,9 @@ class SessionSummary(BaseModel):
     message_count: int
     item_id: str | None = None
     item_title: str | None = None
+    # Durable session KIND (session-kinds-diagnose): 'diagnosis' | 'onboarding' | 'work_item' |
+    # 'general' | null. The chat picker derives the category chip from this (+ item_id).
+    kind: str | None = None
 
 
 class SessionDetail(BaseModel):
@@ -31,6 +34,18 @@ class SessionDetail(BaseModel):
     messages: list[SessionBubble]
     total: int
     truncated: bool
+
+
+class SessionRenameBody(BaseModel):
+    """Owner rename of a session. `title` blank/empty ⇒ clear the override (revert to derived)."""
+    context_id: str = "global"
+    title: str | None = None
+
+
+class SessionRenameResponse(BaseModel):
+    ok: bool
+    id: str
+    title: str  # the effective title after the change (may be the re-derived one on clear)
 
 
 class SessionDeleteResponse(BaseModel):

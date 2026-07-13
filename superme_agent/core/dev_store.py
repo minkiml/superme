@@ -55,7 +55,6 @@ def _norm_origins(value, *, default: str = "user") -> list[str]:
 _MEM_SOURCES = {"agent", "user"}          # who captured (user-injected still gets reviewed)
 # The operational form the agent GUESSES a candidate should become (advisory; distill decides).
 _MEM_FORM_HINTS = {"constitution", "skill", "agent"}
-_MEM_KIND_HINTS = _MEM_FORM_HINTS         # back-compat alias (the old kind_hint column)
 _MEM_CAND_STATUSES = {"candidate", "processed", "promoted", "rejected", "dropped"}
 # PROPOSAL — distill's output (the typed, classified consolidation the owner ratifies at gate 1).
 # output_form = WHICH operational artifact it becomes; target_scope = WHERE it lands. Both are
@@ -104,7 +103,6 @@ class DevStore:
                        tag TEXT,
                        status TEXT NOT NULL DEFAULT 'open',
                        routed_to TEXT,
-                       source TEXT NOT NULL DEFAULT 'human',
                        created_at TEXT NOT NULL,
                        updated_at TEXT NOT NULL
                    )"""
@@ -147,8 +145,7 @@ class DevStore:
                        source TEXT NOT NULL DEFAULT 'agent',
                        origin_item_id TEXT,
                        origin_session_id TEXT,
-                       scope_hint TEXT NOT NULL DEFAULT 'dev',
-                       kind_hint TEXT,
+                       scope_hint TEXT NOT NULL DEFAULT 'repo_dev',
                        form_hint TEXT,
                        signal TEXT NOT NULL,
                        rationale TEXT,
@@ -162,6 +159,12 @@ class DevStore:
             for col in ("form_hint", "rationale"):  # WI-8 richer candidate (idempotent on old DBs)
                 if col not in cand_cols:
                     c.execute(f"ALTER TABLE memory_candidate ADD COLUMN {col} TEXT")
+            # Drop the legacy `kind_hint` column — `form_hint` fully supersedes it (data-model audit
+            # 2026-07). Preserve any legacy hint into form_hint FIRST, then DROP (SQLite ≥ 3.35).
+            # Guarded on existence → idempotent (fresh DBs never had the column).
+            if "kind_hint" in cand_cols:
+                c.execute("UPDATE memory_candidate SET form_hint=COALESCE(form_hint, kind_hint)")
+                c.execute("ALTER TABLE memory_candidate DROP COLUMN kind_hint")
             # Operational-learning PROPOSAL pool (WI-8) — distill consolidates candidates into
             # these TYPED, classified rows; the owner ratifies at gate 1, the write phase stages
             # the rendered artifact (+ eval report for skill/agent), the owner reviews at gate 2,
@@ -222,11 +225,23 @@ class DevStore:
                 if o is None or not str(o).strip().startswith("["):
                     c.execute("UPDATE inbox SET origin=? WHERE id=?",
                               (json.dumps(_norm_origins(o)), r["id"]))
+            # Drop the legacy `source` scalar — `origin` (the JSON list) fully supersedes it (data-model
+            # audit 2026-07): its only consumer (create_work_item) ignored it. DEFENSIVE first: fold a
+            # legacy source='agent' into origin so no provenance is lost, THEN DROP (SQLite ≥ 3.35).
+            # Guarded on existence → idempotent (fresh DBs never had the column).
+            if "source" in cols:
+                for r in c.execute("SELECT id, origin FROM inbox WHERE source='agent'").fetchall():
+                    origins = _norm_origins(r["origin"])
+                    if "agent" not in origins:
+                        origins.append("agent")
+                        c.execute("UPDATE inbox SET origin=? WHERE id=?",
+                                  (json.dumps(origins), r["id"]))
+                c.execute("ALTER TABLE inbox DROP COLUMN source")
 
     # --- inbox CRUD -------------------------------------------------------------
 
     def add_inbox(self, context_id: str, text: str, kind: str = "note",
-                  tag: str | None = None, source: str = "human",
+                  tag: str | None = None,
                   title: str | None = None, origin="user") -> dict:
         text = (text or "").strip()
         if not text:
@@ -236,10 +251,10 @@ class DevStore:
         now = _now()
         with self._conn() as c:
             cur = c.execute(
-                "INSERT INTO inbox (context_id,kind,text,title,tag,status,origin,source,created_at,updated_at)"
-                " VALUES (?,?,?,?,?,'open',?,?,?,?)",
+                "INSERT INTO inbox (context_id,kind,text,title,tag,status,origin,created_at,updated_at)"
+                " VALUES (?,?,?,?,?,'open',?,?,?)",
                 (context_id, kind, text, (title or None), (tag or None),
-                 json.dumps(origins), source, now, now),
+                 json.dumps(origins), now, now),
             )
             return self._get(c, cur.lastrowid)
 
@@ -394,10 +409,10 @@ class DevStore:
 
     def add_memory_candidate(self, context_id: str, signal: str, *,
                              source: str = "agent", form_hint: str | None = None,
-                             rationale: str | None = None, scope_hint: str = "dev",
+                             rationale: str | None = None, scope_hint: str = "repo_dev",
                              origin_item_id: str | None = None,
                              origin_session_id: str | None = None,
-                             evidence=None, kind_hint: str | None = None) -> dict:
+                             evidence=None) -> dict:
         """File an operational-learning CANDIDATE (WI-8) — the capture end. Cheap and reversible:
         it applies nothing, just queues a RICH operational observation distill consolidates and the
         owner gates. `signal` = the operational statement; `rationale` = why it matters / the
@@ -408,9 +423,7 @@ class DevStore:
         if not signal:
             raise ValueError("empty memory signal")
         source = source if source in _MEM_SOURCES else "agent"
-        # `form_hint` supersedes the old `kind_hint`; accept either, store in form_hint.
-        fh = form_hint or kind_hint
-        fh = fh if fh in _MEM_FORM_HINTS else None
+        fh = form_hint if form_hint in _MEM_FORM_HINTS else None
         ev = None if evidence in (None, "") else (
             evidence if isinstance(evidence, str) else json.dumps(evidence))
         with self._conn() as c:
@@ -704,10 +717,10 @@ class DevStore:
                 if not text:
                     continue
                 c.execute(
-                    "INSERT INTO inbox (context_id,kind,text,tag,status,source,created_at,updated_at)"
-                    " VALUES (?,?,?,?,?,?,?,?)",
+                    "INSERT INTO inbox (context_id,kind,text,tag,status,created_at,updated_at)"
+                    " VALUES (?,?,?,?,?,?,?)",
                     (context_id, kind if kind in _KINDS else "note", text, tag,
-                     "triaged" if mark == "x" else "open", "human", d or now[:10], now),
+                     "pushed" if mark == "x" else "open", d or now[:10], now),
                 )
                 n += 1
         return n

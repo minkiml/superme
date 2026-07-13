@@ -168,6 +168,6 @@ class Assistant:
         model_label = _format_model(result.model)
         if model_label:
             tags.append(f"*Model*: {model_label}")
-        if result.context_pct is not None and result.context_window:
-            tags.append(f"*Context ({result.context_window // 1000}k)*: {result.context_pct}%")
+        if result.ctx_pct is not None and result.context_window:
+            tags.append(f"*Context ({result.context_window // 1000}k)*: {result.ctx_pct}%")
         return f"{result.text}\n\n_{'  ·  '.join(tags)}_"

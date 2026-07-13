@@ -52,14 +52,14 @@ export type WorkItem = {
   run_started_at?: number | null // epoch seconds the current run began (for a live timer)
   run_tokens?: number | null // live token count for the current run
   run_model?: string | null // model of the in-flight run
-  run_context_pct?: number | null // live context-window fill of the in-flight run
+  run_ctx_pct?: number | null // live context-window fill of the in-flight run
   model?: string | null // model to show on the card (live run's, else last run's)
   effort?: string | null // configured reasoning effort (low|medium|high) its runs use
-  context_pct?: number | null // context fill to show on the card (live run's, else last run's)
+  ctx_pct?: number | null // context fill to show on the card (live run's, else last run's)
   total_tokens?: number // accumulated tokens across all finished runs
   phase_tokens?: Record<string, number> // per-phase 3-type Σ {phase → tokens}; card shows current phase's
   phase_tokens_4type?: Record<string, number> // per-phase 4-type Σ (3-type + cache_read), recorded behind
-  last_run?: { tokens: number; duration_ms: number | null; model?: string | null; context_pct?: number | null } | null
+  last_run?: { tokens: number; duration_ms: number | null; model?: string | null; ctx_pct?: number | null } | null
   tasks?: { done: number; total: number } | null // tasks.md checklist progress (null = no tasks.md)
 }
 
@@ -144,7 +144,9 @@ export function getLocalPlugins(contextId = 'global'): Promise<{ context_id: str
 // Foundations — SuperMe's universal identity + charter files (SELF.md + per-mode charters,
 // hand-authored + editable) plus the LEARNED universal constitution (always-on rules), per mode.
 export type FoundationFile = Schema<'FoundationFile'>
-export type FoundationConstitution = Schema<'ConstitutionEntry'>
+// `foundational` (charter-pinned, not disable-able) is served by the daemon; extended inline until
+// the next gen:api folds it into the generated ConstitutionEntry.
+export type FoundationConstitution = Schema<'ConstitutionEntry'> & { foundational?: boolean }
 export function getFoundation(): Promise<{ files: FoundationFile[]; constitutions: FoundationConstitution[] }> {
   return getJSON('/api/dev/harness/foundation')
 }

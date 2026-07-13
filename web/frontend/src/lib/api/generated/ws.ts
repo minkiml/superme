@@ -25,6 +25,8 @@ export interface TurnFrame {
   effort?: string | null;
   mode?: string | null;
   work_item_id?: string | null;
+  kind?: string | null;
+  subject_run_id?: number | null;
 }
 /**
  * The owner's decision on a pending approval_request.
@@ -67,7 +69,7 @@ export interface UsageFrame {
   total_tokens: number;
   input_tokens: number;
   output_tokens: number;
-  context_pct?: number | null;
+  ctx_pct?: number | null;
 }
 /**
  * A tool needs the owner's approval — the client answers with an approval_response.
@@ -88,7 +90,7 @@ export interface ResultFrame {
   type?: "result";
   text: string;
   model?: string | null;
-  context_pct?: number | null;
+  ctx_pct?: number | null;
   context_window?: number | null;
   session_id?: string | null;
   tokens?: number | null;

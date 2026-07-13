@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ScrollText, X, Pencil, Save, Loader2 } from 'lucide-react'
+import { ScrollText, X, Pencil, Save, Loader2, Pin } from 'lucide-react'
 import Markdown from '@/ui/Markdown'
 import Modal from '@/ui/Modal'
 import Toggle from '@/ui/Toggle'
@@ -15,7 +15,7 @@ function stripFrontmatter(text: string): string {
 // enable/disable Toggle, and now an Edit mode. Edit pulls the RAW file (frontmatter intact) so
 // `enabled`/`description` survive the save. Keyed by (scope, slug) via the constitution-file routes.
 export default function ConstitutionModal({
-  slug, scope, title, mode, description, body, enabled, learned = false, contextId = 'global', tint = 'dev',
+  slug, scope, title, mode, description, body, enabled, foundational = false, learned = false, contextId = 'global', tint = 'dev',
   onClose, onToggled,
 }: {
   slug: string
@@ -25,6 +25,7 @@ export default function ConstitutionModal({
   description?: string | null
   body: string
   enabled: boolean
+  foundational?: boolean
   learned?: boolean
   contextId?: string
   tint?: 'universal' | 'dev' | 'core'
@@ -89,6 +90,7 @@ export default function ConstitutionModal({
         <ScrollText size={15} className="text-muted" />
         <span className="text-sm font-semibold text-fg">{title}</span>
         {mode && <span className={`text-[10px] font-medium uppercase tracking-wider ${modeTint}`}>{mode}</span>}
+        {foundational && <span className="rounded bg-universal/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-universal">foundational</span>}
         {learned && <span className="rounded bg-warn/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-warn">learned</span>}
         <div className="ml-auto flex items-center gap-2">
           {!editing ? (
@@ -100,7 +102,11 @@ export default function ConstitutionModal({
               >
                 {busy ? <Loader2 size={12} className="animate-spin" /> : <Pencil size={12} />} Edit
               </button>
-              <Toggle on={on} onChange={toggle} onColor={onColor} disabled={busy} title={on ? 'Disable' : 'Enable'} />
+              {foundational ? (
+                <Pin size={15} className="text-faint" aria-label="Foundational — always on, can't be disabled" />
+              ) : (
+                <Toggle on={on} onChange={toggle} onColor={onColor} disabled={busy} title={on ? 'Disable' : 'Enable'} />
+              )}
             </>
           ) : (
             <>

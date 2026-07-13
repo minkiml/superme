@@ -59,6 +59,7 @@ class ConstitutionEntry(BaseModel):
     mode: str                       # dev | core
     slug: str
     enabled: bool
+    foundational: bool = False      # charter-pinned → not disable-able
     title: str
     body: str
     source: str | None = None
@@ -138,6 +139,7 @@ class ManagedConstitution(BaseModel):
     mode: str                        # dev | core
     origin: str                      # universal | repo (local to this host)
     enabled: bool
+    foundational: bool = False       # charter-pinned → not disable-able
     title: str
     description: str | None = None
     body: str

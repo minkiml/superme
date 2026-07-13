@@ -1,17 +1,21 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
-import { Hammer, X } from 'lucide-react'
+import { Hammer, Plus, PanelRightOpen } from 'lucide-react'
 import ChatHeader from './ChatHeader'
 import MessageList from './MessageList'
 import Composer from './Composer'
 import SessionDrawer from './SessionDrawer'
+import { sessionCategory } from './sessionCategory'
 import ConfirmDialog from '@/ui/ConfirmDialog'
 import { useAgentSocket } from './hooks/useAgentSocket'
 import { useSessions } from './hooks/useSessions'
 import { GLOBAL, type ContextRef } from '@/lib/contexts'
-import { getRuns, type ChatMode } from '@/lib/api'
+import { getRuns, type ChatMode, type SessionMeta } from '@/lib/api'
 
 // A dev-mode binding: the chat is taken over as one work-item's dev thread.
 export type DevBinding = { workItemId: string; sessionId: string | null; title: string; contextId: string }
+// A one-shot turn that BIRTHS a fresh session (never inherits the open one). `kind`/`subjectRunId`
+// stamp its agent identity — v1: kind='diagnosis' pointed at the Activity run it inspects.
+export type SeedTurn = { prompt: string; kind?: string; subjectRunId?: number }
 
 // The persistent chat rail. Its context is selectable and detached from whichever
 // dashboard page is active — the parent remounts it via a `key` on context change, so the
@@ -31,8 +35,10 @@ export default function ChatPanel({
   onUnbind,
   onBindingSession,
   tag,
-  seedPrompt,
+  seed,
   onSeedConsumed,
+  collapsed = false,
+  onExpand,
 }: {
   contextId?: string
   contexts?: ContextRef[]
@@ -44,8 +50,10 @@ export default function ChatPanel({
   onUnbind?: () => void
   onBindingSession?: (sessionId: string) => void
   tag?: { color: string; icon: string | null; isHub: boolean }
-  seedPrompt?: string | null // a one-shot message to send once (onboarding launch); parent clears it
+  seed?: SeedTurn | null // a one-shot turn to birth a fresh session (onboarding / diagnosis); parent clears it
   onSeedConsumed?: () => void
+  collapsed?: boolean // render the narrow quick-switch rail instead of the full panel
+  onExpand?: () => void // open the full panel (from the collapsed rail)
 }) {
   const ctxLabel = contexts.find((c) => c.id === contextId)?.label ?? contextId
   const [input, setInput] = useState('')
@@ -96,14 +104,6 @@ export default function ChatPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessions.activeId])
 
-  // Leave a work-item session → back to the general chat. For a card-set binding, clearing it lets the
-  // take-over effect restore the remembered general session; for a picker-opened work-item session
-  // (no binding) we restore it directly.
-  const leaveWorkItem = () => {
-    if (binding) onUnbind?.()
-    else sessions.resumeStored()
-  }
-
   // Binding take-over: open the item's dev thread (resume its session, or a fresh chat if it has
   // none yet) — TRANSIENTLY, so it doesn't clobber the context's general session. When the binding
   // is dropped (unbind, Inbox tab, or switching to core), restore the general session. Keyed on
@@ -119,8 +119,10 @@ export default function ChatPanel({
     if (binding) {
       if (binding.sessionId) sessions.openSession(binding.sessionId, false)
       else sessions.newChat(false)
-    } else if (!first) {
-      // Unbound after having been bound — go back to the remembered general session.
+    } else if (!first && sessions.activeId != null) {
+      // Unbound after having been bound — go back to the remembered general session. But if the rail
+      // is already on a fresh empty chat (activeId null — e.g. "New chat" pressed while bound), keep
+      // that; resuming the stored session would clobber the just-created new chat.
       sessions.resumeStored()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -169,18 +171,23 @@ export default function ChatPanel({
   // session regardless of the rail's current state. Guarded so it fires once per seed.
   const seededRef = useRef(false)
   useEffect(() => {
-    if (!seedPrompt) { seededRef.current = false; return }
+    if (!seed) { seededRef.current = false; return }
     if (!socket.ready || seededRef.current) return
     seededRef.current = true
     if (binding) onUnbind?.()          // drop any work-item binding before the fresh workflow session
     sessions.newChat()                 // clear the rail to a new session
     socket.clearStream()
     socket.clearMeta()
-    if (!socket.send(seedPrompt, null, { mode })) { seededRef.current = false; return }
-    sessions.appendMessage({ role: 'you', text: seedPrompt })
+    // kind/subjectRunId (v1: diagnosis pointed at an Activity run) ride the birth turn — the daemon
+    // stamps them write-once so the session keeps its identity on resume.
+    if (!socket.send(seed.prompt, null, { mode, kind: seed.kind, subjectRunId: seed.subjectRunId })) {
+      seededRef.current = false
+      return
+    }
+    sessions.appendMessage({ role: 'you', text: seed.prompt })
     onSeedConsumed?.()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [seedPrompt, socket.ready])
+  }, [seed, socket.ready])
 
   function openSession(id: string) {
     sessions.openSession(id)
@@ -189,6 +196,10 @@ export default function ChatPanel({
   }
 
   function newChat() {
+    // A New chat is always a fresh GENERAL session — drop any work-item binding first, or the new
+    // chat inherits it and its turns get mis-tagged to that item (the take-over effect keeps the
+    // fresh chat rather than resuming the stored session, thanks to its activeId==null guard).
+    if (binding) onUnbind?.()
     sessions.newChat()
     socket.clearStream()
     socket.clearMeta()
@@ -199,6 +210,30 @@ export default function ChatPanel({
     ? (sessions.sessions.find((s) => s.id === sessions.activeId)?.title ?? 'Conversation')
     : 'New chat'
   const confirmTitle = sessions.sessions.find((s) => s.id === confirmId)?.title
+
+  // Keep the collapsed rail's session list fresh — refresh whenever we enter collapsed mode.
+  useEffect(() => {
+    if (collapsed) sessions.refreshSessions()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [collapsed])
+
+  // Collapsed → the narrow quick-switch rail: recent sessions (current repo + mode) as category
+  // chips + a dev/core toggle, no repo switcher. Clicking a session (or New chat) opens it and
+  // expands the panel. All the session state lives here already (useSessions), so the rail is just
+  // an alternate render of this same conductor.
+  if (collapsed) {
+    return (
+      <CollapsedRail
+        sessions={sessions.sessions}
+        activeId={sessions.activeId}
+        mode={mode}
+        onModeChange={(m) => onModeChange?.(m)}
+        onOpenSession={(id) => { openSession(id); onExpand?.() }}
+        onNewChat={() => { newChat(); onExpand?.() }}
+        onExpand={() => onExpand?.()}
+      />
+    )
+  }
 
   return (
     <div
@@ -228,14 +263,6 @@ export default function ChatPanel({
           <span className="min-w-0 flex-1 truncate text-fg" title={chipItem.title}>
             {chipItem.title}
           </span>
-          <button
-            onClick={leaveWorkItem}
-            title="Back to the general chat"
-            aria-label="Back to the general chat"
-            className="shrink-0 rounded p-0.5 text-muted hover:bg-hover hover:text-fg"
-          >
-            <X size={13} />
-          </button>
         </div>
       )}
 
@@ -249,6 +276,7 @@ export default function ChatPanel({
         approval={socket.approval}
         ctxLabel={ctxLabel}
         onAnswer={socket.answer}
+        onLoadMore={sessions.loadMoreMessages}
         tone={mode === 'core' ? 'core' : 'dev'}
       />
 
@@ -279,6 +307,7 @@ export default function ChatPanel({
           onClose={() => setDrawerOpen(false)}
           onNewChat={newChat}
           onOpenSession={openSession}
+          onRename={sessions.renameSessionTitle}
           onForget={setConfirmId}
         />
       )}
@@ -301,6 +330,116 @@ export default function ChatPanel({
           }}
         />
       )}
+    </div>
+  )
+}
+
+// The collapsed chat rail — a slim quick-switcher. Shows the current repo's recent sessions (this
+// mode) as category chips, a dev/core mode toggle, and New chat. No repo switcher: the sessions are
+// always the repo the rail is currently pointed at (session-kinds-diagnose categories).
+function CollapsedRail({
+  sessions, activeId, mode, onModeChange, onOpenSession, onNewChat, onExpand,
+}: {
+  sessions: SessionMeta[]
+  activeId: string | null
+  mode: ChatMode
+  onModeChange: (m: ChatMode) => void
+  onOpenSession: (id: string) => void
+  onNewChat: () => void
+  onExpand: () => void
+}) {
+  // Only threads touched in the last 24h, most-recent first, capped at 8 — the collapsed rail is a
+  // quick-switcher for what's live now, not a full history (that's the expanded drawer).
+  const dayAgo = Date.now() - 24 * 60 * 60 * 1000
+  const recent = sessions
+    .filter((s) => Date.parse(s.updated_at) >= dayAgo)
+    .slice(0, 8)
+
+  // Hover tooltip is rendered fixed-position (not inside the scroll container, which would clip a
+  // left-anchored popover) so it appears instantly and fully. `top` is the button's vertical centre.
+  const [hover, setHover] = useState<{ id: string; top: number; right: number } | null>(null)
+
+  return (
+    <div className="flex h-full w-full flex-col items-center gap-2 bg-surface py-3">
+      <button
+        onClick={onExpand}
+        title="Expand chat"
+        aria-label="Expand chat"
+        className="rounded-md p-1.5 text-accent-text transition-colors hover:bg-accent/15"
+      >
+        <PanelRightOpen size={18} />
+      </button>
+
+      {/* dev / core mode toggle — vertical segmented; re-scopes the session list below. */}
+      <div className="flex flex-col gap-0.5 rounded-md bg-hover p-0.5">
+        {(['dev', 'core'] as ChatMode[]).map((m) => (
+          <button
+            key={m}
+            onClick={() => onModeChange(m)}
+            title={`${m} chat`}
+            className={`rounded px-1.5 py-1 text-[9px] font-medium uppercase tracking-wide transition-colors ${
+              mode === m ? 'bg-surface text-fg' : 'text-muted hover:text-fg'
+            }`}
+          >
+            {m}
+          </button>
+        ))}
+      </div>
+
+      <div className="h-px w-6 shrink-0 bg-line" />
+
+      <button
+        onClick={onNewChat}
+        title="New chat"
+        aria-label="New chat"
+        className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-line bg-surface text-muted transition-colors hover:border-accent hover:text-accent-text"
+      >
+        <Plus size={15} />
+      </button>
+
+      {/* recent sessions for this repo + mode — click opens the session AND expands the panel. */}
+      <div className="flex min-h-0 flex-1 flex-col items-center gap-1 overflow-y-auto pt-0.5">
+        {recent.map((s) => {
+          const cat = sessionCategory(s)
+          const on = s.id === activeId
+          return (
+            <div key={s.id} className="shrink-0">
+              <button
+                onClick={() => onOpenSession(s.id)}
+                onMouseEnter={(e) => {
+                  const r = e.currentTarget.getBoundingClientRect()
+                  setHover({ id: s.id, top: r.top + r.height / 2, right: window.innerWidth - r.left })
+                }}
+                onMouseLeave={() => setHover((h) => (h?.id === s.id ? null : h))}
+                aria-label={s.title}
+                className={`grid h-8 w-8 place-items-center rounded-md border transition-colors ${
+                  on ? 'border-accent bg-accent/10' : 'border-transparent hover:bg-hover'
+                }`}
+              >
+                <cat.Icon size={15} className={cat.color} />
+              </button>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Fixed-position hover tooltip — shows the (full) session title the icon can't. Rendered
+          outside the scroll container so it never gets clipped and appears instantly. */}
+      {hover &&
+        (() => {
+          const s = recent.find((x) => x.id === hover.id)
+          if (!s) return null
+          const cat = sessionCategory(s)
+          return (
+            <div
+              style={{ top: hover.top, right: hover.right + 8 }}
+              className="pointer-events-none fixed z-50 flex max-w-[240px] -translate-y-1/2 items-center gap-1.5 whitespace-nowrap rounded-md border border-line bg-surface px-2 py-1 text-[11px] shadow-lg"
+            >
+              <cat.Icon size={11} className={`shrink-0 ${cat.color}`} />
+              <span className="truncate text-fg">{s.title}</span>
+            </div>
+          )
+        })()}
     </div>
   )
 }

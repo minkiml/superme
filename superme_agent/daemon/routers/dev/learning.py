@@ -358,7 +358,7 @@ async def memory_proposal_publish(proposal_id: int, body: ProposalActionBody,
         body.context_id, "memory.published",
         f"Published {prop['output_form']} '{prop['title']}' → {path}",
         scope="dev", actor="owner",
-        meta={"proposal_id": proposal_id, "path": path, "form": prop["output_form"],
+        meta={"proposal_id": proposal_id, "staged_path": path, "form": prop["output_form"],
               "scope": prop["target_scope"]})
     return {"ok": True, "path": path, "proposal": dev_store.get_memory_proposal(proposal_id)}
 
@@ -401,7 +401,7 @@ async def memory_proposal_drop(proposal_id: int, body: ProposalActionBody,
     for cid in (prop.get("candidate_ids") or []):
         dev_store.set_candidate_status(cid, "dropped")
     dev_store.log_event(
-        body.context_id, "memory.dropped",
+        body.context_id, "proposal.dropped",
         f"Dropped proposal '{prop['title']}' (noise — won't re-suggest)",
         scope="dev", actor="owner", meta={"proposal_id": proposal_id},
     )

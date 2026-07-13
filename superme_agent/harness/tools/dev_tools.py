@@ -14,11 +14,57 @@ Dev-only: wired into dev-mode turns; absent in core mode (folder-as-scope, same 
 """
 
 import json
+import os
 import re
 from datetime import date, datetime, timedelta, timezone
 from typing import Annotated, Required, TypedDict
 
 from .registry import ToolSpec, build_mcp_server
+
+
+# --------------------------------------------------------------------------- structured id grammar
+# Every read_* tool emits NAMESPACE-QUALIFIED ids — `proposal:99`, `candidate:172`, `event:559`,
+# `run:228`, `inbox:12`, `item:<slug>` — so a record's ORIGIN table is never ambiguous. A bare `#99`
+# is indistinguishable across the proposal / candidate / event / run id spaces (they overlap and are
+# renumbered independently), which is exactly what let a recap conflate a dev-log reference with a
+# live table row. Each tool also leads with a `#`-prefixed header naming its record shape, so the
+# output is self-describing and the agent parses it the same way every time. (read-tool-output)
+
+def _qid(ns: str, ident) -> str:
+    """A namespace-qualified id: `proposal:99`, `event:559`, `run:228`, `candidate:172`, `inbox:12`."""
+    return f"{ns}:{ident}"
+
+
+def _artifact_name(path: str | None) -> str | None:
+    """The specific artifact a learning event produced, from its staged_path — names WHICH skill /
+    constitution / agent, not just the form. `…/skills/add-daemon-endpoint/SKILL.md` → 'add-daemon-
+    endpoint'; `…/constitution/commit-subject-line.md` → 'commit-subject-line'."""
+    if not path:
+        return None
+    stem = os.path.basename(path).rsplit(".", 1)[0]
+    # A dir-named artifact (skills/<name>/SKILL.md) → the parent dir carries the real name.
+    if stem.upper() in ("SKILL", "AGENT", "README", "INDEX"):
+        return os.path.basename(os.path.dirname(path)) or stem
+    return stem
+
+
+def _event_refs(meta: dict | None) -> str:
+    """The qualified cross-table refs an event carries in its meta, as a compact ` · refs=…` clause:
+    proposal_id → proposal:N, candidate_ids → candidate:a+b, staged_path → artifact="<name>". Empty
+    when the event references nothing structured. These refs are what make a dev-log line say
+    `proposal:99 (skill "add-daemon-endpoint")` instead of an unqualified, unnamed `#99 skill`."""
+    if not isinstance(meta, dict):
+        return ""
+    parts: list[str] = []
+    if meta.get("proposal_id") is not None:
+        parts.append(_qid("proposal", meta["proposal_id"]))
+    cids = meta.get("candidate_ids")
+    if isinstance(cids, (list, tuple)) and cids:
+        parts.append("+".join(_qid("candidate", i) for i in cids))
+    name = _artifact_name(meta.get("staged_path"))
+    if name:
+        parts.append(f'artifact="{name}"')
+    return (" · refs=" + " ".join(parts)) if parts else ""
 
 
 # --------------------------------------------------------------------------- rendering helpers
@@ -49,13 +95,23 @@ def _day_range(day: str) -> tuple[str, str] | None:
 
 
 def _fmt(events: list[dict]) -> str:
-    """Render events as a compact, scannable digest (newest first)."""
+    """Render dev-log events as qualified, scannable records (newest first). Each line:
+    `event:<id> · <ts> · <kind> · <actor>@<scope> · [refs=…] · <summary>`. The `refs=` ids point at
+    OTHER tables and are a HISTORICAL record — the referenced row may since have been cleaned, so a
+    ref here does NOT prove a live row; use read_proposals / read_candidates for what's currently live."""
     if not events:
         return "(no matching activity)"
-    lines = []
+    lines = [
+        "# read_dev_log · dev event log, newest-first",
+        "# record: event:<id> · <ts> · <kind> · <actor>@<scope> · [refs=<qualified ids>] · <summary>",
+        "# NOTE refs= are HISTORICAL pointers into other tables (a referenced row may be gone); "
+        "for LIVE rows use read_proposals / read_candidates.",
+    ]
     for e in events:
-        item = f" [{e['item_id']}]" if e.get("item_id") else " [dev-level]"
-        lines.append(f"- {e['created_at']} · {e['kind']} · {e['actor']}{item}: {e['summary']}")
+        scope = f"item:{e['item_id']}" if e.get("item_id") else "dev-level"
+        lines.append(
+            f"{_qid('event', e.get('id'))} · {e['created_at']} · {e['kind']} · {e['actor']}@{scope}"
+            f"{_event_refs(e.get('meta'))} · {e['summary']}")
     return "\n".join(lines)
 
 
@@ -65,15 +121,15 @@ def _fmt_candidates(rows: list[dict]) -> str:
     evidence)."""
     if not rows:
         return "(no candidates in this state)"
-    out = []
+    out = ["# read_candidates · LIVE learning-candidate rows · head: candidate:<id> · <ts> · src=… [· form_hint · scope · item:…]"]
     for r in rows:
-        head = f"#{r['id']} · {r['captured_at']} · src={r['source']}"
+        head = f"{_qid('candidate', r['id'])} · {r['captured_at']} · src={r['source']}"
         if r.get("form_hint"):
             head += f" · form_hint={r['form_hint']}"
         if r.get("scope_hint"):
             head += f" · scope={r['scope_hint']}"
         if r.get("origin_item_id"):
-            head += f" · item={r['origin_item_id']}"
+            head += f" · {_qid('item', r['origin_item_id'])}"
         block = [head, f"  statement: {r['signal']}"]
         if r.get("rationale"):
             block.append(f"  rationale: {r['rationale']}")
@@ -90,18 +146,61 @@ def _fmt_proposals(rows: list[dict]) -> str:
     summary, the candidates it already draws on) so it can merge into it rather than duplicate."""
     if not rows:
         return "(no open proposals — nothing to consolidate against)"
-    out = []
+    out = ["# read_proposals · LIVE open-proposal rows · head: proposal:<id> · <status> · <form>/<scope> [· cluster]"]
     for r in rows:
-        head = f"#{r['id']} · {r['status']} · {r.get('output_form')}/{r.get('target_scope')}"
+        head = f"{_qid('proposal', r['id'])} · {r['status']} · {r.get('output_form')}/{r.get('target_scope')}"
         if r.get("cluster"):
             head += f" · cluster={r['cluster']}"
         cids = r.get("candidate_ids") or []
         block = [head, f"  title: {r['title']}"]
         if r.get("summary"):
             block.append(f"  summary: {r['summary']}")
-        block.append(f"  draws on: {', '.join('#' + str(i) for i in cids) if cids else '—'}")
+        block.append(f"  draws on: {' '.join(_qid('candidate', i) for i in cids) if cids else '—'}")
         out.append("\n".join(block))
     return "\n\n".join(out)
+
+
+def _fmt_run_list(rows: list[dict]) -> str:
+    """One line per recent run — enough for the agent to pick the id to inspect."""
+    if not rows:
+        return "(no runs recorded for this repo yet)"
+    out = [
+        "# read_run · recent runs, newest-first · record: run:<id> · <feature> · <status> · <model> · <tok> · <ts> [· item:…]",
+        "# call read_run with a run_id (the number in run:<id>) to inspect one's full trace.",
+    ]
+    for r in rows:
+        item = f" · {_qid('item', r['item_id'])}" if r.get("item_id") else ""
+        out.append(
+            f"{_qid('run', r['id'])} · {r.get('feature')} · {r.get('status')} · {r.get('model') or '—'}"
+            f" · {r.get('tokens') or 0} tok · {r.get('started_at')}{item}")
+    return "\n".join(out)
+
+
+def _fmt_run_trace(run: dict, events: list[dict]) -> str:
+    """One run's full trace: its summary header + the ordered prompt · reply · tool/skill/agent
+    call trail — the diagnosis substrate ('what did this run actually do / why did it fail')."""
+    head = [
+        f"{_qid('run', run['id'])} · {run.get('feature')} · {run.get('mode')} · {run.get('status')}",
+        f"  model={run.get('model') or '—'} · tokens={run.get('tokens') or 0}"
+        f" · ctx={run.get('ctx_pct') if run.get('ctx_pct') is not None else '—'}%"
+        f" · phase={run.get('phase') or '—'}",
+        f"  started={run.get('started_at')} · ended={run.get('ended_at') or '(running)'}",
+    ]
+    if run.get("item_id"):
+        head.append(f"  work-item={_qid('item', run['item_id'])}")
+    if run.get("session_fate"):
+        head.append(f"  origin session: {run['session_fate']} (trace preserved)")
+    if not events:
+        head.append("\n(no per-event trail recorded for this run)")
+        return "\n".join(head)
+    trail = ["", "trace:"]
+    for e in events:
+        desc = (e.get("description") or "").strip().replace("\n", " ")
+        if len(desc) > 300:
+            desc = desc[:300] + "…"
+        label = e.get("name") or e.get("kind")
+        trail.append(f"  {e.get('seq')}. [{e.get('kind')}] {label}" + (f" — {desc}" if desc else ""))
+    return "\n".join(head + trail)
 
 
 def _ids(raw) -> list[int]:
@@ -135,6 +234,11 @@ def _ok(text: str) -> dict:
     return {"content": [{"type": "text", "text": text}]}
 
 
+# read_dev_log reading depths — recent (default) · mid · max. Far-back rows rarely inform a question
+# and cost context, so a no-arg read stays at 'recent'; the agent widens deliberately.
+_LOG_LEVELS = {"recent": 100, "mid": 300, "max": 500}
+
+
 # --------------------------------------------------------------------------- typed schemas
 # Per-param docs live here (on the schema), NOT in the description. Keep them terse — they answer
 # "what is this arg", never "when should I call this tool" (that's the owning skill/agent's job).
@@ -145,7 +249,8 @@ class DevLogArgs(TypedDict, total=False):
     until: Annotated[str, "ISO timestamp — end of a custom range"]
     scope: Annotated[str, "'dev' for repo-level housekeeping events only"]
     item_id: Annotated[str, "a single work-item's id — its timeline"]
-    limit: Annotated[int, "max rows (default 100, cap 500)"]
+    level: Annotated[str, "reading depth: 'recent' (default, 100) | 'mid' (300) | 'max' (500)"]
+    limit: Annotated[int, "exact row cap override (1–500) — use `level` unless you need a precise count"]
 
 
 class FileCandidateArgs(TypedDict, total=False):
@@ -173,6 +278,11 @@ class StageArtifactArgs(TypedDict, total=False):
 class ReviewCandidatesArgs(TypedDict, total=False):
     status: Annotated[str, "'candidate' (default) | 'processed' | any candidate state"]
     limit: Annotated[int, "max rows (default 100, cap 500)"]
+
+
+class ReadRunArgs(TypedDict, total=False):
+    run_id: Annotated[int, "the run (Activity item) id to inspect — its full trace. Omit to list recent runs first."]
+    limit: Annotated[int, "list mode only: max recent runs (default 20, cap 100)"]
 
 
 class DropCandidatesArgs(TypedDict, total=False):
@@ -224,15 +334,48 @@ def _dev_log(*, store, context_id, **_):
                 return _err(f"Couldn't parse day='{day}' — use 'today', 'yesterday', or 'YYYY-MM-DD'.")
             since, until = rng
         try:
+            # Three discrete reading depths (far-back rows are rarely meaningful + cost context):
+            # recent (default) → 100 · mid → 300 · max → 500. `limit` is an exact override (1–500).
+            lvl = (_s(args, "level") or "recent").lower()
+            depth = int(args.get("limit") or _LOG_LEVELS.get(lvl, 100))
             events = store.list_events(
                 context_id, since=since, until=until,
                 scope=_s(args, "scope"), item_id=_s(args, "item_id"),
-                limit=max(1, min(int(args.get("limit") or 100), 500)),
+                limit=max(1, min(depth, 500)),
             )
         except Exception as e:  # malformed args, db error, …
             return _err(f"Could not read the dev log: {e}")
         return _ok(_fmt(events))
     return dev_log
+
+
+def _read_run(*, context_id, spine=None, **_):
+    """Read one run's full trace (or list recent runs) — the diagnosis/inspection read over the
+    spine's run + run_event tables. `spine` is injected by the daemon (which owns it); learning runs
+    build the dev server without it, but they never carry read_run in their allowlist."""
+    async def read_run(args: dict) -> dict:
+        if spine is None:
+            return _err("Run inspection isn't available in this session.")
+        rid = args.get("run_id")
+        if rid in (None, "", 0):
+            limit = max(1, min(int(args.get("limit") or 20), 100))
+            try:
+                return _ok(_fmt_run_list(spine.run_history(context_id, limit=limit)))
+            except Exception as e:
+                return _err(f"Could not list runs: {e}")
+        try:
+            run = spine.get_run(int(rid))
+        except (ValueError, TypeError):
+            return _err(f"run_id must be a number (got {rid!r}).")
+        # Scope to THIS repo's runs — a repo's agent can't read another repo's trace.
+        if run is None or run.get("repo_id") != context_id:
+            return _err(f"No run #{rid} in this repo.")
+        try:
+            events = spine.events_for_run(int(rid))
+        except Exception as e:
+            return _err(f"Could not read run #{rid}'s trace: {e}")
+        return _ok(_fmt_run_trace(run, events))
+    return read_run
 
 
 def _file_candidate(*, store, context_id, origin_session_id=None, capture_source="agent", **_):
@@ -316,9 +459,9 @@ def _drop_candidates(*, store, context_id, **_):
         try:
             n = store.delete_memory_candidates(context_id, ids)
             store.log_event(
-                context_id, "memory.dropped",
+                context_id, "candidates.dropped",
                 f"Distill dropped {n} candidate(s){f' ({reason})' if reason else ''}: "
-                f"{', '.join('#' + str(i) for i in ids)}",
+                f"{', '.join(_qid('candidate', i) for i in ids)}",
                 scope="dev", actor="agent",
                 meta={"candidate_ids": ids, "reason": reason, "deleted": n})
         except Exception as e:
@@ -443,18 +586,18 @@ def _fmt_inbox(rows: list[dict]) -> str:
     """Render inbox rows compactly (open first, newest first — the store's order)."""
     if not rows:
         return "(inbox empty)"
-    out = []
+    out = ["# read_inbox · triage queue, open-first · record: inbox:<id> · <status> · <kind> [· tag · →routed · from …] · <title>"]
     for r in rows:
-        head = f"#{r['id']} · {r.get('status') or 'open'} · {r.get('kind') or 'note'}"
+        head = f"{_qid('inbox', r['id'])} · {r.get('status') or 'open'} · {r.get('kind') or 'note'}"
         if r.get("tag"):
             head += f" · {r['tag']}"
         if r.get("routed_to"):
-            head += f" → {r['routed_to']}"
+            head += f" → {_qid('item', r['routed_to'])}"
         origin = r.get("origin")
         if origin:
             head += f" · from {', '.join(origin) if isinstance(origin, list) else origin}"
         title = r.get("title") or (r.get("text") or "").strip().replace("\n", " ")
-        out.append(f"- {head}: {title[:200]}")
+        out.append(f"{head} · {title[:200]}")
     return "\n".join(out)
 
 
@@ -495,7 +638,7 @@ def _create_inbox_item(*, store, context_id, **_):
         try:
             row = store.add_inbox(
                 context_id, body, kind=_s(args, "kind") or "note",
-                title=title, origin=["agent"], source="agent",
+                title=title, origin=["agent"],
             )
         except Exception as e:
             return _err(f"Could not create the inbox item: {e}")
@@ -546,12 +689,14 @@ def _append_inbox_item(*, store, context_id, **_):
 _MAIN_DEV_TOOLS: list[ToolSpec] = [
     ToolSpec(
         "read_dev_log",
-        "Read this repo's dev event log (harness · work-item · learning events), newest first.",
+        "This repo's dev activity log — the cross-run record of what's happened in its dev work over "
+        "time (agent runs, learning-pipeline steps, inbox & work-item changes, constitution/asset "
+        "edits), newest first.",
         DevLogArgs, _dev_log,
     ),
     ToolSpec(
         "read_inbox",
-        "Read this repo's inbox — captured items awaiting triage/routing, open first.",
+        "Read this repo's inbox items— captured items awaiting triage/routing/real work, open first.",
         InboxArgs, _list_inbox,
     ),
     ToolSpec(
@@ -561,8 +706,14 @@ _MAIN_DEV_TOOLS: list[ToolSpec] = [
     ),
     ToolSpec(
         "read_proposals",
-        "Read the OPEN operational-learning proposals already standing, newest first.",
+        "Read the OPEN operational-learning proposals that have been consolidated from operational-learning candidate pool, already standing, newest first.",
         ReviewProposalsArgs, _review_proposals,
+    ),
+    ToolSpec(
+        "read_run",
+        "Read `agent` execution trace — the calls + outcome of a single agent-run row (pass a run_id), "
+        "or list recent agentruns.",
+        ReadRunArgs, _read_run,
     ),
     ToolSpec(
         "create_inbox_item",

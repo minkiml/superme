@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Radar, Layers, Activity, SlidersHorizontal, MessageSquareText, Boxes } from 'lucide-react'
+import { Radar, Layers, Activity, SlidersHorizontal, Boxes } from 'lucide-react'
 import TopBar from '@/features/shell/TopBar'
 import GlobalStrip from '@/features/shell/GlobalStrip'
 import NavColumn, { type NavRow } from '@/features/shell/NavColumn'
@@ -15,10 +15,10 @@ import Foundations from '@/features/foundations/Foundations'
 import GlobalActivity from '@/features/activity/GlobalActivity'
 import QuickConfig from '@/features/config/QuickConfig'
 import Internals from '@/features/internals/Internals'
-import ChatPanel, { type DevBinding } from '@/features/chat/ChatPanel'
+import ChatPanel, { type DevBinding, type SeedTurn } from '@/features/chat/ChatPanel'
 import ConnectModal from '@/features/shell/ConnectModal'
 import { GLOBAL, type ContextRef } from '@/lib/contexts'
-import { listContexts, type ChatMode } from '@/lib/api'
+import { listContexts, type ChatMode, type Run } from '@/lib/api'
 
 // System & Dev local nav. Nexus (orbit) is the main entry; Me + projects are reached from orbit
 // nodes, so there's no separate Functional tier in the nav.
@@ -46,9 +46,9 @@ export default function App() {
   // Chat ⇄ work-item binding: clicking a work-item takes the chat rail over as that item's dev
   // thread (opens its session, tags sends). Lifted here so DevWorkspace and ChatPanel can share it.
   const [binding, setBinding] = useState<DevBinding | null>(null)
-  // A one-shot prompt to seed into the chat rail (onboarding launch) — set here, sent once by
-  // ChatPanel when its socket is ready, then cleared via onSeedConsumed.
-  const [seedPrompt, setSeedPrompt] = useState<string | null>(null)
+  // A one-shot turn to birth a fresh session in the chat rail (onboarding OR diagnosis launch) — set
+  // here, sent once by ChatPanel when its socket is ready, then cleared via onSeedConsumed.
+  const [seed, setSeed] = useState<SeedTurn | null>(null)
   // Optimistic tag overrides — a saved tag shows instantly, before the /repos poll confirms it.
   const [tagOverrides, setTagOverrides] = useState<Record<string, { color: string; icon: string | null }>>({})
   const rawStats = useCommandStats()
@@ -66,6 +66,17 @@ export default function App() {
       })
   }, [])
 
+  // Launch a diagnosis session from an Activity row: point the rail at the run's repo dev thread and
+  // seed a read-only diagnosis turn (kind=diagnosis + subject_run_id). The daemon injects the run's
+  // trace so the session starts oriented. (session-kinds-diagnose)
+  function launchDiagnosis(run: Run, query: string) {
+    setBinding(null)
+    setChatContext(run.repo_id)
+    setChatMode('dev')
+    setChatOpen(true)
+    setSeed({ prompt: query, kind: 'diagnosis', subjectRunId: run.id })
+  }
+
   const selectedRepo = selectedId ? [stats.hub, ...stats.nodes].find((r) => r?.id === selectedId) ?? null : null
   // The tag of the repo the chat rail is currently talking to (for the chater header).
   const chatRepo = [stats.hub, ...stats.nodes].find((r) => r?.id === chatContext) ?? null
@@ -75,7 +86,7 @@ export default function App() {
     if (active === 'nexus')
       return <Nexus stats={stats} selectedId={selectedId} onSelectRepo={setSelectedId} onConnect={() => setConnecting(true)} />
     if (active === 'foundations') return <Foundations />
-    if (active === 'activity') return <GlobalActivity stats={stats} />
+    if (active === 'activity') return <GlobalActivity stats={stats} onDiagnose={launchDiagnosis} />
     if (active === 'config') return <QuickConfig stats={stats} />
     if (active === 'internals') return <Internals />
     return <Nexus stats={stats} selectedId={selectedId} onSelectRepo={setSelectedId} onConnect={() => setConnecting(true)} />
@@ -117,7 +128,9 @@ export default function App() {
                 setChatContext(repoId)
                 setChatMode('dev')
                 setChatOpen(true)
-                setSeedPrompt(onboardingKickoff(mode))
+                // kind='onboarding' → the daemon stamps the birthed session (write-once) so it's a
+                // distinctly-labeled category in the session picker (session-kinds-diagnose).
+                setSeed({ prompt: onboardingKickoff(mode), kind: 'onboarding' })
               }}
             />
           ) : dest?.kind === 'core' ? (
@@ -127,8 +140,9 @@ export default function App() {
           )}
         </main>
 
-        {/* persistent chater rail — under the stats strip; kept mounted (hidden when collapsed). */}
-        <div className={`shrink-0 border-l border-line ${chatOpen ? 'w-[480px]' : 'hidden'}`}>
+        {/* persistent chater rail — kept mounted; full panel when open, a slim quick-switch rail
+            (recent sessions + dev/core toggle) when collapsed. */}
+        <div className={`shrink-0 border-l border-line ${chatOpen ? 'w-[480px]' : 'w-14'}`}>
           <ChatPanel
             key={`${chatContext}:${chatMode}`}
             contextId={chatContext}
@@ -141,22 +155,12 @@ export default function App() {
             binding={binding && binding.contextId === chatContext && chatMode === 'dev' ? binding : null}
             onUnbind={() => setBinding(null)}
             onBindingSession={(sid) => setBinding((b) => (b ? { ...b, sessionId: sid } : b))}
-            seedPrompt={seedPrompt}
-            onSeedConsumed={() => setSeedPrompt(null)}
+            seed={seed}
+            onSeedConsumed={() => setSeed(null)}
+            collapsed={!chatOpen}
+            onExpand={() => setChatOpen(true)}
           />
         </div>
-        {!chatOpen && (
-          <div className="flex w-11 shrink-0 flex-col items-center border-l border-line bg-surface py-3">
-            <button
-              onClick={() => setChatOpen(true)}
-              title="Open chat"
-              aria-label="Open chat"
-              className="rounded-md p-1.5 text-muted hover:bg-hover hover:text-fg"
-            >
-              <MessageSquareText size={18} />
-            </button>
-          </div>
-        )}
       </div>
 
       <RepoInspector

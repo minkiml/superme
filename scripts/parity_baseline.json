@@ -48,6 +48,7 @@
     "PATCH /dev/harness/published/{proposal_id}",
     "PATCH /dev/inbox/{item_id}",
     "PATCH /dev/memory/proposals/{proposal_id}/artifact",
+    "PATCH /sessions/{session_id}",
     "POST /dev/inbox",
     "POST /dev/inbox/{item_id}/push",
     "POST /dev/memory/distill",
@@ -214,7 +215,7 @@
           "type": "object"
         },
         "ArtifactCall": {
-          "description": "One row of a work-item's run call-trail (tool / sub-agent / skill invocation).",
+          "description": "One row of a work-item's run call-trail (tool / sub-agent / skill invocation, or its result).\n`tool_id` pairs a `result` row back to its call (concurrent tools return out of order).",
           "properties": {
             "created_at": {
               "title": "Created At",
@@ -240,7 +241,8 @@
                 "tool",
                 "subagent",
                 "skill",
-                "mcp"
+                "mcp",
+                "result"
               ],
               "title": "Kind",
               "type": "string"
@@ -263,6 +265,17 @@
             "seq": {
               "title": "Seq",
               "type": "integer"
+            },
+            "tool_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tool Id"
             }
           },
           "required": [
@@ -764,6 +777,11 @@
             },
             "enabled": {
               "title": "Enabled",
+              "type": "boolean"
+            },
+            "foundational": {
+              "default": false,
+              "title": "Foundational",
               "type": "boolean"
             },
             "mode": {
@@ -2201,17 +2219,6 @@
               ],
               "title": "Routed To"
             },
-            "source": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Source"
-            },
             "status": {
               "enum": [
                 "open",
@@ -2633,6 +2640,11 @@
               "title": "Enabled",
               "type": "boolean"
             },
+            "foundational": {
+              "default": false,
+              "title": "Foundational",
+              "type": "boolean"
+            },
             "mode": {
               "title": "Mode",
               "type": "string"
@@ -2843,6 +2855,10 @@
         },
         "PlanResponse": {
           "properties": {
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
             "model": {
               "title": "Model",
               "type": "string"
@@ -2854,16 +2870,12 @@
             "status": {
               "title": "Status",
               "type": "string"
-            },
-            "work_item_id": {
-              "title": "Work Item Id",
-              "type": "string"
             }
           },
           "required": [
             "ok",
             "status",
-            "work_item_id",
+            "id",
             "model"
           ],
           "title": "PlanResponse",
@@ -4361,7 +4373,7 @@
           "type": "object"
         },
         "RunEventRow": {
-          "description": "One entry of a run's event trail: a prompt, an assistant reply block, or a tool/skill/agent\ncall. `kind` \u2208 prompt | reply | tool | skill | agent; `name` is the label, `description` the body.",
+          "description": "One entry of a run's event trail: a prompt, an assistant reply block, a tool/skill/agent call,\nor that call's `result`. `kind` \u2208 prompt | reply | tool | mcp | skill | agent | subagent | result;\n`name` is the label, `description` the body; `tool_id` pairs a result back to its call.",
           "properties": {
             "created_at": {
               "title": "Created At",
@@ -4393,6 +4405,17 @@
             "seq": {
               "title": "Seq",
               "type": "integer"
+            },
+            "tool_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tool Id"
             }
           },
           "required": [
@@ -4714,6 +4737,52 @@
           "title": "SessionDetail",
           "type": "object"
         },
+        "SessionRenameBody": {
+          "description": "Owner rename of a session. `title` blank/empty \u21d2 clear the override (revert to derived).",
+          "properties": {
+            "context_id": {
+              "default": "global",
+              "title": "Context Id",
+              "type": "string"
+            },
+            "title": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Title"
+            }
+          },
+          "title": "SessionRenameBody",
+          "type": "object"
+        },
+        "SessionRenameResponse": {
+          "properties": {
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "ok": {
+              "title": "Ok",
+              "type": "boolean"
+            },
+            "title": {
+              "title": "Title",
+              "type": "string"
+            }
+          },
+          "required": [
+            "ok",
+            "id",
+            "title"
+          ],
+          "title": "SessionRenameResponse",
+          "type": "object"
+        },
         "SessionSummary": {
           "description": "A session's picker entry. `item_id`/`item_title` are set when the session is stamped to a\nwork-item (work-item-session-recognition-prd) \u2014 the chat rail derives its work-item indicator\nfrom these, so it's correct however the session was opened (card or picker) and clears on switch.",
           "properties": {
@@ -4742,6 +4811,17 @@
                 }
               ],
               "title": "Item Title"
+            },
+            "kind": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kind"
             },
             "message_count": {
               "title": "Message Count",
@@ -5505,17 +5585,6 @@
               ],
               "title": "Children"
             },
-            "context_pct": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Context Pct"
-            },
             "created_at": {
               "anyOf": [
                 {
@@ -5530,6 +5599,17 @@
                 }
               ],
               "title": "Created At"
+            },
+            "ctx_pct": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ctx Pct"
             },
             "deliverable": {
               "anyOf": [
@@ -5693,7 +5773,7 @@
               ],
               "title": "Root Id"
             },
-            "run_context_pct": {
+            "run_ctx_pct": {
               "anyOf": [
                 {
                   "type": "integer"
@@ -5702,7 +5782,7 @@
                   "type": "null"
                 }
               ],
-              "title": "Run Context Pct"
+              "title": "Run Ctx Pct"
             },
             "run_model": {
               "anyOf": [
@@ -6036,7 +6116,7 @@
         },
         "WorkItemLastRun": {
           "properties": {
-            "context_pct": {
+            "ctx_pct": {
               "anyOf": [
                 {
                   "type": "integer"
@@ -6045,7 +6125,7 @@
                   "type": "null"
                 }
               ],
-              "title": "Context Pct"
+              "title": "Ctx Pct"
             },
             "duration_ms": {
               "anyOf": [
@@ -9325,7 +9405,7 @@
           "summary": "Session Delete"
         },
         "get": {
-          "description": "One session's title + replayable bubble history.",
+          "description": "One session's title + its most recent `limit` replayable bubbles (older ones skipped). The\nchat's \"See more\" grows `limit` in steps of 10 to reveal older messages; `limit<=0` = the whole\ntranscript. The agent always resumes with full server-side context regardless.",
           "operationId": "session_read_sessions__session_id__get",
           "parameters": [
             {
@@ -9345,6 +9425,16 @@
                 "default": "global",
                 "title": "Context Id",
                 "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "limit",
+              "required": false,
+              "schema": {
+                "default": 10,
+                "title": "Limit",
+                "type": "integer"
               }
             }
           ],
@@ -9371,6 +9461,54 @@
             }
           },
           "summary": "Session Read"
+        },
+        "patch": {
+          "description": "Set (or clear) a session's owner TITLE override. A blank title reverts to the transcript-\nderived title. The override is stored on the spine session row and wins in list/read.",
+          "operationId": "session_rename_sessions__session_id__patch",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "session_id",
+              "required": true,
+              "schema": {
+                "title": "Session Id",
+                "type": "string"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionRenameBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/SessionRenameResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Session Rename"
         }
       },
       "/system": {

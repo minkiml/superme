@@ -42,7 +42,7 @@ class UsageFrame(BaseModel):
     total_tokens: int
     input_tokens: int
     output_tokens: int
-    context_pct: int | None = None
+    ctx_pct: int | None = None
 
 
 class ApprovalRequestFrame(BaseModel):
@@ -59,7 +59,7 @@ class ResultFrame(BaseModel):
     type: Literal["result"] = "result"
     text: str
     model: str | None = None
-    context_pct: int | None = None
+    ctx_pct: int | None = None
     context_window: int | None = None
     session_id: str | None = None
     tokens: int | None = None
@@ -83,6 +83,12 @@ class TurnFrame(BaseModel):
     effort: str | None = None  # per-turn reasoning-effort override (low|medium|high)
     mode: str | None = None
     work_item_id: str | None = None
+    # Session KIND + subject pointer (session-kinds-diagnose). Only meaningful at a session's BIRTH
+    # (no resume row yet); on resume the session's STORED kind wins, so a stale/rogue payload can't
+    # re-point it. v1: kind='diagnosis' + subject_run_id=<Activity run> opens a read-only diagnosis
+    # session pointed at that run. Absent ⇒ inferred (item_id ⇒ work_item else general).
+    kind: str | None = None
+    subject_run_id: int | None = None
 
 
 class ApprovalResponseFrame(BaseModel):

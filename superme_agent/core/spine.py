@@ -287,6 +287,19 @@ class SystemSpine:
             # (never minted manually), it is the SINGLE source of truth the daemon reads to center
             # the agent + drive the write-sandbox / run-lock / telemetry. Additive ALTER below.
             self._ensure_columns(c, "session", {"item_id": "TEXT"})
+            # `kind` is the session's AGENT IDENTITY (session-kinds-diagnose): one of
+            # general | work_item | diagnosis (onboarding is a transient persona of general, not a
+            # stamped kind). It selects which per-turn agent preamble the daemon assembles
+            # (session_agents.py) and how the turn is centered/gated. `subject_run_id`
+            # is the READ-ONLY pointer a subject-bearing kind carries — v1: a diagnosis session points
+            # at the run it inspects (an Activity row). Both stamped write-once at the session's birth
+            # (mirrors item_id). NULL kind ⇒ inferred from item_id (work_item) else general, so pre-
+            # existing sessions keep working without a backfill. Additive ALTERs below.
+            self._ensure_columns(c, "session", {"kind": "TEXT", "subject_run_id": "INTEGER"})
+            # An owner-set TITLE override — NULL ⇒ the title is derived from the transcript (the SDK
+            # `ai-title` bubble, else the first user line). When set, it wins in list/read so the
+            # picker shows the owner's name. Additive ALTER below.
+            self._ensure_columns(c, "session", {"title": "TEXT"})
             c.execute("CREATE INDEX IF NOT EXISTS idx_session_repo ON session(repo_id, mode)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_session_cwd ON session(cwd)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_session_item ON session(item_id)")
@@ -414,6 +427,7 @@ class SystemSpine:
                        kind TEXT NOT NULL,
                        name TEXT NOT NULL,
                        description TEXT,
+                       tool_id TEXT,
                        created_at TEXT NOT NULL
                    )"""
             )
@@ -433,10 +447,15 @@ class SystemSpine:
                        kind TEXT NOT NULL,
                        name TEXT NOT NULL,
                        description TEXT,
+                       tool_id TEXT,
                        created_at TEXT NOT NULL
                    )"""
             )
             c.execute("CREATE INDEX IF NOT EXISTS idx_event_run ON run_event(run_id)")
+            # tool_id (the SDK tool_use id) pairs a `result` row back to its CALL row — concurrent
+            # tools return out of call order, so position/name can't pair them; the id can. Additive.
+            self._ensure_columns(c, "run_artifact", {"tool_id": "TEXT"})
+            self._ensure_columns(c, "run_event", {"tool_id": "TEXT"})
             # SWEEP_WATERMARK — the capture sweep's per-session swept position (WI-8). `position`
             # is the count of chat messages already swept for a session; every sweep advances it
             # to the transcript head, so a message is NEVER swept twice (content-level idempotency).
@@ -561,6 +580,19 @@ class SystemSpine:
                 (session_id,)).fetchone()
             return r is not None
 
+    def session_is_diagnosis(self, session_id: str | None) -> bool:
+        """True if this session is a DIAGNOSIS session (kind='diagnosis'). Diagnosis is read-only
+        meta-observation ABOUT the work, not the work — so capture never sweeps it (mirrors the
+        onboarding skip): mining it would feed 'diagnosis of a diagnosis' recursion and log noise.
+        Diagnosis runs still land in Activity + token accounting; only the learning sweep skips them."""
+        if not session_id:
+            return False
+        with self._conn() as c:
+            r = c.execute(
+                "SELECT 1 FROM session WHERE id=? AND kind='diagnosis' LIMIT 1", (session_id,),
+            ).fetchone()
+            return r is not None
+
     def stamp_session_item(self, session_id: str, item_id: str) -> bool:
         """Stamp a session's durable work-item identity — write-once (IMMUTABLE): only sets item_id
         when it is currently NULL, so a work-item session can never be re-pointed to a different item
@@ -576,6 +608,48 @@ class SystemSpine:
                 (item_id, _now(), session_id),
             )
             return cur.rowcount > 0
+
+    def stamp_session_kind(self, session_id: str, kind: str,
+                           subject_run_id: int | None = None) -> bool:
+        """Stamp a session's durable KIND + optional subject pointer — write-once (only sets `kind`
+        while it is NULL), mirroring stamp_session_item (session-kinds-diagnose). Called at a
+        subject-bearing session's birth (a diagnosis session's first-turn finish) so the daemon reads
+        the stored kind on resume rather than trusting the client. work_item is stamped implicitly by
+        stamp_session_item (item_id ⇒ work_item), so this is for diagnosis/onboarding/general births
+        that carry no item. Returns True if this call set it."""
+        if not session_id or not kind:
+            return False
+        with self._conn() as c:
+            cur = c.execute(
+                "UPDATE session SET kind=?, subject_run_id=?, updated_at=?"
+                " WHERE id=? AND kind IS NULL",
+                (kind, subject_run_id, _now(), session_id),
+            )
+            return cur.rowcount > 0
+
+    def set_session_title(self, session_id: str, title: str | None) -> bool:
+        """Set (or clear) a session's owner TITLE override. A blank title clears it back to NULL so the
+        title reverts to the transcript-derived one. Returns True if a row was updated."""
+        if not session_id:
+            return False
+        clean = (title or "").strip() or None
+        with self._conn() as c:
+            cur = c.execute(
+                "UPDATE session SET title=?, updated_at=? WHERE id=?",
+                (clean, _now(), session_id),
+            )
+            return cur.rowcount > 0
+
+    def session_kind(self, session_id: str | None) -> dict | None:
+        """The stored (kind, subject_run_id) for a session, or None if unknown/unstamped. `kind` is
+        NULL for pre-existing sessions — the caller derives it (item_id ⇒ work_item else general)."""
+        if not session_id:
+            return None
+        with self._conn() as c:
+            r = c.execute(
+                "SELECT kind, subject_run_id, item_id FROM session WHERE id=?", (session_id,),
+            ).fetchone()
+            return dict(r) if r else None
 
     def backfill_session_items(self, pairs: list[tuple[str, str]]) -> int:
         """One-time migration: stamp each (session_id, item_id) whose session row is not yet stamped,
@@ -827,13 +901,31 @@ class SystemSpine:
             c.execute(f"UPDATE run SET {','.join(sets)}"
                       " WHERE repo_id=? AND item_id=? AND status='running'", args)
 
+    def set_item_run_tokens(self, repo_id: str, item_id: str, *, tokens: int,
+                            ctx_pct: int | None = None) -> None:
+        """Set the item's running-row live token estimate ABSOLUTELY (vs bump_item_run's increment).
+        Callers dedupe the per-step Usage stream by message_id and pass the running SUM here, so the
+        live counter counts each API call once instead of re-adding the several steps a call emits.
+        Still just a live estimate — finish_item_run overwrites it with the authoritative Result.usage."""
+        sets = ["tokens=?"]
+        args: list = [int(tokens or 0)]
+        if ctx_pct is not None:
+            sets.append("ctx_pct=?")
+            args.append(int(ctx_pct))
+        args += [repo_id, item_id]
+        with self._conn() as c:
+            c.execute(f"UPDATE run SET {','.join(sets)}"
+                      " WHERE repo_id=? AND item_id=? AND status='running'", args)
+
     def finish_item_run(self, repo_id: str, item_id: str, *, run_status: str = "done",
                         fallback_tokens: int | None = None,
-                        usage: dict | None = None) -> int | None:
+                        usage: dict | None = None, ctx_pct: int | None = None) -> int | None:
         """Close the item's running row (status done|aborted), keeping the accumulated live token
         sum — or `fallback_tokens` if no Usage steps arrived. `usage` (whole-turn final dict) is the
-        typed-column fallback (see finish_run). Item runs are durable (never purged). Returns the run
-        id, or None if nothing was running."""
+        typed-column fallback (see finish_run). `ctx_pct` is the AUTHORITATIVE end-of-turn context
+        fill from the Result — when given it overwrites the last live-bump estimate (mirrors
+        finish_run), so an item card shows the true occupancy, not a mid-turn snapshot. Item runs are
+        durable (never purged). Returns the run id, or None if nothing was running."""
         run_status = run_status if run_status in _RUN_STATUSES else "done"
         with self._conn() as c:
             row = c.execute(
@@ -843,10 +935,26 @@ class SystemSpine:
             if row is None:
                 return None
             tokens = row["tokens"] or fallback_tokens or 0
-            c.execute("UPDATE run SET status=?, ended_at=?, tokens=? WHERE id=?",
-                      (run_status, _now(), int(tokens), row["id"]))
+            sets = ["status=?", "ended_at=?", "tokens=?"]
+            args: list = [run_status, _now(), int(tokens)]
+            if ctx_pct is not None:  # authoritative Result fill overrides the live-bump estimate
+                sets.append("ctx_pct=?")
+                args.append(int(ctx_pct))
+            args.append(row["id"])
+            c.execute(f"UPDATE run SET {', '.join(sets)} WHERE id=?", args)
             self._finish_usage_apply(c, row["id"], usage)  # authoritative per-type + reconciled tokens
             return row["id"]
+
+    def run_tokens(self, run_id: int | None) -> int:
+        """The reconciled `tokens` scalar on a run row — authoritative (3-type, excl. cache_read)
+        once the run has finished and its whole-turn usage was applied. Use this over a pre-finish
+        `live_run` snapshot, whose `tokens` is the in-flight estimate that OVER-counts (it sums the
+        cumulative-for-the-turn Usage snapshots). 0 if the run is unknown."""
+        if run_id is None:
+            return 0
+        with self._conn() as c:
+            r = c.execute("SELECT tokens FROM run WHERE id=?", (run_id,)).fetchone()
+            return int(r["tokens"]) if r and r["tokens"] is not None else 0
 
     def live_run(self, repo_id: str, item_id: str) -> dict | None:
         """The item's currently-running row (live time/tokens/model/ctx_pct), or None."""
@@ -877,10 +985,10 @@ class SystemSpine:
 
     # --- run artifacts (the tool / sub-agent / skill call-trail per work-item) ---
     def log_artifact(self, repo_id: str, item_id: str, *, kind: str, name: str,
-                     description: str | None = None) -> None:
+                     description: str | None = None, tool_id: str | None = None) -> None:
         """Record one invocation the item's currently-running agent made. Tied to the live run
-        (so calls group by run); `seq` orders them within that run. Best-effort — never raises
-        into the turn loop."""
+        (so calls group by run); `seq` orders them within that run. `tool_id` (the SDK tool_use id)
+        lets a `result` row pair back to its call. Best-effort — never raises into the turn loop."""
         with self._conn() as c:
             run = c.execute(
                 "SELECT id FROM run WHERE repo_id=? AND item_id=? AND status='running'"
@@ -892,17 +1000,18 @@ class SystemSpine:
                 " WHERE repo_id=? AND item_id=? AND run_id IS ?", (repo_id, item_id, run_id),
             ).fetchone()["n"]
             c.execute(
-                "INSERT INTO run_artifact (run_id,repo_id,item_id,seq,kind,name,description,created_at)"
-                " VALUES (?,?,?,?,?,?,?,?)",
-                (run_id, repo_id, item_id, seq, kind, name, description, _now()),
+                "INSERT INTO run_artifact (run_id,repo_id,item_id,seq,kind,name,description,tool_id,created_at)"
+                " VALUES (?,?,?,?,?,?,?,?,?)",
+                (run_id, repo_id, item_id, seq, kind, name, description, tool_id, _now()),
             )
 
     # --- run events (the per-RUN observability trail: prompt · reply · tool/skill/agent calls) ---
     def log_run_event(self, *, repo_id: str, kind: str, name: str, description: str | None = None,
-                      run_id: int | None = None, item_id: str | None = None) -> None:
+                      run_id: int | None = None, item_id: str | None = None,
+                      tool_id: str | None = None) -> None:
         """Append one event to a run's trail (`seq` orders within the run). Pass `run_id` directly
-        (chat / headless), or `item_id` to resolve the item's currently-running run. Best-effort —
-        never raises into the turn loop."""
+        (chat / headless), or `item_id` to resolve the item's currently-running run. `tool_id` (the
+        SDK tool_use id) lets a `result` row pair back to its call. Best-effort — never raises."""
         try:
             with self._conn() as c:
                 if run_id is None and item_id is not None:
@@ -917,18 +1026,24 @@ class SystemSpine:
                     "SELECT COALESCE(MAX(seq),0)+1 AS n FROM run_event WHERE run_id=?", (run_id,),
                 ).fetchone()["n"]
                 c.execute(
-                    "INSERT INTO run_event (run_id,repo_id,item_id,seq,kind,name,description,created_at)"
-                    " VALUES (?,?,?,?,?,?,?,?)",
-                    (run_id, repo_id, item_id, seq, kind, name, description, _now()),
+                    "INSERT INTO run_event (run_id,repo_id,item_id,seq,kind,name,description,tool_id,created_at)"
+                    " VALUES (?,?,?,?,?,?,?,?,?)",
+                    (run_id, repo_id, item_id, seq, kind, name, description, tool_id, _now()),
                 )
         except Exception:  # noqa: BLE001 — telemetry must never break a turn
             pass
+
+    def get_run(self, run_id: int) -> dict | None:
+        """One run row by id (or None) — the single-run read behind the diagnosis/inspection tool."""
+        with self._conn() as c:
+            row = c.execute("SELECT * FROM run WHERE id=?", (int(run_id),)).fetchone()
+            return self._run_dict(row) if row else None
 
     def events_for_run(self, run_id: int) -> list[dict]:
         """The full per-run trail (prompt · replies · calls), in order — powers the Activity trace."""
         with self._conn() as c:
             rows = c.execute(
-                "SELECT id, seq, kind, name, description, created_at FROM run_event"
+                "SELECT id, seq, kind, name, description, tool_id, created_at FROM run_event"
                 " WHERE run_id=? ORDER BY seq ASC", (int(run_id),),
             ).fetchall()
             return [dict(r) for r in rows]
@@ -938,7 +1053,7 @@ class SystemSpine:
         first — the call-trail for the work-item detail's Artifacts tab."""
         with self._conn() as c:
             rows = c.execute(
-                "SELECT id, run_id, seq, kind, name, description, created_at FROM run_artifact"
+                "SELECT id, run_id, seq, kind, name, description, tool_id, created_at FROM run_artifact"
                 " WHERE repo_id=? AND item_id=?"
                 " ORDER BY run_id IS NULL, run_id DESC, seq ASC", (repo_id, item_id),
             ).fetchall()
@@ -946,7 +1061,7 @@ class SystemSpine:
 
     def run_stats(self, repo_id: str, *, mode: str | None = None) -> dict[str, dict]:
         """Per-item accumulated telemetry over FINISHED item runs (the card totals): {item_id:
-        {total_tokens, runs, last_tokens, last_duration_ms, last_model, last_context_pct}}.
+        {total_tokens, runs, last_tokens, last_duration_ms, last_model, last_ctx_pct}}.
         Running rows are excluded (their live figures come from live_run)."""
         where = ["repo_id=?", "status!='running'", "item_id IS NOT NULL"]
         args: list = [repo_id]
@@ -963,7 +1078,7 @@ class SystemSpine:
         for r in rows:
             s = out.setdefault(r["item_id"], {"total_tokens": 0, "runs": 0, "last_tokens": 0,
                                               "last_duration_ms": None, "last_model": None,
-                                              "last_context_pct": None, "by_phase": {}, "by_phase_cr": {}})
+                                              "last_ctx_pct": None, "by_phase": {}, "by_phase_cr": {}})
             toks = self._display_tokens(r)  # 3-type (excl cache_read), matches the dashboard default
             s["total_tokens"] += toks
             s["runs"] += 1
@@ -976,7 +1091,7 @@ class SystemSpine:
             s["last_tokens"] = toks
             s["last_duration_ms"] = _duration_ms(r["started_at"], r["ended_at"])
             s["last_model"] = r["model"]
-            s["last_context_pct"] = r["ctx_pct"]
+            s["last_ctx_pct"] = r["ctx_pct"]
         return out
 
     def recent_runs(self, *, limit: int = 50) -> list[dict]:

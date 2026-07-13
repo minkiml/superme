@@ -676,7 +676,8 @@ const STEP_META: Record<string, { label: string; tint: string }> = {
   'memory.artifact_edited': { label: 'Artifact edited', tint: 'text-warn' },
   'memory.published': { label: 'Published', tint: 'text-success' },
   'memory.rejected': { label: 'Rejected', tint: 'text-danger' },
-  'memory.dropped': { label: 'Dropped', tint: 'text-danger' },
+  'proposal.dropped': { label: 'Dropped', tint: 'text-danger' },
+  'memory.dropped': { label: 'Dropped', tint: 'text-danger' }, // legacy rows (pre-split); kept so old trails still render
 }
 
 function ExecutionTrace({ steps }: { steps: ProposalStep[] | null }) {

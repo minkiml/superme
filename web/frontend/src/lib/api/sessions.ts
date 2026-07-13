@@ -24,8 +24,15 @@ export function listSessions(contextId = 'global', mode?: ChatMode): Promise<Ses
   return getJSON(`/api/sessions?context_id=${q(contextId)}${m}`)
 }
 
-export function readSession(id: string, contextId = 'global'): Promise<SessionDetail> {
-  return getJSON(`/api/sessions/${q(id)}?context_id=${q(contextId)}`)
+export function readSession(id: string, contextId = 'global', limit?: number): Promise<SessionDetail> {
+  const l = limit != null ? `&limit=${limit}` : ''
+  return getJSON(`/api/sessions/${q(id)}?context_id=${q(contextId)}${l}`)
+}
+
+// Set (or clear) an owner title override. An empty title reverts to the transcript-derived title.
+// Returns the effective title after the change.
+export function renameSession(id: string, title: string, contextId = 'global'): Promise<{ ok: boolean; id: string; title: string }> {
+  return sendJSON(`/api/sessions/${q(id)}`, 'PATCH', { context_id: contextId, title })
 }
 
 // Delete a session — one tier only (session-deletion-trace-model): a hard delete of its row + its

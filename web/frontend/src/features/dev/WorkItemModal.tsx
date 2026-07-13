@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
-import { X, ArrowRight, Sparkles, Trash2, Check, Loader2, FileText, ListChecks, ScrollText, History, Terminal, Bot, Wrench, Archive, BookOpen, FolderSearch, Search, SquareTerminal, FilePen, Globe } from 'lucide-react'
+import { X, ArrowRight, Sparkles, Trash2, Check, Loader2, FileText, ListChecks, ScrollText, History, Terminal, Archive } from 'lucide-react'
 import Markdown from '@/ui/Markdown'
 import Dropdown from '@/ui/Dropdown'
 import Modal from '@/ui/Modal'
 import SectionHeader from '@/ui/SectionHeader'
+import { TraceRows } from './ExecutionTrace'
+import { pairTrace } from '@/lib/trace'
 import {
   getWorkItemDetail, getWorkItemArtifacts, advanceWorkItem, completeWorkItem, setWorkItemModel, setWorkItemEffort, getDevLog,
   type WorkItem, type WorkItemDetail, type DevEvent, type RunArtifact,
@@ -36,24 +38,34 @@ export default function WorkItemModal({
   // the last run's model, else Sonnet.
   const [model, setModel] = useState(toModelKey(it.model) || DEFAULT_RUN_MODEL)
   const [effort, setEffort] = useState(it.effort ?? DEFAULT_RUN_EFFORT)
+  const callCount = pairTrace(artifacts).length // tool calls across this item's runs (results absorbed)
 
+  // Pull the item's detail (plan/tasks), its event timeline (PRD §4.9, item scope), and its
+  // call-trail. Keyed on `it.running` too, so it re-runs when a run starts AND when it settles —
+  // giving a fresh load on both transitions. While running, an interval keeps History, Plan/Tasks,
+  // and the Execution trail live (mirrors the board's 2.5s running-poll); tokens/status in the
+  // header already track the `it` prop the board refreshes.
   useEffect(() => {
     let alive = true
-    getWorkItemDetail(it.id, contextId)
-      .then((d) => alive && setDetail(d))
-      .catch((e) => alive && setErr(String(e)))
-    // This item's own event timeline (PRD §4.9) — the containment view at item scope.
-    getDevLog(contextId, { itemId: it.id, limit: 50 })
-      .then((d) => alive && setEvents(d.events))
-      .catch(() => {})
-    // The call-trail: tools / sub-agents / skills this item's runs invoked.
-    getWorkItemArtifacts(it.id, contextId)
-      .then((d) => alive && setArtifacts(d.artifacts))
-      .catch(() => {})
+    const pull = () => {
+      getWorkItemDetail(it.id, contextId)
+        .then((d) => alive && setDetail(d))
+        .catch((e) => alive && setErr(String(e)))
+      getDevLog(contextId, { itemId: it.id, limit: 50 })
+        .then((d) => alive && setEvents(d.events))
+        .catch(() => {})
+      getWorkItemArtifacts(it.id, contextId)
+        .then((d) => alive && setArtifacts(d.artifacts))
+        .catch(() => {})
+    }
+    pull()
+    if (!it.running) return () => { alive = false }
+    const t = setInterval(pull, 2500)
     return () => {
       alive = false
+      clearInterval(t)
     }
-  }, [it.id, contextId])
+  }, [it.id, contextId, it.running])
 
   // Close on Escape.
   useEffect(() => {
@@ -162,8 +174,8 @@ export default function WorkItemModal({
               }`}
             >
               <Icon size={14} /> {label}
-              {id === 'execution' && artifacts.length > 0 && (
-                <span className="rounded-full bg-hover px-1.5 text-[10px] text-muted">{artifacts.length}</span>
+              {id === 'execution' && callCount > 0 && (
+                <span className="rounded-full bg-hover px-1.5 text-[10px] text-muted">{callCount}</span>
               )}
             </button>
           ))}
@@ -293,10 +305,8 @@ export default function WorkItemModal({
           )}
           {inPlan && !running && (
             <button
-              onClick={() => {
-                onDelete(it)
-                onClose()
-              }}
+              onClick={() => onDelete(it)} // opens the themed confirm ABOVE this modal; the modal
+              // stays open and auto-closes only once the item actually disappears (on confirm+reload)
               title="Delete — hard-removes this item, its session, and its inbox row"
               className="ml-auto inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs text-faint transition hover:text-danger"
             >
@@ -313,7 +323,7 @@ export default function WorkItemModal({
 function RunMeta({ it }: { it: WorkItem }) {
   const bits = [
     it.model && fmtModel(it.model),
-    it.context_pct != null && `ctx ${it.context_pct}%`,
+    it.ctx_pct != null && `ctx ${it.ctx_pct}%`,
     (it.total_tokens ?? 0) > 0 && `Σ ${fmtTokens(it.total_tokens ?? 0)} tok`,
   ].filter(Boolean)
   if (!bits.length) return null
@@ -335,32 +345,9 @@ function Empty({ children }: { children: React.ReactNode }) {
   return <div className="text-sm text-faint">{children}</div>
 }
 
-// The Artifacts tab — the call-trail of tools / sub-agents / skills the item's runs invoked,
-// grouped by run (newest run first), in call order within each run.
-// Each call gets a distinct icon + color so the trail is scannable. Resolved by tool NAME first
-// (Read/Glob/Grep/Bash/Agent/…), then by kind (skill/subagent/mcp) for anything else.
-const CALL_STYLE: Record<string, { icon: typeof Terminal; color: string }> = {
-  read: { icon: BookOpen, color: '#60a5fa' },        // blue
-  glob: { icon: FolderSearch, color: '#a78bfa' },    // purple
-  grep: { icon: Search, color: '#fbbf24' },          // amber
-  bash: { icon: SquareTerminal, color: '#34d399' },  // emerald
-  edit: { icon: FilePen, color: '#fb7185' },         // rose
-  write: { icon: FilePen, color: '#fb7185' },
-  agent: { icon: Bot, color: '#818cf8' },            // indigo — the agent (Task) robot head
-  task: { icon: Bot, color: '#818cf8' },
-  webfetch: { icon: Globe, color: '#22d3ee' },       // cyan
-  websearch: { icon: Globe, color: '#22d3ee' },
-}
-const KIND_STYLE: Record<string, { icon: typeof Terminal; color: string }> = {
-  subagent: { icon: Bot, color: '#818cf8' },
-  skill: { icon: Sparkles, color: '#e0a35a' },       // warn amber
-  mcp: { icon: Wrench, color: '#5fe3b3' },            // success
-  tool: { icon: Terminal, color: '#8b93a1' },        // muted
-}
-function callVisual(a: RunArtifact) {
-  return CALL_STYLE[(a.name ?? '').toLowerCase()] ?? KIND_STYLE[a.kind] ?? KIND_STYLE.tool
-}
-
+// The Artifacts tab — the call-trail of tools / sub-agents / skills the item's runs invoked, grouped
+// by run (newest run first). Each call is numbered 1..N within its run and, if it returned output,
+// is clickable to reveal the result inline (shared ExecutionTrace, same as the Activity popup).
 function ArtifactsTab({ artifacts, archived }: { artifacts: RunArtifact[]; archived: string | null }) {
   if (artifacts.length === 0) {
     // Completed items have their rows freed → fall back to the archived execution.md snapshot.
@@ -386,29 +373,17 @@ function ArtifactsTab({ artifacts, archived }: { artifacts: RunArtifact[]; archi
   }
   return (
     <div className="space-y-4">
-      {groups.map((g, gi) => (
-        <div key={gi}>
-          <div className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-faint">
-            {g.run != null ? `Run #${g.run}` : 'Unattached'} · {g.items.length} call{g.items.length === 1 ? '' : 's'}
+      {groups.map((g, gi) => {
+        const calls = pairTrace(g.items) // pair within the run — results follow their calls in order
+        return (
+          <div key={gi}>
+            <div className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-faint">
+              {g.run != null ? `Run #${g.run}` : 'Unattached'} · {calls.length} call{calls.length === 1 ? '' : 's'}
+            </div>
+            <TraceRows rows={calls} time={(a) => fmtLocal(a.created_at)} />
           </div>
-          <ol className="space-y-0.5">
-            {g.items.map((a) => {
-              const { icon: Icon, color } = callVisual(a)
-              return (
-                <li key={a.id} className="flex items-baseline gap-2 text-xs">
-                  <span className="w-5 shrink-0 text-right font-mono text-[10px] text-faint">{a.seq}</span>
-                  <Icon size={12} className="shrink-0 translate-y-0.5" style={{ color }} />
-                  <span className="min-w-0 flex-1 truncate" title={`${a.name}${a.description ? ' - ' + a.description : ''}`}>
-                    <span className="text-fg">{a.name}</span>
-                    {a.description && <span className="text-faint"> - {a.description}</span>}
-                  </span>
-                  <span className="shrink-0 font-mono text-[10px] text-faint">{fmtLocal(a.created_at)}</span>
-                </li>
-              )
-            })}
-          </ol>
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }

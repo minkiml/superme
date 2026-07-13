@@ -91,8 +91,8 @@ export function useAgentSocket(contextId: string, mode: 'core' | 'dev', handlers
           setStatusLabel(null)
           setBusy(false)
           // Don't wipe the model/context readout on a command reply (no run metadata).
-          if (f.model || f.context_pct != null) {
-            setMeta({ model: f.model ?? null, pct: f.context_pct ?? null, window: f.context_window ?? null })
+          if (f.model || f.ctx_pct != null) {
+            setMeta({ model: f.model ?? null, pct: f.ctx_pct ?? null, window: f.context_window ?? null })
           }
           handlersRef.current.onResult(f.text, f.session_id ?? null)
           break
@@ -128,12 +128,16 @@ export function useAgentSocket(contextId: string, mode: 'core' | 'dev', handlers
   function send(
     prompt: string,
     resume: string | null,
-    opts?: { mode?: 'core' | 'dev'; workItemId?: string; model?: string | null; effort?: string | null },
+    opts?: {
+      mode?: 'core' | 'dev'; workItemId?: string; model?: string | null; effort?: string | null
+      kind?: string; subjectRunId?: number  // session-kind launch (v1: diagnosis + its subject run)
+    },
   ): boolean {
     const ws = wsRef.current
     if (busy || !ws || ws.readyState !== WebSocket.OPEN) return false
     // model/effort are the SESSION runtime override (the composer picker) — sent per-turn; they never
-    // persist a default. null = fall to the server precedence (work-item → repo → system).
+    // persist a default. null = fall to the server precedence (work-item → repo → system). kind +
+    // subject_run_id only matter at a session's BIRTH (the daemon stamps them write-once).
     const frame: TurnFrame = {
       type: 'turn',
       prompt,
@@ -143,6 +147,8 @@ export function useAgentSocket(contextId: string, mode: 'core' | 'dev', handlers
       effort: opts?.effort ?? null,
       mode: opts?.mode ?? 'core',
       work_item_id: opts?.workItemId ?? null,
+      kind: opts?.kind ?? null,
+      subject_run_id: opts?.subjectRunId ?? null,
     }
     ws.send(JSON.stringify(frame))
     setBusy(true)

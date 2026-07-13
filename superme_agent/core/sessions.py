@@ -47,6 +47,31 @@ def _is_noise(record: dict, text: str) -> bool:
     return text.lstrip().startswith(_NOISE_PREFIXES)
 
 
+def _short_id(sid: str) -> str:
+    """A short, human-glanceable id for a session (first UUID segment / first 8 chars)."""
+    return (sid or "").split("-")[0][:8] or "session"
+
+
+def short_item_id(item_id: str | None) -> str:
+    """The distinguishing tail of a work-item id — `...-536a40` → `536a40`, or the whole opaque token
+    when it has no hyphens — so same-titled items stay distinguishable in a session title."""
+    return (item_id or "").split("-")[-1] or (item_id or "")
+
+
+def _preset_title(kind: str, item_id: str | None, subject_run_id, sid: str) -> str:
+    """The computed DEFAULT title for a session when the owner hasn't set an override — a consistent,
+    identity-bearing preset by kind (session-kinds-diagnose). work_item falls back to the item's short
+    id here; the router upgrades it to the item's TITLE + short id (which it resolves). Always editable:
+    an owner override wins over this in list()/read()."""
+    if kind == "work_item":
+        return f"Work-item · {short_item_id(item_id) if item_id else _short_id(sid)}"
+    if kind == "diagnosis":
+        return f"Diagnosis · run #{subject_run_id}" if subject_run_id else "Diagnosis session"
+    if kind == "onboarding":
+        return f"Onboarding · {_short_id(sid)}"
+    return f"General · {_short_id(sid)}"
+
+
 def _encode_cwd(cwd) -> str:
     """The CLI's projects-folder name for a cwd: every non-alphanumeric char -> '-'."""
     return re.sub(r"[^A-Za-z0-9]", "-", str(cwd))
@@ -188,35 +213,58 @@ class SessionStore:
             scan = self._scan(ctx, sid)
             if scan is None:
                 continue
+            item_id = rec.get("item_id") or None
+            eff_kind = rec.get("kind") or ("work_item" if item_id else "general")
+            override = rec.get("title")
             out.append({
                 "id": sid,
-                "title": scan["title"],
+                # Owner override wins; else a consistent identity preset by kind. (The transcript-
+                # derived scan title is no longer the default — owner picked preset-by-kind.)
+                "title": override or _preset_title(eff_kind, item_id, rec.get("subject_run_id"), sid),
+                # Internal (dropped by the response_model): lets the router upgrade a NON-overridden
+                # work-item title to the item's resolved TITLE without clobbering an owner rename.
+                "has_override": bool(override),
                 "surface": rec.get("surface", "web"),
                 "mode": sess_mode,
                 "updated_at": scan["updated_at"],
                 "message_count": scan["message_count"],
                 # The durable work-item stamp (work-item-session-recognition-prd): non-null ⇒ this is
                 # a WORK-ITEM session. The title is resolved by the router (it has the dev service).
-                "item_id": rec.get("item_id") or None,
+                "item_id": item_id,
+                # The session's durable KIND (session-kinds-diagnose): 'diagnosis' | 'onboarding' |
+                # 'work_item' | 'general' (NULL ⇒ general). Lets the chat picker label its category.
+                "kind": rec.get("kind") or None,
             })
         out.sort(key=lambda s: s["updated_at"], reverse=True)
         return out
+
+    def rename(self, ctx: Context, session_id: str, title: str | None) -> bool:
+        """Set (or clear) a session's owner TITLE override, if it belongs to this workspace. A blank
+        title reverts to the transcript-derived title. Returns True if a row was updated."""
+        if session_id not in {r["id"] for r in self._spine.sessions_for_cwd(ctx.cwd)}:
+            return False
+        return self._spine.set_session_title(session_id, title)
 
     def read(self, ctx: Context, session_id: str, limit: int = 10) -> dict | None:
         """One session's title + its most recent `limit` bubbles (older ones skipped),
         or None if the session isn't in this workspace. The agent still resumes with
         full server-side context — we just don't replay the whole transcript in the UI.
         """
-        if session_id not in {r["id"] for r in self._spine.sessions_for_cwd(ctx.cwd)}:
+        recs = {r["id"]: r for r in self._spine.sessions_for_cwd(ctx.cwd)}
+        if session_id not in recs:
             return None
         scan = self._scan(ctx, session_id)
         if scan is None:
             return None
         total = len(scan["messages"])
         messages = scan["messages"][-limit:] if limit and limit > 0 else scan["messages"]
+        r = recs[session_id]
+        item_id = r.get("item_id") or None
+        eff_kind = r.get("kind") or ("work_item" if item_id else "general")
         return {
             "id": session_id,
-            "title": scan["title"],
+            # Owner override wins; else the identity preset by kind (matches list()).
+            "title": r.get("title") or _preset_title(eff_kind, item_id, r.get("subject_run_id"), session_id),
             "updated_at": scan["updated_at"],
             "messages": messages,
             "total": total,

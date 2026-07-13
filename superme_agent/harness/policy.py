@@ -26,6 +26,9 @@ SAFE_TOOLS = {
     # into the general dev set so any session can answer "what learning is pending?" — mutate nothing.
     "mcp__dev__read_candidates",
     "mcp__dev__read_proposals",
+    # Read-only run inspector (2026-07-12): one run's trace (calls + outcome) or the recent-run list,
+    # scoped to this repo — the "what did activity #N do / why did it fail?" read + diagnose substrate.
+    "mcp__dev__read_run",
     # The SANCTIONED itemize writes (work-item-session-recognition-prd): create one inbox item from a
     # discussion, or APPEND new discussion onto an existing item (the dedup path). Auto-allowed so a
     # general session can ticket work without a prompt; the one exemption to the general-session

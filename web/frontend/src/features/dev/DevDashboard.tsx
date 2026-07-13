@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Hammer, RefreshCw, ArrowLeft, ArrowRight, Boxes, Inbox, Circle, Clock, Check, Bot, Archive } from 'lucide-react'
 import PageHeader from '@/ui/PageHeader'
-import Dropdown from '@/ui/Dropdown'
 import Modal from '@/ui/Modal'
+import ConfirmDialog from '@/ui/ConfirmDialog'
 import { getDev, planWorkItem, deleteWorkItem, type DevData, type DevGlance, type InboxEntry, type WorkItem } from '@/lib/api'
 import { fmtLocalDate } from '@/lib/format'
-import { WorkspaceKanban, PlanList, InboxView, isActive } from './panels'
+import { WorkspaceKanban, InboxView, isActive } from './panels'
 import WorkItemModal from './WorkItemModal'
 
 // The Development dashboard — a live environment for one context's dev-knowledge. Today it shows
@@ -15,11 +15,6 @@ import WorkItemModal from './WorkItemModal'
 // (D-011) — only global is wired today.
 
 type Zoom = 'workspace' | 'inbox'
-type WsView = 'kanban' | 'plan'
-const WS_VIEWS = [
-  { value: 'kanban', label: 'Worktree · kanban' },
-  { value: 'plan', label: 'Plan · list' },
-]
 
 export default function DevDashboard({
   contextId = 'global',
@@ -37,20 +32,22 @@ export default function DevDashboard({
   const [data, setData] = useState<DevData | null>(null)
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
-  const [zoom, setZoom] = useState<Zoom>('workspace')
-  const [wsView, setWsView] = useState<WsView>('kanban')
+  const [zoom, setZoom] = useState<Zoom>('inbox') // repo dev dashboard opens on the Inbox (capture queue)
   const [reviewId, setReviewId] = useState<string | null>(null) // work-item open in the review popup
   const [showShipped, setShowShipped] = useState(false) // the completed-items list overlay
+  const [confirmDel, setConfirmDel] = useState<WorkItem | null>(null) // item pending delete confirm
 
-  async function load() {
-    setLoading(true)
+  // `silent` background reloads (the running-poll) skip the `loading` flag so the manual Refresh
+  // button doesn't re-trigger its spin every 2.5s — it should spin only on a user-initiated refresh.
+  async function load(opts?: { silent?: boolean }) {
+    if (!opts?.silent) setLoading(true)
     setErr(null)
     try {
       setData(await getDev(contextId))
     } catch (e) {
       setErr(String(e))
     } finally {
-      setLoading(false)
+      if (!opts?.silent) setLoading(false)
     }
   }
 
@@ -65,15 +62,20 @@ export default function DevDashboard({
     load()
   }
 
-  // Hard-delete a plan/design item and erase its trace (folder + session + inbox row). Confirm
-  // first — it's irreversible. If it's the bound item, drop the chat binding too.
-  async function handleDelete(it: WorkItem) {
-    if (!window.confirm(`Delete "${it.title || it.id}"? This removes the work-item, its session, and its inbox row. This can't be undone.`)) return
+  // Hard-delete a plan/design item and erase its trace (folder + session + inbox row). Irreversible,
+  // so it goes through the themed ConfirmDialog (handleDelete just opens it); doDelete runs on confirm.
+  function handleDelete(it: WorkItem) {
+    setConfirmDel(it)
+  }
+  async function doDelete() {
+    const it = confirmDel
+    if (!it) return
+    setConfirmDel(null)
     try {
       await deleteWorkItem(it.id, contextId)
-      if (boundItemId === it.id) onUnbindItem?.()
+      if (boundItemId === it.id) onUnbindItem?.() // it's the bound item — drop the chat binding too
     } catch (e) {
-      alert(`Couldn't delete — ${e}`)
+      setErr(`Couldn't delete — ${e}`)
     }
     load()
   }
@@ -87,7 +89,7 @@ export default function DevDashboard({
   // `running` array identity changes per fetch) and stops once nothing is planning.
   useEffect(() => {
     if (!data?.running?.length) return
-    const t = setTimeout(load, 2500)
+    const t = setTimeout(() => load({ silent: true }), 2500)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data?.running])
@@ -108,6 +110,16 @@ export default function DevDashboard({
           onChanged={load}
         />
       )}
+      {confirmDel && (
+        <ConfirmDialog
+          title="Delete this work-item?"
+          body={<>“{confirmDel.title || confirmDel.id}” will be permanently removed — its work-item, session, and inbox row are all erased. This can’t be undone.</>}
+          confirmLabel="Delete"
+          z="z-50" // above the work-item drilldown (z-40), which stays open behind the confirm
+          onCancel={() => setConfirmDel(null)}
+          onConfirm={doDelete}
+        />
+      )}
       {showShipped && data && (
         <ShippedList
           items={data.work_items.filter((w) => w.done_at)}
@@ -121,7 +133,7 @@ export default function DevDashboard({
       {embedded ? (
         <div className="flex items-center justify-end px-6 pt-4">
           <button
-            onClick={load}
+            onClick={() => load()}
             disabled={loading}
             title="Refresh"
             aria-label="Refresh"
@@ -138,7 +150,7 @@ export default function DevDashboard({
           badge="prototype"
           right={
             <button
-              onClick={load}
+              onClick={() => load()}
               disabled={loading}
               title="Refresh"
               aria-label="Refresh"
@@ -175,31 +187,19 @@ export default function DevDashboard({
                 title="Workspace"
                 icon={Bot}
                 meta={`${data.work_items.filter(isActive).length} active`}
-                control={<Dropdown value={wsView} options={WS_VIEWS} onChange={(v) => setWsView(v as WsView)} />}
               >
                 <WorkspaceStats g={data.glance} onShowShipped={() => setShowShipped(true)} />
-                {wsView === 'kanban' ? (
-                  <WorkspaceKanban
-                    items={data.work_items}
-                    // Clicking a card opens its review popup AND binds the chat to its session —
-                    // read + discuss side by side (the popup overlays only the dashboard column).
-                    onOpen={(it) => {
-                      setReviewId(it.id)
-                      onBindItem?.(it, contextId)
-                    }}
-                    running={data.running}
-                    boundItemId={boundItemId}
-                  />
-                ) : (
-                  <PlanList
-                    items={data.work_items}
-                    onBind={onBindItem ? (it) => onBindItem(it, contextId) : undefined}
-                    onPlan={handlePlan}
-                    onDelete={handleDelete}
-                    running={data.running}
-                    boundItemId={boundItemId}
-                  />
-                )}
+                <WorkspaceKanban
+                  items={data.work_items}
+                  // Clicking a card opens its review popup AND binds the chat to its session —
+                  // read + discuss side by side (the popup overlays only the dashboard column).
+                  onOpen={(it) => {
+                    setReviewId(it.id)
+                    onBindItem?.(it, contextId)
+                  }}
+                  running={data.running}
+                  boundItemId={boundItemId}
+                />
               </ZoomPanel>
             ) : (
               <ZoomPanel title="Inbox" icon={Inbox} meta={`${data.glance.inbox_open ?? 0} open`}>

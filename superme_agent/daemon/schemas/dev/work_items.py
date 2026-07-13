@@ -28,7 +28,7 @@ class WorkItemLastRun(BaseModel):
     tokens: int
     duration_ms: int | None = None
     model: str | None = None
-    context_pct: int | None = None
+    ctx_pct: int | None = None
 
 
 class WorkItemTasks(BaseModel):
@@ -82,8 +82,8 @@ class WorkItem(BaseModel):
     run_started_at: float | None = None
     run_tokens: int | None = None
     run_model: str | None = None
-    run_context_pct: int | None = None
-    context_pct: int | None = None
+    run_ctx_pct: int | None = None
+    ctx_pct: int | None = None
     tasks: WorkItemTasks | None = None
 
 
@@ -94,13 +94,15 @@ class TaskItem(BaseModel):
 
 
 class ArtifactCall(BaseModel):
-    """One row of a work-item's run call-trail (tool / sub-agent / skill invocation)."""
+    """One row of a work-item's run call-trail (tool / sub-agent / skill invocation, or its result).
+    `tool_id` pairs a `result` row back to its call (concurrent tools return out of order)."""
     id: int
     run_id: int | None = None
     seq: int
     kind: ArtifactKind
     name: str
     description: str | None = None
+    tool_id: str | None = None
     created_at: str
 
 
@@ -109,7 +111,7 @@ class ArtifactCall(BaseModel):
 class PlanResponse(BaseModel):
     ok: bool
     status: str
-    work_item_id: str
+    id: str          # the planned work-item's id — named `id` to match every sibling WorkItem*Response
     model: str
 
 

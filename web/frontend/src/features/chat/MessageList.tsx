@@ -16,6 +16,7 @@ export default function MessageList({
   approval,
   ctxLabel,
   onAnswer,
+  onLoadMore,
   tone,
 }: {
   messages: Msg[]
@@ -27,12 +28,28 @@ export default function MessageList({
   approval: Approval | null
   ctxLabel: string
   onAnswer: (approved: boolean) => void
+  onLoadMore?: () => void // reveal the next page of older bubbles ("See more")
   tone?: 'dev' | 'core' // colours assistant `code` by scope + **bold** consistently, matching the doc previews
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null)
+  // When "See more" prepends older bubbles, keep the viewport anchored (don't yank to the bottom).
+  // preserveRef holds the pre-load scrollHeight; the effect restores position by the height delta.
+  const preserveRef = useRef<number | null>(null)
   useEffect(() => {
-    scrollRef.current?.scrollTo(0, scrollRef.current.scrollHeight)
+    const el = scrollRef.current
+    if (!el) return
+    if (preserveRef.current != null) {
+      el.scrollTop = el.scrollHeight - preserveRef.current
+      preserveRef.current = null
+    } else {
+      el.scrollTo(0, el.scrollHeight)
+    }
   }, [messages, live, statusLabel, approval])
+
+  function seeMore() {
+    preserveRef.current = scrollRef.current?.scrollHeight ?? null
+    onLoadMore?.()
+  }
 
   return (
     <div ref={scrollRef} className="min-h-0 flex-1 space-y-3 overflow-auto p-4">
@@ -42,8 +59,13 @@ export default function MessageList({
         </div>
       )}
       {olderHidden > 0 && (
-        <div className="text-center text-xs text-faint">
-          ⋯ {olderHidden} earlier message{olderHidden === 1 ? '' : 's'} hidden — SuperMe still has the full context
+        <div className="text-center">
+          <button
+            onClick={seeMore}
+            className="text-xs text-faint underline-offset-2 transition-colors hover:text-fg hover:underline"
+          >
+            See {Math.min(10, olderHidden)} more · {olderHidden} earlier hidden
+          </button>
         </div>
       )}
       {messages.map((m, i) => (

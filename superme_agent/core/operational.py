@@ -184,6 +184,12 @@ def _is_enabled(meta: dict) -> bool:
     return v not in ("false", "0", "no", "off")
 
 
+def _is_foundational(meta: dict) -> bool:
+    """`foundational: true` marks a constitution a charter consults BY NAME (e.g. dev-knowledge-structure).
+    Disabling one would dangle the charter's pull, so the toggle refuses it — it's pinned always-on."""
+    return str(meta.get("foundational", "false")).strip().lower() in ("true", "1", "yes", "on")
+
+
 def read_constitution_dir(directory: Path, *, origin: str) -> list[dict]:
     """Read one constitution home into a list of items (newest filename last → stable order).
     `origin` tags where it came from ('universal' | 'repo'). Missing dir → []."""
@@ -200,6 +206,7 @@ def read_constitution_dir(directory: Path, *, origin: str) -> list[dict]:
         out.append({
             "slug": meta.get("name") or p.stem,
             "enabled": _is_enabled(meta),
+            "foundational": _is_foundational(meta),  # charter-pinned → not disable-able
             "description": meta.get("description"),  # the always-resident catalog line (directive / when-to-apply)
             "scope": meta.get("scope"),
             "source": meta.get("source"),
