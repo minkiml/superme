@@ -47,6 +47,9 @@ async def _run_headless_distill(ctx, context_id: str, run_id: int) -> None:
         "candidate pool for this context. This is an autonomous headless run — there is no human "
         "in this chat, so do not ask questions; invoke the agent and let it file its proposals."
     )
+    # The trail's first entry = what this run was asked to do (these transcripts are disposed,
+    # so the trail is the only record).
+    capture_prompt(context_id, prompt, run_id=run_id)
     # Snapshot the pool so the end event can report what the pass produced.
     cands_before = len(_dev_store.list_memory_candidates(context_id, status="candidate"))
     props_before = len(_dev_store.list_memory_proposals(context_id, status="proposed"))
@@ -218,9 +221,11 @@ async def _run_headless_write(ctx, context_id: str, proposal_id: int, run_id: in
     session_id = None
     run_model = None
     run_usage = None
+    write_prompt = _write_prompt(prop, slug=slug, workspace=workspace, existing_path=existing_path)
+    capture_prompt(context_id, write_prompt, run_id=run_id)
     try:
         async for ev in _agent.run_turn(
-            ctx, _write_prompt(prop, slug=slug, workspace=workspace, existing_path=existing_path),
+            ctx, write_prompt,
             resume=None,
             model=_spine.resolve_agent_model("write"),   # its .md tier → latest concrete (never the lagging CLI alias)
             effort=_spine.resolve_agent_effort("write"),  # its .md effort field (default medium)
@@ -345,6 +350,7 @@ async def run_sweep(ctx, session_id: str, focus: str | None = None) -> dict:
         f"{focus_line}\n\n--- conversation slice (oldest first) ---\n{_render_slice(slice_msgs)}\n"
         "--- end slice ---"
     )
+    capture_prompt(context_id, prompt, run_id=run_id)  # trail head (capped; the slice is trimmed)
     # Bind provenance server-side: the agent supplies substance, we stamp which session it came from.
     turn_mcp = {"dev": make_dev_mcp_server(_dev_store, context_id, learning=True,
                                            origin_session_id=session_id)}

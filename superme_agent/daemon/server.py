@@ -29,6 +29,7 @@ from .routers import (  # noqa: E402
 from .routers.dev import (  # noqa: E402
     inbox as _r_dev_inbox, meta as _r_dev_meta, harness as _r_dev_harness,
     work_items as _r_dev_work_items, learning as _r_dev_learning, general as _r_dev_general,
+    git as _r_dev_git, gates as _r_dev_gates,
 )
 
 app.include_router(_r_health.router)
@@ -42,6 +43,8 @@ app.include_router(_r_dev_inbox.router)
 app.include_router(_r_dev_meta.router)
 app.include_router(_r_dev_harness.router)
 app.include_router(_r_dev_work_items.router)
+app.include_router(_r_dev_git.router)
+app.include_router(_r_dev_gates.router)
 app.include_router(_r_dev_learning.router)
 app.include_router(_r_dev_general.router)
 app.include_router(_r_ws.router)

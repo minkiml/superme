@@ -353,6 +353,11 @@ class SystemSpine:
                 # session is hard-deleted. The RUN itself is never deleted — this labels the trace whose
                 # session is gone, so activity can show a "session deleted/retired" badge.
                 "session_fate": "TEXT",
+                # Per-run terminal OUTCOME (workspace-workflow D2, declared S1 / persisted S5): how a
+                # HEADLESS run's structured completion report ended — success | clean_noop | blocked |
+                # approval_required | exhausted | stagnated. NULL for interactive turns (no report)
+                # and pre-S5 rows. Feeds the status router + the attention engine (S7).
+                "outcome": "TEXT",
             })
             c.execute("CREATE INDEX IF NOT EXISTS idx_run_guard ON run(repo_id, mode, feature, status)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_run_item ON run(repo_id, item_id)")
@@ -919,7 +924,8 @@ class SystemSpine:
 
     def finish_item_run(self, repo_id: str, item_id: str, *, run_status: str = "done",
                         fallback_tokens: int | None = None,
-                        usage: dict | None = None, ctx_pct: int | None = None) -> int | None:
+                        usage: dict | None = None, ctx_pct: int | None = None,
+                        outcome: str | None = None) -> int | None:
         """Close the item's running row (status done|aborted), keeping the accumulated live token
         sum — or `fallback_tokens` if no Usage steps arrived. `usage` (whole-turn final dict) is the
         typed-column fallback (see finish_run). `ctx_pct` is the AUTHORITATIVE end-of-turn context
@@ -940,6 +946,9 @@ class SystemSpine:
             if ctx_pct is not None:  # authoritative Result fill overrides the live-bump estimate
                 sets.append("ctx_pct=?")
                 args.append(int(ctx_pct))
+            if outcome:  # a headless run's structured completion outcome (S5; validated by caller)
+                sets.append("outcome=?")
+                args.append(str(outcome))
             args.append(row["id"])
             c.execute(f"UPDATE run SET {', '.join(sets)} WHERE id=?", args)
             self._finish_usage_apply(c, row["id"], usage)  # authoritative per-type + reconciled tokens
@@ -1637,6 +1646,73 @@ class SystemSpine:
                     (key, str(max(0, int(val))), _now()),
                 )
         return self.get_sweep_config()
+
+    # --- compaction runtime tuning (workspace-workflow S8/D11) --------------------
+    # `trigger_pct` = context fill (vs the effective window) at which the kernel compacts a
+    # work-item session; `by_kind` = per-kind overrides; `min_gain_pct` = the effectiveness
+    # threshold (a compaction shrinking the prompt by less than this is a STRIKE). Floor safety
+    # (refusing a trigger the incompressible floor alone would exceed) lives in the compaction
+    # service — the spine just stores.
+    # min_gain default is "auto": the verdict is judged against the session's RECLAIMABLE space
+    # (pre − incompressible floor), not a flat %, so preload-heavy sessions aren't false-failed.
+    # A manual int (1–95) remains the escape-hatch override.
+    _COMPACTION_DEFAULTS = {"compaction_trigger_pct": 80, "compaction_min_gain_pct": "auto"}
+
+    def get_compaction_config(self) -> dict:
+        """{trigger_pct, by_kind: {kind: pct}, min_gain_pct} — missing rows fall back to defaults.
+        min_gain_pct is "auto" (reclaimable-normalized verdict) or a manual int %."""
+        with self._conn() as c:
+            rows = {r["key"]: r["value"] for r in c.execute(
+                "SELECT key, value FROM system_setting WHERE key IN "
+                "('compaction_trigger_pct','compaction_min_gain_pct','compaction_by_kind')"
+            ).fetchall()}
+        def _int(key: str) -> int:
+            try:
+                return int(rows[key])
+            except (KeyError, TypeError, ValueError):
+                return self._COMPACTION_DEFAULTS[key]
+        raw_gain = rows.get("compaction_min_gain_pct")
+        if raw_gain is None or str(raw_gain).strip().lower() == "auto":
+            min_gain = self._COMPACTION_DEFAULTS["compaction_min_gain_pct"]
+        else:
+            try:
+                min_gain = int(raw_gain)
+            except (TypeError, ValueError):
+                min_gain = self._COMPACTION_DEFAULTS["compaction_min_gain_pct"]
+        try:
+            by_kind = {str(k): int(v) for k, v in
+                       json.loads(rows.get("compaction_by_kind") or "{}").items()}
+        except (ValueError, TypeError):
+            by_kind = {}
+        return {"trigger_pct": _int("compaction_trigger_pct"), "by_kind": by_kind,
+                "min_gain_pct": min_gain}
+
+    def set_compaction_config(self, *, trigger_pct: int | None = None,
+                              by_kind: dict | None = None,
+                              min_gain_pct: int | str | None = None) -> dict:
+        """Set one or more compaction knobs (None = leave unchanged). The caller (route) has
+        already refused floor-violating values. min_gain_pct: an int % or the string "auto".
+        Returns the new config."""
+        gain_val = None
+        if min_gain_pct is not None:
+            gain_val = ("auto" if str(min_gain_pct).strip().lower() == "auto"
+                        else str(int(min_gain_pct)))
+        updates = {
+            "compaction_trigger_pct": None if trigger_pct is None else str(int(trigger_pct)),
+            "compaction_min_gain_pct": gain_val,
+            "compaction_by_kind": None if by_kind is None else json.dumps(
+                {str(k): int(v) for k, v in by_kind.items()}),
+        }
+        with self._conn() as c:
+            for key, val in updates.items():
+                if val is None:
+                    continue
+                c.execute(
+                    "INSERT INTO system_setting (key,value,updated_at) VALUES (?,?,?)"
+                    " ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at",
+                    (key, val, _now()),
+                )
+        return self.get_compaction_config()
 
     # --- repo visual tag (owner-defined color + icon) ----------------------------
     def get_repo_meta(self, repo_id: str) -> dict:

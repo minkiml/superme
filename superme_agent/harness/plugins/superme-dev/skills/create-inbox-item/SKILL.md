@@ -39,7 +39,25 @@ Rules:
 - **kind** = `todo` for a change to make, `idea` for a proposal to consider, `question` for something
   to resolve, `note` otherwise (default `note`).
 
-Then call `create_inbox_item(title, body, kind)`.
+Then call `create_inbox_item` with the title/body/kind AND the **handoff-brief fields** — the tool
+scaffolds `handoff-brief.md` next to the ticket, and these four fields are its content. Fill them
+NOW, while the discussion is hot: the future work-item's triage session cold-starts from this brief,
+and an empty one throws away exactly the context you currently hold. High-level only — NO plans, no
+implementation detail:
+
+- `background` — the problem/story: why this was raised, in the discussion's own terms.
+- `discussion` — what was discussed and concluded so far (conclusions, not the back-and-forth).
+- `direction` — the high-level direction or options on the table, with any leanings.
+- `constraints` — constraints, things tried-and-failed, explicit out-of-scope.
+
+Skip a field only when the discussion genuinely produced nothing for it (a bare quick capture may
+fill just `background`). Body ≠ brief: the body is the crisp ticket; the brief carries the context
+behind it.
+
+**Branch-off from a work-item session:** pass `spawned_from_item` (the current item's id) +
+`relation` — `blocking` (parent must wait; auto-pushes and pauses the parent) · `parallel`
+(independent but gates the parent's completion; auto-pushes) · `spawn` (speculative follow-up;
+waits in the inbox for the owner's push). Omit both for ordinary discussion tickets.
 
 ## Step 3 - Augment (existing item)
 

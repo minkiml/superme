@@ -34,6 +34,9 @@ FEATURE_CATEGORY = {
     "plan": "workitem",
     "build": "workitem",
     "forge": "workitem",
+    # Resolve-with-Agent (S4/D4): the headless conflict-resolution run on an item's worktree —
+    # an autonomous build op, same bucket as plan/build.
+    "resolve": "workitem",
     # Interactive (owner-driven turns; bound chat still tags item_id for attribution).
     "chat": "interactive",
     # onboarding (project-init/retrofit walkthrough) and diagnosis (owner inspecting a run) are
@@ -42,6 +45,11 @@ FEATURE_CATEGORY = {
     # "new unknown feature" self-flag; each still shows as its own named sub-bucket within Other.
     "onboarding": "other",
     "diagnosis": "other",
+    # Kernel-driven context compaction (S8). Its usage is an ESTIMATE derived from the compact
+    # boundary (the CLI reports zero API usage for a /compact turn — verified empirically):
+    # input ≈ preTokens (the transcript the summarizer read), output ≈ postTokens (the summary
+    # it wrote). Bucketed under Other as silent maintenance, never interactive spend.
+    "compact": "other",
     # System / on-behalf features register here as they appear (e.g. "autotitle": "system").
 }
 

@@ -47,6 +47,26 @@ def _is_noise(record: dict, text: str) -> bool:
     return text.lstrip().startswith(_NOISE_PREFIXES)
 
 
+# Kernel-injected birth blocks prepended to a session's FIRST user prompt (`<block>\n\n---\n\n<real
+# prompt>`): the work-item orient block and the diagnosis subject-run trace. On replay we show only
+# the real prompt — the block is plumbing, and dropping the whole record would hide what the user
+# actually typed on an interactive birth turn.
+_BIRTH_BLOCK_HEADERS = (
+    "### Work-item orientation",
+    "### Subject activity-run trace",
+)
+
+
+def _strip_birth_block(text: str) -> str:
+    """Cut a kernel-injected birth block off the front of a prompt, keeping the real message after
+    the `---` separator (empty when the turn was pure plumbing — e.g. a headless plan trigger,
+    which then falls to the noise filter)."""
+    if not text.lstrip().startswith(_BIRTH_BLOCK_HEADERS):
+        return text
+    parts = text.split("\n\n---\n\n", 1)
+    return parts[1] if len(parts) == 2 else ""
+
+
 def _short_id(sid: str) -> str:
     """A short, human-glanceable id for a session (first UUID segment / first 8 chars)."""
     return (sid or "").split("-")[0][:8] or "session"
@@ -167,6 +187,8 @@ class SessionStore:
                 title = d["aiTitle"]
             elif t in _ROLE:
                 text = _blocks_text((d.get("message") or {}).get("content"))
+                if t == "user":
+                    text = _strip_birth_block(text)
                 if not text.strip() or _is_noise(d, text):
                     continue
                 role = _ROLE[t]

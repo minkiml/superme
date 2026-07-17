@@ -17,6 +17,7 @@ from ..schemas.system import (
     SystemResponse, RepoOverview, RepoConnectResponse, RunsResponse, RunTraceResponse,
     SystemModelResponse, LearningResponse, RepoModelResponse, RepoLearningResponse,
     RepoMetaResponse, TokenUsageResponse, TokenTimeseriesResponse, SweepConfigBody, SweepConfigResponse,
+    CompactionConfigBody, CompactionConfigResponse,
     SystemEffortResponse, RepoEffortResponse, AgentModelsResponse,
 )
 from ...core.models import AGENT_MODEL_FEATURES
@@ -86,15 +87,16 @@ def _norm_effort(e: str | None) -> str | None:
 
 
 def _active_item_count(repo_id: str) -> int:
-    """Live work-item agent jobs = items being worked — status `in_progress` or `waiting`,
-    excluding queued backlog and done/dropped. Read from the work-item STORE (the item's own status
-    is the source of truth, not run rows). 0 when the repo has no dev-knowledge."""
+    """Live work-items = every non-terminal item (status active or any awaiting_*; D2 runnable
+    axis). Read from the work-item STORE (the item's own status is the source of truth, not run
+    rows). 0 when the repo has no dev-knowledge."""
     try:
         data = _dev.read_all(dev_root(repo_id))
     except Exception:
         return 0
     return sum(1 for it in data.get("work_items", [])
-               if it.get("status") in ("in_progress", "waiting") and not it.get("done_at"))
+               if it.get("status") in ("active", "awaiting_child", "awaiting_human")
+               and not it.get("done_at"))
 
 
 @router.get("/system", response_model=SystemResponse)
@@ -287,6 +289,37 @@ async def set_system_sweep(body: SweepConfigBody, spine: SystemSpine = Depends(g
     log.info("sweep config: idle=%ds poll=%ds min_user_msgs=%d",
              cfg["idle_seconds"], cfg["poll_seconds"], cfg["min_user_msgs"])
     return {"ok": True, **cfg}
+
+
+@router.get("/system/compaction", response_model=CompactionConfigResponse)
+async def get_system_compaction(spine: SystemSpine = Depends(get_spine)) -> dict:
+    """The compaction runtime knobs (S8/D11): trigger fill %, per-kind overrides, and the
+    effectiveness threshold, plus the static incompressible floor the trigger may never sit
+    at/below (what makes the knob safe to expose)."""
+    from ..services.compaction import FLOOR_MIN_PCT
+    return {"ok": True, **spine.get_compaction_config(), "floor_pct": FLOOR_MIN_PCT}
+
+
+@router.post("/system/compaction", response_model=CompactionConfigResponse)
+async def set_system_compaction(body: CompactionConfigBody,
+                                spine: SystemSpine = Depends(get_spine)) -> dict:
+    """Tune the compaction runtime. Any omitted field is left unchanged. FLOOR-AWARE: a trigger
+    the incompressible floor alone would exceed is refused (409) — never stored, never fired."""
+    from ..services.compaction import FLOOR_MIN_PCT, validate_trigger
+    for pct in [body.trigger_pct, *(body.by_kind or {}).values()]:
+        if pct is None:
+            continue
+        reason = validate_trigger(int(pct))
+        if reason:
+            raise HTTPException(status_code=409, detail=reason)
+    if (body.min_gain_pct is not None and body.min_gain_pct != "auto"
+            and not (0 <= int(body.min_gain_pct) <= 95)):
+        raise HTTPException(status_code=409, detail="min_gain_pct must be 0–95 or 'auto'")
+    cfg = spine.set_compaction_config(trigger_pct=body.trigger_pct, by_kind=body.by_kind,
+                                      min_gain_pct=body.min_gain_pct)
+    log.info("compaction config: trigger=%d%% by_kind=%s min_gain=%s",
+             cfg["trigger_pct"], cfg["by_kind"], cfg["min_gain_pct"])
+    return {"ok": True, **cfg, "floor_pct": FLOOR_MIN_PCT}
 
 
 @router.post("/repos/{repo_id}/model", response_model=RepoModelResponse)

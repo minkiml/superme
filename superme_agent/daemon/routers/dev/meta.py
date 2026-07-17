@@ -1,10 +1,15 @@
-"""Dev meta routes: /dev (parsed knowledge + inbox + glance + run telemetry), /dev/log."""
+"""Dev meta routes: /dev (parsed knowledge + inbox + glance + run telemetry), /dev/log,
+/dev/workgraph (the derived graph projection)."""
 
 from fastapi import APIRouter, Depends
 
 from ...app_state import DevKnowledgeService, DevStore, SystemSpine, get_dev, get_dev_store, get_spine
 from ...deps import dev_root
-from ...schemas.dev.meta import DevReadResponse, DevLogResponse
+from ...schemas.dev.meta import (
+    AttentionResponse, DevReadResponse, DevLogResponse, WorkGraphResponse,
+)
+from ....core import attention, workgraph
+from ....core.dev_knowledge import _parse_deliverables, _parse_waves
 
 router = APIRouter()
 
@@ -30,6 +35,42 @@ async def dev_read(context_id: str = "global",
     dev.enrich_work_items(root, data["work_items"], live_by_item, stats)
     data["running"] = sorted(live_by_item.keys())
     return data
+
+
+@router.get("/dev/attention", response_model=AttentionResponse)
+async def dev_attention(context_id: str = "global",
+                        dev: DevKnowledgeService = Depends(get_dev),
+                        spine: SystemSpine = Depends(get_spine)) -> dict:
+    """The attention engine (S7/D10): every item in at most one bucket, strict priority
+    needs_you (awaiting_human) > running (live run) > unread (terminal, never opened) — derived
+    from durable state at read time. `badge` = the top non-empty tier's color + count, or null
+    when nothing claims attention. Powers the workspace badge + kanban tinting."""
+    root = dev_root(context_id)
+    items = dev.read_all(root)["work_items"]
+    running = {r["item_id"] for r in spine.live_runs(context_id) if r.get("item_id")}
+    return {"context_id": context_id, **attention.assign(items, running)}
+
+
+@router.get("/dev/workgraph", response_model=WorkGraphResponse)
+async def dev_workgraph(context_id: str = "global",
+                        dev: DevKnowledgeService = Depends(get_dev),
+                        dev_store: DevStore = Depends(get_dev_store)) -> dict:
+    """The DERIVED WorkGraph projection (D3): repo root · roadmap deliverables · work-items ·
+    spawned-but-unpushed inbox rows, with contains / spawned_from(relation) / supersedes edges.
+    Assembled on demand from the authoritative feeds — nothing stored, nothing to sync. Cycles
+    (a hand-edited provenance loop) are REPORTED as data, never a 500. Git state joins as node
+    decoration in S4; the graph VIEW consumes this in S7."""
+    root = dev_root(context_id)
+    items = dev.read_all(root)["work_items"]
+    g = workgraph.build(
+        repo_id=context_id,
+        items=items,
+        deliverables=_parse_deliverables(dev.read_general_doc(root, "project-prd") or ""),
+        waves=_parse_waves(dev.read_general_doc(root, "roadmap") or ""),
+        inbox_rows=dev_store.list_inbox(context_id),
+    )
+    return {"context_id": context_id, "nodes": list(g.nodes.values()), "edges": g.edges,
+            "cycles": g.cycles(), "topo": g.topo()}
 
 
 @router.get("/dev/log", response_model=DevLogResponse)

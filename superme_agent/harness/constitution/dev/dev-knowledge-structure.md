@@ -67,23 +67,37 @@ parent_id: null       # null = a root; set = a branch-off
 wave: null            # (root only) the wave this item instances → resolves its deliverable
 deliverable: null     # …or a deliverable directly when no wave applies
 title: ...
-phase: build_eval     # triage | plan_design | build_eval | done
-status: in_progress   # queued | in_progress | waiting | dropped  (null when completed)
-done_at: null         # set = completed → item leaves the board
+kind: implementation  # implementation | research — picks the phase pipeline (KIND_PROFILES)
+phase: build          # impl: triage|plan|build|validate|deliver|close · research: triage|plan|investigate|report|close
+status: active        # active | awaiting_child | awaiting_human | done
+outcome: null         # set with status done: completed | abandoned | superseded
+spawned_from: null    # branch-off provenance {item, relation: blocking|parallel|spawn, note?}
+superseded_by: null   # set when outcome = superseded
+inbox_id: null        # originating inbox row (trace)
+done_at: null         # terminal stamp → item leaves the board
 artifacts: []         # files under this item's artifacts/
-blocked_by: []        # work-item ids this depends on
 session_id: null      # the session this item originated in
 created_at: 2026-06-16
 updated_at: 2026-06-16
 ```
 
-Rules an example won't show:
-- **phase `triage`** — intake/classification before `plan_design`; lands with the workspace workflow
-  (today `push` enters at `plan_design`).
-- **status has no `done`** — completion = phase `done` **plus** `done_at`; `dropped` is the only terminal
-  status; **`blocked` is derived** (an unresolved `blocked_by`), never stored.
-- **Who sets them** — workflows and the system set `phase`/`status`/`blocked_by` and inbox rows; phase
-  advances and drops are **human-gated**. Unguided work owns only `artifacts` (+ `updated_at`).
+The kernel also stamps fields not shown above (all kernel-owned — read, never write): the git
+record (`git_branch` · `git_worktree` · `git_base` · `git_merge_commit` · `git_merged_at` ·
+`git_backup_ref`), the per-item run config (`model` · `effort`), and the read receipt (`seen_at`).
 
-**Inbox row:** `kind ∈ note|idea|todo|question` · `status ∈ open|pushed` · `origin ∈ user|agent`. **Push**
-promotes an `open` row into `work-items/<id>/` (at `plan_design`/`queued`); **drop** is a hard delete.
+Rules an example won't show:
+- **Every item enters at `triage`/`active`** — `kind` is a PROPOSAL until the triage-exit gate;
+  phase sequencing is per-kind (the system's KIND_PROFILES), never skipped.
+- **Terminal = a status change, never a delete** — `status: done` + `outcome` + `done_at`;
+  `superseded` requires `superseded_by`.
+- **`awaiting_human` is the only status that pages the owner**; `awaiting_child` auto-resumes when
+  the last blocking child closes; running-right-now is derived from live runs, not a status.
+- **Dependency between items is expressed ONE way** — a branch-off with `spawned_from.relation:
+  blocking`, which pauses the parent at `awaiting_child`. There is no dependency-id list.
+- **Who sets them** — the system sets `kind`/`phase`/`status`/`outcome` and inbox rows;
+  phase advances and terminal outcomes are **human-gated** (the agent NEVER sets an item done).
+  Unguided work owns only `artifacts` (+ `updated_at`).
+
+**Inbox row:** `kind ∈ note|idea|todo|question` · `status ∈ open|pushed` · `origin ∈ user|agent` ·
+optional `spawned_from` (carried onto the item at push). **Push** promotes an `open` row into
+`work-items/<id>/` (at `triage`/`active`); **drop** is a hard delete.

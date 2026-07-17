@@ -122,16 +122,6 @@ export default function App() {
                 setChatOpen(true)
               }}
               onUnbindItem={() => setBinding(null)}
-              onStartOnboarding={(repoId, mode) => {
-                // Point the chat rail at this repo's dev thread and seed the onboarding kickoff.
-                setBinding(null)
-                setChatContext(repoId)
-                setChatMode('dev')
-                setChatOpen(true)
-                // kind='onboarding' → the daemon stamps the birthed session (write-once) so it's a
-                // distinctly-labeled category in the session picker (session-kinds-diagnose).
-                setSeed({ prompt: onboardingKickoff(mode), kind: 'onboarding' })
-              }}
             />
           ) : dest?.kind === 'core' ? (
             <CoreDashboard repo={dest.repo} onExit={() => setDest(null)} />
@@ -201,11 +191,9 @@ export default function App() {
   )
 }
 
-// The onboarding kickoff message seeded into the dev chat — names the skill explicitly so routing is
-// reliable, and states the project's starting condition so the skill picks the right posture.
-function onboardingKickoff(mode: 'project-init' | 'retrofit'): string {
-  return mode === 'project-init'
-    ? "This project has no SuperMe memory yet, and it's a new/greenfield project. Run **project-init**: grill me to establish the anchor docs (PRD, spec, roadmap, architecture), then draft them for my approval."
-    : "This project has no SuperMe memory yet, and it's an existing codebase. Run **retrofit**: comprehend the code, clarify the intent with me, then draft the anchor docs for my approval."
-}
+// (There is no onboarding kickoff prompt. Onboarding is a repo STATE, not a launched action: while
+// a dev repo's memory is unestablished, ws.py already treats every general session in it as an
+// onboarding session and `onboarding_preamble(mode)` already carries the skill directive in the
+// system prompt — invisible to the owner, absent from the transcript and the activity trail. The
+// owner's first message is their project description, full stop. See OnboardingLanding.)
 

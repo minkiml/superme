@@ -151,6 +151,17 @@ export function setSweepConfig(patch: { idle_seconds?: number; poll_seconds?: nu
   return sendJSON('/api/system/sweep', 'POST', patch)
 }
 
+// Compaction runtime knobs (workspace-workflow S8/D11): the fill % at which a work-item session
+// auto-compacts (per-kind overrides) + the effectiveness threshold. The backend refuses (409)
+// any trigger at/below the incompressible floor (floor_pct) — the knob is safe by construction.
+export type CompactionConfig = Schema<'CompactionConfigResponse'>
+export function getCompactionConfig(): Promise<CompactionConfig> {
+  return getJSON('/api/system/compaction')
+}
+export function setCompactionConfig(patch: { trigger_pct?: number; by_kind?: Record<string, number>; min_gain_pct?: number | 'auto' }): Promise<CompactionConfig> {
+  return sendJSON('/api/system/compaction', 'POST', patch)
+}
+
 // Set a repo's VISUAL tag (owner-defined color + icon). Omit a field (undefined) to leave it as-is;
 // pass '' to clear it (back to the hashed-palette default / no icon).
 export type RepoMeta = Schema<'RepoMetaResponse'>

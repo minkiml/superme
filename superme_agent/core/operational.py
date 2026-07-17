@@ -164,6 +164,30 @@ def silent_skill_names(plugin_dirs: list[Path]) -> set[str]:
     return out
 
 
+def skills_in_category(plugin_dirs: list[Path], category: str) -> set[str]:
+    """Skill names in `category` across these plugin dirs, in BOTH the namespaced `<ns>:<name>` and
+    bare `<name>` forms (same contract as `silent_skill_names` — a permission check may see either).
+
+    Unlike `access: silent` (which is a permanent property of a skill), a category block is a
+    property of the SESSION: the caller decides when a category is off-limits. Today that's the
+    `onboarding` category — project-init/retrofit exist to establish a project's memory, so once it
+    IS established they can only do harm (retrofit re-derives the anchor docs from the code and
+    would overwrite the owner's approved ones). They're one-shot per repo, and nothing else expires
+    like that, so the kernel — not the skill's own prose — is what enforces it."""
+    out: set[str] = set()
+    want = (category or "").strip().lower()
+    for d in plugin_dirs:
+        p = Path(d)
+        if not p.is_dir():
+            continue
+        ns = _plugin_namespace(p)
+        for sk in _read_plugin(p)["skills"]:
+            if (sk.get("category") or "").strip().lower() == want:
+                out.add(f"{ns}:{sk['name']}")
+                out.add(sk["name"])
+    return out
+
+
 def list_harness_plugins(*, dev_dir: Path, core_dir: Path, shared_dir: Path) -> list[dict]:
     """SuperMe's OWN universal skills/agents, grouped by the scope that loads them: `dev` and
     `core` (mode-selected) plus `shared` (loaded in every mode). The per-repo operational tree
@@ -346,9 +370,9 @@ def constitution_catalog(mode: str, universal_dir: Path, repo_dir: Path | None, 
         lines.append(f"- **{it['slug']}** — {desc}")
     header = (
         "## Constitution catalog (operational directives — in force)\n"
-        "These directives are IN FORCE; follow them. Each line is a constitution item; call "
-        "`pull_constitution(name)` to load its full body (rationale, examples, detail) when you "
-        "need more than the line states."
+        "These directives are IN FORCE; follow them. Each line names one constitution; when its "
+        "description is relevant to what you're doing and you need the full contract, call "
+        "`pull_constitution(name)` to load its body."
     )
     return header + "\n\n" + "\n".join(lines)
 

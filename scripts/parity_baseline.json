@@ -6,6 +6,7 @@
     "DELETE /sessions/{session_id}",
     "GET /contexts",
     "GET /dev",
+    "GET /dev/attention",
     "GET /dev/general",
     "GET /dev/general/{name}",
     "GET /dev/harness/assets",
@@ -27,6 +28,9 @@
     "GET /dev/roadmap",
     "GET /dev/work-items/{item_id}/artifacts",
     "GET /dev/work-items/{item_id}/detail",
+    "GET /dev/work-items/{item_id}/gate-brief",
+    "GET /dev/work-items/{item_id}/git",
+    "GET /dev/workgraph",
     "GET /docs",
     "GET /docs/{slug}",
     "GET /fs/browse",
@@ -40,6 +44,7 @@
     "GET /sessions/{session_id}",
     "GET /system",
     "GET /system/agent-models",
+    "GET /system/compaction",
     "GET /system/inventory",
     "GET /tokens",
     "GET /tokens/timeseries",
@@ -58,12 +63,19 @@
     "POST /dev/memory/proposals/{proposal_id}/reject",
     "POST /dev/sweep",
     "POST /dev/sweep/idle-scan",
+    "POST /dev/work-items/{item_id}/abandon",
     "POST /dev/work-items/{item_id}/advance",
+    "POST /dev/work-items/{item_id}/compact",
     "POST /dev/work-items/{item_id}/complete",
     "POST /dev/work-items/{item_id}/effort",
+    "POST /dev/work-items/{item_id}/git/merge",
+    "POST /dev/work-items/{item_id}/git/resolve",
+    "POST /dev/work-items/{item_id}/git/revert",
+    "POST /dev/work-items/{item_id}/git/sync",
     "POST /dev/work-items/{item_id}/model",
     "POST /dev/work-items/{item_id}/plan",
     "POST /dev/work-items/{item_id}/scaffold",
+    "POST /dev/work-items/{item_id}/seen",
     "POST /knowledge/inject",
     "POST /repos",
     "POST /repos/{repo_id}/effort",
@@ -71,6 +83,7 @@
     "POST /repos/{repo_id}/meta",
     "POST /repos/{repo_id}/model",
     "POST /system/agent-models/{feature}",
+    "POST /system/compaction",
     "POST /system/effort",
     "POST /system/learning",
     "POST /system/model",
@@ -86,6 +99,94 @@
   "openapi": {
     "components": {
       "schemas": {
+        "AbandonBody": {
+          "properties": {
+            "context_id": {
+              "default": "global",
+              "title": "Context Id",
+              "type": "string"
+            },
+            "reason": {
+              "default": "",
+              "title": "Reason",
+              "type": "string"
+            },
+            "superseded_by": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Superseded By"
+            }
+          },
+          "title": "AbandonBody",
+          "type": "object"
+        },
+        "AbandonResponse": {
+          "description": "The abandon brief (D8): what was torn down + the children triage list. Blocking children\nexisted only for this parent \u2014 the owner disposes each (abandon / promote to independent);\nparallel children continue untouched.",
+          "properties": {
+            "blocking_children": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Blocking Children",
+              "type": "array"
+            },
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "ok": {
+              "title": "Ok",
+              "type": "boolean"
+            },
+            "outcome": {
+              "title": "Outcome",
+              "type": "string"
+            },
+            "parallel_children": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Parallel Children",
+              "type": "array"
+            },
+            "runs_freed": {
+              "title": "Runs Freed",
+              "type": "integer"
+            },
+            "session_cleared": {
+              "title": "Session Cleared",
+              "type": "boolean"
+            },
+            "worktree_removed": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Worktree Removed"
+            }
+          },
+          "required": [
+            "ok",
+            "id",
+            "outcome",
+            "session_cleared",
+            "runs_freed",
+            "blocking_children",
+            "parallel_children"
+          ],
+          "title": "AbandonResponse",
+          "type": "object"
+        },
         "AgentModelBody": {
           "properties": {
             "effort": {
@@ -325,6 +426,56 @@
           "title": "ArtifactRef",
           "type": "object"
         },
+        "ArtifactStatusRow": {
+          "description": "COMPUTED status of one artifact kind (S2 \u2014 derived from file existence + self-check +\nevidence freshness at read time; never stored in any doc, so it cannot drift).",
+          "properties": {
+            "evidence": {
+              "anyOf": [
+                {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Evidence"
+            },
+            "issues": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Issues"
+            },
+            "present": {
+              "title": "Present",
+              "type": "boolean"
+            },
+            "required": {
+              "title": "Required",
+              "type": "boolean"
+            },
+            "status": {
+              "title": "Status",
+              "type": "string"
+            }
+          },
+          "required": [
+            "required",
+            "present",
+            "status"
+          ],
+          "title": "ArtifactStatusRow",
+          "type": "object"
+        },
         "AssetActionBody": {
           "properties": {
             "action": {
@@ -443,6 +594,143 @@
           "title": "AssetsResponse",
           "type": "object"
         },
+        "AttentionBadge": {
+          "description": "The global badge: the TOP non-empty tier only \u2014 one color, one count (D10).",
+          "properties": {
+            "color": {
+              "title": "Color",
+              "type": "string"
+            },
+            "count": {
+              "title": "Count",
+              "type": "integer"
+            },
+            "tier": {
+              "title": "Tier",
+              "type": "string"
+            }
+          },
+          "required": [
+            "tier",
+            "color",
+            "count"
+          ],
+          "title": "AttentionBadge",
+          "type": "object"
+        },
+        "AttentionResponse": {
+          "description": "The attention engine's read: strict-priority buckets derived from durable state.",
+          "properties": {
+            "badge": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/AttentionBadge"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "buckets": {
+              "additionalProperties": {
+                "items": {
+                  "$ref": "#/components/schemas/AttentionRow"
+                },
+                "type": "array"
+              },
+              "title": "Buckets",
+              "type": "object"
+            },
+            "context_id": {
+              "title": "Context Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "context_id",
+            "buckets"
+          ],
+          "title": "AttentionResponse",
+          "type": "object"
+        },
+        "AttentionRow": {
+          "description": "One item's attention claim: which bucket, why (one human line), and the gate it sits at\n(needs_you only).",
+          "properties": {
+            "bucket": {
+              "title": "Bucket",
+              "type": "string"
+            },
+            "gate": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Gate"
+            },
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "kind": {
+              "title": "Kind",
+              "type": "string"
+            },
+            "outcome": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Outcome"
+            },
+            "phase": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Phase"
+            },
+            "reason": {
+              "title": "Reason",
+              "type": "string"
+            },
+            "status": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            },
+            "title": {
+              "title": "Title",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "title",
+            "kind",
+            "bucket",
+            "reason"
+          ],
+          "title": "AttentionRow",
+          "type": "object"
+        },
         "BoardDeliverable": {
           "properties": {
             "id": {
@@ -515,9 +803,13 @@
                 {
                   "enum": [
                     "triage",
-                    "plan_design",
-                    "build_eval",
-                    "done"
+                    "plan",
+                    "build",
+                    "validate",
+                    "deliver",
+                    "investigate",
+                    "report",
+                    "close"
                   ],
                   "type": "string"
                 },
@@ -531,10 +823,10 @@
               "anyOf": [
                 {
                   "enum": [
-                    "queued",
-                    "in_progress",
-                    "waiting",
-                    "dropped"
+                    "active",
+                    "awaiting_child",
+                    "awaiting_human",
+                    "done"
                   ],
                   "type": "string"
                 },
@@ -729,6 +1021,41 @@
           "title": "CategoryNode",
           "type": "object"
         },
+        "CheckpointStub": {
+          "description": "One row of the drilldown's continuity feed (newest first) \u2014 full text stays behind path.",
+          "properties": {
+            "git": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Git"
+            },
+            "headline": {
+              "title": "Headline",
+              "type": "string"
+            },
+            "path": {
+              "title": "Path",
+              "type": "string"
+            },
+            "ts": {
+              "title": "Ts",
+              "type": "string"
+            }
+          },
+          "required": [
+            "ts",
+            "path",
+            "headline"
+          ],
+          "title": "CheckpointStub",
+          "type": "object"
+        },
         "ColumnInfo": {
           "properties": {
             "name": {
@@ -755,6 +1082,99 @@
             "notnull"
           ],
           "title": "ColumnInfo",
+          "type": "object"
+        },
+        "CompactionConfigBody": {
+          "description": "Partial update of the compaction runtime (S8/D11) \u2014 omitted fields stay unchanged. The\nroute refuses (409) any trigger at/below the incompressible floor.",
+          "properties": {
+            "by_kind": {
+              "anyOf": [
+                {
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "By Kind"
+            },
+            "min_gain_pct": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "const": "auto",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Min Gain Pct"
+            },
+            "trigger_pct": {
+              "anyOf": [
+                {
+                  "maximum": 100.0,
+                  "minimum": 1.0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Trigger Pct"
+            }
+          },
+          "title": "CompactionConfigBody",
+          "type": "object"
+        },
+        "CompactionConfigResponse": {
+          "properties": {
+            "by_kind": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "title": "By Kind",
+              "type": "object"
+            },
+            "floor_pct": {
+              "title": "Floor Pct",
+              "type": "integer"
+            },
+            "min_gain_pct": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "const": "auto",
+                  "type": "string"
+                }
+              ],
+              "title": "Min Gain Pct"
+            },
+            "ok": {
+              "title": "Ok",
+              "type": "boolean"
+            },
+            "trigger_pct": {
+              "title": "Trigger Pct",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "ok",
+            "trigger_pct",
+            "by_kind",
+            "min_gain_pct",
+            "floor_pct"
+          ],
+          "title": "CompactionConfigResponse",
           "type": "object"
         },
         "ConstitutionEntry": {
@@ -1745,6 +2165,141 @@
           "title": "FsEntry",
           "type": "object"
         },
+        "GateBriefResponse": {
+          "description": "One gate's full decision surface. `brief` is the rendered markdown (continuity \u2192 delta \u2192\nnarrative \u2192 decision); `at_gate: False` means the item is mid-phase and this previews the\nNEXT gate. Answerable without opening code \u2014 that is the contract.",
+          "properties": {
+            "at_gate": {
+              "title": "At Gate",
+              "type": "boolean"
+            },
+            "brief": {
+              "title": "Brief",
+              "type": "string"
+            },
+            "checks": {
+              "items": {
+                "$ref": "#/components/schemas/GateCheck"
+              },
+              "title": "Checks",
+              "type": "array"
+            },
+            "decision": {
+              "$ref": "#/components/schemas/GateDecision"
+            },
+            "gate": {
+              "title": "Gate",
+              "type": "string"
+            },
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "phase": {
+              "title": "Phase",
+              "type": "string"
+            },
+            "title": {
+              "title": "Title",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "gate",
+            "at_gate",
+            "phase",
+            "title",
+            "brief",
+            "decision",
+            "checks"
+          ],
+          "title": "GateBriefResponse",
+          "type": "object"
+        },
+        "GateCheck": {
+          "description": "One mechanical row of a gate's evaluation \u2014 computed from durable state, never a claim.",
+          "properties": {
+            "criterion": {
+              "title": "Criterion",
+              "type": "string"
+            },
+            "detail": {
+              "title": "Detail",
+              "type": "string"
+            },
+            "ok": {
+              "title": "Ok",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "criterion",
+            "ok",
+            "detail"
+          ],
+          "title": "GateCheck",
+          "type": "object"
+        },
+        "GateDecision": {
+          "description": "The uniform decision block (D10 \u2605): recommendation FIRST, stakes one line, per-option\nconsequence, dual-scale effort.",
+          "properties": {
+            "effort_agent": {
+              "title": "Effort Agent",
+              "type": "string"
+            },
+            "effort_user": {
+              "title": "Effort User",
+              "type": "string"
+            },
+            "options": {
+              "items": {
+                "$ref": "#/components/schemas/GateOption"
+              },
+              "title": "Options",
+              "type": "array"
+            },
+            "recommendation": {
+              "title": "Recommendation",
+              "type": "string"
+            },
+            "stakes": {
+              "title": "Stakes",
+              "type": "string"
+            }
+          },
+          "required": [
+            "recommendation",
+            "stakes",
+            "options",
+            "effort_user",
+            "effort_agent"
+          ],
+          "title": "GateDecision",
+          "type": "object"
+        },
+        "GateOption": {
+          "properties": {
+            "consequence": {
+              "title": "Consequence",
+              "type": "string"
+            },
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "label": {
+              "title": "Label",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "label",
+            "consequence"
+          ],
+          "title": "GateOption",
+          "type": "object"
+        },
         "GeneralDoc": {
           "properties": {
             "name": {
@@ -1839,15 +2394,444 @@
           "title": "GeneralDocsResponse",
           "type": "object"
         },
+        "GitBody": {
+          "properties": {
+            "context_id": {
+              "default": "global",
+              "title": "Context Id",
+              "type": "string"
+            }
+          },
+          "title": "GitBody",
+          "type": "object"
+        },
+        "GitHealthResponse": {
+          "description": "One item's live git state \u2014 health check + FE decoration (derived, never stored).",
+          "properties": {
+            "ahead": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ahead"
+            },
+            "behind": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Behind"
+            },
+            "branch": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Branch"
+            },
+            "branch_exists": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Branch Exists"
+            },
+            "dir_exists": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dir Exists"
+            },
+            "dirty": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dirty"
+            },
+            "merged": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Merged"
+            },
+            "ok": {
+              "title": "Ok",
+              "type": "boolean"
+            },
+            "reason": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Reason"
+            },
+            "registered": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Registered"
+            },
+            "trunk": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Trunk"
+            },
+            "worktree": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Worktree"
+            }
+          },
+          "required": [
+            "ok"
+          ],
+          "title": "GitHealthResponse",
+          "type": "object"
+        },
+        "GitMergeResponse": {
+          "description": "The deliver-gate merge. `path` says which route executed: `main` (heavy, with backup ref)\nor `parent` (blocking child's light merge into its parent's branch).",
+          "properties": {
+            "already_merged": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Already Merged"
+            },
+            "backup_ref": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Backup Ref"
+            },
+            "conflicts": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Conflicts"
+            },
+            "knowledge_folded_into": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Knowledge Folded Into"
+            },
+            "knowledge_ops_applied": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Knowledge Ops Applied"
+            },
+            "lint_warnings": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Lint Warnings"
+            },
+            "merge_commit": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Merge Commit"
+            },
+            "merged": {
+              "title": "Merged",
+              "type": "boolean"
+            },
+            "ok": {
+              "title": "Ok",
+              "type": "boolean"
+            },
+            "path": {
+              "title": "Path",
+              "type": "string"
+            },
+            "stash_warning": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Stash Warning"
+            },
+            "target": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Target"
+            }
+          },
+          "required": [
+            "ok",
+            "merged",
+            "path"
+          ],
+          "title": "GitMergeResponse",
+          "type": "object"
+        },
+        "GitResolveResponse": {
+          "description": "Resolve-with-Agent accepted: the conflicted sync was left in the item's worktree and a\nheadless resolution run is in flight (poll GET /dev for run state).",
+          "properties": {
+            "conflicts": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Conflicts"
+            },
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "ok": {
+              "title": "Ok",
+              "type": "boolean"
+            },
+            "status": {
+              "title": "Status",
+              "type": "string"
+            }
+          },
+          "required": [
+            "ok",
+            "status",
+            "id"
+          ],
+          "title": "GitResolveResponse",
+          "type": "object"
+        },
+        "GitRevertResponse": {
+          "properties": {
+            "head": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Head"
+            },
+            "ok": {
+              "title": "Ok",
+              "type": "boolean"
+            },
+            "reverted": {
+              "title": "Reverted",
+              "type": "boolean"
+            },
+            "target": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Target"
+            }
+          },
+          "required": [
+            "ok",
+            "reverted"
+          ],
+          "title": "GitRevertResponse",
+          "type": "object"
+        },
+        "GitSyncResponse": {
+          "description": "Freshness merge (trunk INTO the item branch). Conflicts: `in_tree=False` means the merge\nwas aborted and reported; True means it was deliberately left in the tree for resolution.",
+          "properties": {
+            "commit": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Commit"
+            },
+            "conflicts": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Conflicts"
+            },
+            "in_tree": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "In Tree"
+            },
+            "merged": {
+              "title": "Merged",
+              "type": "boolean"
+            },
+            "ok": {
+              "title": "Ok",
+              "type": "boolean"
+            },
+            "up_to_date": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Up To Date"
+            }
+          },
+          "required": [
+            "ok",
+            "merged"
+          ],
+          "title": "GitSyncResponse",
+          "type": "object"
+        },
         "Glance": {
           "additionalProperties": true,
-          "description": "The dashboard glance summary (counts + bucketed item stubs).",
+          "description": "The dashboard glance summary (counts + bucketed item stubs). `awaiting_human` is the\nattention bucket (D10: the only status that pages the owner).",
           "properties": {
-            "blocked": {
+            "active": {
               "items": {
                 "$ref": "#/components/schemas/GlanceItem"
               },
-              "title": "Blocked",
+              "title": "Active",
+              "type": "array"
+            },
+            "awaiting_human": {
+              "items": {
+                "$ref": "#/components/schemas/GlanceItem"
+              },
+              "title": "Awaiting Human",
               "type": "array"
             },
             "by_phase": {
@@ -1871,31 +2855,16 @@
               "title": "Counts",
               "type": "object"
             },
-            "in_progress": {
-              "items": {
-                "$ref": "#/components/schemas/GlanceItem"
-              },
-              "title": "In Progress",
-              "type": "array"
-            },
             "inbox_open": {
               "title": "Inbox Open",
               "type": "integer"
-            },
-            "waiting": {
-              "items": {
-                "$ref": "#/components/schemas/GlanceItem"
-              },
-              "title": "Waiting",
-              "type": "array"
             }
           },
           "required": [
             "by_status",
             "by_phase",
-            "in_progress",
-            "waiting",
-            "blocked",
+            "active",
+            "awaiting_human",
             "inbox_open",
             "counts"
           ],
@@ -1904,22 +2873,8 @@
         },
         "GlanceItem": {
           "additionalProperties": true,
-          "description": "A work-item stub in the glance buckets (in_progress / waiting / blocked).",
+          "description": "A work-item stub in the glance buckets (active / awaiting_human).",
           "properties": {
-            "blocked_by": {
-              "anyOf": [
-                {
-                  "items": {
-                    "type": "string"
-                  },
-                  "type": "array"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Blocked By"
-            },
             "id": {
               "title": "Id",
               "type": "string"
@@ -2015,6 +2970,18 @@
               "default": "user",
               "title": "Origin",
               "type": "string"
+            },
+            "spawned_from": {
+              "anyOf": [
+                {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Spawned From"
             },
             "tag": {
               "anyOf": [
@@ -2218,6 +3185,16 @@
                 }
               ],
               "title": "Routed To"
+            },
+            "spawned_from": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/SpawnedFrom"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "status": {
               "enum": [
@@ -4491,6 +5468,17 @@
               ],
               "title": "Model"
             },
+            "outcome": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Outcome"
+            },
             "repo_id": {
               "title": "Repo Id",
               "type": "string"
@@ -4855,6 +5843,41 @@
           "title": "SessionSummary",
           "type": "object"
         },
+        "SpawnedFrom": {
+          "description": "The D3 provenance edge, child-side: which item this one branched off and how. `blocking`/\n`parallel` = real children (gate the parent's completion; blocking also pauses it);\n`spawn` = provenance-only follow-up. Exactly one origin edge per item; parent views derived.",
+          "properties": {
+            "item": {
+              "title": "Item",
+              "type": "string"
+            },
+            "note": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Note"
+            },
+            "relation": {
+              "enum": [
+                "blocking",
+                "parallel",
+                "spawn"
+              ],
+              "title": "Relation",
+              "type": "string"
+            }
+          },
+          "required": [
+            "item",
+            "relation"
+          ],
+          "title": "SpawnedFrom",
+          "type": "object"
+        },
         "SweepConfigBody": {
           "description": "Partial update of the capture-sweep tuning \u2014 any omitted field is left unchanged.",
           "properties": {
@@ -4987,6 +6010,22 @@
             "filed"
           ],
           "title": "SweptItem",
+          "type": "object"
+        },
+        "SyncBody": {
+          "properties": {
+            "context_id": {
+              "default": "global",
+              "title": "Context Id",
+              "type": "string"
+            },
+            "leave_conflicts": {
+              "default": false,
+              "title": "Leave Conflicts",
+              "type": "boolean"
+            }
+          },
+          "title": "SyncBody",
           "type": "object"
         },
         "SystemEffortBody": {
@@ -5528,6 +6567,116 @@
           "title": "ValidationError",
           "type": "object"
         },
+        "WorkGraphEdge": {
+          "additionalProperties": true,
+          "description": "One typed edge: contains | spawned_from (carries `relation`) | supersedes.",
+          "properties": {
+            "dst": {
+              "title": "Dst",
+              "type": "string"
+            },
+            "kind": {
+              "title": "Kind",
+              "type": "string"
+            },
+            "src": {
+              "title": "Src",
+              "type": "string"
+            }
+          },
+          "required": [
+            "src",
+            "dst",
+            "kind"
+          ],
+          "title": "WorkGraphEdge",
+          "type": "object"
+        },
+        "WorkGraphNode": {
+          "additionalProperties": true,
+          "description": "One node of the derived WorkGraph (D3). `kind` \u2208 repo_root | deliverable | work_item |\ninbox_spawn; work_item nodes carry item_kind/phase/status/outcome (+ git decoration in S4).",
+          "properties": {
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "kind": {
+              "title": "Kind",
+              "type": "string"
+            },
+            "label": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Label"
+            }
+          },
+          "required": [
+            "id",
+            "kind"
+          ],
+          "title": "WorkGraphNode",
+          "type": "object"
+        },
+        "WorkGraphResponse": {
+          "properties": {
+            "context_id": {
+              "title": "Context Id",
+              "type": "string"
+            },
+            "cycles": {
+              "items": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "title": "Cycles",
+              "type": "array"
+            },
+            "edges": {
+              "items": {
+                "$ref": "#/components/schemas/WorkGraphEdge"
+              },
+              "title": "Edges",
+              "type": "array"
+            },
+            "nodes": {
+              "items": {
+                "$ref": "#/components/schemas/WorkGraphNode"
+              },
+              "title": "Nodes",
+              "type": "array"
+            },
+            "topo": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Topo"
+            }
+          },
+          "required": [
+            "context_id",
+            "nodes",
+            "edges",
+            "cycles"
+          ],
+          "title": "WorkGraphResponse",
+          "type": "object"
+        },
         "WorkItem": {
           "additionalProperties": true,
           "description": "A dev work-item. Base fields are always present; tree-walk + telemetry fields appear only on\nthe enriched /dev list (extra='allow' tolerates any future frontmatter key).",
@@ -5545,31 +6694,6 @@
                 }
               ],
               "title": "Artifacts"
-            },
-            "blocked": {
-              "anyOf": [
-                {
-                  "type": "boolean"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Blocked"
-            },
-            "blocked_by": {
-              "anyOf": [
-                {
-                  "items": {
-                    "type": "string"
-                  },
-                  "type": "array"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Blocked By"
             },
             "children": {
               "anyOf": [
@@ -5681,9 +6805,101 @@
               ],
               "title": "Folder"
             },
+            "git_backup_ref": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Git Backup Ref"
+            },
+            "git_base": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Git Base"
+            },
+            "git_branch": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Git Branch"
+            },
+            "git_merge_commit": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Git Merge Commit"
+            },
+            "git_merged_at": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Git Merged At"
+            },
+            "git_worktree": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Git Worktree"
+            },
             "id": {
               "title": "Id",
               "type": "string"
+            },
+            "inbox_id": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Inbox Id"
+            },
+            "kind": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "implementation",
+                    "research"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kind"
             },
             "last_run": {
               "anyOf": [
@@ -5706,6 +6922,22 @@
               ],
               "title": "Model"
             },
+            "outcome": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "completed",
+                    "abandoned",
+                    "superseded"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Outcome"
+            },
             "parent_id": {
               "anyOf": [
                 {
@@ -5722,9 +6954,13 @@
                 {
                   "enum": [
                     "triage",
-                    "plan_design",
-                    "build_eval",
-                    "done"
+                    "plan",
+                    "build",
+                    "validate",
+                    "deliver",
+                    "investigate",
+                    "report",
+                    "close"
                   ],
                   "type": "string"
                 },
@@ -5828,6 +7064,21 @@
               ],
               "title": "Running"
             },
+            "seen_at": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Seen At"
+            },
             "session_id": {
               "anyOf": [
                 {
@@ -5839,14 +7090,24 @@
               ],
               "title": "Session Id"
             },
+            "spawned_from": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/SpawnedFrom"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "status": {
               "anyOf": [
                 {
                   "enum": [
-                    "queued",
-                    "in_progress",
-                    "waiting",
-                    "dropped"
+                    "active",
+                    "awaiting_child",
+                    "awaiting_human",
+                    "done"
                   ],
                   "type": "string"
                 },
@@ -5855,6 +7116,17 @@
                 }
               ],
               "title": "Status"
+            },
+            "superseded_by": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Superseded By"
             },
             "tasks": {
               "anyOf": [
@@ -5927,6 +7199,16 @@
               "title": "From",
               "type": "string"
             },
+            "git": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/WorkItemGitRecord"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "id": {
               "title": "Id",
               "type": "string"
@@ -5986,6 +7268,17 @@
             "session_cleared": {
               "title": "Session Cleared",
               "type": "boolean"
+            },
+            "worktree_removed": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Worktree Removed"
             }
           },
           "required": [
@@ -6034,6 +7327,55 @@
         },
         "WorkItemDetailResponse": {
           "properties": {
+            "artifact_status": {
+              "anyOf": [
+                {
+                  "additionalProperties": {
+                    "$ref": "#/components/schemas/ArtifactStatusRow"
+                  },
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Artifact Status"
+            },
+            "checkpoints": {
+              "anyOf": [
+                {
+                  "items": {
+                    "$ref": "#/components/schemas/CheckpointStub"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Checkpoints"
+            },
+            "docs": {
+              "anyOf": [
+                {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Docs"
+            },
             "execution": {
               "anyOf": [
                 {
@@ -6112,6 +7454,52 @@
             "effort"
           ],
           "title": "WorkItemEffortResponse",
+          "type": "object"
+        },
+        "WorkItemGitRecord": {
+          "description": "The git record a build entry writes onto the item (S4): its branch, worktree dir, and the\nbase it branched from (the trunk, or the parent's branch for a blocking child).",
+          "properties": {
+            "base": {
+              "title": "Base",
+              "type": "string"
+            },
+            "base_sha": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Base Sha"
+            },
+            "branch": {
+              "title": "Branch",
+              "type": "string"
+            },
+            "created_at": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Created At"
+            },
+            "worktree": {
+              "title": "Worktree",
+              "type": "string"
+            }
+          },
+          "required": [
+            "branch",
+            "worktree",
+            "base"
+          ],
+          "title": "WorkItemGitRecord",
           "type": "object"
         },
         "WorkItemLastRun": {
@@ -6222,6 +7610,30 @@
             "id"
           ],
           "title": "WorkItemScaffoldResponse",
+          "type": "object"
+        },
+        "WorkItemSeenResponse": {
+          "description": "Seen-stamp result (S7 read receipt). `changed` False = was already stamped just now.",
+          "properties": {
+            "changed": {
+              "title": "Changed",
+              "type": "boolean"
+            },
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "ok": {
+              "title": "Ok",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok",
+            "id",
+            "changed"
+          ],
+          "title": "WorkItemSeenResponse",
           "type": "object"
         },
         "WorkItemTasks": {
@@ -6335,6 +7747,47 @@
             }
           },
           "summary": "Dev Read"
+        }
+      },
+      "/dev/attention": {
+        "get": {
+          "description": "The attention engine (S7/D10): every item in at most one bucket, strict priority\nneeds_you (awaiting_human) > running (live run) > unread (terminal, never opened) \u2014 derived\nfrom durable state at read time. `badge` = the top non-empty tier's color + count, or null\nwhen nothing claims attention. Powers the workspace badge + kanban tinting.",
+          "operationId": "dev_attention_dev_attention_get",
+          "parameters": [
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "default": "global",
+                "title": "Context Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/AttentionResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Attention"
         }
       },
       "/dev/general": {
@@ -7253,7 +8706,7 @@
       },
       "/dev/inbox/{item_id}": {
         "delete": {
-          "description": "Remove an inbox item outright.",
+          "description": "Remove an inbox item outright (drop = hard delete), including its content folder \u2014 unless\nthe row was pushed (the folder already moved into the work-item's preliminary/).",
           "operationId": "dev_inbox_delete_dev_inbox__item_id__delete",
           "parameters": [
             {
@@ -7291,7 +8744,7 @@
           "summary": "Dev Inbox Delete"
         },
         "patch": {
-          "description": "Edit an inbox item: change status, kind, tag, text, or title.",
+          "description": "Edit an inbox item: change status, kind, tag, text, or title. A PUSHED row is immutable\ntrace (its content already moved into the work-item's preliminary/): flipping it back to\n`open` would let a second push mint a duplicate work-item over the same provenance.",
           "operationId": "dev_inbox_update_dev_inbox__item_id__patch",
           "parameters": [
             {
@@ -7341,7 +8794,7 @@
       },
       "/dev/inbox/{item_id}/push": {
         "post": {
-          "description": "Push an inbox item to the workspace: stamp a queued work-item, mark the row pushed.\n\nAgent-free write \u2014 creates `work-items/<id>/` at plan_design/queued, seeded from the\ninbox row, and records `routed_to` on the row. Returns the new work-item + the row.",
+          "description": "Push an inbox item to the workspace \u2014 the owner's push (the `spawn` relation waits for\nexactly this; blocking/parallel children auto-pushed at branch-off time never reach here\nopen). One shared transaction (core/inbox_flow): creates `work-items/<id>/` at triage/active\ncarrying `spawned_from` + `inbox_id`, MOVES the inbox content folder (handoff brief + extras)\ninto the item as `preliminary/` (the row stays as trace), and pauses the parent when the\nrelation is blocking. Returns the new work-item + the row.",
           "operationId": "dev_inbox_push_dev_inbox__item_id__push_post",
           "parameters": [
             {
@@ -8204,7 +9657,7 @@
       },
       "/dev/work-items/{item_id}": {
         "delete": {
-          "description": "Hard-delete a plan/design work-item and erase its trace: the `work-items/<id>/` folder,\nits SDK session transcript + index entry, and the originating inbox row. Only allowed while\nthe item is in plan_design (past that gate, code may have been touched). 409 otherwise.",
+          "description": "Hard-delete a pre-build work-item and erase its trace: the `work-items/<id>/` folder,\nits SDK session transcript + index entry, and the originating inbox row. Only allowed while\nthe item is in triage/plan (past that gate, code may have been touched). 409 otherwise.",
           "operationId": "dev_work_item_delete_dev_work_items__item_id__delete",
           "parameters": [
             {
@@ -8252,9 +9705,59 @@
           "summary": "Dev Work Item Delete"
         }
       },
+      "/dev/work-items/{item_id}/abandon": {
+        "post": {
+          "description": "Abandon a work-item \u2014 HUMAN-ONLY (no agent-tool counterpart), legal from any non-terminal\nphase (D8). Ordered, each step idempotent: end live runs/sessions \u00b7 remove the worktree\n(branch kept \u2014 near-free trace) \u00b7 abandon note into closeout.md \u00b7 terminal status change\n(`abandoned`, or `superseded` when `superseded_by` names the replacement) \u00b7 resume a paused\nparent whose last open blocking child this was. Dev-knowledge untouched \u2014 write-at-merge\nmeans a pre-merge abandon wrote nothing, ever. The response is the abandon brief: blocking\nchildren listed for YOUR disposal (they existed only for this parent); parallel children\ncontinue untouched.",
+          "operationId": "dev_work_item_abandon_dev_work_items__item_id__abandon_post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "item_id",
+              "required": true,
+              "schema": {
+                "title": "Item Id",
+                "type": "string"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AbandonBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/AbandonResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Work Item Abandon"
+        }
+      },
       "/dev/work-items/{item_id}/advance": {
         "post": {
-          "description": "Approve \u2192 advance a work-item to the next phase (the owner's gate). plan_design \u2192\nbuild_eval today (approving the plan). Refuses if there's no next phase or a run is in\nflight on the item. Status/run-state is untouched \u2014 phase is the owner axis.",
+          "description": "Approve \u2192 advance a work-item to its kind's next phase (the owner's gate; sequencing\ncomes from KIND_PROFILES \u2014 triage\u2192plan\u2192\u2026 per kind). Refuses if the item is at its final\nphase, terminal, or a run is in flight. The gate decision also rests the item at `active`\n(an awaiting_human item just got its answer).",
           "operationId": "dev_work_item_advance_dev_work_items__item_id__advance_post",
           "parameters": [
             {
@@ -8352,9 +9855,59 @@
           "summary": "Dev Work Item Artifacts"
         }
       },
+      "/dev/work-items/{item_id}/compact": {
+        "post": {
+          "description": "Compact NOW (S8, owner-fired): run the full compaction sequence on this item's bound\nsession \u2014 checkpoint FIRST, then /compact, then the effectiveness verdict. The automatic\ntrigger does the same on its own past `compaction_trigger_pct`; this is the manual handle\n(and how the gate test drives the machinery deterministically). 409 without a session or\nwhile a run is in flight (the sequence takes the item's run-lock itself).",
+          "operationId": "dev_work_item_compact_dev_work_items__item_id__compact_post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "item_id",
+              "required": true,
+              "schema": {
+                "title": "Item Id",
+                "type": "string"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/PlanResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Work Item Compact"
+        }
+      },
       "/dev/work-items/{item_id}/complete": {
         "post": {
-          "description": "Complete + archive a Done-phase work-item (the tick-out). Snapshots the execution trace to\n`artifacts/execution.md` (the folder persists), stamps `done_at`, then RECLAIMS disk by purging\nthe SDK session transcript and freeing the item's run + run_artifact rows. Events are kept.",
+          "description": "Complete + archive a close-phase work-item \u2014 the HUMAN promotion to terminal (D8: the\nagent never self-closes; this FE route has no agent-tool counterpart). Mechanically refused\nwhile any child (blocking/parallel spawned_from edge) is non-terminal (D3). Snapshots the\nexecution trace to `artifacts/execution.md` (the folder persists), stamps status=done +\noutcome=completed + done_at, resumes an awaiting_child parent whose last blocking child this\nwas (status router), then reclaims the SDK transcript + frees run rows. Events are kept.",
           "operationId": "dev_work_item_complete_dev_work_items__item_id__complete_post",
           "parameters": [
             {
@@ -8404,7 +9957,7 @@
       },
       "/dev/work-items/{item_id}/detail": {
         "get": {
-          "description": "A work-item's review payload: its frontmatter/body plus the rendered artifact content\nthe review popup shows \u2014 plan.md and prd.md as Markdown bodies, tasks.md as a structured\n`{text, done}` checklist. Structured render, not a raw file dump.",
+          "description": "A work-item's review payload: its frontmatter/body plus the rendered artifact content\nthe review popup shows \u2014 plan.md and prd.md as Markdown bodies, the plan's `## Tasks` as a\nstructured `{text, done}` checklist, and the COMPUTED per-artifact status map (S2: derived\nfrom file existence + self-check + evidence freshness \u2014 never stored).",
           "operationId": "dev_work_item_detail_dev_work_items__item_id__detail_get",
           "parameters": [
             {
@@ -8502,6 +10055,306 @@
           "summary": "Dev Work Item Set Effort"
         }
       },
+      "/dev/work-items/{item_id}/gate-brief": {
+        "get": {
+          "description": "The item's CURRENT gate brief (or a preview of the next one when mid-phase): continuity \u2192\ndelta \u2192 narrative \u2192 the uniform decision block, plus the mechanical checks \u2014 answerable\nwithout opening code (D10 \u2605). The drilldown leads with this.",
+          "operationId": "dev_work_item_gate_brief_dev_work_items__item_id__gate_brief_get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "item_id",
+              "required": true,
+              "schema": {
+                "title": "Item Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "default": "global",
+                "title": "Context Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/GateBriefResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Work Item Gate Brief"
+        }
+      },
+      "/dev/work-items/{item_id}/git": {
+        "get": {
+          "description": "The item's live git state (derived at read time, never stored): branch/dir/registration\nexistence, dirty files, ahead/behind vs trunk (behind = freshness debt), merged-into-trunk.",
+          "operationId": "dev_work_item_git_dev_work_items__item_id__git_get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "item_id",
+              "required": true,
+              "schema": {
+                "title": "Item Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "default": "global",
+                "title": "Context Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/GitHealthResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Work Item Git"
+        }
+      },
+      "/dev/work-items/{item_id}/git/merge": {
+        "post": {
+          "description": "The deliver-gate merge (owner-fired). Routes itself by topology (D4): a BLOCKING child\nmerges into its parent's branch (light path \u2014 no backup ceremony; the parent re-validates the\nfamily), everything else merges to the trunk (heavy path \u2014 overlap refusal, tagged auto-stash,\nbackup ref first, never-merge-twice). Success records merge commit (+ backup ref) on the item.\nConflicts on the main path \u2192 200 with the conflict list (fix via sync + resolve, then retry).",
+          "operationId": "dev_work_item_git_merge_dev_work_items__item_id__git_merge_post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "item_id",
+              "required": true,
+              "schema": {
+                "title": "Item Id",
+                "type": "string"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GitBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/GitMergeResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Work Item Git Merge"
+        }
+      },
+      "/dev/work-items/{item_id}/git/resolve": {
+        "post": {
+          "description": "Resolve-with-Agent (D4): the human decides WHETHER, the agent resolves \u2014 they never\nhand-edit conflict markers. Re-runs the freshness sync leaving conflicts IN the worktree,\nthen fires a headless resolution run (write-sandboxed to the worktree); the daemon completes\nthe merge mechanically and the item re-enters `validate`. 409 if the sync is clean (nothing\nto resolve) or a run is in flight.",
+          "operationId": "dev_work_item_git_resolve_dev_work_items__item_id__git_resolve_post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "item_id",
+              "required": true,
+              "schema": {
+                "title": "Item Id",
+                "type": "string"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GitBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/GitResolveResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Work Item Git Resolve"
+        }
+      },
+      "/dev/work-items/{item_id}/git/revert": {
+        "post": {
+          "description": "Restore the trunk to its pre-merge state via the item's recorded backup ref \u2014 the\nalways-offered undo behind every main merge (D4 guardrail). Safe-only: refuses once anything\nelse has landed on top. Clears the item's merge record (the branch itself is untouched).",
+          "operationId": "dev_work_item_git_revert_dev_work_items__item_id__git_revert_post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "item_id",
+              "required": true,
+              "schema": {
+                "title": "Item Id",
+                "type": "string"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GitBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/GitRevertResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Work Item Git Revert"
+        }
+      },
+      "/dev/work-items/{item_id}/git/sync": {
+        "post": {
+          "description": "Freshness merge (D4): merge the trunk INTO the item branch, inside its worktree \u2014 run\nduring long builds and always before the deliver merge, so main-merge is trivial.",
+          "operationId": "dev_work_item_git_sync_dev_work_items__item_id__git_sync_post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "item_id",
+              "required": true,
+              "schema": {
+                "title": "Item Id",
+                "type": "string"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/GitSyncResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Work Item Git Sync"
+        }
+      },
       "/dev/work-items/{item_id}/model": {
         "post": {
           "description": "Configure the model a work-item's runs use (plan + bound chat) \u2014 reconfigurable anytime\nfrom the review popup. Persisted to `item.md` frontmatter.",
@@ -8554,7 +10407,7 @@
       },
       "/dev/work-items/{item_id}/plan": {
         "post": {
-          "description": "Fire a headless /plan turn for a work-item \u2014 the \"Plan it\" quick-action. Flips the\nitem to in_progress immediately, then returns; the agent works in the background and the\nitem lands at `waiting` when done. Poll GET /dev (`running`) for the live planning state.",
+          "description": "Fire a headless /plan turn for a work-item \u2014 the \"Plan it\" quick-action. Opens the run\nimmediately, then returns; the agent works in the background and the item lands at\n`awaiting_human` (the pre-main gate) when done. Poll GET /dev (`running`) for live state.",
           "operationId": "dev_work_item_plan_dev_work_items__item_id__plan_post",
           "parameters": [
             {
@@ -8650,6 +10503,97 @@
             }
           },
           "summary": "Dev Work Item Scaffold"
+        }
+      },
+      "/dev/work-items/{item_id}/seen": {
+        "post": {
+          "description": "Stamp the item as SEEN (the owner opened its drilldown) \u2014 clears it from the attention\nengine's `unread` bucket (S7). A read receipt: idempotent, never bumps updated_at.",
+          "operationId": "dev_work_item_seen_dev_work_items__item_id__seen_post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "item_id",
+              "required": true,
+              "schema": {
+                "title": "Item Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "default": "global",
+                "title": "Context Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/WorkItemSeenResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Work Item Seen"
+        }
+      },
+      "/dev/workgraph": {
+        "get": {
+          "description": "The DERIVED WorkGraph projection (D3): repo root \u00b7 roadmap deliverables \u00b7 work-items \u00b7\nspawned-but-unpushed inbox rows, with contains / spawned_from(relation) / supersedes edges.\nAssembled on demand from the authoritative feeds \u2014 nothing stored, nothing to sync. Cycles\n(a hand-edited provenance loop) are REPORTED as data, never a 500. Git state joins as node\ndecoration in S4; the graph VIEW consumes this in S7.",
+          "operationId": "dev_workgraph_dev_workgraph_get",
+          "parameters": [
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "default": "global",
+                "title": "Context Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/WorkGraphResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Workgraph"
         }
       },
       "/docs": {
@@ -9597,6 +11541,62 @@
             }
           },
           "summary": "Set Agent Model"
+        }
+      },
+      "/system/compaction": {
+        "get": {
+          "description": "The compaction runtime knobs (S8/D11): trigger fill %, per-kind overrides, and the\neffectiveness threshold, plus the static incompressible floor the trigger may never sit\nat/below (what makes the knob safe to expose).",
+          "operationId": "get_system_compaction_system_compaction_get",
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/CompactionConfigResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            }
+          },
+          "summary": "Get System Compaction"
+        },
+        "post": {
+          "description": "Tune the compaction runtime. Any omitted field is left unchanged. FLOOR-AWARE: a trigger\nthe incompressible floor alone would exceed is refused (409) \u2014 never stored, never fired.",
+          "operationId": "set_system_compaction_system_compaction_post",
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompactionConfigBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/CompactionConfigResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Set System Compaction"
         }
       },
       "/system/effort": {

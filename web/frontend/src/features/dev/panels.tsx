@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react'
-import { Plus, Trash2, Clock, CornerDownRight, GitBranch, ArrowRight, X, Bot, User, Loader2, MessageSquareText, ListChecks } from 'lucide-react'
+import { Plus, Trash2, CornerDownRight, GitBranch, ArrowRight, X, Bot, User, Loader2, MessageSquareText, ListChecks } from 'lucide-react'
 import Dropdown from '@/ui/Dropdown'
 import Markdown from '@/ui/Markdown'
 import Modal from '@/ui/Modal'
 import { addInbox, updateInbox, deleteInbox, pushInbox, type WorkItem, type InboxEntry, type InboxKind } from '@/lib/api'
 import { fmtLocal, fmtTokens, fmtDuration, fmtModel, MODELS as MODEL_CATALOG, DEFAULT_MODEL, EFFORTS as EFFORT_CATALOG, DEFAULT_EFFORT } from '@/lib/format'
-import { PHASES, PHASE_LABEL, PHASE_ACCENT, STATUS_COLOR, STATUS_LABEL, STATUS_STRIPE, primaryStatus, Empty } from './common'
+import { PHASES, PHASE_LABEL, PHASE_ACCENT, PHASE_VERB, STATUS_COLOR, STATUS_LABEL, STATUS_STRIPE, primaryStatus, Empty } from './common'
 
 // Phase accent → literal dot class (Tailwind needs the full string present in source).
 const PHASE_DOT: Record<string, string> = { dev: 'bg-dev', warn: 'bg-warn', success: 'bg-success' }
@@ -19,27 +19,23 @@ export const RUN_EFFORTS = EFFORT_CATALOG.map((e) => ({ value: e.key, label: e.l
 export const DEFAULT_RUN_EFFORT = DEFAULT_EFFORT
 
 // Shared dev-knowledge store views — the bodies for Workspace (work-items) and Inbox. Rendered
-// both by the main Development map (in-panel zooms) and reusable elsewhere. v2 work-item model
-// (D-018): phase = Plan/Design → Build/Eval → Done; status = queued/in_progress/waiting/dropped;
-// `done` (completion) and `blocked` are derived display states.
+// both by the main Development map (in-panel zooms) and reusable elsewhere. Workspace-workflow
+// model: phase = the per-kind pipeline (triage→plan→…→close); status = the runnable axis
+// (active/awaiting_*/done), where `done` is the derived terminal display state.
 
 // --- status / branch-off chrome -------------------------------------------------
 
-export function StatusBadge({ it }: { it: WorkItem }) {
+// The badge answers "what is this item doing?" — so a live run wins over the status word: an item
+// with an agent on it reads "triaging…", not "in progress". `running` covers both a headless run
+// fired from the board and a bound session's turn.
+export function StatusBadge({ it, running }: { it: WorkItem; running?: boolean }) {
   const s = primaryStatus(it)
+  const live = running && s !== 'done' ? PHASE_VERB[it.phase ?? ''] : null
   return (
-    <span className={`shrink-0 whitespace-nowrap rounded bg-hover px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${STATUS_COLOR[s] ?? 'text-faint'}`}>
-      {STATUS_LABEL[s] ?? '—'}
-    </span>
-  )
-}
-
-// Blocked is a derived overlay (hidden unless set) — shown as a small danger chip, not the status.
-function BlockedChip({ it }: { it: WorkItem }) {
-  if (!it.blocked) return null
-  return (
-    <span className="inline-flex items-center gap-1 text-[10px] text-danger" title={`blocked by ${(it.blocked_by ?? []).join(', ')}`}>
-      <Clock size={10} /> blocked by {(it.blocked_by ?? []).join(', ')}
+    <span className={`shrink-0 whitespace-nowrap rounded bg-hover px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${
+      live ? 'text-success' : STATUS_COLOR[s] ?? 'text-faint'
+    }`}>
+      {live ? `${live}…` : STATUS_LABEL[s] ?? '—'}
     </span>
   )
 }
@@ -62,18 +58,16 @@ function BranchInfo({ it }: { it: WorkItem }) {
   )
 }
 
-// An item is on the active board until it terminates: completed (ticked out of Done — `done_at`)
-// or dropped. Terminal items leave the interface (D-018 — a DONE-phase/ticked-out item is gone).
-export const isActive = (it: WorkItem) => !it.done_at && it.status !== 'dropped'
+// An item is on the active board until it terminates (status done / done_at — completed,
+// abandoned, or superseded). Terminal items leave the interface; their trace stays.
+export const isActive = (it: WorkItem) => !it.done_at && it.status !== 'done'
 
-// A work-item is "plannable" — eligible for the one-shot "Plan it" gate — only while it's a
-// QUEUED plan/design item, i.e. it has never been planned. The first plan moves it
-// queued → in_progress → waiting and it never returns to queued, so the button is offered
-// exactly once. After that it's forward-only (review / discuss in chat / advance phase);
-// re-planning, if ever needed, is a natural chat request, not a card affordance. The caller
-// also gates on `!running` (can't launch while an agent is already on it).
+// A work-item is "plannable" — eligible for the one-shot "Plan it" gate — while it sits in the
+// pre-build phases (triage/plan) and has never run (no run telemetry yet). After the first run
+// it's forward-only (review / discuss in chat / advance phase); re-planning, if ever needed, is
+// a natural chat request, not a card affordance. The caller also gates on `!running`.
 export const isPlannable = (it: WorkItem) =>
-  (it.phase ?? 'plan_design') === 'plan_design' && (it.status ?? 'queued') === 'queued'
+  ['triage', 'plan'].includes(it.phase ?? 'triage') && !it.last_run && !it.total_tokens
 
 // Actions a board surface can offer per card. `bind` opens the item in the chat (dev);
 // `plan` fires a headless /plan turn; `delete` hard-deletes a plan/design item; `running`
@@ -91,13 +85,20 @@ export type WorkActions = {
 
 // --- workspace: kanban by phase -------------------------------------------------
 
-export function WorkspaceKanban({ items, onOpen, running, boundItemId }: { items: WorkItem[] } & WorkActions) {
+export function WorkspaceKanban({ items, onOpen, running, boundItemId, buckets }: { items: WorkItem[]; buckets?: Record<string, string> } & WorkActions) {
   const visible = items.filter(isActive)
   if (visible.length === 0) return <Empty>No active work-items.</Empty>
-  const byPhase = (key: string) => visible.filter((it) => (it.phase ?? 'plan_design') === key)
+  const byPhase = (key: string) => visible.filter((it) => (it.phase ?? 'triage') === key)
+  // The union pipeline is 8 stages; only render columns that hold items, plus the implementation
+  // core so the board always reads as a pipeline (S7 redesigns this surface properly).
+  const CORE = ['triage', 'plan', 'build', 'validate', 'deliver', 'close']
+  const columns = PHASES.filter((ph) => CORE.includes(ph.key) || byPhase(ph.key).length > 0)
   return (
-    <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-      {PHASES.map((ph) => {
+    <div
+      className="grid grid-cols-1 gap-3"
+      style={{ gridTemplateColumns: `repeat(${Math.min(columns.length, 6)}, minmax(0, 1fr))` }}
+    >
+      {columns.map((ph) => {
         const col = byPhase(ph.key)
         const dot = PHASE_DOT[PHASE_ACCENT[ph.key] ?? 'dev'] ?? 'bg-line'
         return (
@@ -118,6 +119,7 @@ export function WorkspaceKanban({ items, onOpen, running, boundItemId }: { items
                     onOpen={onOpen}
                     planning={running?.includes(it.id)}
                     bound={boundItemId === it.id}
+                    bucket={buckets?.[it.id]}
                   />
                 ))
               )}
@@ -130,12 +132,13 @@ export function WorkspaceKanban({ items, onOpen, running, boundItemId }: { items
 }
 
 function WorkCard({
-  it, onOpen, planning, bound,
+  it, onOpen, planning, bound, bucket,
 }: {
   it: WorkItem
   onOpen?: (it: WorkItem) => void
   planning?: boolean
   bound?: boolean
+  bucket?: string // attention tier (S7): needs_you | running | unread — tints the card ring
 }) {
   const clickable = !!onOpen
   const running = !!planning || !!it.running
@@ -155,24 +158,23 @@ function WorkCard({
   // chat. All actions (model config, Plan it, Approve, Drop) live in the popup now.
   const showFooter = running || hasTelemetry || !!it.tasks
   const stripe = STATUS_STRIPE[primaryStatus(it)] ?? 'border-l-line'
+  // Attention tint (S7): the card carries its bucket color as a soft ring — orange pages, green
+  // means an agent is on it. (Unread applies to terminal items, which live off-board in the strip.)
+  const attnRing = bucket === 'needs_you' ? 'ring-1 ring-warn/70'
+    : bucket === 'running' ? 'ring-1 ring-success/60' : ''
   return (
     <div
       onClick={clickable ? () => onOpen!(it) : undefined}
       title={clickable ? 'Open review + chat for this work-item' : undefined}
       className={`rounded-md border border-line border-l-2 bg-surface px-2.5 py-2 shadow-sm ${
-        bound ? 'border-l-accent ring-2 ring-accent' : it.blocked ? 'border-l-danger' : stripe
-      } ${clickable ? 'cursor-pointer transition hover:border-accent hover:shadow-md' : ''}`}
+        bound ? 'border-l-accent ring-2 ring-accent' : stripe
+      } ${bound ? '' : attnRing} ${clickable ? 'cursor-pointer transition hover:border-accent hover:shadow-md' : ''}`}
     >
       <div className="flex items-start gap-1.5">
         <div className="min-w-0 flex-1 text-[12.5px] leading-snug text-fg">{it.title}</div>
         <BranchInfo it={it} />
-        <StatusBadge it={it} />
+        <StatusBadge it={it} running={running} />
       </div>
-      {it.blocked && (
-        <div className="mt-1.5">
-          <BlockedChip it={it} />
-        </div>
-      )}
       {showFooter && (
         <div className="mt-2 text-[11px]">
           {running ? (

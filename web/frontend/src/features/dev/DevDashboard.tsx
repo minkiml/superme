@@ -3,7 +3,7 @@ import { Hammer, RefreshCw, ArrowLeft, ArrowRight, Boxes, Inbox, Circle, Clock, 
 import PageHeader from '@/ui/PageHeader'
 import Modal from '@/ui/Modal'
 import ConfirmDialog from '@/ui/ConfirmDialog'
-import { getDev, planWorkItem, deleteWorkItem, type DevData, type DevGlance, type InboxEntry, type WorkItem } from '@/lib/api'
+import { getDev, getAttention, planWorkItem, deleteWorkItem, type AttentionData, type DevData, type DevGlance, type InboxEntry, type WorkItem } from '@/lib/api'
 import { fmtLocalDate } from '@/lib/format'
 import { WorkspaceKanban, InboxView, isActive } from './panels'
 import WorkItemModal from './WorkItemModal'
@@ -36,6 +36,7 @@ export default function DevDashboard({
   const [reviewId, setReviewId] = useState<string | null>(null) // work-item open in the review popup
   const [showShipped, setShowShipped] = useState(false) // the completed-items list overlay
   const [confirmDel, setConfirmDel] = useState<WorkItem | null>(null) // item pending delete confirm
+  const [attn, setAttn] = useState<AttentionData | null>(null) // attention buckets (S7)
 
   // `silent` background reloads (the running-poll) skip the `loading` flag so the manual Refresh
   // button doesn't re-trigger its spin every 2.5s — it should spin only on a user-initiated refresh.
@@ -44,6 +45,7 @@ export default function DevDashboard({
     setErr(null)
     try {
       setData(await getDev(contextId))
+      getAttention(contextId).then(setAttn).catch(() => {}) // best-effort; never blocks the board
     } catch (e) {
       setErr(String(e))
     } finally {
@@ -97,6 +99,18 @@ export default function DevDashboard({
   // The item open in the review popup — looked up live so it reflects the latest poll/reload
   // (and auto-closes if the item disappears, e.g. after a delete).
   const reviewItem = reviewId ? (data?.work_items.find((w) => w.id === reviewId) ?? null) : null
+
+  // id → attention tier, for the kanban card tint (S7).
+  const bucketOf: Record<string, string> = {}
+  for (const tier of ['needs_you', 'running', 'unread'] as const) {
+    for (const r of attn?.buckets?.[tier] ?? []) bucketOf[r.id] = tier
+  }
+  function openItem(id: string) {
+    const it = data?.work_items.find((w) => w.id === id)
+    if (!it) return
+    setReviewId(id)
+    onBindItem?.(it, contextId)
+  }
 
   return (
     <div className="relative flex h-full flex-col">
@@ -171,6 +185,7 @@ export default function DevDashboard({
           <div className="mx-auto max-w-5xl space-y-5 p-6">
             {/* Pipeline summary — Inbox → Workspace, always visible; each card selects the store
                 whose working surface shows below. */}
+            {attn && <AttentionStrip attn={attn} onOpen={openItem} />}
             <EnvMap
               data={data}
               selected={zoom}
@@ -199,6 +214,7 @@ export default function DevDashboard({
                   }}
                   running={data.running}
                   boundItemId={boundItemId}
+                  buckets={bucketOf}
                 />
               </ZoomPanel>
             ) : (
@@ -209,6 +225,46 @@ export default function DevDashboard({
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+// --- attention strip (S7/D10) -----------------------------------------------------
+// Strict-priority rows derived from durable state: what needs YOU (orange) > what's running
+// (green) > unread closeouts (blue). Terminal items live only here (they're off the board) —
+// clicking a row opens its drilldown, which stamps it seen and clears the blue.
+
+const TIER_STYLE: Record<string, { dot: string; label: string }> = {
+  needs_you: { dot: 'bg-warn', label: 'Needs you' },
+  running: { dot: 'bg-success', label: 'Running' },
+  unread: { dot: 'bg-accent', label: 'Unread' },
+}
+
+function AttentionStrip({ attn, onOpen }: { attn: AttentionData; onOpen: (id: string) => void }) {
+  const tiers = (['needs_you', 'running', 'unread'] as const)
+    .map((t) => ({ tier: t, rows: attn.buckets?.[t] ?? [] }))
+    .filter((x) => x.rows.length > 0)
+  if (tiers.length === 0) return null
+  return (
+    <div className="space-y-1.5 rounded-xl border border-line bg-surface px-3 py-2.5">
+      {tiers.map(({ tier, rows }) => (
+        <div key={tier} className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <span className="flex w-20 shrink-0 items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted">
+            <span className={`h-2 w-2 rounded-full ${TIER_STYLE[tier].dot}`} /> {TIER_STYLE[tier].label}
+          </span>
+          {rows.map((r) => (
+            <button
+              key={r.id}
+              onClick={() => onOpen(r.id)}
+              title={r.reason}
+              className="max-w-[16rem] truncate rounded-md border border-line bg-sunken px-2 py-0.5 text-left text-[12px] text-fg hover:bg-hover"
+            >
+              {r.title}
+              <span className="ml-1.5 text-[10px] text-faint">{r.reason}</span>
+            </button>
+          ))}
+        </div>
+      ))}
     </div>
   )
 }
@@ -329,8 +385,8 @@ function StatusDots({ item, total }: { item: Record<string, number>; total: numb
         <span className="text-[11px] text-muted">work-items</span>
       </div>
       <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted">
-        {dot(Circle, item.in_progress ?? 0, 'in progress', 'fill-current text-accent-text')}
-        {dot(Clock, item.waiting ?? 0, 'waiting', item.waiting ? 'text-danger' : 'text-faint')}
+        {dot(Circle, item.active ?? 0, 'active', 'fill-current text-accent-text')}
+        {dot(Clock, item.awaiting_human ?? 0, 'needs you', item.awaiting_human ? 'text-danger' : 'text-faint')}
         {dot(Check, item.done ?? 0, 'done', 'text-success')}
       </div>
     </div>
@@ -347,10 +403,9 @@ function WorkspaceStats({ g, onShowShipped }: { g: DevGlance; onShowShipped: () 
   )
   return (
     <div className="mb-4 flex flex-wrap items-center gap-x-7 gap-y-3 rounded-xl bg-sunken px-4 py-3">
-      {cell('in progress', g.by_status.in_progress ?? 0, 'text-accent-text')}
-      {cell('waiting', g.by_status.waiting ?? 0, 'text-warn')}
-      {cell('queued', g.by_status.queued ?? 0)}
-      {cell('blocked', g.blocked.length, g.blocked.length ? 'text-danger' : 'text-fg')}
+      {cell('active', g.by_status.active ?? 0, 'text-accent-text')}
+      {cell('needs you', g.by_status.awaiting_human ?? 0, 'text-warn')}
+      {cell('awaiting child', g.by_status.awaiting_child ?? 0)}
       {(g.by_status.done ?? 0) > 0 ? (
         <button
           onClick={onShowShipped}

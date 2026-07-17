@@ -54,6 +54,24 @@ SAFE_TOOLS = {
     # the proposal row (→ drafted). Still pre-gate: staging writes only to the DB, never to disk;
     # the disk write (publish) is the owner-gated step downstream.
     "mcp__dev__stage_artifact",
+    # Work-item phase-session pens (workspace-workflow S2/S5/S6): each enforces its own
+    # bound_item_id scope (a session may touch only ITS item) and writes only inside that item's
+    # own folder daemon-side — the sanctioned autonomous writes the D5 scaffold-then-fill playbook
+    # depends on. Must never prompt: a headless phase run has no human to approve, and an
+    # interactive one shouldn't page the owner for the item's own artifacts.
+    # Triage's recording surface: kind + existing-deliverable onto the item's own yaml, triage
+    # phase only (the gate that follows is the human confirmation).
+    "mcp__dev__set_triage_classification",
+    "mcp__dev__scaffold_artifact",
+    "mcp__dev__record_validation_evidence",
+    "mcp__dev__write_checkpoint",
+    # Agent-run freshness sync (D9): merges trunk INTO the item's own worktree only — trunk itself
+    # is never written; conflicts abort-and-report by default.
+    "mcp__dev__sync_from_main",
+    # Stages edit ops item-local (applied only later, atomically with the owner's merge).
+    "mcp__dev__stage_knowledge_delta",
+    # Proposal-only: drafts the verified closeout + pages the owner; never sets an item terminal.
+    "mcp__dev__propose_close",
 }
 
 

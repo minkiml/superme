@@ -10,10 +10,19 @@ import type { Schema } from './generated'
 // Proposal, the model manifest, the glance) stay as hand-written VIEW types — the backend itself
 // permits any key on those until R5 tightens them — with FE enum-narrowing layered on top.
 
-// `triage` = the intake/classification phase before plan_design (reserved in the contract; the board
-// gains its column with the triage behaviour in a later slice).
-export type WorkPhase = 'triage' | 'plan_design' | 'build_eval' | 'done'
-export type WorkStatus = 'queued' | 'in_progress' | 'waiting' | 'dropped'
+// Workspace-workflow enums (S1, 2026-07-15). `phase` = the per-KIND pipeline stage
+// (implementation: triage→plan→build→validate→deliver→close · research: triage→plan→investigate→
+// report→close; the union type below). `status` = the runnable axis — only `awaiting_human` pages
+// the owner; running-right-now is derived from live runs, not a status. `outcome` stamps how a
+// terminal (status done) item ended.
+export type WorkKind = 'implementation' | 'research'
+export type WorkPhase =
+  | 'triage' | 'plan' | 'build' | 'validate' | 'deliver' | 'investigate' | 'report' | 'close'
+export type WorkStatus = 'active' | 'awaiting_child' | 'awaiting_human' | 'done'
+export type WorkOutcome = 'completed' | 'abandoned' | 'superseded'
+export type SpawnRelation = 'blocking' | 'parallel' | 'spawn'
+// D3 branch-off provenance, child-side: which item this one spawned from and how.
+export type SpawnedFrom = { item: string; relation: SpawnRelation; note?: string | null }
 
 // An item.md `artifacts` entry, NORMALIZED on read by the daemon (R5): always `{type, path}` on the
 // wire now (the legacy bare-string form is coerced server-side). `artifactPath` stays as the accessor.
@@ -23,7 +32,7 @@ export function artifactPath(a: Artifact): string {
 }
 
 // VIEW type over Schema<'WorkItem'> (extra='allow'). Carries the base item.md fields plus the
-// BE-derived tree fields (blocked/depth/children) and run telemetry the daemon attaches at read
+// BE-derived tree fields (depth/children) and run telemetry the daemon attaches at read
 // time. Kept hand-written so the FE can rely on narrowed phase/status/children (R5 will pin these
 // server-side, at which point this can re-derive from the generated type directly).
 export type WorkItem = {
@@ -34,16 +43,26 @@ export type WorkItem = {
   deliverable?: string | null // …or a deliverable directly when no wave applies (set in S2)
   title?: string
   description?: string // the item.md body
+  kind?: WorkKind | null // machinery selector (null on pre-workflow items = implementation)
   phase: WorkPhase
-  status: WorkStatus | null // null when completed (done_at) or unset
-  done_at?: string | null // ticked out of the Done phase = completed
+  status: WorkStatus | null // runnable axis (done = terminal); null only on pre-workflow items
+  outcome?: WorkOutcome | null // set with status done: how the item ended
+  spawned_from?: SpawnedFrom | null // branch-off provenance edge (D3)
+  superseded_by?: string | null // set when outcome = superseded
+  inbox_id?: number | null // originating inbox row (trace)
+  done_at?: string | null // terminal stamp
+  // Git record (S4/D4) — written at build entry / the deliver merge; kept at terminal (trace):
+  git_branch?: string | null
+  git_worktree?: string | null
+  git_base?: string | null
+  git_merge_commit?: string | null
+  git_merged_at?: string | null
+  git_backup_ref?: string | null
   artifacts?: Artifact[] // normalized {type, path} refs (R5); read the path via artifactPath
-  blocked_by?: string[]
   session_id?: string | null // the agent session this item originated in (session:<id>)
   created_at?: string | null
   updated_at?: string | null
   // BE-derived (never stored):
-  blocked: boolean // an unresolved blocked_by dependency
   depth: number
   children: string[] // child (branch-off) ids
   folder?: string
@@ -61,6 +80,7 @@ export type WorkItem = {
   phase_tokens_4type?: Record<string, number> // per-phase 4-type Σ (3-type + cache_read), recorded behind
   last_run?: { tokens: number; duration_ms: number | null; model?: string | null; ctx_pct?: number | null } | null
   tasks?: { done: number; total: number } | null // tasks.md checklist progress (null = no tasks.md)
+  seen_at?: string | null // owner-opened read receipt (S7 attention: terminal + unseen = unread)
 }
 
 export type InboxKind = 'note' | 'idea' | 'todo' | 'question'
@@ -72,11 +92,10 @@ export type InboxOrigin = 'user' | 'agent' // who created it (user-made vs agent
 export type InboxEntry = Schema<'InboxRow'>
 
 export type DevGlance = {
-  by_status: Record<string, number> // queued/in_progress/waiting/dropped/done counts
+  by_status: Record<string, number> // active/awaiting_*/done counts
   by_phase: Record<string, number>
-  in_progress: { id: string; title?: string }[]
-  waiting: { id: string; blocked_by: string[] }[]
-  blocked: { id: string; blocked_by: string[] }[]
+  active: { id: string; title?: string }[]
+  awaiting_human: { id: string; title?: string }[] // the attention bucket (pages the owner)
   inbox_open: number
   counts: { work_items: number }
 }
@@ -459,10 +478,65 @@ export function deleteInbox(id: number): Promise<{ ok: boolean; id: number }> {
   return sendJSON(`/api/dev/inbox/${id}`, 'DELETE')
 }
 
-// Push an inbox item to the workspace: stamps a queued work-item, marks the row pushed.
+// Push an inbox item to the workspace — the owner's push (spawn branch-offs wait for this).
+// One shared transaction: work-item at triage/active + the brief folder moved to preliminary/.
 export type PushResult = { ok: boolean; work_item: { id: string; folder: string }; inbox: InboxEntry }
 export function pushInbox(id: number, contextId = 'global'): Promise<PushResult> {
   return sendJSON(`/api/dev/inbox/${id}/push`, 'POST', { context_id: contextId })
+}
+
+// The DERIVED WorkGraph projection (D3): repo root · deliverables · work-items · unpushed
+// spawn rows, with contains / spawned_from(relation) / supersedes edges. Assembled on demand —
+// nothing stored. Cycles are reported as data. The graph view (S7) renders this.
+export type WorkGraphNode = {
+  id: string
+  kind: 'repo_root' | 'deliverable' | 'work_item' | 'inbox_spawn'
+  label?: string | null
+  // work_item decoration:
+  item_kind?: WorkKind | null
+  phase?: WorkPhase | null
+  status?: WorkStatus | null
+  outcome?: WorkOutcome | null
+  inbox_id?: number
+  slug?: string
+  git_branch?: string | null // S4 decoration on work_item nodes
+  git_merged?: boolean
+}
+export type WorkGraphEdge = {
+  src: string
+  dst: string
+  kind: 'contains' | 'spawned_from' | 'supersedes'
+  relation?: SpawnRelation
+}
+export type WorkGraphData = {
+  context_id: string
+  nodes: WorkGraphNode[]
+  edges: WorkGraphEdge[]
+  cycles: string[][]
+  topo: string[] | null
+}
+export function getWorkGraph(contextId = 'global'): Promise<WorkGraphData> {
+  return getJSON(`/api/dev/workgraph?context_id=${q(contextId)}`)
+}
+
+// --- attention engine (S7/D10) ------------------------------------------------------------
+// Every item in at most one bucket, strict priority needs_you > running > unread, derived from
+// durable state. `badge` = the top non-empty tier only (one color, one count).
+export type AttentionRow = Schema<'AttentionRow'>
+export type AttentionBadge = Schema<'AttentionBadge'>
+export type AttentionData = Schema<'AttentionResponse'>
+export function getAttention(contextId = 'global'): Promise<AttentionData> {
+  return getJSON(`/api/dev/attention?context_id=${q(contextId)}`)
+}
+
+// Compact NOW (S8): run the checkpoint-first compaction sequence on the item's bound session.
+export function compactWorkItem(itemId: string, contextId = 'global'): Promise<PlanResult> {
+  return sendJSON(`/api/dev/work-items/${q(itemId)}/compact`, 'POST', { context_id: contextId })
+}
+
+// Read receipt: the owner opened this item's drilldown — clears it from `unread`.
+export function markWorkItemSeen(itemId: string, contextId = 'global'): Promise<{ ok: boolean }> {
+  return sendJSON(`/api/dev/work-items/${q(itemId)}/seen?context_id=${q(contextId)}`, 'POST')
 }
 
 // "Plan it" — fire a headless /plan turn for a queued work-item. Returns immediately; the
@@ -479,8 +553,8 @@ export function planWorkItem(itemId: string, contextId = 'global', model?: strin
   })
 }
 
-// Hard-delete a plan/design work-item and erase its trace (folder + session transcript +
-// originating inbox row). Backend refuses (409) once the item leaves plan_design.
+// Hard-delete a pre-build work-item and erase its trace (folder + session transcript +
+// originating inbox row). Backend refuses (409) once the item leaves triage/plan.
 export type DeleteResult = Schema<'WorkItemDeleteResponse'>
 export function deleteWorkItem(itemId: string, contextId = 'global'): Promise<DeleteResult> {
   return sendJSON(`/api/dev/work-items/${q(itemId)}?context_id=${q(contextId)}`, 'DELETE')
@@ -489,13 +563,27 @@ export function deleteWorkItem(itemId: string, contextId = 'global'): Promise<De
 // A work-item's review payload — the structured artifact content the review popup renders:
 // plan.md / prd.md as Markdown bodies (frontmatter stripped), tasks.md as a checklist.
 export type TaskItem = Schema<'TaskItem'>
+// COMPUTED per-artifact status (S2): derived at read time from file existence + self-check +
+// evidence freshness — never stored, so it can't drift.
+export type ArtifactStatusRow = {
+  required: boolean
+  present: boolean
+  status: 'ok' | 'incomplete' | 'missing'
+  issues?: string[] | null
+  evidence?: { status: 'passed' | 'stale' | 'failed' | 'unverified'; entries: number } | null
+}
 export type WorkItemDetail = {
   item: WorkItem
   plan: string | null
   prd: string | null
   tasks: TaskItem[] | null
   execution: string | null // the archived execution trace (present once completed)
+  artifact_status?: Record<string, ArtifactStatusRow> | null
+  // S7 drilldown: raw gate-doc texts (null while un-emitted) + the checkpoint continuity feed.
+  docs?: Record<string, string | null> | null
+  checkpoints?: CheckpointStub[] | null
 }
+export type CheckpointStub = Schema<'CheckpointStub'>
 export function getWorkItemDetail(itemId: string, contextId = 'global'): Promise<WorkItemDetail> {
   return getJSON(`/api/dev/work-items/${q(itemId)}/detail?context_id=${q(contextId)}`)
 }
@@ -507,8 +595,8 @@ export function getWorkItemArtifacts(itemId: string, contextId = 'global'): Prom
   return getJSON(`/api/dev/work-items/${q(itemId)}/artifacts?context_id=${q(contextId)}`)
 }
 
-// Approve → advance a work-item to its next phase (plan_design → build_eval today). The
-// owner's forward gate; backend 409s if there's no next phase or a run is in flight.
+// Approve → advance a work-item to its KIND's next phase (KIND_PROFILES sequencing). The
+// owner's forward gate; backend 409s at the final phase, on terminal items, or mid-run.
 export type AdvanceResult = Omit<Schema<'WorkItemAdvanceResponse'>, 'phase' | 'from'> & {
   phase: WorkPhase
   from: WorkPhase
@@ -522,6 +610,59 @@ export function advanceWorkItem(itemId: string, contextId = 'global'): Promise<A
 export type CompleteResult = Schema<'WorkItemCompleteResponse'>
 export function completeWorkItem(itemId: string, contextId = 'global'): Promise<CompleteResult> {
   return sendJSON(`/api/dev/work-items/${q(itemId)}/complete?context_id=${q(contextId)}`, 'POST')
+}
+
+// --- work-item git layer (workspace-workflow S4/D4) -------------------------------------
+// The worktree is created automatically at build entry (the advance route); these are the
+// owner's git surface: live health, freshness sync, the deliver merge (auto-routed: blocking
+// child → parent branch, else → trunk with a backup ref), revert, and Resolve-with-Agent.
+
+export type GitHealth = Schema<'GitHealthResponse'>
+export function getWorkItemGit(itemId: string, contextId = 'global'): Promise<GitHealth> {
+  return getJSON(`/api/dev/work-items/${q(itemId)}/git?context_id=${q(contextId)}`)
+}
+
+export type GitSyncResult = Schema<'GitSyncResponse'>
+export function syncWorkItemGit(itemId: string, contextId = 'global'): Promise<GitSyncResult> {
+  return sendJSON(`/api/dev/work-items/${q(itemId)}/git/sync`, 'POST', { context_id: contextId })
+}
+
+export type GitMergeResult = Schema<'GitMergeResponse'>
+export function mergeWorkItemGit(itemId: string, contextId = 'global'): Promise<GitMergeResult> {
+  return sendJSON(`/api/dev/work-items/${q(itemId)}/git/merge`, 'POST', { context_id: contextId })
+}
+
+export type GitRevertResult = Schema<'GitRevertResponse'>
+export function revertWorkItemGit(itemId: string, contextId = 'global'): Promise<GitRevertResult> {
+  return sendJSON(`/api/dev/work-items/${q(itemId)}/git/revert`, 'POST', { context_id: contextId })
+}
+
+// Resolve-with-Agent: re-runs the sync leaving conflicts in the worktree and fires a headless
+// resolution run (409 when the sync is actually clean). Poll getDev (running) for progress.
+export type GitResolveResult = Schema<'GitResolveResponse'>
+export function resolveWorkItemGit(itemId: string, contextId = 'global'): Promise<GitResolveResult> {
+  return sendJSON(`/api/dev/work-items/${q(itemId)}/git/resolve`, 'POST', { context_id: contextId })
+}
+
+// --- gates & lifecycle (workspace-workflow S6/D8/D10) ------------------------------------
+// The four human gates' decision surface: a kernel-assembled brief (continuity → delta →
+// narrative → the uniform decision block) answerable without opening code, plus the human-only
+// abandon path. UI lands in S7 — the drilldown leads with the newest brief.
+
+export type GateBrief = Schema<'GateBriefResponse'>
+export function getWorkItemGateBrief(itemId: string, contextId = 'global'): Promise<GateBrief> {
+  return getJSON(`/api/dev/work-items/${q(itemId)}/gate-brief?context_id=${q(contextId)}`)
+}
+
+// Abandon (human-only, any non-terminal phase): ends runs/session, removes the worktree (branch
+// kept), notes the reason into closeout.md, flips terminal. Pass supersededBy to record a
+// `superseded` outcome instead. The response is the abandon brief — blocking children listed
+// for the owner's disposal; parallel children continue untouched.
+export type AbandonResult = Schema<'AbandonResponse'>
+export function abandonWorkItem(itemId: string, reason = '', contextId = 'global',
+                                supersededBy?: string): Promise<AbandonResult> {
+  return sendJSON(`/api/dev/work-items/${q(itemId)}/abandon`, 'POST',
+    { context_id: contextId, reason, superseded_by: supersededBy ?? null })
 }
 
 // Configure the model a work-item's runs use (plan + bound chat) — reconfigurable anytime

@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from ...app_state import DevKnowledgeService, DevStore, get_dev, get_dev_store
 from ...deps import dev_root
 from ...schemas.dev.inbox import InboxRow, InboxPushResponse, InboxDeleteResponse
+from ....core import inbox_flow
 
 router = APIRouter()
 
@@ -17,6 +18,8 @@ class InboxBody(BaseModel):
     tag: str | None = None
     origin: str = "user"  # user (manual) | agent (branch-off proposal)
     context_id: str = "global"
+    # D3 provenance a branch-off row carries from birth: {item, relation: blocking|parallel|spawn}.
+    spawned_from: dict | None = None
 
 
 class InboxPatch(BaseModel):
@@ -38,7 +41,7 @@ async def dev_inbox_add(body: InboxBody, dev_store: DevStore = Depends(get_dev_s
     try:
         row = dev_store.add_inbox(
             body.context_id, body.text, body.kind, body.tag,
-            title=body.title, origin=body.origin,
+            title=body.title, origin=body.origin, spawned_from=body.spawned_from,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -54,7 +57,14 @@ async def dev_inbox_add(body: InboxBody, dev_store: DevStore = Depends(get_dev_s
 
 @router.patch("/dev/inbox/{item_id}", response_model=InboxRow)
 async def dev_inbox_update(item_id: int, body: InboxPatch, dev_store: DevStore = Depends(get_dev_store)) -> dict:
-    """Edit an inbox item: change status, kind, tag, text, or title."""
+    """Edit an inbox item: change status, kind, tag, text, or title. A PUSHED row is immutable
+    trace (its content already moved into the work-item's preliminary/): flipping it back to
+    `open` would let a second push mint a duplicate work-item over the same provenance."""
+    cur = dev_store.get_inbox(item_id)
+    if cur is None:
+        raise HTTPException(status_code=404, detail="inbox item not found")
+    if cur.get("status") == "pushed":
+        raise HTTPException(status_code=409, detail="inbox item was pushed — the row is trace now")
     item = dev_store.update_inbox(
         item_id, status=body.status, kind=body.kind, tag=body.tag,
         text=body.text, title=body.title, routed_to=body.routed_to,
@@ -69,36 +79,35 @@ async def dev_inbox_update(item_id: int, body: InboxPatch, dev_store: DevStore =
 async def dev_inbox_push(item_id: int, body: InboxPushBody,
                          dev_store: DevStore = Depends(get_dev_store),
                          dev: DevKnowledgeService = Depends(get_dev)) -> dict:
-    """Push an inbox item to the workspace: stamp a queued work-item, mark the row pushed.
-
-    Agent-free write — creates `work-items/<id>/` at plan_design/queued, seeded from the
-    inbox row, and records `routed_to` on the row. Returns the new work-item + the row.
+    """Push an inbox item to the workspace — the owner's push (the `spawn` relation waits for
+    exactly this; blocking/parallel children auto-pushed at branch-off time never reach here
+    open). One shared transaction (core/inbox_flow): creates `work-items/<id>/` at triage/active
+    carrying `spawned_from` + `inbox_id`, MOVES the inbox content folder (handoff brief + extras)
+    into the item as `preliminary/` (the row stays as trace), and pauses the parent when the
+    relation is blocking. Returns the new work-item + the row.
     """
     rows = dev_store.list_inbox(body.context_id)
     row = next((r for r in rows if r["id"] == item_id), None)
     if row is None:
         raise HTTPException(status_code=404, detail="inbox item not found")
-    if row.get("status") == "pushed":
-        raise HTTPException(status_code=409, detail="inbox item already pushed")
-    wi = dev.create_work_item(
-        dev_root(body.context_id),
-        title=row.get("title") or row.get("text") or "",
-        description=row.get("text") or "",
-    )
-    updated = dev_store.push_inbox(item_id, wi["id"])
-    # The inbox→workspace transition — item-scoped on the new work-item. PRD §4.9.
-    dev_store.log_event(
-        body.context_id, "inbox.push",
-        f"Pushed to workspace: {wi.get('title') or wi['id']}",
-        item_id=wi["id"], actor="owner", meta={"inbox_id": item_id},
-    )
-    return {"ok": True, "work_item": wi, "inbox": updated}
+    try:
+        wi = inbox_flow.push_inbox_item(dev_store, dev, dev_root(body.context_id), row,
+                                        context_id=body.context_id, actor="owner")
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    return {"ok": True, "work_item": wi, "inbox": dev_store.get_inbox(item_id)}
 
 
 @router.delete("/dev/inbox/{item_id}", response_model=InboxDeleteResponse)
 async def dev_inbox_delete(item_id: int, dev_store: DevStore = Depends(get_dev_store)) -> dict:
-    """Remove an inbox item outright."""
+    """Remove an inbox item outright (drop = hard delete), including its content folder — unless
+    the row was pushed (the folder already moved into the work-item's preliminary/)."""
+    import shutil
     row = dev_store.get_inbox(item_id)  # capture context + text before the row is gone
+    if row and row.get("status") != "pushed":
+        folder = inbox_flow.inbox_content_dir(dev_root(row["context_id"]), item_id)
+        if folder.is_dir():
+            shutil.rmtree(folder)
     result = dev_store.delete_inbox(item_id)
     if row:
         dev_store.log_event(

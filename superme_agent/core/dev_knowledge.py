@@ -36,12 +36,16 @@ def _iso_epoch(iso: str | None) -> float | None:
 _FRONTMATTER = re.compile(r"^---\s*\n(.*?)\n---\s*\n?(.*)$", re.DOTALL)
 
 
-# Display order for the work-item lifecycle (D-018). phase: triage → plan_design → build_eval → done.
-# status (active): queued · in_progress · waiting · dropped — completion is a phase, not a status.
-# `triage` = the pre-plan intake/classification phase (reserved; behaviour lands with the workspace
-# workflow). Ranked first so intake items sort ahead of planned work.
-_PHASE_RANK = {"triage": 0, "plan_design": 1, "build_eval": 2, "done": 3}
-_STATUS_RANK = {"in_progress": 0, "waiting": 1, "queued": 2, "dropped": 3}
+# Display order for the work-item lifecycle (workspace-workflow D1/D2). phase = the per-kind
+# pipeline stage (union of both kinds' pipelines; see core/kind_profiles.py); the mid-pipeline
+# research stages (investigate/report) rank beside their implementation counterparts. status ranks
+# put what NEEDS THE OWNER first (awaiting_human), then runnable work, then routed waits, then done.
+_PHASE_RANK = {"triage": 0, "plan": 1, "build": 2, "investigate": 2,
+               "validate": 3, "report": 3, "deliver": 4, "close": 5}
+_STATUS_RANK = {"awaiting_human": 0, "active": 1, "awaiting_child": 2, "done": 3}
+# Statuses that read as "this item is live" (non-terminal).
+_LIVE_STATUSES = ("active", "awaiting_child", "awaiting_human")
+_SPAWN_RELATIONS = ("blocking", "parallel", "spawn")
 
 
 def _norm_artifact(a) -> dict:
@@ -170,7 +174,7 @@ def _item_view(it: dict) -> dict:
     """The board's per-item projection: identity + phase/status + the one relevant date (as display
     strings — the board never does date math, and a stringified date keeps the wire shape simple)."""
     done_at, updated, created = it.get("done_at"), it.get("updated_at"), it.get("created_at")
-    date_val = done_at or (updated if it.get("status") in ("in_progress", "waiting") else None) or created
+    date_val = done_at or (updated if it.get("status") in _LIVE_STATUSES else None) or created
     return {"id": it.get("id"), "title": it.get("title"), "phase": it.get("phase"),
             "status": it.get("status"),
             "done_at": str(done_at) if done_at else None,
@@ -198,18 +202,6 @@ class DevKnowledgeService:
             pid = it.get("parent_id")
             if pid and pid in by_id:
                 by_id[pid]["children"].append(it["id"])
-
-        # `blocked` is derived (D-018): an active item is blocked when any `blocked_by`
-        # dependency is unresolved (unknown id, or not completed/dropped). Never set by hand.
-        def resolved(i: dict) -> bool:
-            return bool(i.get("done_at")) or i.get("status") == "dropped"
-
-        for it in items:
-            blockers = it.get("blocked_by") or []
-            it["blocked"] = (
-                not resolved(it)
-                and any((b not in by_id) or not resolved(by_id[b]) for b in blockers)
-            )
 
         items.sort(key=lambda it: (
             _PHASE_RANK.get(str(it.get("phase")), 9),
@@ -246,7 +238,7 @@ class DevKnowledgeService:
             # Legacy runs (made before the phase column existed) carry no phase → the "unknown" bucket.
             # Attribute them to the item's CURRENT phase: an item rarely leaves its first phase, and every
             # NEW run is stamped, so this only ever re-homes legacy spend (and is exact for the common
-            # never-advanced case — e.g. an item that's lived entirely in plan_design shows its full total).
+            # never-advanced case — e.g. an item that's lived entirely in one phase shows its full total).
             cur = it.get("phase")
             if cur:
                 u = by_phase.pop("unknown", 0)
@@ -283,21 +275,36 @@ class DevKnowledgeService:
         description: str = "",
         *,
         session_id: str | None = None,
+        kind: str = "implementation",
+        spawned_from: dict | None = None,
+        inbox_id: int | None = None,
     ) -> dict:
-        """Stamp a new top-level work-item from a pushed inbox item (D-018).
+        """Stamp a new top-level work-item from a pushed inbox item.
 
-        Creates `work-items/<id>/{item.md, artifacts/}`, entering at phase=plan_design,
-        status=queued. The id is an OPAQUE token (12-hex), fully DECOUPLED from the title — identity
+        Creates `work-items/<id>/{item.md, artifacts/}`, entering at phase=triage, status=active
+        (workspace-workflow D1/D2: every item passes triage; kind is a PROPOSAL until the
+        triage-exit gate confirms it). `kind` is validated against KIND_PROFILES — an unknown kind
+        raises loud (ValueError) with NO folder created. `spawned_from` = the D3 provenance edge
+        `{item, relation: blocking|parallel|spawn, note?}` (child-side single write; parent views
+        are derived by scan); relation is validated. `inbox_id` = the originating inbox row (D5
+        trace; the row itself also stays, with `routed_to` as the reverse pointer).
+
+        The id is an OPAQUE token (12-hex), fully DECOUPLED from the title — identity
         is a stable meaningless key, the human label lives only in the `title` field (best-practice
         data modeling; cf. git object hashes — the UI surfaces meaning, not the folder name). The
         folder name IS the id, so the work-graph's parent_id/root_id (derived from folder path parts
         in `_read_work_items`) stay single-sourced and drift-free. Because identity carries nothing
         from the title, a deleted item's id is never regenerated, so a later same-title item can
         NEVER adopt its orphaned (permanent, never-delete-logs) runs/dev-events — the 305k-token
-        ghost post-mortem, 2026-07-13. Returns {id, folder}. The inbox→item provenance is recorded
-        by the caller: the `inbox.push` event (meta.inbox_id) + the `inbox.routed_to` reverse
-        pointer — so nothing about the origin needs to land in item.md.
+        ghost post-mortem, 2026-07-13. Returns {id, folder}.
         """
+        from .kind_profiles import get_profile
+        profile = get_profile(kind)  # loud KeyError on unknown kind, before any disk write
+        if spawned_from is not None:
+            if not isinstance(spawned_from, dict) or not spawned_from.get("item"):
+                raise ValueError("spawned_from must be {item, relation[, note]}")
+            if spawned_from.get("relation") not in _SPAWN_RELATIONS:
+                raise ValueError(f"spawned_from.relation must be one of {_SPAWN_RELATIONS}")
         wi = Path(dev_root) / "work-items"
         wi.mkdir(parents=True, exist_ok=True)
         title = (title or "").strip()
@@ -308,10 +315,20 @@ class DevKnowledgeService:
         (folder / "artifacts").mkdir(parents=True, exist_ok=True)
 
         today = date.today().isoformat()
+        # Optional provenance lines — written only when set (absent = null on read; no dead fields).
+        extra = ""
+        if spawned_from is not None:
+            edge = {"item": str(spawned_from["item"]), "relation": spawned_from["relation"]}
+            if spawned_from.get("note"):
+                edge["note"] = str(spawned_from["note"])
+            extra += f"spawned_from: {json.dumps(edge)}\n"   # JSON is valid YAML flow mapping
+        if inbox_id is not None:
+            extra += f"inbox_id: {inbox_id}\n"
         fm = (
             f"---\nid: {wid}\nroot_id: {wid}\nparent_id: null\n"
-            f"title: {json.dumps(title)}\nphase: plan_design\nstatus: queued\n"
-            f"done_at: null\nartifacts: []\nblocked_by: []\n"
+            f"title: {json.dumps(title)}\nkind: {profile.kind}\n"
+            f"phase: {profile.phases[0]}\nstatus: active\n"
+            f"done_at: null\nartifacts: []\n{extra}"
             f"session_id: {json.dumps(session_id) if session_id else 'null'}\n"
             f"created_at: {today}\nupdated_at: {today}\n---\n"
         )
@@ -329,20 +346,37 @@ class DevKnowledgeService:
         meta, body = _parse_md(p.read_text())
         it = dict(meta)
         it["id"] = str(meta.get("id") or item_id)
+        # Id-like fields are opaque 12-HEX tokens, but one that happens to be all decimal digits
+        # parses from YAML as an int (~0.4% of ids — a real 500 in the wild, 2026-07-16). Coerce.
+        for k in ("root_id", "parent_id", "superseded_by"):
+            if meta.get(k) is not None:
+                it[k] = str(meta[k])
         it["description"] = body.strip()
         it["session_id"] = meta.get("session_id")
         it["artifacts"] = _norm_artifacts(meta.get("artifacts"))  # legacy str → {type,path} (R5)
         return it
 
+    def _task_lines(self, dev_root: Path, item_id: str) -> list[str]:
+        """The item's checklist lines. Single source = plan.md's `## Tasks` section (D6 §1 —
+        the living plan IS the task tracker; approve plan = approve breakdown, no drift).
+        Falls back to the legacy standalone `tasks.md` for items that predate the workflow."""
+        adir = Path(dev_root) / "work-items" / item_id / "artifacts"
+        plan = adir / "plan.md"
+        if plan.exists():
+            body = _section(plan.read_text(), "Tasks")
+            if body.strip():
+                return body.splitlines()
+        legacy = adir / "tasks.md"
+        if legacy.exists():
+            return legacy.read_text().splitlines()
+        return []
+
     def task_progress(self, dev_root: Path, item_id: str) -> dict | None:
-        """Count the checklist state in a work-item's `artifacts/tasks.md` → {done, total},
-        or None if there's no tasks.md. Reads Markdown task lines (`- [ ]` / `- [x]`), the
-        living to-do list the plan skill writes — lets the card show a build-progress glance."""
-        p = Path(dev_root) / "work-items" / item_id / "artifacts" / "tasks.md"
-        if not p.exists():
-            return None
+        """Checklist state → {done, total} (None when there are no task lines). Reads Markdown
+        task lines (`- [ ]` / `- [x]`) from plan.md's `## Tasks` — the derived progress the card
+        + drilldown progress bar show; never stored."""
         done = total = 0
-        for line in p.read_text().splitlines():
+        for line in self._task_lines(dev_root, item_id):
             m = re.match(r"\s*[-*]\s+\[([ xX])\]", line)
             if m:
                 total += 1
@@ -353,14 +387,10 @@ class DevKnowledgeService:
         return {"done": done, "total": total}
 
     def read_tasks(self, dev_root: Path, item_id: str) -> list[dict] | None:
-        """Parse `artifacts/tasks.md` into an ordered list of `{text, done}` checklist items
-        (None if there's no tasks.md or it has no task lines). The structured form the review
-        popup renders — same `- [ ]` / `- [x]` lines `task_progress` counts."""
-        p = Path(dev_root) / "work-items" / item_id / "artifacts" / "tasks.md"
-        if not p.exists():
-            return None
+        """The checklist as an ordered `{text, done}` list (None when empty) — the structured
+        form the review popup renders; same lines `task_progress` counts."""
         out: list[dict] = []
-        for line in p.read_text().splitlines():
+        for line in self._task_lines(dev_root, item_id):
             m = re.match(r"\s*[-*]\s+\[([ xX])\]\s*(.*)", line)
             if m:
                 out.append({"text": m.group(2).strip(), "done": m.group(1) in ("x", "X")})
@@ -379,9 +409,10 @@ class DevKnowledgeService:
         return body.strip() or None
 
     def set_work_item_phase(self, dev_root: Path, item_id: str, phase: str) -> bool:
-        """Set a work-item's `phase` (plan_design / build_eval / done) — the owner's gate,
-        advanced on approval. Line-based rewrite preserving frontmatter shape, bumping
-        `updated_at`. Returns True if the file changed."""
+        """Set a work-item's `phase` (the per-kind pipeline stage; sequencing validity is the
+        caller's job via core/kind_profiles.next_phase) — the owner's gate, advanced on approval.
+        Line-based rewrite preserving frontmatter shape, bumping `updated_at`. Returns True if
+        the file changed."""
         item = Path(dev_root) / "work-items" / item_id / "item.md"
         if not item.exists():
             return False
@@ -397,26 +428,62 @@ class DevKnowledgeService:
         item.write_text(f"---\n{fm}\n---\n{body}")
         return True
 
-    def set_work_item_done(self, dev_root: Path, item_id: str) -> bool:
-        """Mark a work-item COMPLETE — stamp `done_at` (the tick-out off the Done phase). Sets
-        the field to today (inserting it for older items that predate it) and bumps `updated_at`.
-        Returns True if the file changed (False if already completed or missing)."""
+    def set_work_item_kind(self, dev_root: Path, item_id: str, kind: str) -> bool:
+        """Set a work-item's `kind` (D1: a PROPOSAL until the triage-exit gate — this is triage's
+        recording surface; the route/tool layer restricts it to the triage phase). Validated
+        against KIND_PROFILES (loud KeyError on unknown). Line-based rewrite, bumps updated_at.
+        Returns True if the file changed."""
+        from .kind_profiles import get_profile
+        get_profile(kind)  # loud on unknown kind, before any write
         item = Path(dev_root) / "work-items" / item_id / "item.md"
         if not item.exists():
             return False
         text = item.read_text()
         meta, body = _parse_md(text)
-        if meta.get("done_at"):
-            return False  # already completed
+        if str(meta.get("kind")) == str(kind):
+            return False
+        m = _FRONTMATTER.match(text)
+        if not m:
+            return False
+        fm = re.sub(r"(?m)^kind:.*$", f"kind: {kind}", m.group(1))
+        fm = re.sub(r"(?m)^updated_at:.*$", f"updated_at: {date.today().isoformat()}", fm)
+        item.write_text(f"---\n{fm}\n---\n{body}")
+        return True
+
+    def set_work_item_terminal(self, dev_root: Path, item_id: str, outcome: str = "completed",
+                               *, superseded_by: str | None = None) -> bool:
+        """Move a work-item to its TERMINAL state (workspace-workflow D2/D8) — a status change,
+        never a delete: `status: done` + `outcome: completed|abandoned|superseded` + `done_at`
+        stamp. `superseded` REQUIRES `superseded_by` (no dangling supersedes, D3). Idempotent:
+        returns False if already terminal or missing. Human-gated at the route layer — the agent
+        never calls this (D8 three-layer close protocol)."""
+        if outcome not in ("completed", "abandoned", "superseded"):
+            raise ValueError(f"unknown terminal outcome {outcome!r}")
+        if outcome == "superseded" and not superseded_by:
+            raise ValueError("superseded requires superseded_by")
+        item = Path(dev_root) / "work-items" / item_id / "item.md"
+        if not item.exists():
+            return False
+        text = item.read_text()
+        meta, body = _parse_md(text)
+        if meta.get("done_at") or str(meta.get("status")) == "done":
+            return False  # already terminal
         m = _FRONTMATTER.match(text)
         if not m:
             return False
         today = date.today().isoformat()
         fm = m.group(1)
-        if re.search(r"(?m)^done_at:.*$", fm):
-            fm = re.sub(r"(?m)^done_at:.*$", f"done_at: {today}", fm)
-        else:
-            fm = fm.rstrip() + f"\ndone_at: {today}"
+
+        def _upsert(field: str, value: str, block: str) -> str:
+            if re.search(rf"(?m)^{field}:.*$", block):
+                return re.sub(rf"(?m)^{field}:.*$", f"{field}: {value}", block)
+            return block.rstrip() + f"\n{field}: {value}"
+
+        fm = _upsert("status", "done", fm)
+        fm = _upsert("outcome", outcome, fm)
+        fm = _upsert("done_at", today, fm)
+        if superseded_by:
+            fm = _upsert("superseded_by", superseded_by, fm)
         fm = re.sub(r"(?m)^updated_at:.*$", f"updated_at: {today}", fm)
         item.write_text(f"---\n{fm}\n---\n{body}")
         return True
@@ -508,9 +575,10 @@ class DevKnowledgeService:
         return True
 
     def set_work_item_status(self, dev_root: Path, item_id: str, status: str) -> bool:
-        """Set a work-item's `status` (the run-state axis — queued/in_progress/waiting/...),
+        """Set a work-item's `status` (the runnable-state axis — active/awaiting_child/
+        awaiting_human; terminal `done` goes through set_work_item_terminal),
         line-based rewrite preserving frontmatter shape, bumping `updated_at`. Status is
-        ORCHESTRATOR-OWNED (the daemon sets it on run start/finish), not the agent's to set.
+        ORCHESTRATOR-OWNED (daemon/routes/status-router), never the agent's to set (D8).
         Returns True if the file changed."""
         item = Path(dev_root) / "work-items" / item_id / "item.md"
         if not item.exists():
@@ -519,11 +587,40 @@ class DevKnowledgeService:
         meta, body = _parse_md(text)
         if str(meta.get("status")) == str(status):
             return False
+        # Terminal is FINAL on this axis: a straggler run's end-of-turn status write (an aborted
+        # headless plan finishing after an abandon, say) must never revive a done item into a
+        # ghost `awaiting_human` page. Un-terminal has exactly no path (never-delete lifecycle).
+        if meta.get("done_at") or str(meta.get("status")) == "done":
+            return False
         m = _FRONTMATTER.match(text)
         if not m:
             return False
         fm = re.sub(r"(?m)^status:.*$", f"status: {status}", m.group(1))
         fm = re.sub(r"(?m)^updated_at:.*$", f"updated_at: {date.today().isoformat()}", fm)
+        item.write_text(f"---\n{fm}\n---\n{body}")
+        return True
+
+    def set_work_item_seen(self, dev_root: Path, item_id: str) -> bool:
+        """Stamp `seen_at` — the owner opened this item's drilldown (S7 attention engine: a
+        terminal item without the stamp sits in the `unread` bucket; the stamp clears it).
+        A read receipt, so `updated_at` is deliberately NOT bumped. Idempotent (re-stamps).
+        Returns True if the file changed."""
+        item = Path(dev_root) / "work-items" / item_id / "item.md"
+        if not item.exists():
+            return False
+        text = item.read_text()
+        m = _FRONTMATTER.match(text)
+        if not m:
+            return False
+        stamp = datetime.now().isoformat(timespec="seconds")
+        fm = m.group(1)
+        if re.search(r"(?m)^seen_at:.*$", fm):
+            if re.search(rf"(?m)^seen_at: {re.escape(stamp)}$", fm):
+                return False
+            fm = re.sub(r"(?m)^seen_at:.*$", f"seen_at: {stamp}", fm)
+        else:
+            fm = fm.rstrip() + f"\nseen_at: {stamp}"
+        _meta, body = _parse_md(text)
         item.write_text(f"---\n{fm}\n---\n{body}")
         return True
 
@@ -552,6 +649,43 @@ class DevKnowledgeService:
 
         fm = _set(fm, "wave", wave or "null")
         fm = _set(fm, "deliverable", deliverable or "null")
+        fm = re.sub(r"(?m)^updated_at:.*$", f"updated_at: {date.today().isoformat()}", fm)
+        item.write_text(f"---\n{fm}\n---\n{body}")
+        return True
+
+    # Item-yaml git record fields (workspace-workflow S4/D4) — written by the git layer's
+    # callers, read by health checks + the FE. A terminal item KEEPS its record (branch = trace).
+    _GIT_FIELDS = frozenset({
+        "git_branch", "git_worktree", "git_base", "git_merge_commit", "git_merged_at",
+        "git_backup_ref",
+    })
+
+    def set_work_item_git(self, dev_root: Path, item_id: str, **fields) -> bool:
+        """Upsert the item's git record (S4): branch/worktree at build entry, merge commit +
+        backup ref at deliver. Only the known `_GIT_FIELDS` keys are accepted (loud ValueError
+        otherwise); string values are JSON-quoted (paths survive the line parser), None writes
+        `null`. Bumps `updated_at`. Returns True if the file changed."""
+        bad = set(fields) - self._GIT_FIELDS
+        if bad:
+            raise ValueError(f"unknown git record fields: {sorted(bad)}")
+        item = Path(dev_root) / "work-items" / item_id / "item.md"
+        if not item.exists() or not fields:
+            return False
+        text = item.read_text()
+        m = _FRONTMATTER.match(text)
+        if not m:
+            return False
+        _meta, body = _parse_md(text)
+        fm = m.group(1)
+
+        def _upsert(block: str, key: str, val) -> str:
+            rendered = "null" if val is None else json.dumps(val) if isinstance(val, str) else str(val)
+            if re.search(rf"(?m)^{key}:", block):
+                return re.sub(rf"(?m)^{key}:.*$", f"{key}: {rendered}", block)
+            return block.rstrip() + f"\n{key}: {rendered}"
+
+        for key, val in fields.items():
+            fm = _upsert(fm, key, val)
         fm = re.sub(r"(?m)^updated_at:.*$", f"updated_at: {date.today().isoformat()}", fm)
         item.write_text(f"---\n{fm}\n---\n{body}")
         return True
@@ -657,7 +791,7 @@ class DevKnowledgeService:
         if items is None:
             items = self._read_work_items(Path(dev_root) / "work-items")
         inprog = [it for it in items
-                  if it.get("status") in ("in_progress", "waiting") and not it.get("done_at")]
+                  if it.get("status") in _LIVE_STATUSES and not it.get("done_at")]
         if not (line or active or inprog):
             # Cold start: no project memory yet. Make the empty state VISIBLE (not silence) so the
             # charter's "Before there is any memory" rule fires — establish it before building.
@@ -676,7 +810,7 @@ class DevKnowledgeService:
     def delete_work_item(self, dev_root: Path, item_id: str) -> bool:
         """Hard-delete a work-item folder (item.md, artifacts/ and any branch-offs nested
         under it). Returns True if a folder was removed. Caller enforces any phase
-        guard (only plan_design items are deletable — past that, code may be touched)."""
+        guard (only pre-build items — triage/plan — are deletable; past that, code may be touched)."""
         folder = Path(dev_root) / "work-items" / item_id
         if not folder.is_dir():
             return False
@@ -714,7 +848,6 @@ class DevKnowledgeService:
             it["depth"] = len(rel.parts) - 1
             it["description"] = body.strip()
             it["status"] = meta.get("status")  # may be None (completed/unset)
-            it["blocked_by"] = meta.get("blocked_by") or []
             it["artifacts"] = _norm_artifacts(meta.get("artifacts"))  # legacy str → {type,path} (R5)
             it["session_id"] = meta.get("session_id")  # origin session, may be None
             it["folder"] = str(rel)
@@ -724,24 +857,22 @@ class DevKnowledgeService:
     def _glance(self, items: list[dict], inbox: list[dict]) -> dict:
         by_status: dict[str, int] = {}
         by_phase: dict[str, int] = {}
-        blocked, in_progress, waiting = [], [], []
+        active, awaiting_human = [], []
         for it in items:
             by_phase[str(it.get("phase", "?"))] = by_phase.get(str(it.get("phase", "?")), 0) + 1
-            # Display bucket: completion (done_at) reads as "done"; else the active status.
+            # Display bucket: completion (done_at) reads as "done"; else the live status.
             key = "done" if it.get("done_at") else (str(it["status"]) if it.get("status") else "—")
             by_status[key] = by_status.get(key, 0) + 1
-            if it.get("blocked"):
-                blocked.append({"id": it.get("id"), "blocked_by": it.get("blocked_by") or []})
-            if it.get("status") == "in_progress":
-                in_progress.append({"id": it.get("id"), "title": it.get("title")})
-            if it.get("status") == "waiting":
-                waiting.append({"id": it.get("id"), "blocked_by": it.get("blocked_by") or []})
+            if it.get("status") == "active":
+                active.append({"id": it.get("id"), "title": it.get("title")})
+            # The attention list (D10): awaiting_human is the only status that pages the owner.
+            if it.get("status") == "awaiting_human":
+                awaiting_human.append({"id": it.get("id"), "title": it.get("title")})
         return {
             "by_status": by_status,
             "by_phase": by_phase,
-            "in_progress": in_progress,
-            "waiting": waiting,
-            "blocked": blocked,
+            "active": active,
+            "awaiting_human": awaiting_human,
             "inbox_open": sum(1 for e in inbox if e.get("status", "open") == "open"),
             "counts": {"work_items": len(items)},
         }

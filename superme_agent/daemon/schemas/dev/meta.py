@@ -8,22 +8,49 @@ from ..common import EventScope, EventActor
 
 
 class GlanceItem(BaseModel):
-    """A work-item stub in the glance buckets (in_progress / waiting / blocked)."""
+    """A work-item stub in the glance buckets (active / awaiting_human)."""
     model_config = ConfigDict(extra="allow")
     id: str
-    blocked_by: list[str] | None = None
 
 
 class Glance(BaseModel):
-    """The dashboard glance summary (counts + bucketed item stubs)."""
+    """The dashboard glance summary (counts + bucketed item stubs). `awaiting_human` is the
+    attention bucket (D10: the only status that pages the owner)."""
     model_config = ConfigDict(extra="allow")
     by_status: dict[str, int]
     by_phase: dict[str, int]
-    in_progress: list[GlanceItem]
-    waiting: list[GlanceItem]
-    blocked: list[GlanceItem]
+    active: list[GlanceItem]
+    awaiting_human: list[GlanceItem]
     inbox_open: int
     counts: dict[str, int]
+
+
+class AttentionRow(BaseModel):
+    """One item's attention claim: which bucket, why (one human line), and the gate it sits at
+    (needs_you only)."""
+    id: str
+    title: str
+    kind: str
+    phase: str | None = None
+    status: str | None = None
+    outcome: str | None = None
+    bucket: str          # needs_you | running | unread
+    reason: str
+    gate: str | None = None
+
+
+class AttentionBadge(BaseModel):
+    """The global badge: the TOP non-empty tier only — one color, one count (D10)."""
+    tier: str            # needs_you | running | unread
+    color: str           # orange | green | blue
+    count: int
+
+
+class AttentionResponse(BaseModel):
+    """The attention engine's read: strict-priority buckets derived from durable state."""
+    context_id: str
+    buckets: dict[str, list[AttentionRow]]
+    badge: AttentionBadge | None = None
 
 
 class DevReadResponse(BaseModel):
@@ -35,6 +62,31 @@ class DevReadResponse(BaseModel):
     glance: Glance
     context_id: str
     running: list[str]
+
+
+class WorkGraphNode(BaseModel):
+    """One node of the derived WorkGraph (D3). `kind` ∈ repo_root | deliverable | work_item |
+    inbox_spawn; work_item nodes carry item_kind/phase/status/outcome (+ git decoration in S4)."""
+    model_config = ConfigDict(extra="allow")
+    id: str
+    kind: str
+    label: str | None = None
+
+
+class WorkGraphEdge(BaseModel):
+    """One typed edge: contains | spawned_from (carries `relation`) | supersedes."""
+    model_config = ConfigDict(extra="allow")
+    src: str
+    dst: str
+    kind: str
+
+
+class WorkGraphResponse(BaseModel):
+    context_id: str
+    nodes: list[WorkGraphNode]
+    edges: list[WorkGraphEdge]
+    cycles: list[list[str]]  # non-empty = a provenance loop to surface (never a 500)
+    topo: list[str] | None = None  # topological order; None when cyclic
 
 
 class DevLogEvent(BaseModel):

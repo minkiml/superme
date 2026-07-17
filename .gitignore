@@ -13,6 +13,10 @@
 # local DB backups (created before migrations/cleanups; never commit)
 .dev.db.*
 .system.db.*
+# scratch DBs a test run leaves anywhere in the tree (the roots above only match this dir)
+**/.dev_dummy.db
+**/.dev.db
+**/.system.db
 
 # Private, lifelong SuperMe knowledge (its own private repo; never in the app repo).
 # superme-global-knowledge/ = today's home; superme-knowledge/ = the renovation target (placeholder).

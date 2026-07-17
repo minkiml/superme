@@ -30,19 +30,79 @@ selected per-turn by project state (`is_onboarding`, ws.py), so a stamped sessio
 SESSION_KINDS = ("general", "work_item", "onboarding", "diagnosis")
 
 
+# The THIN per-phase contract (workspace-workflow S5/D9: thin preamble, thick skill). One line of
+# WHAT this phase is + the phase skill that owns the PROCEDURE. Constraints/gates are derived in
+# work_item_preamble from live item state; this table carries only the per-phase constants.
+_PHASE_CONTRACTS: dict[str, dict] = {
+    "triage":      {"skill": "triage",
+                    "what": "classify this item (kind, scope, deliverable) and shape its brief — no building yet"},
+    "plan":        {"skill": "plan",
+                    "what": "produce the approved plan (plan.md with its ## Tasks checklist) — no building yet"},
+    "build":       {"skill": "build",
+                    "what": "implement the plan's tasks, committing as you go"},
+    "validate":    {"skill": "validate",
+                    "what": "verify the built work against the plan's validation criteria, recording machine evidence"},
+    "deliver":     {"skill": "deliver",
+                    "what": "make the work mergeable: sync from main, tidy commits, draft the readiness report"},
+    "close":       {"skill": "close",
+                    "what": "draft the closeout record; completion itself is the user's action"},
+    "investigate": {"skill": "investigate",
+                    "what": "answer the plan's research questions within its boundaries — read-only on code"},
+    "report":      {"skill": "report",
+                    "what": "distill the investigation into findings.md — read-only on code"},
+}
+
+
 def work_item_preamble(item_id: str, item: dict, item_dir) -> str:
-    """The work_item agent (the builder): center on its bound item (pointer-only — names the item +
-    where its materials live; inlines nothing, keeping ctx% honest)."""
+    """The work_item agent (the builder): a THIN contract derived from (item.kind, item.phase) —
+    focus, this phase's job + its skill, the edit boundary, and the next gate. The PROCEDURE lives
+    in the per-phase skill; the big orientation payload is injected once at session birth (the
+    orient block), never here — this block rides every turn's system prompt, so it stays small."""
     title = item.get("title") or item_id
-    phase = item.get("phase") or "—"
-    return (
-        f"## Focus\n"
-        f"This session is dedicated to work-item **{item_id} — \"{title}\"** (phase: {phase}). "
-        f"This is your primary work-item to work on; the user's questions are centred on this "
-        f"item's content unless they explicitly point elsewhere. Its materials live at "
-        f"`{item_dir}/` — read them on demand to ground your answers rather than guessing. "
-        f"You may still read other work-items and repo knowledge when relevant."
+    phase = str(item.get("phase") or "triage")
+    kind = str(item.get("kind") or "implementation")
+    c = _PHASE_CONTRACTS.get(phase, {})
+    lines = [
+        "## Focus",
+        f"This session is dedicated to work-item **{item_id} — \"{title}\"** "
+        f"(kind `{kind}`, current phase `{phase}`). This is an INTERACTIVE chat — the user is "
+        f"present (any earlier headless-run instructions in this transcript, like no-questions or "
+        f"the completion-report fence, applied to that run only). Their interactions primarily "
+        f"center on this item unless they "
+        f"point elsewhere. Its materials live at `{item_dir}/` — read on demand, NEVER guess.",
+    ]
+    if c:
+        lines.append(
+            f"\n**This phase:** {c['what']}. The procedure lives in the `superme-dev:{c['skill']}` "
+            f"skill — invoke it when doing this phase's work."
+        )
+    # Edit boundary: worktree during build+ (S4 freeze), item folder otherwise.
+    wt = item.get("git_worktree")
+    if wt:
+        lines.append(
+            f"\n**Edit boundary:** all code changes happen in this item's git worktree `{wt}/` "
+            f"(your working directory); the item folder holds its artifacts. File writes outside "
+            f"those two are denied. Never touch the main repo tree — the merge to main happens at "
+            f"the user's deliver gate."
+        )
+    else:
+        # Kind-aware (M4): research items never get a worktree — telling them "the build phase
+        # gets one" asserts a future their pipeline doesn't have.
+        code_line = (
+            "the repo stays read-only for this item — research changes no code."
+            if kind == "research" else
+            "the build phase gets a dedicated git worktree."
+        )
+        lines.append(
+            "\n**Edit boundary:** this phase touches no real code — writes belong in the item's "
+            "own folder (artifacts, checkpoints); " + code_line
+        )
+    lines.append(
+        "\n**Gates:** the user advances phases and closes items — never you. When this phase's "
+        "work is done, say so and stop; don't start the next phase's work. Bank a checkpoint "
+        "(`write_checkpoint`) before wrapping up a long session."
     )
+    return "\n".join(lines)
 
 
 def general_preamble() -> str:
@@ -59,20 +119,37 @@ def general_preamble() -> str:
     )
 
 
-def onboarding_preamble() -> str:
+def onboarding_preamble(mode: str | None = None) -> str:
     """The onboarding agent: the general agent's ESTABLISH-MEMORY persona, used while the dev project
     has no SuperMe memory yet. More directive than the general advisor — its job is to stand the
-    project's memory up (project-init for greenfield, retrofit for existing code)."""
+    project's memory up (project-init for greenfield, retrofit for existing code).
+
+    This IS the onboarding kickoff — it carries the skill directive, so nothing needs to be said in
+    the chat to start onboarding. The owner's first message is their project description and nothing
+    else; a visible "Run **retrofit**: …" prompt would only say out loud what this already says
+    privately. `mode` is the repo's connect-time choice (RepoConfig.onboarding): when it's known,
+    NAME the skill rather than making the agent re-derive greenfield-vs-existing from the code."""
+    if mode == "project-init":
+        skill = ("Run **project-init** — this was connected as a NEW/greenfield project.")
+    elif mode == "retrofit":
+        skill = ("Run **retrofit** — this was connected as an EXISTING codebase, so read the code to "
+                 "reconstruct what's there before asking.")
+    else:
+        skill = ("Run **project-init** (a new/greenfield project) or **retrofit** (an existing "
+                 "codebase) — pick from what you find in the repo.")
     return (
         "## Onboarding session\n"
         "This dev project has NO SuperMe memory yet — establishing it IS the work of this session. "
-        "Your job is to stand up the project's `general/` memory: run **project-init** (a new/greenfield "
-        "project) or **retrofit** (an existing codebase) — grill the owner to pin down intent, then draft "
-        "the anchor docs (PRD, spec, roadmap, architecture) for their approval. Authoring `general/` memory "
-        "is exactly what you're here to do. But do NOT implement or edit the project's real code, or mutate "
-        "work-items (no code writes, commits, installs, or migrations — including via shell); that's for a "
-        "work-item once the project is established. Keep the owner in the loop — draft for approval, don't "
-        "assume."
+        f"Your job is to stand up the project's `general/` memory. {skill} Grill the user to pin down "
+        "intent, then draft the anchor docs (PRD, spec, roadmap, architecture) for their approval.\n"
+        "The user is normally told to open with a short description of the project, so if their "
+        "message carries one, START FROM IT — grill from there, never re-ask what they just said. "
+        "If it doesn't (they asked something else, or said nothing much), just ask for the one-liner "
+        "and go. Authoring `general/` memory is exactly "
+        "what you're here to do. But do NOT implement or edit the project's real code, or mutate "
+        "work-items (no code writes, commits, installs, or migrations — including via shell); that's "
+        "for a work-item once the project is established. Keep the user in the loop — draft for "
+        "approval, don't assume."
     )
 
 
@@ -124,16 +201,19 @@ def diagnosis_preamble(run: dict | None, run_id: int) -> str:
         f"Activity **#{run_id}** — {feature} · status `{status}` · model `{model}` · started {started}"
         + (f" · work-item `{item_id}`" if item_id else "")
     )
+    trace_line = (
+        " The subject run's full trace was provided at the start of this session."
+        if run else ""
+    )
     return (
         "## Diagnosis\n"
-        f"You are SuperMe's DIAGNOSIS agent, focusing on one past agentic run activity"
-        f" — {subject_line} - against user query. \n\n"
-        "It is read-only such that you investigate, explain, and discuss with users, and may propose a fix, improvement, idea, or plan — but you do NOT "
-        "edit code, mutate work-items, commit, or run migrations here. If a concrete fix is warranted, "
-        "describe it and offer to itemize it (the create-inbox-item skill) so the work happens in its "
-        "own work-item.\n\n"
+        f"You are SuperMe's DIAGNOSIS agent, examining one past run: {subject_line}.\n\n"
+        "This session is read-only: investigate, explain, and discuss with the user; propose a "
+        "fix, improvement, idea, or plan — but never edit code, mutate work-items, commit, or run "
+        "migrations here. If a concrete fix is warranted, describe it and offer to itemize it "
+        "(the create-inbox-item skill) so the work happens in its own work-item.\n\n"
         "To dig deeper you can read this repo's knowledge, other runs (`read_run`), and the dev log "
-        "(`read_dev_log`). The subject run's full trace was provided at the start of this session."
+        f"(`read_dev_log`).{trace_line}"
     )
 
 

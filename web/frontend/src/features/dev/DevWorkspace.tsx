@@ -1,15 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, GitBranch, Map, Brain, Package, Activity, ChevronsUpDown, Check, Loader2 } from 'lucide-react'
+import { ArrowLeft, GitBranch, Map, Brain, Package, Activity, ChevronsUpDown, Check, Loader2, Waypoints } from 'lucide-react'
 import { colorFor } from '@/lib/palette'
 import { RepoIcon } from '@/lib/repoIcons'
 import type { OrbitRepo } from '@/features/shell/useCommandStats'
-import { getProjectStatus, type WorkItem } from '@/lib/api'
+import { getProjectStatus, getAttention, type AttentionBadge, type WorkItem } from '@/lib/api'
 import TabBar from '@/ui/TabBar'
 import DevDashboard from './DevDashboard'
 import RoadmapTab from './RoadmapTab'
 import { MemoryGovernance, PublishedInventory } from './LearningGovernance'
 import ArtifactsTab from './ArtifactsTab'
 import ActivityLog from './ActivityLog'
+import WorkGraphView from './WorkGraphView'
 import OnboardingLanding, { type OnboardMode } from './OnboardingLanding'
 
 // The Dev workspace — the per-repo Tier-2 detail surface, reached from an orbit node's inspector
@@ -17,9 +18,10 @@ import OnboardingLanding, { type OnboardMode } from './OnboardingLanding'
 // the three heavy dev surfaces for ONE repo: the plan→build pipeline, the learning governance queue,
 // and the per-repo activity log. Scoped by contextId (the repo id; only global is fully wired today).
 
-type Tab = 'pipeline' | 'roadmap' | 'learning' | 'artifacts' | 'activity'
+type Tab = 'pipeline' | 'graph' | 'roadmap' | 'learning' | 'artifacts' | 'activity'
 const TABS: { id: Tab; label: string; icon: typeof GitBranch }[] = [
   { id: 'pipeline', label: 'Pipeline', icon: GitBranch },
+  { id: 'graph', label: 'Graph', icon: Waypoints },
   { id: 'roadmap', label: 'Roadmap', icon: Map },
   { id: 'learning', label: 'Learning', icon: Brain },
   { id: 'artifacts', label: 'Artifacts', icon: Package },
@@ -34,7 +36,6 @@ export default function DevWorkspace({
   onBindItem,
   onUnbindItem,
   boundItemId,
-  onStartOnboarding,
 }: {
   repo: OrbitRepo
   onExit: () => void
@@ -43,11 +44,20 @@ export default function DevWorkspace({
   onBindItem?: (it: WorkItem, contextId: string) => void // clicking a work-item binds the chat to it
   onUnbindItem?: () => void
   boundItemId?: string | null
-  onStartOnboarding?: (repoId: string, mode: OnboardMode) => void // launch a guided onboarding session
 }) {
   const [tab, setTab] = useState<Tab>('pipeline')
   const isHub = repo.id === 'global'
   const c = colorFor(repo.id)
+
+  // Attention badge (S7/D10): the top non-empty tier's color + count, polled from durable state.
+  const [badge, setBadge] = useState<AttentionBadge | null>(null)
+  useEffect(() => {
+    let alive = true
+    const pull = () => getAttention(repo.id).then((a) => alive && setBadge(a.badge ?? null)).catch(() => {})
+    pull()
+    const t = setInterval(pull, 5000)
+    return () => { alive = false; clearInterval(t) }
+  }, [repo.id])
 
   // Onboarding gate (S5·B): a repo whose project memory isn't established yet (PRD defines no
   // deliverables) shows the onboarding front door instead of the work tabs — you can't take on work
@@ -101,7 +111,19 @@ export default function DevWorkspace({
             {!isHub && repo.icon && <RepoIcon name={repo.icon} size={16} color={c} />}
           </span>
           <div className="min-w-0">
-            <div className="truncate text-[15px] font-semibold text-fg">{isHub ? 'SuperMe Hub' : repo.label}</div>
+            <div className="flex items-center gap-2">
+              <span className="truncate text-[15px] font-semibold text-fg">{isHub ? 'SuperMe Hub' : repo.label}</span>
+              {badge && (
+                <span
+                  title={`${badge.count} item(s) in the '${badge.tier}' attention tier`}
+                  className={`inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[10px] font-bold text-on-accent ${
+                    badge.tier === 'needs_you' ? 'bg-warn' : badge.tier === 'running' ? 'bg-success' : 'bg-accent'
+                  }`}
+                >
+                  {badge.count}
+                </span>
+              )}
+            </div>
             <div className="text-[12px] text-faint">dev workspace</div>
           </div>
           {onSwitch && others.length > 0 && (
@@ -142,11 +164,7 @@ export default function DevWorkspace({
             <Loader2 size={15} className="animate-spin" /> Checking project memory…
           </div>
         ) : established === false ? (
-          <OnboardingLanding
-            repoLabel={isHub ? 'SuperMe Hub' : repo.label}
-            mode={onboardMode}
-            onStart={(mode) => onStartOnboarding?.(repo.id, mode)}
-          />
+          <OnboardingLanding repoLabel={isHub ? 'SuperMe Hub' : repo.label} mode={onboardMode} />
         ) : (
           <>
             {tab === 'pipeline' && (
@@ -158,6 +176,7 @@ export default function DevWorkspace({
                 boundItemId={boundItemId}
               />
             )}
+            {tab === 'graph' && <WorkGraphView contextId={repo.id} onBindItem={onBindItem} />}
             {tab === 'roadmap' && <RoadmapTab contextId={repo.id} />}
             {tab === 'learning' && <LearningTab contextId={repo.id} />}
             {tab === 'artifacts' && <ArtifactsTab contextId={repo.id} />}

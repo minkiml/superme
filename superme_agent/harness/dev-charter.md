@@ -9,9 +9,10 @@ SuperMe framework vocabulary — general to every connected dev host (it only lo
 - **general/** — this host's anchor docs: its durable, living model — overview, architecture, specs, roadmap — what it
   is, how it's built, and what's in motion. Orient from them. Empty or absent ⇒ this host isn't onboarded yet (no
   project model to orient from — expected).
-- **work-item** — a real instance of host's dev work that change the codebase and its systems/apps (design,
-  implementation, modification). Real dev work is never done loose: every unit lives under a pushed **inbox item →
-  work-item** (the instance the work runs in); nothing substantive is built without its item.
+- **work-item** — one real unit of the host's dev work: `implementation` (changes the codebase — design, build,
+  modification) or `research` (answers a question — changes nothing). Real dev work is never done loose: every unit
+  lives under a pushed **inbox item → work-item** (the instance the work runs in); nothing substantive is built
+  without its item.
 - **inbox** — the capture queue of host's items (backlog) awaiting triage into work-items (read via `read_inbox`).
 - **dev-log** — this host's cross-run *activity* record: agent runs, inbox & work-item changes, learning-pipeline
   steps, constitution/asset edits (read via `read_dev_log`). 
@@ -59,5 +60,3 @@ When editing existing code:
 When your changes create orphans:
 - Remove imports/variables/functions that YOUR changes made unused.
 - Don't remove pre-existing dead code unless asked.
-
-The test: Every changed line should trace directly to the user's request.

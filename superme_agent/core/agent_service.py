@@ -25,7 +25,8 @@ from ..runtime.config import (
     SELF_FILE, CHARTER_FILES, HARNESS_DIR, LOCAL_HARNESS_DIR, CONSTITUTION_DIR, plugins_for,
 )
 from .models import normalize_model
-from .operational import constitution_catalog, list_repo_assets, silent_skill_names
+from .operational import (constitution_catalog, list_repo_assets, silent_skill_names,
+                          skills_in_category)
 from .dev_knowledge import DevKnowledgeService
 
 _DEV = DevKnowledgeService()  # stateless — reused to build the dev Orient digest
@@ -193,11 +194,26 @@ class AgentService:
                 )
         return text
 
+    # Deny messages for a blocked Skill call. Each is the agent's ONLY feedback about the block, so
+    # each states what is true of the skills it covers — and what to do instead.
+    _SILENT_SKILL_DENY = ("This is an internal SuperMe skill — it runs only inside the learning "
+                          "pipeline, not from chat.")
+    _CATEGORY_DENY = {
+        "onboarding": (
+            "Onboarding is already done for this project — it has established memory (anchor docs), "
+            "so the onboarding skills are closed and would overwrite that memory rather than build "
+            "on it. To CHANGE an anchor doc, edit the specific section that's wrong (or raise a "
+            "work-item for it); to record something new, add it. Don't re-derive the docs."
+        ),
+    }
+    _CATEGORY_DENY_DEFAULT = "The `{category}` skills aren't available in this session."
+
     def _build_options(
         self, ctx: Context, *, resume, model, approve: ApproveFn, extra_mcp_servers,
         enforce_silent: bool = False, effort: str | None = None, scope_reads: bool = False,
         system_append: str | None = None, gate_general_mutations: bool = False,
-        general_write_root: Path | None = None,
+        general_write_root: Path | None = None, write_boundary: list[Path] | None = None,
+        hooks: dict | None = None, block_categories: set[str] | None = None,
     ) -> ClaudeAgentOptions:
         # Assemble layer-2 append: persona (WHO) + mode charter (WHAT MODE) + preamble
         # (WHERE) + persona_append (per-project extra). Mode falls back to core.
@@ -239,8 +255,18 @@ class AgentService:
         # User-facing turns may not invoke `access: silent` skills (forge-* — internal pipeline
         # machinery); the owning sub-run leaves enforce_silent False so it still can. Computed from
         # the same plugin set the turn loads.
-        blocked = (silent_skill_names([Path(p) for p in plugins_for(ctx.mode, op_home)])
-                   if enforce_silent else None)
+        turn_plugins = [Path(p) for p in plugins_for(ctx.mode, op_home)]
+        # name → the deny message for THAT block (the agent's only feedback, so it must be true of
+        # the skill it lands on — see build_can_use_tool).
+        blocked: dict[str, str] = {}
+        if enforce_silent:
+            blocked.update({n: self._SILENT_SKILL_DENY for n in silent_skill_names(turn_plugins)})
+        # `block_categories` = a block the CALLER decides on but Core resolves, off the same plugin
+        # set (the daemon knows a repo's phase of life; Core knows where the skills live). Today:
+        # `onboarding`, once a project's memory is established.
+        for cat in (block_categories or ()):
+            msg = self._CATEGORY_DENY.get(cat, self._CATEGORY_DENY_DEFAULT.format(category=cat))
+            blocked.update({n: msg for n in skills_in_category(turn_plugins, cat)})
         return ClaudeAgentOptions(
             cwd=str(ctx.cwd),                       # the Context (cwd / workspace)
             resume=resume,                          # continuous session (surface-owned)
@@ -272,15 +298,24 @@ class AgentService:
                 **(extra_mcp_servers or {}),
             },
             permission_mode="default",
+            # Surface-supplied SDK hooks (S8: the PreCompact checkpoint-first safety net on
+            # work-item sessions). None on every other turn — no behavior change.
+            hooks=hooks,
             # L2 read-guard on user-facing turns (chat / work-item): keep Read/Grep/Glob inside the
             # host's scope. Headless runs pass scope_reads=False — they are hermetic + write-sandboxed
             # and read their own /tmp scratch, which the guard would otherwise deny.
             can_use_tool=build_can_use_tool(
                 approve, blocked_skills=blocked,
-                cwd=ctx.cwd if scope_reads else None,
+                # `cwd` is the agent's working root, used for two INDEPENDENT things: resolving a
+                # relative read target against `read_roots`, and pinning the shell inside
+                # `write_boundary`. Only the former is a read-guard concern, so pass cwd
+                # unconditionally — gating it on scope_reads would silently disarm the boundary's
+                # shell allow on every headless run.
+                cwd=ctx.cwd,
                 read_roots=_read_roots(ctx) if scope_reads else None,
                 gate_general_mutations=gate_general_mutations,
                 general_write_root=general_write_root,
+                write_boundary=write_boundary,
             ),
             # SuperMe owns its OWN log+memory subsystem — it must never read from or write to
             # Claude Code's native auto-memory store (~/.claude/projects/<hash>/memory/). That
@@ -306,6 +341,9 @@ class AgentService:
         system_append: str | None = None,
         gate_general_mutations: bool = False,
         general_write_root: Path | None = None,
+        write_boundary: list[Path] | None = None,
+        hooks: dict | None = None,
+        block_categories: set[str] | None = None,
     ) -> AsyncIterator[TurnEvent]:
         """Run one turn against `ctx`, yielding TurnEvents.
 
@@ -323,7 +361,8 @@ class AgentService:
             extra_mcp_servers=extra_mcp_servers, enforce_silent=enforce_silent, effort=effort,
             scope_reads=scope_reads, system_append=system_append,
             gate_general_mutations=gate_general_mutations,
-            general_write_root=general_write_root,
+            general_write_root=general_write_root, write_boundary=write_boundary,
+            hooks=hooks, block_categories=block_categories,
         )
         resolved_model = None
         # Context-window fill is measured from a SINGLE API call, not the turn aggregate.

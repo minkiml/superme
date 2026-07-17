@@ -1,0 +1,67 @@
+"""Attention engine — "what needs me?" answered mechanically (workspace-workflow S7, D10;
+nimbalyst near-verbatim).
+
+Every work-item lands in AT MOST one bucket, strict priority:
+    needs_you (orange)  — sits at a human gate: durable `status == awaiting_human`, never an
+                          ephemeral flag (restart-proof; only awaiting{human} pages — child/
+                          external stay silent, D2).
+    running  (green)    — a live run is executing for it right now (spine live rows).
+    unread   (blue)     — terminal, and the owner hasn't opened it since (no `seen_at` stamp):
+                          the closeout/abandon brief pushing back instead of waiting to be polled.
+Everything else is quiet — active-but-autonomous work makes no attention claim.
+
+The global badge shows ONLY the top non-empty tier (its color + count) — one glance, one number.
+Derived at read time from durable state; nothing stored, nothing to drift.
+"""
+
+from .gate_briefs import GATE_FOR_PHASE
+from .kind_profiles import get_profile
+
+TIER_ORDER = ("needs_you", "running", "unread")
+TIER_COLOR = {"needs_you": "orange", "running": "green", "unread": "blue"}
+
+
+def _is_terminal(item: dict) -> bool:
+    return bool(item.get("done_at")) or str(item.get("status")) == "done"
+
+
+def _reason(item: dict, bucket: str) -> str:
+    phase = str(item.get("phase") or "")
+    if bucket == "needs_you":
+        gate = GATE_FOR_PHASE.get(phase)
+        return f"at the {gate} gate — your decision" if gate \
+            else f"awaiting you (mid-{phase})"
+    if bucket == "running":
+        return f"agent working ({phase})"
+    return f"{item.get('outcome') or 'closed'} — unreviewed"
+
+
+def assign(items: list[dict], running_ids: set[str]) -> dict:
+    """Bucket every item → {buckets: {tier: [row…]}, badge: {tier, color, count} | None}.
+    A row carries what the kanban/badge surfaces need: id · title · kind · phase · status ·
+    outcome · bucket · reason (one human line) · gate (when parked at one)."""
+    buckets: dict[str, list[dict]] = {t: [] for t in TIER_ORDER}
+    for it in items:
+        iid = str(it.get("id"))
+        if str(it.get("status")) == "awaiting_human":
+            tier = "needs_you"
+        elif iid in running_ids and not _is_terminal(it):
+            tier = "running"
+        elif _is_terminal(it) and not it.get("seen_at"):
+            tier = "unread"
+        else:
+            continue
+        buckets[tier].append({
+            "id": iid, "title": it.get("title") or iid,
+            "kind": get_profile(it.get("kind")).kind,
+            "phase": it.get("phase"), "status": it.get("status"),
+            "outcome": it.get("outcome"), "bucket": tier,
+            "reason": _reason(it, tier),
+            "gate": GATE_FOR_PHASE.get(str(it.get("phase") or "")) if tier == "needs_you" else None,
+        })
+    badge = None
+    for tier in TIER_ORDER:
+        if buckets[tier]:
+            badge = {"tier": tier, "color": TIER_COLOR[tier], "count": len(buckets[tier])}
+            break
+    return {"buckets": buckets, "badge": badge}

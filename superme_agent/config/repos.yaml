@@ -23,3 +23,24 @@ repos:
     layer: local
     persona_append: ""
     extra_mcp: []
+  test-playground:
+    label: test-playground
+    cwd: /Users/cooma/Developer/my_docs/test-playground
+    layer: local
+    persona_append: ''
+    extra_mcp: []
+    onboarding: project-init
+  dummy9:
+    label: dummy9
+    cwd: /Users/cooma/Developer/my_docs/dummy9
+    layer: local
+    persona_append: ''
+    extra_mcp: []
+    onboarding: retrofit
+  example-project:
+    label: example-project
+    cwd: /Users/cooma/Developer/my_docs/dummy10
+    layer: local
+    persona_append: ''
+    extra_mcp: []
+    onboarding: project-init

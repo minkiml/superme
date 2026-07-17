@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel
 
-from .work_items import WorkItem
+from .work_items import WorkItem, SpawnedFrom
 from ..common import InboxKind, InboxStatus, InboxOrigin
 
 
@@ -20,6 +20,8 @@ class InboxRow(BaseModel):
     updated_at: str
     title: str | None = None
     origin: list[InboxOrigin] = []  # an item can accrue multiple origins (e.g. ['user','agent'])
+    # D3 provenance a branch-off row carries before push (copied onto the work-item on push).
+    spawned_from: SpawnedFrom | None = None
 
 
 class InboxPushResponse(BaseModel):

@@ -11,7 +11,11 @@ Imports singletons from `app_state` (never from server.py) so there's no import 
 import uuid
 import asyncio
 import logging
+import time
+from dataclasses import replace
+from pathlib import Path
 
+from claude_agent_sdk import HookMatcher
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from ..app_state import (
@@ -23,10 +27,12 @@ from ..protocol import (
     event_to_frame, init_frame, result_frame, approval_request_frame, error_frame, parse_inbound,
 )
 from ..schemas.ws import TurnFrame, ApprovalResponseFrame
+from ..services import compaction
 from ..services.runs import (
     _begin_run, _end_run, _LiveTokens, _log_artifact,
-    capture_prompt, capture_event,
+    bank_auto_checkpoint, capture_prompt, capture_event,
 )
+from ...core import session_contract, status_router
 from ...core import Init, Usage, Result, Status, TextDelta, ToolResult, scoped_writes_approve
 from ...gateway import contexts
 from ...harness.tools.dev_tools import make_dev_mcp_server
@@ -96,6 +102,11 @@ async def ws_agent(ws: WebSocket) -> None:
             pending.pop(aid, None)
 
     reader_task = asyncio.create_task(reader())
+    # Session-end checkpoint hook (S5): remember the last work-item this connection worked, so the
+    # disconnect path can bank a mechanical fallback checkpoint (skipped when the agent banked its
+    # own during the session) — the orient block always has a latest checkpoint to cold-start from.
+    conn_started = time.time()
+    last_bound: tuple | None = None   # (ctx, work_item_id)
     try:
         while True:
             msg = await inbox.get()
@@ -116,17 +127,26 @@ async def ws_agent(ws: WebSocket) -> None:
             if ctx.mode != "dev":
                 work_item_id = None
 
+            # Is this dev repo still unestablished (no PRD deliverables ⇒ no project memory)? That
+            # is the ONE fact both the session kind and the onboarding behaviour below derive from —
+            # onboarding is a repo STATE, not a launched action, so nothing in the payload decides it.
+            unestablished = bool(
+                ctx.mode == "dev" and ctx.internal_root
+                and not _dev.project_established(ctx.internal_root / "dev")
+            )
             # Session KIND (session-kinds-diagnose) — server-authoritative like item_id: a resumed
-            # session's STORED kind wins; only at BIRTH do we trust the payload. Absent ⇒ inferred
-            # (item_id ⇒ work_item else general). v1 non-default kind is `diagnosis`, which carries a
-            # read-only `subject_run_id` (the Activity run it inspects). Dev surface only.
+            # session's STORED kind wins; only at BIRTH do we infer. Inference: item_id ⇒ work_item ·
+            # an unestablished repo ⇒ onboarding (every session there IS the onboarding workflow) ·
+            # else general. The payload may still name a kind explicitly (`diagnosis`, which carries
+            # a read-only `subject_run_id` — the Activity run it inspects). Dev surface only.
             if ctx.mode != "dev":
                 session_kind, subject_run_id = "general", None
             elif resumed is not None:
                 session_kind = resumed.get("kind") or ("work_item" if work_item_id else "general")
                 subject_run_id = resumed.get("subject_run_id")
             else:
-                session_kind = msg.kind or ("work_item" if work_item_id else "general")
+                session_kind = msg.kind or ("work_item" if work_item_id else
+                                            "onboarding" if unestablished else "general")
                 subject_run_id = msg.subject_run_id
             if work_item_id:  # an item-bound session is a work_item session, whatever the payload said
                 session_kind = "work_item"
@@ -187,28 +207,71 @@ async def ws_agent(ws: WebSocket) -> None:
                 (ctx.internal_root / "dev" / "general")
                 if gate_general and session_kind != "diagnosis" and ctx.internal_root else None
             )
-            # Is this general dev turn an ONBOARDING turn? (session-agent-lifecycle-prd, Bug 3.) An
-            # unestablished dev repo's general session IS the onboarding workflow — establishing the
-            # project's memory — so its runs are tagged `onboarding` (a workflow agent that counts in
-            # the AGENTS `running` metric), vs plain `chat` which never counts. Auto-retires: once the
-            # project is established, further general turns are ordinary `chat` again.
-            is_onboarding = bool(
-                gate_general and session_kind != "diagnosis" and ctx.internal_root
-                and not _dev.project_established(ctx.internal_root / "dev")
-            )
+            # Is this turn an ONBOARDING turn? (session-agent-lifecycle-prd, Bug 3.) An unestablished
+            # dev repo's general session IS the onboarding workflow — establishing the project's
+            # memory — so its runs are tagged `onboarding` (a workflow agent that counts in the
+            # AGENTS `running` metric), vs plain `chat` which never counts.
+            # NOTE this is the LIVE state, deliberately distinct from `session_kind`: a session BORN
+            # during onboarding keeps `kind=onboarding` forever (that's what it was), but the moment
+            # the docs land it stops BEHAVING as one — general preamble, onboarding skills blocked.
+            # Identity is durable; behaviour auto-retires.
+            is_onboarding = bool(gate_general and session_kind != "diagnosis" and unestablished)
             # NOTE: the agent no longer writes `memory/` files during a turn — capture (automatic
             # sweeps) and processing (`distill`) write DB rows, and apply/publish are owner-gated
             # daemon-side writes. So the old `scoped_writes_approve(memory/)` sandbox here is gone
             # (PRD §4.10). Only the work-item folder is auto-write below.
+            # S4 git layer: a work-item with a live worktree record (build+ of a worktree kind)
+            # WORKS IN ITS WORKTREE — the turn's cwd swaps to it (reads/writes/Bash all resolve
+            # there), and the freeze boundary confines Edit/Write to worktree + item folder
+            # (hard-deny outside, auto-allow inside). Cleared at terminal (record's dir is gone).
+            write_boundary = None
+            item_worktree = None
+            turn_resume = msg.resume
+            rotated_from = None   # the pre-worktree session this turn replaces (retired on success)
+            main_repo_dir = ctx.cwd   # the REAL repo root, captured before any worktree swap
+            if work_item_id and item.get("git_worktree"):
+                wt = Path(str(item["git_worktree"]))
+                if wt.is_dir():
+                    item_worktree = wt
             if work_item_id and ctx.internal_root:
                 item_dir = ctx.internal_root / "dev" / "work-items" / work_item_id
                 # Auto-allow item-folder writes (autonomous planning within its own dir); anything
                 # else still defers to the surface approval. (`item` + `model`/`effort` were resolved
                 # above — the item's configured model already factored into `model`.)
                 turn_approve = scoped_writes_approve(item_dir, turn_approve)
+                if item_worktree:
+                    ctx = replace(ctx, cwd=item_worktree)
+                    write_boundary = [item_worktree, item_dir]
+                    # Session-cwd boundary: the CLI stores transcripts PER-CWD, so a session born
+                    # pre-build (cwd = the repo) cannot be resumed from the worktree — the CLI
+                    # exits 1 with "No conversation found". Entering build is a natural session
+                    # boundary anyway: mint a FRESH session here (the orient block below carries
+                    # continuity from plan.md + the banked checkpoint); the replaced thread is
+                    # retired once the new session records.
+                    def _norm_cwd(p) -> str:
+                        try:
+                            return str(Path(str(p)).resolve()) if p else ""
+                        except OSError:
+                            return str(p or "")
+                    if resumed is not None and _norm_cwd(resumed.get("cwd")) != _norm_cwd(item_worktree):
+                        rotated_from = msg.resume
+                        turn_resume = None
+                        resumed = None   # birth semantics: orient block injects below
                 item_run_id = _begin_run(ctx, ctx.id, work_item_id, "chat", model, phase=item.get("phase"))
                 began_run = item_run_id is not None
+                last_bound = (ctx, work_item_id)
                 session_append = work_item_preamble(work_item_id, item, item_dir)
+                # Cold-start orient block (S5/D11 §3): kernel-assembled, injected ONCE at session
+                # BIRTH into the transcript (later turns cache-read it; never re-sent per turn).
+                # `resumed is None` = no stored session row = this turn mints the session.
+                if resumed is None:
+                    try:
+                        siblings = _dev.read_all(ctx.internal_root / "dev")["work_items"]
+                        kids = status_router.children_of(siblings, work_item_id)
+                    except Exception:
+                        kids = []
+                    orient = session_contract.render_orient_block(item, item_dir, children=kids)
+                    agent_prompt = f"{orient}\n\n---\n\n{prompt}" if prompt else orient
             elif session_kind == "diagnosis":
                 # Read-only inspection of a subject run (session-kinds-diagnose). The IDENTITY/behaviour
                 # header rides the per-turn system prompt (small, stable → caches). The large subject-run
@@ -224,11 +287,45 @@ async def ws_agent(ws: WebSocket) -> None:
             elif ctx.mode == "dev":
                 # The general agent — or its onboarding persona while the project has no memory yet
                 # (transient: the session stays stamped `general`; only the preamble differs).
-                session_append = onboarding_preamble() if is_onboarding else general_preamble()
+                # The onboarding preamble carries the skill directive itself (naming the repo's
+                # connect-time choice), so the kickoff is SILENT: the owner's first message is their
+                # project description and nothing else — no canned prompt in their transcript.
+                session_append = (
+                    onboarding_preamble((_spine.repo(ctx.id).onboarding if _spine.repo(ctx.id) else None))
+                    if is_onboarding else general_preamble()
+                )
+            # Onboarding skills are ONE-SHOT per repo: they exist to establish project memory, so
+            # once it IS established they can only do harm — `retrofit` re-derives the anchor docs
+            # from the code and would overwrite the owner's approved ones. Nothing in the skills'
+            # own prose can be trusted to hold that line across every phrasing ("go read the
+            # codebase and write up what's there" reads exactly like a retrofit request), so the
+            # kernel blocks the category once the project is established. Onboarding turns keep
+            # them; other modes never load them, so the block is a no-op there.
+            block_categories = None if is_onboarding else {"onboarding"}
             # UNBOUND (general/diagnosis) chat still spends tokens — record a lightweight run so it is
             # fully accounted (Interactive category), never silent. No item-status flip / no run-lock;
             # just telemetry + the authoritative per-type usage written at finish. session_id is
             # attached at finish so per-session grouping works.
+            # S8 checkpoint-first safety net: if the CLI ever compacts this bound session on its
+            # own (mid-turn auto-compaction), the PreCompact hook banks the derived checkpoint
+            # BEFORE the compaction event — the D11 run order holds no matter who compacts.
+            turn_hooks = None
+            if work_item_id:
+                _hook_ctx, _hook_item = ctx, work_item_id
+
+                async def _pre_compact(_input, _tool_use_id, _hctx):
+                    try:
+                        banked = compaction.bank_precompaction_checkpoint(_hook_ctx, _hook_item)
+                        _dev_store.log_event(
+                            _hook_ctx.id, "compaction.checkpoint",
+                            "Pre-compaction checkpoint banked (PreCompact hook)" if banked
+                            else "Pre-compaction checkpoint skipped (fresh one exists)",
+                            item_id=_hook_item, actor="daemon", meta={"hook": True})
+                    except Exception:
+                        log.exception("PreCompact checkpoint hook failed")
+                    return {}
+
+                turn_hooks = {"PreCompact": [HookMatcher(hooks=[_pre_compact])]}
             chat_feature = ("onboarding" if is_onboarding
                             else "diagnosis" if session_kind == "diagnosis" else "chat")
             chat_run_id = None if began_run else _spine.start_run(
@@ -243,7 +340,19 @@ async def ws_agent(ws: WebSocket) -> None:
             # fully automatic — there is no chat-side capture tool; the idle + phase-advance sweeps own it.
             # Folder-as-scope: absent in core mode. PRD §4.9.
             turn_mcp = (
-                {"dev": make_dev_mcp_server(_dev_store, ctx.id, spine=_spine)}
+                {"dev": make_dev_mcp_server(
+                    _dev_store, ctx.id, spine=_spine,
+                    # S2 artifact tools: the item folders + the repo tree for git-state / evidence
+                    # freshness fingerprints. With a live worktree, ctx.cwd IS the worktree (the
+                    # S4 swap above) — evidence fingerprints the tree actually being validated.
+                    # `main_repo_dir` stays the real repo for sync_from_main's trunk resolution.
+                    dev_root=(ctx.internal_root / "dev") if ctx.internal_root else None,
+                    repo_dir=ctx.cwd,
+                    main_repo_dir=main_repo_dir,
+                    # Worker tool-scoping (S5/D9): the item write-tools operate ONLY this
+                    # session's bound item; a general session gets refusals, not silence.
+                    bound_item_id=work_item_id,
+                )}
                 if ctx.mode == "dev" else None
             )
             final_tokens = None
@@ -257,7 +366,7 @@ async def ws_agent(ws: WebSocket) -> None:
                 async for ev in _agent.run_turn(
                     ctx,
                     agent_prompt,
-                    resume=msg.resume,
+                    resume=turn_resume,
                     model=model,
                     effort=effort or _spine.DEFAULT_EFFORT,   # final "medium" floor
                     approve=turn_approve,
@@ -267,6 +376,9 @@ async def ws_agent(ws: WebSocket) -> None:
                     system_append=session_append,       # Focus (work-item) / Guard (general) block
                     gate_general_mutations=gate_general, # hard-gate mutations in a general dev session
                     general_write_root=general_write_root,  # …except writing this project's general/ memory
+                    write_boundary=write_boundary,  # S4 freeze: build writes stay in worktree+item dir
+                    hooks=turn_hooks,               # S8: PreCompact checkpoint-first safety net
+                    block_categories=block_categories,  # onboarding skills die once memory exists
                 ):
                     if isinstance(ev, Usage) and began_run:
                         live.bump(ctx.id, work_item_id, ev)
@@ -291,6 +403,11 @@ async def ws_agent(ws: WebSocket) -> None:
                                 # a work-item session's birth. From here on the daemon reads this stamp
                                 # (not the client payload) to center + sandbox + lock + telemetry.
                                 _spine.stamp_session_item(ev.session_id, work_item_id)
+                                # A worktree-entry rotation replaced the pre-build thread — retire
+                                # it now that the new session is recorded (trace preserved+labeled;
+                                # same pattern as the headless-plan replacement).
+                                if rotated_from and rotated_from != ev.session_id:
+                                    _sessions.delete(ctx, rotated_from, cause="retired")
                             except Exception:
                                 log.exception("failed to persist session to work-item %s", work_item_id)
                         elif ev.session_id and ctx.mode == "dev":
@@ -313,9 +430,22 @@ async def ws_agent(ws: WebSocket) -> None:
                     # event_to_frame would reject it, so never send it down the socket.
                     if not isinstance(ev, ToolResult):
                         await ws.send_json(event_to_frame(ev))
-                # Turn done — the agent has stopped, so the item now awaits the owner.
+                # Turn done — an interactive (bound-chat) turn rests the item at `active`
+                # (the conversation continues; gates set awaiting_human, not chat turns).
                 if began_run:
-                    _end_run(ctx, ctx.id, work_item_id, final_tokens, "waiting", final_usage, final_ctx)
+                    _end_run(ctx, ctx.id, work_item_id, final_tokens, "active", final_usage, final_ctx)
+                    # S8 compaction trigger: a REAL bound turn just finished with fresh usage —
+                    # clear the defer latch / attempt budget, then evaluate the fill against the
+                    # (floor-aware) trigger. Fire-and-forget: the compact run takes the item's
+                    # run-lock itself and never blocks this reply.
+                    if final_session and final_ctx is not None:
+                        try:
+                            compaction.note_turn_start(final_session)
+                            compaction.maybe_compact(
+                                ctx, ctx.id, work_item_id, final_session,
+                                ctx_pct=final_ctx, kind=(item or {}).get("kind"), model=model)
+                        except Exception:
+                            log.exception("compaction trigger evaluation failed")
                 elif chat_run_id:
                     _spine.finish_run(chat_run_id, usage=final_usage, session_id=final_session,
                                       model=final_model, ctx_pct=final_ctx)
@@ -323,7 +453,7 @@ async def ws_agent(ws: WebSocket) -> None:
                 # phase-advance/completion), so nothing fires here per-turn.
             except Exception as e:
                 if began_run:
-                    _end_run(ctx, ctx.id, work_item_id, final_tokens, "waiting", final_usage, final_ctx)
+                    _end_run(ctx, ctx.id, work_item_id, final_tokens, "active", final_usage, final_ctx)
                 elif chat_run_id:
                     _spine.finish_run(chat_run_id, status="aborted", usage=final_usage,
                                       session_id=final_session, model=final_model, ctx_pct=final_ctx)
@@ -334,3 +464,10 @@ async def ws_agent(ws: WebSocket) -> None:
                     break  # socket is gone
     finally:
         reader_task.cancel()
+        # Bank the session-end fallback checkpoint (no-op if the agent banked its own since
+        # `conn_started`, or the item is terminal). Best-effort — never blocks the close.
+        if last_bound:
+            try:
+                bank_auto_checkpoint(last_bound[0], last_bound[1], since=conn_started)
+            except Exception:
+                log.exception("session-end auto-checkpoint failed")

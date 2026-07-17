@@ -3,8 +3,8 @@
 Each `Literal` here is pinned to exactly the values its producer can emit, verified against the live
 data AND the producer code (so a `response_model` can declare it without ever 500-ing on a real row):
 
-- work-item phase/status: written by `DevKnowledgeService` (create → queued/plan_design; advance;
-  orchestrator `set_work_item_status`).
+- work-item kind/phase/status/outcome: written by `DevKnowledgeService` (create → triage/active;
+  advance via KIND_PROFILES; orchestrator `set_work_item_status`; terminal via outcome).
 - inbox kind/status/origin: `DevStore` validates against `_KINDS`/`_STATUSES` on write.
 - proposal output_form/target_scope: `DevStore.propose_memory` COERCES to `_MEM_OUTPUT_FORMS`/
   `_MEM_TARGET_SCOPES`; proposal status is guarded by `_MEM_PROP_STATUSES` on every transition.
@@ -19,13 +19,26 @@ Deliberately NOT locked (model-generated / free-form, so a Literal could 500): p
 
 from typing import Literal
 
-# --- work-item lifecycle (D-018) ---
-# `triage` is the intake/classification phase a pushed item passes through before plan_design (the
-# two-tier scaffold: an item is classified onto a deliverable/wave, owner-approved, then advances to
-# plan_design). The value is reserved in the contract now; the triage BEHAVIOUR (auto-classify +
-# approval gate) lands with the workspace-workflow. `create_work_item` still enters at plan_design.
-WorkPhase = Literal["triage", "plan_design", "build_eval", "done"]
-WorkStatus = Literal["queued", "in_progress", "waiting", "dropped"]
+# --- work-item lifecycle (workspace-workflow D1/D2, 2026-07-15) ---
+# Three separate state layers replace the old conflated phase/status pair:
+# 1. `kind` — which MACHINERY the item runs (core/kind_profiles.py; unknown kind fails loud).
+# 2. `phase` — per-kind ordered pipeline stage. implementation: triage→plan→build→validate→
+#    deliver→close · research: triage→plan→investigate→report→close. The Literal is the UNION of
+#    all kinds' phases (KIND_PROFILES.ALL_PHASES); validity-per-kind is enforced by kind_profiles.
+# 3. `status` — the runnable-state axis: active · awaiting_* (typed router — only awaiting_human
+#    pages the owner; awaiting_child auto-resumes via core/status_router.py) · done (terminal).
+# `outcome` stamps HOW an item ended (with status=done): completed | abandoned | superseded —
+# status changes only, never deletes (never-delete standing constraint).
+WorkKind = Literal["implementation", "research"]
+WorkPhase = Literal["triage", "plan", "build", "validate", "deliver", "investigate", "report", "close"]
+WorkStatus = Literal["active", "awaiting_child", "awaiting_human", "done"]
+WorkOutcome = Literal["completed", "abandoned", "superseded"]
+# Branch-off relation on `spawned_from` (D3): blocking/parallel = children (auto-pushed, gate the
+# parent's completion; blocking additionally pauses it) · spawn = provenance only (owner-pushed).
+SpawnRelation = Literal["blocking", "parallel", "spawn"]
+# Per-run terminal outcomes (D2 layer 3) — stamped by the headless phase-session completion
+# contract (lands S5); declared here so the wire vocabulary is stable from S1.
+RunOutcome = Literal["success", "clean_noop", "blocked", "approval_required", "exhausted", "stagnated"]
 
 # --- inbox triage ---
 InboxKind = Literal["note", "idea", "todo", "question"]

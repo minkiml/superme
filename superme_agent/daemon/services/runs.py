@@ -8,6 +8,7 @@ Imports singletons from `app_state` (never from server.py) so there's no import 
 """
 
 import logging
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -15,6 +16,8 @@ from ..app_state import agent as _agent, dev as _dev, dev_store as _dev_store, \
     spine as _spine, sessions as _sessions
 from ..deps import cache_slash as _cache_slash
 from ...core import Init, Usage, Result, Status, TextDelta, ToolResult, scoped_writes_approve, deny_all
+from ...core import artifacts as _arts
+from ...core import git_layer, session_contract
 from ...core.models import MODEL_TIERS
 
 log = logging.getLogger("superme-agent")
@@ -24,11 +27,21 @@ DEFAULT_RUN_MODEL = MODEL_TIERS["sonnet"]
 
 
 def _set_status(ctx, item_id: str, status: str) -> None:
-    """Set a work-item's run-state status (orchestrator-owned). Best-effort; logs on failure."""
+    """Set a work-item's run-state status (orchestrator-owned). Best-effort; logs on failure.
+    Run-lifecycle rests never OVERWRITE a typed pause: when the turn itself paused the item
+    (`awaiting_child` — e.g. its session filed a blocking child mid-turn), resting it back to
+    `active` at turn end would silently un-pause it. Only the status ROUTER (which calls
+    dev.set_work_item_status directly) may resume a paused parent. Terminal is guarded at the
+    data layer."""
     if not (item_id and ctx.internal_root):
         return
     try:
-        _dev.set_work_item_status(ctx.internal_root / "dev", item_id, status)
+        dev_root = ctx.internal_root / "dev"
+        if status == "active":
+            cur = _dev.read_work_item(dev_root, item_id) or {}
+            if str(cur.get("status")) == "awaiting_child":
+                return  # the pause survives the turn's end-of-run rest
+        _dev.set_work_item_status(dev_root, item_id, status)
     except Exception:
         log.exception("could not set status %s on %s", status, item_id)
 
@@ -36,7 +49,7 @@ def _set_status(ctx, item_id: str, status: str) -> None:
 def _begin_run(ctx, context_id: str, item_id: str, kind: str = "plan",
                model: str | None = None, phase: str | None = None) -> int | None:
     """Mark an item as running, atomically: open a spine run row (status=running) ONLY if the item
-    isn't already running, then flip the work-item to in_progress and log the start. The running row
+    isn't already running, then rest the work-item at `active` and log the start. The running row
     IS the live state (no in-memory mirror) and IS the per-item run-lock. Returns False without any
     side effect if a run was already in flight (the caller turns that into a 409), so the lock can't
     be lost to a check-then-start race (R5). `phase` stamps the item's current phase onto the run so
@@ -45,7 +58,10 @@ def _begin_run(ctx, context_id: str, item_id: str, kind: str = "plan",
                                    item_id=item_id, model=model, phase=phase)
     if run_id is None:
         return None  # already running — no status flip, no event
-    _set_status(ctx, item_id, "in_progress")
+    # Runnable-state axis (workspace-workflow D2): a starting run means the item is being worked —
+    # `active`. "Running right now" is NOT a status — it's derived from the live run row (the two
+    # were conflated pre-workflow as in_progress/waiting).
+    _set_status(ctx, item_id, "active")
     # Run start — item-scoped. PRD §4.9.
     _dev_store.log_event(context_id, f"{kind}.start", f"Started {kind} run",
                          item_id=item_id, actor="daemon", meta={"model": model})
@@ -77,17 +93,20 @@ class _LiveTokens:
 
 
 def _end_run(ctx, context_id: str, item_id: str, tokens: int | None,
-             status: str = "waiting", usage: dict | None = None,
-             ctx_pct: int | None = None) -> None:
+             status: str = "active", usage: dict | None = None,
+             ctx_pct: int | None = None, outcome: str | None = None) -> None:
     """Close out a run: finalize its spine row (keeping the accumulated live token sum, or the
-    passed Result aggregate as a fallback) and set the work-item's resting status (the agent
-    stopped → the owner's move). `kind` is recovered from the running row for the end event.
+    passed Result aggregate as a fallback) and set the work-item's resting status. Interactive
+    (bound-chat) turns rest at `active`; a HEADLESS phase run that ends at a human gate passes
+    `awaiting_human` (the only status that pages the owner — D2 typed awaiting; the full
+    completion-report router lands S5). `kind` is recovered from the running row for the end event.
     `usage` is the whole-turn final dict — the typed-column fallback if no per-step Usage arrived.
     `ctx_pct` is the authoritative Result fill — persisted over the live-bump estimate (chat runs do
     the same via finish_run), so an item card's ctx% matches the true end-of-turn occupancy."""
     info = _spine.live_run(context_id, item_id)
     kind = (info or {}).get("feature", "plan")
-    rid = _spine.finish_item_run(context_id, item_id, fallback_tokens=tokens, usage=usage, ctx_pct=ctx_pct)
+    rid = _spine.finish_item_run(context_id, item_id, fallback_tokens=tokens, usage=usage,
+                                 ctx_pct=ctx_pct, outcome=outcome)
     # Log the AUTHORITATIVE total that finish just reconciled onto the row (3-type, excl. cache_read —
     # the same basis the item card shows), NOT the pre-finish `info` snapshot, whose live `tokens` sums
     # the cumulative-for-the-turn Usage snapshots and so over-counts (that mismatch was the "62k vs 305k").
@@ -205,6 +224,45 @@ def capture_event(repo_id: str, ev, *, run_id: int | None = None, item_id: str |
                                  run_id=run_id, item_id=item_id)
 
 
+def bank_auto_checkpoint(ctx, item_id: str, *, since: float | None = None) -> bool:
+    """The session-end checkpoint hook's mechanical fallback (S5): guarantees the orient block
+    always has a latest checkpoint, even when the agent didn't bank its own. SKIPS when the item
+    is terminal or a checkpoint newer than `since` (the session's start) already exists — the
+    agent's own checkpoint is always better than this derived stub. Content is DATA the kernel can
+    derive (phase, remaining tasks); it says so, and the orient block's verify-banner covers the
+    rest. Returns True if a checkpoint was written."""
+    if not (item_id and ctx.internal_root):
+        return False
+    dev_root = ctx.internal_root / "dev"
+    item = _dev.read_work_item(dev_root, item_id) or {}
+    if not item or item.get("done_at") or str(item.get("status")) == "done":
+        return False
+    item_dir = dev_root / "work-items" / item_id
+    latest = _arts.latest_checkpoint(item_dir, char_cap=1)
+    if latest and since:
+        try:
+            if Path(latest["path"]).stat().st_mtime >= since:
+                return False  # the session banked its own — keep it
+        except OSError:
+            pass
+    tasks = _dev.read_tasks(dev_root, item_id) or []
+    open_tasks = [t["text"] for t in tasks if not t.get("done")][:8]
+    remaining = ("; ".join(open_tasks)) if open_tasks else "see plan.md ## Tasks (none parsed)"
+    repo_dir = Path(str(item["git_worktree"])) if item.get("git_worktree") else ctx.cwd
+    try:
+        _arts.write_checkpoint(
+            item_dir, repo_dir,
+            working_on=f"{item.get('phase') or 'triage'} phase — {item.get('title') or item_id}",
+            decisions="(auto-banked at session end — the session's reasoning lives in its transcript)",
+            remaining=remaining,
+            notes="AUTO checkpoint written by the daemon because the session ended without banking "
+                  "one. Derived data only — verify against the artifacts before relying on it.",
+        )
+        return True
+    except ValueError:
+        return False
+
+
 async def _run_headless_plan(ctx, context_id: str, item_id: str, item_dir: Path,
                              model: str | None = None, effort: str | None = None) -> None:
     """Drive one /plan turn for `item_id` with no surface attached, then clear run-state.
@@ -214,22 +272,34 @@ async def _run_headless_plan(ctx, context_id: str, item_id: str, item_dir: Path,
     resumed agent saying "already done". The prior plan thread is replaced — its session is
     purged once the new one is recorded, keeping the picker clean. Runs autonomously (the prompt
     forbids questions), persists the new session, sandboxes writes to the item folder; status is
-    owned here: in_progress while running → waiting (awaiting the owner) on finish."""
+    owned here: active while running → awaiting_human (the plan sits at the owner's gate) on finish."""
     dev_root = ctx.internal_root / "dev"
     item = _dev.read_work_item(dev_root, item_id) or {}
     prev_session = item.get("session_id") or None
     title = item.get("title") or item_id
     # Thin trigger: name the skill, the item, and the mode — nothing else. The steps live in
     # the superme-dev:plan skill (its "Autonomous (headless) runs" section), the single
-    # source of truth, so this can't drift from it. Keep the leading phrase in sync with
-    # sessions._NOISE_PREFIXES (it's filtered from replay so the bubble doesn't show).
-    prompt = (
+    # source of truth, so this can't drift from it. On replay, sessions._strip_birth_block cuts
+    # the orient prefix and sessions._NOISE_PREFIXES drops this trigger phrase — keep in sync.
+    # NB: this session PERSISTS as the item's bound session and is later resumed for interactive
+    # chat — so every headless claim below is scoped "for THIS run" (and the interactive preamble
+    # states a human is present), or the transcript would keep asserting "no human" forever (H1).
+    trigger = (
         f"Run the superme-dev:plan skill for work-item `{item_id}` (\"{title}\") in "
-        f"autonomous mode — this is a headless run with no human in this chat. Follow the "
-        f"skill's autonomous-run instructions."
+        f"autonomous mode — for THIS run only, no human is in this chat. Follow the "
+        f"skill's autonomous-run instructions.\n\n{session_contract.completion_report_instructions()}"
     )
+    # Cold-start orient block (S5): a headless plan is always a FRESH session, so its birth prompt
+    # carries the same kernel-assembled orientation an interactive session gets.
+    orient = session_contract.render_orient_block(item, item_dir)
+    prompt = f"{orient}\n\n---\n\n{trigger}"
+    # The trail's first entry = what this run was asked to do (the trigger, not the orient bulk) —
+    # interactive turns get this from the ws path; headless runs record their own.
+    capture_prompt(context_id, trigger, item_id=item_id)
     final_tokens = None
     final_usage = None
+    final_text = None
+    run_started = time.time()
     live = _LiveTokens()   # dedupes the Usage stream by message_id for an accurate live estimate
     try:
         async for ev in _agent.run_turn(
@@ -246,6 +316,7 @@ async def _run_headless_plan(ctx, context_id: str, item_id: str, item_dir: Path,
             elif isinstance(ev, Result):
                 final_tokens = ev.tokens
                 final_usage = ev.usage
+                final_text = ev.text
                 _sessions.record(ctx, ev.session_id)
                 if ev.session_id:
                     try:
@@ -268,14 +339,117 @@ async def _run_headless_plan(ctx, context_id: str, item_id: str, item_dir: Path,
     except Exception:
         log.exception("headless plan run failed for %s", item_id)
     finally:
-        # Run finished (or died) — the agent is no longer working, so it's the owner's move.
-        _end_run(ctx, context_id, item_id, final_tokens, "waiting", final_usage)
+        # Structured completion contract (S5/D2): parse the run's final report and persist its
+        # outcome onto the run row. A missing/invalid report = None (legacy/unstructured run —
+        # the event flags it so drift is visible).
+        report = session_contract.parse_completion_report(final_text)
+        if report:
+            _dev_store.log_event(context_id, "run.report",
+                                 f"{report['outcome']}: {report['summary'][:160]}",
+                                 item_id=item_id, actor="agent", meta=report)
+        else:
+            log.warning("headless plan for %s ended without a completion report", item_id)
+        # Headless plan finished (or died) — the plan sits at the owner's pre-main gate, the one
+        # status that pages them (D2 typed awaiting).
+        _end_run(ctx, context_id, item_id, final_tokens, "awaiting_human", final_usage,
+                 outcome=(report or {}).get("outcome"))
+        # Session-end checkpoint hook: a headless session ends here — bank the fallback if the
+        # run didn't write its own checkpoint.
+        try:
+            bank_auto_checkpoint(ctx, item_id, since=run_started)
+        except Exception:
+            log.exception("auto-checkpoint after headless plan failed")
         log.info("headless plan: done for %s", item_id)
+
+
+async def _run_headless_resolve(ctx, context_id: str, item_id: str, worktree: Path,
+                                conflicts: list[str], model: str | None = None,
+                                effort: str | None = None) -> None:
+    """Resolve-with-Agent (workspace-workflow S4/D4): a conflicted freshness merge was left IN the
+    item's worktree; drive one headless turn that edits the conflict markers, then COMPLETE the
+    merge mechanically daemon-side (marker scan + `git add` + commit — the agent never commits).
+    The human decided WHETHER (they fired the route); the agent does the resolution; the item
+    re-enters `validate` on success (D4: re-validate before re-presenting). Failure pages the
+    owner (`awaiting_human`) with the merge still in the tree for a retry or manual abort."""
+    dev_root = ctx.internal_root / "dev"
+    files = "\n".join(f"- {f}" for f in conflicts) or "- (see `git status` in the worktree)"
+    prompt = (
+        f"A sync-from-main merge left CONFLICTS in this work-item's git worktree at `{worktree}` "
+        f"(work-item `{item_id}`). Conflicted files:\n{files}\n\n"
+        f"Resolve every conflict marker (`<<<<<<<`/`=======`/`>>>>>>>`) in these files, honoring "
+        f"BOTH sides' intent: keep this item's changes AND the incoming trunk changes semantically "
+        f"intact — never resolve by discarding one side wholesale unless the file makes that "
+        f"clearly correct and no features should be lost or broken. Edit the files in place. "
+        f"Do NOT run git commands and do NOT commit — your job is done when every conflict "
+        f"marker in these files is resolved and the files are saved.\n\n"
+        f"{session_contract.completion_report_instructions()}"
+    )
+    capture_prompt(context_id, prompt, item_id=item_id)
+    final_tokens = None
+    final_usage = None
+    final_text = None
+    run_started = time.time()
+    live = _LiveTokens()
+    try:
+        async for ev in _agent.run_turn(
+            ctx, prompt,
+            resume=None,
+            model=model,
+            effort=effort or _spine.effective_effort(context_id),
+            approve=scoped_writes_approve(worktree, deny_all),
+        ):
+            if isinstance(ev, Usage):
+                live.bump(context_id, item_id, ev)
+            elif isinstance(ev, (Status, ToolResult)):
+                _log_artifact(context_id, item_id, ev)
+            elif isinstance(ev, Result):
+                final_tokens = ev.tokens
+                final_usage = ev.usage
+                final_text = ev.text
+            if isinstance(ev, (Status, TextDelta, ToolResult)):
+                capture_event(context_id, ev, item_id=item_id)
+    except Exception:
+        log.exception("headless resolve run failed for %s", item_id)
+    # Mechanically finish the merge — ground truth (marker scan + git state), not the agent's claim.
+    resolved = False
+    detail = ""
+    try:
+        res = git_layer.finish_merge(worktree)
+        resolved = True
+        detail = f"merge completed at {res['commit'][:10]}"
+    except git_layer.GitError as e:
+        detail = str(e)
+    # The MECHANICAL result outranks the agent's own report (ground truth over claims): a report
+    # is recorded, but the persisted outcome is success/blocked by whether the merge finished.
+    report = session_contract.parse_completion_report(final_text)
+    outcome = "success" if resolved else ((report or {}).get("outcome") or "blocked")
+    if resolved:
+        item = _dev.read_work_item(dev_root, item_id) or {}
+        if str(item.get("phase")) == "deliver":  # re-enters validate before re-presenting (D4)
+            _dev.set_work_item_phase(dev_root, item_id, "validate")
+            # Every phase move lands in the trail — this is the one non-gate transition.
+            _dev_store.log_event(context_id, "phase.advance",
+                                 "Conflict resolved — re-entering validate before re-presenting",
+                                 item_id=item_id, actor="daemon",
+                                 meta={"from": "deliver", "to": "validate"})
+        _end_run(ctx, context_id, item_id, final_tokens, "active", final_usage, outcome=outcome)
+    else:
+        # Conflicts remain in the tree (deliberate — retry or manual abort); page the owner.
+        _end_run(ctx, context_id, item_id, final_tokens, "awaiting_human", final_usage, outcome=outcome)
+    try:
+        bank_auto_checkpoint(ctx, item_id, since=run_started)
+    except Exception:
+        log.exception("auto-checkpoint after resolve failed")
+    _dev_store.log_event(context_id, "git.resolve",
+                         f"Conflict resolution {'succeeded' if resolved else 'FAILED'}: {detail}",
+                         item_id=item_id, actor="daemon", meta={"resolved": resolved})
+    log.info("headless resolve: %s for %s (%s)", "done" if resolved else "failed", item_id, detail)
 
 
 def _render_execution_md(context_id: str, item_id: str, item: dict) -> str:
     """Snapshot a work-item's execution trace (its run call-trail + per-run telemetry) to Markdown,
-    so the record survives after the spine rows are freed on completion. Chronological (oldest run
+    so the item folder carries its own copy after completion (the spine rows themselves are
+    permanent — never-delete-logs). Chronological (oldest run
     first)."""
     arts = _spine.artifacts_for_item(context_id, item_id)
     runs = {r["id"]: r for r in _spine.run_history(context_id)}

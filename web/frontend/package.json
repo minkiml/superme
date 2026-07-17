@@ -14,6 +14,8 @@
     "@fontsource-variable/hanken-grotesk": "^5.2.8",
     "@fontsource-variable/inter": "^5.2.8",
     "@fontsource/ibm-plex-mono": "^5.2.7",
+    "@xyflow/react": "^12.11.2",
+    "dagre": "^0.8.5",
     "lucide-react": "^1.18.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -21,6 +23,7 @@
     "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
+    "@types/dagre": "^0.7.54",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",

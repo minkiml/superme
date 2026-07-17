@@ -103,7 +103,9 @@ BASE_TOOLS: list[ToolSpec] = [
     ToolSpec(
         "suggest_assets",
         "Search and rank the shared knowledge-asset pool against a project spec and auto-adopt the "
-        "confidently-relevant items for this repo. Onboarding only.",
+        "confidently-relevant items for this repo. This tool WRITES the repo's adopted-asset list — "
+        "call it only during project onboarding (project-init / retrofit, after drafting spec.md), "
+        "never in ordinary chat; the owner curates the adopted set afterwards.",
         SuggestAssetsArgs, _suggest_assets,
     ),
 ]

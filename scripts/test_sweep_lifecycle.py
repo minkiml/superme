@@ -78,10 +78,10 @@ def main() -> int:
     try:
         print(f"[setup] disposable item {item_id} bound to session {session_id}")
 
-        # --- advance: plan_design → build_eval should fire a sweep ----------------------------
+        # --- advance: triage → plan (workspace-workflow pipeline) should fire a sweep ---------
         r1 = _post(f"/dev/work-items/{item_id}/advance?context_id={CONTEXT_ID}")
         print(f"[advance] {r1}")
-        assert r1.get("phase") == "build_eval", f"advance didn't move phase: {r1}"
+        assert r1.get("phase") == "plan", f"advance didn't move phase: {r1}"
         end = _wait_sweep_end(store, session_id)
         assert end is not None, "no sweep.end after advance (trigger didn't fire)"
         print(f"[advance] sweep.end: {end['summary']}")
@@ -94,8 +94,8 @@ def main() -> int:
         print(f"[assert] advance → swept, transcript survives, watermark={wm}, "
               f"{len(filed_ids)} candidate(s) filed ✓")
 
-        # --- complete: done → tick-out should fire a FINAL sweep THEN purge -------------------
-        dev.set_work_item_phase(dev_root, item_id, "done")
+        # --- complete: close-phase → tick-out should fire a FINAL sweep THEN purge ------------
+        dev.set_work_item_phase(dev_root, item_id, "close")
         r2 = _post(f"/dev/work-items/{item_id}/complete?context_id={CONTEXT_ID}")
         print(f"[complete] {r2}")
         # The bound session is already caught up (advance swept it), so the final sweep is a no-op

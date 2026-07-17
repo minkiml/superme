@@ -17,7 +17,7 @@ import json
 import os
 import re
 from datetime import date, datetime, timedelta, timezone
-from typing import Annotated, Required, TypedDict
+from typing import Annotated, Literal, NotRequired, Required, TypedDict
 
 from .registry import ToolSpec, build_mcp_server
 
@@ -242,14 +242,16 @@ _LOG_LEVELS = {"recent": 100, "mid": 300, "max": 500}
 # --------------------------------------------------------------------------- typed schemas
 # Per-param docs live here (on the schema), NOT in the description. Keep them terse — they answer
 # "what is this arg", never "when should I call this tool" (that's the owning skill/agent's job).
-
+# Closed value sets are `Literal[...]` (the registry renders them as JSON-Schema enums, so the
+# model sees the allowed values as TYPE, not prose); prose in the doc string is for meaning only.
 class DevLogArgs(TypedDict, total=False):
     day: Annotated[str, "'today' | 'yesterday' | 'YYYY-MM-DD' (owner's local tz)"]
     since: Annotated[str, "ISO timestamp — start of a custom range"]
     until: Annotated[str, "ISO timestamp — end of a custom range"]
-    scope: Annotated[str, "'dev' for repo-level housekeeping events only"]
+    scope: Annotated[str, "'dev' for repo-level (non-item-scoped) events only"]
     item_id: Annotated[str, "a single work-item's id — its timeline"]
-    level: Annotated[str, "reading depth: 'recent' (default, 100) | 'mid' (300) | 'max' (500)"]
+    level: Annotated[Literal["recent", "mid", "max"],
+                     "reading depth: recent=100 rows (default) · mid=300 · max=500"]
     limit: Annotated[int, "exact row cap override (1–500) — use `level` unless you need a precise count"]
 
 
@@ -259,7 +261,9 @@ class FileCandidateArgs(TypedDict, total=False):
     statement: Required[Annotated[str, "what to do — the durable operational learning, stated so it stands alone (1–3 sentences)"]]
     rationale: Annotated[str, "why it matters / what triggered it / the problem it solves"]
     evidence: Annotated[str, "the concrete instance(s) from the slice + a pointer (item id / path / quote)"]
-    scope_hint: Annotated[str, "repo_dev | universal_dev | core (optional). The FORM (constitution/skill/agent) is distill's call, not yours — don't classify it."]
+    scope_hint: Annotated[Literal["repo_dev", "universal_dev", "core"],
+                          "where the learning applies (default repo_dev). The FORM "
+                          "(constitution/skill/agent) is distill's call, not yours — don't classify it."]
     origin_item_id: Annotated[str, "the work-item in scope, if the slice names one"]
 
 
@@ -295,15 +299,17 @@ class ProposeMemoryArgs(TypedDict, total=False):
     body: Required[Annotated[str, "the consolidated proposal narrative"]]
     summary: Annotated[str, "purpose · usage · why-raised (one short para; for owner + write phase)"]
     candidate_ids: Annotated[str, "source candidate ids, comma-separated"]
-    output_form: Annotated[str, "constitution | skill | agent"]
-    target_scope: Annotated[str, "repo_dev | universal_dev | core"]
+    output_form: Annotated[Literal["constitution", "skill", "agent"],
+                           "the artifact form this proposal targets (default constitution)"]
+    target_scope: Annotated[Literal["repo_dev", "universal_dev", "core"],
+                            "where the artifact will live (default repo_dev)"]
     fields: Annotated[str, ("JSON object of form-specific fields — constitution: "
                             "{statement,scope,rationale}; skill: {name,when_to_use,procedure,tools,scope}; "
                             "agent: {name,role,tools,model,trigger}")]
     clarifications: Annotated[str, "JSON array of batch gate-1 questions, each {question, suggested, blocking}"]
     apply_target: Annotated[str, "drafted destination slug"]
     cluster: Annotated[str, "optional grouping label"]
-    confidence: Annotated[str, "high | medium | low"]
+    confidence: Annotated[Literal["high", "medium", "low"], "how solidly grounded the proposal is"]
 
 
 class ReviewProposalsArgs(TypedDict, total=False):
@@ -318,7 +324,8 @@ class MergeProposalArgs(TypedDict, total=False):
     body: Annotated[str, "optional — the re-consolidated narrative incorporating the new substance"]
     summary: Annotated[str, "optional — refreshed purpose · usage · why-raised"]
     fields: Annotated[str, "optional — updated form-specific fields (JSON), same shape as propose_memory"]
-    confidence: Annotated[str, "optional — refreshed high|medium|low (recurrence usually raises it)"]
+    confidence: Annotated[Literal["high", "medium", "low"],
+                          "optional — refreshed confidence (recurrence usually raises it)"]
 
 
 # --------------------------------------------------------------------------- handler factories
@@ -627,22 +634,77 @@ class CreateInboxItemArgs(TypedDict, total=False):
     body: Required[Annotated[str, ("the item content — a crisp synthesis of intent + the on-point "
                                    "context/decisions and any pointers or references (work-item ids, "
                                    "paths, doc names). NOT a raw transcript dump")]]
-    kind: Annotated[str, "note | idea | todo | question (default note)"]
+    kind: Annotated[Literal["note", "idea", "todo", "question"], "item flavor (default note)"]
+    spawned_from_item: Annotated[str, ("branch-off ONLY: the parent work-item id this spawns from "
+                                       "(requires `relation`)")]
+    relation: Annotated[Literal["blocking", "parallel", "spawn"],
+                        ("branch-off type: blocking (parent can't proceed without it — auto-pushed, "
+                         "pauses the parent) · parallel (child work, auto-pushed, gates the parent's "
+                         "completion) · spawn (independent follow-up — waits in the inbox for the "
+                         "owner's push)")]
+    background: Annotated[str, "handoff brief: the problem/story — why this was raised"]
+    discussion: Annotated[str, "handoff brief: what was discussed/concluded so far"]
+    direction: Annotated[str, "handoff brief: high-level direction or options, with leanings — NO plans/implementation detail"]
+    constraints: Annotated[str, "handoff brief: constraints, tried-but-failed, out-of-scope"]
 
 
-def _create_inbox_item(*, store, context_id, **_):
+def _create_inbox_item(*, store, context_id, dev_root=None, **_):
     async def create_inbox_item(args: dict) -> dict:
+        from pathlib import Path
+        from ...core import artifacts as _arts
+        from ...core import inbox_flow as _flow
+        from ...core.dev_knowledge import DevKnowledgeService
         title, body = _s(args, "title"), _s(args, "body")
         if not title or not body:
             return _err("An inbox item needs both `title` and `body` (a crisp synthesis, not a dump).")
+        parent, relation = _s(args, "spawned_from_item"), _s(args, "relation")
+        if bool(parent) != bool(relation):
+            return _err("A branch-off needs BOTH `spawned_from_item` and `relation` (or neither).")
+        spawned_from = None
+        dev = DevKnowledgeService()
+        if parent:
+            if relation not in ("blocking", "parallel", "spawn"):
+                return _err("`relation` must be blocking | parallel | spawn.")
+            if not dev_root or not dev.read_work_item(Path(dev_root), parent):
+                return _err(f"Parent work-item {parent!r} not found — a branch-off must name a real item.")
+            spawned_from = {"item": parent, "relation": relation}
         try:
             row = store.add_inbox(
                 context_id, body, kind=_s(args, "kind") or "note",
-                title=title, origin=["agent"],
+                title=title, origin=["agent"], spawned_from=spawned_from,
             )
         except Exception as e:
             return _err(f"Could not create the inbox item: {e}")
-        return _ok(f"Created inbox item #{row['id']} — \"{title}\". "
+        # Handoff brief (D5): scaffolded + prose slots filled from the args while context is hot.
+        # High-level only — the work-item's own phases do the deep work.
+        brief = None
+        if dev_root:
+            brief = _arts.write_handoff_brief(
+                _flow.inbox_content_dir(Path(dev_root), row["id"]), title,
+                background=_s(args, "background"), discussion=_s(args, "discussion"),
+                direction=_s(args, "direction"), constraints=_s(args, "constraints"),
+            )
+        # Auto-push (D3): blocking/parallel children route through the inbox for the uniform
+        # trace but push immediately — only `spawn` waits for the owner.
+        if spawned_from and relation in ("blocking", "parallel") and dev_root:
+            try:
+                wi = _flow.push_inbox_item(store, dev, Path(dev_root), row,
+                                           context_id=context_id, actor="agent")
+            except Exception as e:
+                return _err(f"Inbox item #{row['id']} created but auto-push failed: {e}")
+            paused = " Parent paused (awaiting_child) until it closes." if relation == "blocking" else ""
+            return _ok(f"Branch-off filed and AUTO-PUSHED: inbox #{row['id']} → work-item "
+                       f"{wi['id']} ({relation} child of {parent}; brief moved to its "
+                       f"preliminary/).{paused}")
+        where = f" Handoff brief at {brief}." if brief else ""
+        # An empty brief throws away exactly the context this session holds — flag it back so the
+        # agent fills the fields (the future triage session cold-starts from this brief).
+        filled = any(_s(args, k) for k in ("background", "discussion", "direction", "constraints"))
+        nudge = ("" if filled or not brief else
+                 " NOTE: the handoff brief's slots are EMPTY. If this discussion holds real "
+                 "context, capture it now with `append_inbox_item` (it mirrors onto the brief) — "
+                 "the future triage session cold-starts from this brief and shouldn't start blind.")
+        return _ok(f"Created inbox item #{row['id']} — \"{title}\".{where}{nudge} "
                    f"It's in the Inbox for the owner to review and push into a work-item.")
     return create_inbox_item
 
@@ -654,7 +716,7 @@ class AppendInboxItemArgs(TypedDict, total=False):
                                        "the existing text is preserved and this is added under it")]]
 
 
-def _append_inbox_item(*, store, context_id, **_):
+def _append_inbox_item(*, store, context_id, dev_root=None, **_):
     async def append_inbox_item(args: dict) -> dict:
         addition = _s(args, "addition")
         try:
@@ -669,9 +731,371 @@ def _append_inbox_item(*, store, context_id, **_):
             return _err(f"Could not append to the inbox item: {e}")
         if row is None:
             return _err(f"No inbox item #{item_id} to append to.")
+        # Mirror the append onto the handoff brief when one exists (D5: append, never rewrite).
+        if dev_root:
+            from pathlib import Path
+            from ...core import artifacts as _arts
+            from ...core.inbox_flow import inbox_content_dir
+            folder = inbox_content_dir(Path(dev_root), row["id"])
+            if (folder / "handoff-brief.md").exists():
+                _arts.write_handoff_brief(folder, row.get("title") or "", discussion=addition)
         return _ok(f"Appended to inbox item #{row['id']} — \"{row.get('title') or ''}\" "
                    f"(existing content untouched; origin now {', '.join(row.get('origin') or [])}).")
     return append_inbox_item
+
+
+# --------------------------------------------------------------------------- work-item artifacts (S2)
+# The D5-playbook write tools: code supplies form (scaffold/renderer), the agent supplies content.
+# All three need `dev_root` (the item folders) and take `repo_dir` for git-state/freshness; both
+# are threaded as deps from the ws turn. S5 scopes these to work-item sessions (worker tool-scoping);
+# until then they live in the main dev set — they can only touch a work-item's OWN folder.
+
+def _item_dir(dev_root, item_id: str):
+    from pathlib import Path
+    if not dev_root:
+        return None
+    d = Path(dev_root) / "work-items" / str(item_id)
+    return d if (d / "item.md").exists() else None
+
+
+def _bound_err(item_id, bound_item_id) -> str | None:
+    """Worker tool-scoping (S5/D9, hermes): a work-item session operates ONLY its own item — no
+    cross-item writes; a session with no bound item has no item write-tools at all. Returns the
+    refusal text, or None when the call is in scope. (Kernel gate actions — close, merge, push —
+    have no tool counterparts at all: enforcement by absence.)"""
+    if bound_item_id is None:
+        return ("Work-item tools operate only inside a work-item session. This session has no "
+                "bound item — if this work is real, itemize it (create_inbox_item) and do it in "
+                "the item's own session.")
+    if str(item_id) != str(bound_item_id):
+        return (f"This session is bound to work-item {bound_item_id!r} and may operate only on "
+                f"it — cross-item operations aren't allowed. If item {item_id!r} needs work, that "
+                f"happens in ITS session.")
+    return None
+
+
+class ScaffoldArtifactArgs(TypedDict, total=False):
+    item_id: Required[Annotated[str, "the work-item id (folder name)"]]
+    artifact: Required[Annotated[Literal["plan", "validation", "readiness", "findings", "closeout"],
+                                 "which gate doc to scaffold"]]
+
+
+def _scaffold_artifact(*, store, context_id, dev_root=None, bound_item_id=None, **_):
+    async def scaffold_artifact(args: dict) -> dict:
+        from ...core import artifacts as _arts
+        from ...core.dev_knowledge import _parse_md
+        item_id = _s(args, "item_id")
+        if (msg := _bound_err(item_id, bound_item_id)):
+            return _err(msg)
+        d = _item_dir(dev_root, item_id)
+        if d is None:
+            return _err(f"No work-item {item_id!r} here.")
+        meta, _body = _parse_md((d / "item.md").read_text())
+        try:
+            r = _arts.scaffold(d, _s(args, "artifact"), title=str(meta.get("title") or item_id),
+                               item_kind=meta.get("kind"), item_id=item_id)
+        except KeyError as e:
+            return _err(str(e))
+        state = "scaffolded" if r["created"] else "already exists (re-scaffold is a no-op)"
+        return _ok(f"{r['path']} {state}. Fill the <fill:…> slots in sections: "
+                   f"{', '.join(r['sections']) or '(free-form)'} — the self-check at the consuming "
+                   f"gate rejects unfilled slots and empty required sections.")
+    return scaffold_artifact
+
+
+class SetTriageClassificationArgs(TypedDict, total=False):
+    item_id: Required[Annotated[str, "the work-item id"]]
+    kind: Required[Annotated[Literal["implementation", "research"],
+                             ("the confirmed kind — implementation (changes code; worktree + "
+                              "validate/deliver pipeline) or research (answers questions; "
+                              "read-only on code, findings instead of merges)")]]
+    deliverable: Annotated[str, ("the deliverable this item anchors to: an existing `d-<slug>` "
+                                 "from the project PRD, or omit/'none' for a standalone chore. "
+                                 "NEVER invent a new slug here — a NEW deliverable is proposed in "
+                                 "prose for the owner to confirm first")]
+
+
+def _set_triage_classification(*, store, context_id, dev_root=None, bound_item_id=None, **_):
+    async def set_triage_classification(args: dict) -> dict:
+        """Triage's RECORDING surface (D1/D3): write the proposed kind + deliverable onto the item
+        so the triage-exit gate confirms durable fields, not chat prose. Triage phase only — after
+        the gate the kind is fixed (post-triage needs are branch-offs, never re-kinds)."""
+        from pathlib import Path
+        from ...core.dev_knowledge import DevKnowledgeService, _parse_deliverables
+        item_id = _s(args, "item_id")
+        if (msg := _bound_err(item_id, bound_item_id)):
+            return _err(msg)
+        d = _item_dir(dev_root, item_id)
+        if d is None:
+            return _err(f"No work-item {item_id!r} here.")
+        dev = DevKnowledgeService()
+        root = Path(dev_root)
+        item = dev.read_work_item(root, item_id) or {}
+        if str(item.get("phase")) != "triage":
+            return _err("Kind/deliverable are fixed after the triage-exit gate — this item is "
+                        f"already in `{item.get('phase')}`. A post-triage need is a branch-off "
+                        "(create_inbox_item), never a re-kind.")
+        kind = _s(args, "kind")
+        try:
+            dev.set_work_item_kind(root, item_id, kind)
+        except KeyError as e:
+            return _err(str(e))
+        deliverable = _s(args, "deliverable")
+        d_note = ""
+        if deliverable and deliverable.lower() != "none":
+            known = {x["id"] for x in _parse_deliverables(
+                dev.read_general_doc(root, "project-prd") or "")}
+            if deliverable not in known:
+                return _err(f"Deliverable {deliverable!r} isn't in the project PRD "
+                            f"(known: {', '.join(sorted(known)) or 'none'}). Propose a NEW "
+                            "deliverable in prose for the owner to confirm — never record an "
+                            "unconfirmed slug.")
+            dev.set_work_item_scaffold(root, item_id, deliverable=deliverable)
+            d_note = f" · deliverable `{deliverable}`"
+        return _ok(f"Recorded triage classification: kind `{kind}`{d_note}. The owner confirms at "
+                   "the triage-exit gate (Approve → plan); until then it stays a proposal on the "
+                   "item's own fields.")
+    return set_triage_classification
+
+
+class RecordEvidenceArgs(TypedDict, total=False):
+    item_id: Required[Annotated[str, "the work-item id"]]
+    check: Required[Annotated[str, "WHAT was verified, one line (e.g. 'unit tests', 'parity')"]]
+    how: Required[Annotated[str, "the exact command / procedure that ran"]]
+    result: Required[Annotated[str, "the MACHINE result — exit code, counts, output tail"]]
+    passed: Required[Annotated[bool, "did the check pass"]]
+
+
+def _record_evidence(*, store, context_id, dev_root=None, repo_dir=None, bound_item_id=None, **_):
+    async def record_validation_evidence(args: dict) -> dict:
+        from ...core import artifacts as _arts
+        item_id = _s(args, "item_id")
+        if (msg := _bound_err(item_id, bound_item_id)):
+            return _err(msg)
+        d = _item_dir(dev_root, item_id)
+        if d is None:
+            return _err(f"No work-item {item_id!r} here.")
+        try:
+            e = _arts.record_evidence(d, repo_dir, check=_s(args, "check"), how=_s(args, "how"),
+                                      result=_s(args, "result"), passed=bool(args.get("passed")))
+        except ValueError as err:
+            return _err(str(err))
+        verdict = _arts.evidence_status(d, repo_dir)
+        return _ok(f"Evidence recorded: {e['check']} · passed={e['passed']} · "
+                   f"fingerprint={e['fingerprint']}. Ledger verdict now: {verdict['status']} "
+                   f"({verdict['entries']} entries). Evidence goes STALE on any further repo edit — "
+                   f"re-run checks after changes; never claim validated without a fresh green ledger.")
+    return record_validation_evidence
+
+
+class WriteCheckpointArgs(TypedDict, total=False):
+    item_id: Required[Annotated[str, "the work-item id"]]
+    working_on: Required[Annotated[str, "what is being worked on right now"]]
+    decisions: Annotated[str, "decisions made + tradeoffs/leans — the reasoning a transcript loses"]
+    remaining: Required[Annotated[str, "what remains, concretely — next session starts here"]]
+    notes: Annotated[str, "tried-but-failed, gotchas, anything else worth carrying"]
+
+
+def _write_checkpoint(*, store, context_id, dev_root=None, repo_dir=None, bound_item_id=None, **_):
+    async def write_checkpoint(args: dict) -> dict:
+        from ...core import artifacts as _arts
+        item_id = _s(args, "item_id")
+        if (msg := _bound_err(item_id, bound_item_id)):
+            return _err(msg)
+        d = _item_dir(dev_root, item_id)
+        if d is None:
+            return _err(f"No work-item {item_id!r} here.")
+        try:
+            p = _arts.write_checkpoint(d, repo_dir, working_on=_s(args, "working_on"),
+                                       decisions=_s(args, "decisions"),
+                                       remaining=_s(args, "remaining"), notes=_s(args, "notes"))
+        except ValueError as err:
+            return _err(str(err))
+        return _ok(f"Checkpoint banked: {p} (append-only; the next session's cold start reads the "
+                   f"newest one). Reference artifacts by path — never duplicate their content here.")
+    return write_checkpoint
+
+
+class SyncFromMainArgs(TypedDict, total=False):
+    item_id: Required[Annotated[str, "the work-item id (must have a live worktree — build phase)"]]
+
+
+def _sync_from_main(*, store, context_id, dev_root=None, main_repo_dir=None, bound_item_id=None, **_):
+    async def sync_from_main(args: dict) -> dict:
+        from pathlib import Path
+        from ...core import git_layer as _gl
+        from ...core.dev_knowledge import _parse_md
+        item_id = _s(args, "item_id")
+        if (msg := _bound_err(item_id, bound_item_id)):
+            return _err(msg)
+        d = _item_dir(dev_root, item_id)
+        if d is None:
+            return _err(f"No work-item {item_id!r} here.")
+        meta, _body = _parse_md((d / "item.md").read_text())
+        wt = meta.get("git_worktree")
+        if not wt or not Path(str(wt)).is_dir():
+            return _err("This item has no live worktree — sync applies only during build "
+                        "(the worktree is created at build entry).")
+        try:
+            res = _gl.sync_from_main(main_repo_dir or Path(str(wt)), Path(str(wt)))
+        except (_gl.GitError, _gl.GitBusy) as e:
+            return _err(str(e))
+        if res.get("up_to_date"):
+            return _ok("Already up to date with the trunk — nothing to merge.")
+        if res.get("conflicts"):
+            return _err("Sync hit conflicts (merge aborted, your tree is unchanged): "
+                        + ", ".join(res["conflicts"]) +
+                        ". Commit your work, then resolve by re-running the merge yourself in the "
+                        "worktree (`git merge <trunk>`, fix markers, commit) — or report the "
+                        "conflict for the owner's Resolve-with-Agent action.")
+        return _ok(f"Trunk merged into the item branch at {res['commit'][:10]}. Re-run your "
+                   f"validation checks — evidence recorded before this merge is now stale.")
+    return sync_from_main
+
+
+class KnowledgeOpArg(TypedDict):
+    doc: Annotated[Literal["project-prd", "spec", "roadmap", "architecture", "resources"],
+                   "which anchor doc this op edits"]
+    section: Annotated[str, "the exact `## heading` text the op targets (must exist in the doc)"]
+    op: Annotated[Literal["update", "append", "supersede"],
+                  "update/supersede replace the section body; append extends it"]
+    content: Annotated[str, ("the section BODY markdown only — do NOT repeat the `## <section>` "
+                             "heading (the writer keeps it in place; a repeated heading is stripped)")]
+
+
+class StageKnowledgeDeltaArgs(TypedDict, total=False):
+    item_id: Required[Annotated[str, "the work-item id"]]
+    ops: Required[Annotated[list[KnowledgeOpArg],
+                            ("the edit ops — validated now, applied to the anchor docs "
+                             "atomically with the merge to main")]]
+
+
+def _stage_knowledge_delta(*, store, context_id, dev_root=None, repo_dir=None,
+                           bound_item_id=None, **_):
+    async def stage_knowledge_delta(args: dict) -> dict:
+        from pathlib import Path
+        from ...core import knowledge_delta as _kd
+        from ...core.dev_knowledge import _parse_md
+        from ...core.kind_profiles import get_profile
+        item_id = _s(args, "item_id")
+        if (msg := _bound_err(item_id, bound_item_id)):
+            return _err(msg)
+        d = _item_dir(dev_root, item_id)
+        if d is None:
+            return _err(f"No work-item {item_id!r} here.")
+        meta, _body = _parse_md((d / "item.md").read_text())
+        if not get_profile(meta.get("kind")).knowledge_writes:
+            return _err("This item's kind never writes general dev-knowledge (D7 — research "
+                        "findings stay item-local in findings.md; docs change only via an "
+                        "implementation item after real code changes).")
+        # `ops` arrives as a real JSON array (typed schema); tolerate a JSON string too (older
+        # skill text / tests pass one).
+        ops = args.get("ops")
+        if isinstance(ops, str):
+            try:
+                ops = json.loads(ops) if ops.strip() else None
+            except (ValueError, TypeError) as e:
+                return _err(f"`ops` must be a JSON array of edit ops: {e}")
+        issues = _kd.validate_ops(ops, Path(dev_root), repo_dir)
+        if issues:
+            return _err("Delta rejected — nothing staged. Fix and restage:\n- "
+                        + "\n- ".join(issues))
+        path = _kd.stage_delta(d, ops)
+        return _ok(f"Knowledge delta staged ({len(ops)} op(s)) at {path}. It stays a draft "
+                   f"(restage freely to replace it) until the deliver-gate merge applies it to "
+                   f"the anchor docs atomically — you never edit those docs directly.")
+    return stage_knowledge_delta
+
+
+class ProposeCloseArgs(TypedDict, total=False):
+    item_id: Required[Annotated[str, "the work-item id"]]
+
+
+def _propose_close(*, store, context_id, dev_root=None, main_repo_dir=None,
+                   bound_item_id=None, **_):
+    async def propose_close(args: dict) -> dict:
+        from pathlib import Path
+        from ...core import gate_briefs as _gb
+        from ...core.dev_knowledge import DevKnowledgeService
+        from ...core.kind_profiles import is_final_phase
+        item_id = _s(args, "item_id")
+        if (msg := _bound_err(item_id, bound_item_id)):
+            return _err(msg)
+        d = _item_dir(dev_root, item_id)
+        if d is None:
+            return _err(f"No work-item {item_id!r} here.")
+        dev = DevKnowledgeService()
+        item = dev.read_work_item(Path(dev_root), item_id) or {}
+        if item.get("done_at") or str(item.get("status")) == "done":
+            return _err("This item is already terminal.")
+        if not is_final_phase(item.get("kind"), item.get("phase") or "triage"):
+            return _err(f"Close is proposed from the close phase — this item is at "
+                        f"`{item.get('phase')}`. Finish the phase pipeline first.")
+        all_items = dev.read_all(Path(dev_root))["work_items"]
+        cr = _gb.close_readiness(item, d, Path(dev_root), main_repo_dir, all_items)
+        if not cr["ok"]:
+            fails = [c for c in cr["checks"] if not c["ok"]]
+            return _err("Close would be refused mechanically — fix these first (nothing was "
+                        "proposed):\n- " + "\n- ".join(f"{c['criterion']}: {c['detail']}"
+                                                       for c in fails))
+        dev.set_work_item_status(Path(dev_root), item_id, "awaiting_human")
+        store.log_event(context_id, "close.proposed",
+                        f"Close proposed (all {len(cr['checks'])} criteria green): "
+                        f"{item.get('title') or item_id}",
+                        item_id=item_id, actor="agent",
+                        meta={"checks": [c["criterion"] for c in cr["checks"]]})
+        return _ok("Close proposed — every mechanical criterion is green and the owner is paged "
+                   "at the close gate. Completion itself is the owner's promotion; never claim "
+                   "the item is closed.")
+    return propose_close
+
+
+_ITEM_DEV_TOOLS: list[ToolSpec] = [
+    ToolSpec(
+        "set_triage_classification",
+        "Record a triage session's classification onto its work-item: the confirmed kind "
+        "(implementation | research) and, optionally, an EXISTING PRD deliverable it anchors to. "
+        "Triage phase only — after the triage-exit gate the kind is fixed.",
+        SetTriageClassificationArgs, _set_triage_classification,
+    ),
+    ToolSpec(
+        "scaffold_artifact",
+        "Scaffold a work-item artifact skeleton (plan/validation/readiness/findings/closeout) — "
+        "code owns the structure, you fill the <fill:…> prose slots.",
+        ScaffoldArtifactArgs, _scaffold_artifact,
+    ),
+    ToolSpec(
+        "record_validation_evidence",
+        "Append one machine-checked evidence entry to a work-item's validation ledger "
+        "(check + how + result + pass/fail; freshness-tracked against the repo state).",
+        RecordEvidenceArgs, _record_evidence,
+    ),
+    ToolSpec(
+        "write_checkpoint",
+        "Bank a session-continuity checkpoint onto a work-item (working-on / decisions / "
+        "remaining / notes) — what a fresh session cold-starts from.",
+        WriteCheckpointArgs, _write_checkpoint,
+    ),
+    ToolSpec(
+        "sync_from_main",
+        "Freshness merge for a work-item's git worktree: merge the trunk INTO the item branch "
+        "(run during long builds and before delivering; requires a clean tree — commit first).",
+        SyncFromMainArgs, _sync_from_main,
+    ),
+    ToolSpec(
+        "stage_knowledge_delta",
+        "Stage this item's general dev-knowledge delta (structured edit ops against the anchor "
+        "docs) — validated now, applied atomically with the merge to main; never edit anchor "
+        "docs directly.",
+        StageKnowledgeDeltaArgs, _stage_knowledge_delta,
+    ),
+    ToolSpec(
+        "propose_close",
+        "Propose the item for closing (proposal only — the owner promotes): runs the mechanical "
+        "close criteria and pages the owner at the close gate when all are green.",
+        ProposeCloseArgs, _propose_close,
+    ),
+]
 
 
 # --------------------------------------------------------------------------- the registry
@@ -696,7 +1120,7 @@ _MAIN_DEV_TOOLS: list[ToolSpec] = [
     ),
     ToolSpec(
         "read_inbox",
-        "Read this repo's inbox items— captured items awaiting triage/routing/real work, open first.",
+        "Read this repo's inbox — captured items awaiting triage/routing into real work, open first.",
         InboxArgs, _list_inbox,
     ),
     ToolSpec(
@@ -706,18 +1130,21 @@ _MAIN_DEV_TOOLS: list[ToolSpec] = [
     ),
     ToolSpec(
         "read_proposals",
-        "Read the OPEN operational-learning proposals that have been consolidated from operational-learning candidate pool, already standing, newest first.",
+        "Read the OPEN operational-learning proposals (consolidated from the candidate pool and "
+        "awaiting the owner's gate), newest first.",
         ReviewProposalsArgs, _review_proposals,
     ),
     ToolSpec(
         "read_run",
-        "Read `agent` execution trace — the calls + outcome of a single agent-run row (pass a run_id), "
-        "or list recent agentruns.",
+        "Read one agent run's execution trace — its prompt/reply/tool-call trail + outcome "
+        "(pass a run_id) — or omit run_id to list recent runs.",
         ReadRunArgs, _read_run,
     ),
     ToolSpec(
         "create_inbox_item",
-        "Create one inbox item (ticket) from a discussion — the sanctioned way to itemize real work.",
+        "Create one inbox item (ticket) from a discussion — the sanctioned way to itemize real "
+        "work. Also the branch-off front door: pass spawned_from_item + relation "
+        "(blocking/parallel auto-push into a child work-item; spawn waits for the owner).",
         CreateInboxItemArgs, _create_inbox_item,
     ),
     ToolSpec(
@@ -758,7 +1185,7 @@ _LEARNING_DEV_TOOLS: list[ToolSpec] = [
     ),
 ]
 
-DEV_TOOLS: list[ToolSpec] = _MAIN_DEV_TOOLS + _LEARNING_DEV_TOOLS   # full set (for reference/tests)
+DEV_TOOLS: list[ToolSpec] = _MAIN_DEV_TOOLS + _ITEM_DEV_TOOLS + _LEARNING_DEV_TOOLS   # full set (for reference/tests)
 
 
 def make_dev_mcp_server(store, context_id: str, *, learning: bool = False, **deps):
@@ -771,5 +1198,5 @@ def make_dev_mcp_server(store, context_id: str, *, learning: bool = False, **dep
     Optional deps thread per-turn state to specific learning tools (ignored by the rest):
     `origin_session_id` + `capture_source` (provenance bound onto `file_candidate` during a sweep),
     `proposal_id` + `staged_path` (bound onto `stage_artifact` during a write run)."""
-    tools = _MAIN_DEV_TOOLS + (_LEARNING_DEV_TOOLS if learning else [])
+    tools = _MAIN_DEV_TOOLS + _ITEM_DEV_TOOLS + (_LEARNING_DEV_TOOLS if learning else [])
     return build_mcp_server("dev", tools, store=store, context_id=context_id, **deps)

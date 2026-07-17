@@ -16,6 +16,7 @@ export default function Modal({
   scrim = 'bg-black/50',
   contain = false,
   column = false,
+  fill = false,
 }: {
   onClose: () => void
   title?: ReactNode
@@ -26,6 +27,9 @@ export default function Modal({
   contain?: boolean // absolute (fill positioned ancestor) instead of fixed (viewport)
   column?: boolean // cap the card to the viewport/column and lay it out as a flex column, so a
   // caller with a pinned header/footer + a `flex-1 min-h-0 overflow-y-auto` body scrolls internally
+  fill?: boolean // with `column`: TAKE the full height rather than just capping it, so the card is
+  // a stable frame instead of resizing to each tab's content (adaptive — it's the scrim's height,
+  // which the viewport/column drives). Use for multi-tab inspectors; omit for short prompts.
 }) {
   // Close on a true backdrop click only. A `click` resolves to the common ancestor of its mousedown
   // and mouseup, so a press that STARTS inside the card and releases on the scrim (e.g. dragging a
@@ -42,7 +46,7 @@ export default function Modal({
       }}
     >
       <div
-        className={`w-full ${maxW} ${column ? 'flex max-h-full flex-col' : ''} overflow-hidden rounded-2xl border border-line bg-app shadow-2xl`}
+        className={`w-full ${maxW} ${column ? `flex flex-col ${fill ? 'h-full' : 'max-h-full'}` : ''} overflow-hidden rounded-2xl border border-line bg-app shadow-2xl`}
       >
         {title !== undefined && (
           <div className="flex items-center justify-between border-b border-line px-5 py-4">

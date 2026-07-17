@@ -31,15 +31,25 @@ const TYPE_META: { key: string; label: string; color: string }[] = [
 const typesFor = (full: boolean) => TYPE_META.filter((t) => full || t.key !== 'cache_read')
 
 // Breakdown 1 — per-operation (per-feature). 3-type by default; 4-type adds each feature's cache_read.
+// Features in the catch-all `other` category (onboarding, diagnosis, compact, unregistered) render as
+// ONE aggregated "Other" bar — meta/maintenance spend reads as a whole, not per-feature. Membership
+// comes from the payload's by_category tree, so the FE never duplicates the taxonomy.
 function FeatureBars({ tokens, full }: { tokens: TokenUsage; full: boolean }) {
   const base = tokens.global?.by_feature ?? {}
   const cr = tokens.global?.by_feature_cache_read ?? {}
+  const otherFeatures = new Set(Object.keys(
+    (tokens.global?.by_category as Record<string, { features?: Record<string, number> }> | undefined)
+      ?.other?.features ?? {},
+  ))
+  const val = (f: string) => (base[f] ?? 0) + (full ? cr[f] ?? 0 : 0)
   const rows: Row[] = Object.keys(base)
-    .map((f) => ({ key: f, label: featureLabel(f), value: (base[f] ?? 0) + (full ? cr[f] ?? 0 : 0), color: featureColor(f) }))
-    .filter((r) => r.value > 0)
-    .sort((a, b) => b.value - a.value)
-  if (!rows.length) return <NoUsage />
-  return <Bars rows={rows} />
+    .filter((f) => !otherFeatures.has(f))
+    .map((f) => ({ key: f, label: featureLabel(f), value: val(f), color: featureColor(f) }))
+  const otherTotal = [...otherFeatures].reduce((s, f) => s + val(f), 0)
+  if (otherTotal > 0) rows.push({ key: 'other', label: 'Other', value: otherTotal, color: '#8b93a7' })
+  const shown = rows.filter((r) => r.value > 0).sort((a, b) => b.value - a.value)
+  if (!shown.length) return <NoUsage />
+  return <Bars rows={shown} />
 }
 
 // Breakdown 2 — the systematic token-type split. cache_read row appears only in 4-type mode.

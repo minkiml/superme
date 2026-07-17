@@ -25,6 +25,9 @@ _STATUSES = {"open", "pushed"}
 # discussion onto an existing item (so a user-made item touched by the agent reads ['user','agent']).
 # Stored as a JSON array in the TEXT column; legacy scalar values are coerced on read + migrated once.
 _ORIGINS = {"user", "agent"}
+# Branch-off relation vocabulary (workspace-workflow D3): blocking/parallel = children (auto-push,
+# gate the parent's completion) · spawn = provenance-only follow-up (owner-pushed).
+_SPAWN_RELATIONS = {"blocking", "parallel", "spawn"}
 
 
 def _norm_origins(value, *, default: str = "user") -> list[str]:
@@ -77,6 +80,19 @@ def _now() -> str:
 
 def _slug(s: str) -> str | None:
     return re.sub(r"[^a-z0-9]+", "-", (s or "").strip().lower()).strip("-") or None
+
+
+def _parse_spawned_from(value) -> dict | None:
+    """Stored JSON `spawned_from` → dict (None on NULL/garbage — callers always see dict|None)."""
+    if not value:
+        return None
+    if isinstance(value, dict):
+        return value
+    try:
+        d = json.loads(value)
+        return d if isinstance(d, dict) and d.get("item") else None
+    except (ValueError, TypeError):
+        return None
 
 
 class DevStore:
@@ -237,24 +253,38 @@ class DevStore:
                         c.execute("UPDATE inbox SET origin=? WHERE id=?",
                                   (json.dumps(origins), r["id"]))
                 c.execute("ALTER TABLE inbox DROP COLUMN source")
+            # Workspace-workflow D3 (S1): `spawned_from` = the provenance edge a branch-off inbox
+            # item already carries before push — JSON {item, relation: blocking|parallel|spawn,
+            # note?}; NULL for plain captures. Idempotent add.
+            if "spawned_from" not in cols:
+                c.execute("ALTER TABLE inbox ADD COLUMN spawned_from TEXT")
 
     # --- inbox CRUD -------------------------------------------------------------
 
     def add_inbox(self, context_id: str, text: str, kind: str = "note",
                   tag: str | None = None,
-                  title: str | None = None, origin="user") -> dict:
+                  title: str | None = None, origin="user",
+                  spawned_from: dict | None = None) -> dict:
+        """`spawned_from` (D3) = the provenance edge a branch-off item carries from birth:
+        {item, relation: blocking|parallel|spawn, note?}. Validated here; NULL for plain captures."""
         text = (text or "").strip()
         if not text:
             raise ValueError("empty inbox text")
+        if spawned_from is not None:
+            if not isinstance(spawned_from, dict) or not spawned_from.get("item"):
+                raise ValueError("spawned_from must be {item, relation[, note]}")
+            if spawned_from.get("relation") not in _SPAWN_RELATIONS:
+                raise ValueError(f"spawned_from.relation must be one of {sorted(_SPAWN_RELATIONS)}")
         kind = kind if kind in _KINDS else "note"
         origins = _norm_origins(origin)
         now = _now()
         with self._conn() as c:
             cur = c.execute(
-                "INSERT INTO inbox (context_id,kind,text,title,tag,status,origin,created_at,updated_at)"
-                " VALUES (?,?,?,?,?,'open',?,?,?)",
+                "INSERT INTO inbox (context_id,kind,text,title,tag,status,origin,spawned_from,"
+                "created_at,updated_at) VALUES (?,?,?,?,?,'open',?,?,?,?)",
                 (context_id, kind, text, (title or None), (tag or None),
-                 json.dumps(origins), now, now),
+                 json.dumps(origins),
+                 json.dumps(spawned_from) if spawned_from else None, now, now),
             )
             return self._get(c, cur.lastrowid)
 
@@ -298,6 +328,7 @@ class DevStore:
             for r in rows:
                 d = dict(r)
                 d["origin"] = _norm_origins(d.get("origin"))  # always a list to callers
+                d["spawned_from"] = _parse_spawned_from(d.get("spawned_from"))
                 out.append(d)
             return out
 
@@ -326,6 +357,7 @@ class DevStore:
             return None
         d = dict(r)
         d["origin"] = _norm_origins(d.get("origin"))  # always a list to callers
+        d["spawned_from"] = _parse_spawned_from(d.get("spawned_from"))
         return d
 
     def get_inbox(self, item_id: int) -> dict | None:

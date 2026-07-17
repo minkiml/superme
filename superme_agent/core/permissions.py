@@ -37,9 +37,10 @@ _WRITE_TOOLS = {"Write", "Edit", "MultiEdit", "NotebookEdit"}
 # conversation (no picker, no way to return a selection) — so the agent must just ASK IN TEXT.
 _SURFACE_UNSUPPORTED = {"AskUserQuestion"}
 _ASK_IN_TEXT_NUDGE = (
-    "The AskUserQuestion tool isn't available in this chat surface. Ask the user your question(s) as "
-    "plain conversational text instead — one at a time, with your recommended answer — and wait for "
-    "their reply in the next message."
+    "The AskUserQuestion tool isn't available on this surface. If a human is in this chat, ask "
+    "your question(s) as plain conversational text — one at a time, with your recommended answer. "
+    "In a headless run, don't ask at all: take your recommended option and record the judgment "
+    "call in your final report."
 )
 
 # General-session guardrail (work-item-session-recognition-prd): the mutating tools a GENERAL
@@ -57,6 +58,14 @@ _GENERAL_SESSION_NUDGE = (
     "maintaining an anchor doc) is allowed and not what this blocks. If what you're about to do is "
     "real implementation work, don't try it here: propose itemizing it into an inbox item (the "
     "create-inbox-item skill) so it can be picked up and done properly."
+)
+# The fully read-only variant (diagnosis sessions carve NO general/ write exception): the general
+# nudge's "authoring general/ memory is allowed" claim would be false there — the agent would
+# retry a blocked write it was just told is fine (M1).
+_READONLY_SESSION_NUDGE = (
+    "This session is fully READ-ONLY — no file writes at all, including the project's memory "
+    "docs. Describe the change you'd make instead, and offer to itemize it (the create-inbox-item "
+    "skill) so it happens in its own work-item."
 )
 
 
@@ -118,6 +127,11 @@ def is_read_only_bash(command: str) -> bool:
     known read-only command with no redirection, command-substitution, or in-place/mutating flags."""
     if not command or not command.strip():
         return False
+    # The two PROVABLY write-free redirects: discarding stderr, and folding it into stdout. Agents
+    # reach for both on ordinary reads constantly; without this carve-out every such `ls`/`cat`
+    # stalls an interactive turn at an approval card (and hard-fails a headless one). Strip the
+    # exact tokens, then judge the rest as usual — any other `>`/`<` still refuses.
+    command = command.replace("2>/dev/null", " ").replace("2>&1", " ")
     if any(bad in command for bad in _BASH_UNSAFE_SUBSTR):
         return False
     try:
@@ -241,6 +255,73 @@ def learning_write_approve(workspace: Path) -> ApproveFn:
     return approve
 
 
+# Freeze-boundary deny message (workspace-workflow S4/D4): a build session works ONLY in its
+# item's worktree — outside writes are an accident by construction, so they hard-deny with the
+# reason rather than prompting the human.
+_FREEZE_NUDGE = (
+    "Edit boundary (build phase): this work-item owns a dedicated git worktree, and all file "
+    "changes must happen inside it (or the item's own artifacts folder). The path you tried is "
+    "outside that boundary. Work in the worktree — it is your working directory; the merge back "
+    "to main happens at the deliver gate."
+)
+
+
+def _in_any(target: Path, roots: list[Path]) -> bool:
+    """True if `target` resolves inside any of `roots` (a root itself counts as inside)."""
+    try:
+        t = target.resolve()
+    except (OSError, ValueError):
+        return False
+    for root in roots:
+        try:
+            r = root.resolve()
+        except (OSError, ValueError):
+            continue
+        if t == r or r in t.parents:
+            return True
+    return False
+
+
+def _target_in_any(input_data: dict, roots: list[Path]) -> bool:
+    """True if a write tool's target path resolves inside any of `roots`. Fail-CLOSED (no path /
+    unparseable → False): during a build freeze an unclear write is treated as out-of-bounds."""
+    path = input_data.get("file_path") or input_data.get("path") or input_data.get("notebook_path")
+    if not path:
+        return False
+    try:
+        return _in_any(Path(path), roots)
+    except (OSError, ValueError):
+        return False
+
+
+# Tokens that look like an absolute path (`/x`, `~/x`) — the only part of a shell command we can
+# honestly reason about. Everything else (relative paths, `cd`, substitution) resolves against the
+# session cwd, which the boundary check already pins inside the worktree.
+def _bash_escapes_boundary(command: str, roots: list[Path]) -> bool:
+    """True if the command NAMES an absolute path outside every boundary root. A cheap
+    accident-catcher, not a sandbox: it can't see through `cd`, variables, or substitution (the
+    read-only classifier already refuses those constructs, and Bash is not path-checkable in
+    general — see build_can_use_tool). Escaping doesn't deny; it falls through to the normal
+    prompt, so a deliberate outside command still works with the owner's click."""
+    for raw in shlex_split_safe(command):
+        tok = raw.strip("'\"")
+        if tok.startswith("~"):
+            tok = str(Path(tok).expanduser())
+        if not tok.startswith("/"):
+            continue
+        if not _in_any(Path(tok), roots):
+            return True
+    return False
+
+
+def shlex_split_safe(command: str) -> list[str]:
+    """`shlex.split` that degrades to a whitespace split on unbalanced quotes."""
+    try:
+        return shlex.split(command)
+    except ValueError:
+        return command.split()
+
+
 _SKILL_TOOLS = {"Skill", "SlashCommand"}
 
 
@@ -261,16 +342,19 @@ def _invoked_skill_names(tool_name: str, input_data: dict) -> list[str]:
     return out
 
 
-def build_can_use_tool(approve: ApproveFn, *, blocked_skills: set[str] | None = None,
+def build_can_use_tool(approve: ApproveFn, *, blocked_skills: dict[str, str] | None = None,
                        cwd: Path | None = None, read_roots: list[Path] | None = None,
                        gate_general_mutations: bool = False,
-                       general_write_root: Path | None = None):
+                       general_write_root: Path | None = None,
+                       write_boundary: list[Path] | None = None):
     """Wrap a surface's ApproveFn into the SDK `can_use_tool` callback.
 
-    Safe (read-only) tools auto-allow; everything else defers to `approve`. `blocked_skills` (the
-    `access: silent` set) are denied OUTRIGHT before the safe-tool check — even though `Skill` is a
-    safe tool — so internal machinery (forge-*) can't be invoked from a user-facing turn. The owning
-    sub-run passes no `blocked_skills`, so it can still invoke them.
+    Safe (read-only) tools auto-allow; everything else defers to `approve`. `blocked_skills` maps a
+    skill name → the DENY MESSAGE explaining that specific block, and is checked OUTRIGHT before the
+    safe-tool check (even though `Skill` is a safe tool). Two blocks use it, and they are unrelated
+    — which is why the message is per-skill rather than one constant: `access: silent` machinery
+    (forge-*, invocable only by its owning sub-run) and, once a project's memory is established, the
+    one-shot `onboarding` skills. A caller that passes nothing blocks nothing.
 
     `read_roots` (with `cwd` to resolve relatives) enables the **L2 read-guard**: a Read/Grep/Glob
     whose target falls outside the host's allowlist is denied before the safe-tool auto-allow, so a
@@ -284,40 +368,78 @@ def build_can_use_tool(approve: ApproveFn, *, blocked_skills: set[str] | None = 
     writes whose target is inside it (the project's `general/` memory home) are AUTO-allowed, so
     onboarding (project-init/retrofit authoring the anchor docs) and routine anchor-doc maintenance
     work in a general session while real-code writes stay denied.
+
+    `write_boundary` enables the **build-phase freeze boundary** (workspace-workflow S4/D4): a
+    work-item build session's writes are confined to its git worktree + item folder — inside any
+    boundary root a write AUTO-allows (the agent works autonomously in its own tree, "commits
+    freely"); outside it hard-denies with the boundary explained (no human prompt — an outside
+    write during build is an accident by construction). Cleared at terminal by simply not passing
+    it. Honest limit: accident-prevention, not security (Bash is not path-checkable).
+
+    The boundary governs `Bash` too, and must: an agent that has to ask before running its own
+    tests isn't autonomous, and the build⟷validate loop can't run at all if every command parks
+    on a human. A mutating command AUTO-allows when the session `cwd` is inside the boundary and
+    the command names no absolute path outside it. That is weaker than the write-tool check by
+    necessity — `cd /elsewhere && rm -rf` is not detectable by reading a string — so the guarantee
+    here is the worktree's, not the classifier's: the agent's cwd IS a throwaway tree, its commits
+    are local to a branch nobody has merged, and the owner's real gate is the merge. A command that
+    does name an outside path doesn't deny — it falls through to the normal prompt, so deliberate
+    outside work still happens with a click.
     """
 
     async def can_use_tool(
         tool_name: str, input_data: dict, context: ToolPermissionContext
     ) -> PermissionResultAllow | PermissionResultDeny:
         if blocked_skills and tool_name in _SKILL_TOOLS:
-            if any(n in blocked_skills for n in _invoked_skill_names(tool_name, input_data)):
-                log.info("blocked silent skill via %s: %s", tool_name, input_data)
-                return PermissionResultDeny(
-                    message="This is an internal SuperMe skill — it runs only inside the learning "
-                            "pipeline, not from chat.")
+            for n in _invoked_skill_names(tool_name, input_data):
+                if n in blocked_skills:
+                    log.info("blocked skill via %s: %s", tool_name, input_data)
+                    # The deny message is the agent's ONLY feedback — it must be TRUE for THIS
+                    # block, or the agent self-corrects toward a wrong conclusion (an onboarding
+                    # skill told "this is learning-pipeline machinery" learns nothing useful).
+                    return PermissionResultDeny(message=blocked_skills[n])
         # Surface-unsupported tools (e.g. AskUserQuestion) → deny with a nudge to ask in plain text.
         if tool_name in _SURFACE_UNSUPPORTED:
             log.info("surface-unsupported tool denied: %s (ask in text)", tool_name)
             return PermissionResultDeny(message=_ASK_IN_TEXT_NUDGE)
+        # Build-phase freeze boundary (S4): writes live-or-die on the worktree/item roots.
+        if write_boundary and tool_name in _WRITE_TOOLS:
+            if _target_in_any(input_data, write_boundary):
+                return PermissionResultAllow()
+            log.info("freeze boundary denied %s outside the item worktree", tool_name)
+            return PermissionResultDeny(message=_FREEZE_NUDGE)
         # General-session guardrail: hard-deny mutating tools with a nudge, no user prompt. Placed
         # before the safe-tool check and before `approve`, so the human is never interrupted — the
         # agent self-corrects toward itemizing (the deny message is its feedback).
         if gate_general_mutations and tool_name in _GENERAL_SESSION_BLOCKED:
             # The one allowed write: authoring/maintaining the project's `general/` memory (onboarding
             # + anchor-doc upkeep). Auto-allow it (autonomous, no prompt); deny everything else.
+            # No general_write_root at all = a fully read-only session (diagnosis) — its deny
+            # message must not claim general/ writes are allowed.
             if general_write_root is not None and _write_target_under(input_data, general_write_root):
                 return PermissionResultAllow()
             log.info("general-session guardrail denied %s (nudge to itemize)", tool_name)
-            return PermissionResultDeny(message=_GENERAL_SESSION_NUDGE)
+            return PermissionResultDeny(message=_GENERAL_SESSION_NUDGE if general_write_root
+                                        is not None else _READONLY_SESSION_NUDGE)
         # Shell: read-only commands are the same access as Read/Grep/Glob → auto-allow (no prompt).
         # A mutating shell command in a general session is denied+nudged (same rule as the write
         # tools — "no code mutation, including via shell"); elsewhere it defers to approval as before.
         if tool_name == "Bash":
-            if is_read_only_bash(input_data.get("command", "")):
+            command = input_data.get("command", "")
+            if is_read_only_bash(command):
                 return PermissionResultAllow()
             if gate_general_mutations:
                 log.info("general-session guardrail denied mutating Bash (nudge to itemize)")
-                return PermissionResultDeny(message=_GENERAL_SESSION_NUDGE)
+                return PermissionResultDeny(message=_GENERAL_SESSION_NUDGE if general_write_root
+                                            is not None else _READONLY_SESSION_NUDGE)
+            # Freeze boundary (S4): a phase agent working inside its own worktree owns its shell.
+            # Running tests, installing deps and committing are the agent's job — the same autonomy
+            # the boundary already grants its writes, and the precondition for the build⟷validate
+            # loop (a loop that stops for a click on every test run is not a loop). The owner's gate
+            # is the merge, not each command.
+            if (write_boundary and cwd is not None and _in_any(cwd, write_boundary)
+                    and not _bash_escapes_boundary(command, write_boundary)):
+                return PermissionResultAllow()
         # L2 read-guard: keep reads inside the host's scope (before the safe-tool auto-allow).
         if read_roots and cwd is not None and tool_name in _READ_TOOLS:
             target = _read_target(input_data)

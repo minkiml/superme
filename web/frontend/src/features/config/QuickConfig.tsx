@@ -7,7 +7,8 @@ import { MODELS as MODEL_CATALOG, EFFORTS as EFFORT_CATALOG, fmtModel, toModelKe
 import {
   getSystem, setSystemModel, setSystemLearning, setRepoModel, setRepoLearning, setSweepConfig,
   setSystemEffort, setRepoEffort, getAgentModels, setAgentModel, setAgentEffort,
-  type SystemOverview, type ModelAlias, type AgentModels,
+  getCompactionConfig, setCompactionConfig,
+  type SystemOverview, type ModelAlias, type AgentModels, type CompactionConfig,
 } from '@/lib/api'
 import type { CommandStats, OrbitRepo } from '@/features/shell/useCommandStats'
 
@@ -81,6 +82,16 @@ export default function QuickConfig({ stats }: { stats: CommandStats }) {
           ) : (
             <SweepTuning sys={sys} onChange={setSys} />
           )}
+        </section>
+
+        {/* Compaction runtime */}
+        <section className="mb-8">
+          <div className="mb-1 text-[12px] font-semibold uppercase tracking-wider text-muted">Compaction</div>
+          <p className="mb-3 text-[12px] text-faint">
+            When a work-item session auto-compacts. System-wide; each session still raises its own
+            effective trigger above its measured floor.
+          </p>
+          <CompactionTuning />
         </section>
 
         {/* Background agents */}
@@ -230,11 +241,38 @@ function BackgroundAgents() {
   )
 }
 
-// A compact labeled integer stepper with a unit suffix. Clamps to [min, max]; commits on change.
+// A labeled config row. MODULE-LEVEL on purpose: defining this inside a card component gives it a
+// new identity every render, and the stats poll re-renders the page every ~5s — React then
+// REMOUNTS the row's subtree each cycle, resetting inputs and stealing focus mid-typing (the
+// "can't type into the trigger field" bug).
+function ConfigRow({ title, hint, children }: { title: string; hint: string; children: ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <div className="min-w-0">
+        <div className="text-[14px] text-fg">{title}</div>
+        <div className="text-[12px] text-faint">{hint}</div>
+      </div>
+      {children}
+    </div>
+  )
+}
+
+// A compact labeled integer stepper with a unit suffix. The text is FREE while typing and clamps
+// to [min, max] only on blur/Enter — clamping per keystroke makes fields with a high `min`
+// untypeable (typing "60" into min=26 became 26 → 260 → 95 before the fix). The ± buttons still
+// clamp-commit instantly.
 function NumberField({ value, min, max, unit, onChange }: {
   value: number; min: number; max: number; unit: string; onChange: (v: number) => void
 }) {
   const clamp = (v: number) => Math.max(min, Math.min(max, v))
+  const [text, setText] = useState(String(value))
+  useEffect(() => { setText(String(value)) }, [value])  // ± / reset / apply re-sync the draft
+  function commit() {
+    const n = parseInt(text, 10)
+    const v = clamp(Number.isNaN(n) ? value : n)
+    setText(String(v))  // explicit — the effect won't fire when the clamped value is unchanged
+    if (v !== value) onChange(v)
+  }
   const btn = 'grid h-7 w-7 shrink-0 place-items-center rounded-md border border-line text-muted hover:bg-hover hover:text-fg'
   return (
     // Fixed widths so the −/value/unit/+ columns line up across every row.
@@ -243,10 +281,12 @@ function NumberField({ value, min, max, unit, onChange }: {
       <div className="flex w-[5.25rem] items-baseline gap-1 rounded-md border border-line bg-sunken px-2 py-1">
         <input
           type="number"
-          value={value}
+          value={text}
           min={min}
           max={max}
-          onChange={(e) => onChange(clamp(parseInt(e.target.value || '0', 10)))}
+          onChange={(e) => setText(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
           className="min-w-0 flex-1 bg-transparent text-right text-[13px] tabular-nums text-fg outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
         />
         <span className="w-8 shrink-0 text-left text-[11px] text-faint">{unit}</span>
@@ -279,15 +319,7 @@ function SweepTuning({ sys, onChange }: { sys: SystemOverview; onChange: (s: Sys
     }
   }
 
-  const Row = ({ title, hint, children }: { title: string; hint: string; children: ReactNode }) => (
-    <div className="flex items-center justify-between gap-4">
-      <div className="min-w-0">
-        <div className="text-[14px] text-fg">{title}</div>
-        <div className="text-[12px] text-faint">{hint}</div>
-      </div>
-      {children}
-    </div>
-  )
+  const Row = ConfigRow
 
   return (
     <div className="space-y-3 rounded-xl border border-line bg-surface p-4">
@@ -305,6 +337,101 @@ function SweepTuning({ sys, onChange }: { sys: SystemOverview; onChange: (s: Sys
       <div className="flex items-center justify-end gap-2 border-t border-line pt-3">
         {dirty && !saving && (
           <button onClick={() => setDraft(saved)} className="rounded-md px-2.5 py-1.5 text-[13px] text-muted hover:text-fg">
+            Reset
+          </button>
+        )}
+        <button
+          onClick={apply}
+          disabled={!dirty || saving}
+          className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-[13px] font-medium text-on-accent transition enabled:hover:opacity-90 disabled:opacity-40"
+        >
+          {saving ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />} Apply
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// Compaction tuning card (S8/D11): the system-wide auto-compaction trigger + the effectiveness
+// threshold. Global only by design — per-session floors already adapt the effective trigger, so a
+// per-repo override adds config surface without adding control. Draft+Apply like SweepTuning; a
+// floor-violating trigger is REFUSED by the daemon (409) and the reason is surfaced inline.
+function CompactionTuning() {
+  // min gain draft: auto (default — verdict judged against the session's reclaimable space) or a
+  // manual flat %. `gain` keeps the last manual value so toggling auto off restores it.
+  const [cfg, setCfg] = useState<CompactionConfig | null>(null)
+  const [draft, setDraft] = useState({ trigger: 80, auto: true, gain: 30 })
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  const fromCfg = (c: CompactionConfig) => ({
+    trigger: c.trigger_pct,
+    auto: c.min_gain_pct === 'auto',
+    gain: typeof c.min_gain_pct === 'number' ? c.min_gain_pct : 30,
+  })
+
+  useEffect(() => {
+    let alive = true
+    getCompactionConfig().then((c) => {
+      if (!alive) return
+      setCfg(c)
+      setDraft(fromCfg(c))
+    }).catch((e) => alive && setErr(String(e)))
+    return () => { alive = false }
+  }, [])
+
+  if (err && !cfg) return <div className="text-sm text-danger">Couldn’t load compaction config — {err}</div>
+  if (!cfg) {
+    return (
+      <div className="flex items-center gap-2 text-sm text-muted">
+        <Loader2 size={14} className="animate-spin" /> Loading…
+      </div>
+    )
+  }
+
+  const draftGain: number | 'auto' = draft.auto ? 'auto' : draft.gain
+  const dirty = draft.trigger !== cfg.trigger_pct || draftGain !== cfg.min_gain_pct
+
+  async function apply() {
+    setSaving(true)
+    setErr(null)
+    try {
+      const next = await setCompactionConfig({ trigger_pct: draft.trigger, min_gain_pct: draftGain })
+      setCfg(next)
+      setDraft(fromCfg(next))
+    } catch (e) {
+      setErr(String(e)) // e.g. the daemon's floor refusal — shown verbatim, draft kept for editing
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const Row = ConfigRow
+
+  return (
+    <div className="space-y-3 rounded-xl border border-line bg-surface p-4">
+      <Row title="Trigger" hint={`context fill that fires auto-compaction (floor ${cfg.floor_pct}% — lower values are refused)`}>
+        <NumberField value={draft.trigger} min={cfg.floor_pct + 1} max={95} unit="%" onChange={(v) => setDraft((d) => ({ ...d, trigger: v }))} />
+      </Row>
+      <div className="h-px bg-line" />
+      <Row
+        title="Min gain"
+        hint={draft.auto
+          ? 'auto: a compaction must reclaim ≥50% of what the session could shed (its fill beyond the incompressible preload) — two strikes parks the session'
+          : 'manual: a compaction shrinking less than this flat % counts as ineffective (two strikes parks the session)'}
+      >
+        <div className="flex shrink-0 items-center gap-2.5">
+          <span className="text-[12px] text-faint">Auto</span>
+          <Toggle on={draft.auto} onChange={(v) => setDraft((d) => ({ ...d, auto: v }))} />
+          {!draft.auto && (
+            <NumberField value={draft.gain} min={1} max={95} unit="%" onChange={(v) => setDraft((d) => ({ ...d, gain: v }))} />
+          )}
+        </div>
+      </Row>
+      {err && <div className="text-[12px] text-danger">{err}</div>}
+      <div className="flex items-center justify-end gap-2 border-t border-line pt-3">
+        {dirty && !saving && (
+          <button onClick={() => { setDraft(fromCfg(cfg)); setErr(null) }} className="rounded-md px-2.5 py-1.5 text-[13px] text-muted hover:text-fg">
             Reset
           </button>
         )}

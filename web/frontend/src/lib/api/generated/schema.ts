@@ -459,6 +459,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/system/compaction": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get System Compaction
+         * @description The compaction runtime knobs (S8/D11): trigger fill %, per-kind overrides, and the
+         *     effectiveness threshold, plus the static incompressible floor the trigger may never sit
+         *     at/below (what makes the knob safe to expose).
+         */
+        get: operations["get_system_compaction_system_compaction_get"];
+        put?: never;
+        /**
+         * Set System Compaction
+         * @description Tune the compaction runtime. Any omitted field is left unchanged. FLOOR-AWARE: a trigger
+         *     the incompressible floor alone would exceed is refused (409) — never stored, never fired.
+         */
+        post: operations["set_system_compaction_system_compaction_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/repos/{repo_id}/model": {
         parameters: {
             query?: never;
@@ -615,14 +642,17 @@ export interface paths {
         post?: never;
         /**
          * Dev Inbox Delete
-         * @description Remove an inbox item outright.
+         * @description Remove an inbox item outright (drop = hard delete), including its content folder — unless
+         *     the row was pushed (the folder already moved into the work-item's preliminary/).
          */
         delete: operations["dev_inbox_delete_dev_inbox__item_id__delete"];
         options?: never;
         head?: never;
         /**
          * Dev Inbox Update
-         * @description Edit an inbox item: change status, kind, tag, text, or title.
+         * @description Edit an inbox item: change status, kind, tag, text, or title. A PUSHED row is immutable
+         *     trace (its content already moved into the work-item's preliminary/): flipping it back to
+         *     `open` would let a second push mint a duplicate work-item over the same provenance.
          */
         patch: operations["dev_inbox_update_dev_inbox__item_id__patch"];
         trace?: never;
@@ -638,10 +668,12 @@ export interface paths {
         put?: never;
         /**
          * Dev Inbox Push
-         * @description Push an inbox item to the workspace: stamp a queued work-item, mark the row pushed.
-         *
-         *     Agent-free write — creates `work-items/<id>/` at plan_design/queued, seeded from the
-         *     inbox row, and records `routed_to` on the row. Returns the new work-item + the row.
+         * @description Push an inbox item to the workspace — the owner's push (the `spawn` relation waits for
+         *     exactly this; blocking/parallel children auto-pushed at branch-off time never reach here
+         *     open). One shared transaction (core/inbox_flow): creates `work-items/<id>/` at triage/active
+         *     carrying `spawned_from` + `inbox_id`, MOVES the inbox content folder (handoff brief + extras)
+         *     into the item as `preliminary/` (the row stays as trace), and pauses the parent when the
+         *     relation is blocking. Returns the new work-item + the row.
          */
         post: operations["dev_inbox_push_dev_inbox__item_id__push_post"];
         delete?: never;
@@ -665,6 +697,53 @@ export interface paths {
          *     show a live "planning…" state while a background agent works.
          */
         get: operations["dev_read_dev_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dev/attention": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Dev Attention
+         * @description The attention engine (S7/D10): every item in at most one bucket, strict priority
+         *     needs_you (awaiting_human) > running (live run) > unread (terminal, never opened) — derived
+         *     from durable state at read time. `badge` = the top non-empty tier's color + count, or null
+         *     when nothing claims attention. Powers the workspace badge + kanban tinting.
+         */
+        get: operations["dev_attention_dev_attention_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dev/workgraph": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Dev Workgraph
+         * @description The DERIVED WorkGraph projection (D3): repo root · roadmap deliverables · work-items ·
+         *     spawned-but-unpushed inbox rows, with contains / spawned_from(relation) / supersedes edges.
+         *     Assembled on demand from the authoritative feeds — nothing stored, nothing to sync. Cycles
+         *     (a hand-edited provenance loop) are REPORTED as data, never a 500. Git state joins as node
+         *     decoration in S4; the graph VIEW consumes this in S7.
+         */
+        get: operations["dev_workgraph_dev_workgraph_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1010,11 +1089,35 @@ export interface paths {
         put?: never;
         /**
          * Dev Work Item Plan
-         * @description Fire a headless /plan turn for a work-item — the "Plan it" quick-action. Flips the
-         *     item to in_progress immediately, then returns; the agent works in the background and the
-         *     item lands at `waiting` when done. Poll GET /dev (`running`) for the live planning state.
+         * @description Fire a headless /plan turn for a work-item — the "Plan it" quick-action. Opens the run
+         *     immediately, then returns; the agent works in the background and the item lands at
+         *     `awaiting_human` (the pre-main gate) when done. Poll GET /dev (`running`) for live state.
          */
         post: operations["dev_work_item_plan_dev_work_items__item_id__plan_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dev/work-items/{item_id}/compact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dev Work Item Compact
+         * @description Compact NOW (S8, owner-fired): run the full compaction sequence on this item's bound
+         *     session — checkpoint FIRST, then /compact, then the effectiveness verdict. The automatic
+         *     trigger does the same on its own past `compaction_trigger_pct`; this is the manual handle
+         *     (and how the gate test drives the machinery deterministically). 409 without a session or
+         *     while a run is in flight (the sequence takes the item's run-lock itself).
+         */
+        post: operations["dev_work_item_compact_dev_work_items__item_id__compact_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1054,9 +1157,9 @@ export interface paths {
         post?: never;
         /**
          * Dev Work Item Delete
-         * @description Hard-delete a plan/design work-item and erase its trace: the `work-items/<id>/` folder,
+         * @description Hard-delete a pre-build work-item and erase its trace: the `work-items/<id>/` folder,
          *     its SDK session transcript + index entry, and the originating inbox row. Only allowed while
-         *     the item is in plan_design (past that gate, code may have been touched). 409 otherwise.
+         *     the item is in triage/plan (past that gate, code may have been touched). 409 otherwise.
          */
         delete: operations["dev_work_item_delete_dev_work_items__item_id__delete"];
         options?: never;
@@ -1074,12 +1177,34 @@ export interface paths {
         /**
          * Dev Work Item Detail
          * @description A work-item's review payload: its frontmatter/body plus the rendered artifact content
-         *     the review popup shows — plan.md and prd.md as Markdown bodies, tasks.md as a structured
-         *     `{text, done}` checklist. Structured render, not a raw file dump.
+         *     the review popup shows — plan.md and prd.md as Markdown bodies, the plan's `## Tasks` as a
+         *     structured `{text, done}` checklist, and the COMPUTED per-artifact status map (S2: derived
+         *     from file existence + self-check + evidence freshness — never stored).
          */
         get: operations["dev_work_item_detail_dev_work_items__item_id__detail_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dev/work-items/{item_id}/seen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dev Work Item Seen
+         * @description Stamp the item as SEEN (the owner opened its drilldown) — clears it from the attention
+         *     engine's `unread` bucket (S7). A read receipt: idempotent, never bumps updated_at.
+         */
+        post: operations["dev_work_item_seen_dev_work_items__item_id__seen_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1118,9 +1243,12 @@ export interface paths {
         put?: never;
         /**
          * Dev Work Item Complete
-         * @description Complete + archive a Done-phase work-item (the tick-out). Snapshots the execution trace to
-         *     `artifacts/execution.md` (the folder persists), stamps `done_at`, then RECLAIMS disk by purging
-         *     the SDK session transcript and freeing the item's run + run_artifact rows. Events are kept.
+         * @description Complete + archive a close-phase work-item — the HUMAN promotion to terminal (D8: the
+         *     agent never self-closes; this FE route has no agent-tool counterpart). Mechanically refused
+         *     while any child (blocking/parallel spawned_from edge) is non-terminal (D3). Snapshots the
+         *     execution trace to `artifacts/execution.md` (the folder persists), stamps status=done +
+         *     outcome=completed + done_at, resumes an awaiting_child parent whose last blocking child this
+         *     was (status router), then reclaims the SDK transcript + frees run rows. Events are kept.
          */
         post: operations["dev_work_item_complete_dev_work_items__item_id__complete_post"];
         delete?: never;
@@ -1182,11 +1310,173 @@ export interface paths {
         put?: never;
         /**
          * Dev Work Item Advance
-         * @description Approve → advance a work-item to the next phase (the owner's gate). plan_design →
-         *     build_eval today (approving the plan). Refuses if there's no next phase or a run is in
-         *     flight on the item. Status/run-state is untouched — phase is the owner axis.
+         * @description Approve → advance a work-item to its kind's next phase (the owner's gate; sequencing
+         *     comes from KIND_PROFILES — triage→plan→… per kind). Refuses if the item is at its final
+         *     phase, terminal, or a run is in flight. The gate decision also rests the item at `active`
+         *     (an awaiting_human item just got its answer).
          */
         post: operations["dev_work_item_advance_dev_work_items__item_id__advance_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dev/work-items/{item_id}/git": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Dev Work Item Git
+         * @description The item's live git state (derived at read time, never stored): branch/dir/registration
+         *     existence, dirty files, ahead/behind vs trunk (behind = freshness debt), merged-into-trunk.
+         */
+        get: operations["dev_work_item_git_dev_work_items__item_id__git_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dev/work-items/{item_id}/git/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dev Work Item Git Sync
+         * @description Freshness merge (D4): merge the trunk INTO the item branch, inside its worktree — run
+         *     during long builds and always before the deliver merge, so main-merge is trivial.
+         */
+        post: operations["dev_work_item_git_sync_dev_work_items__item_id__git_sync_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dev/work-items/{item_id}/git/merge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dev Work Item Git Merge
+         * @description The deliver-gate merge (owner-fired). Routes itself by topology (D4): a BLOCKING child
+         *     merges into its parent's branch (light path — no backup ceremony; the parent re-validates the
+         *     family), everything else merges to the trunk (heavy path — overlap refusal, tagged auto-stash,
+         *     backup ref first, never-merge-twice). Success records merge commit (+ backup ref) on the item.
+         *     Conflicts on the main path → 200 with the conflict list (fix via sync + resolve, then retry).
+         */
+        post: operations["dev_work_item_git_merge_dev_work_items__item_id__git_merge_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dev/work-items/{item_id}/git/revert": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dev Work Item Git Revert
+         * @description Restore the trunk to its pre-merge state via the item's recorded backup ref — the
+         *     always-offered undo behind every main merge (D4 guardrail). Safe-only: refuses once anything
+         *     else has landed on top. Clears the item's merge record (the branch itself is untouched).
+         */
+        post: operations["dev_work_item_git_revert_dev_work_items__item_id__git_revert_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dev/work-items/{item_id}/git/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dev Work Item Git Resolve
+         * @description Resolve-with-Agent (D4): the human decides WHETHER, the agent resolves — they never
+         *     hand-edit conflict markers. Re-runs the freshness sync leaving conflicts IN the worktree,
+         *     then fires a headless resolution run (write-sandboxed to the worktree); the daemon completes
+         *     the merge mechanically and the item re-enters `validate`. 409 if the sync is clean (nothing
+         *     to resolve) or a run is in flight.
+         */
+        post: operations["dev_work_item_git_resolve_dev_work_items__item_id__git_resolve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dev/work-items/{item_id}/gate-brief": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Dev Work Item Gate Brief
+         * @description The item's CURRENT gate brief (or a preview of the next one when mid-phase): continuity →
+         *     delta → narrative → the uniform decision block, plus the mechanical checks — answerable
+         *     without opening code (D10 ★). The drilldown leads with this.
+         */
+        get: operations["dev_work_item_gate_brief_dev_work_items__item_id__gate_brief_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dev/work-items/{item_id}/abandon": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dev Work Item Abandon
+         * @description Abandon a work-item — HUMAN-ONLY (no agent-tool counterpart), legal from any non-terminal
+         *     phase (D8). Ordered, each step idempotent: end live runs/sessions · remove the worktree
+         *     (branch kept — near-free trace) · abandon note into closeout.md · terminal status change
+         *     (`abandoned`, or `superseded` when `superseded_by` names the replacement) · resume a paused
+         *     parent whose last open blocking child this was. Dev-knowledge untouched — write-at-merge
+         *     means a pre-merge abandon wrote nothing, ever. The response is the abandon brief: blocking
+         *     children listed for YOUR disposal (they existed only for this parent); parallel children
+         *     continue untouched.
+         */
+        post: operations["dev_work_item_abandon_dev_work_items__item_id__abandon_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1555,6 +1845,45 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AbandonBody */
+        AbandonBody: {
+            /**
+             * Context Id
+             * @default global
+             */
+            context_id: string;
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+            /** Superseded By */
+            superseded_by?: string | null;
+        };
+        /**
+         * AbandonResponse
+         * @description The abandon brief (D8): what was torn down + the children triage list. Blocking children
+         *     existed only for this parent — the owner disposes each (abandon / promote to independent);
+         *     parallel children continue untouched.
+         */
+        AbandonResponse: {
+            /** Ok */
+            ok: boolean;
+            /** Id */
+            id: string;
+            /** Outcome */
+            outcome: string;
+            /** Worktree Removed */
+            worktree_removed?: boolean | null;
+            /** Session Cleared */
+            session_cleared: boolean;
+            /** Runs Freed */
+            runs_freed: number;
+            /** Blocking Children */
+            blocking_children: string[];
+            /** Parallel Children */
+            parallel_children: string[];
+        };
         /** AgentModelBody */
         AgentModelBody: {
             /** Model */
@@ -1654,6 +1983,25 @@ export interface components {
             /** Path */
             path: string;
         };
+        /**
+         * ArtifactStatusRow
+         * @description COMPUTED status of one artifact kind (S2 — derived from file existence + self-check +
+         *     evidence freshness at read time; never stored in any doc, so it cannot drift).
+         */
+        ArtifactStatusRow: {
+            /** Required */
+            required: boolean;
+            /** Present */
+            present: boolean;
+            /** Status */
+            status: string;
+            /** Issues */
+            issues?: string[] | null;
+            /** Evidence */
+            evidence?: {
+                [key: string]: unknown;
+            } | null;
+        };
         /** AssetActionBody */
         AssetActionBody: {
             /** Action */
@@ -1705,6 +2053,56 @@ export interface components {
             /** Assets */
             assets: components["schemas"]["AssetItem"][];
         };
+        /**
+         * AttentionBadge
+         * @description The global badge: the TOP non-empty tier only — one color, one count (D10).
+         */
+        AttentionBadge: {
+            /** Tier */
+            tier: string;
+            /** Color */
+            color: string;
+            /** Count */
+            count: number;
+        };
+        /**
+         * AttentionResponse
+         * @description The attention engine's read: strict-priority buckets derived from durable state.
+         */
+        AttentionResponse: {
+            /** Context Id */
+            context_id: string;
+            /** Buckets */
+            buckets: {
+                [key: string]: components["schemas"]["AttentionRow"][];
+            };
+            badge?: components["schemas"]["AttentionBadge"] | null;
+        };
+        /**
+         * AttentionRow
+         * @description One item's attention claim: which bucket, why (one human line), and the gate it sits at
+         *     (needs_you only).
+         */
+        AttentionRow: {
+            /** Id */
+            id: string;
+            /** Title */
+            title: string;
+            /** Kind */
+            kind: string;
+            /** Phase */
+            phase?: string | null;
+            /** Status */
+            status?: string | null;
+            /** Outcome */
+            outcome?: string | null;
+            /** Bucket */
+            bucket: string;
+            /** Reason */
+            reason: string;
+            /** Gate */
+            gate?: string | null;
+        };
         /** BoardDeliverable */
         BoardDeliverable: {
             /** Id */
@@ -1727,9 +2125,9 @@ export interface components {
             /** Title */
             title?: string | null;
             /** Phase */
-            phase?: ("triage" | "plan_design" | "build_eval" | "done") | null;
+            phase?: ("triage" | "plan" | "build" | "validate" | "deliver" | "investigate" | "report" | "close") | null;
             /** Status */
-            status?: ("queued" | "in_progress" | "waiting" | "dropped") | null;
+            status?: ("active" | "awaiting_child" | "awaiting_human" | "done") | null;
             /** Done At */
             done_at?: string | null;
             /** Date */
@@ -1797,6 +2195,20 @@ export interface components {
                 [key: string]: number;
             };
         };
+        /**
+         * CheckpointStub
+         * @description One row of the drilldown's continuity feed (newest first) — full text stays behind path.
+         */
+        CheckpointStub: {
+            /** Ts */
+            ts: string;
+            /** Path */
+            path: string;
+            /** Headline */
+            headline: string;
+            /** Git */
+            git?: string | null;
+        };
         /** ColumnInfo */
         ColumnInfo: {
             /** Name */
@@ -1807,6 +2219,36 @@ export interface components {
             pk: boolean;
             /** Notnull */
             notnull: boolean;
+        };
+        /**
+         * CompactionConfigBody
+         * @description Partial update of the compaction runtime (S8/D11) — omitted fields stay unchanged. The
+         *     route refuses (409) any trigger at/below the incompressible floor.
+         */
+        CompactionConfigBody: {
+            /** Trigger Pct */
+            trigger_pct?: number | null;
+            /** By Kind */
+            by_kind?: {
+                [key: string]: number;
+            } | null;
+            /** Min Gain Pct */
+            min_gain_pct?: number | "auto" | null;
+        };
+        /** CompactionConfigResponse */
+        CompactionConfigResponse: {
+            /** Ok */
+            ok: boolean;
+            /** Trigger Pct */
+            trigger_pct: number;
+            /** By Kind */
+            by_kind: {
+                [key: string]: number;
+            };
+            /** Min Gain Pct */
+            min_gain_pct: number | "auto";
+            /** Floor Pct */
+            floor_pct: number;
         };
         /**
          * ConstitutionEntry
@@ -2188,6 +2630,67 @@ export interface components {
              */
             empty: boolean;
         };
+        /**
+         * GateBriefResponse
+         * @description One gate's full decision surface. `brief` is the rendered markdown (continuity → delta →
+         *     narrative → decision); `at_gate: False` means the item is mid-phase and this previews the
+         *     NEXT gate. Answerable without opening code — that is the contract.
+         */
+        GateBriefResponse: {
+            /** Id */
+            id: string;
+            /** Gate */
+            gate: string;
+            /** At Gate */
+            at_gate: boolean;
+            /** Phase */
+            phase: string;
+            /** Title */
+            title: string;
+            /** Brief */
+            brief: string;
+            decision: components["schemas"]["GateDecision"];
+            /** Checks */
+            checks: components["schemas"]["GateCheck"][];
+        };
+        /**
+         * GateCheck
+         * @description One mechanical row of a gate's evaluation — computed from durable state, never a claim.
+         */
+        GateCheck: {
+            /** Criterion */
+            criterion: string;
+            /** Ok */
+            ok: boolean;
+            /** Detail */
+            detail: string;
+        };
+        /**
+         * GateDecision
+         * @description The uniform decision block (D10 ★): recommendation FIRST, stakes one line, per-option
+         *     consequence, dual-scale effort.
+         */
+        GateDecision: {
+            /** Recommendation */
+            recommendation: string;
+            /** Stakes */
+            stakes: string;
+            /** Options */
+            options: components["schemas"]["GateOption"][];
+            /** Effort User */
+            effort_user: string;
+            /** Effort Agent */
+            effort_agent: string;
+        };
+        /** GateOption */
+        GateOption: {
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Consequence */
+            consequence: string;
+        };
         /** GeneralDoc */
         GeneralDoc: {
             /** Name */
@@ -2224,9 +2727,124 @@ export interface components {
             /** Docs */
             docs: components["schemas"]["GeneralDoc"][];
         };
+        /** GitBody */
+        GitBody: {
+            /**
+             * Context Id
+             * @default global
+             */
+            context_id: string;
+        };
+        /**
+         * GitHealthResponse
+         * @description One item's live git state — health check + FE decoration (derived, never stored).
+         */
+        GitHealthResponse: {
+            /** Ok */
+            ok: boolean;
+            /** Reason */
+            reason?: string | null;
+            /** Branch */
+            branch?: string | null;
+            /** Worktree */
+            worktree?: string | null;
+            /** Trunk */
+            trunk?: string | null;
+            /** Branch Exists */
+            branch_exists?: boolean | null;
+            /** Dir Exists */
+            dir_exists?: boolean | null;
+            /** Registered */
+            registered?: boolean | null;
+            /** Dirty */
+            dirty?: string[] | null;
+            /** Merged */
+            merged?: boolean | null;
+            /** Ahead */
+            ahead?: number | null;
+            /** Behind */
+            behind?: number | null;
+        };
+        /**
+         * GitMergeResponse
+         * @description The deliver-gate merge. `path` says which route executed: `main` (heavy, with backup ref)
+         *     or `parent` (blocking child's light merge into its parent's branch).
+         */
+        GitMergeResponse: {
+            /** Ok */
+            ok: boolean;
+            /** Merged */
+            merged: boolean;
+            /** Path */
+            path: string;
+            /** Already Merged */
+            already_merged?: boolean | null;
+            /** Merge Commit */
+            merge_commit?: string | null;
+            /** Backup Ref */
+            backup_ref?: string | null;
+            /** Target */
+            target?: string | null;
+            /** Conflicts */
+            conflicts?: string[] | null;
+            /** Stash Warning */
+            stash_warning?: string | null;
+            /** Knowledge Ops Applied */
+            knowledge_ops_applied?: number | null;
+            /** Knowledge Folded Into */
+            knowledge_folded_into?: string | null;
+            /** Lint Warnings */
+            lint_warnings?: string[] | null;
+        };
+        /**
+         * GitResolveResponse
+         * @description Resolve-with-Agent accepted: the conflicted sync was left in the item's worktree and a
+         *     headless resolution run is in flight (poll GET /dev for run state).
+         */
+        GitResolveResponse: {
+            /** Ok */
+            ok: boolean;
+            /** Status */
+            status: string;
+            /** Id */
+            id: string;
+            /** Conflicts */
+            conflicts?: string[] | null;
+        };
+        /** GitRevertResponse */
+        GitRevertResponse: {
+            /** Ok */
+            ok: boolean;
+            /** Reverted */
+            reverted: boolean;
+            /** Target */
+            target?: string | null;
+            /** Head */
+            head?: string | null;
+        };
+        /**
+         * GitSyncResponse
+         * @description Freshness merge (trunk INTO the item branch). Conflicts: `in_tree=False` means the merge
+         *     was aborted and reported; True means it was deliberately left in the tree for resolution.
+         */
+        GitSyncResponse: {
+            /** Ok */
+            ok: boolean;
+            /** Merged */
+            merged: boolean;
+            /** Up To Date */
+            up_to_date?: boolean | null;
+            /** Commit */
+            commit?: string | null;
+            /** Conflicts */
+            conflicts?: string[] | null;
+            /** In Tree */
+            in_tree?: boolean | null;
+        };
         /**
          * Glance
-         * @description The dashboard glance summary (counts + bucketed item stubs).
+         * @description The dashboard glance summary (counts + bucketed item stubs). `awaiting_human` is the
+         *     attention bucket (D10: the only status that pages the owner).
          */
         Glance: {
             /** By Status */
@@ -2237,12 +2855,10 @@ export interface components {
             by_phase: {
                 [key: string]: number;
             };
-            /** In Progress */
-            in_progress: components["schemas"]["GlanceItem"][];
-            /** Waiting */
-            waiting: components["schemas"]["GlanceItem"][];
-            /** Blocked */
-            blocked: components["schemas"]["GlanceItem"][];
+            /** Active */
+            active: components["schemas"]["GlanceItem"][];
+            /** Awaiting Human */
+            awaiting_human: components["schemas"]["GlanceItem"][];
             /** Inbox Open */
             inbox_open: number;
             /** Counts */
@@ -2254,13 +2870,11 @@ export interface components {
         };
         /**
          * GlanceItem
-         * @description A work-item stub in the glance buckets (in_progress / waiting / blocked).
+         * @description A work-item stub in the glance buckets (active / awaiting_human).
          */
         GlanceItem: {
             /** Id */
             id: string;
-            /** Blocked By */
-            blocked_by?: string[] | null;
         } & {
             [key: string]: unknown;
         };
@@ -2311,6 +2925,10 @@ export interface components {
              * @default global
              */
             context_id: string;
+            /** Spawned From */
+            spawned_from?: {
+                [key: string]: unknown;
+            } | null;
         };
         /** InboxDeleteResponse */
         InboxDeleteResponse: {
@@ -2386,6 +3004,7 @@ export interface components {
              * @default []
              */
             origin: ("user" | "agent")[];
+            spawned_from?: components["schemas"]["SpawnedFrom"] | null;
         };
         /** InjectBody */
         InjectBody: {
@@ -3208,6 +3827,8 @@ export interface components {
             ended_at?: string | null;
             /** Session Fate */
             session_fate?: string | null;
+            /** Outcome */
+            outcome?: string | null;
         };
         /** RunTraceResponse */
         RunTraceResponse: {
@@ -3344,6 +3965,23 @@ export interface components {
             kind?: string | null;
         };
         /**
+         * SpawnedFrom
+         * @description The D3 provenance edge, child-side: which item this one branched off and how. `blocking`/
+         *     `parallel` = real children (gate the parent's completion; blocking also pauses it);
+         *     `spawn` = provenance-only follow-up. Exactly one origin edge per item; parent views derived.
+         */
+        SpawnedFrom: {
+            /** Item */
+            item: string;
+            /**
+             * Relation
+             * @enum {string}
+             */
+            relation: "blocking" | "parallel" | "spawn";
+            /** Note */
+            note?: string | null;
+        };
+        /**
          * SweepConfigBody
          * @description Partial update of the capture-sweep tuning — any omitted field is left unchanged.
          */
@@ -3385,6 +4023,19 @@ export interface components {
             repo_id: string;
             /** Filed */
             filed: number;
+        };
+        /** SyncBody */
+        SyncBody: {
+            /**
+             * Context Id
+             * @default global
+             */
+            context_id: string;
+            /**
+             * Leave Conflicts
+             * @default false
+             */
+            leave_conflicts: boolean;
         };
         /** SystemEffortBody */
         SystemEffortBody: {
@@ -3664,6 +4315,48 @@ export interface components {
             ctx?: Record<string, never>;
         };
         /**
+         * WorkGraphEdge
+         * @description One typed edge: contains | spawned_from (carries `relation`) | supersedes.
+         */
+        WorkGraphEdge: {
+            /** Src */
+            src: string;
+            /** Dst */
+            dst: string;
+            /** Kind */
+            kind: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * WorkGraphNode
+         * @description One node of the derived WorkGraph (D3). `kind` ∈ repo_root | deliverable | work_item |
+         *     inbox_spawn; work_item nodes carry item_kind/phase/status/outcome (+ git decoration in S4).
+         */
+        WorkGraphNode: {
+            /** Id */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** Label */
+            label?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** WorkGraphResponse */
+        WorkGraphResponse: {
+            /** Context Id */
+            context_id: string;
+            /** Nodes */
+            nodes: components["schemas"]["WorkGraphNode"][];
+            /** Edges */
+            edges: components["schemas"]["WorkGraphEdge"][];
+            /** Cycles */
+            cycles: string[][];
+            /** Topo */
+            topo?: string[] | null;
+        };
+        /**
          * WorkItem
          * @description A dev work-item. Base fields are always present; tree-walk + telemetry fields appear only on
          *     the enriched /dev list (extra='allow' tolerates any future frontmatter key).
@@ -3681,20 +4374,41 @@ export interface components {
             deliverable?: string | null;
             /** Title */
             title?: string | null;
+            /** Kind */
+            kind?: ("implementation" | "research") | null;
+            spawned_from?: components["schemas"]["SpawnedFrom"] | null;
+            /** Superseded By */
+            superseded_by?: string | null;
+            /** Outcome */
+            outcome?: ("completed" | "abandoned" | "superseded") | null;
+            /** Inbox Id */
+            inbox_id?: number | null;
             /** Phase */
-            phase?: ("triage" | "plan_design" | "build_eval" | "done") | null;
+            phase?: ("triage" | "plan" | "build" | "validate" | "deliver" | "investigate" | "report" | "close") | null;
             /** Status */
-            status?: ("queued" | "in_progress" | "waiting" | "dropped") | null;
+            status?: ("active" | "awaiting_child" | "awaiting_human" | "done") | null;
             /** Model */
             model?: string | null;
             /** Effort */
             effort?: string | null;
             /** Done At */
             done_at?: string | null;
+            /** Git Branch */
+            git_branch?: string | null;
+            /** Git Worktree */
+            git_worktree?: string | null;
+            /** Git Base */
+            git_base?: string | null;
+            /** Git Merge Commit */
+            git_merge_commit?: string | null;
+            /** Git Merged At */
+            git_merged_at?: string | null;
+            /** Git Backup Ref */
+            git_backup_ref?: string | null;
+            /** Seen At */
+            seen_at?: string | null;
             /** Artifacts */
             artifacts?: components["schemas"]["ArtifactRef"][] | null;
-            /** Blocked By */
-            blocked_by?: string[] | null;
             /** Session Id */
             session_id?: string | null;
             /** Created At */
@@ -3709,8 +4423,6 @@ export interface components {
             folder?: string | null;
             /** Children */
             children?: string[] | null;
-            /** Blocked */
-            blocked?: boolean | null;
             /** Total Tokens */
             total_tokens?: number | null;
             /** Phase Tokens */
@@ -3748,6 +4460,7 @@ export interface components {
             phase: string;
             /** From */
             from: string;
+            git?: components["schemas"]["WorkItemGitRecord"] | null;
         };
         /** WorkItemArtifactsResponse */
         WorkItemArtifactsResponse: {
@@ -3766,6 +4479,8 @@ export interface components {
             session_cleared: boolean;
             /** Runs Freed */
             runs_freed: number;
+            /** Worktree Removed */
+            worktree_removed?: boolean | null;
         };
         /** WorkItemDeleteResponse */
         WorkItemDeleteResponse: {
@@ -3789,6 +4504,16 @@ export interface components {
             tasks?: components["schemas"]["TaskItem"][] | null;
             /** Execution */
             execution?: string | null;
+            /** Artifact Status */
+            artifact_status?: {
+                [key: string]: components["schemas"]["ArtifactStatusRow"];
+            } | null;
+            /** Docs */
+            docs?: {
+                [key: string]: string | null;
+            } | null;
+            /** Checkpoints */
+            checkpoints?: components["schemas"]["CheckpointStub"][] | null;
         };
         /** WorkItemEffortResponse */
         WorkItemEffortResponse: {
@@ -3798,6 +4523,23 @@ export interface components {
             id: string;
             /** Effort */
             effort: string;
+        };
+        /**
+         * WorkItemGitRecord
+         * @description The git record a build entry writes onto the item (S4): its branch, worktree dir, and the
+         *     base it branched from (the trunk, or the parent's branch for a blocking child).
+         */
+        WorkItemGitRecord: {
+            /** Branch */
+            branch: string;
+            /** Worktree */
+            worktree: string;
+            /** Base */
+            base: string;
+            /** Base Sha */
+            base_sha?: string | null;
+            /** Created At */
+            created_at?: string | null;
         };
         /** WorkItemLastRun */
         WorkItemLastRun: {
@@ -3832,6 +4574,18 @@ export interface components {
             wave?: string | null;
             /** Deliverable */
             deliverable?: string | null;
+        };
+        /**
+         * WorkItemSeenResponse
+         * @description Seen-stamp result (S7 read receipt). `changed` False = was already stamped just now.
+         */
+        WorkItemSeenResponse: {
+            /** Ok */
+            ok: boolean;
+            /** Id */
+            id: string;
+            /** Changed */
+            changed: boolean;
         };
         /** WorkItemTasks */
         WorkItemTasks: {
@@ -4589,6 +5343,59 @@ export interface operations {
             };
         };
     };
+    get_system_compaction_system_compaction_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompactionConfigResponse"];
+                };
+            };
+        };
+    };
+    set_system_compaction_system_compaction_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CompactionConfigBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompactionConfigResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     set_repo_model_repos__repo_id__model_post: {
         parameters: {
             query?: never;
@@ -4932,6 +5739,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DevReadResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dev_attention_dev_attention_get: {
+        parameters: {
+            query?: {
+                context_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttentionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dev_workgraph_dev_workgraph_get: {
+        parameters: {
+            query?: {
+                context_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkGraphResponse"];
                 };
             };
             /** @description Validation Error */
@@ -5584,6 +6453,41 @@ export interface operations {
             };
         };
     };
+    dev_work_item_compact_dev_work_items__item_id__compact_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     dev_work_item_scaffold_dev_work_items__item_id__scaffold_post: {
         parameters: {
             query?: never;
@@ -5672,6 +6576,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WorkItemDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dev_work_item_seen_dev_work_items__item_id__seen_post: {
+        parameters: {
+            query?: {
+                context_id?: string;
+            };
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkItemSeenResponse"];
                 };
             };
             /** @description Validation Error */
@@ -5841,6 +6778,247 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WorkItemAdvanceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dev_work_item_git_dev_work_items__item_id__git_get: {
+        parameters: {
+            query?: {
+                context_id?: string;
+            };
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitHealthResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dev_work_item_git_sync_dev_work_items__item_id__git_sync_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SyncBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitSyncResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dev_work_item_git_merge_dev_work_items__item_id__git_merge_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GitBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitMergeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dev_work_item_git_revert_dev_work_items__item_id__git_revert_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GitBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitRevertResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dev_work_item_git_resolve_dev_work_items__item_id__git_resolve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GitBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitResolveResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dev_work_item_gate_brief_dev_work_items__item_id__gate_brief_get: {
+        parameters: {
+            query?: {
+                context_id?: string;
+            };
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GateBriefResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dev_work_item_abandon_dev_work_items__item_id__abandon_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AbandonBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AbandonResponse"];
                 };
             };
             /** @description Validation Error */

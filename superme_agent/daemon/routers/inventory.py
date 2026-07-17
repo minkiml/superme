@@ -98,11 +98,12 @@ def _tool_params(schema) -> list[ToolParam]:
 
 def _collect_tools() -> list[ToolInfo]:
     from ...harness.tools.base_tools import BASE_TOOLS
-    from ...harness.tools.dev_tools import _MAIN_DEV_TOOLS, _LEARNING_DEV_TOOLS
+    from ...harness.tools.dev_tools import _MAIN_DEV_TOOLS, _ITEM_DEV_TOOLS, _LEARNING_DEV_TOOLS
     out: list[ToolInfo] = []
     for surface, specs in (
         ("base", BASE_TOOLS),
         ("dev · main", _MAIN_DEV_TOOLS),
+        ("dev · work-item", _ITEM_DEV_TOOLS),
         ("dev · learning", _LEARNING_DEV_TOOLS),
     ):
         for s in specs:

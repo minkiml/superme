@@ -4,6 +4,8 @@ The Monitor/System dashboard read surface: the System singleton, the repo roster
 plus the model-config + learning-switch write results.
 """
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from .common import RunMode, RunStatus
@@ -27,6 +29,10 @@ class RunRow(BaseModel):
     # NULL while the origin session is live; 'deleted' / 'retired' once it's hard-deleted
     # (session-deletion-trace-model) — the run + its trace are preserved, this labels the orphan.
     session_fate: str | None = None
+    # A HEADLESS run's structured completion outcome (workspace-workflow D2/S5): success |
+    # clean_noop | blocked | approval_required | exhausted | stagnated. NULL for interactive
+    # turns and pre-S5 rows. Feeds the S7 attention engine.
+    outcome: str | None = None
 
 
 class SystemResponse(BaseModel):
@@ -145,6 +151,24 @@ class SweepConfigResponse(BaseModel):
     idle_seconds: int
     poll_seconds: int
     min_user_msgs: int
+
+
+class CompactionConfigBody(BaseModel):
+    """Partial update of the compaction runtime (S8/D11) — omitted fields stay unchanged. The
+    route refuses (409) any trigger at/below the incompressible floor."""
+    trigger_pct: int | None = Field(default=None, ge=1, le=100)
+    by_kind: dict[str, int] | None = None   # per-kind trigger overrides {kind: pct}
+    # "auto" (default) = reclaimable-normalized verdict; an int % = the manual escape hatch.
+    min_gain_pct: int | Literal["auto"] | None = Field(default=None)
+
+
+class CompactionConfigResponse(BaseModel):
+    ok: bool
+    trigger_pct: int          # fill % at which a work-item session compacts
+    by_kind: dict[str, int]   # per-kind overrides
+    # "auto" = judged against the session's reclaimable space; int % = flat manual threshold.
+    min_gain_pct: int | Literal["auto"]
+    floor_pct: int            # the static incompressible floor a trigger may never sit at/below
 
 
 class RepoModelResponse(BaseModel):
