@@ -35,16 +35,20 @@ export default function GlobalActivity({
   const [hasMore, setHasMore] = useState(false)
   const [openRun, setOpenRun] = useState<Run | null>(null)
 
+  // Live roster first; a run whose repo was disconnected falls through to its tombstoned label
+  // (so history keeps reading "Dummy Project", not the bare id) and is marked as gone.
   const metaFor = useCallback(
-    (id: string): { label: string; color: string; icon: string | null } => {
+    (id: string): { label: string; color: string; icon: string | null; archived?: boolean } => {
       const r = ([stats.hub, ...stats.nodes].filter(Boolean) as OrbitRepo[]).find((x) => x.id === id)
+      const gone = !r && !!stats.archived[id]
       return {
-        label: id === 'global' ? 'SuperMe Hub' : r?.label ?? id,
+        label: id === 'global' ? 'SuperMe Hub' : r?.label ?? stats.archived[id] ?? id,
         color: r?.color ?? colorFor(id),
         icon: r?.icon ?? null,
+        archived: gone,
       }
     },
-    [stats.hub, stats.nodes],
+    [stats.hub, stats.nodes, stats.archived],
   )
 
   // `silent` polls in the background without flipping the spinner or clobbering an error toast.
@@ -148,7 +152,7 @@ export default function GlobalActivity({
   )
 }
 
-function RunRow({ r, meta, last, onOpen }: { r: Run; meta: { label: string; color: string; icon: string | null }; last: boolean; onOpen: () => void }) {
+function RunRow({ r, meta, last, onOpen }: { r: Run; meta: { label: string; color: string; icon: string | null; archived?: boolean }; last: boolean; onOpen: () => void }) {
   const isHub = r.repo_id === 'global'
   return (
     <button
@@ -166,7 +170,12 @@ function RunRow({ r, meta, last, onOpen }: { r: Run; meta: { label: string; colo
             style={isHub ? { backgroundImage: 'var(--grad-iris)' } : { backgroundColor: meta.color }}
           />
         )}
-        <span className="truncate text-[13px] text-fg" title={meta.label}>{meta.label}</span>
+        <span
+          className={`truncate text-[13px] ${meta.archived ? 'text-muted italic' : 'text-fg'}`}
+          title={meta.archived ? `${meta.label} — disconnected project` : meta.label}
+        >
+          {meta.label}
+        </span>
         {r.session_fate && (
           <span
             className="shrink-0 text-faint"
@@ -176,11 +185,17 @@ function RunRow({ r, meta, last, onOpen }: { r: Run; meta: { label: string; colo
           </span>
         )}
       </span>
-      <span
-        className="justify-self-start rounded px-1.5 py-0.5 text-[11px] font-medium"
-        style={{ color: featureColor(r.feature), backgroundColor: 'rgb(var(--c-hover))' }}
-      >
-        {featureLabel(r.feature)}
+      {/* Op = the feature chip + the work-item PHASE beneath it. An interactive triage/build/review
+          turn is feature `chat`; the phase is the real signal, so surface it (else the feed reads
+          all-`chat` and hides the pipeline work). Phase is absent on non-item runs. */}
+      <span className="flex min-w-0 flex-col items-start gap-0.5">
+        <span
+          className="rounded px-1.5 py-0.5 text-[11px] font-medium"
+          style={{ color: featureColor(r.feature), backgroundColor: 'rgb(var(--c-hover))' }}
+        >
+          {featureLabel(r.feature)}
+        </span>
+        {r.phase && <span className="px-0.5 text-[10px] lowercase text-faint">{r.phase}</span>}
       </span>
       <span className="text-[11px] text-faint">{r.mode}</span>
       <span className="truncate text-[11px] text-muted" title={r.model ?? undefined}>{r.model ? fmtModel(r.model) : '—'}</span>

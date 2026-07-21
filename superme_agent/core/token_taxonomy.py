@@ -33,8 +33,11 @@ FEATURE_CATEGORY = {
     # Work-item agents (autonomous build ops)
     "plan": "workitem",
     "build": "workitem",
+    # The loop's fresh-eyes verification runs (build-vet-loop §5) — same bucket as the build
+    # cycles they gate.
+    "vet": "workitem",
     "forge": "workitem",
-    # Resolve-with-Agent (S4/D4): the headless conflict-resolution run on an item's worktree —
+    # Resolve-with-Agent (S4/D4): the background conflict-resolution run on an item's worktree —
     # an autonomous build op, same bucket as plan/build.
     "resolve": "workitem",
     # Interactive (owner-driven turns; bound chat still tags item_id for attribution).

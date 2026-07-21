@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, GitBranch, Map, Brain, Package, Activity, ChevronsUpDown, Check, Loader2, Waypoints } from 'lucide-react'
+import { ArrowLeft, GitBranch, Map, Brain, Package, Activity, ChevronsUpDown, Check, Loader2 } from 'lucide-react'
 import { colorFor } from '@/lib/palette'
 import { RepoIcon } from '@/lib/repoIcons'
 import type { OrbitRepo } from '@/features/shell/useCommandStats'
@@ -10,7 +10,6 @@ import RoadmapTab from './RoadmapTab'
 import { MemoryGovernance, PublishedInventory } from './LearningGovernance'
 import ArtifactsTab from './ArtifactsTab'
 import ActivityLog from './ActivityLog'
-import WorkGraphView from './WorkGraphView'
 import OnboardingLanding, { type OnboardMode } from './OnboardingLanding'
 
 // The Dev workspace — the per-repo Tier-2 detail surface, reached from an orbit node's inspector
@@ -18,11 +17,16 @@ import OnboardingLanding, { type OnboardMode } from './OnboardingLanding'
 // the three heavy dev surfaces for ONE repo: the plan→build pipeline, the learning governance queue,
 // and the per-repo activity log. Scoped by contextId (the repo id; only global is fully wired today).
 
-type Tab = 'pipeline' | 'graph' | 'roadmap' | 'learning' | 'artifacts' | 'activity'
+// Graph is no longer a tab — it's the Kanban⇄Graph toggle inside the Pipeline workspace panel
+// (same population, two projections).
+//
+// `project` is the home of this repo's GENERAL knowledge — what we're building and why — as opposed
+// to Pipeline's work-in-flight. Roadmap is its first section; deliverables, open questions and the
+// decision ledger join it as the general/ docs become addressable records rather than prose.
+type Tab = 'pipeline' | 'project' | 'learning' | 'artifacts' | 'activity'
 const TABS: { id: Tab; label: string; icon: typeof GitBranch }[] = [
   { id: 'pipeline', label: 'Pipeline', icon: GitBranch },
-  { id: 'graph', label: 'Graph', icon: Waypoints },
-  { id: 'roadmap', label: 'Roadmap', icon: Map },
+  { id: 'project', label: 'Project', icon: Map },
   { id: 'learning', label: 'Learning', icon: Brain },
   { id: 'artifacts', label: 'Artifacts', icon: Package },
   { id: 'activity', label: 'Activity', icon: Activity },
@@ -36,6 +40,8 @@ export default function DevWorkspace({
   onBindItem,
   onUnbindItem,
   boundItemId,
+  focusItemId,
+  onFocusConsumed,
 }: {
   repo: OrbitRepo
   onExit: () => void
@@ -44,8 +50,16 @@ export default function DevWorkspace({
   onBindItem?: (it: WorkItem, contextId: string) => void // clicking a work-item binds the chat to it
   onUnbindItem?: () => void
   boundItemId?: string | null
+  focusItemId?: string | null // attention-center "Open" → auto-open this item in the pipeline
+  onFocusConsumed?: () => void
 }) {
   const [tab, setTab] = useState<Tab>('pipeline')
+
+  // Arriving from the attention center: snap to the pipeline tab so DevDashboard can pop the item's
+  // modal. (The item lives on the pipeline board; any other tab would swallow the focus.)
+  useEffect(() => {
+    if (focusItemId) setTab('pipeline')
+  }, [focusItemId])
   const isHub = repo.id === 'global'
   const c = colorFor(repo.id)
 
@@ -117,7 +131,7 @@ export default function DevWorkspace({
                 <span
                   title={`${badge.count} item(s) in the '${badge.tier}' attention tier`}
                   className={`inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[10px] font-bold text-on-accent ${
-                    badge.tier === 'needs_you' ? 'bg-warn' : badge.tier === 'running' ? 'bg-success' : 'bg-accent'
+                    badge.tier === 'needs_you' ? 'bg-warn' : badge.tier === 'deputy_working' ? 'bg-deputy' : badge.tier === 'running' ? 'bg-success' : 'bg-accent'
                   }`}
                 >
                   {badge.count}
@@ -174,10 +188,11 @@ export default function DevWorkspace({
                 onBindItem={onBindItem}
                 onUnbindItem={onUnbindItem}
                 boundItemId={boundItemId}
+                focusItemId={focusItemId}
+                onFocusConsumed={onFocusConsumed}
               />
             )}
-            {tab === 'graph' && <WorkGraphView contextId={repo.id} onBindItem={onBindItem} />}
-            {tab === 'roadmap' && <RoadmapTab contextId={repo.id} />}
+            {tab === 'project' && <RoadmapTab contextId={repo.id} />}
             {tab === 'learning' && <LearningTab contextId={repo.id} />}
             {tab === 'artifacts' && <ArtifactsTab contextId={repo.id} />}
             {tab === 'activity' && <ActivityLog contextId={repo.id} />}

@@ -18,6 +18,7 @@ export default function Composer({
   modelOverride,
   effortOverride,
   onSelectModel,
+  locked = null,
 }: {
   value: string
   onChange: (value: string) => void
@@ -30,6 +31,9 @@ export default function Composer({
   modelOverride?: string | null // the context's current model selection (for the picker's check)
   effortOverride?: string | null // the context's current effort selection (for the picker's check)
   onSelectModel?: (model: string, effort: string) => void // sends `/model <model> <effort>` directly
+  // F2: input greyed during autonomous phases (build/vet) — there's no live intake worker to
+  // receive a message, so sending is disabled and the reason shown. `null` = normal.
+  locked?: { reason: string } | null
 }) {
   const [palIdx, setPalIdx] = useState(0)
   const [palHidden, setPalHidden] = useState(false) // dismissed with Esc until next edit
@@ -64,14 +68,14 @@ export default function Composer({
       <div className="relative">
         {modelOpen && <ModelPicker currentModel={modelOverride ?? null} currentEffort={effortOverride ?? null} onPick={pickModel} />}
         {palOpen && <CommandPalette items={palItems} activeIndex={palIdx} onHover={setPalIdx} onPick={accept} />}
-        <div className="rounded-lg border border-line bg-sunken focus-within:border-accent">
+        <div className={`rounded-lg border bg-sunken ${locked ? 'border-line opacity-60' : 'border-line focus-within:border-accent'}`}>
           <textarea
             ref={inputRef}
             className="max-h-48 min-h-[4.5rem] w-full resize-none overflow-y-auto bg-transparent px-3 pt-2.5 text-sm leading-relaxed text-fg outline-none placeholder:text-faint disabled:opacity-50"
             rows={3}
-            placeholder={ready ? `Message ${ctxLabel} SuperMe…` : 'connecting…'}
+            placeholder={locked ? locked.reason : ready ? `Message ${ctxLabel} SuperMe…` : 'connecting…'}
             value={value}
-            disabled={!ready}
+            disabled={!ready || !!locked}
             onChange={(e) => {
               const next = e.target.value
               // Palette just opened (became a "/token") — pull a fresh list so it never lags a publish.
@@ -108,17 +112,19 @@ export default function Composer({
                   return
                 }
               }
-              if (e.key === 'Enter' && !e.shiftKey) {
+              if (e.key === 'Enter' && !e.shiftKey && !locked) {
                 e.preventDefault()
                 onSend()
               }
             }}
           />
           <div className="flex items-center justify-between gap-2 px-2.5 pb-2 pt-1">
-            <span className="truncate text-[10px] text-faint">/ commands · Enter to send · Shift+Enter for newline</span>
+            <span className="truncate text-[10px] text-faint">
+              {locked ? locked.reason : '/ commands · Enter to send · Shift+Enter for newline'}
+            </span>
             <button
               className="flex shrink-0 items-center justify-center rounded-md bg-[var(--chat-accent)] p-1.5 text-on-accent disabled:opacity-40"
-              disabled={busy || !ready || !value.trim()}
+              disabled={busy || !ready || !value.trim() || !!locked}
               onClick={onSend}
               title="Send (Enter)"
               aria-label="Send"

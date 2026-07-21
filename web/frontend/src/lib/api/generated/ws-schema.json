@@ -209,6 +209,71 @@
       ],
       "type": "object"
     },
+    "TimelineFrame": {
+      "description": "A live event from a work-item's run that this panel is WATCHING (F2 unified timeline) \u2014\npushed from the item's broker (`item_stream`), independent of any turn this panel fired. Carries\nwhich run it belongs to; run-lock means one live run per item, so the FE appends it to the item's\nCURRENT phase lane. Kinds mirror the run trail: `reply` (assistant text) \u00b7 a tool/skill call\n(status kinds) \u00b7 `result` (a call's output).",
+      "properties": {
+        "type": {
+          "const": "timeline",
+          "default": "timeline",
+          "type": "string"
+        },
+        "item_id": {
+          "type": "string"
+        },
+        "run_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "kind": {
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "tool_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "item_id",
+        "kind"
+      ],
+      "type": "object"
+    },
     "TurnFrame": {
       "description": "A turn request. Lenient (every field defaulted) so a sparse client frame still validates.",
       "properties": {
@@ -347,6 +412,28 @@
         "output_tokens"
       ],
       "type": "object"
+    },
+    "WatchFrame": {
+      "description": "Client \u2192 daemon: \"this panel is now watching work-item `item_id`\" \u2014 subscribe it to that\nitem's live event broker so build/vet/other-phase runs stream in (F2). `item_id: null` stops\nwatching (panel closed / switched away). Independent of turns: watching is passive observation,\nfiring a turn is separate.",
+      "properties": {
+        "type": {
+          "const": "watch",
+          "default": "watch",
+          "type": "string"
+        },
+        "item_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "type": "object"
     }
   },
   "description": "Schema container \u2014 its JSON schema carries every frame model in `$defs`, the single artifact\nthe FE WS-type codegen consumes (`scripts/ws_schema.py`).",
@@ -355,7 +442,8 @@
       "discriminator": {
         "mapping": {
           "approval_response": "#/$defs/ApprovalResponseFrame",
-          "turn": "#/$defs/TurnFrame"
+          "turn": "#/$defs/TurnFrame",
+          "watch": "#/$defs/WatchFrame"
         },
         "propertyName": "type"
       },
@@ -365,6 +453,9 @@
         },
         {
           "$ref": "#/$defs/ApprovalResponseFrame"
+        },
+        {
+          "$ref": "#/$defs/WatchFrame"
         }
       ]
     },
@@ -377,6 +468,7 @@
           "result": "#/$defs/ResultFrame",
           "status": "#/$defs/StatusFrame",
           "text_delta": "#/$defs/TextDeltaFrame",
+          "timeline": "#/$defs/TimelineFrame",
           "usage": "#/$defs/UsageFrame"
         },
         "propertyName": "type"
@@ -402,6 +494,9 @@
         },
         {
           "$ref": "#/$defs/ErrorFrame"
+        },
+        {
+          "$ref": "#/$defs/TimelineFrame"
         }
       ]
     }

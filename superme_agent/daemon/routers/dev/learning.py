@@ -2,7 +2,7 @@
 and the two-gate proposal review queue (approve → write → publish, plus reject/drop and the
 execution trace).
 
-The pipeline machinery lives in services/learning.py (the headless runners + sweep triggers); these
+The pipeline machinery lives in services/learning.py (the background runners + sweep triggers); these
 routes are the thin HTTP gate the owner drives.
 """
 
@@ -15,7 +15,7 @@ from ...app_state import DevStore, SystemSpine, get_dev_store, get_spine
 from ...deps import proposal_slug as _proposal_slug, published_ident as _published_ident
 from ....gateway import contexts
 from ...services.learning import (
-    _run_headless_distill, _run_headless_write, run_sweep, _sweep_idle_sessions,
+    _run_background_distill, _run_background_write, run_sweep, _sweep_idle_sessions,
     SWEEP_IDLE_SECONDS, _WRITE_FORMS, _WRITE_SCOPES, _has_answer,
 )
 from ...schemas.dev.learning import (
@@ -154,7 +154,7 @@ async def dev_memory_rollup(dev_store: DevStore = Depends(get_dev_store),
 async def dev_memory_distill(context_id: str = "global",
                              dev_store: DevStore = Depends(get_dev_store),
                              spine: SystemSpine = Depends(get_spine)) -> dict:
-    """The Manage-Harness "Run distill" button: fire a headless distill pass over the candidate
+    """The Manage-Harness "Run distill" button: fire a background distill pass over the candidate
     pool (no need to open Dev chat). One pass per (repo × dev scope) at a time — guarded by a
     server-truth spine query, not a shadow set. Returns immediately; poll `/dev/memory/stats`
     (`distilling`) for completion, then refetch the review queue."""
@@ -169,7 +169,7 @@ async def dev_memory_distill(context_id: str = "global",
     # Open the run row SYNCHRONOUSLY (before returning) so it is the guard — closes the
     # double-click race between the is_running check and the background task starting.
     run_id = spine.start_run(context_id, mode="dev", feature="distill")
-    asyncio.create_task(_run_headless_distill(ctx, context_id, run_id))
+    asyncio.create_task(_run_background_distill(ctx, context_id, run_id))
     return {"status": "started", "context_id": context_id, "candidates": len(cands)}
 
 
@@ -259,7 +259,7 @@ async def memory_proposal_approve(proposal_id: int, body: ApproveBody,
                                   spine: SystemSpine = Depends(get_spine)) -> dict:
     """GATE 1 — owner approves the proposal's INTENT (and answers distill's clarifying questions).
     Validates the form/scope can actually be written today (core is reserved), records the answers,
-    moves the proposal to `writing`, and fires a headless per-item WRITE run that authors the final
+    moves the proposal to `writing`, and fires a background per-item WRITE run that authors the final
     artifact and stages it (→ `drafted`) for gate-2. Returns immediately; poll the proposal status."""
     prop = dev_store.get_memory_proposal(proposal_id)
     if not prop or prop["context_id"] != body.context_id:
@@ -292,7 +292,7 @@ async def memory_proposal_approve(proposal_id: int, body: ApproveBody,
         body.context_id, "memory.approved",
         f"Approved proposal #{proposal_id} ({prop['output_form']}/{prop['target_scope']}) → writing",
         scope="dev", actor="owner", meta={"proposal_id": proposal_id})
-    asyncio.create_task(_run_headless_write(ctx, body.context_id, proposal_id, run_id))
+    asyncio.create_task(_run_background_write(ctx, body.context_id, proposal_id, run_id))
     return {"status": "writing", "proposal_id": proposal_id}
 
 

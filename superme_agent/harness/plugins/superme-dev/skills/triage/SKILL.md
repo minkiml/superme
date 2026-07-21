@@ -9,7 +9,7 @@ category: workspace
 
 Every item passes triage before real work: the kind it was created with is a PROPOSAL until this
 gate confirms it. Produce the classification + brief the owner approves at the triage-exit gate.
-Write only inside the item's folder; never touch `status`/`phase` — advancing is the owner's gate.
+`status`/`phase` belong to the kernel and the owner's gate — the one rule of this phase.
 
 ## 1 — Read what exists
 
@@ -19,7 +19,7 @@ when:* you can say in one sentence what this item wants.
 
 ## 2 — Classify the kind
 
-Propose `implementation` (changes code — gets a worktree + full validate/deliver pipeline) or
+Propose `implementation` (changes code — gets a worktree + full vet/review pipeline) or
 `research` (answers questions — read-only on code, findings instead of merges). If the intent
 mixes both, propose research FIRST with a spawn follow-up for the build — a mixed item stalls at
 whichever pipeline it isn't. State your call and the reason in one line.
@@ -56,6 +56,19 @@ End with a SHORT brief the owner decides on — anchored in what they already kn
 > <as-is | split proposed>. **Recommend:** approve → plan. <one line of stakes, if any.>
 
 Then stop. The owner advances the phase; a request to change kind/scope is just another round here.
+
+## Background runs
+
+Triage fires automatically when an item is pushed (a background run — the kernel fired this
+turn; see the system prompt). Do steps 1–6 end-to-end without stopping:
+
+- **Never interview** — make the most reasonable classification call from `item.md` +
+  `preliminary/`; if genuinely torn, pick the safer kind (research over a mixed item) and say why
+  in the brief.
+- Always call `set_triage_classification` — the `triaged_at` stamp it writes is what lifts the
+  gate. A run that only presents a brief leaves the item stuck (the gate stays "no classification
+  recorded").
+- End with the step-6 gate brief and stop; the owner glances and approves.
 
 ## Pitfalls
 

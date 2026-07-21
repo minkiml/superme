@@ -5,7 +5,7 @@ import Toggle from '@/ui/Toggle'
 import { RepoIcon } from '@/lib/repoIcons'
 import { MODELS as MODEL_CATALOG, EFFORTS as EFFORT_CATALOG, fmtModel, toModelKey } from '@/lib/format'
 import {
-  getSystem, setSystemModel, setSystemLearning, setRepoModel, setRepoLearning, setSweepConfig,
+  getSystem, setSystemModel, setSystemLearning, setSystemDeputy, setRepoModel, setRepoLearning, setSweepConfig,
   setSystemEffort, setRepoEffort, getAgentModels, setAgentModel, setAgentEffort,
   getCompactionConfig, setCompactionConfig,
   type SystemOverview, type ModelAlias, type AgentModels, type CompactionConfig,
@@ -22,6 +22,41 @@ import type { CommandStats, OrbitRepo } from '@/features/shell/useCommandStats'
 const SYSTEM_MODELS: { value: string; label: string }[] = MODEL_CATALOG.map((m) => ({ value: m.key, label: m.label }))
 const SYSTEM_EFFORTS: { value: string; label: string }[] = EFFORT_CATALOG.map((e) => ({ value: e.key, label: e.label }))
 // Per-repo pickers add "System default" ("" = inherit the system default set above).
+// The deputy escalation dial (autopilot slice 4) — set PER GATE, because a project can want a light
+// touch at triage but a cautious hand at review. Four rungs, filling left→right; low delegates the
+// most (fewest calls to you), extra calls you soonest. The refusal floor holds at every level; this
+// only moves the discretionary band. Rendered as a click-to-set bar gauge, one per gate.
+const STRICTNESS_ORDER = ['low', 'medium', 'high', 'extra'] as const
+const DEPUTY_GATES: { key: string; label: string }[] = [
+  { key: 'triage', label: 'Triage' },
+  { key: 'plan', label: 'Plan' },
+  { key: 'review', label: 'Review' },
+]
+
+// A four-rung bar gauge. Filled up to and including the selected rung; click a rung to set it.
+function GaugeBar({ level, onPick }: { level: string; onPick: (l: string) => void }) {
+  const idx = Math.max(0, STRICTNESS_ORDER.indexOf(level as (typeof STRICTNESS_ORDER)[number]))
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex gap-1">
+        {STRICTNESS_ORDER.map((l, i) => (
+          <button
+            key={l}
+            type="button"
+            onClick={() => onPick(l)}
+            title={l}
+            aria-label={l}
+            className={`h-4 w-7 rounded-sm transition-colors ${
+              i <= idx ? (i === 3 ? 'bg-warn' : 'bg-accent') : 'bg-line hover:bg-hover'
+            }`}
+          />
+        ))}
+      </div>
+      <span className="w-12 text-[11px] capitalize text-faint">{level}</span>
+    </div>
+  )
+}
+
 const MODELS = [{ value: '', label: 'System default' }, ...SYSTEM_MODELS]
 const EFFORTS = [{ value: '', label: 'System default' }, ...SYSTEM_EFFORTS]
 // Background-agent model pickers: the VALUE is the tier (`sonnet` — the daemon auto-tracks it to the
@@ -143,6 +178,15 @@ function SystemDefaults({ sys, onChange }: { sys: SystemOverview; onChange: (s: 
     onChange({ ...sys, learning_enabled: v })
     setSystemLearning(v).catch(() => {})
   }
+  function changeDeputyEnabled(v: boolean) {
+    onChange({ ...sys, deputy_enabled: v })
+    setSystemDeputy({ enabled: v }).catch(() => {})
+  }
+  function changeDeputyStrictness(gate: string, level: string) {
+    const next = { ...(sys.deputy_strictness ?? {}), [gate]: level }
+    onChange({ ...sys, deputy_strictness: next })
+    setSystemDeputy({ strictness: { [gate]: level } }).catch(() => {})
+  }
   return (
     <div className="space-y-3 rounded-xl border border-line bg-surface p-4">
       <div className="flex items-center justify-between">
@@ -168,6 +212,32 @@ function SystemDefaults({ sys, onChange }: { sys: SystemOverview; onChange: (s: 
         </div>
         <Toggle on={sys.learning_enabled} onChange={changeLearning} />
       </div>
+      <div className="h-px bg-line" />
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="text-[14px] text-fg">Deputy</div>
+          <div className="text-[12px] text-faint">judges autopilot gates on your behalf — off runs autopilot unsupervised</div>
+        </div>
+        <Toggle on={sys.deputy_enabled ?? true} onChange={changeDeputyEnabled} />
+      </div>
+      {(sys.deputy_enabled ?? true) && (
+        <div className="rounded-lg bg-sunken/40 p-3">
+          <div className="text-[12px] text-faint">
+            strictness per gate — how readily it calls you. Low delegates most, extra calls you soonest.
+          </div>
+          <div className="mt-1 divide-y divide-line">
+            {DEPUTY_GATES.map((g) => (
+              <div key={g.key} className="flex items-center justify-between py-2">
+                <div className="text-[13px] text-fg">{g.label}</div>
+                <GaugeBar
+                  level={sys.deputy_strictness?.[g.key] ?? 'medium'}
+                  onPick={(l) => changeDeputyStrictness(g.key, l)}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

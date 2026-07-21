@@ -12,7 +12,7 @@ import { getRunTrace, type Run, type RunEvent } from '@/lib/api'
 // Run trace — the popup for one Activity row. Two tabs (mirroring the work-item detail's
 // Review/Execution): CONVERSATION (the prompt + assistant reply, readable — the default) and EXECUTION
 // (the call-trail of tools / sub-agents / skills, same layout as the work-item Execution tab). Everything
-// is scoped to THIS run (not the whole session), so each row has its own thread — works for headless runs.
+// is scoped to THIS run (not the whole session), so each row has its own thread — works for background runs.
 
 type Tab = 'trace' | 'conversation'
 

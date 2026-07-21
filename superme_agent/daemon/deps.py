@@ -36,7 +36,7 @@ def dev_root(context_id: str):
     return ctx.internal_root / "dev"
 
 
-# --- "/" palette slash-command cache (shared by the palette route + ws/headless turns) ----------
+# --- "/" palette slash-command cache (shared by the palette route + ws/background turns) ----------
 
 def load_slash_cache() -> dict:
     try:

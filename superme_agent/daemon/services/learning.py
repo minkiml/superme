@@ -1,6 +1,6 @@
 """Learning pipeline — the capture/distill/write runners + the capture-sweep machinery (WI-8).
 
-Three disposable, sessionless headless runners (distill the candidate pool, write an approved
+Three disposable, sessionless background runners (distill the candidate pool, write an approved
 proposal, capture-sweep a session's un-swept tail) plus the sweep triggers (single-flight guard,
 fire-and-forget, the idle-scan pass, and the daemon's idle heartbeat). The learning + work-item
 routes call these; the daemon `lifespan` launches `_idle_sweep_loop`.
@@ -8,7 +8,6 @@ routes call these; the daemon `lifespan` launches `_idle_sweep_loop`.
 Imports singletons from `app_state` (never from server.py) so there's no import cycle.
 """
 
-import json
 import time
 import shutil
 import asyncio
@@ -20,6 +19,7 @@ from ..app_state import agent as _agent, dev_store as _dev_store, spine as _spin
     sessions as _sessions
 from ..deps import cache_slash as _cache_slash, proposal_slug as _proposal_slug
 from .runs import capture_prompt, capture_event
+from ...core import kernel_speech
 from ...core import Init, Usage, Result, Status, TextDelta, ToolResult, deny_all, learning_write_approve
 from ...gateway import contexts
 from ...harness.tools.dev_tools import make_dev_mcp_server
@@ -32,8 +32,8 @@ FORGE_KIT = HARNESS_DIR / "forge_kit"   # the forge agent's lint + behavioural-e
 
 # --- DISTILL phase: process the candidate pool into proposals -----------------------------------
 
-async def _run_headless_distill(ctx, context_id: str, run_id: int) -> None:
-    """Drive one headless distill pass: a dev-mode turn whose only job is to invoke the `distill`
+async def _run_background_distill(ctx, context_id: str, run_id: int) -> None:
+    """Drive one background distill pass: a dev-mode turn whose only job is to invoke the `distill`
     sub-agent over the un-processed candidate pool. The sub-agent files proposals via the dev MCP
     (read_candidates / propose_memory), so we inject that server for this turn. Fire-and-forget.
 
@@ -41,12 +41,9 @@ async def _run_headless_distill(ctx, context_id: str, run_id: int) -> None:
     it has NO session — its `ev.session_id` is deliberately NOT recorded, so it can't pollute the
     resumable picker. A clean finish purges the run row; an error keeps it as `aborted` for audit.
     Nothing is applied — the owner still gates every proposal."""
-    # Thin trigger: name the agent + the job, nothing else. The steps live in the distill agent.
-    prompt = (
-        "Use the `distill` sub-agent (superme-dev:distill) to process the un-distilled memory "
-        "candidate pool for this context. This is an autonomous headless run — there is no human "
-        "in this chat, so do not ask questions; invoke the agent and let it file its proposals."
-    )
+    # Thin trigger: name the agent + the job, nothing else. The steps live in the distill agent;
+    # the run contract rides the system layer (background=True).
+    prompt = kernel_speech.distill_trigger()
     # The trail's first entry = what this run was asked to do (these transcripts are disposed,
     # so the trail is the only record).
     capture_prompt(context_id, prompt, run_id=run_id)
@@ -68,22 +65,23 @@ async def _run_headless_distill(ctx, context_id: str, run_id: int) -> None:
             effort=_spine.resolve_agent_effort("distill"),  # its .md effort field (default medium)
             approve=deny_all,                 # distill writes only via DB tools (pre-approved), not files
             extra_mcp_servers=turn_mcp,
+            background=True,                  # per-turn run contract in the system layer (Thread 3 §3)
         ):
             if isinstance(ev, Usage):
                 _spine.bump_run(run_id, add_tokens=ev.total_tokens, ctx_pct=ev.ctx_pct)
             elif isinstance(ev, Result):
                 session_id = ev.session_id    # captured ONLY to dispose the throwaway transcript
-                run_model = ev.model          # the model the SDK resolved for this headless run
+                run_model = ev.model          # the model the SDK resolved for this background run
                 run_usage = ev.usage          # whole-turn usage — typed-column fallback at finish
             elif isinstance(ev, Init):
                 _cache_slash(ctx.id, ev.slash_commands)
-            # Per-run trail for the Activity trace: this headless run's reply text + tool/skill/agent
+            # Per-run trail for the Activity trace: this background run's reply text + tool/skill/agent
             # calls (its throwaway session transcript is disposed, so this is the only record).
             if isinstance(ev, (Status, TextDelta, ToolResult)):
                 capture_event(context_id, ev, run_id=run_id)
             # NB: never _sessions.record — distill is sessionless; its transcript is disposed below.
     except Exception:
-        log.exception("headless distill run failed for %s", context_id)
+        log.exception("background distill run failed for %s", context_id)
         run_status = "aborted"
     finally:
         # The run is LOGGED (the spine run row is kept as durable telemetry + the event below),
@@ -98,10 +96,10 @@ async def _run_headless_distill(ctx, context_id: str, run_id: int) -> None:
                              f"Finished distill ({run_status}) · {filed} proposal(s) filed",
                              scope="dev", actor="daemon",
                              meta={"status": run_status, "proposals_filed": filed})
-        log.info("headless distill: %s for %s (%d proposals filed)", run_status, context_id, filed)
+        log.info("background distill: %s for %s (%d proposals filed)", run_status, context_id, filed)
 
 
-# --- WRITE phase (WI-8 §Phase 3 / 4c) — gate-1 approval → headless per-item authoring -----------
+# --- WRITE phase (WI-8 §Phase 3 / 4c) — gate-1 approval → background per-item authoring -----------
 
 # Forms × scopes that can actually be written today (core is reserved, §4.11.6 #3).
 _WRITE_FORMS = {"constitution", "skill", "agent"}
@@ -160,42 +158,8 @@ def _existing_rules_file(prop: dict, repo_id: str | None, workspace: Path) -> st
     return str(path)
 
 
-def _write_prompt(prop: dict, *, slug: str, workspace: Path, existing_path: str | None) -> str:
-    """The thin trigger for the write run: name the agent + hand it the full proposal plus the
-    tooling it authors with. The authoring + validation steps live in the `forge` agent and its
-    per-form skills; here we just lay out the spec and where the toolkit / scratch space are."""
-    fields = prop.get("fields")
-    answers = prop.get("clarification_answers")
-    parts = [
-        "Use the `forge` sub-agent (superme-dev:forge) to author the final artifact for this approved "
-        "proposal, validate it with the forge_kit, then stage it via `stage_artifact`. This is an "
-        "autonomous headless run — there is no human in this chat, so do not ask questions.",
-        "",
-        f"forge_kit: {FORGE_KIT}   (run: python <forge_kit>/lint.py … and python <forge_kit>/eval.py …)",
-        f"scratch workspace: {workspace}   (draft + run the toolkit here; do not write anywhere else)",
-        f"publish slug: {slug}   (the artifact's on-disk name — frontmatter `name` must match it)",
-        "",
-        f"PROPOSAL #{prop['id']}",
-        f"output_form: {prop['output_form']}",
-        f"target_scope: {prop['target_scope']}",
-        f"title: {prop['title']}",
-    ]
-    if prop.get("summary"):
-        parts.append(f"summary: {prop['summary']}")
-    if prop.get("body"):
-        parts += ["body:", prop["body"]]
-    if fields:
-        parts += ["fields (the spec):", json.dumps(fields, indent=2)]
-    if answers:
-        parts += ["owner's answers to the clarifying questions (binding):",
-                  json.dumps(answers, indent=2)]
-    if existing_path:
-        parts.append(f"existing rules in this scope (for the eval conflict check): {existing_path}")
-    return "\n".join(parts)
-
-
-async def _run_headless_write(ctx, context_id: str, proposal_id: int, run_id: int) -> None:
-    """Drive one headless WRITE pass for a single approved proposal: a dev-mode turn whose only job
+async def _run_background_write(ctx, context_id: str, proposal_id: int, run_id: int) -> None:
+    """Drive one background WRITE pass for a single approved proposal: a dev-mode turn whose only job
     is to invoke the `write` sub-agent, which authors the final artifact and stages it (→ drafted)
     via `stage_artifact`. Per-item isolated — one proposal per run, no context mixing.
 
@@ -221,7 +185,8 @@ async def _run_headless_write(ctx, context_id: str, proposal_id: int, run_id: in
     session_id = None
     run_model = None
     run_usage = None
-    write_prompt = _write_prompt(prop, slug=slug, workspace=workspace, existing_path=existing_path)
+    write_prompt = kernel_speech.write_trigger(prop, slug=slug, workspace=workspace,
+                                               existing_path=existing_path, forge_kit=FORGE_KIT)
     capture_prompt(context_id, write_prompt, run_id=run_id)
     try:
         async for ev in _agent.run_turn(
@@ -233,21 +198,22 @@ async def _run_headless_write(ctx, context_id: str, proposal_id: int, run_id: in
             # auto-allowed for this hermetic, disposable run. stage_artifact stays DB-only (safe).
             approve=learning_write_approve(workspace),
             extra_mcp_servers=turn_mcp,
+            background=True,                  # per-turn run contract in the system layer (Thread 3 §3)
         ):
             if isinstance(ev, Usage):
                 _spine.bump_run(run_id, add_tokens=ev.total_tokens, ctx_pct=ev.ctx_pct)
             elif isinstance(ev, Result):
                 session_id = ev.session_id
-                run_model = ev.model          # the model the SDK resolved for this headless run
+                run_model = ev.model          # the model the SDK resolved for this background run
                 run_usage = ev.usage          # whole-turn usage — typed-column fallback at finish
             elif isinstance(ev, Init):
                 _cache_slash(ctx.id, ev.slash_commands)
-            # Per-run trail for the Activity trace: this headless run's reply text + tool/skill/agent
+            # Per-run trail for the Activity trace: this background run's reply text + tool/skill/agent
             # calls (its throwaway session transcript is disposed, so this is the only record).
             if isinstance(ev, (Status, TextDelta, ToolResult)):
                 capture_event(context_id, ev, run_id=run_id)
     except Exception:
-        log.exception("headless write run failed for proposal %s", proposal_id)
+        log.exception("background write run failed for proposal %s", proposal_id)
         run_status = "aborted"
     finally:
         _spine.finish_run(run_id, status=run_status, model=run_model, usage=run_usage)
@@ -265,7 +231,7 @@ async def _run_headless_write(ctx, context_id: str, proposal_id: int, run_id: in
                              f"{'staged → drafted' if staged else 'not staged (reverted)'}",
                              scope="dev", actor="daemon",
                              meta={"proposal_id": proposal_id, "status": run_status, "staged": staged})
-        log.info("headless write: %s for proposal %s (staged=%s)", run_status, proposal_id, staged)
+        log.info("background write: %s for proposal %s (staged=%s)", run_status, proposal_id, staged)
         shutil.rmtree(workspace, ignore_errors=True)
 
 
@@ -297,7 +263,7 @@ async def run_sweep(ctx, session_id: str, focus: str | None = None) -> dict:
 
       1. read the transcript slice `watermark → head` (content-level idempotency — never re-sweep);
       2. if nothing new, no-op;
-      3. else launch a DISPOSABLE headless run of the `capture` sub-agent over that slice, which
+      3. else launch a DISPOSABLE background run of the `capture` sub-agent over that slice, which
          files candidates via `mcp__dev__file_candidate` (provenance bound here, not by the agent);
       4. advance the watermark to head on a clean pass (an abort leaves it, so the slice re-sweeps).
 
@@ -334,22 +300,9 @@ async def run_sweep(ctx, session_id: str, focus: str | None = None) -> dict:
                          f"Started capture sweep · {len(slice_msgs)} new message(s)",
                          scope="dev", actor="daemon",
                          meta={"session_id": session_id, "messages": len(slice_msgs)})
-    # A `focus` is an explicit steer (debug-only now — supplied solely by the `/dev/sweep` ops hook;
-    # the automatic triggers pass None). When present, treat it as a directive: file it unless it's
-    # genuinely non-operational. Redundancy ("already covered") is decided downstream by distill +
-    # the owner, NOT suppressed here — else an explicit steer silently keeps nothing.
-    focus_line = (f"\n\n**A capture steer was supplied for this sweep — treat it as a directive, not "
-                  f"a hint.** Prioritize it: file it as a candidate unless it is genuinely "
-                  f"non-operational (a pure fact/reference with no effect on how SuperMe behaves). "
-                  f"The steer:\n{focus}\n") if focus else ""
-    prompt = (
-        "Use the `capture` sub-agent (superme-dev:capture) to sweep the conversation slice below "
-        "for durable OPERATIONAL learnings and file each as a candidate. This is an autonomous "
-        "headless run — there is no human in this chat, so do not ask questions; invoke the agent "
-        "and let it file what it finds (filing nothing is a valid result)."
-        f"{focus_line}\n\n--- conversation slice (oldest first) ---\n{_render_slice(slice_msgs)}\n"
-        "--- end slice ---"
-    )
+    # `focus` is the owner's explicit steer (debug-only — the `/dev/sweep` ops hook); the trigger
+    # renders it as a directive (kernel_speech.capture_trigger).
+    prompt = kernel_speech.capture_trigger(_render_slice(slice_msgs), focus)
     capture_prompt(context_id, prompt, run_id=run_id)  # trail head (capped; the slice is trimmed)
     # Bind provenance server-side: the agent supplies substance, we stamp which session it came from.
     turn_mcp = {"dev": make_dev_mcp_server(_dev_store, context_id, learning=True,
@@ -366,16 +319,17 @@ async def run_sweep(ctx, session_id: str, focus: str | None = None) -> dict:
             effort=_spine.resolve_agent_effort("sweep"),  # its .md effort field (default medium)
             approve=deny_all,                 # capture writes only via the file_candidate DB tool
             extra_mcp_servers=turn_mcp,
+            background=True,                  # per-turn run contract in the system layer (Thread 3 §3)
         ):
             if isinstance(ev, Usage):
                 _spine.bump_run(run_id, add_tokens=ev.total_tokens, ctx_pct=ev.ctx_pct)
             elif isinstance(ev, Result):
                 sub_session = ev.session_id   # captured ONLY to dispose the throwaway transcript
-                run_model = ev.model          # the model the SDK resolved for this headless run
+                run_model = ev.model          # the model the SDK resolved for this background run
                 run_usage = ev.usage          # whole-turn usage — typed-column fallback at finish
             elif isinstance(ev, Init):
                 _cache_slash(ctx.id, ev.slash_commands)
-            # Per-run trail for the Activity trace: this headless run's reply text + tool/skill/agent
+            # Per-run trail for the Activity trace: this background run's reply text + tool/skill/agent
             # calls (its throwaway session transcript is disposed, so this is the only record).
             if isinstance(ev, (Status, TextDelta, ToolResult)):
                 capture_event(context_id, ev, run_id=run_id)

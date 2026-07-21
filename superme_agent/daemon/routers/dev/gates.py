@@ -19,6 +19,7 @@ from ...app_state import (
 )
 from ....core import artifacts, gate_briefs, git_layer, status_router
 from ....core.artifacts import artifact_file, _atomic_write
+from ...services import scheduler
 from ....gateway import contexts
 from ...schemas.dev.gates import AbandonResponse, GateBriefResponse
 
@@ -97,9 +98,8 @@ async def dev_work_item_abandon(item_id: str, body: AbandonBody,
     # 1. end live work: free run rows (history kept), retire the session (transcript reclaimed,
     #    trace preserved + labeled). No capture sweep — an abandon writes nothing anywhere.
     runs_freed = spine.release_item_runs(body.context_id, item_id)
-    session_id = item.get("session_id")
-    if session_id:
-        sessions.delete(ctx, session_id, cause="retired")
+    for sid in dev.work_item_session_ids(item):   # ALL role threads (intake/build/vet + legacy)
+        sessions.delete(ctx, sid, cause="retired")
     # 2. worktree dir removed, branch KEPT (D4 terminal cleanup). Never blocks the abandon.
     worktree_removed = None
     if item.get("git_worktree"):
@@ -135,6 +135,16 @@ async def dev_work_item_abandon(item_id: str, body: AbandonBody,
         dev_store.log_event(body.context_id, "item.resume",
                             f"Blocking child {item_id} abandoned — parent resumed",
                             item_id=resume_id, actor="daemon", meta={"child": item_id})
+    # 5b. peers parked on this item (`after:`) — an abandon/supersede is NOT a release. They page
+    #     the owner instead: the thing they were queued behind is never landing.
+    for it in all_items:
+        if it.get("id") == item_id:
+            it["outcome"] = outcome
+    scheduler.release_downstream(dev, dev_root, dev_store, body.context_id, all_items, item_id,
+                                 cause=outcome)
+    # Abandoning a build⟷vet item frees an autopilot slot — pump the queue.
+    from ...services import gates as gate_svc
+    gate_svc.pump_autopilot_slots(body.context_id)
     # 6. the children triage list (D8: a triage moment, nothing automatic).
     blocking, parallel = [], []
     for it in all_items:
@@ -151,6 +161,6 @@ async def dev_work_item_abandon(item_id: str, body: AbandonBody,
                               "blocking_children": blocking})
     log.info("abandoned work-item %s (%s; blocking children: %s)", item_id, outcome, blocking)
     return {"ok": True, "id": item_id, "outcome": outcome,
-            "worktree_removed": worktree_removed, "session_cleared": bool(session_id),
+            "worktree_removed": worktree_removed, "session_cleared": bool(dev.work_item_session_ids(item)),
             "runs_freed": runs_freed, "blocking_children": blocking,
             "parallel_children": parallel}

@@ -32,8 +32,7 @@ proposal doesn't support.
    JSON), and an optional one-line `note`.
 
 You have Bash and Write only to draft into a scratch file and run the toolkit — never write to the
-artifact's real home. Don't stage more than once, don't ask questions (there is no human in this
-run), and don't publish.
+artifact's real home. Don't stage more than once, and don't publish.
 
 ## Your return
 

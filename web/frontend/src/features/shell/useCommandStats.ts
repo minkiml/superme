@@ -32,6 +32,9 @@ export type CommandStats = {
   learn: { candidates: number; pending: number; drafted: number; learned: number }
   hub: OrbitRepo | null // Me / global — the orbit center
   nodes: OrbitRepo[] // connected projects orbiting the hub
+  // Disconnected projects, by former id → label. They have no orbit node, but their runs live on,
+  // so the activity log and the token drill-in can still name them ("Old projects").
+  archived: Record<string, string>
 }
 
 const EMPTY: CommandStats = {
@@ -44,6 +47,7 @@ const EMPTY: CommandStats = {
   learn: { candidates: 0, pending: 0, drafted: 0, learned: 0 },
   hub: null,
   nodes: [],
+  archived: {},
 }
 
 // Composes the command-centre's live numbers from three real sources: token aggregation
@@ -99,6 +103,7 @@ export function useCommandStats(pollMs = 5000): CommandStats {
           },
           hub,
           nodes,
+          archived: Object.fromEntries((tokens.archived?.repos ?? []).map((r) => [r.id, r.label])),
         })
       } catch {
         /* daemon down — keep whatever we have (placeholders) */

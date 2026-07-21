@@ -14,11 +14,12 @@ from pydantic import BaseModel
 from ..app_state import SystemSpine, get_spine, dev as _dev
 from ..deps import dev_root
 from ..schemas.system import (
-    SystemResponse, RepoOverview, RepoConnectResponse, RunsResponse, RunTraceResponse,
+    SystemResponse, RepoOverview, RepoConnectResponse, RepoDisconnectResponse,
+    RunsResponse, RunTraceResponse,
     SystemModelResponse, LearningResponse, RepoModelResponse, RepoLearningResponse,
-    RepoMetaResponse, TokenUsageResponse, TokenTimeseriesResponse, SweepConfigBody, SweepConfigResponse,
-    CompactionConfigBody, CompactionConfigResponse,
-    SystemEffortResponse, RepoEffortResponse, AgentModelsResponse,
+    RepoMetaResponse, RepoAutopilotResponse, TokenUsageResponse, TokenTimeseriesResponse, SweepConfigBody, SweepConfigResponse,
+    CompactionConfigBody, CompactionConfigResponse, DeputyConfigResponse,
+    SystemEffortResponse, RepoEffortResponse, AgentModelsResponse, RepoAttention,
 )
 from ...core.models import AGENT_MODEL_FEATURES
 from ...core.spine import MODES, RepoConfig
@@ -50,6 +51,13 @@ class RepoEffortBody(BaseModel):
 
 class LearningBody(BaseModel):
     enabled: bool
+
+
+class DeputyConfigBody(BaseModel):
+    # Either/both may be sent (partial update). enabled = deputy on/off; strictness = a PARTIAL
+    # per-gate map {gate: level} — send only the gates that changed (e.g. {"review": "high"}).
+    enabled: bool | None = None
+    strictness: dict[str, str] | None = None  # {triage|plan|review: low·medium·high·extra}
 
 
 class AgentModelBody(BaseModel):
@@ -95,7 +103,8 @@ def _active_item_count(repo_id: str) -> int:
     except Exception:
         return 0
     return sum(1 for it in data.get("work_items", [])
-               if it.get("status") in ("active", "awaiting_child", "awaiting_human")
+               if it.get("status") in ("active", "awaiting_child", "awaiting_upstream",
+                                      "awaiting_slot", "awaiting_human")
                and not it.get("done_at"))
 
 
@@ -154,6 +163,72 @@ async def connect_repo(body: RepoConnectBody, spine: SystemSpine = Depends(get_s
     return {"id": rid, "label": label, "cwd": str(p), "onboarding": onboarding}
 
 
+@router.delete("/repos/{repo_id}", response_model=RepoDisconnectResponse)
+async def disconnect_repo(repo_id: str, confirm: str = "",
+                          spine: SystemSpine = Depends(get_spine)) -> dict:
+    """Disconnect a domain — forget the project from SuperMe entirely. IRREVERSIBLE: deletes the
+    registration (repos.yaml entry + kv overrides), the knowledge home, the per-repo harness cell,
+    the pipeline state (inbox + learning rows) and every session (row + transcript). The project
+    FOLDER itself is never touched; reconnecting later is simply a fresh connect (retrofit).
+    Preserved per never-delete-logs: run/run_event/run_artifact + dev-activity events — each
+    deleted session's runs are stamped session_fate='disconnected'. Guards: `?confirm=<repo id>`
+    must match (the UI's typed confirmation), the hub is refused, and live runs block with 409."""
+    import shutil
+
+    rc = spine.repo(repo_id)
+    if rc is None:
+        raise HTTPException(status_code=404, detail="unknown repo")
+    if repo_id == "global":
+        raise HTTPException(status_code=400, detail="the hub cannot be disconnected")
+    if confirm != repo_id:
+        raise HTTPException(status_code=400, detail="confirmation mismatch: pass ?confirm=<repo id>")
+    running = spine.running_run_count(repo_id)
+    if running:
+        raise HTTPException(status_code=409,
+                            detail=f"{running} run(s) still executing — stop them first")
+
+    from ...core.git_layer import worktrees_root
+    from ...gateway import contexts
+    from ..app_state import sessions as session_store, dev_store
+
+    # 1 · sessions — hard-delete each (row + transcript) through the one deletion path; the
+    # context must be resolved BEFORE the registration is removed (transcript lookup needs cwd).
+    ctx = contexts.resolve(repo_id, mode="dev")
+    rows = spine.sessions_for_repo(repo_id)
+    for s in rows:
+        session_store.delete(ctx, s["id"], cause="disconnected")
+
+    # 2 · pipeline state (inbox + learning candidates/proposals); dev events preserved.
+    pipeline_rows = dev_store.purge_context(repo_id)
+
+    # 3 · the on-disk homes SuperMe owns. The project folder (rc.cwd) is deliberately untouched —
+    # only best-effort `git worktree prune` tidies its .git metadata after the worktrees go.
+    wt = worktrees_root(repo_id)
+    worktrees_removed = wt.is_dir()
+    shutil.rmtree(wt, ignore_errors=True)
+    if worktrees_removed:
+        try:
+            import subprocess
+            subprocess.run(["git", "worktree", "prune"], cwd=str(rc.cwd),
+                           capture_output=True, text=True, timeout=15)
+        except OSError as e:
+            log.warning("worktree prune skipped for %s: %s", repo_id, e)
+    kb = rc._knowledge_base()
+    knowledge_removed = kb.is_dir()
+    shutil.rmtree(kb, ignore_errors=True)
+    cell = Path(rc.operational_home("dev")).parent  # local-harness/<id>/ (both scopes)
+    harness_removed = cell.is_dir()
+    shutil.rmtree(cell, ignore_errors=True)
+
+    # 4 · forget the registration last, so a mid-cascade failure leaves the repo visible (retry-able).
+    spine.remove_repo(repo_id)
+    log.info("disconnected repo '%s' (%s): %d session(s), %d pipeline row(s)",
+             repo_id, rc.label, len(rows), pipeline_rows)
+    return {"id": repo_id, "label": rc.label, "sessions_deleted": len(rows),
+            "pipeline_rows_deleted": pipeline_rows, "knowledge_removed": knowledge_removed,
+            "harness_removed": harness_removed, "worktrees_removed": worktrees_removed}
+
+
 @router.get("/repos", response_model=list[RepoOverview])
 async def repos_overview(spine: SystemSpine = Depends(get_spine)) -> list[dict]:
     """Every repo × scope: static meta + computed live status (active/idle, last activity,
@@ -169,7 +244,7 @@ async def repos_overview(spine: SystemSpine = Depends(get_spine)) -> list[dict]:
             st = spine.repo_status(rc.id, scope)
             lar = spine.live_agent_runs(rc.id, scope)
             active_items = dev_active_items if scope == "dev" else 0
-            # A headless learning run (forge/distill/sweep) IS a live Claude session while it runs, so
+            # A background learning run (forge/distill/sweep) IS a live Claude session while it runs, so
             # count it in `sessions` too — but it's disposable (sessionless, transcript discarded on
             # finish), so it leaves NO row to clean: the moment it finishes it drops out of
             # learn_running and the count self-corrects. So sessions never goes stale.
@@ -189,10 +264,21 @@ async def repos_overview(spine: SystemSpine = Depends(get_spine)) -> list[dict]:
             "model_override": spine.get_model_override(rc.id),
             "effort_override": spine.get_effort_override(rc.id),
             "learning_enabled": spine.get_repo_learning(rc.id),
+            "autopilot_concurrency": spine.get_autopilot_concurrency(rc.id),
             "tag_color": meta["color"], "icon": meta["icon"],
             "scopes": scopes,
         })
     return out
+
+
+@router.get("/system/attention", response_model=list[RepoAttention])
+async def system_attention() -> list[dict]:
+    """The top-of-SuperMe attention feed (Pass 2 · Q2): every `awaiting_human` hold across ALL
+    connected repos, grouped by repo and classified (escalation · breaker · paged · review · gate)
+    so the notification center can badge a count and offer the right quick actions. Only repos with
+    a hold appear; empty feed = nothing needs the owner."""
+    from ..services import attention
+    return attention.system_attention()
 
 
 @router.get("/runs", response_model=RunsResponse)
@@ -213,7 +299,7 @@ async def runs_overview(context_id: str | None = None, limit: int = 50,
 async def run_trace(run_id: int, spine: SystemSpine = Depends(get_spine)) -> dict:
     """One run's event trail — the prompt that opened it, the assistant's reply text, and each
     tool/skill/agent call, in order. Per-RUN (not per-session), so each Activity row has its own
-    thread; works for headless runs too. Empty list when nothing was recorded."""
+    thread; works for background runs too. Empty list when nothing was recorded."""
     return {"run_id": run_id, "events": spine.events_for_run(run_id)}
 
 
@@ -276,6 +362,26 @@ async def set_system_learning(body: LearningBody, spine: SystemSpine = Depends(g
     spine.set_learning_enabled(body.enabled)
     log.info("auto-learning %s", "ENABLED" if body.enabled else "disabled")
     return {"ok": True, "learning_enabled": spine.get_learning_enabled()}
+
+
+@router.post("/system/deputy", response_model=DeputyConfigResponse)
+async def set_system_deputy(body: DeputyConfigBody, spine: SystemSpine = Depends(get_spine)) -> dict:
+    """The global deputy dial (Quick config): whether a deputy judges autopilot gates and how
+    readily it escalates PER GATE (triage/plan/review, each low·medium·high·extra). Partial —
+    omitted fields stay put; strictness sets only the gates it names. Rejects an unknown gate or
+    level (422) rather than silently defaulting."""
+    if body.enabled is not None:
+        spine.set_deputy_enabled(body.enabled)
+    if body.strictness is not None:
+        try:
+            for gate, level in body.strictness.items():
+                spine.set_deputy_strictness(gate, level)
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=str(e))
+    log.info("deputy: enabled=%s strictness=%s", spine.get_deputy_enabled(),
+             spine.deputy_strictness_map())
+    return {"ok": True, "deputy_enabled": spine.get_deputy_enabled(),
+            "deputy_strictness": spine.deputy_strictness_map()}
 
 
 @router.post("/system/sweep", response_model=SweepConfigResponse)
@@ -352,6 +458,21 @@ async def set_repo_learning(repo_id: str, body: LearningBody, spine: SystemSpine
         raise HTTPException(status_code=404, detail=f"unknown repo '{repo_id}'")
     spine.set_repo_learning(repo_id, body.enabled)
     return {"ok": True, "repo_id": repo_id, "learning_enabled": spine.get_repo_learning(repo_id)}
+
+
+class AutopilotConcurrencyBody(BaseModel):
+    concurrency: int
+
+
+@router.post("/repos/{repo_id}/autopilot", response_model=RepoAutopilotResponse)
+async def set_repo_autopilot(repo_id: str, body: AutopilotConcurrencyBody,
+                             spine: SystemSpine = Depends(get_spine)) -> dict:
+    """Set this repo's autopilot concurrency cap — the max autopilot items in the build⟷vet loop at
+    once (the slice-3 launch breaker). Per-project by owner decision; floored at 1."""
+    if repo_id not in spine.repos():
+        raise HTTPException(status_code=404, detail=f"unknown repo '{repo_id}'")
+    n = spine.set_autopilot_concurrency(repo_id, body.concurrency)
+    return {"ok": True, "repo_id": repo_id, "autopilot_concurrency": n}
 
 
 @router.post("/repos/{repo_id}/meta", response_model=RepoMetaResponse)

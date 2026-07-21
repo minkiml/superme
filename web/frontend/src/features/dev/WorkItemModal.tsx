@@ -2,23 +2,22 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   X, ArrowRight, Sparkles, Trash2, Check, Loader2, FileText, ListChecks, ScrollText, History,
   Terminal, Archive, Scale, GitBranch, Milestone, FlaskConical, BookOpenText, Ban, RefreshCw,
-  GitMerge, Undo2,
+  GitMerge, Undo2, ShieldCheck, AlertTriangle, MessageSquare, CornerUpLeft, Lock, Plane,
 } from 'lucide-react'
 import Markdown from '@/ui/Markdown'
-import Dropdown from '@/ui/Dropdown'
 import Modal from '@/ui/Modal'
 import SectionHeader from '@/ui/SectionHeader'
 import { TraceRows } from './ExecutionTrace'
 import { pairTrace } from '@/lib/trace'
 import {
-  getWorkItemDetail, getWorkItemArtifacts, advanceWorkItem, completeWorkItem, setWorkItemModel,
-  setWorkItemEffort, getDevLog, getWorkItemGateBrief, getWorkItemGit, syncWorkItemGit,
-  mergeWorkItemGit, revertWorkItemGit, abandonWorkItem, markWorkItemSeen,
+  getWorkItemDetail, getWorkItemArtifacts, advanceWorkItem, completeWorkItem,
+  getDevLog, getWorkItemGateBrief, getWorkItemGit, syncWorkItemGit,
+  revertWorkItemGit, abandonWorkItem, markWorkItemSeen, vetWorkItem, continueWorkItem, authorizeWorkItem,
   type WorkItem, type WorkItemDetail, type DevEvent, type RunArtifact, type GateBrief,
   type GitHealth,
 } from '@/lib/api'
 import { fmtModel, fmtTokens, fmtLocal, toModelKey } from '@/lib/format'
-import { StatusBadge, isPlannable, RUN_MODELS, DEFAULT_RUN_MODEL, RUN_EFFORTS, DEFAULT_RUN_EFFORT } from './panels'
+import { StatusBadge, isPlannable, DEFAULT_RUN_MODEL, DEFAULT_RUN_EFFORT } from './panels'
 import { PHASE_LABEL, GATED_PHASES } from './common'
 
 // The work-item drilldown (S7 v1) — "tell me about this one". Header (overview + meta + progress)
@@ -29,19 +28,19 @@ import { PHASE_LABEL, GATED_PHASES } from './common'
 
 // Per-kind pipeline (mirrors the backend KIND_PROFILES).
 const PIPELINES: Record<string, string[]> = {
-  implementation: ['triage', 'plan', 'build', 'validate', 'deliver', 'close'],
+  implementation: ['triage', 'plan', 'build', 'vet', 'review', 'close'],
   research: ['triage', 'plan', 'investigate', 'report', 'close'],
 }
 
 // P0-curated sub-tabs per phase — the most useful reads for that stage, nothing else. `trace`
 // (the raw call-trail) is appended to every phase: one click deeper, never leading.
-type SubTab = 'gate' | 'item' | 'plan' | 'validation' | 'findings' | 'closeout' | 'checkpoints' | 'git' | 'trace'
+type SubTab = 'gate' | 'item' | 'plan' | 'validation' | 'findings' | 'closeout' | 'checkpoints' | 'git' | 'trace' | 'deputy'
 const PHASE_TABS: Record<string, SubTab[]> = {
   triage: ['gate', 'item'],
   plan: ['gate', 'plan'],
   build: ['plan', 'checkpoints', 'git'],
-  validate: ['validation', 'checkpoints', 'git'],
-  deliver: ['gate', 'git', 'checkpoints'],
+  vet: ['validation', 'checkpoints', 'git'],
+  review: ['gate', 'git', 'checkpoints'],
   investigate: ['plan', 'checkpoints'],
   report: ['findings'],
   close: ['gate', 'closeout'],
@@ -56,7 +55,13 @@ const SUB_META: Record<SubTab, { label: string; icon: typeof FileText }> = {
   checkpoints: { label: 'Checkpoints', icon: Milestone },
   git: { label: 'Git', icon: GitBranch },
   trace: { label: 'Trace', icon: Terminal },
+  deputy: { label: 'Deputy', icon: ShieldCheck },
 }
+
+// Why the item is parked for the owner when it isn't a plain gate wait (a deputy escalation, a
+// build⟷vet halt, a blocked run). Lands on the gate-brief payload as `paged`; the modal leads with
+// it so "what's going on / what do I decide" is answered on arrival. (Typed here until gen:api.)
+type PagedData = { source: string; gate: string | null; headline: string; detail: string; next: string | null }
 
 export default function WorkItemModal({
   it, contextId, onClose, onPlan, onDelete, onChanged,
@@ -64,7 +69,7 @@ export default function WorkItemModal({
   it: WorkItem
   contextId: string
   onClose: () => void
-  onPlan: (it: WorkItem, model?: string, effort?: string) => void // fire a headless plan run (queued items)
+  onPlan: (it: WorkItem, model?: string, effort?: string) => void // fire a background plan run (queued items)
   onDelete: (it: WorkItem) => void // hard-delete (caller confirms)
   onChanged: () => void // reload the board after an advance
 }) {
@@ -77,8 +82,8 @@ export default function WorkItemModal({
   const [advancing, setAdvancing] = useState(false)
   const [abandoning, setAbandoning] = useState(false) // inline abandon confirm row
   const [abandonReason, setAbandonReason] = useState('')
-  const [model, setModel] = useState(toModelKey(it.model) || DEFAULT_RUN_MODEL)
-  const [effort, setEffort] = useState(it.effort ?? DEFAULT_RUN_EFFORT)
+  const [model] = useState(toModelKey(it.model) || DEFAULT_RUN_MODEL)
+  const [effort] = useState(it.effort ?? DEFAULT_RUN_EFFORT)
 
   const pipeline = PIPELINES[it.kind ?? 'implementation'] ?? PIPELINES.implementation
   const phase = it.phase ?? 'triage'
@@ -96,6 +101,11 @@ export default function WorkItemModal({
   const [phaseView, setPhaseView] = useState<string>(phase)
   useEffect(() => setPhaseView(phase), [phase])
   const viewingLive = phaseView === phase
+  // The brief carries `paged` when the item is parked for a nameable reason (not a plain gate wait).
+  const briefPaged = (brief as (GateBrief & { paged?: PagedData | null }) | null)?.paged ?? null
+  // BV-A2: deferred contract changes awaiting the owner's grant/deny at the review gate.
+  const auths = (brief as (GateBrief & { authorizations?: AuthRow[] }) | null)?.authorizations ?? []
+  const [authBusy, setAuthBusy] = useState<string | null>(null)
   const subTabs = PHASE_TABS[phaseView] ?? ['gate']
   const [sub, setSub] = useState<SubTab>(subTabs[0])
   useEffect(() => setSub((PHASE_TABS[phaseView] ?? ['gate'])[0]), [phaseView])
@@ -145,24 +155,8 @@ export default function WorkItemModal({
     onPlan(it, model, effort)
     onClose()
   }
-  async function changeModel(m: string) {
-    setModel(m)
-    try {
-      await setWorkItemModel(it.id, m, contextId)
-      onChanged()
-    } catch (e) {
-      setErr(`Couldn't set model — ${e}`)
-    }
-  }
-  async function changeEffort(e: string) {
-    setEffort(e)
-    try {
-      await setWorkItemEffort(it.id, e, contextId)
-      onChanged()
-    } catch (err) {
-      setErr(`Couldn't set effort — ${err}`)
-    }
-  }
+  // F3: model/effort are locked at push — no per-item reconfiguration here. `model`/`effort` state
+  // just mirrors the item's locked config for the Plan-it run and the read-only chip.
   async function advance() {
     setAdvancing(true)
     try {
@@ -172,6 +166,49 @@ export default function WorkItemModal({
     } catch (e) {
       setErr(`Couldn't advance — ${e}`)
       setAdvancing(false)
+    }
+  }
+  // "Run vet" — launch the build⟷vet loop (build-vet-loop §5). One click; from here the daemon
+  // driver self-drives (vet → build cycles → re-vet) until the review gate or a breaker pages.
+  async function vet() {
+    setAdvancing(true)
+    try {
+      await vetWorkItem(it.id, contextId)
+      onChanged()
+      onClose()
+    } catch (e) {
+      setErr(`Couldn't start the vet loop — ${e}`)
+      setAdvancing(false)
+    }
+  }
+  // "Continue" — the owner's resume of a build parked at a human gate (BV-A1). RE-enters the
+  // build⟷vet loop: the build thread finalizes (records any wall as an assumption), then the
+  // gap rides to review. This is what makes the paused-build banner's promise true — a chat reply
+  // alone runs a bare turn that does not advance the loop.
+  async function resumeBuild() {
+    setAdvancing(true)
+    try {
+      await continueWorkItem(it.id, contextId)
+      onChanged()
+      onClose()
+    } catch (e) {
+      setErr(`Couldn't continue — ${e}`)
+      setAdvancing(false)
+    }
+  }
+  // BV-A2: the owner's grant/deny on a deferred contract change. A grant routes the item back into
+  // build to perform it (grant-as-send_back → re-vet → review); a deny waives the deferred check so
+  // it can close with the gap on record. Either way the item leaves this review rest, so close +
+  // refresh. The owner grants unconditionally — the delegated floor binds only the deputy.
+  async function decideAuth(authId: string, decision: 'granted' | 'denied') {
+    setAuthBusy(authId)
+    try {
+      await authorizeWorkItem(it.id, authId, decision, contextId)
+      onChanged()
+      onClose()
+    } catch (e) {
+      setErr(`Couldn't ${decision === 'granted' ? 'grant' : 'deny'} — ${e}`)
+      setAuthBusy(null)
     }
   }
   async function complete() {
@@ -216,6 +253,12 @@ export default function WorkItemModal({
               </span>
               {it.deliverable && (
                 <span className="rounded-full bg-hover px-2 py-0.5 font-mono text-[10px] text-faint">{it.deliverable}</span>
+              )}
+              {it.autopilot && (
+                <span className="flex items-center gap-1 rounded-full bg-accent/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-accent-text"
+                      title="This item drives its own gates without a click — the deputy judges each gate on your behalf.">
+                  <Plane size={10} /> Autopilot
+                </span>
               )}
             </div>
             <h2 className="mt-1 text-[15px] font-semibold leading-snug text-fg">{it.title || it.id}</h2>
@@ -265,9 +308,32 @@ export default function WorkItemModal({
         </div>
       </div>
 
+      {/* Paused banner (fixes "zero idea what to do"): when the item rests awaiting_human for a
+          REASON — a deputy escalation, a build⟷vet halt, a blocked run — lead with why + what to
+          decide, ABOVE the sub-tabs so it's seen whatever tab you land on. Live phase only. */}
+      {viewingLive && briefPaged && (
+        <PagedBanner
+          p={briefPaged}
+          canContinue={phase === 'build'}
+          busy={advancing}
+          onContinue={resumeBuild}
+        />
+      )}
+
+      {/* BV-A2: deferred contract changes awaiting the owner's grant/deny at the review gate.
+          A grant sends the item back to build to perform the change (then re-vets); a deny waives
+          the check so it can close with the gap on record. Leads above the sub-tabs like the pause. */}
+      {viewingLive && phase === 'review' && auths.length > 0 && (
+        <AuthorizationsBanner auths={auths} busy={authBusy} onDecide={decideAuth} />
+      )}
+
       {/* Sub-tabs — P0-curated for the selected stage; the gate brief leads where one exists. */}
       <div className="flex shrink-0 gap-1 border-b border-line px-4">
-        {[...subTabs, 'trace' as SubTab].map((id) => {
+        {[...subTabs,
+          // The Deputy log appears only once the deputy has acted on this item — its governance
+          // moves (approve / send-back / escalate) + rationale live HERE, out of the chat (Q1-E).
+          ...(events.some((e) => String(e.kind).startsWith('deputy')) ? ['deputy' as SubTab] : []),
+          'trace' as SubTab].map((id) => {
           const { label, icon: Icon } = SUB_META[id]
           return (
             <button
@@ -337,22 +403,11 @@ export default function WorkItemModal({
         ))}
         {sub === 'checkpoints' && (!detail ? <Loading /> : <CheckpointsPane stubs={detail.checkpoints ?? []} />)}
         {sub === 'git' && <GitPane it={it} contextId={contextId} onChanged={onChanged} />}
+        {sub === 'deputy' && <DeputyLogPane events={events} />}
         {sub === 'trace' && (
           <>
             <TracePane artifacts={artifacts} archived={detail?.execution ?? null} />
-            {events.length > 0 && (
-              <Section icon={History} title="History">
-                <ol className="space-y-1">
-                  {events.map((e) => (
-                    <li key={e.id} className="flex items-baseline gap-2 text-xs">
-                      <span className="font-mono text-[10px] text-faint">{fmtLocal(e.created_at)}</span>
-                      <span className="rounded bg-hover px-1.5 py-0.5 font-mono text-[10px] text-muted">{e.kind}</span>
-                      <span className="min-w-0 flex-1 truncate text-muted">{e.summary}</span>
-                    </li>
-                  ))}
-                </ol>
-              </Section>
-            )}
+            {events.length > 0 && <TimelinePane events={events} />}
           </>
         )}
       </div>
@@ -387,12 +442,17 @@ export default function WorkItemModal({
           </span>
         ) : (
           <>
-            <Dropdown value={model} options={RUN_MODELS} onChange={changeModel} title="Model this item's runs use (plan + chat)" />
-            <Dropdown value={effort} options={RUN_EFFORTS} onChange={changeEffort} title="Reasoning effort this item's runs use (plan + chat)" />
+            <span
+              title="Run config was locked in at capture (chosen on the inbox item, fixed at push) — F3"
+              className="inline-flex items-center gap-1.5 rounded-md border border-line bg-surface px-2 py-1 text-[11px] text-muted"
+            >
+              <Lock size={11} className="opacity-70" />
+              {fmtModel(model)} · {effort}
+            </span>
             {queued ? (
               <button
                 onClick={plan}
-                title="Plan it — a headless agent drafts the plan with the selected model"
+                title="Plan it — a background run drafts the plan with the selected model"
                 className="inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-on-accent transition hover:opacity-90"
               >
                 <Sparkles size={14} /> Plan it
@@ -411,15 +471,28 @@ export default function WorkItemModal({
                 {advancing ? <Loader2 size={14} className="animate-spin" /> : <Archive size={14} />}
                 Complete &amp; archive
               </button>
+            ) : phase === 'vet' ? (
+              <button
+                onClick={vet}
+                disabled={advancing}
+                title="Run vet — launches the build⟷vet loop: a fresh agent runs the plan's vet checks; failures hand back to the build session until green or a breaker stops it"
+                className="inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-on-accent transition hover:opacity-90 disabled:opacity-50"
+              >
+                {advancing ? <Loader2 size={14} className="animate-spin" /> : <FlaskConical size={14} />}
+                Run vet
+              </button>
             ) : nextPhase && atGate ? (
               <button
                 onClick={advance}
                 disabled={advancing}
-                title={`Approve — advances to ${PHASE_LABEL[nextPhase] ?? nextPhase}`}
+                title={phase === 'review'
+                  ? 'Approve & merge — the review decision IS the merge: lands the branch on main (applies the staged knowledge delta, backup ref first), then advances to close. On conflicts it holds here so you can sync + resolve, then approve again.'
+                  : `Approve — advances to ${PHASE_LABEL[nextPhase] ?? nextPhase}`}
                 className="inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-on-accent transition hover:opacity-90 disabled:opacity-50"
               >
-                {advancing ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-                Approve
+                {advancing ? <Loader2 size={14} className="animate-spin" />
+                  : phase === 'review' ? <GitMerge size={14} /> : <Check size={14} />}
+                {phase === 'review' ? 'Approve & merge' : 'Approve'}
               </button>
             ) : null}
             <span className="ml-auto flex items-center gap-1">
@@ -476,6 +549,124 @@ export default function WorkItemModal({
   )
 }
 
+// The paused banner — the FIRST thing the owner sees when they open a parked item that stopped for a
+// reason (deputy escalation / build⟷vet halt / blocked run). It answers "why am I here, what do I
+// decide" without the owner hunting a sub-tab; the runbook detail + the reporter's own next step lead.
+// BV-A2: a deferred contract change awaiting the owner's grant/deny at review.
+type AuthRow = { id: string; what: string; why: string; doc: string; scope: string; delegable: boolean }
+
+function AuthorizationsBanner({ auths, busy, onDecide }: {
+  auths: AuthRow[]
+  busy: string | null
+  onDecide: (id: string, decision: 'granted' | 'denied') => void
+}) {
+  return (
+    <div className="mx-4 mt-3 rounded-lg border border-accent/40 bg-accent/10 px-3.5 py-3">
+      <div className="flex items-start gap-2.5">
+        <ShieldCheck size={16} className="mt-0.5 shrink-0 text-accent-text" />
+        <div className="min-w-0 flex-1">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-accent-text">
+            Authorization {auths.length > 1 ? `requests (${auths.length})` : 'request'} — your call
+          </span>
+          <p className="mt-1 text-xs leading-snug text-muted">
+            The build deferred {auths.length > 1 ? 'these contract changes' : 'this contract change'} rather than self-authorizing.
+            Grant to have it performed + re-vetted; deny to close with the gap on record.
+          </p>
+          <div className="mt-2.5 space-y-2.5">
+            {auths.map((a) => {
+              const b = busy === a.id
+              return (
+                <div key={a.id} className="rounded-md border border-line bg-sunken px-2.5 py-2">
+                  <p className="text-sm font-medium leading-snug text-fg">{a.what}</p>
+                  <p className="mt-0.5 text-xs leading-snug text-muted">{a.why}</p>
+                  <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-faint">
+                    {a.doc && <span>doc: <code className="text-muted">{a.doc}</code></span>}
+                    <span>scope: <code className="text-muted">{a.scope}</code></span>
+                    <span className={a.delegable ? 'text-muted' : 'font-medium text-warn'}>
+                      {a.delegable ? 'sync-to-reality' : 'owner-reserved — escalated to you'}
+                    </span>
+                  </div>
+                  <div className="mt-2 flex items-center gap-2">
+                    <button
+                      onClick={() => onDecide(a.id, 'granted')}
+                      disabled={!!busy}
+                      className="inline-flex items-center gap-1.5 rounded-md bg-accent px-2.5 py-1 text-xs font-semibold text-on-accent transition hover:opacity-90 disabled:opacity-50"
+                    >
+                      {b ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />} Grant
+                    </button>
+                    <button
+                      onClick={() => onDecide(a.id, 'denied')}
+                      disabled={!!busy}
+                      className="inline-flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1 text-xs text-muted transition hover:text-danger disabled:opacity-50"
+                    >
+                      <Ban size={13} /> Deny
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function PagedBanner({ p, canContinue, busy, onContinue }: {
+  p: PagedData
+  canContinue: boolean
+  busy: boolean
+  onContinue: () => void
+}) {
+  const deputy = p.source === 'deputy'
+  const Icon = deputy ? ShieldCheck : AlertTriangle
+  return (
+    <div className="mx-4 mt-3 rounded-lg border border-warn/40 bg-warn/10 px-3.5 py-3">
+      <div className="flex items-start gap-2.5">
+        <Icon size={16} className="mt-0.5 shrink-0 text-warn" />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-warn">
+              {deputy ? `Deputy escalated${p.gate ? ` · ${p.gate}` : ''}` : 'Paused — needs your call'}
+            </span>
+          </div>
+          <p className="mt-1 text-sm font-medium leading-snug text-fg">{p.headline}</p>
+          {p.detail && (
+            <div className="mt-1.5 whitespace-pre-wrap text-xs leading-relaxed text-muted">{p.detail}</div>
+          )}
+          {p.next && (
+            <p className="mt-2 text-xs leading-snug text-fg">
+              <span className="font-semibold text-warn">What to decide: </span>{p.next}
+            </p>
+          )}
+          {canContinue ? (
+            // BV-A1: a parked build re-enters the loop on Continue — it finalizes, records any wall
+            // as an assumption, and the gap rides to review. This makes the resume real (a bare chat
+            // reply does not advance the loop).
+            <div className="mt-2.5 flex items-center gap-2">
+              <button
+                onClick={onContinue}
+                disabled={busy}
+                className="inline-flex items-center gap-1.5 rounded-md bg-warn px-2.5 py-1 text-xs font-semibold text-white transition hover:brightness-110 disabled:opacity-50"
+              >
+                {busy ? <Loader2 size={13} className="animate-spin" /> : <ArrowRight size={13} />}
+                Continue — carry the gap to review
+              </button>
+              <span className="text-[11px] italic leading-snug text-faint">
+                or reply in chat to steer the build first.
+              </span>
+            </div>
+          ) : (
+            <p className="mt-2 text-[11px] italic leading-snug text-faint">
+              Reply in this item's chat with your decision, or use the buttons below.
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // The kernel-assembled gate brief (S6): continuity → delta → narrative → the uniform decision
 // block. The gate is answerable from this render alone — that's the contract.
 // The brief is fetched by the PARENT and passed in, not fetched here: this pane unmounts whenever
@@ -484,14 +675,22 @@ export default function WorkItemModal({
 function GateBriefPane({ brief, err }: { brief: GateBrief | null; err: string | null }) {
   if (err) return <div className="text-sm text-danger">Couldn’t load the gate brief — {err}</div>
   if (!brief) return <Loading />
+  const n = brief.numbers
+  const nums: [string, string][] = [
+    ['tasks', `${n.tasks_done}/${n.tasks_total}`],
+    ['checks', `${n.checks_pass}/${n.checks_total}`],
+    ['cycle', String(n.cycle)],
+  ]
   return (
-    <div>
-      <div className="mb-2 flex items-center gap-2">
+    <div className="space-y-3">
+      {/* Verdict line: gate state + recommendation + check glyphs — the 3-second read. */}
+      <div className="flex flex-wrap items-center gap-2">
         <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-          brief.at_gate ? 'bg-warn/15 text-warn' : 'bg-hover text-faint'
+          brief.terminal ? 'bg-success/15 text-success' : brief.at_gate ? 'bg-warn/15 text-warn' : 'bg-hover text-faint'
         }`}>
-          {brief.gate}{brief.at_gate ? ' — decision pending' : ' — preview'}
+          {brief.terminal ? 'terminal — nothing to decide' : `${brief.gate}${brief.at_gate ? ' — decision pending' : ' — preview'}`}
         </span>
+        {!brief.terminal && <span className="text-sm font-medium text-fg">{brief.decision.recommendation}</span>}
         <span className="flex items-center gap-1 text-[11px] text-faint">
           {brief.checks.map((c) => (
             <span key={c.criterion} title={`${c.criterion}: ${c.detail}`} className={c.ok ? 'text-success' : 'text-danger'}>
@@ -499,9 +698,198 @@ function GateBriefPane({ brief, err }: { brief: GateBrief | null; err: string | 
             </span>
           ))}
         </span>
+        <span className="ml-auto flex items-center gap-3 font-mono text-[11px] tabular-nums text-muted">
+          {nums.map(([l, v]) => (
+            <span key={l}><span className="text-faint">{l}</span> {v}</span>
+          ))}
+        </span>
       </div>
-      <Markdown text={brief.brief} variant="doc" tone="dev" />
+
+      {/* Fact rows — present facts only, label:value, tone-tinted. */}
+      {(brief.facts.length > 0 || brief.flags.length > 0) && (
+        <div className="flex flex-wrap gap-1.5">
+          {brief.facts.map((f) => (
+            <span key={f.label} className={`rounded-md border px-2 py-0.5 text-[11px] ${
+              f.tone === 'warn' ? 'border-warn/40 bg-warn/10 text-warn' : 'border-line bg-sunken text-muted'
+            }`}>
+              <span className="uppercase tracking-wide text-[9.5px] text-faint">{f.label}</span>{' '}{f.value}
+            </span>
+          ))}
+          {brief.flags.map((f) => (
+            <span key={f} className="rounded-md border border-warn/40 bg-warn/10 px-2 py-0.5 text-[11px] text-warn">⚠ {f}</span>
+          ))}
+        </div>
+      )}
+
+      {/* Loop instruments — the checks×cycles convergence matrix (build⟷vet stretch + review). */}
+      {brief.loop.cycles.length > 0 && brief.loop.checks.length > 0 && (
+        <div className="rounded-md border border-line bg-sunken px-3 py-2">
+          <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-faint">
+            Convergence — checks × vet cycles
+          </div>
+          <table className="font-mono text-[11px] tabular-nums">
+            <thead>
+              <tr>
+                <th className="pr-3 text-left font-normal text-faint">check</th>
+                {brief.loop.cycles.map((c) => (
+                  <th key={c.cycle} className="px-1.5 text-center font-normal text-faint">c{c.cycle}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {brief.loop.checks.map((id) => (
+                <tr key={id}>
+                  <td className="pr-3 text-muted">{id}</td>
+                  {brief.loop.cycles.map((c) => {
+                    const v = c.verdicts[id]
+                    return (
+                      <td key={c.cycle} className={`px-1.5 text-center ${
+                        v === undefined ? 'text-line' : v ? 'text-success' : 'text-danger'
+                      }`}>
+                        {v === undefined ? '−' : v ? '●' : '✕'}
+                      </td>
+                    )
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {brief.loop.findings && (
+            <div className="mt-2 border-t border-line pt-2">
+              <div className="mb-1 text-[10px] uppercase tracking-wide text-danger">latest failure — expected vs actual (verbatim)</div>
+              <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded bg-canvas px-2 py-1.5 font-mono text-[11px] leading-relaxed text-muted">{brief.loop.findings}</pre>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Assumptions — the review's real subject (plan gate). */}
+      {brief.assumptions.length > 0 && (
+        <div className="rounded-md border border-line bg-sunken px-3 py-2">
+          <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-faint">
+            Assumptions made without you — confirm or adjust
+          </div>
+          <ol className="space-y-0.5">
+            {brief.assumptions.map((a, i) => (
+              <li key={i} className="flex items-baseline gap-2 text-[12.5px] text-fg">
+                <span className="font-mono text-[10px] text-accent">{i + 1}</span>
+                <span className="min-w-0 flex-1">{a}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
+
+      {/* Behavior snippet (review) — the newest passing ledger entry, verbatim: captured reality. */}
+      {brief.snippet && brief.gate === 'review' && (
+        <div className="rounded-md border border-line bg-sunken px-3 py-2">
+          <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-faint">
+            Behavior — captured by the vet (verbatim)
+          </div>
+          <pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded bg-canvas px-2 py-1.5 font-mono text-[11px] leading-relaxed text-muted">{brief.snippet}</pre>
+        </div>
+      )}
+
+      {/* The gate report — agent-rendered from the phase skill's template, embedded verbatim.
+          Self-contained html by contract; sandboxed (scripts only — it renders itself, no reach). */}
+      {brief.report_html ? (
+        <iframe
+          title="gate report"
+          sandbox="allow-scripts"
+          srcDoc={brief.report_html}
+          className="h-[560px] w-full rounded-md border border-line bg-[#0d1117]"
+        />
+      ) : null}
+
+      {/* The narrative brief, demoted to details once the typed card carries the decision. */}
+      <details className="group" open={!brief.report_html}>
+        <summary className="cursor-pointer select-none text-[11px] font-medium uppercase tracking-wide text-faint hover:text-fg">
+          Details — full brief
+        </summary>
+        <div className="mt-2">
+          <Markdown text={brief.brief} variant="doc" tone="dev" />
+        </div>
+      </details>
     </div>
+  )
+}
+
+// The uniform timeline strip (renovation build slice): the item's dev-event trail as one glyph-
+// coded feed. Density by omission — `.start` rows say nothing their `.end` twin doesn't, so they
+// are dropped; milestones (gates, merges, completion) read emphasized, telemetry reads quiet.
+const MILESTONE_KINDS = new Set([
+  'phase.advance', 'git.merge', 'git.worktree', 'git.revert', 'item.complete', 'item.abandon',
+  'close.proposed', 'review.route', 'inbox.push', 'item.await',
+])
+function TimelinePane({ events }: { events: DevEvent[] }) {
+  const rows = events.filter((e) => !e.kind.endsWith('.start'))
+  if (!rows.length) return null
+  return (
+    <Section icon={History} title="Timeline">
+      <ol className="space-y-1">
+        {rows.map((e) => {
+          const milestone = MILESTONE_KINDS.has(e.kind)
+          const owner = e.actor === 'owner'
+          return (
+            <li key={e.id} className="flex items-baseline gap-2 text-xs">
+              <span className={`w-2 shrink-0 text-center text-[10px] ${
+                owner ? 'text-accent' : milestone ? 'text-success' : 'text-line'
+              }`}>
+                {owner ? '◆' : milestone ? '●' : '·'}
+              </span>
+              <span className="shrink-0 font-mono text-[10px] tabular-nums text-faint">{fmtLocal(e.created_at)}</span>
+              <span className={`shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] ${
+                milestone ? 'bg-hover text-fg' : 'bg-sunken text-faint'
+              }`}>{e.kind}</span>
+              <span className={`min-w-0 flex-1 truncate ${milestone ? 'text-fg' : 'text-muted'}`}>{e.summary}</span>
+            </li>
+          )
+        })}
+      </ol>
+    </Section>
+  )
+}
+
+// The Deputy log (Q1-E) — the owner's stand-in's governance trail on this item, in one place and
+// OUT of the chat: every gate call it made (approve · escalate), each round of feedback it fired at
+// the agent, with the rationale. The conversation itself lives in the chat (3 speakers); this is the
+// accountability record the owner reads to see WHY the deputy did what it did.
+const DEPUTY_ROW: Record<string, { icon: typeof ShieldCheck; label: string; tint: string }> = {
+  'deputy.approve': { icon: Check, label: 'Approved', tint: 'text-success' },
+  'deputy.escalate': { icon: AlertTriangle, label: 'Escalated to you', tint: 'text-danger' },
+  'deputy.query': { icon: MessageSquare, label: 'Sent feedback to the agent', tint: 'text-accent-text' },
+  'deputy.send_back': { icon: CornerUpLeft, label: 'Sent back', tint: 'text-warn' },
+}
+function DeputyLogPane({ events }: { events: DevEvent[] }) {
+  const rows = events
+    .filter((e) => String(e.kind).startsWith('deputy') && !e.kind.endsWith('.start') && !e.kind.endsWith('.end'))
+    .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))
+  if (!rows.length) return <Empty>The deputy hasn’t acted on this item yet.</Empty>
+  return (
+    <Section icon={ShieldCheck} title="Deputy log">
+      <ol className="space-y-2">
+        {rows.map((e) => {
+          const m = (e.meta ?? {}) as Record<string, unknown>
+          const row = DEPUTY_ROW[e.kind] ?? { icon: ShieldCheck, label: e.kind, tint: 'text-muted' }
+          const Icon = row.icon
+          const gate = (m.gate ?? m.phase ?? m.origin_gate) as string | undefined
+          // The reasoning behind the move, in the deputy's own words (what it checked / why / what it asked for).
+          const rationale = [m.because, m.escalation, m.change, m.speech, m.checked]
+            .map((x) => (typeof x === 'string' ? x.trim() : '')).find(Boolean) || e.summary
+          return (
+            <li key={e.id} className="rounded-md border border-line bg-sunken px-3 py-2">
+              <div className="flex items-center gap-2">
+                <Icon size={13} className={`shrink-0 ${row.tint}`} />
+                <span className={`text-xs font-semibold ${row.tint}`}>{row.label}</span>
+                {gate && <span className="rounded bg-hover px-1.5 py-px text-[10px] font-medium text-muted">{gate}</span>}
+                <span className="ml-auto shrink-0 font-mono text-[10px] tabular-nums text-faint">{fmtLocal(e.created_at)}</span>
+              </div>
+              {rationale && <div className="mt-1 text-xs leading-snug text-muted"><Markdown text={rationale} tone="dev" /></div>}
+            </li>
+          )
+        })}
+      </ol>
+    </Section>
   )
 }
 
@@ -524,7 +912,7 @@ function CheckpointsPane({ stubs }: { stubs: { ts: string; headline: string; git
   )
 }
 
-// Live git state + the owner's git actions (S4 routes): freshness sync anytime, the deliver
+// Live git state + the owner's git actions (S4 routes): freshness sync anytime, the review
 // merge, and the always-offered revert while the backup ref stands.
 function GitPane({ it, contextId, onChanged }: { it: WorkItem; contextId: string; onChanged: () => void }) {
   const [health, setHealth] = useState<GitHealth | null>(null)
@@ -574,10 +962,13 @@ function GitPane({ it, contextId, onChanged }: { it: WorkItem; contextId: string
         <GitBtn icon={RefreshCw} label="Sync from main" busy={busy === 'sync'}
                 onClick={() => act('sync', () => syncWorkItemGit(it.id, contextId))}
                 title="Merge the trunk INTO the item branch (freshness — makes the real merge trivial)" />
-        {!health.merged && (
-          <GitBtn icon={GitMerge} label="Merge" busy={busy === 'merge'} accent
-                  onClick={() => act('merge', () => mergeWorkItemGit(it.id, contextId))}
-                  title="The deliver merge — lands on main + applies the staged knowledge delta; a backup ref precedes it" />
+        {/* B2: the merge is no longer a standalone button — it IS the review gate's Approve
+            ("Approve & merge" in the Gate tab). One decision, one act; a lone Merge that left the
+            item at review unmerged was exactly the stranding this fix removes. */}
+        {!health.merged && it.phase === 'review' && (
+          <span className="inline-flex items-center gap-1.5 rounded-md border border-line bg-surface px-2.5 py-1.5 text-[11px] text-faint">
+            <GitMerge size={13} /> Merge happens at the Gate → “Approve &amp; merge”
+          </span>
         )}
         {it.git_backup_ref && (
           <GitBtn icon={Undo2} label="Revert merge" busy={busy === 'revert'}

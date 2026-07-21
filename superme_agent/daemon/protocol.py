@@ -11,7 +11,7 @@ WS types from. The router calls these constructors instead of hand-writing dicts
 from ..core.events import Init, TextDelta, Status, Usage, Result, TurnEvent
 from .schemas.ws import (
     InitFrame, TextDeltaFrame, StatusFrame, UsageFrame, ApprovalRequestFrame,
-    ResultFrame, ErrorFrame, TurnFrame, ApprovalResponseFrame,
+    ResultFrame, ErrorFrame, TimelineFrame, TurnFrame, ApprovalResponseFrame, WatchFrame,
 )
 
 
@@ -59,7 +59,7 @@ def error_frame(message: str) -> dict:
 
 # --- inbound (client → daemon) -----------------------------------------------------
 
-def parse_inbound(msg: dict) -> TurnFrame | ApprovalResponseFrame | None:
+def parse_inbound(msg: dict) -> TurnFrame | ApprovalResponseFrame | WatchFrame | None:
     """Validate a client frame into its typed model (None for an unknown/!dict type), so the router
     works against typed fields instead of `msg.get(...)`."""
     if not isinstance(msg, dict):
@@ -69,4 +69,6 @@ def parse_inbound(msg: dict) -> TurnFrame | ApprovalResponseFrame | None:
         return TurnFrame.model_validate(msg)
     if kind == "approval_response":
         return ApprovalResponseFrame.model_validate(msg)
+    if kind == "watch":
+        return WatchFrame.model_validate(msg)
     return None

@@ -22,21 +22,24 @@ from typing import Literal
 # --- work-item lifecycle (workspace-workflow D1/D2, 2026-07-15) ---
 # Three separate state layers replace the old conflated phase/status pair:
 # 1. `kind` — which MACHINERY the item runs (core/kind_profiles.py; unknown kind fails loud).
-# 2. `phase` — per-kind ordered pipeline stage. implementation: triage→plan→build→validate→
-#    deliver→close · research: triage→plan→investigate→report→close. The Literal is the UNION of
+# 2. `phase` — per-kind ordered pipeline stage. implementation: triage→plan→build→vet→
+#    review→close · research: triage→plan→investigate→report→close. The Literal is the UNION of
 #    all kinds' phases (KIND_PROFILES.ALL_PHASES); validity-per-kind is enforced by kind_profiles.
 # 3. `status` — the runnable-state axis: active · awaiting_* (typed router — only awaiting_human
-#    pages the owner; awaiting_child auto-resumes via core/status_router.py) · done (terminal).
+#    pages the owner; awaiting_child / awaiting_upstream / awaiting_slot all auto-release without a
+#    human — child on a spawned child closing, upstream on a peer named in `after:` completing,
+#    slot on the autopilot concurrency cap freeing a build⟷vet slot) · done (terminal).
 # `outcome` stamps HOW an item ended (with status=done): completed | abandoned | superseded —
 # status changes only, never deletes (never-delete standing constraint).
 WorkKind = Literal["implementation", "research"]
-WorkPhase = Literal["triage", "plan", "build", "validate", "deliver", "investigate", "report", "close"]
-WorkStatus = Literal["active", "awaiting_child", "awaiting_human", "done"]
+WorkPhase = Literal["triage", "plan", "build", "vet", "review", "investigate", "report", "close"]
+WorkStatus = Literal["active", "awaiting_child", "awaiting_upstream", "awaiting_slot",
+                     "awaiting_human", "done"]
 WorkOutcome = Literal["completed", "abandoned", "superseded"]
 # Branch-off relation on `spawned_from` (D3): blocking/parallel = children (auto-pushed, gate the
 # parent's completion; blocking additionally pauses it) · spawn = provenance only (owner-pushed).
 SpawnRelation = Literal["blocking", "parallel", "spawn"]
-# Per-run terminal outcomes (D2 layer 3) — stamped by the headless phase-session completion
+# Per-run terminal outcomes (D2 layer 3) — stamped by the background phase-session completion
 # contract (lands S5); declared here so the wire vocabulary is stable from S1.
 RunOutcome = Literal["success", "clean_noop", "blocked", "approval_required", "exhausted", "stagnated"]
 
@@ -58,5 +61,9 @@ RunStatus = Literal["running", "done", "aborted", "waiting"]
 
 # --- activity log + call-trail ---
 EventScope = Literal["item", "dev", "global"]
-EventActor = Literal["owner", "agent", "daemon"]
+# owner (a person) · agent (a phase session) · daemon (the kernel) · autopilot (the per-item
+# auto-advance driver, slice 2) · deputy (the owner's stand-in that judges gates, slice 4). Distinct
+# actors so "who decided this" stays legible in the log forever — an autopilot advance and a deputy
+# approval must never read as the same hand.
+EventActor = Literal["owner", "agent", "daemon", "autopilot", "deputy"]
 ArtifactKind = Literal["tool", "subagent", "skill", "mcp", "result"]

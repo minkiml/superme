@@ -258,15 +258,25 @@ class DevStore:
             # note?}; NULL for plain captures. Idempotent add.
             if "spawned_from" not in cols:
                 c.execute("ALTER TABLE inbox ADD COLUMN spawned_from TEXT")
+            # F3 (config lock-in): model + effort chosen at CAPTURE, carried into the work-item at
+            # push (the push button locks them in — no per-work-item override after). NULL = inherit
+            # the repo/system default at run time (effective_model precedence). Idempotent adds.
+            if "model" not in cols:
+                c.execute("ALTER TABLE inbox ADD COLUMN model TEXT")
+            if "effort" not in cols:
+                c.execute("ALTER TABLE inbox ADD COLUMN effort TEXT")
 
     # --- inbox CRUD -------------------------------------------------------------
 
     def add_inbox(self, context_id: str, text: str, kind: str = "note",
                   tag: str | None = None,
                   title: str | None = None, origin="user",
-                  spawned_from: dict | None = None) -> dict:
+                  spawned_from: dict | None = None,
+                  model: str | None = None, effort: str | None = None) -> dict:
         """`spawned_from` (D3) = the provenance edge a branch-off item carries from birth:
-        {item, relation: blocking|parallel|spawn, note?}. Validated here; NULL for plain captures."""
+        {item, relation: blocking|parallel|spawn, note?}. Validated here; NULL for plain captures.
+        `model`/`effort` (F3) = the run config chosen at capture, locked into the work-item at push;
+        NULL = inherit the repo/system default."""
         text = (text or "").strip()
         if not text:
             raise ValueError("empty inbox text")
@@ -281,10 +291,11 @@ class DevStore:
         with self._conn() as c:
             cur = c.execute(
                 "INSERT INTO inbox (context_id,kind,text,title,tag,status,origin,spawned_from,"
-                "created_at,updated_at) VALUES (?,?,?,?,?,'open',?,?,?,?)",
+                "model,effort,created_at,updated_at) VALUES (?,?,?,?,?,'open',?,?,?,?,?,?)",
                 (context_id, kind, text, (title or None), (tag or None),
                  json.dumps(origins),
-                 json.dumps(spawned_from) if spawned_from else None, now, now),
+                 json.dumps(spawned_from) if spawned_from else None,
+                 (model or None), (effort or None), now, now),
             )
             return self._get(c, cur.lastrowid)
 
@@ -334,7 +345,8 @@ class DevStore:
 
     def update_inbox(self, item_id: int, **fields) -> dict | None:
         sets = {k: v for k, v in fields.items()
-                if k in {"kind", "text", "tag", "status", "routed_to", "title"} and v is not None}
+                if k in {"kind", "text", "tag", "status", "routed_to", "title", "model", "effort"}
+                and v is not None}
         if sets.get("kind") not in _KINDS:
             sets.pop("kind", None)
         if sets.get("status") not in _STATUSES:
@@ -350,6 +362,17 @@ class DevStore:
         with self._conn() as c:
             c.execute("DELETE FROM inbox WHERE id=?", (item_id,))
         return {"ok": True, "id": item_id}
+
+    def purge_context(self, context_id: str) -> int:
+        """Disconnect cleanup: drop a context's PIPELINE state — the inbox queue + learning
+        candidates/proposals. `events` (the dev-activity trace) are deliberately kept
+        (monitoring logs are never deleted); their orphaned context_id is harmless because no
+        surface lists a disconnected repo. Returns the number of rows deleted."""
+        n = 0
+        with self._conn() as c:
+            for table in ("inbox", "memory_candidate", "memory_proposal"):
+                n += c.execute(f"DELETE FROM {table} WHERE context_id=?", (context_id,)).rowcount
+        return n
 
     def _get(self, c: sqlite3.Connection, item_id: int) -> dict | None:
         r = c.execute("SELECT * FROM inbox WHERE id=?", (item_id,)).fetchone()

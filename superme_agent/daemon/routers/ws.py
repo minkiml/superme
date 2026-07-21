@@ -26,17 +26,21 @@ from ..deps import load_slash_cache as _load_slash_cache, cache_slash as _cache_
 from ..protocol import (
     event_to_frame, init_frame, result_frame, approval_request_frame, error_frame, parse_inbound,
 )
-from ..schemas.ws import TurnFrame, ApprovalResponseFrame
-from ..services import compaction
+from ..schemas.ws import TurnFrame, ApprovalResponseFrame, WatchFrame
+from ..services import compaction, item_stream
 from ..services.runs import (
     _begin_run, _end_run, _LiveTokens, _log_artifact,
     bank_auto_checkpoint, capture_prompt, capture_event,
 )
-from ...core import session_contract, status_router
-from ...core import Init, Usage, Result, Status, TextDelta, ToolResult, scoped_writes_approve
+from ...core import kernel_speech, kind_profiles, status_router
+from ...core import (
+    Init, Usage, Result, Status, TextDelta, ToolResult, scoped_writes_approve,
+    VET_READONLY_NUDGE,
+)
+from ...core.permissions import approval_signature
 from ...gateway import contexts
 from ...harness.tools.dev_tools import make_dev_mcp_server
-from ..session_agents import (
+from ...core.kernel_speech import (
     work_item_preamble, general_preamble, onboarding_preamble, diagnosis_preamble,
     diagnosis_trace_block,
 )
@@ -47,8 +51,55 @@ log = logging.getLogger("superme-agent")
 router = APIRouter()
 
 
+def _norm_cwd(p) -> str:
+    """A cwd normalized for equality checks (resolves symlinks/relative parts, tolerates junk)."""
+    try:
+        return str(Path(str(p)).resolve()) if p else ""
+    except OSError:
+        return str(p or "")
+
+
+def resolve_item_session(item: dict, *, worktree, repo_dir, get_session, adopt) -> tuple[str, str | None]:
+    """The explicit phase→session map (build-vet-loop §1.3): which session a bound turn runs in.
+
+    Returns `(role, session_id-or-None)` — the item's current phase's ROLE and that role's slot
+    (None ⇒ this turn MINTS the role's session). Server-authoritative: the caller redirects any
+    client-passed resume here, and off-role threads are left alone — never retired.
+
+    Legacy adoption (one-time, self-migrating): a pre-roles item carries a single bare
+    `session_id` — file it under the role its recorded cwd implies (repo cwd ⇒ intake, worktree
+    cwd ⇒ build) via `adopt(sid, role)`, which NULLs the legacy key so this runs once. A legacy
+    sid whose cwd matches neither (e.g. its worktree is gone) is left unadopted — minting fresh
+    beats resuming a thread the CLI would refuse ("No conversation found" on a cwd mismatch).
+
+    `get_session(sid) -> row|None` and `adopt(sid, role)` are injected so this stays a pure
+    decision function (testable without a daemon)."""
+    role = kind_profiles.session_role(str(item.get("phase") or "triage"))
+    slots = item.get("sessions") or {}
+    sid = slots.get(role)
+    if not sid and not slots and item.get("session_id"):
+        legacy_sid = str(item["session_id"])
+        lcwd = _norm_cwd((get_session(legacy_sid) or {}).get("cwd"))
+        legacy_role = ("build" if worktree and lcwd == _norm_cwd(worktree)
+                       else "intake" if lcwd == _norm_cwd(repo_dir) else None)
+        if legacy_role:
+            adopt(legacy_sid, legacy_role)
+            if legacy_role == role:
+                sid = legacy_sid
+    return role, sid
+
+
+def _live_resume(msg_resume: str | None, resumed: dict | None) -> str | None:
+    """The resume sid a turn may actually use (F0, playground-e2e-blockers): a client resume that
+    resolves to NO stored session row is DANGLING — the session was deleted/purged and its
+    transcript reclaimed, so handing the sid to the CLI hard-fails the turn. Mint fresh instead
+    (`resumed is None` already routed identity/kind through the birth rules above). Item-bound
+    turns overwrite this with the server-authoritative role slot; this guards the general paths."""
+    return msg_resume if (msg_resume and resumed is not None) else None
+
+
 # --- session-aware per-turn append (work-item-session-recognition + session-kinds-diagnose) ----
-# A dev session runs as one of several AGENTS (session_agents.py owns each one's identity preamble):
+# A dev session runs as one of several AGENTS (core/kernel_speech.py owns each one's identity preamble):
 # work_item (the builder, centered on its item) · general (the advisor, discussion-only) · onboarding
 # (general's establish-memory persona while the project has no memory) · diagnosis (read-only, pointed
 # at a subject run, its trace auto-injected). Pointer-only by design — no artifact contents are inlined,
@@ -58,18 +109,56 @@ router = APIRouter()
 @router.websocket("/ws/agent")
 async def ws_agent(ws: WebSocket) -> None:
     await ws.accept()
+    # ONE serialized sender: the turn loop and the F2 watch-drain task both push frames, and
+    # Starlette's send is not safe to interleave — every outbound frame goes through `send`.
+    send_lock = asyncio.Lock()
+
+    async def send(frame: dict) -> None:
+        async with send_lock:
+            await ws.send_json(frame)
+
     # Seed the client's "/" palette from the last-known list (web is the global context),
     # so it's usable before the first turn reveals the live list.
     cached = _load_slash_cache().get("global")
     if cached:
-        await ws.send_json(init_frame(cached))
+        await send(init_frame(cached))
 
     pending: dict[str, asyncio.Future] = {}   # approval_id -> Future[bool]
     inbox: asyncio.Queue = asyncio.Queue()     # queued TurnFrames (None = disconnect)
 
+    # F2 unified live timeline: this panel WATCHES at most one work-item at a time; while it does,
+    # a drain task forwards that item's broker frames (build/vet/other-phase runs) down the socket,
+    # independent of any turn this panel fired. `watch = (item_id, queue, task)`.
+    watch: dict = {"item_id": None, "queue": None, "task": None}
+
+    async def _drain(item_id: str, q: asyncio.Queue) -> None:
+        """Forward one watched item's live broker frames to the client until cancelled."""
+        try:
+            while True:
+                frame = await q.get()
+                await send(frame)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            log.exception("ws watch-drain failed for %s", item_id)
+
+    async def set_watch(item_id: str | None) -> None:
+        """(Re)point this panel's watch. Idempotent for the same id; tears down the prior
+        subscription+drain before starting the new one (or none when item_id is null)."""
+        if watch["item_id"] == item_id:
+            return
+        if watch["task"]:
+            watch["task"].cancel()
+            item_stream.unsubscribe(watch["item_id"], watch["queue"])
+        watch.update(item_id=None, queue=None, task=None)
+        if item_id:
+            q = item_stream.subscribe(item_id)
+            watch.update(item_id=item_id, queue=q,
+                         task=asyncio.create_task(_drain(item_id, q)))
+
     async def reader() -> None:
         """Pump incoming frames (typed via protocol.parse_inbound): resolve approvals immediately,
-        queue turns."""
+        (un)subscribe watches, queue turns."""
         try:
             while True:
                 frame = parse_inbound(await ws.receive_json())
@@ -77,6 +166,8 @@ async def ws_agent(ws: WebSocket) -> None:
                     fut = pending.get(frame.id)
                     if fut and not fut.done():
                         fut.set_result(frame.approved)
+                elif isinstance(frame, WatchFrame):
+                    await set_watch(frame.item_id)
                 elif isinstance(frame, TurnFrame):
                     await inbox.put(frame)
                 else:
@@ -87,19 +178,32 @@ async def ws_agent(ws: WebSocket) -> None:
             log.exception("ws reader failed")
             await inbox.put(None)
 
+    approved_sigs: set[str] = set()   # P4: 'remember approval within a session' — once the owner
+    #                                   OK's a KIND of call, later calls of that kind don't re-ask.
+
     async def approve(tool_name: str, tool_input: dict) -> bool:
-        """The daemon's ApproveFn — round-trip the decision to this client."""
+        """The daemon's ApproveFn — round-trip the decision to this client, but only ONCE per kind
+        of call: a previously-approved signature (see permissions.approval_signature) auto-allows
+        without prompting again this connection. Kills the rubber-stamp storm the owner watched (the
+        same `pytest`/`git commit` asked over and over). Denials are NOT remembered — a 'no' is
+        specific to the moment, so the owner can approve later; only 'yes' is sticky."""
+        sig = approval_signature(tool_name, tool_input)
+        if sig in approved_sigs:
+            return True
         aid = uuid.uuid4().hex
         fut: asyncio.Future = asyncio.get_running_loop().create_future()
         pending[aid] = fut
-        await ws.send_json(approval_request_frame(aid, tool_name, tool_input))
+        await send(approval_request_frame(aid, tool_name, tool_input))
         try:
-            return await asyncio.wait_for(fut, timeout=DAEMON_APPROVAL_TIMEOUT)
+            granted = await asyncio.wait_for(fut, timeout=DAEMON_APPROVAL_TIMEOUT)
         except asyncio.TimeoutError:
             log.warning("approval %s for %s timed out -> deny", aid[:8], tool_name)
             return False
         finally:
             pending.pop(aid, None)
+        if granted:
+            approved_sigs.add(sig)
+        return granted
 
     reader_task = asyncio.create_task(reader())
     # Session-end checkpoint hook (S5): remember the last work-item this connection worked, so the
@@ -156,7 +260,7 @@ async def ws_agent(ws: WebSocket) -> None:
             # /clear, skills) falls through to the CLI below.
             cmd_reply = _commands.handle(ctx, prompt)
             if cmd_reply is not None:
-                await ws.send_json(result_frame(cmd_reply))
+                await send(result_frame(cmd_reply))
                 continue
 
             # The bound work-item (if any): its configured model/effort feed resolution, and its
@@ -172,10 +276,10 @@ async def ws_agent(ws: WebSocket) -> None:
             effort = _spine.effective_effort(ctx.id, per_call=msg.effort, item_effort=item.get("effort"))
 
             # Run-lock: an item runs ONE agent at a time. If something is already working it
-            # (a headless plan, or another bound turn), refuse rather than let two agents write
+            # (a background plan, or another bound turn), refuse rather than let two agents write
             # the same files concurrently. The owner waits for the in-flight run to finish.
             if work_item_id and _spine.is_item_running(ctx.id, work_item_id):
-                await ws.send_json(result_frame(
+                await send(result_frame(
                     "⏳ This work-item already has a run in progress — wait for it to "
                     "finish before sending another turn."))
                 continue
@@ -220,14 +324,22 @@ async def ws_agent(ws: WebSocket) -> None:
             # sweeps) and processing (`distill`) write DB rows, and apply/publish are owner-gated
             # daemon-side writes. So the old `scoped_writes_approve(memory/)` sandbox here is gone
             # (PRD §4.10). Only the work-item folder is auto-write below.
-            # S4 git layer: a work-item with a live worktree record (build+ of a worktree kind)
-            # WORKS IN ITS WORKTREE — the turn's cwd swaps to it (reads/writes/Bash all resolve
-            # there), and the freeze boundary confines Edit/Write to worktree + item folder
-            # (hard-deny outside, auto-allow inside). Cleared at terminal (record's dir is gone).
+            # S4 git layer + the explicit phase→session map (build-vet-loop §1.3): a bound turn
+            # runs in the session of its phase's ROLE — intake narrates (triage/plan/review/close,
+            # repo cwd, one thread per item) · build remembers (worktree cwd, persists across
+            # cycles) · vet forgets (worktree cwd; fresh-per-cycle mechanics land in step 4).
+            # build/vet turns work IN THE WORKTREE (cwd swap + freeze boundary: Edit/Write confined
+            # to worktree + item folder); intake turns stay at the repo even while a worktree
+            # exists — close merges into main, and the CLI's per-cwd transcript storage means the
+            # intake thread must never change cwd mid-life. This replaces the old rotate-on-cwd-
+            # change accident that made build+vet+review+close share one session and RETIRED the
+            # pre-build thread; the intake thread now persists for review/close.
             write_boundary = None
+            deny_write_tools = None   # vet turns set this: file-writes denied outright (§4)
             item_worktree = None
-            turn_resume = msg.resume
-            rotated_from = None   # the pre-worktree session this turn replaces (retired on success)
+            turn_resume = _live_resume(msg.resume, resumed)
+            session_role = None   # the bound turn's session role (intake|build|vet); None unbound
+            handoff_mark = None   # step-6 watermark to persist at Result (a promotion rode this turn)
             main_repo_dir = ctx.cwd   # the REAL repo root, captured before any worktree swap
             if work_item_id and item.get("git_worktree"):
                 wt = Path(str(item["git_worktree"]))
@@ -239,24 +351,32 @@ async def ws_agent(ws: WebSocket) -> None:
                 # else still defers to the surface approval. (`item` + `model`/`effort` were resolved
                 # above — the item's configured model already factored into `model`.)
                 turn_approve = scoped_writes_approve(item_dir, turn_approve)
+                session_role, slot_sid = resolve_item_session(
+                    item, worktree=item_worktree, repo_dir=main_repo_dir,
+                    get_session=_spine.get_session,
+                    adopt=lambda sid, r: _dev.set_work_item_session(
+                        ctx.internal_root / "dev", work_item_id, sid, role=r),
+                )
+                # Server-authoritative session choice: the bound turn runs in the CURRENT role's
+                # slot — mint fresh when empty (orient block injects at birth below). msg.resume
+                # (possibly another role's thread opened from the picker) is REDIRECTED here, and
+                # the off-role thread is left alone — never retired.
+                turn_resume = slot_sid
+                resumed = _spine.get_session(slot_sid) if slot_sid else None
+                # A phase session that OWNS a worktree gets the freeze boundary (P4) — build/vet
+                # run AT the worktree (cwd swap), review/close keep the repo cwd (intake thread
+                # continuity) but still auto-allow writes into the worktree/item dir and Bash that
+                # scopes itself into them. So review/close run their git-tidy + checks without a
+                # rubber-stamp per command, while writes to main stay denied.
                 if item_worktree:
-                    ctx = replace(ctx, cwd=item_worktree)
                     write_boundary = [item_worktree, item_dir]
-                    # Session-cwd boundary: the CLI stores transcripts PER-CWD, so a session born
-                    # pre-build (cwd = the repo) cannot be resumed from the worktree — the CLI
-                    # exits 1 with "No conversation found". Entering build is a natural session
-                    # boundary anyway: mint a FRESH session here (the orient block below carries
-                    # continuity from plan.md + the banked checkpoint); the replaced thread is
-                    # retired once the new session records.
-                    def _norm_cwd(p) -> str:
-                        try:
-                            return str(Path(str(p)).resolve()) if p else ""
-                        except OSError:
-                            return str(p or "")
-                    if resumed is not None and _norm_cwd(resumed.get("cwd")) != _norm_cwd(item_worktree):
-                        rotated_from = msg.resume
-                        turn_resume = None
-                        resumed = None   # birth semantics: orient block injects below
+                    if kind_profiles.role_uses_worktree(session_role):
+                        ctx = replace(ctx, cwd=item_worktree)
+                # Vet is READ-ONLY on files (build-vet-loop §4 anti-self-report): file-write tools
+                # are denied outright — evidence + report go through the MCP tools; the shell stays
+                # (running checks IS the job) under the freeze-boundary rule above.
+                if session_role == "vet":
+                    deny_write_tools = VET_READONLY_NUDGE
                 item_run_id = _begin_run(ctx, ctx.id, work_item_id, "chat", model, phase=item.get("phase"))
                 began_run = item_run_id is not None
                 last_bound = (ctx, work_item_id)
@@ -264,14 +384,28 @@ async def ws_agent(ws: WebSocket) -> None:
                 # Cold-start orient block (S5/D11 §3): kernel-assembled, injected ONCE at session
                 # BIRTH into the transcript (later turns cache-read it; never re-sent per turn).
                 # `resumed is None` = no stored session row = this turn mints the session.
+                prompt_prefixes: list[str] = []
                 if resumed is None:
                     try:
                         siblings = _dev.read_all(ctx.internal_root / "dev")["work_items"]
                         kids = status_router.children_of(siblings, work_item_id)
                     except Exception:
                         kids = []
-                    orient = session_contract.render_orient_block(item, item_dir, children=kids)
-                    agent_prompt = f"{orient}\n\n---\n\n{prompt}" if prompt else orient
+                    prompt_prefixes.append(
+                        kernel_speech.render_orient_block(item, item_dir, children=kids))
+                # Handoff promotion (build-vet-loop §1.4 / step 6): NEW loop records (driver
+                # decisions + vet verdicts, curated + capped) inject ONCE into the intake thread —
+                # this turn's transcript entry — so review narrates from the record. The watermark
+                # (`handoffs_promoted`) advances only at Result below: a failed turn re-injects
+                # (at-least-once), a landed one never repeats (the per-turn-append scar).
+                if session_role == "intake":
+                    hb, hb_mark = kernel_speech.render_handoff_block(item, item_dir)
+                    if hb:
+                        prompt_prefixes.append(hb)
+                        handoff_mark = hb_mark
+                if prompt_prefixes:
+                    agent_prompt = "\n\n---\n\n".join(
+                        prompt_prefixes + ([prompt] if prompt else []))
             elif session_kind == "diagnosis":
                 # Read-only inspection of a subject run (session-kinds-diagnose). The IDENTITY/behaviour
                 # header rides the per-turn system prompt (small, stable → caches). The large subject-run
@@ -377,6 +511,7 @@ async def ws_agent(ws: WebSocket) -> None:
                     gate_general_mutations=gate_general, # hard-gate mutations in a general dev session
                     general_write_root=general_write_root,  # …except writing this project's general/ memory
                     write_boundary=write_boundary,  # S4 freeze: build writes stay in worktree+item dir
+                    deny_write_tools=deny_write_tools,  # vet: no file-write capability at all (§4)
                     hooks=turn_hooks,               # S8: PreCompact checkpoint-first safety net
                     block_categories=block_categories,  # onboarding skills die once memory exists
                 ):
@@ -396,18 +531,24 @@ async def ws_agent(ws: WebSocket) -> None:
                         if work_item_id and ev.session_id and ctx.internal_root:
                             try:
                                 _dev.set_work_item_session(
-                                    ctx.internal_root / "dev", work_item_id, ev.session_id
+                                    ctx.internal_root / "dev", work_item_id, ev.session_id,
+                                    role=session_role or "intake",
                                 )
                                 # Reverse stamp: the session now durably KNOWS its work-item
                                 # (work-item-session-recognition-prd). Write-once/immutable — this is
                                 # a work-item session's birth. From here on the daemon reads this stamp
                                 # (not the client payload) to center + sandbox + lock + telemetry.
                                 _spine.stamp_session_item(ev.session_id, work_item_id)
-                                # A worktree-entry rotation replaced the pre-build thread — retire
-                                # it now that the new session is recorded (trace preserved+labeled;
-                                # same pattern as the headless-plan replacement).
-                                if rotated_from and rotated_from != ev.session_id:
-                                    _sessions.delete(ctx, rotated_from, cause="retired")
+                                # …and its ROLE (session-kinds §1.3): kind = intake|build|vet for
+                                # item sessions (write-once; legacy item sessions keep kind NULL,
+                                # which derives to 'work_item' downstream).
+                                _spine.stamp_session_kind(ev.session_id, session_role or "intake")
+                                # Step 6: the promotion block landed in this turn's transcript —
+                                # advance the watermark so it is never re-injected. Only here, on
+                                # a successful Result (at-least-once by design).
+                                if handoff_mark is not None:
+                                    _dev.set_work_item_handoff_mark(
+                                        ctx.internal_root / "dev", work_item_id, handoff_mark)
                             except Exception:
                                 log.exception("failed to persist session to work-item %s", work_item_id)
                         elif ev.session_id and ctx.mode == "dev":
@@ -425,15 +566,19 @@ async def ws_agent(ws: WebSocket) -> None:
                     # text + each tool/skill/agent call + that call's (capped) output, keyed to this
                     # run for the Activity trace and the diagnosis agent.
                     if active_run_id and isinstance(ev, (Status, TextDelta, ToolResult)):
-                        capture_event(ctx.id, ev, run_id=active_run_id, item_id=work_item_id)
+                        # publish_live=False: this interactive turn already streams straight to the
+                        # firing panel below; broker-echoing would double it (F2).
+                        capture_event(ctx.id, ev, run_id=active_run_id, item_id=work_item_id,
+                                      publish_live=False)
                     # ToolResult is trail-only (persisted above); it has no live frame and
                     # event_to_frame would reject it, so never send it down the socket.
                     if not isinstance(ev, ToolResult):
-                        await ws.send_json(event_to_frame(ev))
+                        await send(event_to_frame(ev))
                 # Turn done — an interactive (bound-chat) turn rests the item at `active`
                 # (the conversation continues; gates set awaiting_human, not chat turns).
                 if began_run:
-                    _end_run(ctx, ctx.id, work_item_id, final_tokens, "active", final_usage, final_ctx)
+                    _end_run(ctx, ctx.id, work_item_id, final_tokens, "active", final_usage,
+                             final_ctx, session_id=final_session)
                     # S8 compaction trigger: a REAL bound turn just finished with fresh usage —
                     # clear the defer latch / attempt budget, then evaluate the fill against the
                     # (floor-aware) trigger. Fire-and-forget: the compact run takes the item's
@@ -453,17 +598,22 @@ async def ws_agent(ws: WebSocket) -> None:
                 # phase-advance/completion), so nothing fires here per-turn.
             except Exception as e:
                 if began_run:
-                    _end_run(ctx, ctx.id, work_item_id, final_tokens, "active", final_usage, final_ctx)
+                    _end_run(ctx, ctx.id, work_item_id, final_tokens, "active", final_usage,
+                             final_ctx, session_id=final_session)
                 elif chat_run_id:
                     _spine.finish_run(chat_run_id, status="aborted", usage=final_usage,
                                       session_id=final_session, model=final_model, ctx_pct=final_ctx)
                 log.exception("turn failed")
                 try:
-                    await ws.send_json(error_frame(str(e)))
+                    await send(error_frame(str(e)))
                 except Exception:
                     break  # socket is gone
     finally:
         reader_task.cancel()
+        # F2: tear down any live watch (cancel the drain, drop the broker subscription).
+        if watch["task"]:
+            watch["task"].cancel()
+            item_stream.unsubscribe(watch["item_id"], watch["queue"])
         # Bank the session-end fallback checkpoint (no-op if the agent banked its own since
         # `conn_started`, or the item is terminal). Best-effort — never blocks the close.
         if last_bound:

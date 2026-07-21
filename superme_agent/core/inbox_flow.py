@@ -54,6 +54,13 @@ def push_inbox_item(store, dev: DevKnowledgeService, dev_root: Path, row: dict, 
             spawned_from=row.get("spawned_from"),
             inbox_id=inbox_id,
         )
+        # F3: the push button LOCKS IN the capture-time run config — model/effort chosen on the
+        # inbox row become the work-item's immutable defaults (no per-work-item override after).
+        # NULL stays NULL → the item inherits the repo/system default via effective_model.
+        if row.get("model"):
+            dev.set_work_item_model(dev_root, wi["id"], row["model"])
+        if row.get("effort"):
+            dev.set_work_item_effort(dev_root, wi["id"], row["effort"])
     # Content folder → the item's preliminary/ (move, not delete; absent for bare FE captures).
     src = inbox_content_dir(dev_root, inbox_id)
     moved = False

@@ -290,7 +290,7 @@ class SystemSpine:
             # `kind` is the session's AGENT IDENTITY (session-kinds-diagnose): one of
             # general | work_item | diagnosis (onboarding is a transient persona of general, not a
             # stamped kind). It selects which per-turn agent preamble the daemon assembles
-            # (session_agents.py) and how the turn is centered/gated. `subject_run_id`
+            # (kernel_speech.py) and how the turn is centered/gated. `subject_run_id`
             # is the READ-ONLY pointer a subject-bearing kind carries — v1: a diagnosis session points
             # at the run it inspects (an Activity row). Both stamped write-once at the session's birth
             # (mirrors item_id). NULL kind ⇒ inferred from item_id (work_item) else general, so pre-
@@ -345,7 +345,7 @@ class SystemSpine:
                 "tok_output": "INTEGER NOT NULL DEFAULT 0",
                 "raw_usage": "TEXT",
                 # The work-item phase this run happened IN (plan_design / build_eval / …), stamped at
-                # run open so a work-item's tokens can be accumulated per-phase. NULL for chat/headless
+                # run open so a work-item's tokens can be accumulated per-phase. NULL for chat/background
                 # (non-item) runs and for item runs opened before this column existed.
                 "phase": "TEXT",
                 # The fate of this run's origin session (session-deletion-trace-model): NULL while the
@@ -354,7 +354,7 @@ class SystemSpine:
                 # session is gone, so activity can show a "session deleted/retired" badge.
                 "session_fate": "TEXT",
                 # Per-run terminal OUTCOME (workspace-workflow D2, declared S1 / persisted S5): how a
-                # HEADLESS run's structured completion report ended — success | clean_noop | blocked |
+                # BACKGROUND run's structured completion report ended — success | clean_noop | blocked |
                 # approval_required | exhausted | stagnated. NULL for interactive turns (no report)
                 # and pre-S5 rows. Feeds the status router + the attention engine (S7).
                 "outcome": "TEXT",
@@ -397,6 +397,17 @@ class SystemSpine:
                        updated_at TEXT NOT NULL
                    )"""
             )
+            # REPO_AUTOPILOT — per-project autopilot tuning (workspace-workflow autopilot slice 3).
+            # `concurrency` = max autopilot items in the build⟷vet loop at once for this repo
+            # (the launch breaker; absent row = the default in get_autopilot_concurrency). Per-repo
+            # by owner decision — the right width depends on the project, no global default.
+            c.execute(
+                """CREATE TABLE IF NOT EXISTS repo_autopilot (
+                       repo_id TEXT PRIMARY KEY,
+                       concurrency INTEGER NOT NULL,
+                       updated_at TEXT NOT NULL
+                   )"""
+            )
             # REPO_META — the owner's VISUAL tag for a repo: a display color + an optional icon
             # (emoji) shown in place of the color swatch. Purely presentational (the orbit/inspector
             # read it); absent = fall back to the hashed palette color + no icon.
@@ -406,6 +417,19 @@ class SystemSpine:
                        color TEXT,
                        icon TEXT,
                        updated_at TEXT NOT NULL
+                   )"""
+            )
+            # ARCHIVED_REPO — the tombstone a disconnected project leaves behind. Its runs are
+            # preserved forever (never-delete-logs) but its registration is gone, so nothing could
+            # name them: the activity log fell back to the raw id and its tokens dropped out of the
+            # per-repo breakdown while still counting in the global total. This row keeps the label
+            # (and when it left) so that spend stays attributable — aggregated under "Old projects".
+            c.execute(
+                """CREATE TABLE IF NOT EXISTS archived_repo (
+                       repo_id TEXT PRIMARY KEY,
+                       label TEXT NOT NULL,
+                       cwd TEXT,
+                       disconnected_at TEXT NOT NULL
                    )"""
             )
             # SYSTEM_SETTING — runtime overrides of the System singleton's static config
@@ -437,7 +461,7 @@ class SystemSpine:
                    )"""
             )
             c.execute("CREATE INDEX IF NOT EXISTS idx_artifact_item ON run_artifact(repo_id, item_id)")
-            # RUN_EVENT — the per-RUN observability trail (any run, incl. session-less headless):
+            # RUN_EVENT — the per-RUN observability trail (any run, incl. session-less background):
             # the prompt that triggered it, the assistant's reply text, and every tool/skill/agent
             # call, in `seq` order. Keyed by `run_id` (item_id optional) so each Activity row — one
             # run — has its own thread, distinct from the whole-session transcript. Kept as durable
@@ -506,6 +530,50 @@ class SystemSpine:
             text += "\n"
         path.write_text(text + block)
         return rc
+
+    def remove_repo(self, repo_id: str) -> RepoConfig:
+        """Deregister a repo (disconnect): surgically drop its entry block from config/repos.yaml —
+        a line-level edit, so header comments + every other entry keep their exact formatting — and
+        delete its runtime kv rows (model/effort/learning/meta overrides). This only forgets the
+        REGISTRATION; the knowledge home, harness cell, sessions and worktrees are the disconnect
+        route's concern. Refuses 'global' (the hub is not disconnectable) and unknown ids.
+        Like add_repo, goes live at once — repos() re-reads the file every call."""
+        if repo_id == "global":
+            raise ValueError("the hub repo cannot be disconnected")
+        rc = self.repos().get(repo_id)
+        if rc is None:
+            raise ValueError(f"unknown repo id '{repo_id}'")
+        path = Path(self._repos_config_path)
+        out, dropping = [], False
+        for ln in path.read_text().splitlines(keepends=True):
+            if not dropping and ln.rstrip().startswith(f"  {repo_id}:") and not ln.startswith("   "):
+                dropping = True
+                continue
+            if dropping:
+                if ln.startswith("    "):  # the entry's nested fields (safe_dump indents them to 4)
+                    continue
+                dropping = False  # anything shallower ends the block — keep it
+            out.append(ln)
+        path.write_text("".join(out))
+        with self._conn() as c:
+            for table in ("model_override", "effort_override", "repo_learning", "repo_meta"):
+                c.execute(f"DELETE FROM {table} WHERE repo_id=?", (repo_id,))
+            # Leave the tombstone so this repo's preserved runs stay nameable + attributable.
+            c.execute(
+                "INSERT INTO archived_repo (repo_id,label,cwd,disconnected_at) VALUES (?,?,?,?)"
+                " ON CONFLICT(repo_id) DO UPDATE SET label=excluded.label, cwd=excluded.cwd,"
+                " disconnected_at=excluded.disconnected_at",
+                (repo_id, rc.label, str(rc.cwd), _now()),
+            )
+        return rc
+
+    def archived_repos(self) -> dict[str, dict]:
+        """{repo_id: {label, cwd, disconnected_at}} for every disconnected project. Reconnecting
+        the same id doesn't clear the tombstone — it's harmless, since every attribution path
+        checks the LIVE roster first and only falls through to here."""
+        with self._conn() as c:
+            return {r["repo_id"]: dict(r)
+                    for r in c.execute("SELECT * FROM archived_repo").fetchall()}
 
     def repo_for_cwd(self, cwd) -> str | None:
         """Reverse-resolve a cwd to a repo id (the logical key for a session)."""
@@ -603,7 +671,7 @@ class SystemSpine:
         when it is currently NULL, so a work-item session can never be re-pointed to a different item
         (work-item-session-recognition-prd). Idempotent if already stamped to the same item. Returns
         True if this call set it. Called at the two existing session-persistence points (bound-turn
-        finish, headless /plan) — never from a user-facing 'create session' path, which is what keeps
+        finish, background /plan) — never from a user-facing 'create session' path, which is what keeps
         work-item sessions from being minted manually."""
         if not session_id or not item_id:
             return False
@@ -685,6 +753,23 @@ class SystemSpine:
                 " ORDER BY datetime(updated_at) DESC", args,
             ).fetchall()
             return [dict(r) for r in rows]
+
+    def sessions_for_repo(self, repo_id: str) -> list[dict]:
+        """Every session row bound to a repo, resumable or not — the disconnect cascade walks
+        these to hard-delete each through the session-deletion-trace-model (row + transcript
+        gone, run trace preserved + stamped)."""
+        with self._conn() as c:
+            rows = c.execute(
+                "SELECT * FROM session WHERE repo_id=? ORDER BY datetime(updated_at) DESC",
+                (repo_id,)).fetchall()
+            return [dict(r) for r in rows]
+
+    def running_run_count(self, repo_id: str) -> int:
+        """Runs executing right now for a repo (any mode/feature) — the disconnect pre-flight
+        guard: never rip a repo out from under a live agent."""
+        with self._conn() as c:
+            return c.execute("SELECT COUNT(*) FROM run WHERE repo_id=? AND status='running'",
+                             (repo_id,)).fetchone()[0]
 
     def session_for_thread(self, thread_ts: str) -> str | None:
         """The session id for a Slack thread (thread_ts is globally unique)."""
@@ -805,7 +890,7 @@ class SystemSpine:
         """Close a run row (status done|aborted) — ALWAYS kept, as the durable run log/telemetry.
         For session-disposable features the throwaway *transcript* is deleted by the caller (the
         run record itself stays). status falls back to 'done' if unknown. `model` records the model
-        the SDK actually resolved for the run (headless features don't request one up front).
+        the SDK actually resolved for the run (background features don't request one up front).
 
         `usage` is the whole-turn final SDK usage dict — the AUTHORITATIVE per-type accounting for
         the run (one run == one turn). finish sets the four typed columns absolutely from it and
@@ -872,6 +957,18 @@ class SystemSpine:
             ).fetchall()
             return [self._run_dict(r) for r in rows]
 
+    def runs_for_item(self, repo_id: str, item_id: str) -> list[dict]:
+        """Every run this work-item has had, OLDEST-first — the spine of the F2 unified timeline
+        (each run is one phase agent's turn(s); ordering them chronologically reads triage→plan→
+        build→vet→review as one conversation). Unbounded by design: an item's whole history, never
+        truncated by a repo-wide limit."""
+        with self._conn() as c:
+            rows = c.execute(
+                "SELECT * FROM run WHERE repo_id=? AND item_id=?"
+                " ORDER BY datetime(started_at) ASC, id ASC", (repo_id, item_id),
+            ).fetchall()
+            return [self._run_dict(r) for r in rows]
+
     def run_history(self, repo_id: str, *, mode: str | None = None,
                     limit: int = 100) -> list[dict]:
         """Recent runs for a repo (newest first), live + finished."""
@@ -925,13 +1022,16 @@ class SystemSpine:
     def finish_item_run(self, repo_id: str, item_id: str, *, run_status: str = "done",
                         fallback_tokens: int | None = None,
                         usage: dict | None = None, ctx_pct: int | None = None,
-                        outcome: str | None = None) -> int | None:
+                        outcome: str | None = None, session_id: str | None = None) -> int | None:
         """Close the item's running row (status done|aborted), keeping the accumulated live token
         sum — or `fallback_tokens` if no Usage steps arrived. `usage` (whole-turn final dict) is the
         typed-column fallback (see finish_run). `ctx_pct` is the AUTHORITATIVE end-of-turn context
         fill from the Result — when given it overwrites the last live-bump estimate (mirrors
-        finish_run), so an item card shows the true occupancy, not a mid-turn snapshot. Item runs are
-        durable (never purged). Returns the run id, or None if nothing was running."""
+        finish_run), so an item card shows the true occupancy, not a mid-turn snapshot. `session_id`
+        is the run's origin session (from the Result) — attached here so item runs join the
+        `session_fate` labeling path (a deleted/retired session stamps its run rows; a NULL session_id
+        made that unreachable). Item runs are durable (never purged). Returns the run id, or None if
+        nothing was running."""
         run_status = run_status if run_status in _RUN_STATUSES else "done"
         with self._conn() as c:
             row = c.execute(
@@ -946,9 +1046,12 @@ class SystemSpine:
             if ctx_pct is not None:  # authoritative Result fill overrides the live-bump estimate
                 sets.append("ctx_pct=?")
                 args.append(int(ctx_pct))
-            if outcome:  # a headless run's structured completion outcome (S5; validated by caller)
+            if outcome:  # a background run's structured completion outcome (S5; validated by caller)
                 sets.append("outcome=?")
                 args.append(str(outcome))
+            if session_id:  # attach origin session so session_fate labeling can reach this row
+                sets.append("session_id=?")
+                args.append(str(session_id))
             args.append(row["id"])
             c.execute(f"UPDATE run SET {', '.join(sets)} WHERE id=?", args)
             self._finish_usage_apply(c, row["id"], usage)  # authoritative per-type + reconciled tokens
@@ -1019,7 +1122,7 @@ class SystemSpine:
                       run_id: int | None = None, item_id: str | None = None,
                       tool_id: str | None = None) -> None:
         """Append one event to a run's trail (`seq` orders within the run). Pass `run_id` directly
-        (chat / headless), or `item_id` to resolve the item's currently-running run. `tool_id` (the
+        (chat / background), or `item_id` to resolve the item's currently-running run. `tool_id` (the
         SDK tool_use id) lets a `result` row pair back to its call. Best-effort — never raises."""
         try:
             with self._conn() as c:
@@ -1187,6 +1290,22 @@ class SystemSpine:
         by_category = _order(by_category)
         for pr in by_repo.values():
             pr["by_category"] = _order(pr["by_category"])
+
+        # "Old projects" — spend whose repo is no longer connected. Its runs are preserved forever,
+        # so it stays in `total`; without this bucket it would be counted-but-unnameable (the orbit
+        # renders the LIVE roster, so the visible nodes wouldn't sum to the header). Every repo_id
+        # missing from the roster lands here, whether it left through disconnect (tombstoned, so we
+        # know its label) or predates tombstoning (falls back to the bare id).
+        live, tombs = self.repos(), self.archived_repos()
+        members = [
+            {"id": rid, "label": (tombs.get(rid) or {}).get("label") or rid,
+             "total": pr["total"], "runs": pr["runs"],
+             "disconnected_at": (tombs.get(rid) or {}).get("disconnected_at")}
+            for rid, pr in by_repo.items() if rid not in live
+        ]
+        members.sort(key=lambda m: m["total"], reverse=True)
+        archived = {"total": sum(m["total"] for m in members),
+                    "runs": sum(m["runs"] for m in members), "repos": members}
         return {
             "global": {
                 "total": total,
@@ -1197,6 +1316,7 @@ class SystemSpine:
                 "by_category": by_category,
             },
             "by_repo": by_repo,
+            "archived": archived,
         }
 
     def token_timeseries(self, tz_offset: int = 0) -> dict:
@@ -1563,6 +1683,109 @@ class SystemSpine:
         return (per_call or item_effort or self.get_effort_override(repo_id)
                 or self.effective_system_effort())
 
+    # --- build⟷vet loop (build-vet-loop §5) ---------------------------------------
+    # Token budget = the PRIMARY breaker (§5.2): the loop stops when an item's build+vet spend
+    # crosses it — measured, not proxied by a cycle count. Precedence (§8·O2, v1): the item's own
+    # `loop_budget` frontmatter → the system default below. (A per-repo tier mirrors model/effort
+    # when a real need shows; noted in the design doc.) Default is calibrated to the one measured
+    # reference: 294k for a mostly-manual pass on test-playground → ~1.7× headroom.
+    DEFAULT_LOOP_BUDGET = 500_000
+
+    def item_phase_tokens(self, repo_id: str, item_id: str,
+                          phases: tuple[str, ...] = ("build", "vet")) -> int:
+        """An item's accumulated 3-type token spend over the given phases (ALL its runs — live
+        and finished, interactive and background: the loop's meter reads what the item actually
+        cost in those phases, whoever spent it). Legacy pre-typed rows fall back to `tokens`."""
+        ph = ",".join("?" for _ in phases)
+        with self._conn() as c:
+            r = c.execute(
+                f"SELECT COALESCE(SUM(CASE WHEN (tok_input+tok_cache_creation+tok_cache_read+tok_output)=0"
+                f" THEN COALESCE(tokens,0) ELSE tok_input+tok_cache_creation+tok_output END),0) AS t"
+                f" FROM run WHERE repo_id=? AND item_id=? AND phase IN ({ph})",
+                (repo_id, item_id, *phases),
+            ).fetchone()
+            return int(r["t"] or 0)
+
+    def get_loop_budget(self) -> int:
+        """The system-default loop token budget (runtime-set → the built-in default)."""
+        with self._conn() as c:
+            r = c.execute("SELECT value FROM system_setting WHERE key='loop_token_budget'").fetchone()
+        try:
+            return int(str(r["value"]).strip()) if r and r["value"] else self.DEFAULT_LOOP_BUDGET
+        except (TypeError, ValueError):
+            return self.DEFAULT_LOOP_BUDGET
+
+    def set_loop_budget(self, budget: int | None) -> None:
+        """Set (or clear, with None) the system-default loop token budget."""
+        with self._conn() as c:
+            if budget is None:
+                c.execute("DELETE FROM system_setting WHERE key='loop_token_budget'")
+            else:
+                c.execute(
+                    "INSERT INTO system_setting (key,value,updated_at) VALUES ('loop_token_budget',?,?)"
+                    " ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at",
+                    (str(int(budget)), _now()),
+                )
+
+    def effective_loop_budget(self, repo_id: str, item_budget=None) -> int:
+        """The budget the loop breaker measures against for one item: the item's own
+        `loop_budget` (frontmatter, string-coerced) → the system default."""
+        try:
+            if item_budget is not None and str(item_budget).strip():
+                return int(str(item_budget).strip())
+        except (TypeError, ValueError):
+            pass
+        return self.get_loop_budget()
+
+    def get_loop_autorun(self) -> bool:
+        """Whether the loop drives its own hops (vet→build→vet) once STARTED. Default ON — the
+        loop only ever starts from an explicit owner action (the vet quick-action), and the token
+        budget is the safety; OFF degrades the driver to decide-and-page (every hop awaits the
+        owner). Distinct from the learning switch: this never fires on its own."""
+        with self._conn() as c:
+            r = c.execute("SELECT value FROM system_setting WHERE key='loop_autorun'").fetchone()
+        if r is None or r["value"] is None:
+            return True
+        return str(r["value"]).strip().lower() in ("1", "true", "on", "yes")
+
+    def set_loop_autorun(self, enabled: bool) -> None:
+        """Flip the loop's self-drive switch."""
+        with self._conn() as c:
+            c.execute(
+                "INSERT INTO system_setting (key,value,updated_at) VALUES ('loop_autorun',?,?)"
+                " ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at",
+                ("true" if enabled else "false", _now()),
+            )
+
+    # --- delegated deputy authority (BV-A2.2) ------------------------------------
+    # The authorization scopes the deputy may GRANT on its own at the review gate. The line (build-
+    # vet-autonomy-design.md): the deputy may authorize changes that SYNC the contract to shipped
+    # reality; the owner reserves changes that DEFINE or alter intent. The default is that sync set,
+    # widenable/narrowable per-system. Everything NOT in the set escalates — the human floor holds.
+    # (The scope vocabulary itself is artifacts.AUTH_SCOPES; this stores a subset. Kept literal here
+    # so a spine read needs no cross-module import.)
+    DEFAULT_DELEGATED_AUTHORITY = ("doc-sync", "rename-to-shipped", "roadmap-mark-done")
+
+    def get_deputy_delegated_authority(self) -> list[str]:
+        """The scopes the deputy may grant unaided (default = the sync-to-reality set)."""
+        with self._conn() as c:
+            r = c.execute("SELECT value FROM system_setting "
+                          "WHERE key='deputy_delegated_authority'").fetchone()
+        if r is None or r["value"] is None:
+            return list(self.DEFAULT_DELEGATED_AUTHORITY)
+        return [s.strip() for s in str(r["value"]).split(",") if s.strip()]
+
+    def set_deputy_delegated_authority(self, scopes: list[str]) -> None:
+        """Set the delegated scope set (per-system). An empty list means the deputy grants nothing —
+        every authorization escalates to the owner."""
+        with self._conn() as c:
+            c.execute(
+                "INSERT INTO system_setting (key,value,updated_at) "
+                "VALUES ('deputy_delegated_authority',?,?)"
+                " ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at",
+                (",".join(s.strip() for s in scopes if s.strip()), _now()),
+            )
+
     # --- learning master switch (WI-8) -------------------------------------------
     def get_learning_enabled(self) -> bool:
         """Whether capture sweeps (idle / phase / completion) may fire. Default OFF — background
@@ -1600,6 +1823,106 @@ class SystemSpine:
     def learning_enabled_for(self, repo_id: str) -> bool:
         """Effective capture gate for a repo: the master switch AND this repo's participation."""
         return self.get_learning_enabled() and self.get_repo_learning(repo_id)
+
+    # --- autopilot concurrency (per-project launch breaker, slice 3) --------------
+    AUTOPILOT_CONCURRENCY_DEFAULT = 4
+
+    def get_autopilot_concurrency(self, repo_id: str) -> int:
+        """Max autopilot items allowed in the build⟷vet loop at once for this repo. Absent row →
+        the default (4). Floored at 1 — a cap of 0 would wedge every autopilot item forever."""
+        with self._conn() as c:
+            r = c.execute("SELECT concurrency FROM repo_autopilot WHERE repo_id=?",
+                          (repo_id,)).fetchone()
+        if r is None or r["concurrency"] is None:
+            return self.AUTOPILOT_CONCURRENCY_DEFAULT
+        return max(1, int(r["concurrency"]))
+
+    def set_autopilot_concurrency(self, repo_id: str, n: int) -> int:
+        """Set the per-repo autopilot concurrency cap (floored at 1). Returns the stored value."""
+        n = max(1, int(n))
+        with self._conn() as c:
+            c.execute(
+                "INSERT INTO repo_autopilot (repo_id,concurrency,updated_at) VALUES (?,?,?)"
+                " ON CONFLICT(repo_id) DO UPDATE SET concurrency=excluded.concurrency,"
+                " updated_at=excluded.updated_at",
+                (repo_id, n, _now()),
+            )
+        return n
+
+    # --- deputy (autopilot gate judge, slice 4) -----------------------------------
+    # GLOBAL settings (unlike the per-repo concurrency cap): a deputy behaves the same on every
+    # project — only its escalation readiness (strictness) and whether it runs at all are owner-set.
+    DEPUTY_STRICTNESS_LEVELS = ("low", "medium", "high", "extra")
+    DEPUTY_STRICTNESS_DEFAULT = "medium"
+    # Strictness is set PER GATE — a project can want a light touch at triage but a cautious hand at
+    # review. These are the three gates a deputy judges (mirrors services.deputy.DEPUTY_GATE_PHASES).
+    DEPUTY_GATES = ("triage", "plan", "review")
+
+    def get_deputy_enabled(self) -> bool:
+        """Whether a deputy judges autopilot gates. Default ON — 'autopilot without a deputy' is the
+        design's named DANGEROUS config (a gate advanced by nobody), so once the deputy exists every
+        autopilot gate is judged unless the owner explicitly opts out. OFF reverts to the slice-2
+        unsupervised auto-advance."""
+        with self._conn() as c:
+            r = c.execute("SELECT value FROM system_setting WHERE key='deputy_enabled'").fetchone()
+        if r is None or r["value"] is None:
+            return True
+        return str(r["value"]).strip().lower() in ("1", "true", "on", "yes")
+
+    def set_deputy_enabled(self, enabled: bool) -> None:
+        with self._conn() as c:
+            c.execute(
+                "INSERT INTO system_setting (key,value,updated_at) VALUES ('deputy_enabled',?,?)"
+                " ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at",
+                ("true" if enabled else "false", _now()),
+            )
+
+    def deputy_strictness_map(self) -> dict:
+        """Per-gate escalation dial: {triage, plan, review} → low·medium·high·extra (design §6).
+        Each gate tunes only its own escalation THRESHOLD; the refusal floor holds at every level.
+        Stored as one JSON object under `deputy_strictness`. Tolerant of a legacy plain-scalar value
+        (pre-per-gate) by broadcasting it to all gates, and fills any missing/invalid gate with the
+        default — so the map is always complete and every level is valid."""
+        with self._conn() as c:
+            r = c.execute("SELECT value FROM system_setting WHERE key='deputy_strictness'").fetchone()
+        raw = (r["value"] if r else None) or ""
+        stored: dict = {}
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, dict):
+                stored = parsed
+            elif isinstance(parsed, str):          # JSON-encoded scalar
+                stored = {g: parsed for g in self.DEPUTY_GATES}
+        except (ValueError, TypeError):
+            if raw:                                # legacy bare scalar (e.g. "high") — broadcast it
+                stored = {g: raw for g in self.DEPUTY_GATES}
+        return {g: (stored.get(g) if stored.get(g) in self.DEPUTY_STRICTNESS_LEVELS
+                    else self.DEPUTY_STRICTNESS_DEFAULT)
+                for g in self.DEPUTY_GATES}
+
+    def get_deputy_strictness(self, gate: str) -> str:
+        """One gate's strictness — used at dispatch to build that gate's preamble. Unknown gate →
+        the default (medium)."""
+        return self.deputy_strictness_map().get(gate, self.DEPUTY_STRICTNESS_DEFAULT)
+
+    def set_deputy_strictness(self, gate: str, level: str) -> dict:
+        """Set ONE gate's strictness dial. Rejects an unknown gate or level (never silently stores
+        garbage that would fall back at read time and hide the typo). Returns the full updated map."""
+        if gate not in self.DEPUTY_GATES:
+            raise ValueError(f"unknown deputy gate {gate!r}; "
+                             f"expected one of {self.DEPUTY_GATES}")
+        if level not in self.DEPUTY_STRICTNESS_LEVELS:
+            raise ValueError(f"unknown deputy strictness {level!r}; "
+                             f"expected one of {self.DEPUTY_STRICTNESS_LEVELS}")
+        m = self.deputy_strictness_map()
+        m[gate] = level
+        with self._conn() as c:
+            c.execute(
+                "INSERT INTO system_setting (key,value,updated_at) VALUES ('deputy_strictness',?,?)"
+                " ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at",
+                (json.dumps(m), _now()),
+            )
+        return m
 
     # --- capture-sweep tuning (idle / heartbeat / min-user-message gate) ----------
     # Defaults live in services.learning; these are the runtime overrides the owner sets from
@@ -1755,6 +2078,8 @@ class SystemSpine:
             "policy_version": cfg.policy_version,
             "default_repo": cfg.default_repo,
             "learning_enabled": self.get_learning_enabled(),  # auto-sweep master switch (WI-8)
+            "deputy_enabled": self.get_deputy_enabled(),       # autopilot gate judge (slice 4)
+            "deputy_strictness": self.deputy_strictness_map(),  # {gate: low·medium·high·extra}
             "live_runs": live,
             "running": len(live),
         }

@@ -1,6 +1,6 @@
 ---
 name: close
-description: "Draft a work-item's closeout record — verified facts (changed files, tests, merge commit), summary, artifacts worth keeping. Use when a work-item reaches its close phase after delivery; not for the merge/readiness work (use deliver) — completing the item is the owner's action, never yours."
+description: "Draft a work-item's closeout record — verified facts (changed files, tests, merge commit), summary, artifacts worth keeping. Use when a work-item reaches its close phase after the merge decision; not for the merge/readiness work (use review) — completing the item is the owner's action, never yours."
 argument-hint: "work-item id (optional — defaults to the bound item)"
 category: workspace
 ---

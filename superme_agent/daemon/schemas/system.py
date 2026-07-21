@@ -18,6 +18,10 @@ class RunRow(BaseModel):
     repo_id: str
     mode: RunMode
     feature: str
+    # The work-item phase this run happened IN (triage/plan/build/vet/review/close), stamped at run
+    # open. NULL for non-item runs. Surfaced so the Activity feed shows the pipeline phase, not just
+    # the raw feature label (an interactive triage/build turn is feature `chat` — phase is the signal).
+    phase: str | None = None
     session_id: str | None = None
     item_id: str | None = None
     status: RunStatus
@@ -29,9 +33,9 @@ class RunRow(BaseModel):
     # NULL while the origin session is live; 'deleted' / 'retired' once it's hard-deleted
     # (session-deletion-trace-model) — the run + its trace are preserved, this labels the orphan.
     session_fate: str | None = None
-    # A HEADLESS run's structured completion outcome (workspace-workflow D2/S5): success |
-    # clean_noop | blocked | approval_required | exhausted | stagnated. NULL for interactive
-    # turns and pre-S5 rows. Feeds the S7 attention engine.
+    # A BACKGROUND run's structured completion outcome (workspace-workflow D2/S5): success |
+    # partial | clean_noop | blocked | approval_required | exhausted | stagnated. NULL for
+    # interactive turns and pre-S5 rows. Feeds the S7 attention engine.
     outcome: str | None = None
 
 
@@ -47,6 +51,8 @@ class SystemResponse(BaseModel):
     policy_version: int
     default_repo: str
     learning_enabled: bool
+    deputy_enabled: bool = True            # autopilot gate judge on/off (slice 4)
+    deputy_strictness: dict[str, str] = Field(default_factory=dict)  # {gate: low·medium·high·extra}
     sweep_idle_seconds: int      # a dev session idle this long, with enough new content, gets swept
     sweep_poll_seconds: int      # how often the idle heartbeat scans (latency knob)
     sweep_min_user_msgs: int     # min new user turns past the watermark before a sweep fires (0 = off)
@@ -75,9 +81,29 @@ class RepoOverview(BaseModel):
     model_override: str | None = None
     effort_override: str | None = None  # owner-set reasoning-effort override (None = inherit system)
     learning_enabled: bool = True
+    autopilot_concurrency: int = 4  # per-repo autopilot build⟷vet cap (slice 3)
     tag_color: str | None = None   # owner-set visual tag color (None = hashed-palette default)
     icon: str | None = None        # owner-set icon (emoji) shown in place of the color swatch
     scopes: dict[str, RepoScope]
+
+
+class AttentionHold(BaseModel):
+    """One parked (`awaiting_human`) work-item on the top-of-SuperMe attention center (Pass 2 · Q2)."""
+    id: str
+    title: str
+    session_id: str | None = None  # the item's own dev session — so Open binds the chat to it, not the general thread
+    phase: str | None = None
+    cohort: str | None = None
+    kind: Literal["escalation", "breaker", "paged", "review", "gate"]
+    reason: str
+    actor: str
+
+
+class RepoAttention(BaseModel):
+    """A repo's holds, grouped so the center can label 'in <repo>'. Only repos WITH holds appear."""
+    repo_id: str
+    repo_label: str
+    holds: list[AttentionHold]
 
 
 class RepoConnectResponse(BaseModel):
@@ -87,6 +113,19 @@ class RepoConnectResponse(BaseModel):
     label: str
     cwd: str
     onboarding: str | None = None
+
+
+class RepoDisconnectResponse(BaseModel):
+    """The receipt for a disconnect — what the cascade actually removed. Irreversible by design;
+    the project folder itself is never touched, and run traces + dev events are preserved
+    (never-delete-logs), stamped session_fate='disconnected'."""
+    id: str
+    label: str
+    sessions_deleted: int      # session rows hard-deleted (transcripts removed with them)
+    pipeline_rows_deleted: int  # inbox + learning candidate/proposal rows dropped
+    knowledge_removed: bool    # superme-knowledge/<id>-knowledge/ deleted
+    harness_removed: bool      # local-harness/<id>/ deleted (constitutions, assets, published)
+    worktrees_removed: bool    # ~/.superme/worktrees/<id>/ deleted
 
 
 class RunsResponse(BaseModel):
@@ -197,6 +236,20 @@ class RepoLearningResponse(BaseModel):
     learning_enabled: bool
 
 
+class RepoAutopilotResponse(BaseModel):
+    ok: bool
+    repo_id: str
+    autopilot_concurrency: int
+
+
+class DeputyConfigResponse(BaseModel):
+    """The global deputy dial: whether a deputy judges autopilot gates + how readily it escalates
+    per gate (triage/plan/review, each low·medium·high·extra)."""
+    ok: bool
+    deputy_enabled: bool
+    deputy_strictness: dict[str, str]  # {gate: low·medium·high·extra}
+
+
 class RepoMetaResponse(BaseModel):
     ok: bool
     repo_id: str
@@ -239,10 +292,31 @@ class RepoTokens(TokenBucket):
     runs: int = 0
 
 
+class ArchivedRepoTokens(BaseModel):
+    """One disconnected project's preserved spend. `label` is the tombstoned display name (falls
+    back to the bare id for repos that left before tombstoning); `disconnected_at` is null there."""
+    id: str
+    label: str
+    total: int = 0
+    runs: int = 0
+    disconnected_at: str | None = None
+
+
+class ArchivedTokens(BaseModel):
+    """"Old projects" — spend belonging to repos that are no longer connected. Their runs are kept
+    forever, so they still count in `global.total`; this bucket keeps them ATTRIBUTABLE (the orbit
+    only renders live repos, so without it the visible nodes wouldn't sum to the header)."""
+    total: int = 0
+    runs: int = 0
+    repos: list[ArchivedRepoTokens] = []
+
+
 class TokenUsageResponse(BaseModel):
-    """System-wide token usage: the global bucket + one bucket per repo (keyed by repo id)."""
+    """System-wide token usage: the global bucket + one bucket per repo (keyed by repo id) +
+    the "Old projects" roll-up of disconnected repos (also present in by_repo, by raw id)."""
     global_: TokenBucket = Field(alias="global")
     by_repo: dict[str, RepoTokens] = {}
+    archived: ArchivedTokens = ArchivedTokens()
 
     model_config = ConfigDict(populate_by_name=True)
 

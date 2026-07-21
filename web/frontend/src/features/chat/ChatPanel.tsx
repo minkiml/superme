@@ -2,14 +2,23 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Hammer, Plus, PanelRightOpen } from 'lucide-react'
 import ChatHeader from './ChatHeader'
 import MessageList from './MessageList'
+import TimelineView from './TimelineView'
+import ApprovalCard from './ApprovalCard'
 import Composer from './Composer'
 import SessionDrawer from './SessionDrawer'
 import { sessionCategory } from './sessionCategory'
 import ConfirmDialog from '@/ui/ConfirmDialog'
-import { useAgentSocket } from './hooks/useAgentSocket'
+import { useAgentSocket, type TimelineFrame } from './hooks/useAgentSocket'
 import { useSessions } from './hooks/useSessions'
 import { GLOBAL, type ContextRef } from '@/lib/contexts'
 import { getRuns, type ChatMode, type SessionMeta } from '@/lib/api'
+import { getDevLog, getWorkItemDetail } from '@/lib/api/dev'
+import type { Msg } from './types'
+
+// F2: the phases whose session is the item's own worker (not the intake thread the owner talks in).
+// While the item sits in one of these, the chat input is greyed — there's no live intake worker to
+// receive a message; the owner watches the build/vet stream read-only.
+const AUTONOMOUS_PHASES = new Set(['build', 'vet'])
 
 // A dev-mode binding: the chat is taken over as one work-item's dev thread.
 export type DevBinding = { workItemId: string; sessionId: string | null; title: string; contextId: string }
@@ -65,6 +74,11 @@ export default function ChatPanel({
   // record effort). null = follow the server precedence (work-item → repo → system).
   const [sessionModel, setSessionModel] = useState<string | null>(null)
   const [sessionEffort, setSessionEffort] = useState<string | null>(null)
+  // F2 unified timeline state (only used when bound to a work-item).
+  const [liveFrames, setLiveFrames] = useState<TimelineFrame[]>([])
+  const [timelineKey, setTimelineKey] = useState(0)   // parent bumps → TimelineView re-fetches history
+  const [boundPhase, setBoundPhase] = useState<string | null>(null)
+  const [boundRunning, setBoundRunning] = useState(false)
 
   const sessions = useSessions(contextId, mode)
   const socket = useAgentSocket(contextId, mode, {
@@ -77,8 +91,12 @@ export default function ChatPanel({
         sessions.claimSession(sessionId, !binding)
         if (binding && sessionId !== binding.sessionId) onBindingSession?.(sessionId)
       }
+      // An interactive intake turn just finished — reload the timeline so its settled events land.
+      if (binding) setTimelineKey((k) => k + 1)
     },
     onError: (message) => sessions.appendMessage({ role: 'superme', text: '⚠ ' + message }),
+    // F2: a watched item's live background run event → buffer it for the timeline view.
+    onTimeline: (f) => setLiveFrames((prev) => [...prev, f]),
   })
 
   // The work-item this chat is actually on — derived from the ACTIVE SESSION's durable stamp (server
@@ -95,6 +113,91 @@ export default function ChatPanel({
       ? { id: binding.workItemId, title: binding.title }
       : null
   const chipItem = stampedItem ?? optimisticItem
+
+  // F2: subscribe this panel to the bound item's live event broker (build/vet/other-phase runs
+  // stream in), and drop the subscription when the binding changes/clears.
+  useEffect(() => {
+    const id = chipItem?.id && mode === 'dev' ? chipItem.id : null
+    if (!socket.ready) return
+    socket.watch(id)
+    setLiveFrames([])           // fresh buffer for the new item
+    setTimelineKey((k) => k + 1)
+    return () => socket.watch(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chipItem?.id, mode, socket.ready])
+
+  // F2: track the bound item's phase + running so the timeline attributes live frames to the right
+  // lane and the composer greys during build/vet. On a run-end (running true→false) reload the
+  // authoritative history and drop the reconciled live-frame tail.
+  useEffect(() => {
+    const id = chipItem?.id
+    if (!id || mode !== 'dev') { setBoundPhase(null); setBoundRunning(false); return }
+    let alive = true
+    let prev = false
+    const pull = () =>
+      getWorkItemDetail(id, contextId)
+        .then((d) => {
+          if (!alive) return
+          const running = !!d.item.running
+          setBoundPhase(d.item.phase ?? null)
+          setBoundRunning(running)
+          if (prev && !running) { setTimelineKey((k) => k + 1); setLiveFrames([]) }
+          prev = running
+        })
+        .catch(() => {})
+    pull()
+    const t = setInterval(pull, 2000)
+    return () => { alive = false; clearInterval(t) }
+  }, [chipItem?.id, contextId, mode])
+
+  // Deputy turns woven into the bound work-item thread (autopilot slice 4b). The deputy acts in the
+  // BACKGROUND (headless, at gates), so its words can't arrive over the live socket — they're
+  // persisted as `deputy.*` dev events and replayed here whenever the owner opens the item's chat.
+  // Appended after the session bubbles (the deputy always acts at the item's CURRENT gate, i.e. its
+  // latest state), each an attributed `deputy` bubble. Poll-refreshed so a decision made while the
+  // panel is open still surfaces. NOT merged into the SDK transcript — kept independent, exactly as
+  // the deputy session is (design §"Interface": stored attribution, never inferred).
+  // The deputy's channel presence is ONLY its real turns AT the agent (Q1). Its governance moves —
+  // approve / send-back / escalate and their rationale — belong in the Deputy-log drilldown
+  // (WorkItemModal), OUT of the channel (owner's Q1 spec), so the chat stays a clean 3-speaker
+  // conversation. Here we fetch just the `deputy.query` markers: the exact text of each turn the
+  // deputy fired at the agent, so the matching transcript user-bubble can be re-attributed (Q1-D).
+  const [deputyQueries, setDeputyQueries] = useState<string[]>([])
+  useEffect(() => {
+    const itemId = chipItem?.id
+    if (!itemId || mode !== 'dev') {
+      setDeputyQueries([])
+      return
+    }
+    let alive = true
+    const pull = () =>
+      getDevLog(contextId, { itemId, limit: 50 })
+        .then((d) => {
+          if (!alive) return
+          setDeputyQueries((d.events ?? [])
+            .filter((e) => String(e.kind) === 'deputy.query')
+            .map((e) => String(e.meta?.text ?? '').trim())
+            .filter(Boolean))
+        })
+        .catch(() => {})
+    pull()
+    const t = setInterval(pull, 8000)
+    return () => {
+      alive = false
+      clearInterval(t)
+    }
+  }, [chipItem?.id, contextId, mode])
+
+  // Re-attribute the deputy's real turns (Q1-D): a transcript bubble the owner appears to have sent
+  // that exactly matches a `deputy.query` marker was actually the DEPUTY talking to the agent on the
+  // owner's behalf — render it as the deputy (3 speakers), not as the owner. The agent never saw a
+  // difference; only the owner's view distinguishes them.
+  const displayMessages = deputyQueries.length
+    ? sessions.messages.map((m) =>
+        m.role === 'you' && deputyQueries.includes((m.text ?? '').trim())
+          ? { ...m, role: 'deputy' as const }
+          : m)
+    : sessions.messages
 
   // Reconcile: once the active session diverges from a card-set binding, that binding is stale — drop
   // it so it can't mis-tag turns or leave a wrong indicator up. Keyed on activeId ALONE (not binding),
@@ -266,19 +369,43 @@ export default function ChatPanel({
         </div>
       )}
 
-      <MessageList
-        messages={sessions.messages}
-        live={socket.live}
-        busy={socket.busy}
-        statusLabel={socket.statusLabel}
-        elapsed={socket.elapsed}
-        olderHidden={sessions.olderHidden}
-        approval={socket.approval}
-        ctxLabel={ctxLabel}
-        onAnswer={socket.answer}
-        onLoadMore={sessions.loadMoreMessages}
-        tone={mode === 'core' ? 'core' : 'dev'}
-      />
+      {/* F2: bound to a work-item → the unified live timeline (all phases, read-only mirror).
+          A general chat → the normal session transcript. */}
+      {chipItem ? (
+        <div className="flex min-h-0 flex-1 flex-col">
+          <TimelineView
+            itemId={chipItem.id}
+            contextId={contextId}
+            refreshKey={timelineKey}
+            running={boundRunning}
+            currentPhase={boundPhase}
+            liveFrames={liveFrames}
+            interactiveLive={socket.live}
+            statusLabel={socket.statusLabel}
+            busy={socket.busy}
+            elapsed={socket.elapsed}
+          />
+          {socket.approval && (
+            <div className="shrink-0 px-3 pb-1">
+              <ApprovalCard approval={socket.approval} onAnswer={socket.answer} />
+            </div>
+          )}
+        </div>
+      ) : (
+        <MessageList
+          messages={displayMessages}
+          live={socket.live}
+          busy={socket.busy}
+          statusLabel={socket.statusLabel}
+          elapsed={socket.elapsed}
+          olderHidden={sessions.olderHidden}
+          approval={socket.approval}
+          ctxLabel={ctxLabel}
+          onAnswer={socket.answer}
+          onLoadMore={sessions.loadMoreMessages}
+          tone={mode === 'core' ? 'core' : 'dev'}
+        />
+      )}
 
       <Composer
         value={input}
@@ -291,6 +418,13 @@ export default function ChatPanel({
         onPaletteOpen={socket.refreshCommands}
         modelOverride={sessionModel}
         effortOverride={sessionEffort}
+        // F2: grey the input while the item is in an autonomous phase (build/vet) — no live intake
+        // worker to receive it; the owner watches the stream and speaks again at review.
+        locked={
+          chipItem && boundPhase && AUTONOMOUS_PHASES.has(boundPhase)
+            ? { reason: `The ${boundPhase} agent is working — it'll report at review.` }
+            : null
+        }
         onSelectModel={(model, effort) => {
           // A pure FE state change — the session's runtime model/effort, sent on the next turn's
           // frame. 'reset' clears back to the server default. NEVER writes a persisted default.

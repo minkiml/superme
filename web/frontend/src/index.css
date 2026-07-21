@@ -29,6 +29,7 @@
   --c-success: 18 138 91;
   --c-danger: 208 69 59;
   --c-warn: 180 121 31;
+  --c-deputy: 147 51 234; /* deputy-working attention tier (purple) — the delegate covering you */
   /* scope accents */
   --c-dev: 59 130 246;
   --c-core: 18 168 120;
@@ -53,6 +54,7 @@
   --c-success: 95 227 179;
   --c-danger: 240 121 111;
   --c-warn: 224 163 90;
+  --c-deputy: 192 132 252; /* deputy-working tier (lavender) — matches --c-select */
   /* scope accents */
   --c-dev: 110 168 254;
   --c-core: 95 227 179;

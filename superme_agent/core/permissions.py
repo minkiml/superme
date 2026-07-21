@@ -39,7 +39,7 @@ _SURFACE_UNSUPPORTED = {"AskUserQuestion"}
 _ASK_IN_TEXT_NUDGE = (
     "The AskUserQuestion tool isn't available on this surface. If a human is in this chat, ask "
     "your question(s) as plain conversational text — one at a time, with your recommended answer. "
-    "In a headless run, don't ask at all: take your recommended option and record the judgment "
+    "In a background run, don't ask at all: take your recommended option and record the judgment "
     "call in your final report."
 )
 
@@ -129,7 +129,7 @@ def is_read_only_bash(command: str) -> bool:
         return False
     # The two PROVABLY write-free redirects: discarding stderr, and folding it into stdout. Agents
     # reach for both on ordinary reads constantly; without this carve-out every such `ls`/`cat`
-    # stalls an interactive turn at an approval card (and hard-fails a headless one). Strip the
+    # stalls an interactive turn at an approval card (and hard-fails a background one). Strip the
     # exact tokens, then judge the rest as usual — any other `>`/`<` still refuses.
     command = command.replace("2>/dev/null", " ").replace("2>&1", " ")
     if any(bad in command for bad in _BASH_UNSAFE_SUBSTR):
@@ -198,7 +198,7 @@ def path_in_scope(target: str, cwd: Path, roots: list[Path]) -> bool:
 
 
 async def deny_all(tool_name: str, tool_input: dict) -> bool:
-    """An ApproveFn that denies everything — the fallback for a headless run with no human."""
+    """An ApproveFn that denies everything — the fallback for a background run (nothing to ask)."""
     return False
 
 
@@ -208,7 +208,7 @@ def scoped_writes_approve(allowed_dir: Path, fallback: ApproveFn) -> ApproveFn:
     makes an agent autonomous within one folder while keeping a gate on everything outside it
     — e.g. a planning agent can freely write its own work-item but not real source code.
 
-    With `fallback=deny_all` this is a hard sandbox (headless: no human to ask); with
+    With `fallback=deny_all` this is a hard sandbox (background: nothing to ask); with
     `fallback=<surface approve>` the outside-writes still prompt the human (interactive)."""
     allowed = allowed_dir.resolve()
 
@@ -228,7 +228,7 @@ def scoped_writes_approve(allowed_dir: Path, fallback: ApproveFn) -> ApproveFn:
 
 
 def learning_write_approve(workspace: Path) -> ApproveFn:
-    """Policy for a headless learning WRITE run (the `forge` sub-agent). Forge needs two non-safe
+    """Policy for a background learning WRITE run (the `forge` sub-agent). Forge needs two non-safe
     tools with no human to ask: `Bash` (to run the forge_kit lint + behavioural eval) and `Write`
     (to draft the artifact into its scratch workspace). Auto-allow Bash, and writes inside
     `workspace`; deny everything else (no edits to real source, no writes outside the scratch dir).
@@ -262,7 +262,18 @@ _FREEZE_NUDGE = (
     "Edit boundary (build phase): this work-item owns a dedicated git worktree, and all file "
     "changes must happen inside it (or the item's own artifacts folder). The path you tried is "
     "outside that boundary. Work in the worktree — it is your working directory; the merge back "
-    "to main happens at the deliver gate."
+    "to main happens at the review gate."
+)
+
+# Vet read-only denial (build-vet-loop §4/§8·O4, nimbalyst anti-self-report): a vet session has NO
+# file-write tools — a verifier that physically cannot edit cannot report a fix it didn't make.
+# Denied outright with the reason (never a human prompt); the shell stays available for RUNNING
+# checks (tests, env) under the freeze-boundary rule.
+VET_READONLY_NUDGE = (
+    "This is a VET session — file writes are disabled by design (a verifier that can edit could "
+    "grade its own fixes). Record each check's outcome with record_validation_evidence and file "
+    "the cycle's report with file_vet_report. If the build is wrong, FAIL the check and describe "
+    "exactly what you observed — the fix happens in the build session, never here."
 )
 
 
@@ -322,6 +333,52 @@ def shlex_split_safe(command: str) -> list[str]:
         return command.split()
 
 
+def _bash_scoped_into_boundary(command: str, roots: list[Path]) -> bool:
+    """True if the command EXPLICITLY scopes itself into a boundary root — `cd <root>…` or
+    `git -C <root>…` where the target is an absolute path inside a boundary root. This is the
+    review/close analogue of the build case's cwd-in-boundary auto-allow (P4): those sessions keep
+    the REPO cwd for transcript continuity, but their legitimate worktree work NAMES the worktree,
+    so a command that enters the boundary explicitly is as safe to auto-allow as one run from inside
+    it. A bare mutating command (no scoping — a `rm` at the repo cwd) does NOT match, so it still
+    defers to the owner."""
+    toks = shlex_split_safe(command)
+    for i, raw in enumerate(toks[:-1]):
+        if raw.strip("'\"") in ("cd", "-C"):
+            target = toks[i + 1].strip("'\"")
+            if target.startswith("~"):
+                target = str(Path(target).expanduser())
+            if target.startswith("/"):
+                try:
+                    if _in_any(Path(target), roots):
+                        return True
+                except (OSError, ValueError):
+                    pass
+    return False
+
+
+# Shell multiplexers whose SUBCOMMAND is the meaningful unit for approval memory (`git commit` vs
+# `git push`); everything else is keyed by its program name alone.
+_BASH_MULTIPLEXERS = {"git", "npm", "yarn", "pnpm", "npx", "cargo", "go", "make", "python",
+                      "python3", "pip", "pip3", "uv", "poetry", "conda", "docker", "node", "bun"}
+
+
+def approval_signature(tool_name: str, tool_input: dict) -> str:
+    """A stable key for 'the owner already OK'd this KIND of call' (session approval memory, P4 —
+    'remember approval within a session'). Bash → program + subcommand for a known multiplexer
+    (`git commit`), program alone otherwise (`pytest`), so approving one `pytest …` clears later
+    `pytest …` runs but `git commit` and `git push` stay distinct. Every other tool → its name (its
+    target is already governed by the write boundary). Coarse ON PURPOSE: exact-command memory
+    barely helps, since agents vary args on every call."""
+    if tool_name == "Bash":
+        words = [t.strip("'\"") for t in shlex_split_safe(str(tool_input.get("command", "")))
+                 if not t.startswith("-")]
+        prog = Path(words[0]).name if words else ""
+        if prog in _BASH_MULTIPLEXERS and len(words) > 1:
+            return f"Bash:{prog} {words[1]}"
+        return f"Bash:{prog}"
+    return f"tool:{tool_name}"
+
+
 _SKILL_TOOLS = {"Skill", "SlashCommand"}
 
 
@@ -346,7 +403,8 @@ def build_can_use_tool(approve: ApproveFn, *, blocked_skills: dict[str, str] | N
                        cwd: Path | None = None, read_roots: list[Path] | None = None,
                        gate_general_mutations: bool = False,
                        general_write_root: Path | None = None,
-                       write_boundary: list[Path] | None = None):
+                       write_boundary: list[Path] | None = None,
+                       deny_write_tools: str | None = None):
     """Wrap a surface's ApproveFn into the SDK `can_use_tool` callback.
 
     Safe (read-only) tools auto-allow; everything else defers to `approve`. `blocked_skills` maps a
@@ -359,7 +417,7 @@ def build_can_use_tool(approve: ApproveFn, *, blocked_skills: dict[str, str] | N
     `read_roots` (with `cwd` to resolve relatives) enables the **L2 read-guard**: a Read/Grep/Glob
     whose target falls outside the host's allowlist is denied before the safe-tool auto-allow, so a
     host cannot read another repo's files or the bulk of SuperMe's own source. Omit both to disable
-    the guard (e.g. a hermetic headless run that governs paths its own way).
+    the guard (e.g. a hermetic background run that governs paths its own way).
 
     `gate_general_mutations` enables the **general-session guardrail** (work-item-session-recognition-
     prd): in a GENERAL (non-work-item) dev session, mutating tools are denied WITH FEEDBACK and NO
@@ -377,7 +435,7 @@ def build_can_use_tool(approve: ApproveFn, *, blocked_skills: dict[str, str] | N
     it. Honest limit: accident-prevention, not security (Bash is not path-checkable).
 
     The boundary governs `Bash` too, and must: an agent that has to ask before running its own
-    tests isn't autonomous, and the build⟷validate loop can't run at all if every command parks
+    tests isn't autonomous, and the build⟷vet loop can't run at all if every command parks
     on a human. A mutating command AUTO-allows when the session `cwd` is inside the boundary and
     the command names no absolute path outside it. That is weaker than the write-tool check by
     necessity — `cd /elsewhere && rm -rf` is not detectable by reading a string — so the guarantee
@@ -385,6 +443,13 @@ def build_can_use_tool(approve: ApproveFn, *, blocked_skills: dict[str, str] | N
     are local to a branch nobody has merged, and the owner's real gate is the merge. A command that
     does name an outside path doesn't deny — it falls through to the normal prompt, so deliberate
     outside work still happens with a click.
+
+    `deny_write_tools` (a deny MESSAGE) removes the file-write tools OUTRIGHT — the vet session's
+    anti-self-report guarantee (build-vet-loop §4): checked before the freeze boundary's
+    auto-allow, so not even in-boundary writes pass, and before `approve`, so no human prompt can
+    grant one either. `Bash` is deliberately NOT covered — vet must RUN checks (tests, env), and
+    the freeze-boundary shell rule still applies; the guarantee is "no write capability via file
+    tools", the same honest limit as the boundary itself.
     """
 
     async def can_use_tool(
@@ -402,6 +467,11 @@ def build_can_use_tool(approve: ApproveFn, *, blocked_skills: dict[str, str] | N
         if tool_name in _SURFACE_UNSUPPORTED:
             log.info("surface-unsupported tool denied: %s (ask in text)", tool_name)
             return PermissionResultDeny(message=_ASK_IN_TEXT_NUDGE)
+        # Vet read-only (§4 anti-self-report): file-write tools are denied OUTRIGHT — before the
+        # freeze boundary's in-boundary auto-allow and before any human prompt.
+        if deny_write_tools and tool_name in _WRITE_TOOLS:
+            log.info("vet read-only denied %s", tool_name)
+            return PermissionResultDeny(message=deny_write_tools)
         # Build-phase freeze boundary (S4): writes live-or-die on the worktree/item roots.
         if write_boundary and tool_name in _WRITE_TOOLS:
             if _target_in_any(input_data, write_boundary):
@@ -434,11 +504,16 @@ def build_can_use_tool(approve: ApproveFn, *, blocked_skills: dict[str, str] | N
                                             is not None else _READONLY_SESSION_NUDGE)
             # Freeze boundary (S4): a phase agent working inside its own worktree owns its shell.
             # Running tests, installing deps and committing are the agent's job — the same autonomy
-            # the boundary already grants its writes, and the precondition for the build⟷validate
+            # the boundary already grants its writes, and the precondition for the build⟷vet
             # loop (a loop that stops for a click on every test run is not a loop). The owner's gate
             # is the merge, not each command.
-            if (write_boundary and cwd is not None and _in_any(cwd, write_boundary)
-                    and not _bash_escapes_boundary(command, write_boundary)):
+            # Auto-allow when the command lives in the boundary: either the session cwd is inside it
+            # (build/vet — worktree cwd), OR the command explicitly scopes itself into it via
+            # `cd <worktree>` / `git -C <worktree>` (review/close — repo cwd for transcript
+            # continuity, P4). Both require the command to name no path OUTSIDE the boundary.
+            if (write_boundary and not _bash_escapes_boundary(command, write_boundary)
+                    and ((cwd is not None and _in_any(cwd, write_boundary))
+                         or _bash_scoped_into_boundary(command, write_boundary))):
                 return PermissionResultAllow()
         # L2 read-guard: keep reads inside the host's scope (before the safe-tool auto-allow).
         if read_roots and cwd is not None and tool_name in _READ_TOOLS:

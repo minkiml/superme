@@ -22,6 +22,9 @@ class InboxRow(BaseModel):
     origin: list[InboxOrigin] = []  # an item can accrue multiple origins (e.g. ['user','agent'])
     # D3 provenance a branch-off row carries before push (copied onto the work-item on push).
     spawned_from: SpawnedFrom | None = None
+    # F3: run config chosen at capture, locked into the work-item at push. NULL = inherit default.
+    model: str | None = None
+    effort: str | None = None
 
 
 class InboxPushResponse(BaseModel):

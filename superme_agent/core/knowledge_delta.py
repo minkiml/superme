@@ -31,7 +31,11 @@ from .artifacts import FILL, _atomic_write
 from .dev_knowledge import ANCHOR_DOCS, DevKnowledgeService, _parse_deliverables
 
 DELTA_FILE = "knowledge-delta.yaml"
-OPS = ("update", "append", "supersede")
+# update/append/supersede act on a section's BODY; rename_section rewrites the `## <heading>` LINE
+# itself (BV-A2 small-fix: the tool used to edit bodies only, so a heading carrying stale text —
+# e.g. a roadmap deliverable heading naming a renamed command — was unreachable).
+OPS = ("update", "append", "supersede", "rename_section")
+_BODY_OPS = ("update", "append", "supersede")
 _DOCS = (*ANCHOR_DOCS, "resources")
 
 # A backticked repo path worth ground-truth checking: contains a `/` or ends in a code/doc
@@ -117,6 +121,13 @@ def validate_ops(ops: list, dev_root: Path, repo_dir: Path | None) -> list[str]:
             issues.append(f"{tag}: empty content")
         if FILL.search(content):
             issues.append(f"{tag}: content contains <fill:…> placeholder(s)")
+        if kind == "rename_section":
+            # content is the NEW heading LINE (not a body). It must be a single line and must not
+            # carry its own `##` marker — the writer supplies exactly one.
+            if "\n" in content.strip():
+                issues.append(f"{tag}: rename_section content is one heading line, not a body")
+            if content.lstrip().startswith("#"):
+                issues.append(f"{tag}: rename_section content is the heading TEXT — omit the '##'")
         for ref in _PATH_REF.findall(content):
             if os.path.isabs(ref):
                 issues.append(f"{tag}: file reference must be repo-relative: {ref}")
@@ -161,6 +172,11 @@ def apply_delta(item_dir: Path, dev_root: Path) -> dict:
         m = re.search(rf"(?ms)^(##\s+{re.escape(section)}\s*\n)(.*?)(?=^##\s|\Z)", text)
         if not m:
             raise ValueError(f"section '## {section}' vanished from {doc} — restage the delta")
+        if op["op"] == "rename_section":
+            # Rewrite the `## <heading>` LINE, leaving the body (group 2) untouched. content is the
+            # new heading text (validate_ops guarantees single-line, no leading '#').
+            texts[doc] = text[:m.start(1)] + f"## {content.strip()}\n" + text[m.end(1):]
+            continue
         # Forgiving writer: `content` is the section BODY, but agents frequently re-include the
         # `## <section>` heading at the top of their content (conflating "the section" with "its
         # body"). The heading is kept in place (group 1), so a re-included heading would DOUBLE it.

@@ -3,7 +3,7 @@
 Trunk-based, item-level: one work-item ⇄ one branch `item/<id>-<slug>` ⇄ one worktree under
 SuperMe's own home, `~/.superme/worktrees/<repo-id>/<item-id>/` (see `worktrees_home`). Trees are
 never shared across items. `main` is the
-trunk; only the human-gated deliver decision merges into it, always behind an ephemeral
+trunk; only the human-gated review decision merges into it, always behind an ephemeral
 `refs/backup/<item>-<ts>` guardrail (revert always offered). Blocking children branch FROM the
 parent's branch and merge BACK INTO it (the light path); parallel/spawn branch from main.
 
@@ -45,6 +45,28 @@ def _git(cwd: Path, *args: str, check: bool = True) -> subprocess.CompletedProce
 
 def _out(cwd: Path, *args: str) -> str:
     return _git(cwd, *args).stdout.strip()
+
+
+def diff_numstat(worktree: Path, base: str) -> dict:
+    """`git diff --numstat base...HEAD` in the worktree → {files, insertions, deletions, by_file}
+    (by_file = [{path, plus, minus}]). The mechanical merge-diff summary — feeds readiness.md's
+    `## Stats` (and later a PR body). Best-effort: a bad base / non-repo returns zeros, never raises
+    (binary files report '-' for plus/minus in numstat → counted as 0)."""
+    proc = _git(worktree, "diff", "--numstat", f"{base}...HEAD", check=False)
+    if proc.returncode != 0:
+        return {"files": 0, "insertions": 0, "deletions": 0, "by_file": []}
+    by_file, ins, dels = [], 0, 0
+    for line in proc.stdout.splitlines():
+        parts = line.split("\t")
+        if len(parts) != 3:
+            continue
+        p, m, path = parts
+        plus = int(p) if p.isdigit() else 0
+        minus = int(m) if m.isdigit() else 0
+        ins += plus
+        dels += minus
+        by_file.append({"path": path, "plus": plus, "minus": minus})
+    return {"files": len(by_file), "insertions": ins, "deletions": dels, "by_file": by_file}
 
 
 def is_git_repo(repo_dir: Path) -> bool:
@@ -483,7 +505,7 @@ def revert_merge(repo_dir: Path, backup_ref: str, *, target: str | None = None) 
 def merge_into_parent(repo_dir: Path, child_branch: str, parent_worktree: Path) -> dict:
     """The LIGHT path (D4): a blocking child's branch merges into its parent's branch, executed
     INSIDE the parent's worktree. No backup ref, no stash ceremony — no main risk; the parent
-    re-validates the family before its own main merge. Conflict → abort + report. Runs under the
+    re-vets the family before its own main merge. Conflict → abort + report. Runs under the
     per-repo op lock: the merge commit mutates the SHARED object store, and the parent's own
     trunk merge must never interleave with a child landing into it."""
     parent_worktree = Path(parent_worktree)
@@ -509,7 +531,7 @@ def merge_into_parent(repo_dir: Path, child_branch: str, parent_worktree: Path) 
 def sync_from_main(repo_dir: Path, worktree: Path, *, target: str | None = None,
                    leave_conflicts: bool = False) -> dict:
     """Freshness rule (replaces rebasing ceremony): merge the trunk INTO the item branch, inside
-    the worktree. Run agent-side during long builds and ALWAYS at deliver time — after this, the
+    the worktree. Run agent-side during long builds and ALWAYS at review time — after this, the
     merge back to main is trivial. Conflicts: default aborts + reports; `leave_conflicts=True`
     leaves the conflicted merge IN the tree for the Resolve-with-Agent session (the human never
     hand-edits conflict markers; finish with `finish_merge`)."""

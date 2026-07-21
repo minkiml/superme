@@ -36,8 +36,9 @@ def _backfill_session_stamps() -> None:
             except Exception:
                 continue
             for it in data.get("work_items", []):
-                sid = it.get("session_id")
-                if sid and it.get("id"):
+                if not it.get("id"):
+                    continue
+                for sid in app_state.dev.work_item_session_ids(it):  # every role thread + legacy
                     pairs.append((sid, it["id"]))
         if pairs:
             n = app_state.spine.backfill_session_items(pairs)
@@ -96,6 +97,7 @@ def _reconcile_close_steps() -> None:
     released · a paused parent whose last open blocking child went terminal resumed. The worktree
     step is _reconcile_worktrees' job. Idempotent + best-effort."""
     from ..core import status_router
+    from .services import scheduler
     from .services.runs import _render_execution_md
     try:
         for rid in app_state.spine.repos():
@@ -127,6 +129,12 @@ def _reconcile_close_steps() -> None:
                     if resume_id and app_state.dev.set_work_item_status(dev_root, resume_id,
                                                                         "active"):
                         log.info("close reconcile [%s]: resumed paused parent %s", rid, resume_id)
+                    # Peers parked on this terminal item (`after:`). The live routes already fire
+                    # this; the reconcile catches a cohort stranded by a daemon death mid-release,
+                    # which for an autopiloted launch is the difference between "resumes on its
+                    # own" and "silently never runs again".
+                    scheduler.release_downstream(app_state.dev, dev_root, app_state.dev_store,
+                                                 rid, items, item_id, cause="reconcile")
                 except Exception:
                     log.exception("close reconcile failed for %s/%s", rid, item_id)
     except Exception:

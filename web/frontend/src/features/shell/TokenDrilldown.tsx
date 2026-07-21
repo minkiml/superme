@@ -169,7 +169,7 @@ const NoUsage = () => <Empty>No usage recorded yet.</Empty>
 type Tab = 'repo' | 'category' | 'type' | 'time'
 
 export default function TokenDrilldown({ stats, onClose }: { stats: CommandStats; onClose: () => void }) {
-  const [tab, setTab] = useState<Tab>('category')
+  const [tab, setTab] = useState<Tab>('repo')
   const [tokens, setTokens] = useState<TokenUsage | null>(null)
   const [ts, setTs] = useState<TokenTimeseries | null>(null)
   // Mode: off = 3-type (default), on = 4-type (adds cache_read across every breakdown).
@@ -185,17 +185,26 @@ export default function TokenDrilldown({ stats, onClose }: { stats: CommandStats
   const headlineTotal = full ? total3 + cacheRead : total3
 
   // Per-repo rows: 3-type from the orbit stats; 4-type adds each repo's cache_read from the token API.
-  const repoRows: Row[] = useMemo(
-    () =>
-      [stats.hub, ...stats.nodes]
-        .filter((r): r is NonNullable<typeof r> => !!r)
-        .map((r) => {
-          const cr = full ? tokens?.by_repo?.[r.id]?.by_type?.cache_read ?? 0 : 0
-          return { key: r.id, label: r.id === 'global' ? 'SuperMe Hub' : r.label, value: r.tokens + cr, color: r.color }
-        })
-        .sort((a, b) => b.value - a.value),
-    [stats, tokens, full],
-  )
+  // Disconnected repos have no orbit node, so their preserved spend rolls into one "Old projects" bar
+  // — otherwise these rows wouldn't sum to the headline total.
+  const repoRows: Row[] = useMemo(() => {
+    const live = [stats.hub, ...stats.nodes]
+      .filter((r): r is NonNullable<typeof r> => !!r)
+      .map((r) => {
+        const cr = full ? tokens?.by_repo?.[r.id]?.by_type?.cache_read ?? 0 : 0
+        return { key: r.id, label: r.id === 'global' ? 'SuperMe Hub' : r.label, value: r.tokens + cr, color: r.color }
+      })
+    const old = tokens?.archived
+    if (old && old.total > 0) {
+      const cr = full
+        ? old.repos.reduce((s, m) => s + (tokens?.by_repo?.[m.id]?.by_type?.cache_read ?? 0), 0)
+        : 0
+      live.push({ key: '__archived__', label: 'Old projects', value: old.total + cr, color: '#8b93a7' })
+    }
+    return live.sort((a, b) => b.value - a.value)
+  }, [stats, tokens, full])
+
+  const oldRepos = tokens?.archived?.repos ?? []
 
   const TABS: [Tab, string][] = [
     ['repo', 'Per repo'],
@@ -221,7 +230,17 @@ export default function TokenDrilldown({ stats, onClose }: { stats: CommandStats
         <TabBar tabs={TABS} value={tab} onChange={setTab} />
       </div>
       <div className="max-h-[60vh] overflow-y-auto p-5">
-        {tab === 'repo' && <Bars rows={repoRows} />}
+        {tab === 'repo' && (
+          <div className="space-y-3">
+            <Bars rows={repoRows} />
+            {oldRepos.length > 0 && (
+              <p className="pt-1 text-[12px] leading-relaxed text-faint">
+                <span className="text-muted">Old projects</span> — disconnected, but their spend is kept:{' '}
+                {oldRepos.map((r) => r.label).join(' · ')}.
+              </p>
+            )}
+          </div>
+        )}
         {tab === 'category' && (tokens ? <FeatureBars tokens={tokens} full={full} /> : <NoUsage />)}
         {tab === 'type' && (tokens ? <TypeSplit tokens={tokens} full={full} /> : <NoUsage />)}
         {tab === 'time' && (ts ? <OverTime ts={ts} full={full} /> : <NoUsage />)}

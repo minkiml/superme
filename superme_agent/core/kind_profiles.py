@@ -4,7 +4,7 @@ writes, artifacts, close criteria) — content differences (feature/bug/refactor
 `implementation`. Extending = adding a profile entry; an unknown kind fails LOUD (never a silent
 default), so a typo can't run an item through the wrong machinery.
 
-Item-kind is orthogonal to session-kind (daemon/session_agents.py): they join at
+Item-kind is orthogonal to session-kind (core/kernel_speech.py): they join at
 `(item.kind, item.phase)` → the phase-session behavior contract (S5).
 """
 
@@ -31,19 +31,19 @@ class KindProfile:
 KIND_PROFILES: dict[str, KindProfile] = {
     "implementation": KindProfile(
         kind="implementation",
-        phases=("triage", "plan", "build", "validate", "deliver", "close"),
+        phases=("triage", "plan", "build", "vet", "review", "close"),
         worktree=True,
         knowledge_writes=True,
         emits={
             "plan": ("plan",),
-            "validate": ("validation",),
-            "deliver": ("readiness",),
+            "vet": ("validation",),
+            "review": ("readiness",),
             "close": ("closeout",),
         },
         required_artifacts=("plan", "validation", "readiness", "closeout"),
         close_criteria=(
             "merged_or_logged_no_merge", "evidence_fresh", "knowledge_row_resolved",
-            "closeout_verified", "children_terminal",
+            "closeout_verified", "children_terminal", "assumptions_ratified",
         ),
     ),
     "research": KindProfile(
@@ -57,7 +57,8 @@ KIND_PROFILES: dict[str, KindProfile] = {
             "close": ("closeout",),
         },
         required_artifacts=("plan", "findings", "closeout"),
-        close_criteria=("findings_delivered", "spawns_exist", "closeout_verified"),
+        close_criteria=("findings_delivered", "spawns_exist", "closeout_verified",
+                        "assumptions_ratified"),
     ),
 }
 
@@ -68,6 +69,48 @@ DEFAULT_KIND = "implementation"
 ALL_PHASES: tuple[str, ...] = tuple(dict.fromkeys(
     p for prof in KIND_PROFILES.values() for p in prof.phases
 ))
+
+
+# --- session roles (build-vet-loop §1.3) -------------------------------------------------------
+# A work-item's turns run in ROLE-keyed sessions — the boundary sits where a fresh PERSPECTIVE is
+# required, not where a phase label changes: `intake` narrates (one thread per item, repo cwd),
+# `build` remembers (persists across build⟷vet cycles, worktree cwd), `vet` forgets (fresh per
+# cycle — step-4 mechanics; worktree cwd). The map is explicit CODE (§4.5.1), replacing the old
+# implicit rotate-on-cwd-change accident that made build+vet+review+close share one session.
+SESSION_ROLES: tuple[str, ...] = ("intake", "build", "vet")
+
+# The durable `session.kind` values (spine column) — the stampable superset: the item ROLES above
+# + `general` (un-bound advisor session) + `onboarding` (label-only kind: stamped at birth for the
+# picker's category chip, but the onboarding persona is applied per-turn by project state, never by
+# this stamp) + `diagnosis` (read-only inspector pointed at a subject run — the one kind that
+# changes runtime behavior). `work_item` is never stamped — it's the DERIVED label for legacy
+# pre-roles item sessions (item_id set, kind NULL); the item_id stamp, not the kind, is what makes
+# a session item-bound. Each kind's identity PREAMBLE lives in core/kernel_speech.py.
+SESSION_KINDS = ("general", "work_item", "onboarding", "diagnosis", "intake", "build", "vet")
+
+_ROLE_FOR_PHASE: dict[str, str] = {
+    "triage": "intake", "plan": "intake", "review": "intake", "close": "intake",
+    "build": "build",
+    "vet": "vet",
+    # research: no fresh-perspective boundary anywhere — one intake thread end to end.
+    "investigate": "intake", "report": "intake",
+}
+
+
+def session_role(phase: str | None) -> str:
+    """The session ROLE a phase's turns run in. Unknown phases fail LOUD (mirrors get_profile —
+    a typo must not silently land a turn in the wrong session)."""
+    p = phase or "triage"
+    if p not in _ROLE_FOR_PHASE:
+        raise KeyError(f"phase {p!r} has no session role — known: {sorted(_ROLE_FOR_PHASE)}")
+    return _ROLE_FOR_PHASE[p]
+
+
+def role_uses_worktree(role: str) -> bool:
+    """Whether a role's turns run at the item's WORKTREE cwd (build/vet) vs the repo (intake).
+    intake stays repo-level even while a worktree exists — close merges into main, and the CLI's
+    per-cwd transcript storage means the intake thread must never change cwd mid-life."""
+    return role in ("build", "vet")
 
 
 def get_profile(kind: str | None) -> KindProfile:

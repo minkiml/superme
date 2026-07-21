@@ -26,6 +26,7 @@ export default {
         success: 'rgb(var(--c-success) / <alpha-value>)',
         danger: 'rgb(var(--c-danger) / <alpha-value>)',
         warn: 'rgb(var(--c-warn) / <alpha-value>)',
+        deputy: 'rgb(var(--c-deputy) / <alpha-value>)', // deputy-working attention tier (F1)
         // scope accents — dev/core/universal color-coding
         dev: 'rgb(var(--c-dev) / <alpha-value>)',
         core: 'rgb(var(--c-core) / <alpha-value>)',

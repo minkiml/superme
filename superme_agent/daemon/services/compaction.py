@@ -286,7 +286,7 @@ async def run_compaction(ctx: Context, context_id: str, item_id: str, session_id
         verdict = {"error": True}
         run_usage = None
     finally:
-        _end_run(ctx, context_id, item_id, None, rest_status, run_usage)
+        _end_run(ctx, context_id, item_id, None, rest_status, run_usage, session_id=session_id)
     return verdict
 
 

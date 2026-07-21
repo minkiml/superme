@@ -72,13 +72,18 @@ class WorkItem(BaseModel):
     inbox_id: int | None = None
     phase: WorkPhase | None = None
     status: WorkStatus | None = None
+    # Peer sequencing (autopilot slice 1): ids this item may not start before. Present when set;
+    # an item with an open upstream rests at status `awaiting_upstream` until the scheduler releases.
+    after: list[str] | None = None
+    # Autopilot (slice 2): the per-item policy — does the workflow drive its gates without a click.
+    autopilot: bool | None = None
     model: str | None = None
     effort: str | None = None  # configured reasoning effort (low|medium|high) its runs use
     # work-item frontmatter dates parse to datetime.date (YAML); a date|str union keeps them faithful
     # (date → isoformat "YYYY-MM-DD" on serialize, exactly as the raw jsonable_encoder path did).
     done_at: date | str | None = None
     # --- git record (workspace-workflow S4/D4) --- written at build entry (branch + worktree +
-    # base) and at the deliver merge (merge commit + backup ref). A terminal item KEEPS the record
+    # base) and at the review merge (merge commit + backup ref). A terminal item KEEPS the record
     # minus the removed dir (the branch ref is trace — never deleted).
     git_branch: str | None = None
     git_worktree: str | None = None
@@ -197,16 +202,34 @@ class WorkItemCompleteResponse(BaseModel):
     worktree_removed: bool | None = None
 
 
-class WorkItemModelResponse(BaseModel):
-    ok: bool
-    id: str
-    model: str
+class TimelineEvent(BaseModel):
+    """One event in a run's trail (F2 timeline): a prompt, an assistant reply block, a tool/skill
+    call (status), or that call's result — the same rows the Activity trace shows, per run."""
+    id: int
+    seq: int
+    kind: str                       # prompt | reply | status/tool kinds | result
+    name: str | None = None
+    description: str | None = None
+    tool_id: str | None = None
+    created_at: str
 
 
-class WorkItemEffortResponse(BaseModel):
-    ok: bool
-    id: str
-    effort: str
+class TimelineRun(BaseModel):
+    """One phase agent's run in the unified timeline: which phase/role it was, and its turn events."""
+    run_id: int
+    phase: str | None = None        # triage | plan | build | vet | review | close
+    feature: str | None = None      # chat (interactive owner) | deputy | triage/plan/build/vet/close
+    model: str | None = None
+    status: str | None = None
+    started_at: str | None = None
+    events: list[TimelineEvent] = []
+
+
+class WorkItemTimelineResponse(BaseModel):
+    """The F2 unified timeline: all of an item's runs oldest-first, each with its ordered events —
+    the read-only conversation the panel mirrors across every phase."""
+    item_id: str
+    runs: list[TimelineRun] = []
 
 
 class WorkItemGitRecord(BaseModel):
@@ -227,12 +250,23 @@ class WorkItemAdvanceResponse(BaseModel):
     from_: str = Field(alias="from")
     # Present only when this advance ENTERED build for a worktree kind: the record just created.
     git: WorkItemGitRecord | None = None
+    # Present only when this advance LEFT review (the review decision IS the merge, B2): the merge
+    # result — target/path, knowledge ops applied, freshness lint. Absent on every other transition.
+    merge: dict | None = None
 
 
 class WorkItemSeenResponse(BaseModel):
     """Seen-stamp result (S7 read receipt). `changed` False = was already stamped just now."""
     ok: bool
     id: str
+    changed: bool
+
+
+class WorkItemAutopilotResponse(BaseModel):
+    """Autopilot-toggle result. `changed` False = the flag was already in the requested state."""
+    ok: bool
+    id: str
+    autopilot: bool
     changed: bool
 
 

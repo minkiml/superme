@@ -709,6 +709,52 @@ def _create_inbox_item(*, store, context_id, dev_root=None, **_):
     return create_inbox_item
 
 
+# --------------------------------------------------------------------------- itemize + launch (4c)
+# The onboarding LAUNCH step: turn a settled plan into a cohort of autopilot work-items in one call.
+# Unlike create_inbox_item (one ticket, owner triages later), this mints work-items DIRECTLY on
+# autopilot with their dependency edges wired — the end-of-onboarding act, after the owner confirms
+# the list. `key` is a batch-local handle so the caller can express `after` edges before ids exist.
+
+class ItemizeItemArgs(TypedDict, total=False):
+    key: Required[Annotated[str, ("a batch-LOCAL handle for this item, used only to wire `after` "
+                                  "edges within this launch (e.g. the deliverable id `d-cli`) — the "
+                                  "real work-item id is minted on creation")]]
+    title: Required[Annotated[str, "short, on-point work-item title"]]
+    description: Annotated[str, ("the intent — what value this item delivers. Crisp; NOT a plan "
+                                 "(the item's own plan phase does that)")]
+    after: Annotated[list[str], ("keys of items in THIS batch (or ids of existing work-items) that "
+                                 "must finish before this one starts — from the PRD deliverables' "
+                                 "`Needs` edges. Omit for items that can start immediately")]
+    kind: Annotated[Literal["implementation", "research"], "work-item kind (default implementation)"]
+
+
+class ItemizeAndLaunchArgs(TypedDict, total=False):
+    items: Required[Annotated[list[ItemizeItemArgs], ("the launch cohort — one entry per work-item. "
+                                                      "Created together on autopilot, wired by their "
+                                                      "`after` edges, stamped with one shared cohort id")]]
+
+
+def _itemize_and_launch(*, store, context_id, **_):
+    async def itemize_and_launch(args: dict) -> dict:
+        items = args.get("items")
+        if not isinstance(items, list) or not items:
+            return _err("itemize_and_launch needs a non-empty `items` list (the cohort to launch).")
+        from ...daemon.services import launch   # lazy: harness must not import daemon at load time
+        try:
+            r = launch.launch_cohort(context_id, items)
+        except (ValueError, RuntimeError) as e:
+            return _err(f"Could not launch the cohort: {e}")
+        head = [f"# launched cohort {r['cohort']} · {len(r['created'])} item(s) on autopilot",
+                f"# {r['launched']} started now · {len(r['waiting'])} waiting on upstreams · "
+                f"record: <id> · <status> · <title> [· after <ids>]"]
+        rows = []
+        for c in r["created"]:
+            edge = f" · after {', '.join(c['after'])}" if c["after"] else ""
+            rows.append(f"{c['id']} · {c['status']} · {c['title']}{edge}")
+        return _ok("\n".join(head + rows))
+    return itemize_and_launch
+
+
 class AppendInboxItemArgs(TypedDict, total=False):
     item_id: Required[Annotated[int, "the existing inbox item's id to augment"]]
     addition: Required[Annotated[str, ("the NEW, on-point content from this discussion to append — "
@@ -807,7 +853,7 @@ class SetTriageClassificationArgs(TypedDict, total=False):
     item_id: Required[Annotated[str, "the work-item id"]]
     kind: Required[Annotated[Literal["implementation", "research"],
                              ("the confirmed kind — implementation (changes code; worktree + "
-                              "validate/deliver pipeline) or research (answers questions; "
+                              "vet/review pipeline) or research (answers questions; "
                               "read-only on code, findings instead of merges)")]]
     deliverable: Annotated[str, ("the deliverable this item anchors to: an existing `d-<slug>` "
                                  "from the project PRD, or omit/'none' for a standalone chore. "
@@ -852,6 +898,9 @@ def _set_triage_classification(*, store, context_id, dev_root=None, bound_item_i
                             "unconfirmed slug.")
             dev.set_work_item_scaffold(root, item_id, deliverable=deliverable)
             d_note = f" · deliverable `{deliverable}`"
+        # F1: the triage-exit gate's `triage_ran` reads this stamp — recording a classification
+        # IS triage having run; a bare inbox push (kind default + body copied) never stamps it.
+        dev.set_work_item_triaged(root, item_id)
         return _ok(f"Recorded triage classification: kind `{kind}`{d_note}. The owner confirms at "
                    "the triage-exit gate (Approve → plan); until then it stays a proposal on the "
                    "item's own fields.")
@@ -863,7 +912,10 @@ class RecordEvidenceArgs(TypedDict, total=False):
     check: Required[Annotated[str, "WHAT was verified, one line (e.g. 'unit tests', 'parity')"]]
     how: Required[Annotated[str, "the exact command / procedure that ran"]]
     result: Required[Annotated[str, "the MACHINE result — exit code, counts, output tail"]]
-    passed: Required[Annotated[bool, "did the check pass"]]
+    passed: Required[Annotated[bool, "did the check pass (false when deferred)"]]
+    deferred: Annotated[bool, ("set true for a check the BUILD deferred to the owner (a needs-you "
+                               "item pending authorization at review): it is recorded as an "
+                               "intentional skip, not a failure — you did NOT run it")]
 
 
 def _record_evidence(*, store, context_id, dev_root=None, repo_dir=None, bound_item_id=None, **_):
@@ -877,7 +929,8 @@ def _record_evidence(*, store, context_id, dev_root=None, repo_dir=None, bound_i
             return _err(f"No work-item {item_id!r} here.")
         try:
             e = _arts.record_evidence(d, repo_dir, check=_s(args, "check"), how=_s(args, "how"),
-                                      result=_s(args, "result"), passed=bool(args.get("passed")))
+                                      result=_s(args, "result"), passed=bool(args.get("passed")),
+                                      deferred=bool(args.get("deferred")))
         except ValueError as err:
             return _err(str(err))
         verdict = _arts.evidence_status(d, repo_dir)
@@ -886,6 +939,140 @@ def _record_evidence(*, store, context_id, dev_root=None, repo_dir=None, bound_i
                    f"({verdict['entries']} entries). Evidence goes STALE on any further repo edit — "
                    f"re-run checks after changes; never claim validated without a fresh green ledger.")
     return record_validation_evidence
+
+
+class RecordAssumptionArgs(TypedDict, total=False):
+    item_id: Required[Annotated[str, "the work-item id"]]
+    what: Required[Annotated[str, "the call you took, one line, stated as a decision not a question"]]
+    why: Required[Annotated[str, "one line: why this default over the alternative"]]
+    cost: Required[Annotated[str, "what breaks if this turns out wrong, and how hard to reverse"]]
+
+
+class RequestAuthorizationArgs(TypedDict, total=False):
+    item_id: Required[Annotated[str, "the work-item id"]]
+    what: Required[Annotated[str, "the contract change you can't self-authorize, one line "
+                                  "(e.g. 'retire the legacy spec.md doc')"]]
+    why: Required[Annotated[str, "one line: why it's needed and why it's above your pay grade"]]
+    doc: Required[Annotated[str, "the anchor doc it touches (project-prd|architecture|capabilities|"
+                                 "decisions|roadmap|resources|spec)"]]
+    scope: Required[Annotated[
+        Literal["doc-sync", "rename-to-shipped", "roadmap-mark-done",
+                "prd-identity", "roadmap-scope", "new-decision", "doc-delete"],
+        "the authorization scope, matched against the deputy's delegated authority: sync-to-reality "
+        "scopes (doc-sync · rename-to-shipped · roadmap-mark-done) are delegable; intent-defining "
+        "scopes (prd-identity · roadmap-scope · new-decision · doc-delete) are owner-reserved"]]
+    check: Annotated[str, "the vet-plan check id this blocks — so vet DEFERS it instead of failing it"]
+
+
+def _record_assumption(*, store, context_id, dev_root=None, bound_item_id=None, **_):
+    async def record_assumption(args: dict) -> dict:
+        from ...core import artifacts as _arts
+        item_id = _s(args, "item_id")
+        if (msg := _bound_err(item_id, bound_item_id)):
+            return _err(msg)
+        d = _item_dir(dev_root, item_id)
+        if d is None:
+            return _err(f"No work-item {item_id!r} here.")
+        item = {}
+        try:
+            from ...core.dev_knowledge import DevKnowledgeService as _DK
+            item = _DK().read_work_item(dev_root, item_id) or {}
+        except Exception:
+            pass
+        try:
+            a = _arts.record_assumption(d, what=_s(args, "what"), why=_s(args, "why"),
+                                        cost=_s(args, "cost"), phase=str(item.get("phase") or ""))
+        except ValueError as err:
+            return _err(str(err))
+        n = len(_arts.unratified_assumptions(d))
+        return _ok(f"Assumption recorded: {a['what']}. {n} now awaiting the owner. It goes in front "
+                   f"of them at the NEXT GATE as a confirm/adjust card, and the close gate refuses "
+                   f"while any is unratified — so keep working; do not stop to ask.")
+    return record_assumption
+
+
+def _request_authorization(*, store, context_id, dev_root=None, bound_item_id=None, **_):
+    async def request_authorization(args: dict) -> dict:
+        from ...core import artifacts as _arts
+        item_id = _s(args, "item_id")
+        if (msg := _bound_err(item_id, bound_item_id)):
+            return _err(msg)
+        d = _item_dir(dev_root, item_id)
+        if d is None:
+            return _err(f"No work-item {item_id!r} here.")
+        item = {}
+        try:
+            from ...core.dev_knowledge import DevKnowledgeService as _DK
+            item = _DK().read_work_item(dev_root, item_id) or {}
+        except Exception:
+            pass
+        try:
+            a = _arts.record_authorization(
+                d, what=_s(args, "what"), why=_s(args, "why"), doc=_s(args, "doc"),
+                scope=_s(args, "scope"), check=_s(args, "check"),
+                phase=str(item.get("phase") or ""))
+        except ValueError as err:
+            return _err(str(err))
+        return _ok(f"Authorization requested: {a['what']} (scope {a['scope']}). The blocked vet "
+                   f"check now DEFERS — do NOT edit the vet plan and do NOT force the change through. "
+                   f"Complete everything else and report. The request rides to REVIEW, where the "
+                   f"owner (or a delegated deputy) grants or denies; a grant routes back to you to "
+                   f"perform it, a denial accepts the gap on the record.")
+    return request_authorization
+
+
+class VetVerdictArg(TypedDict):
+    check: Annotated[str, "the plan's vet-plan check id, verbatim (it keys the evidence ledger)"]
+    passed: Annotated[bool, "did the check meet its `expect` — must match the ledger's latest entry"]
+
+
+class FileVetReportArgs(TypedDict, total=False):
+    item_id: Required[Annotated[str, "the work-item id"]]
+    verdicts: Required[Annotated[list[VetVerdictArg],
+                                 ("one verdict per vet-plan check — EVERY plan check must appear, "
+                                  "each backed by a record_validation_evidence entry")]]
+    findings: Annotated[str, ("markdown for the failing checks: per check `### <check-id>` with "
+                              "expected / actual / verbatim evidence / where. DESCRIBE what you "
+                              "saw — never prescribe the fix (the builder decides how). Required "
+                              "when any verdict fails")]
+    out_of_scope: Annotated[str, ("real-but-unwritten observations (crashes, smells) — these do "
+                                  "NOT gate the loop; they go to the review gate. Omit if none")]
+
+
+def _file_vet_report(*, store, context_id, dev_root=None, bound_item_id=None, **_):
+    async def file_vet_report(args: dict) -> dict:
+        """The vet cycle's narrative handoff (build-vet-loop §4b): code writes the envelope
+        (`vet-report-<n>.md`, cycle-numbered), the agent supplies findings prose. Verdicts are
+        cross-checked MECHANICALLY against the plan's vet plan and the evidence ledger — a verdict
+        with no evidence, or contradicting the ledger's latest entry, is refused (anti-self-report:
+        the ledger is the truth, not the prose)."""
+        from ...core import artifacts as _arts
+        item_id = _s(args, "item_id")
+        if (msg := _bound_err(item_id, bound_item_id)):
+            return _err(msg)
+        d = _item_dir(dev_root, item_id)
+        if d is None:
+            return _err(f"No work-item {item_id!r} here.")
+        verdicts = args.get("verdicts") or []
+        if not isinstance(verdicts, list) or not all(isinstance(v, dict) for v in verdicts):
+            return _err("verdicts must be a list of {check, passed} objects")
+        try:
+            r = _arts.write_vet_report(d, verdicts=verdicts,
+                                       findings=_s(args, "findings") or "",
+                                       out_of_scope=_s(args, "out_of_scope") or "")
+        except ValueError as err:
+            return _err(f"Vet report refused — {err}")
+        store.log_event(context_id, "vet.report",
+                        f"Vet report filed (cycle {r['cycle']}): "
+                        + ", ".join(f"{v['check']}={'PASS' if v.get('passed') else 'FAIL'}"
+                                    for v in verdicts),
+                        item_id=item_id, actor="agent",
+                        meta={"cycle": r["cycle"],
+                              "failed": [v["check"] for v in verdicts if not v.get("passed")]})
+        return _ok(f"Vet report filed: {r['path']} (cycle {r['cycle']}). The verdicts matched the "
+                   "ledger. This session's job is done — do not attempt fixes; the loop hands "
+                   "failures back to the build session.")
+    return file_vet_report
 
 
 class WriteCheckpointArgs(TypedDict, total=False):
@@ -954,13 +1141,17 @@ def _sync_from_main(*, store, context_id, dev_root=None, main_repo_dir=None, bou
 
 
 class KnowledgeOpArg(TypedDict):
-    doc: Annotated[Literal["project-prd", "spec", "roadmap", "architecture", "resources"],
-                   "which anchor doc this op edits"]
+    doc: Annotated[Literal["project-prd", "architecture", "capabilities", "decisions",
+                           "roadmap", "resources"],
+                   "which anchor doc this op edits (the retired `spec` is read-only — its "
+                   "content lives in architecture/decisions now)"]
     section: Annotated[str, "the exact `## heading` text the op targets (must exist in the doc)"]
-    op: Annotated[Literal["update", "append", "supersede"],
-                  "update/supersede replace the section body; append extends it"]
-    content: Annotated[str, ("the section BODY markdown only — do NOT repeat the `## <section>` "
-                             "heading (the writer keeps it in place; a repeated heading is stripped)")]
+    op: Annotated[Literal["update", "append", "supersede", "rename_section"],
+                  "update/supersede replace the section body; append extends it; rename_section "
+                  "rewrites the `## heading` LINE itself (content = the new heading text)"]
+    content: Annotated[str, ("for body ops: the section BODY markdown only — do NOT repeat the "
+                             "`## <section>` heading (the writer keeps it; a repeated heading is "
+                             "stripped). For rename_section: the new heading TEXT, one line, no `##`")]
 
 
 class StageKnowledgeDeltaArgs(TypedDict, total=False):
@@ -1002,7 +1193,7 @@ def _stage_knowledge_delta(*, store, context_id, dev_root=None, repo_dir=None,
                         + "\n- ".join(issues))
         path = _kd.stage_delta(d, ops)
         return _ok(f"Knowledge delta staged ({len(ops)} op(s)) at {path}. It stays a draft "
-                   f"(restage freely to replace it) until the deliver-gate merge applies it to "
+                   f"(restage freely to replace it) until the review-gate merge applies it to "
                    f"the anchor docs atomically — you never edit those docs directly.")
     return stage_knowledge_delta
 
@@ -1050,6 +1241,56 @@ def _propose_close(*, store, context_id, dev_root=None, main_repo_dir=None,
     return propose_close
 
 
+class RouteReviewFeedbackArgs(TypedDict, total=False):
+    item_id: Required[Annotated[str, "the work-item id"]]
+    feedback: Required[Annotated[str, ("the review feedback VERBATIM — the owner's (or deputy's) "
+                                       "words are the requirement being routed; never paraphrase "
+                                       "into this field")]]
+
+
+def _route_review_feedback(*, store, context_id, dev_root=None, spine=None,
+                           bound_item_id=None, **_):
+    async def route_review_feedback(args: dict) -> dict:
+        """The review router (#178): hold-&-fix feedback at the review gate is NEW information the
+        loop must act on — this routes it back through the workflow instead of you doing the work in
+        this un-vetted review session. Flips review→plan and, once this turn ends, fires a re-plan
+        carrying the feedback + a downstream digest; forward flow (plan→build→vet→review) re-vets by
+        construction. Owner feedback and the deputy's send-back use the SAME path — the chat is a
+        shared terminal, and feedback advances the loop the same way whoever gives it."""
+        from pathlib import Path
+        from ...core.dev_knowledge import DevKnowledgeService
+        item_id = _s(args, "item_id")
+        if (msg := _bound_err(item_id, bound_item_id)):
+            return _err(msg)
+        d = _item_dir(dev_root, item_id)
+        if d is None:
+            return _err(f"No work-item {item_id!r} here.")
+        dev = DevKnowledgeService()
+        item = dev.read_work_item(Path(dev_root), item_id) or {}
+        if item.get("done_at") or str(item.get("status")) == "done":
+            return _err("This item is already terminal.")
+        if str(item.get("phase")) != "review":
+            return _err(f"Review routing applies at the review gate — this item is at "
+                        f"`{item.get('phase')}`. Mid-loop findings go through the vet report; "
+                        f"new scope goes to the inbox (create_inbox_item).")
+        feedback = (_s(args, "feedback") or "").strip()
+        if not feedback:
+            return _err("`feedback` is required — the reviewer's words ARE the requirement "
+                        "being routed.")
+        # A run is in flight (this very turn holds the item's run-lock), so the re-plan cannot fire
+        # synchronously — schedule it to fire once this turn's run row closes. The scheduler flips
+        # review→plan and re-plans with a downstream digest (loop.schedule_review_plan).
+        from ...daemon.services import loop as _loop
+        _loop.schedule_review_plan(context_id, item_id, feedback)
+        return _ok("Feedback routed → re-planning. Once this turn ends the item flips review→plan "
+                   "and re-plans against your feedback, then runs forward (plan→build→vet→review) and "
+                   "is re-vetted before it comes back. Tell the owner exactly what was routed, then "
+                   "STOP — do NOT fix anything in this review session (it isn't vetted here; the loop "
+                   "does the work and proves it). Feedback that is genuinely NEW SCOPE (a feature, "
+                   "not a shortfall of this item) goes to the inbox (create_inbox_item) instead.")
+    return route_review_feedback
+
+
 _ITEM_DEV_TOOLS: list[ToolSpec] = [
     ToolSpec(
         "set_triage_classification",
@@ -1071,6 +1312,28 @@ _ITEM_DEV_TOOLS: list[ToolSpec] = [
         RecordEvidenceArgs, _record_evidence,
     ),
     ToolSpec(
+        "record_assumption",
+        "Record a call you made WITHOUT the owner during an autonomous phase (what · why · cost of "
+        "being wrong). Use this instead of stopping to ask: it surfaces at the next gate as a "
+        "confirm/adjust card and blocks close until they've seen it.",
+        RecordAssumptionArgs, _record_assumption,
+    ),
+    ToolSpec(
+        "request_authorization",
+        "Request authorization for a contract change you can't self-authorize (an owner-reserved "
+        "anchor-doc edit). The blocked vet check DEFERS instead of failing — never edit the vet "
+        "plan or force the change. It surfaces at review, where the owner or a delegated deputy "
+        "grants (routes back to you) or denies (accepts the gap).",
+        RequestAuthorizationArgs, _request_authorization,
+    ),
+    ToolSpec(
+        "file_vet_report",
+        "File a vet cycle's report (vet phase): one verdict per vet-plan check, each backed by "
+        "recorded evidence — the envelope and cycle number are code-owned; you supply the "
+        "findings (describe what you saw, never the fix).",
+        FileVetReportArgs, _file_vet_report,
+    ),
+    ToolSpec(
         "write_checkpoint",
         "Bank a session-continuity checkpoint onto a work-item (working-on / decisions / "
         "remaining / notes) — what a fresh session cold-starts from.",
@@ -1090,6 +1353,14 @@ _ITEM_DEV_TOOLS: list[ToolSpec] = [
         StageKnowledgeDeltaArgs, _stage_knowledge_delta,
     ),
     ToolSpec(
+        "route_review_feedback",
+        "Route the owner's review-gate feedback into the loop (review phase only): phrase it as "
+        "a new vet-plan check (traces + falsifiable expect) — the check is appended code-owned "
+        "and validated, the item re-enters build, and the loop drives it to green. This is how "
+        "owner feedback becomes a written requirement the loop can close on.",
+        RouteReviewFeedbackArgs, _route_review_feedback,
+    ),
+    ToolSpec(
         "propose_close",
         "Propose the item for closing (proposal only — the owner promotes): runs the mechanical "
         "close criteria and pages the owner at the close gate when all are green.",
@@ -1103,7 +1374,7 @@ _ITEM_DEV_TOOLS: list[ToolSpec] = [
 # two SANCTIONED itemize writes. The LEARNING set is the pipeline sub-agents' pens (capture / distill
 # / forge) — they must NOT reach the main chat agent, or it will short-circuit the automatic
 # capture→distill→forge flow by filing candidates/proposals itself (there is no chat-side learning
-# surface by design). Those tools are added only for the disposable headless runs (`learning=True`).
+# surface by design). Those tools are added only for the disposable background runs (`learning=True`).
 
 # Read-only tools available to EVERY dev turn (main chat + learning runs). Naming: every read is
 # `read_*` so the tool surface is scannable. The learning-pool reads (`read_candidates`/`read_proposals`)
@@ -1151,6 +1422,14 @@ _MAIN_DEV_TOOLS: list[ToolSpec] = [
         "append_inbox_item",
         "Append new discussion content onto an EXISTING inbox item (never edits it) — the dedup path.",
         AppendInboxItemArgs, _append_inbox_item,
+    ),
+    ToolSpec(
+        "itemize_and_launch",
+        "Launch a cohort of autopilot work-items from a settled onboarding plan — one call creates "
+        "them all, wired by their dependency edges, each born on autopilot and flowing "
+        "triage→plan→build⟷vet→review with no human until a review gate. The end-of-onboarding "
+        "step; use ONLY after the owner has confirmed the item list.",
+        ItemizeAndLaunchArgs, _itemize_and_launch,
     ),
 ]
 

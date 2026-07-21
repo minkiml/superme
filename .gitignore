@@ -39,3 +39,16 @@ superme-docs/
 
 # Internal authoring/practice guidance — private to the dev, never on remote
 Best-superme-context-practice-and-other-guidance/
+
+# scripts/ holds internal dev/test runners (per-slice test_*.py, drivers, one-off migrations) —
+# local-only, never on remote. Keep ONLY the shared infra tooling + its golden snapshots:
+#   parity.py / parity_baseline.json  = API-contract (route + OpenAPI) parity net
+#   ws_schema.py                      = regenerates the typed WS frame schema
+#   prompt_baseline.json              = kernel-speech / launch-prompt parity net (test_thread3.py)
+#   check_fast.sh                     = shared dev helper
+/scripts/*
+!/scripts/parity.py
+!/scripts/parity_baseline.json
+!/scripts/prompt_baseline.json
+!/scripts/ws_schema.py
+!/scripts/check_fast.sh

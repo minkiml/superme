@@ -6,37 +6,36 @@ import type { WorkItem } from '@/lib/api'
 // The per-kind phase pipelines (workspace-workflow D2). The kanban renders the UNION in pipeline
 // order; a column only shows when it has items (mid-pipeline research stages sit beside their
 // implementation counterparts). Board redesign lands with the workflow's surface stage (S7).
-// `deliver` reads as "Review" to the owner: the phase IS the owner reading the finished work and
-// deciding, and "deliver" named it from the agent's side. The wire value stays `deliver` — it's a
-// stored contract enum in every item's frontmatter — so the rename lives here, at the render edge.
+// `vet`/`review` are the wire enums too (build-vet-loop O1) — the old `validate`/`deliver` values
+// were renamed end-to-end (enums + stored frontmatter, via migration), not just at this edge.
 export const PHASES: { key: string; label: string }[] = [
   { key: 'triage', label: 'Triage' },
   { key: 'plan', label: 'Plan' },
   { key: 'build', label: 'Build' },
   { key: 'investigate', label: 'Investigate' },
-  { key: 'validate', label: 'Validate' },
+  { key: 'vet', label: 'Vet' },
   { key: 'report', label: 'Report' },
-  { key: 'deliver', label: 'Review' },
+  { key: 'review', label: 'Review' },
   { key: 'close', label: 'Close' },
 ]
 
 // The four phases that END at a briefed human gate (mirrors core/gate_briefs.GATE_FOR_PHASE). The
-// owner's Approve button belongs on THESE and nowhere else: build→validate and validate→deliver
+// owner's Approve button belongs on THESE and nowhere else: build→vet and vet→review
 // are the autonomous loop's edges, and rendering a gate button there invents a decision the owner
 // was never asked to make.
-export const GATED_PHASES = new Set(['triage', 'plan', 'deliver', 'close'])
+export const GATED_PHASES = new Set(['triage', 'plan', 'review', 'close'])
 export const PHASE_LABEL: Record<string, string> = Object.fromEntries(PHASES.map((p) => [p.key, p.label]))
 
 // Per-phase accent token (dot + column rail) — reads left→right as the pipeline advances:
-// intake/plan = dev-blue (thinking), mid-flight = warn-amber, deliver/close = success-green.
+// intake/plan = dev-blue (thinking), mid-flight = warn-amber, review/close = success-green.
 export const PHASE_ACCENT: Record<string, string> = {
   triage: 'dev',
   plan: 'dev',
   build: 'warn',
   investigate: 'warn',
-  validate: 'warn',
+  vet: 'warn',
   report: 'success',
-  deliver: 'success',
+  review: 'success',
   close: 'success',
 }
 
@@ -46,6 +45,8 @@ export const STATUS_COLOR: Record<string, string> = {
   active: 'text-accent-text',
   awaiting_human: 'text-warn',
   awaiting_child: 'text-muted',
+  awaiting_upstream: 'text-muted',
+  awaiting_slot: 'text-muted',
   done: 'text-success',
 }
 
@@ -55,6 +56,8 @@ export const STATUS_STRIPE: Record<string, string> = {
   active: 'border-l-accent',
   awaiting_human: 'border-l-warn',
   awaiting_child: 'border-l-line',
+  awaiting_upstream: 'border-l-line',
+  awaiting_slot: 'border-l-line',
   done: 'border-l-success',
 }
 
@@ -65,6 +68,8 @@ export const STATUS_LABEL: Record<string, string> = {
   active: 'in progress',
   awaiting_human: 'needs you',
   awaiting_child: 'blocked on sub-item',
+  awaiting_upstream: 'queued behind another item',
+  awaiting_slot: 'queued (autopilot busy)',
   done: 'done',
 }
 
@@ -74,10 +79,10 @@ export const PHASE_VERB: Record<string, string> = {
   triage: 'triaging',
   plan: 'planning',
   build: 'building',
-  validate: 'validating',
+  vet: 'vetting',
   investigate: 'investigating',
   report: 'reporting',
-  deliver: 'reviewing',
+  review: 'reviewing',
   close: 'closing',
 }
 

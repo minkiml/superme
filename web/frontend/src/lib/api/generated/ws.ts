@@ -10,8 +10,16 @@
  * the FE WS-type codegen consumes (`scripts/ws_schema.py`).
  */
 export interface WsFrames {
-  inbound: TurnFrame | ApprovalResponseFrame;
-  outbound: InitFrame | TextDeltaFrame | StatusFrame | UsageFrame | ApprovalRequestFrame | ResultFrame | ErrorFrame;
+  inbound: TurnFrame | ApprovalResponseFrame | WatchFrame;
+  outbound:
+    | InitFrame
+    | TextDeltaFrame
+    | StatusFrame
+    | UsageFrame
+    | ApprovalRequestFrame
+    | ResultFrame
+    | ErrorFrame
+    | TimelineFrame;
 }
 /**
  * A turn request. Lenient (every field defaulted) so a sparse client frame still validates.
@@ -35,6 +43,16 @@ export interface ApprovalResponseFrame {
   type?: "approval_response";
   id?: string | null;
   approved?: boolean;
+}
+/**
+ * Client → daemon: "this panel is now watching work-item `item_id`" — subscribe it to that
+ * item's live event broker so build/vet/other-phase runs stream in (F2). `item_id: null` stops
+ * watching (panel closed / switched away). Independent of turns: watching is passive observation,
+ * firing a turn is separate.
+ */
+export interface WatchFrame {
+  type?: "watch";
+  item_id?: string | null;
 }
 /**
  * Sent on connect + whenever the SDK reveals the live "/" command list.
@@ -101,4 +119,20 @@ export interface ResultFrame {
 export interface ErrorFrame {
   type?: "error";
   message: string;
+}
+/**
+ * A live event from a work-item's run that this panel is WATCHING (F2 unified timeline) —
+ * pushed from the item's broker (`item_stream`), independent of any turn this panel fired. Carries
+ * which run it belongs to; run-lock means one live run per item, so the FE appends it to the item's
+ * CURRENT phase lane. Kinds mirror the run trail: `reply` (assistant text) · a tool/skill call
+ * (status kinds) · `result` (a call's output).
+ */
+export interface TimelineFrame {
+  type?: "timeline";
+  item_id: string;
+  run_id?: number | null;
+  kind: string;
+  name?: string | null;
+  description?: string | null;
+  tool_id?: string | null;
 }

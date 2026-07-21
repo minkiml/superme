@@ -11,14 +11,14 @@ import type { Schema } from './generated'
 // permits any key on those until R5 tightens them — with FE enum-narrowing layered on top.
 
 // Workspace-workflow enums (S1, 2026-07-15). `phase` = the per-KIND pipeline stage
-// (implementation: triage→plan→build→validate→deliver→close · research: triage→plan→investigate→
+// (implementation: triage→plan→build→vet→review→close · research: triage→plan→investigate→
 // report→close; the union type below). `status` = the runnable axis — only `awaiting_human` pages
 // the owner; running-right-now is derived from live runs, not a status. `outcome` stamps how a
 // terminal (status done) item ended.
 export type WorkKind = 'implementation' | 'research'
 export type WorkPhase =
-  | 'triage' | 'plan' | 'build' | 'validate' | 'deliver' | 'investigate' | 'report' | 'close'
-export type WorkStatus = 'active' | 'awaiting_child' | 'awaiting_human' | 'done'
+  | 'triage' | 'plan' | 'build' | 'vet' | 'review' | 'investigate' | 'report' | 'close'
+export type WorkStatus = 'active' | 'awaiting_child' | 'awaiting_upstream' | 'awaiting_slot' | 'awaiting_human' | 'done'
 export type WorkOutcome = 'completed' | 'abandoned' | 'superseded'
 export type SpawnRelation = 'blocking' | 'parallel' | 'spawn'
 // D3 branch-off provenance, child-side: which item this one spawned from and how.
@@ -47,11 +47,13 @@ export type WorkItem = {
   phase: WorkPhase
   status: WorkStatus | null // runnable axis (done = terminal); null only on pre-workflow items
   outcome?: WorkOutcome | null // set with status done: how the item ended
+  after?: string[] | null // peer-sequencing edge (slice 1): ids this item may not start before
+  autopilot?: boolean | null // per-item policy (slice 2): drive its gates without a click
   spawned_from?: SpawnedFrom | null // branch-off provenance edge (D3)
   superseded_by?: string | null // set when outcome = superseded
   inbox_id?: number | null // originating inbox row (trace)
   done_at?: string | null // terminal stamp
-  // Git record (S4/D4) — written at build entry / the deliver merge; kept at terminal (trace):
+  // Git record (S4/D4) — written at build entry / the review merge; kept at terminal (trace):
   git_branch?: string | null
   git_worktree?: string | null
   git_base?: string | null
@@ -107,7 +109,7 @@ export type DevData = {
   work_items: WorkItem[]
   inbox: InboxEntry[]
   glance: DevGlance
-  running?: string[] // work-item ids with a headless /plan turn in flight
+  running?: string[] // work-item ids with a background /plan turn in flight
 }
 
 // The event LOG (PRD §4.9) — the append-only activity firehose. `scope`/`item_id` give the
@@ -289,6 +291,20 @@ export function saveGeneralDoc(name: string, content: string, contextId = 'globa
 export function getRoadmap(contextId = 'global'): Promise<RoadmapBoard> {
   return getJSON(`/api/dev/roadmap?context_id=${q(contextId)}`)
 }
+
+// The PORTRAIT — what this project IS, in six bands assembled from the anchor docs. Read-only:
+// the docs are the store, so nothing here is edited in place.
+export type Portrait = Schema<'PortraitResponse'>
+export function getPortrait(contextId = 'global'): Promise<Portrait> {
+  return getJSON(`/api/dev/portrait?context_id=${q(contextId)}`)
+}
+
+// Knowledge health — findings over general/, derived fresh (never stored, so never stale).
+export type LintFinding = Schema<'LintFinding'>
+export type LintReport = Schema<'LintResponse'>
+export function getKnowledgeLint(contextId = 'global'): Promise<LintReport> {
+  return getJSON(`/api/dev/lint?context_id=${q(contextId)}`)
+}
 // Set a root work-item's anchor pointer — pass `wave` (resolves its deliverable) or `deliverable`.
 export function setWorkItemScaffold(
   itemId: string, opts: { wave?: string | null; deliverable?: string | null }, contextId = 'global',
@@ -453,7 +469,11 @@ export function getDev(contextId = 'global'): Promise<DevData> {
 // Quick-capture: add an item to the context's inbox queue (no approval gate). Title is
 // entered manually; origin defaults to 'user' (manual capture).
 export function addInbox(
-  input: { text: string; title?: string | null; kind?: InboxKind; tag?: string | null; origin?: InboxOrigin },
+  input: {
+    text: string; title?: string | null; kind?: InboxKind; tag?: string | null; origin?: InboxOrigin
+    // F3: run config chosen at capture — locked into the work-item at push. null = inherit default.
+    model?: string | null; effort?: string | null
+  },
   contextId = 'global',
 ): Promise<InboxEntry> {
   return sendJSON('/api/dev/inbox', 'POST', {
@@ -462,14 +482,16 @@ export function addInbox(
     kind: input.kind ?? 'note',
     tag: input.tag ?? null,
     origin: input.origin ?? 'user',
+    model: input.model ?? null,
+    effort: input.effort ?? null,
     context_id: contextId,
   })
 }
 
-// Edit an inbox item: change title, text, kind, tag, or status.
+// Edit an inbox item: change title, text, kind, tag, status, or the locked-in model/effort (F3).
 export function updateInbox(
   id: number,
-  patch: Partial<Pick<InboxEntry, 'status' | 'kind' | 'tag' | 'text' | 'title' | 'routed_to'>>,
+  patch: Partial<Pick<InboxEntry, 'status' | 'kind' | 'tag' | 'text' | 'title' | 'routed_to' | 'model' | 'effort'>>,
 ): Promise<InboxEntry> {
   return sendJSON(`/api/dev/inbox/${id}`, 'PATCH', patch)
 }
@@ -539,7 +561,7 @@ export function markWorkItemSeen(itemId: string, contextId = 'global'): Promise<
   return sendJSON(`/api/dev/work-items/${q(itemId)}/seen?context_id=${q(contextId)}`, 'POST')
 }
 
-// "Plan it" — fire a headless /plan turn for a queued work-item. Returns immediately; the
+// "Plan it" — fire a background /plan turn for a queued work-item. Returns immediately; the
 // agent works in the background and the item's status/artifacts update on their own. Poll
 // getDev (DevData.running) for the live planning state.
 export type PlanResult = Schema<'PlanResponse'>
@@ -551,6 +573,35 @@ export function planWorkItem(itemId: string, contextId = 'global', model?: strin
     model: model ?? null,
     effort: effort ?? null,
   })
+}
+
+// "Run vet" — launch the build⟷vet LOOP on a vet-phase item (build-vet-loop §5). One click,
+// then the daemon-side driver self-drives: vet run → passed→review · failed→build cycle
+// (handed the vet report) → re-vet — until the review gate, a breaker, or a fail-closed stop.
+// Returns immediately; poll getDev for phase/status. Backend 409s off-phase / mid-run / no worktree.
+export function vetWorkItem(itemId: string, contextId = 'global'): Promise<PlanResult> {
+  return sendJSON(`/api/dev/work-items/${q(itemId)}/vet`, 'POST', { context_id: contextId })
+}
+
+// "Continue" — the owner's resume of a build parked at a human gate (BV-A1). RE-enters the
+// build⟷vet loop: resumes the build thread to finalize (complete what's doable, record any wall
+// as an assumption), then the normal build→vet→review flow carries the gap to review. Distinct
+// from a chat reply to the paused build, which does not advance the loop. Backend 409s off-phase /
+// mid-run / no worktree.
+export function continueWorkItem(itemId: string, contextId = 'global'): Promise<PlanResult> {
+  return sendJSON(`/api/dev/work-items/${q(itemId)}/continue`, 'POST', { context_id: contextId })
+}
+
+// The owner's grant/deny on a deferred authorization at the review gate (BV-A2). A grant routes
+// the item back through build⟷vet to PERFORM the now-allowed contract change (grant-as-send_back),
+// then it re-vets and returns to review; a deny waives the deferred check (the gap is accepted, on
+// the record) so the item can close. The owner grants unconditionally — the delegated-authority
+// floor binds only the deputy. Backend 409s off-review / unknown or already-decided auth id.
+export function authorizeWorkItem(
+  itemId: string, authId: string, decision: 'granted' | 'denied', contextId = 'global',
+): Promise<PlanResult> {
+  return sendJSON(`/api/dev/work-items/${q(itemId)}/authorize`, 'POST',
+    { auth_id: authId, decision, context_id: contextId })
 }
 
 // Hard-delete a pre-build work-item and erase its trace (folder + session transcript +
@@ -595,6 +646,15 @@ export function getWorkItemArtifacts(itemId: string, contextId = 'global'): Prom
   return getJSON(`/api/dev/work-items/${q(itemId)}/artifacts?context_id=${q(contextId)}`)
 }
 
+// F2 unified timeline: every run of this item, oldest-first, phase/role-tagged with its turn events —
+// the read-only history the chat panel loads before live-streaming new frames from the socket.
+export type WorkItemTimeline = Schema<'WorkItemTimelineResponse'>
+export type TimelineRun = Schema<'TimelineRun'>
+export type TimelineEvent = Schema<'TimelineEvent'>
+export function getWorkItemTimeline(itemId: string, contextId = 'global'): Promise<WorkItemTimeline> {
+  return getJSON(`/api/dev/work-items/${q(itemId)}/timeline?context_id=${q(contextId)}`)
+}
+
 // Approve → advance a work-item to its KIND's next phase (KIND_PROFILES sequencing). The
 // owner's forward gate; backend 409s at the final phase, on terminal items, or mid-run.
 export type AdvanceResult = Omit<Schema<'WorkItemAdvanceResponse'>, 'phase' | 'from'> & {
@@ -603,6 +663,15 @@ export type AdvanceResult = Omit<Schema<'WorkItemAdvanceResponse'>, 'phase' | 'f
 }
 export function advanceWorkItem(itemId: string, contextId = 'global'): Promise<AdvanceResult> {
   return sendJSON(`/api/dev/work-items/${q(itemId)}/advance?context_id=${q(contextId)}`, 'POST')
+}
+
+// Enrol / un-enrol a work-item in autopilot (slice 2). Pre-build only (triage/plan) — 409 past that.
+export type AutopilotResult = Schema<'WorkItemAutopilotResponse'>
+export function setWorkItemAutopilot(
+  itemId: string, on: boolean, contextId = 'global',
+): Promise<AutopilotResult> {
+  return sendJSON(
+    `/api/dev/work-items/${q(itemId)}/autopilot?context_id=${q(contextId)}`, 'POST', { on })
 }
 
 // Complete + archive a Done-phase item (the tick-out): snapshots the execution trace to a file,
@@ -614,7 +683,7 @@ export function completeWorkItem(itemId: string, contextId = 'global'): Promise<
 
 // --- work-item git layer (workspace-workflow S4/D4) -------------------------------------
 // The worktree is created automatically at build entry (the advance route); these are the
-// owner's git surface: live health, freshness sync, the deliver merge (auto-routed: blocking
+// owner's git surface: live health, freshness sync, the review merge (auto-routed: blocking
 // child → parent branch, else → trunk with a backup ref), revert, and Resolve-with-Agent.
 
 export type GitHealth = Schema<'GitHealthResponse'>
@@ -637,7 +706,7 @@ export function revertWorkItemGit(itemId: string, contextId = 'global'): Promise
   return sendJSON(`/api/dev/work-items/${q(itemId)}/git/revert`, 'POST', { context_id: contextId })
 }
 
-// Resolve-with-Agent: re-runs the sync leaving conflicts in the worktree and fires a headless
+// Resolve-with-Agent: re-runs the sync leaving conflicts in the worktree and fires a background
 // resolution run (409 when the sync is actually clean). Poll getDev (running) for progress.
 export type GitResolveResult = Schema<'GitResolveResponse'>
 export function resolveWorkItemGit(itemId: string, contextId = 'global'): Promise<GitResolveResult> {
@@ -665,14 +734,5 @@ export function abandonWorkItem(itemId: string, reason = '', contextId = 'global
     { context_id: contextId, reason, superseded_by: supersededBy ?? null })
 }
 
-// Configure the model a work-item's runs use (plan + bound chat) — reconfigurable anytime
-// from the review popup; persisted to item.md frontmatter.
-export function setWorkItemModel(itemId: string, model: string, contextId = 'global'): Promise<{ ok: boolean; id: string; model: string }> {
-  return sendJSON(`/api/dev/work-items/${q(itemId)}/model`, 'POST', { context_id: contextId, model })
-}
-
-// Configure the reasoning effort a work-item's runs use (plan + bound chat) — reconfigurable
-// anytime from the review popup; persisted to item.md frontmatter.
-export function setWorkItemEffort(itemId: string, effort: string, contextId = 'global'): Promise<{ ok: boolean; id: string; effort: string }> {
-  return sendJSON(`/api/dev/work-items/${q(itemId)}/effort`, 'POST', { context_id: contextId, effort })
-}
+// F3: per-work-item model/effort setters REMOVED — run config is chosen at capture (addInbox
+// model/effort) and locked in at push. The work-item carries it immutably from then on.

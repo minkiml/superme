@@ -16,6 +16,7 @@ from .context import Context
 from .events import Init, TextDelta, Status, ToolResult, Usage, Result, TurnEvent
 from .permissions import (
     ApproveFn, build_can_use_tool, scoped_writes_approve, deny_all, learning_write_approve,
+    VET_READONLY_NUDGE,
 )
 from .agent_service import AgentService
 from .knowledge_service import KnowledgeService
@@ -38,6 +39,7 @@ __all__ = [
     "scoped_writes_approve",
     "deny_all",
     "learning_write_approve",
+    "VET_READONLY_NUDGE",
     "AgentService",
     "KnowledgeService",
     "DevKnowledgeService",

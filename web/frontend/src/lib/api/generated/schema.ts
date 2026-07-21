@@ -248,6 +248,55 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/repos/{repo_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Disconnect Repo
+         * @description Disconnect a domain — forget the project from SuperMe entirely. IRREVERSIBLE: deletes the
+         *     registration (repos.yaml entry + kv overrides), the knowledge home, the per-repo harness cell,
+         *     the pipeline state (inbox + learning rows) and every session (row + transcript). The project
+         *     FOLDER itself is never touched; reconnecting later is simply a fresh connect (retrofit).
+         *     Preserved per never-delete-logs: run/run_event/run_artifact + dev-activity events — each
+         *     deleted session's runs are stamped session_fate='disconnected'. Guards: `?confirm=<repo id>`
+         *     must match (the UI's typed confirmation), the hub is refused, and live runs block with 409.
+         */
+        delete: operations["disconnect_repo_repos__repo_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/system/attention": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * System Attention
+         * @description The top-of-SuperMe attention feed (Pass 2 · Q2): every `awaiting_human` hold across ALL
+         *     connected repos, grouped by repo and classified (escalation · breaker · paged · review · gate)
+         *     so the notification center can badge a count and offer the right quick actions. Only repos with
+         *     a hold appear; empty feed = nothing needs the owner.
+         */
+        get: operations["system_attention_system_attention_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/runs": {
         parameters: {
             query?: never;
@@ -280,7 +329,7 @@ export interface paths {
          * Run Trace
          * @description One run's event trail — the prompt that opened it, the assistant's reply text, and each
          *     tool/skill/agent call, in order. Per-RUN (not per-session), so each Activity row has its own
-         *     thread; works for headless runs too. Empty list when nothing was recorded.
+         *     thread; works for background runs too. Empty list when nothing was recorded.
          */
         get: operations["run_trace_runs__run_id__trace_get"];
         put?: never;
@@ -437,6 +486,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/system/deputy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set System Deputy
+         * @description The global deputy dial (Quick config): whether a deputy judges autopilot gates and how
+         *     readily it escalates PER GATE (triage/plan/review, each low·medium·high·extra). Partial —
+         *     omitted fields stay put; strictness sets only the gates it names. Rejects an unknown gate or
+         *     level (422) rather than silently defaulting.
+         */
+        post: operations["set_system_deputy_system_deputy_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/system/sweep": {
         parameters: {
             query?: never;
@@ -541,6 +613,27 @@ export interface paths {
          *     this lets a single repo sit out even when the master is on.
          */
         post: operations["set_repo_learning_repos__repo_id__learning_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/repos/{repo_id}/autopilot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set Repo Autopilot
+         * @description Set this repo's autopilot concurrency cap — the max autopilot items in the build⟷vet loop at
+         *     once (the slice-3 launch breaker). Per-project by owner decision; floored at 1.
+         */
+        post: operations["set_repo_autopilot_repos__repo_id__autopilot_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -673,7 +766,8 @@ export interface paths {
          *     open). One shared transaction (core/inbox_flow): creates `work-items/<id>/` at triage/active
          *     carrying `spawned_from` + `inbox_id`, MOVES the inbox content folder (handoff brief + extras)
          *     into the item as `preliminary/` (the row stays as trace), and pauses the parent when the
-         *     relation is blocking. Returns the new work-item + the row.
+         *     relation is blocking. Then fires the auto-triage run (#120 — no manual trigger). Returns the
+         *     new work-item + the row.
          */
         post: operations["dev_inbox_push_dev_inbox__item_id__push_post"];
         delete?: never;
@@ -693,7 +787,7 @@ export interface paths {
          * Dev Read
          * @description A context's parsed dev knowledge (files) + inbox queue (DB) + the glance view.
          *
-         *     `running` lists work-item ids with a headless /plan turn in flight, so the cards can
+         *     `running` lists work-item ids with a background /plan turn in flight, so the cards can
          *     show a live "planning…" state while a background agent works.
          */
         get: operations["dev_read_dev_get"];
@@ -715,9 +809,10 @@ export interface paths {
         /**
          * Dev Attention
          * @description The attention engine (S7/D10): every item in at most one bucket, strict priority
-         *     needs_you (awaiting_human) > running (live run) > unread (terminal, never opened) — derived
-         *     from durable state at read time. `badge` = the top non-empty tier's color + count, or null
-         *     when nothing claims attention. Powers the workspace badge + kanban tinting.
+         *     needs_you (awaiting_human) > deputy_working (live deputy judgment) > running (live phase run)
+         *     > unread (terminal, never opened) — derived from durable state at read time. `badge` = the top
+         *     non-empty tier's color + count, or null when nothing claims attention. Powers the workspace
+         *     badge + kanban tinting.
          */
         get: operations["dev_attention_dev_attention_get"];
         put?: never;
@@ -1089,11 +1184,86 @@ export interface paths {
         put?: never;
         /**
          * Dev Work Item Plan
-         * @description Fire a headless /plan turn for a work-item — the "Plan it" quick-action. Opens the run
+         * @description Fire a background /plan turn for a work-item — the "Plan it" quick-action. Opens the run
          *     immediately, then returns; the agent works in the background and the item lands at
          *     `awaiting_human` (the pre-main gate) when done. Poll GET /dev (`running`) for live state.
          */
         post: operations["dev_work_item_plan_dev_work_items__item_id__plan_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dev/work-items/{item_id}/vet": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dev Work Item Vet
+         * @description Run VET on demand and let the loop take over (build-vet-loop §5): fire a background vet run
+         *     on this item's worktree. From there the daemon-side driver self-drives — passed → review ·
+         *     failed → a build cycle handed the vet report (while `loop_autorun` and the breakers allow) ·
+         *     stale → re-vet · unverified → fail closed. This is the owner's manual "vet what's built now"
+         *     action; the AUTONOMOUS loop opens build-first (gates.enter_build_loop), so vet is the loop's
+         *     sole DECISION point, not its entry. 409 when the item isn't a runnable vet-phase item or a run
+         *     is in flight.
+         */
+        post: operations["dev_work_item_vet_dev_work_items__item_id__vet_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dev/work-items/{item_id}/continue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dev Work Item Continue
+         * @description The owner's CONTINUE on a build parked at a human gate (BV-A1): RE-ENTER the build⟷vet loop.
+         *     Resumes the item's build thread to finalize — complete what's doable, record any wall it can't
+         *     pass itself as an assumption — then the normal build→vet→review flow carries the gap to review.
+         *     This is distinct from a bare chat reply to a paused build (which runs a `chat` turn and does NOT
+         *     advance the loop). 409 when the item isn't a parked build-phase item with a live worktree, or a
+         *     run is in flight.
+         */
+        post: operations["dev_work_item_continue_dev_work_items__item_id__continue_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dev/work-items/{item_id}/authorize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dev Work Item Authorize
+         * @description The owner's grant/deny on a deferred authorization at review (BV-A2.3). `granted` records the
+         *     grant and routes the item back to build to perform the now-allowed change; `denied` accepts the
+         *     gap (the blocked check is waived) and leaves the item at review for the owner's approve. Unlike
+         *     the deputy, the owner grants unconditionally — the delegated-authority floor only binds the
+         *     deputy. 409 when the item/request isn't in a grantable state or a run is in flight.
+         */
+        post: operations["dev_work_item_authorize_dev_work_items__item_id__authorize_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1232,6 +1402,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/dev/work-items/{item_id}/timeline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Dev Work Item Timeline
+         * @description F2 unified timeline: every run of this item, oldest-first, phase/role-tagged with its ordered
+         *     turn events (prompt · reply · calls) — the read-only history the chat panel loads before
+         *     live-streaming new frames from the item's event broker. All phases in one chronological view.
+         */
+        get: operations["dev_work_item_timeline_dev_work_items__item_id__timeline_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/dev/work-items/{item_id}/complete": {
         parameters: {
             query?: never;
@@ -1257,48 +1449,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/dev/work-items/{item_id}/model": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Dev Work Item Set Model
-         * @description Configure the model a work-item's runs use (plan + bound chat) — reconfigurable anytime
-         *     from the review popup. Persisted to `item.md` frontmatter.
-         */
-        post: operations["dev_work_item_set_model_dev_work_items__item_id__model_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/dev/work-items/{item_id}/effort": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Dev Work Item Set Effort
-         * @description Configure the reasoning effort a work-item's runs use (plan + bound chat) — reconfigurable
-         *     anytime from the review popup. Persisted to `item.md` frontmatter.
-         */
-        post: operations["dev_work_item_set_effort_dev_work_items__item_id__effort_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/dev/work-items/{item_id}/advance": {
         parameters: {
             query?: never;
@@ -1313,9 +1463,33 @@ export interface paths {
          * @description Approve → advance a work-item to its kind's next phase (the owner's gate; sequencing
          *     comes from KIND_PROFILES — triage→plan→… per kind). Refuses if the item is at its final
          *     phase, terminal, or a run is in flight. The gate decision also rests the item at `active`
-         *     (an awaiting_human item just got its answer).
+         *     (an awaiting_human item just got its answer). Owner-driven, so `ratify=True` — approving
+         *     ratifies the brief's assumptions; the autopilot driver uses the same core with ratify=False.
          */
         post: operations["dev_work_item_advance_dev_work_items__item_id__advance_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dev/work-items/{item_id}/autopilot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dev Work Item Autopilot
+         * @description Enrol / un-enrol a work-item in autopilot — the per-item policy that drives its gates without
+         *     a click. Allowed only PRE-BUILD (phase in triage/plan): the inbox-stage decision, and the last
+         *     moment before code exists that flipping it is cheap. 409 past that. The flag is durable; the
+         *     driver (services/gates.maybe_autopilot_advance) reads it when a run rests the item at a gate.
+         */
+        post: operations["dev_work_item_autopilot_dev_work_items__item_id__autopilot_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1355,7 +1529,7 @@ export interface paths {
         /**
          * Dev Work Item Git Sync
          * @description Freshness merge (D4): merge the trunk INTO the item branch, inside its worktree — run
-         *     during long builds and always before the deliver merge, so main-merge is trivial.
+         *     during long builds and always before the review merge, so main-merge is trivial.
          */
         post: operations["dev_work_item_git_sync_dev_work_items__item_id__git_sync_post"];
         delete?: never;
@@ -1375,11 +1549,13 @@ export interface paths {
         put?: never;
         /**
          * Dev Work Item Git Merge
-         * @description The deliver-gate merge (owner-fired). Routes itself by topology (D4): a BLOCKING child
-         *     merges into its parent's branch (light path — no backup ceremony; the parent re-validates the
-         *     family), everything else merges to the trunk (heavy path — overlap refusal, tagged auto-stash,
-         *     backup ref first, never-merge-twice). Success records merge commit (+ backup ref) on the item.
-         *     Conflicts on the main path → 200 with the conflict list (fix via sync + resolve, then retry).
+         * @description The review-gate merge (owner-fired), as a raw route. Thin wrapper over
+         *     `services.git_ops.review_merge` — the SAME body `advance_item` runs when the owner (or deputy)
+         *     approves at review, so 'the review decision IS the merge' holds whether it's fired here or by
+         *     the Approve transition (B2). Routes by topology (D4): a BLOCKING child merges into its parent's
+         *     branch (light path), everything else to the trunk (heavy path — overlap refusal, backup ref,
+         *     never-merge-twice). Conflicts on the main path → 200 with the conflict list (sync + resolve,
+         *     then retry / approve again).
          */
         post: operations["dev_work_item_git_merge_dev_work_items__item_id__git_merge_post"];
         delete?: never;
@@ -1423,8 +1599,8 @@ export interface paths {
          * Dev Work Item Git Resolve
          * @description Resolve-with-Agent (D4): the human decides WHETHER, the agent resolves — they never
          *     hand-edit conflict markers. Re-runs the freshness sync leaving conflicts IN the worktree,
-         *     then fires a headless resolution run (write-sandboxed to the worktree); the daemon completes
-         *     the merge mechanically and the item re-enters `validate`. 409 if the sync is clean (nothing
+         *     then fires a background resolution run (write-sandboxed to the worktree); the daemon completes
+         *     the merge mechanically and the item re-enters `vet`. 409 if the sync is clean (nothing
          *     to resolve) or a run is in flight.
          */
         post: operations["dev_work_item_git_resolve_dev_work_items__item_id__git_resolve_post"];
@@ -1541,7 +1717,7 @@ export interface paths {
         put?: never;
         /**
          * Dev Memory Distill
-         * @description The Manage-Harness "Run distill" button: fire a headless distill pass over the candidate
+         * @description The Manage-Harness "Run distill" button: fire a background distill pass over the candidate
          *     pool (no need to open Dev chat). One pass per (repo × dev scope) at a time — guarded by a
          *     server-truth spine query, not a shadow set. Returns immediately; poll `/dev/memory/stats`
          *     (`distilling`) for completion, then refetch the review queue.
@@ -1656,7 +1832,7 @@ export interface paths {
          * Memory Proposal Approve
          * @description GATE 1 — owner approves the proposal's INTENT (and answers distill's clarifying questions).
          *     Validates the form/scope can actually be written today (core is reserved), records the answers,
-         *     moves the proposal to `writing`, and fires a headless per-item WRITE run that authors the final
+         *     moves the proposal to `writing`, and fires a background per-item WRITE run that authors the final
          *     artifact and stages it (→ `drafted`) for gate-2. Returns immediately; poll the proposal status.
          */
         post: operations["memory_proposal_approve_dev_memory_proposals__proposal_id__approve_post"];
@@ -1841,6 +2017,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/dev/portrait": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Dev Portrait
+         * @description The project PORTRAIT — what this project is, in six bands, one per anchor doc. Read-only and
+         *     derived on every call: the docs are the store, this is just the shape the view needs.
+         */
+        get: operations["dev_portrait_dev_portrait_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dev/lint": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Dev Lint
+         * @description Health of this project's general knowledge, as findings the owner can act on — not a document
+         *     to read. Derived fresh on every call, so the lint itself can never be stale.
+         */
+        get: operations["dev_lint_dev_lint_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1933,6 +2151,52 @@ export interface components {
             status: string;
             /** Proposal Id */
             proposal_id: number;
+        };
+        /**
+         * ArchivedRepoTokens
+         * @description One disconnected project's preserved spend. `label` is the tombstoned display name (falls
+         *     back to the bare id for repos that left before tombstoning); `disconnected_at` is null there.
+         */
+        ArchivedRepoTokens: {
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
+            /**
+             * Runs
+             * @default 0
+             */
+            runs: number;
+            /** Disconnected At */
+            disconnected_at?: string | null;
+        };
+        /**
+         * ArchivedTokens
+         * @description "Old projects" — spend belonging to repos that are no longer connected. Their runs are kept
+         *     forever, so they still count in `global.total`; this bucket keeps them ATTRIBUTABLE (the orbit
+         *     only renders live repos, so without it the visible nodes wouldn't sum to the header).
+         */
+        ArchivedTokens: {
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
+            /**
+             * Runs
+             * @default 0
+             */
+            runs: number;
+            /**
+             * Repos
+             * @default []
+             */
+            repos: components["schemas"]["ArchivedRepoTokens"][];
         };
         /**
          * ArtifactCall
@@ -2066,6 +2330,31 @@ export interface components {
             count: number;
         };
         /**
+         * AttentionHold
+         * @description One parked (`awaiting_human`) work-item on the top-of-SuperMe attention center (Pass 2 · Q2).
+         */
+        AttentionHold: {
+            /** Id */
+            id: string;
+            /** Title */
+            title: string;
+            /** Session Id */
+            session_id?: string | null;
+            /** Phase */
+            phase?: string | null;
+            /** Cohort */
+            cohort?: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "escalation" | "breaker" | "paged" | "review" | "gate";
+            /** Reason */
+            reason: string;
+            /** Actor */
+            actor: string;
+        };
+        /**
          * AttentionResponse
          * @description The attention engine's read: strict-priority buckets derived from durable state.
          */
@@ -2103,12 +2392,61 @@ export interface components {
             /** Gate */
             gate?: string | null;
         };
+        /**
+         * AuthorizationRequest
+         * @description A contract change a work-item couldn't self-authorize (BV-A2), awaiting the owner's grant or
+         *     deny at the review gate. `delegable` = whether the deputy COULD have granted it (a sync-to-
+         *     reality scope) vs it being owner-reserved (why it reached you). The owner grants regardless.
+         */
+        AuthorizationRequest: {
+            /** Id */
+            id: string;
+            /** What */
+            what: string;
+            /** Why */
+            why: string;
+            /** Doc */
+            doc: string;
+            /** Scope */
+            scope: string;
+            /** Delegable */
+            delegable: boolean;
+        };
+        /** AuthorizeBody */
+        AuthorizeBody: {
+            /**
+             * Context Id
+             * @default global
+             */
+            context_id: string;
+            /** Auth Id */
+            auth_id: string;
+            /** Decision */
+            decision: string;
+        };
+        /** AutopilotBody */
+        AutopilotBody: {
+            /** On */
+            on: boolean;
+        };
+        /** AutopilotConcurrencyBody */
+        AutopilotConcurrencyBody: {
+            /** Concurrency */
+            concurrency: number;
+        };
         /** BoardDeliverable */
         BoardDeliverable: {
             /** Id */
             id: string;
             /** Title */
             title: string;
+            /** Value */
+            value?: string | null;
+            /**
+             * Needs
+             * @default []
+             */
+            needs: string[];
             /** Waves */
             waves: components["schemas"]["BoardWave"][];
             /** Items */
@@ -2125,9 +2463,9 @@ export interface components {
             /** Title */
             title?: string | null;
             /** Phase */
-            phase?: ("triage" | "plan" | "build" | "validate" | "deliver" | "investigate" | "report" | "close") | null;
+            phase?: ("triage" | "plan" | "build" | "vet" | "review" | "investigate" | "report" | "close") | null;
             /** Status */
-            status?: ("active" | "awaiting_child" | "awaiting_human" | "done") | null;
+            status?: ("active" | "awaiting_child" | "awaiting_upstream" | "awaiting_slot" | "awaiting_human" | "done") | null;
             /** Done At */
             done_at?: string | null;
             /** Date */
@@ -2370,6 +2708,30 @@ export interface components {
             /** Tables */
             tables: components["schemas"]["TableInfo"][];
         };
+        /** DeputyConfigBody */
+        DeputyConfigBody: {
+            /** Enabled */
+            enabled?: boolean | null;
+            /** Strictness */
+            strictness?: {
+                [key: string]: string;
+            } | null;
+        };
+        /**
+         * DeputyConfigResponse
+         * @description The global deputy dial: whether a deputy judges autopilot gates + how readily it escalates
+         *     per gate (triage/plan/review, each low·medium·high·extra).
+         */
+        DeputyConfigResponse: {
+            /** Ok */
+            ok: boolean;
+            /** Deputy Enabled */
+            deputy_enabled: boolean;
+            /** Deputy Strictness */
+            deputy_strictness: {
+                [key: string]: string;
+            };
+        };
         /**
          * DevLogEvent
          * @description One activity-log row.
@@ -2392,7 +2754,7 @@ export interface components {
              * Actor
              * @enum {string}
              */
-            actor: "owner" | "agent" | "daemon";
+            actor: "owner" | "agent" | "daemon" | "autopilot" | "deputy";
             /** Summary */
             summary: string;
             /** Meta */
@@ -2465,16 +2827,6 @@ export interface components {
         DocsListResponse: {
             /** Docs */
             docs: components["schemas"]["DocSummary"][];
-        };
-        /** EffortBody */
-        EffortBody: {
-            /**
-             * Context Id
-             * @default global
-             */
-            context_id: string;
-            /** Effort */
-            effort: string;
         };
         /**
          * EvalMetrics
@@ -2633,8 +2985,10 @@ export interface components {
         /**
          * GateBriefResponse
          * @description One gate's full decision surface. `brief` is the rendered markdown (continuity → delta →
-         *     narrative → decision); `at_gate: False` means the item is mid-phase and this previews the
-         *     NEXT gate. Answerable without opening code — that is the contract.
+         *     narrative → decision) — since the typed fields landed it is the collapsed DETAILS payload;
+         *     the NOW card renders facts/assumptions/flags/numbers + the embedded gate report.
+         *     `at_gate: False` means the item is mid-phase and this previews the NEXT gate. Answerable
+         *     without opening code — that is the contract.
          */
         GateBriefResponse: {
             /** Id */
@@ -2652,6 +3006,23 @@ export interface components {
             decision: components["schemas"]["GateDecision"];
             /** Checks */
             checks: components["schemas"]["GateCheck"][];
+            /** Facts */
+            facts: components["schemas"]["GateFact"][];
+            /** Assumptions */
+            assumptions: string[];
+            /** Flags */
+            flags: string[];
+            numbers: components["schemas"]["GateNumbers"];
+            /** Report Html */
+            report_html: string | null;
+            loop: components["schemas"]["LoopInstruments"];
+            /** Snippet */
+            snippet: string | null;
+            /** Terminal */
+            terminal: boolean;
+            paged: components["schemas"]["PagedNotice"] | null;
+            /** Authorizations */
+            authorizations: components["schemas"]["AuthorizationRequest"][];
         };
         /**
          * GateCheck
@@ -2681,6 +3052,38 @@ export interface components {
             effort_user: string;
             /** Effort Agent */
             effort_agent: string;
+        };
+        /**
+         * GateFact
+         * @description One label:value row of the typed NOW card (renovation §3) — a present fact, never prose.
+         *     `tone` tints the row ('' neutral · 'warn').
+         */
+        GateFact: {
+            /** Label */
+            label: string;
+            /** Value */
+            value: string;
+            /**
+             * Tone
+             * @default
+             */
+            tone: string;
+        };
+        /**
+         * GateNumbers
+         * @description The brief's real-ratio counts (law 2: counts of real things, never invented scores).
+         */
+        GateNumbers: {
+            /** Tasks Done */
+            tasks_done: number;
+            /** Tasks Total */
+            tasks_total: number;
+            /** Cycle */
+            cycle: number;
+            /** Checks Pass */
+            checks_pass: number;
+            /** Checks Total */
+            checks_total: number;
         };
         /** GateOption */
         GateOption: {
@@ -2767,7 +3170,7 @@ export interface components {
         };
         /**
          * GitMergeResponse
-         * @description The deliver-gate merge. `path` says which route executed: `main` (heavy, with backup ref)
+         * @description The review-gate merge. `path` says which route executed: `main` (heavy, with backup ref)
          *     or `parent` (blocking child's light merge into its parent's branch).
          */
         GitMergeResponse: {
@@ -2799,7 +3202,7 @@ export interface components {
         /**
          * GitResolveResponse
          * @description Resolve-with-Agent accepted: the conflicted sync was left in the item's worktree and a
-         *     headless resolution run is in flight (poll GET /dev for run state).
+         *     background resolution run is in flight (poll GET /dev for run state).
          */
         GitResolveResponse: {
             /** Ok */
@@ -2929,6 +3332,10 @@ export interface components {
             spawned_from?: {
                 [key: string]: unknown;
             } | null;
+            /** Model */
+            model?: string | null;
+            /** Effort */
+            effort?: string | null;
         };
         /** InboxDeleteResponse */
         InboxDeleteResponse: {
@@ -2951,6 +3358,10 @@ export interface components {
             title?: string | null;
             /** Routed To */
             routed_to?: string | null;
+            /** Model */
+            model?: string | null;
+            /** Effort */
+            effort?: string | null;
         };
         /** InboxPushBody */
         InboxPushBody: {
@@ -3005,6 +3416,10 @@ export interface components {
              */
             origin: ("user" | "agent")[];
             spawned_from?: components["schemas"]["SpawnedFrom"] | null;
+            /** Model */
+            model?: string | null;
+            /** Effort */
+            effort?: string | null;
         };
         /** InjectBody */
         InjectBody: {
@@ -3131,6 +3546,29 @@ export interface components {
             learned: components["schemas"]["ScopeCount"];
         };
         /**
+         * LintFinding
+         * @description One actionable finding over general/. Derived on read — never stored, so it can't go stale.
+         */
+        LintFinding: {
+            /** Severity */
+            severity: string;
+            /** Kind */
+            kind: string;
+            /** Detail */
+            detail: string;
+            /** Ref */
+            ref?: string | null;
+        };
+        /** LintResponse */
+        LintResponse: {
+            /** Findings */
+            findings: components["schemas"]["LintFinding"][];
+            /** Counts */
+            counts: {
+                [key: string]: number;
+            };
+        };
+        /**
          * LocalPluginsResponse
          * @description A single host's OWN local-harness skills + agents (its `local-harness/<id>/dev` plugin tree) —
          *     flat (no dev/core/shared split; the dev workspace is already mode-scoped).
@@ -3142,6 +3580,48 @@ export interface components {
             skills: components["schemas"]["PluginEntry"][];
             /** Agents */
             agents: components["schemas"]["PluginEntry"][];
+        };
+        /**
+         * LoopAttempt
+         * @description One loop-driver decision from the attempts ledger.
+         */
+        LoopAttempt: {
+            /** Cycle */
+            cycle: number;
+            /** Decision */
+            decision: string;
+            /** Reason */
+            reason: string;
+            /** Ts */
+            ts: string;
+        };
+        /**
+         * LoopCycle
+         * @description One filed vet report's verdict column: check id → pass/fail.
+         */
+        LoopCycle: {
+            /** Cycle */
+            cycle: number;
+            /** Verdicts */
+            verdicts: {
+                [key: string]: boolean;
+            };
+        };
+        /**
+         * LoopInstruments
+         * @description The build⟷vet loop's live panel (renovation §2 Loop row) — the checks×cycles matrix,
+         *     the newest failing report's Findings verbatim, and the driver trail. All derived from the
+         *     ledger + reports the loop already writes; empty checks+cycles ⇒ nothing to show.
+         */
+        LoopInstruments: {
+            /** Checks */
+            checks: string[];
+            /** Cycles */
+            cycles: components["schemas"]["LoopCycle"][];
+            /** Findings */
+            findings: string | null;
+            /** Attempts */
+            attempts: components["schemas"]["LoopAttempt"][];
         };
         /**
          * ManagedConstitution
@@ -3186,16 +3666,6 @@ export interface components {
             candidates: components["schemas"]["CandidatesStat"];
             knowledge: components["schemas"]["KnowledgeStat"];
         };
-        /** ModelBody */
-        ModelBody: {
-            /**
-             * Context Id
-             * @default global
-             */
-            context_id: string;
-            /** Model */
-            model: string;
-        };
         /**
          * Orphan
          * @description A referential-integrity break — a pointer to an id the anchor docs don't define.
@@ -3209,6 +3679,24 @@ export interface components {
             deliverable?: string | null;
             /** Items */
             items?: string[] | null;
+        };
+        /**
+         * PagedNotice
+         * @description Why an item is parked for the owner when it isn't a plain gate wait — a deputy escalation, a
+         *     build⟷vet halt, or a blocked run. The drilldown LEADS with this so 'what's going on / what do I
+         *     decide' is answered on arrival, not buried under a future-gate preview. None ⇒ a normal gate.
+         */
+        PagedNotice: {
+            /** Source */
+            source: string;
+            /** Gate */
+            gate: string | null;
+            /** Headline */
+            headline: string;
+            /** Detail */
+            detail: string;
+            /** Next */
+            next: string | null;
         };
         /** PaletteResponse */
         PaletteResponse: {
@@ -3325,6 +3813,114 @@ export interface components {
             skills: components["schemas"]["PluginEntry"][];
             /** Agents */
             agents: components["schemas"]["PluginEntry"][];
+        };
+        /**
+         * PortraitBuild
+         * @description architecture — only what code CAN'T say. No file trees, no component inventories: those are
+         *     stale duplicates by construction. Invariants, boundaries, rationale, and the refusals.
+         */
+        PortraitBuild: {
+            /**
+             * Stack
+             * @default []
+             */
+            stack: components["schemas"]["StackRow"][];
+            /**
+             * Invariants
+             * @default []
+             */
+            invariants: string[];
+            /**
+             * Not Here
+             * @default []
+             */
+            not_here: string[];
+        };
+        /**
+         * PortraitCapability
+         * @description capabilities — one thing the system can do RIGHT NOW, in user language.
+         */
+        PortraitCapability: {
+            /** Name */
+            name: string;
+            /** Detail */
+            detail?: string | null;
+        };
+        /**
+         * PortraitDeliverable
+         * @description project-prd — the value statement, not the work. `delivered` is project-level truth (this
+         *     value exists now / doesn't yet); sequencing and progress live in the pipeline.
+         */
+        PortraitDeliverable: {
+            /** Id */
+            id: string;
+            /** Value */
+            value?: string | null;
+            /** Title */
+            title: string;
+            /**
+             * Delivered
+             * @default false
+             */
+            delivered: boolean;
+        };
+        /**
+         * PortraitGoals
+         * @description project-prd. `now` must be specific; `direction` is allowed to be directional — the horizon
+         *     split dissolves the vision-vs-concreteness argument instead of losing it. Non-goals carry equal
+         *     weight: what a project refuses is as defining as what it pursues.
+         */
+        PortraitGoals: {
+            /**
+             * Now
+             * @default []
+             */
+            now: string[];
+            /**
+             * Direction
+             * @default []
+             */
+            direction: string[];
+            /**
+             * Non Goals
+             * @default []
+             */
+            non_goals: string[];
+        };
+        /**
+         * PortraitIdentity
+         * @description project-prd — what it is, who for, and the load-bearing field: why it exists.
+         */
+        PortraitIdentity: {
+            /** Name */
+            name: string;
+            /** One Liner */
+            one_liner?: string | null;
+            /** Who */
+            who?: string | null;
+            /** Why */
+            why?: string | null;
+        };
+        /** PortraitResponse */
+        PortraitResponse: {
+            identity: components["schemas"]["PortraitIdentity"];
+            goals: components["schemas"]["PortraitGoals"];
+            /**
+             * Capabilities
+             * @default []
+             */
+            capabilities: components["schemas"]["PortraitCapability"][];
+            build: components["schemas"]["PortraitBuild"];
+            /**
+             * Deliverables
+             * @default []
+             */
+            deliverables: components["schemas"]["PortraitDeliverable"][];
+            /**
+             * Resources
+             * @default []
+             */
+            resources: components["schemas"]["StackRow"][];
         };
         /**
          * ProjectStatusResponse
@@ -3572,6 +4168,27 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /**
+         * RepoAttention
+         * @description A repo's holds, grouped so the center can label 'in <repo>'. Only repos WITH holds appear.
+         */
+        RepoAttention: {
+            /** Repo Id */
+            repo_id: string;
+            /** Repo Label */
+            repo_label: string;
+            /** Holds */
+            holds: components["schemas"]["AttentionHold"][];
+        };
+        /** RepoAutopilotResponse */
+        RepoAutopilotResponse: {
+            /** Ok */
+            ok: boolean;
+            /** Repo Id */
+            repo_id: string;
+            /** Autopilot Concurrency */
+            autopilot_concurrency: number;
+        };
         /** RepoConnectBody */
         RepoConnectBody: {
             /** Path */
@@ -3595,6 +4212,28 @@ export interface components {
             cwd: string;
             /** Onboarding */
             onboarding?: string | null;
+        };
+        /**
+         * RepoDisconnectResponse
+         * @description The receipt for a disconnect — what the cascade actually removed. Irreversible by design;
+         *     the project folder itself is never touched, and run traces + dev events are preserved
+         *     (never-delete-logs), stamped session_fate='disconnected'.
+         */
+        RepoDisconnectResponse: {
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Sessions Deleted */
+            sessions_deleted: number;
+            /** Pipeline Rows Deleted */
+            pipeline_rows_deleted: number;
+            /** Knowledge Removed */
+            knowledge_removed: boolean;
+            /** Harness Removed */
+            harness_removed: boolean;
+            /** Worktrees Removed */
+            worktrees_removed: boolean;
         };
         /** RepoEffortBody */
         RepoEffortBody: {
@@ -3674,6 +4313,11 @@ export interface components {
              * @default true
              */
             learning_enabled: boolean;
+            /**
+             * Autopilot Concurrency
+             * @default 4
+             */
+            autopilot_concurrency: number;
             /** Tag Color */
             tag_color?: string | null;
             /** Icon */
@@ -3806,6 +4450,8 @@ export interface components {
             mode: "core" | "dev";
             /** Feature */
             feature: string;
+            /** Phase */
+            phase?: string | null;
             /** Session Id */
             session_id?: string | null;
             /** Item Id */
@@ -3981,6 +4627,13 @@ export interface components {
             /** Note */
             note?: string | null;
         };
+        /** StackRow */
+        StackRow: {
+            /** Key */
+            key: string;
+            /** Value */
+            value: string;
+        };
         /**
          * SweepConfigBody
          * @description Partial update of the capture-sweep tuning — any omitted field is left unchanged.
@@ -4090,6 +4743,15 @@ export interface components {
             default_repo: string;
             /** Learning Enabled */
             learning_enabled: boolean;
+            /**
+             * Deputy Enabled
+             * @default true
+             */
+            deputy_enabled: boolean;
+            /** Deputy Strictness */
+            deputy_strictness?: {
+                [key: string]: string;
+            };
             /** Sweep Idle Seconds */
             sweep_idle_seconds: number;
             /** Sweep Poll Seconds */
@@ -4123,6 +4785,50 @@ export interface components {
             text: string;
             /** Done */
             done: boolean;
+        };
+        /**
+         * TimelineEvent
+         * @description One event in a run's trail (F2 timeline): a prompt, an assistant reply block, a tool/skill
+         *     call (status), or that call's result — the same rows the Activity trace shows, per run.
+         */
+        TimelineEvent: {
+            /** Id */
+            id: number;
+            /** Seq */
+            seq: number;
+            /** Kind */
+            kind: string;
+            /** Name */
+            name?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Tool Id */
+            tool_id?: string | null;
+            /** Created At */
+            created_at: string;
+        };
+        /**
+         * TimelineRun
+         * @description One phase agent's run in the unified timeline: which phase/role it was, and its turn events.
+         */
+        TimelineRun: {
+            /** Run Id */
+            run_id: number;
+            /** Phase */
+            phase?: string | null;
+            /** Feature */
+            feature?: string | null;
+            /** Model */
+            model?: string | null;
+            /** Status */
+            status?: string | null;
+            /** Started At */
+            started_at?: string | null;
+            /**
+             * Events
+             * @default []
+             */
+            events: components["schemas"]["TimelineEvent"][];
         };
         /**
          * TokenBucket
@@ -4271,7 +4977,8 @@ export interface components {
         };
         /**
          * TokenUsageResponse
-         * @description System-wide token usage: the global bucket + one bucket per repo (keyed by repo id).
+         * @description System-wide token usage: the global bucket + one bucket per repo (keyed by repo id) +
+         *     the "Old projects" roll-up of disconnected repos (also present in by_repo, by raw id).
          */
         TokenUsageResponse: {
             global: components["schemas"]["TokenBucket"];
@@ -4282,6 +4989,14 @@ export interface components {
             by_repo: {
                 [key: string]: components["schemas"]["RepoTokens"];
             };
+            /**
+             * @default {
+             *       "total": 0,
+             *       "runs": 0,
+             *       "repos": []
+             *     }
+             */
+            archived: components["schemas"]["ArchivedTokens"];
         };
         /** ToolInfo */
         ToolInfo: {
@@ -4384,9 +5099,13 @@ export interface components {
             /** Inbox Id */
             inbox_id?: number | null;
             /** Phase */
-            phase?: ("triage" | "plan" | "build" | "validate" | "deliver" | "investigate" | "report" | "close") | null;
+            phase?: ("triage" | "plan" | "build" | "vet" | "review" | "investigate" | "report" | "close") | null;
             /** Status */
-            status?: ("active" | "awaiting_child" | "awaiting_human" | "done") | null;
+            status?: ("active" | "awaiting_child" | "awaiting_upstream" | "awaiting_slot" | "awaiting_human" | "done") | null;
+            /** After */
+            after?: string[] | null;
+            /** Autopilot */
+            autopilot?: boolean | null;
             /** Model */
             model?: string | null;
             /** Effort */
@@ -4461,11 +5180,29 @@ export interface components {
             /** From */
             from: string;
             git?: components["schemas"]["WorkItemGitRecord"] | null;
+            /** Merge */
+            merge?: {
+                [key: string]: unknown;
+            } | null;
         };
         /** WorkItemArtifactsResponse */
         WorkItemArtifactsResponse: {
             /** Artifacts */
             artifacts: components["schemas"]["ArtifactCall"][];
+        };
+        /**
+         * WorkItemAutopilotResponse
+         * @description Autopilot-toggle result. `changed` False = the flag was already in the requested state.
+         */
+        WorkItemAutopilotResponse: {
+            /** Ok */
+            ok: boolean;
+            /** Id */
+            id: string;
+            /** Autopilot */
+            autopilot: boolean;
+            /** Changed */
+            changed: boolean;
         };
         /** WorkItemCompleteResponse */
         WorkItemCompleteResponse: {
@@ -4515,15 +5252,6 @@ export interface components {
             /** Checkpoints */
             checkpoints?: components["schemas"]["CheckpointStub"][] | null;
         };
-        /** WorkItemEffortResponse */
-        WorkItemEffortResponse: {
-            /** Ok */
-            ok: boolean;
-            /** Id */
-            id: string;
-            /** Effort */
-            effort: string;
-        };
         /**
          * WorkItemGitRecord
          * @description The git record a build entry writes onto the item (S4): its branch, worktree dir, and the
@@ -4551,15 +5279,6 @@ export interface components {
             model?: string | null;
             /** Ctx Pct */
             ctx_pct?: number | null;
-        };
-        /** WorkItemModelResponse */
-        WorkItemModelResponse: {
-            /** Ok */
-            ok: boolean;
-            /** Id */
-            id: string;
-            /** Model */
-            model: string;
         };
         /**
          * WorkItemScaffoldResponse
@@ -4593,6 +5312,20 @@ export interface components {
             done: number;
             /** Total */
             total: number;
+        };
+        /**
+         * WorkItemTimelineResponse
+         * @description The F2 unified timeline: all of an item's runs oldest-first, each with its ordered events —
+         *     the read-only conversation the panel mirrors across every phase.
+         */
+        WorkItemTimelineResponse: {
+            /** Item Id */
+            item_id: string;
+            /**
+             * Runs
+             * @default []
+             */
+            runs: components["schemas"]["TimelineRun"][];
         };
         /** WriteBody */
         WriteBody: {
@@ -5042,6 +5775,59 @@ export interface operations {
             };
         };
     };
+    disconnect_repo_repos__repo_id__delete: {
+        parameters: {
+            query?: {
+                confirm?: string;
+            };
+            header?: never;
+            path: {
+                repo_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RepoDisconnectResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    system_attention_system_attention_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RepoAttention"][];
+                };
+            };
+        };
+    };
     runs_overview_runs_get: {
         parameters: {
             query?: {
@@ -5310,6 +6096,39 @@ export interface operations {
             };
         };
     };
+    set_system_deputy_system_deputy_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeputyConfigBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeputyConfigResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     set_system_sweep_system_sweep_post: {
         parameters: {
             query?: never;
@@ -5488,6 +6307,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RepoLearningResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_repo_autopilot_repos__repo_id__autopilot_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                repo_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AutopilotConcurrencyBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RepoAutopilotResponse"];
                 };
             };
             /** @description Validation Error */
@@ -6453,6 +7307,111 @@ export interface operations {
             };
         };
     };
+    dev_work_item_vet_dev_work_items__item_id__vet_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dev_work_item_continue_dev_work_items__item_id__continue_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dev_work_item_authorize_dev_work_items__item_id__authorize_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthorizeBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     dev_work_item_compact_dev_work_items__item_id__compact_post: {
         parameters: {
             query?: never;
@@ -6655,6 +7614,39 @@ export interface operations {
             };
         };
     };
+    dev_work_item_timeline_dev_work_items__item_id__timeline_get: {
+        parameters: {
+            query?: {
+                context_id?: string;
+            };
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkItemTimelineResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     dev_work_item_complete_dev_work_items__item_id__complete_post: {
         parameters: {
             query?: {
@@ -6688,76 +7680,6 @@ export interface operations {
             };
         };
     };
-    dev_work_item_set_model_dev_work_items__item_id__model_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                item_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ModelBody"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorkItemModelResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    dev_work_item_set_effort_dev_work_items__item_id__effort_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                item_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["EffortBody"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorkItemEffortResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     dev_work_item_advance_dev_work_items__item_id__advance_post: {
         parameters: {
             query?: {
@@ -6778,6 +7700,43 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WorkItemAdvanceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dev_work_item_autopilot_dev_work_items__item_id__autopilot_post: {
+        parameters: {
+            query?: {
+                context_id?: string;
+            };
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AutopilotBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkItemAutopilotResponse"];
                 };
             };
             /** @description Validation Error */
@@ -7566,6 +8525,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RoadmapBoardResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dev_portrait_dev_portrait_get: {
+        parameters: {
+            query?: {
+                context_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortraitResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dev_lint_dev_lint_get: {
+        parameters: {
+            query?: {
+                context_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LintResponse"];
                 };
             };
             /** @description Validation Error */

@@ -28,7 +28,7 @@ _ROLE = {"user": "you", "assistant": "superme"}
 
 # Local-command echo artifacts the CLI injects (compact continuation, /command wrappers).
 # These aren't real conversation — skip them when replaying a session in the UI. Also the
-# internal headless-run prompt (orchestrator plumbing, not something the owner typed).
+# internal background-run trigger (orchestrator plumbing, not something the owner typed).
 _NOISE_PREFIXES = (
     "This session is being continued from a previous conversation",
     "<command-name>",
@@ -36,7 +36,8 @@ _NOISE_PREFIXES = (
     "<command-args>",
     "<local-command-stdout>",
     "<local-command-caveat>",
-    "Run the superme-dev:plan skill for work-item",
+    "Run superme-dev:plan for work-item",
+    "Run superme-dev:triage for work-item",
 )
 
 
@@ -59,7 +60,7 @@ _BIRTH_BLOCK_HEADERS = (
 
 def _strip_birth_block(text: str) -> str:
     """Cut a kernel-injected birth block off the front of a prompt, keeping the real message after
-    the `---` separator (empty when the turn was pure plumbing — e.g. a headless plan trigger,
+    the `---` separator (empty when the turn was pure plumbing — e.g. a background plan trigger,
     which then falls to the noise filter)."""
     if not text.lstrip().startswith(_BIRTH_BLOCK_HEADERS):
         return text
@@ -83,7 +84,9 @@ def _preset_title(kind: str, item_id: str | None, subject_run_id, sid: str) -> s
     identity-bearing preset by kind (session-kinds-diagnose). work_item falls back to the item's short
     id here; the router upgrades it to the item's TITLE + short id (which it resolves). Always editable:
     an owner override wins over this in list()/read()."""
-    if kind == "work_item":
+    if kind in ("intake", "build", "vet"):   # role-stamped item sessions (build-vet-loop §1.3)
+        return f"Work-item · {short_item_id(item_id) if item_id else _short_id(sid)} · {kind}"
+    if kind == "work_item":                  # legacy pre-roles item sessions (kind derived)
         return f"Work-item · {short_item_id(item_id) if item_id else _short_id(sid)}"
     if kind == "diagnosis":
         return f"Diagnosis · run #{subject_run_id}" if subject_run_id else "Diagnosis session"
@@ -137,20 +140,29 @@ class SessionStore:
         events and knowledge are untouched. Returns True if the transcript file was removed.
 
         This is the ONLY deletion — the former forget (index-only) / purge (index+transcript) two-tier
-        is gone; every delete is a full hard delete now."""
+        is gone; every delete is a full hard delete now.
+
+        The transcript is located by the SESSION'S recorded cwd, not the caller's: role sessions
+        (build/vet) live under their WORKTREE's encoded projects folder, and a repo-cwd caller
+        (abandon/complete/delete routes) would otherwise miss them (bv-s3 live finding). Read
+        before the row is deleted; falls back to ctx.cwd when the row is already gone."""
         if not session_id:
             return False
+        rec = self._spine.get_session(session_id)
+        cwd = (rec or {}).get("cwd") or ctx.cwd
         self._spine.delete_session_record(session_id, cause=cause)
-        return self.discard_transcript(ctx, session_id)
+        return self.discard_transcript(ctx, session_id, cwd=cwd)
 
-    def discard_transcript(self, ctx: Context, session_id: str) -> bool:
+    def discard_transcript(self, ctx: Context, session_id: str, cwd=None) -> bool:
         """Delete a session's transcript JSONL from disk WITHOUT touching the index — for
         session-disposable runs (distill, …) whose session was never recorded, so there is no
         index entry to forget. Completes their disposability: the throwaway conversation leaves
-        no resumable trace on disk (the run is still logged in the spine's `run` table)."""
+        no resumable trace on disk (the run is still logged in the spine's `run` table).
+        `cwd` overrides the projects-folder key when the session lived at a different cwd than
+        the caller's Context (worktree-born role sessions)."""
         if not session_id:
             return False
-        path = self._transcript(ctx, session_id)
+        path = self._transcript(ctx, session_id, cwd=cwd)
         try:
             if path.exists():
                 path.unlink()
@@ -160,8 +172,14 @@ class SessionStore:
         return False
 
     # --- transcript access ------------------------------------------------------
-    def _transcript(self, ctx: Context, session_id: str):
-        return self._projects / _encode_cwd(ctx.cwd) / f"{session_id}.jsonl"
+    def _transcript(self, ctx: Context, session_id: str, cwd=None):
+        """The session's transcript path. Keyed by the SESSION'S recorded cwd when the spine knows
+        it (role sessions born in a worktree live under the worktree's encoded projects folder —
+        a repo-cwd caller would miss them; bv-s3 live finding), else the caller's Context cwd
+        (unrecorded/disposable sessions). `cwd` short-circuits the lookup when already known."""
+        if cwd is None:
+            cwd = (self._spine.get_session(session_id) or {}).get("cwd")
+        return self._projects / _encode_cwd(cwd or ctx.cwd) / f"{session_id}.jsonl"
 
     def _scan(self, ctx: Context, session_id: str) -> dict | None:
         """Parse a transcript into {title, messages, updated_at, message_count}.

@@ -19,20 +19,39 @@ research or external files go under `resources/` or a work-item's `artifacts/`.
 
 ```
 general/
-├─ project-prd.md    what & why — problem · users · deliverables · success · non-goals · open questions
-├─ spec.md           decisions — stack · approach · constraints · append-only key decisions
+├─ project-prd.md    what & why — identity · goals · non-goals · deliverables as value · success
+├─ architecture.md   how it's built NOW — stack · invariants · what's deliberately not here ·
+│                    components · flows · data (current-state, mutable)
+├─ capabilities.md   what it can do RIGHT NOW — present tense only, never the plan
+├─ decisions.md      what we chose and why — the append-only D-NNN ledger (history, never edited)
 ├─ roadmap.md        the within-project index of SuperMe-tracked dev work (deliverable → wave → items)
-├─ architecture.md   current system truth — components · flows · data · constraints & debt
 └─ resources/        if any, external refs + an index .md (optional)
 ```
+
+**Each doc answers ONE question, and owns that answer.** State a fact in the doc that owns it and
+reference it from anywhere else (`see D-012`) — never restate it. Two homes for one fact means one of
+them silently stops being updated.
+
+**Docs are split by LIFECYCLE, and the split is load-bearing:** `project-prd.md` + `architecture.md` +
+`capabilities.md` are mutable current-state (edit in place); `decisions.md` is append-only history
+(never edit a past entry's body — reverse by appending and marking the old one superseded);
+`roadmap.md` is forward-only (no history). Putting a fact in the wrong lifecycle is how these docs rot.
+
+**The tense rule:** `capabilities.md` is present tense only — what works today. `roadmap.md` is future
+tense. A capability that hasn't shipped belongs in the roadmap; the moment the two mix, neither can be
+trusted. (`spec.md` was retired into `architecture.md` — stack and constraints ARE current-state
+architecture, and keeping both invited the same fact in two places.)
 
 Each doc's field-level authoring contract — sections, shape, templates — is in the `superme-dev` plugin at
 `general-dev-knowledge-asset/<doc>.md`; follow it when you write.
 
 ## The two-tier scaffold
 Two curated tiers sit above the items:
-- **Deliverable** — a chunk of intended value — in `project-prd.md` as `- **<id>** — Title` (the full
-  set, including planned or externally-built).
+- **Deliverable** — a chunk of value the owner can RECEIVE (not a component you must build) — in
+  `project-prd.md` as `- **<id>** — Title`, optionally carrying indented `- **Value**:` and
+  `- **Needs**:` sub-fields (the full set, including planned or externally-built). The test: if
+  *"once this lands, I can ___"* can't be finished without naming another unfinished deliverable,
+  it's a task inside one, not a deliverable of its own.
 - **Wave** — a step toward a deliverable — under it in `roadmap.md` as `**<id>** — Title`, indexing only
   pipeline work driven through SuperMe (inbox → push → work-item).
 
@@ -68,7 +87,7 @@ wave: null            # (root only) the wave this item instances → resolves it
 deliverable: null     # …or a deliverable directly when no wave applies
 title: ...
 kind: implementation  # implementation | research — picks the phase pipeline (KIND_PROFILES)
-phase: build          # impl: triage|plan|build|validate|deliver|close · research: triage|plan|investigate|report|close
+phase: build          # impl: triage|plan|build|vet|review|close · research: triage|plan|investigate|report|close
 status: active        # active | awaiting_child | awaiting_human | done
 outcome: null         # set with status done: completed | abandoned | superseded
 spawned_from: null    # branch-off provenance {item, relation: blocking|parallel|spawn, note?}

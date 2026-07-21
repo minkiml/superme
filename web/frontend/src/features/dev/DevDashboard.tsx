@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
-import { Hammer, RefreshCw, ArrowLeft, ArrowRight, Boxes, Inbox, Circle, Clock, Check, Bot, Archive } from 'lucide-react'
+import { Hammer, ArrowLeft, ArrowRight, Boxes, Inbox, Circle, Clock, Check, Bot, Archive, Shield } from 'lucide-react'
 import PageHeader from '@/ui/PageHeader'
 import Modal from '@/ui/Modal'
 import ConfirmDialog from '@/ui/ConfirmDialog'
 import { getDev, getAttention, planWorkItem, deleteWorkItem, type AttentionData, type DevData, type DevGlance, type InboxEntry, type WorkItem } from '@/lib/api'
 import { fmtLocalDate } from '@/lib/format'
 import { WorkspaceKanban, InboxView, isActive } from './panels'
+import WorkGraphView from './WorkGraphView'
+import { STATUS_LABEL } from './common'
 import WorkItemModal from './WorkItemModal'
 
 // The Development dashboard — a live environment for one context's dev-knowledge. Today it shows
@@ -22,17 +24,22 @@ export default function DevDashboard({
   onUnbindItem,
   boundItemId,
   embedded = false,
+  focusItemId,
+  onFocusConsumed,
 }: {
   contextId?: string
   onBindItem?: (it: WorkItem, contextId: string) => void
   onUnbindItem?: () => void
   boundItemId?: string | null
   embedded?: boolean // hosted inside the Dev workspace shell — the shell owns the header
+  focusItemId?: string | null // attention-center "Open" → pop this item's drilldown once loaded
+  onFocusConsumed?: () => void
 }) {
   const [data, setData] = useState<DevData | null>(null)
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
   const [zoom, setZoom] = useState<Zoom>('inbox') // repo dev dashboard opens on the Inbox (capture queue)
+  const [board, setBoard] = useState<'kanban' | 'graph'>('kanban') // Workspace projection toggle
   const [reviewId, setReviewId] = useState<string | null>(null) // work-item open in the review popup
   const [showShipped, setShowShipped] = useState(false) // the completed-items list overlay
   const [confirmDel, setConfirmDel] = useState<WorkItem | null>(null) // item pending delete confirm
@@ -87,8 +94,17 @@ export default function DevDashboard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contextId])
 
-  // Poll while any work-item has a headless plan in flight — re-arms after each load (the
-  // `running` array identity changes per fetch) and stops once nothing is planning.
+  // Steady background refresh so the board never goes stale — an auto-triage or loop run started
+  // elsewhere (or a gate advance) surfaces on its own, no manual Refresh button. Silent, so it
+  // never flashes the spinner. The faster running-poll below takes over while a run is in flight.
+  useEffect(() => {
+    const t = setInterval(() => load({ silent: true }), 5000)
+    return () => clearInterval(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contextId])
+
+  // Poll FASTER while any work-item has a background run in flight — re-arms after each load (the
+  // `running` array identity changes per fetch) and stops once nothing is running.
   useEffect(() => {
     if (!data?.running?.length) return
     const t = setTimeout(() => load({ silent: true }), 2500)
@@ -102,7 +118,7 @@ export default function DevDashboard({
 
   // id → attention tier, for the kanban card tint (S7).
   const bucketOf: Record<string, string> = {}
-  for (const tier of ['needs_you', 'running', 'unread'] as const) {
+  for (const tier of ['needs_you', 'deputy_working', 'running', 'unread'] as const) {
     for (const r of attn?.buckets?.[tier] ?? []) bucketOf[r.id] = tier
   }
   function openItem(id: string) {
@@ -111,6 +127,16 @@ export default function DevDashboard({
     setReviewId(id)
     onBindItem?.(it, contextId)
   }
+
+  // Attention-center "Open": once the board has loaded, pop the requested item's drilldown, then
+  // report it consumed (so the parent clears the request and a poll can't re-open it). If the item
+  // is already gone by the time we arrive, consume anyway — never leave the request wedged.
+  useEffect(() => {
+    if (!focusItemId || !data) return
+    if (data.work_items.some((w) => w.id === focusItemId)) openItem(focusItemId)
+    onFocusConsumed?.()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusItemId, data])
 
   return (
     <div className="relative flex h-full flex-col">
@@ -144,35 +170,13 @@ export default function DevDashboard({
           onClose={() => setShowShipped(false)}
         />
       )}
-      {embedded ? (
-        <div className="flex items-center justify-end px-6 pt-4">
-          <button
-            onClick={() => load()}
-            disabled={loading}
-            title="Refresh"
-            aria-label="Refresh"
-            className="inline-flex items-center gap-1.5 rounded-md border border-line bg-surface px-2.5 py-1.5 text-xs text-muted hover:bg-hover hover:text-fg disabled:opacity-50"
-          >
-            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Refresh
-          </button>
-        </div>
-      ) : (
+      {/* No manual Refresh — the board auto-polls (steady 5s + a faster 2.5s while a run is live). */}
+      {!embedded && (
         <PageHeader
           icon={Hammer}
           title="Development"
           subtitle="Live environment for this SuperMe's dev-knowledge — operate every store from one map"
           badge="prototype"
-          right={
-            <button
-              onClick={() => load()}
-              disabled={loading}
-              title="Refresh"
-              aria-label="Refresh"
-              className="inline-flex items-center gap-1.5 rounded-md border border-line bg-surface px-2.5 py-1.5 text-xs text-muted hover:bg-hover hover:text-fg disabled:opacity-50"
-            >
-              <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Refresh
-            </button>
-          }
         />
       )}
 
@@ -203,7 +207,27 @@ export default function DevDashboard({
                 icon={Bot}
                 meta={`${data.work_items.filter(isActive).length} active`}
               >
+                {/* Kanban ⇄ Graph: two projections of the same population (replaces the Graph tab). */}
+                <div className="mb-3 flex justify-end">
+                  <div className="inline-flex rounded-md border border-line bg-sunken p-0.5">
+                    {(['kanban', 'graph'] as const).map((v) => (
+                      <button
+                        key={v}
+                        onClick={() => setBoard(v)}
+                        className={`rounded px-2.5 py-1 text-[11px] font-medium capitalize transition ${
+                          board === v ? 'bg-surface text-fg shadow-sm' : 'text-muted hover:text-fg'
+                        }`}
+                      >
+                        {v}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <DeputyStrip items={data.work_items} />
                 <WorkspaceStats g={data.glance} onShowShipped={() => setShowShipped(true)} />
+                {board === 'graph' ? (
+                  <WorkGraphView contextId={contextId} onBindItem={onBindItem} embedded />
+                ) : (
                 <WorkspaceKanban
                   items={data.work_items}
                   // Clicking a card opens its review popup AND binds the chat to its session —
@@ -216,6 +240,7 @@ export default function DevDashboard({
                   boundItemId={boundItemId}
                   buckets={bucketOf}
                 />
+                )}
               </ZoomPanel>
             ) : (
               <ZoomPanel title="Inbox" icon={Inbox} meta={`${data.glance.inbox_open ?? 0} open`}>
@@ -229,6 +254,29 @@ export default function DevDashboard({
   )
 }
 
+// The deputy-activity strip (autopilot slice 4b) — fills the space above the stat cards ONLY when
+// the deputy is shepherding autopilot items, so it's silent on a hand-driven board. Two counts a
+// glance answers: how many the deputy is carrying, and how many it has handed back to you. Derived
+// from the already-loaded items (no extra fetch); `awaiting_human` on an autopilot item is a deputy
+// escalation (the deputy is the one that paged you).
+function DeputyStrip({ items }: { items: WorkItem[] }) {
+  const auto = items.filter((w) => w.autopilot && w.status !== 'done' && !w.outcome)
+  if (auto.length === 0) return null
+  const waiting = auto.filter((w) => w.status === 'awaiting_human').length
+  return (
+    <div className="flex items-center gap-2 rounded-md border border-warn/30 bg-warn/5 px-3 py-1.5 text-[11px]">
+      <Shield size={13} className="shrink-0 text-warn" />
+      <span className="font-medium text-fg">Deputy</span>
+      <span className="text-muted">shepherding {auto.length} on autopilot</span>
+      {waiting > 0 && (
+        <span className="ml-auto rounded-full bg-warn/15 px-2 py-0.5 font-semibold text-warn">
+          {waiting} need{waiting === 1 ? 's' : ''} you
+        </span>
+      )}
+    </div>
+  )
+}
+
 // --- attention strip (S7/D10) -----------------------------------------------------
 // Strict-priority rows derived from durable state: what needs YOU (orange) > what's running
 // (green) > unread closeouts (blue). Terminal items live only here (they're off the board) —
@@ -236,12 +284,13 @@ export default function DevDashboard({
 
 const TIER_STYLE: Record<string, { dot: string; label: string }> = {
   needs_you: { dot: 'bg-warn', label: 'Needs you' },
+  deputy_working: { dot: 'bg-deputy', label: 'Deputy reviewing' },
   running: { dot: 'bg-success', label: 'Running' },
   unread: { dot: 'bg-accent', label: 'Unread' },
 }
 
 function AttentionStrip({ attn, onOpen }: { attn: AttentionData; onOpen: (id: string) => void }) {
-  const tiers = (['needs_you', 'running', 'unread'] as const)
+  const tiers = (['needs_you', 'deputy_working', 'running', 'unread'] as const)
     .map((t) => ({ tier: t, rows: attn.buckets?.[t] ?? [] }))
     .filter((x) => x.rows.length > 0)
   if (tiers.length === 0) return null
@@ -383,11 +432,13 @@ function StatusDots({ item, total }: { item: Record<string, number>; total: numb
       <div className="flex items-baseline gap-1.5">
         <span className="text-xl font-semibold tabular-nums text-fg">{total}</span>
         <span className="text-[11px] text-muted">work-items</span>
+        {/* Done = officially closed (approved through close) — kept beside the live count, off the
+            live-status dots below (a shipped item has left the board). */}
+        <span className="text-[11px] text-faint">· <span className="tabular-nums text-success">{item.done ?? 0}</span> done</span>
       </div>
       <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted">
-        {dot(Circle, item.active ?? 0, 'active', 'fill-current text-accent-text')}
-        {dot(Clock, item.awaiting_human ?? 0, 'needs you', item.awaiting_human ? 'text-danger' : 'text-faint')}
-        {dot(Check, item.done ?? 0, 'done', 'text-success')}
+        {dot(Circle, item.active ?? 0, STATUS_LABEL.active, 'fill-current text-accent-text')}
+        {dot(Clock, item.awaiting_human ?? 0, STATUS_LABEL.awaiting_human, item.awaiting_human ? 'text-danger' : 'text-faint')}
       </div>
     </div>
   )
@@ -403,9 +454,9 @@ function WorkspaceStats({ g, onShowShipped }: { g: DevGlance; onShowShipped: () 
   )
   return (
     <div className="mb-4 flex flex-wrap items-center gap-x-7 gap-y-3 rounded-xl bg-sunken px-4 py-3">
-      {cell('active', g.by_status.active ?? 0, 'text-accent-text')}
-      {cell('needs you', g.by_status.awaiting_human ?? 0, 'text-warn')}
-      {cell('awaiting child', g.by_status.awaiting_child ?? 0)}
+      {cell(STATUS_LABEL.active, g.by_status.active ?? 0, 'text-accent-text')}
+      {cell(STATUS_LABEL.awaiting_human, g.by_status.awaiting_human ?? 0, 'text-warn')}
+      {cell(STATUS_LABEL.awaiting_child, g.by_status.awaiting_child ?? 0)}
       {(g.by_status.done ?? 0) > 0 ? (
         <button
           onClick={onShowShipped}

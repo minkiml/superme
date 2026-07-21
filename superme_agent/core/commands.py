@@ -1,4 +1,4 @@
-"""Shared command layer — the few slash commands with no headless SDK path.
+"""Shared command layer — the few slash commands with no non-interactive SDK path.
 
 Native commands and skills (`/compact`, `/clear`, `/superme-harness:*`, your skills)
 pass straight through to the CLI on every surface, so they need no code here. This

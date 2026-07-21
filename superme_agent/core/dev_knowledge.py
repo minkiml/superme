@@ -36,16 +36,66 @@ def _iso_epoch(iso: str | None) -> float | None:
 _FRONTMATTER = re.compile(r"^---\s*\n(.*?)\n---\s*\n?(.*)$", re.DOTALL)
 
 
+def _session_fields(meta: dict) -> tuple[dict, str | None]:
+    """A work-item's session slots (build-vet-loop §1.3): frontmatter keys `session_<role>` →
+    `{role: sid}`, plus the COMPUTED `session_id` — the session for the item's CURRENT phase's
+    role, so every single-session consumer (FE binding, compaction, phase-close sweep) keeps
+    reading "the item's thread" and it now follows the phase. Falls back to the legacy single
+    `session_id` key while no slot covers the role (pre-roles items; ws.py adopts it into its
+    cwd-implied slot on the next turn)."""
+    from .kind_profiles import SESSION_ROLES, session_role
+    sessions = {r: str(meta[f"session_{r}"])
+                for r in SESSION_ROLES if meta.get(f"session_{r}")}
+    try:
+        role = session_role(str(meta.get("phase") or "triage"))
+    except KeyError:
+        role = "intake"  # unknown/legacy phase label — never blow up a read
+    legacy = meta.get("session_id")
+    computed = sessions.get(role) or (str(legacy) if legacy else None)
+    return sessions, computed
+
+
 # Display order for the work-item lifecycle (workspace-workflow D1/D2). phase = the per-kind
 # pipeline stage (union of both kinds' pipelines; see core/kind_profiles.py); the mid-pipeline
 # research stages (investigate/report) rank beside their implementation counterparts. status ranks
 # put what NEEDS THE OWNER first (awaiting_human), then runnable work, then routed waits, then done.
 _PHASE_RANK = {"triage": 0, "plan": 1, "build": 2, "investigate": 2,
-               "validate": 3, "report": 3, "deliver": 4, "close": 5}
-_STATUS_RANK = {"awaiting_human": 0, "active": 1, "awaiting_child": 2, "done": 3}
-# Statuses that read as "this item is live" (non-terminal).
-_LIVE_STATUSES = ("active", "awaiting_child", "awaiting_human")
+               "vet": 3, "report": 3, "review": 4, "close": 5}
+_STATUS_RANK = {"awaiting_human": 0, "active": 1, "awaiting_child": 2,
+                "awaiting_upstream": 3, "awaiting_slot": 3, "done": 4}
+# Statuses that read as "this item is live" (non-terminal). A parked-on-a-peer or queued-for-a-slot
+# item IS live — nothing is asked of the owner, but the work is real and queued, so it belongs in
+# the board.
+_LIVE_STATUSES = ("active", "awaiting_child", "awaiting_upstream", "awaiting_slot", "awaiting_human")
 _SPAWN_RELATIONS = ("blocking", "parallel", "spawn")
+
+
+def _toposort_keys(specs: list[dict]) -> list[str]:
+    """Order batch keys so every intra-batch `after` dependency comes BEFORE its dependent (used by
+    itemize_launch to create upstreams first). Cross-batch refs to already-existing item ids impose
+    no order here (they exist on disk already). Raises ValueError naming the cycle if the edges are
+    not a DAG — a launch with a circular dependency can never make progress, so refuse it loudly."""
+    keys = {s["key"] for s in specs}
+    deps = {s["key"]: [a for a in s["after"] if a in keys] for s in specs}
+    order: list[str] = []
+    temp: set[str] = set()
+    perm: set[str] = set()
+
+    def visit(k: str, stack: list[str]) -> None:
+        if k in perm:
+            return
+        if k in temp:
+            raise ValueError(f"cyclic after: edge — {' → '.join(stack + [k])}")
+        temp.add(k)
+        for d in deps[k]:
+            visit(d, stack + [k])
+        temp.discard(k)
+        perm.add(k)
+        order.append(k)
+
+    for s in specs:
+        visit(s["key"], [])
+    return order
 
 
 def _norm_artifact(a) -> dict:
@@ -91,7 +141,21 @@ def _parse_md(text: str) -> tuple[dict, str]:
 # `## Deliverables`, and `**<id>** — Title` under each `## <deliverable-id> …` heading in roadmap.md.
 # A wave line may carry a curated status glyph (✓ done · ▸ active · · planned). These parsers are
 # deliberately forgiving; example snippets inside ``` fences are skipped so they don't parse as data.
-ANCHOR_DOCS = ("project-prd", "spec", "roadmap", "architecture")  # + resources/index.md
+# The doc set is split by the QUESTION each answers, one owner per fact (see
+# general_docs/general-knowledge-content-design.md §3):
+#   project-prd    what is this · who for · why · goals + non-goals · deliverables as value
+#   architecture   how it's built · stack · invariants · what's deliberately not here
+#   capabilities   what it can do RIGHT NOW (present tense only — never the plan)
+#   decisions      why we chose what we chose (append-only + supersede)
+#   roadmap        what's coming (forward-only)
+#   resources      where the external things are
+# `spec` was RETIRED into architecture: stack/approach/constraints ARE current-state architecture,
+# and keeping both guaranteed the duplication we measured on repo-pulse (D-001/2/3 each stated
+# twice — as a Stack bullet and as a decision record — so changing one meant remembering the other).
+# It stays readable via LEGACY_DOCS so existing repos keep their content until it's folded in.
+ANCHOR_DOCS = ("project-prd", "architecture", "capabilities",
+               "decisions", "roadmap")            # + resources/index.md
+LEGACY_DOCS = ("spec",)                            # readable, lint-flagged, never re-created
 _DELIVERABLE_RE = re.compile(r"^-\s+\*\*(?P<id>[^*]+?)\*\*\s*[—–-]\s*(?P<title>.+?)\s*$", re.M)
 _WAVE_RE = re.compile(r"\*\*(?P<id>[^*]+?)\*\*\s*[—–-]\s*(?P<title>.+?)\s*$")
 _HEADING_RE = re.compile(r"^#{2,6}\s+(?P<id>\S+)")
@@ -128,13 +192,80 @@ def _deemph(s: str) -> str:
     return re.sub(r"[*_`]", "", s).strip()
 
 
+# --- portrait parsing: the small, forgiving readers behind the Project view ------
+# Anchor docs are prose an agent writes, not a form it fills, so every reader here degrades to an
+# empty result rather than raising. A band the docs don't answer simply doesn't render.
+_KV_RE = re.compile(r"^\s*-\s+\*\*(?P<k>[^*]+?)\*\*\s*[:—–-]\s*(?P<v>.+?)\s*$")
+# Colon-only, for deciding what is STRUCTURE vs a sentence that merely opens in bold. `- **Stack**:
+# Python` is a field; `- **No CSS framework** — breaks offline rendering` is prose with a bold lead,
+# and treating the second as a field would silently drop it from its band.
+_KV_STRICT_RE = re.compile(r"^\s*-\s+\*\*[^*]+?\*\*\s*:\s*.+$")
+_PLAIN_BULLET_RE = re.compile(r"^\s*-\s+(?P<v>.+?)\s*$")
+
+
+def _kv_bullets(section: str) -> dict[str, str]:
+    """`- **Key**: value` bullets → {lowercased key: value}. Keys are matched case-insensitively
+    by callers so an agent writing "Who it's for" or "who it's for" both land."""
+    return {_deemph(m.group("k")).lower(): _deemph(m.group("v"))
+            for m in (_KV_RE.match(ln) for ln in section.splitlines()) if m}
+
+
+def _kv_list(section: str) -> list[dict]:
+    """Same `- **Key**: value` shape, but ORDER-PRESERVING and repeat-tolerant — for stack rows and
+    resource pointers, where the sequence is the author's and duplicate keys are legitimate."""
+    return [{"key": _deemph(m.group("k")), "value": _deemph(m.group("v"))}
+            for m in (_KV_RE.match(ln) for ln in section.splitlines()) if m]
+
+
+def _bullets(section: str) -> list[str]:
+    """`- text` bullets as plain sentences. A leading `**Bold lead** — rest` is kept (it's emphasis
+    inside a sentence, not structure) but a true `- **Key**: value` row is skipped, since `_kv_*`
+    owns those and rendering them twice would duplicate the band."""
+    return [_deemph(m.group("v"))
+            for ln in section.splitlines()
+            if (m := _PLAIN_BULLET_RE.match(ln)) and not _KV_STRICT_RE.match(ln)]
+
+
+def _project_name(prd_text: str) -> str | None:
+    """The project's own name from the PRD's `# <name> — …` H1, minus any trailing doc label."""
+    m = re.search(r"^#\s+(.+?)\s*$", prd_text or "", re.M)
+    return re.split(r"\s+[—–-]\s+", _deemph(m.group(1)))[0] if m else None
+
+
+# A deliverable may carry OPTIONAL indented sub-fields under its line — `**Value**:` (what the owner
+# can do once it lands) and `**Needs**:` (the deliverables it depends on). Kept as sub-bullets rather
+# than folded into the title line so the machine-parsed `- **d-x** — Title` format is byte-identical
+# to before: `project_established` and every existing PRD keep working untouched.
+_D_FIELD_RE = re.compile(r"^\s+-\s+\*\*(?P<key>Value|Needs)\*\*\s*:\s*(?P<val>.+?)\s*$")
+
+
 def _parse_deliverables(prd_text: str) -> list[dict]:
-    """project-prd.md `## Deliverables` → [{id, title}] (in document order)."""
+    """project-prd.md `## Deliverables` → [{id, title, value, needs}] (in document order).
+
+    `value` is None and `needs` [] when the deliverable predates the typed shape — the sub-fields are
+    additive, so a v1 PRD parses exactly as it always did."""
     body = _section(_strip_fences(prd_text or ""), "Deliverables")
-    return [{"id": _deemph(m.group("id")), "title": _deemph(m.group("title"))}
-            for m in _DELIVERABLE_RE.finditer(body)]
+    out: list[dict] = []
+    for line in body.splitlines():
+        m = _DELIVERABLE_RE.match(line)
+        if m:
+            out.append({"id": _deemph(m.group("id")), "title": _deemph(m.group("title")),
+                        "value": None, "needs": []})
+            continue
+        f = _D_FIELD_RE.match(line)
+        if f and out:                      # a sub-field belongs to the deliverable above it
+            if f.group("key") == "Value":
+                out[-1]["value"] = _deemph(f.group("val"))
+            else:
+                out[-1]["needs"] = [s for s in
+                                    (x.strip() for x in _deemph(f.group("val")).split(",")) if s]
+    return out
 
 
+# An open question is an ADDRESSABLE record, not prose: `- **q-<slug>** — <question> — [OPEN]`, and
+# once answered `… — [RESOLVED <date>] <answer>`. The id is what lets the agent say "answer q-window"
+# and the owner answer it from the dashboard instead of opening the file in an IDE — the whole point
+# of the typed shape (general-knowledge-redesign-input.md §5·B).
 def _parse_waves(roadmap_text: str) -> list[dict]:
     """roadmap.md → [{id, title, deliverable, status}] — waves grouped under each `## <d-id> …`."""
     waves, current = [], None
@@ -278,6 +409,9 @@ class DevKnowledgeService:
         kind: str = "implementation",
         spawned_from: dict | None = None,
         inbox_id: int | None = None,
+        after: list[str] | None = None,
+        autopilot: bool = False,
+        cohort: str | None = None,
     ) -> dict:
         """Stamp a new top-level work-item from a pushed inbox item.
 
@@ -287,7 +421,12 @@ class DevKnowledgeService:
         raises loud (ValueError) with NO folder created. `spawned_from` = the D3 provenance edge
         `{item, relation: blocking|parallel|spawn, note?}` (child-side single write; parent views
         are derived by scan); relation is validated. `inbox_id` = the originating inbox row (D5
-        trace; the row itself also stays, with `routed_to` as the reverse pointer).
+        trace; the row itself also stays, with `routed_to` as the reverse pointer). `after` = PEER
+        sequencing — ids this item may not start before (populated at itemization from the PRD's
+        `Needs` edges). An item created with any non-terminal upstream enters at
+        `awaiting_upstream` instead of `active`, and the status router releases it automatically
+        when the last one completes; peers are validated to EXIST here, because a typo'd id that
+        silently parks work forever is the worst failure this edge can have.
 
         The id is an OPAQUE token (12-hex), fully DECOUPLED from the title — identity
         is a stable meaningless key, the human label lives only in the `title` field (best-practice
@@ -307,6 +446,12 @@ class DevKnowledgeService:
                 raise ValueError(f"spawned_from.relation must be one of {_SPAWN_RELATIONS}")
         wi = Path(dev_root) / "work-items"
         wi.mkdir(parents=True, exist_ok=True)
+        # Peer edges are validated against disk BEFORE any write: a mistyped upstream id would
+        # park this item at awaiting_upstream with nothing that can ever release it.
+        after_ids = [str(a) for a in (after or []) if a]
+        missing = [a for a in after_ids if not (wi / a / "item.md").exists()]
+        if missing:
+            raise ValueError(f"after references unknown work-item(s): {', '.join(missing)}")
         title = (title or "").strip()
         wid = secrets.token_hex(6)                       # opaque 12-hex id == folder name (~2^48)
         while (wi / wid).exists():                       # vanishingly rare live clash → re-roll
@@ -324,10 +469,31 @@ class DevKnowledgeService:
             extra += f"spawned_from: {json.dumps(edge)}\n"   # JSON is valid YAML flow mapping
         if inbox_id is not None:
             extra += f"inbox_id: {inbox_id}\n"
+        # Autopilot is a per-item POLICY (not a run-state): does the workflow drive itself through
+        # this item's gates, or wait for a click at each. Written only when on (absent reads False —
+        # no dead `autopilot: false` lines on the hand-driven majority). Onboarding items are born
+        # with it on; any item can be switched at the inbox stage (the last cheap moment).
+        if autopilot:
+            extra += "autopilot: true\n"
+        # Launch cohort (autopilot slice 4c): the batch this item was itemized with, at the end of
+        # one onboarding. Shared opaque id across the batch; the observability read sums the cohort's
+        # aggregate spend. Written only when set (absent reads null — no dead field on the manual
+        # majority, which are created one at a time and belong to no cohort).
+        if cohort:
+            extra += f"cohort: {json.dumps(str(cohort))}\n"
+        status = "active"
+        if after_ids:
+            extra += f"after: {json.dumps(after_ids)}\n"   # JSON is valid YAML flow sequence
+            # Park immediately if anything upstream is still open — an item must never spend even
+            # one scheduler tick `active` against work that hasn't landed.
+            unfinished = [a for a in after_ids
+                          if str((self.read_work_item(dev_root, a) or {}).get("status")) != "done"]
+            if unfinished:
+                status = "awaiting_upstream"
         fm = (
             f"---\nid: {wid}\nroot_id: {wid}\nparent_id: null\n"
             f"title: {json.dumps(title)}\nkind: {profile.kind}\n"
-            f"phase: {profile.phases[0]}\nstatus: active\n"
+            f"phase: {profile.phases[0]}\nstatus: {status}\n"
             f"done_at: null\nartifacts: []\n{extra}"
             f"session_id: {json.dumps(session_id) if session_id else 'null'}\n"
             f"created_at: {today}\nupdated_at: {today}\n---\n"
@@ -335,6 +501,69 @@ class DevKnowledgeService:
         body = (description or "").strip()
         (folder / "item.md").write_text(fm + (body + "\n" if body else ""))
         return {"id": wid, "folder": wid}
+
+    def itemize_launch(self, dev_root: Path, items: list[dict], *,
+                       session_id: str | None = None, cohort: str | None = None) -> dict:
+        """Create a LAUNCH COHORT — the batch of autopilot work-items an onboarding settles into
+        (autopilot slice 4c). Every item is born `autopilot=true` and stamped with one shared
+        `cohort` id (aggregate-spend observability groups on it).
+
+        `items` = `[{key, title, description?, kind?, after:[key|id]}]`. `key` is a caller-local
+        HANDLE used only to express edges within this batch — the real opaque ids are minted here,
+        so the caller (which doesn't know ids yet) can wire the PRD's `Needs` graph by key. Each
+        `after` entry is resolved: a batch key → that item's minted id; an existing on-disk id →
+        passed through (a cross-cohort dependency); anything else is a loud `ValueError` (a typo'd
+        edge that would park work forever is the worst failure this has). Items are created in
+        TOPOLOGICAL order so every upstream exists on disk before its dependent — a cycle raises.
+
+        Pure creation, no orchestration: the daemon's launch service fires the first triage run for
+        each item that starts `active`; items parked `awaiting_upstream` are kicked by the scheduler
+        when their upstreams complete. Returns `{cohort, created:[{id,key,title,after,status}],
+        running:[id…], waiting:[id…]}`."""
+        if not items:
+            raise ValueError("itemize_launch needs at least one item")
+        specs: list[dict] = []
+        seen: set[str] = set()
+        for i, it in enumerate(items):
+            key = str(it.get("key") or "").strip()
+            title = str(it.get("title") or "").strip()
+            if not key:
+                raise ValueError(f"item #{i} is missing a `key` (its batch-local edge handle)")
+            if not title:
+                raise ValueError(f"item {key!r} is missing a title")
+            if key in seen:
+                raise ValueError(f"duplicate item key {key!r}")
+            seen.add(key)
+            specs.append({"key": key, "title": title,
+                          "description": str(it.get("description") or ""),
+                          "kind": str(it.get("kind") or "implementation"),
+                          "after": [str(a) for a in (it.get("after") or []) if a]})
+        keys = {s["key"] for s in specs}
+        for s in specs:                                   # validate every edge BEFORE any write
+            for a in s["after"]:
+                if a in keys or (Path(dev_root) / "work-items" / a / "item.md").exists():
+                    continue
+                raise ValueError(f"item {s['key']!r} lists after={a!r}, which is neither another "
+                                 f"item in this batch nor an existing work-item")
+        order = _toposort_keys(specs)                     # deps-first; raises on a cycle
+        cohort_id = str(cohort) if cohort else secrets.token_hex(4)
+        key_to_id: dict[str, str] = {}
+        created: list[dict] = []
+        for key in order:
+            s = next(x for x in specs if x["key"] == key)
+            after_ids = [key_to_id.get(a, a) for a in s["after"]]   # batch key → id; existing id passes
+            wi = self.create_work_item(dev_root, s["title"], s["description"],
+                                       session_id=session_id, kind=s["kind"],
+                                       after=after_ids, autopilot=True, cohort=cohort_id)
+            key_to_id[key] = wi["id"]
+            item = self.read_work_item(dev_root, wi["id"]) or {}
+            created.append({"id": wi["id"], "key": key, "title": s["title"],
+                            "after": after_ids, "status": str(item.get("status") or "active")})
+        # Preserve the caller's input order in the return (topo order is an implementation detail).
+        created.sort(key=lambda c: [s["key"] for s in specs].index(c["key"]))
+        return {"cohort": cohort_id, "created": created,
+                "running": [c["id"] for c in created if c["status"] == "active"],
+                "waiting": [c["id"] for c in created if c["status"] == "awaiting_upstream"]}
 
     def read_work_item(self, dev_root: Path, item_id: str) -> dict | None:
         """Parse one work-item's `item.md` (frontmatter + body) into a dict, or None if it
@@ -351,8 +580,12 @@ class DevKnowledgeService:
         for k in ("root_id", "parent_id", "superseded_by"):
             if meta.get(k) is not None:
                 it[k] = str(meta[k])
+        if isinstance(meta.get("after"), (list, tuple)):   # same int-coercion trap, per element
+            it["after"] = [str(a) for a in meta["after"] if a]
+        it["autopilot"] = bool(meta.get("autopilot"))   # absent → False
+        it["cohort"] = str(meta["cohort"]) if meta.get("cohort") else None  # launch cohort (4c)
         it["description"] = body.strip()
-        it["session_id"] = meta.get("session_id")
+        it["sessions"], it["session_id"] = _session_fields(meta)  # role slots + current-role sid
         it["artifacts"] = _norm_artifacts(meta.get("artifacts"))  # legacy str → {type,path} (R5)
         return it
 
@@ -447,6 +680,33 @@ class DevKnowledgeService:
             return False
         fm = re.sub(r"(?m)^kind:.*$", f"kind: {kind}", m.group(1))
         fm = re.sub(r"(?m)^updated_at:.*$", f"updated_at: {date.today().isoformat()}", fm)
+        item.write_text(f"---\n{fm}\n---\n{body}")
+        return True
+
+    def set_work_item_triaged(self, dev_root: Path, item_id: str) -> bool:
+        """Stamp `triaged_at` (F1, playground-e2e-blockers): the triage-exit gate's `triage_ran`
+        check reads THIS stamp — written only by triage's recording surface
+        (set_triage_classification) — instead of the old `kind set + body filled` tautology,
+        which any inbox push already satisfied without a triage agent ever running. Idempotent
+        (first stamp wins); line-based rewrite, bumps updated_at. Returns True if the file
+        changed."""
+        item = Path(dev_root) / "work-items" / item_id / "item.md"
+        if not item.exists():
+            return False
+        text = item.read_text()
+        meta, body = _parse_md(text)
+        if meta.get("triaged_at"):
+            return False
+        m = _FRONTMATTER.match(text)
+        if not m:
+            return False
+        fm = m.group(1)
+        stamp = date.today().isoformat()
+        if re.search(r"(?m)^triaged_at:", fm):
+            fm = re.sub(r"(?m)^triaged_at:.*$", f"triaged_at: {stamp}", fm)
+        else:
+            fm = re.sub(r"(?m)^created_at:", f"triaged_at: {stamp}\ncreated_at:", fm, count=1)
+        fm = re.sub(r"(?m)^updated_at:.*$", f"updated_at: {stamp}", fm)
         item.write_text(f"---\n{fm}\n---\n{body}")
         return True
 
@@ -553,26 +813,80 @@ class DevKnowledgeService:
         item.write_text(f"---\n{fm}\n---\n{body}")
         return True
 
-    def set_work_item_session(self, dev_root: Path, item_id: str, session_id: str | None) -> bool:
-        """Persist the agent `session_id` onto a work-item's frontmatter — the item is the
-        durable home of its dev thread (resume from here next time). Line-based rewrite to
-        preserve frontmatter shape; bumps `updated_at`. Returns True if the file changed."""
+    def set_work_item_session(self, dev_root: Path, item_id: str, session_id: str | None,
+                              role: str = "intake") -> bool:
+        """Persist a session id onto a work-item's ROLE slot (`session_<role>` frontmatter key —
+        build-vet-loop §1.3: intake narrates · build remembers · vet forgets). The item is the
+        durable home of its dev threads; the read layer computes `session_id` (current phase's
+        role) from these slots. Writing any slot NULLs the legacy single `session_id` key — the
+        slot now owns that thread, and a stale legacy value must not shadow other roles' slots.
+        Line-based rewrite preserving frontmatter shape; bumps `updated_at`. Returns True if
+        the file changed."""
+        from .kind_profiles import SESSION_ROLES
+        if role not in SESSION_ROLES:
+            raise ValueError(f"unknown session role {role!r} — known: {SESSION_ROLES}")
         item = Path(dev_root) / "work-items" / item_id / "item.md"
         if not item.exists():
             return False
         text = item.read_text()
         meta, body = _parse_md(text)
-        if str(meta.get("session_id")) == str(session_id):
-            return False  # unchanged — skip the write
+        key = f"session_{role}"
+        if str(meta.get(key)) == str(session_id) and not meta.get("session_id"):
+            return False  # unchanged (and no legacy key left to clear) — skip the write
         m = _FRONTMATTER.match(text)
         if not m:
             return False
         today = date.today().isoformat()
         sid = json.dumps(session_id) if session_id else "null"
-        fm = re.sub(r"(?m)^session_id:.*$", f"session_id: {sid}", m.group(1))
+        fm = m.group(1)
+        if re.search(rf"(?m)^{key}:", fm):
+            fm = re.sub(rf"(?m)^{key}:.*$", f"{key}: {sid}", fm)
+        else:  # insert the slot next to its siblings — right before created_at (always present)
+            fm = re.sub(r"(?m)^created_at:", f"{key}: {sid}\ncreated_at:", fm, count=1)
+        fm = re.sub(r"(?m)^session_id:.*$", "session_id: null", fm)  # slot owns the thread now
         fm = re.sub(r"(?m)^updated_at:.*$", f"updated_at: {today}", fm)
         item.write_text(f"---\n{fm}\n---\n{body}")
         return True
+
+    def set_work_item_handoff_mark(self, dev_root: Path, item_id: str, mark: int) -> bool:
+        """Advance the item's `handoffs_promoted` watermark (build-vet-loop §1.4 / step 6) — the
+        count of attempts-ledger entries already promoted into the intake thread. Monotonic by
+        contract (the ledger is append-only); written only AFTER the turn that carried the
+        promotion block landed, so a failed turn re-injects (at-least-once). Line-based rewrite;
+        bumps `updated_at`. Returns True if the file changed."""
+        item = Path(dev_root) / "work-items" / item_id / "item.md"
+        if not item.exists():
+            return False
+        text = item.read_text()
+        meta, body = _parse_md(text)
+        try:
+            cur = int(str(meta.get("handoffs_promoted") or 0).strip() or 0)
+        except (TypeError, ValueError):
+            cur = 0
+        if cur == int(mark):
+            return False
+        m = _FRONTMATTER.match(text)
+        if not m:
+            return False
+        fm = m.group(1)
+        if re.search(r"(?m)^handoffs_promoted:", fm):
+            fm = re.sub(r"(?m)^handoffs_promoted:.*$", f"handoffs_promoted: {int(mark)}", fm)
+        else:
+            fm = re.sub(r"(?m)^created_at:", f"handoffs_promoted: {int(mark)}\ncreated_at:",
+                        fm, count=1)
+        fm = re.sub(r"(?m)^updated_at:.*$", f"updated_at: {date.today().isoformat()}", fm)
+        item.write_text(f"---\n{fm}\n---\n{body}")
+        return True
+
+    def work_item_session_ids(self, item: dict) -> list[str]:
+        """Every distinct session id an item holds — all role slots plus a still-unadopted legacy
+        `session_id` — for lifecycle paths (complete/abandon/delete) that must sweep/retire ALL of
+        an item's threads, not just the current phase's."""
+        out: list[str] = []
+        for sid in [*(item.get("sessions") or {}).values(), item.get("session_id")]:
+            if sid and sid not in out:
+                out.append(str(sid))
+        return out
 
     def set_work_item_status(self, dev_root: Path, item_id: str, status: str) -> bool:
         """Set a work-item's `status` (the runnable-state axis — active/awaiting_child/
@@ -588,7 +902,7 @@ class DevKnowledgeService:
         if str(meta.get("status")) == str(status):
             return False
         # Terminal is FINAL on this axis: a straggler run's end-of-turn status write (an aborted
-        # headless plan finishing after an abandon, say) must never revive a done item into a
+        # background plan finishing after an abandon, say) must never revive a done item into a
         # ghost `awaiting_human` page. Un-terminal has exactly no path (never-delete lifecycle).
         if meta.get("done_at") or str(meta.get("status")) == "done":
             return False
@@ -596,6 +910,30 @@ class DevKnowledgeService:
         if not m:
             return False
         fm = re.sub(r"(?m)^status:.*$", f"status: {status}", m.group(1))
+        fm = re.sub(r"(?m)^updated_at:.*$", f"updated_at: {date.today().isoformat()}", fm)
+        item.write_text(f"---\n{fm}\n---\n{body}")
+        return True
+
+    def set_work_item_autopilot(self, dev_root: Path, item_id: str, on: bool) -> bool:
+        """Flip the per-item autopilot policy. Written as a bare `autopilot: true` line, REMOVED
+        when off (so the frontmatter never carries a dead `autopilot: false`, matching how the
+        flag is minted). Bumps `updated_at`. Returns True if the file changed. Callers gate WHEN
+        this is allowed (the route restricts it to pre-build — the inbox-stage decision)."""
+        item = Path(dev_root) / "work-items" / item_id / "item.md"
+        if not item.exists():
+            return False
+        text = item.read_text()
+        meta, body = _parse_md(text)
+        if bool(meta.get("autopilot")) == bool(on):
+            return False
+        m = _FRONTMATTER.match(text)
+        if not m:
+            return False
+        fm = m.group(1)
+        if on:
+            fm = re.sub(r"(?m)^(status:.*)$", r"autopilot: true\n\1", fm, count=1)
+        else:
+            fm = re.sub(r"(?m)^autopilot:.*\n?", "", fm)
         fm = re.sub(r"(?m)^updated_at:.*$", f"updated_at: {date.today().isoformat()}", fm)
         item.write_text(f"---\n{fm}\n---\n{body}")
         return True
@@ -662,7 +1000,7 @@ class DevKnowledgeService:
 
     def set_work_item_git(self, dev_root: Path, item_id: str, **fields) -> bool:
         """Upsert the item's git record (S4): branch/worktree at build entry, merge commit +
-        backup ref at deliver. Only the known `_GIT_FIELDS` keys are accepted (loud ValueError
+        backup ref at review. Only the known `_GIT_FIELDS` keys are accepted (loud ValueError
         otherwise); string values are JSON-quoted (paths survive the line parser), None writes
         `null`. Bumps `updated_at`. Returns True if the file changed."""
         bad = set(fields) - self._GIT_FIELDS
@@ -696,22 +1034,43 @@ class DevKnowledgeService:
         """Resolve an anchor-doc name to its path (guards the name — no traversal)."""
         if name == "resources":
             return Path(dev_root) / "general" / "resources" / "index.md"
-        if name in ANCHOR_DOCS:
+        if name in ANCHOR_DOCS or name in LEGACY_DOCS:
             return Path(dev_root) / "general" / f"{name}.md"
         return None
 
     def general_docs(self, dev_root: Path) -> list[dict]:
-        """The anchor-doc set with presence flags (for the dashboard's Knowledge surface)."""
+        """The anchor-doc set with presence flags (for the dashboard's Knowledge surface). A legacy
+        doc appears only while it still exists on disk — so a repo mid-migration can still open it."""
         out = []
         for name in (*ANCHOR_DOCS, "resources"):
             p = self._general_path(dev_root, name)
             out.append({"name": name, "present": bool(p and p.exists())})
+        for name in LEGACY_DOCS:
+            p = self._general_path(dev_root, name)
+            if p and p.exists():
+                out.append({"name": name, "present": True})
         return out
 
     def read_general_doc(self, dev_root: Path, name: str) -> str | None:
         """Raw text of one anchor doc, or None (unknown name or missing file)."""
         p = self._general_path(dev_root, name)
         return p.read_text() if (p and p.exists()) else None
+
+    def deliverable_success_signal(self, dev_root: Path, deliverable_id: str) -> str | None:
+        """The PRD `## Success signals` lines that cite `deliverable_id`, verbatim — the owner's own
+        words for "what good looks like" for this deliverable (the deputy's review acceptance test,
+        autopilot §2b). Returns the matching bullet(s), or None when the PRD, the section, or a line
+        citing the id can't be found. Free-form prose, so it matches by id mention, not a fixed shape
+        — a best-effort read, never a raise (the deputy escalates when a signal can't be confirmed)."""
+        if not deliverable_id:
+            return None
+        prd = self.read_general_doc(dev_root, "project-prd")
+        if not prd:
+            return None
+        section = _section(_strip_fences(prd), "Success signals")
+        hits = [ln.strip(" -\t") for ln in section.splitlines()
+                if re.search(rf"\b{re.escape(deliverable_id)}\b", ln)]
+        return "\n".join(hits) if hits else None
 
     def project_established(self, dev_root: Path) -> bool:
         """True once this project's memory exists — the PRD defines at least one deliverable (the
@@ -730,6 +1089,128 @@ class DevKnowledgeService:
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(text)
         return True
+
+    # The general/ lint: mechanical checks over the anchor set, reported as ACTIONABLE FINDINGS
+    # rather than a document to read. Everything here is derived — nothing is stored — so it can
+    # never itself go stale. Bookkeeping is the 80% of knowledge upkeep humans are worst at; this
+    # automates that half and leaves curation (what a fact MEANS) to the owner.
+    _LINT_SEVERITY = {"error": 0, "warn": 1, "info": 2}
+
+    def lint_general(self, dev_root: Path, *, stale_days: int = 90) -> dict:
+        """Findings over `general/`: missing docs, deliverables that no wave or item is delivering,
+        success signals citing an unknown id, deliverables with no success signal, `Needs:` pointing
+        at an undefined deliverable, unanswered questions, and stale docs. Ordered worst-first."""
+        root = Path(dev_root)
+        prd = self.read_general_doc(root, "project-prd") or ""
+        deliverables = _parse_deliverables(prd)
+        d_ids = {d["id"] for d in deliverables}
+        waves = _parse_waves(self.read_general_doc(root, "roadmap") or "")
+        items = self._read_work_items(root)
+        find: list[dict] = []
+
+        def add(sev: str, kind: str, detail: str, ref: str | None = None) -> None:
+            find.append({"severity": sev, "kind": kind, "detail": detail, "ref": ref})
+
+        for name in (*ANCHOR_DOCS, "resources"):
+            if not (self.read_general_doc(root, name) or "").strip():
+                add("warn", "missing-doc", f"{name}.md is empty or absent", name)
+
+        # A retired doc still on disk is a live duplication hazard: two files own the same facts,
+        # so one of them silently stops being updated.
+        for name in LEGACY_DOCS:
+            if (self.read_general_doc(root, name) or "").strip():
+                add("warn", "retired-doc",
+                    f"{name}.md is retired — fold its content into architecture.md and delete it",
+                    name)
+
+        # A deliverable nothing is working toward is either not really planned, or the roadmap
+        # forgot it — either way it's the owner's call, so it's a finding rather than a fix.
+        claimed = {w["deliverable"] for w in waves} | {
+            it.get("deliverable") for it in items if it.get("deliverable")}
+        for d in deliverables:
+            if d["id"] not in claimed:
+                add("info", "deliverable-unclaimed",
+                    f"{d['id']} has no wave or work-item delivering it", d["id"])
+            for n in d.get("needs") or []:
+                if n.lower() != "none" and n not in d_ids:
+                    add("error", "broken-needs",
+                        f"{d['id']} needs '{n}', which no deliverable defines", d["id"])
+
+        # Success-signal integrity, both directions (the alirezarezvani AC↔FR invariant).
+        signals = _section(_strip_fences(prd), "Success signals")
+        cited = {i for i in re.findall(r"\bd-[a-z0-9-]+", signals)}
+        for d in deliverables:
+            if d["id"] not in cited:
+                add("warn", "no-success-signal",
+                    f"{d['id']} has no success signal — nobody can tell when it's done", d["id"])
+        for c in sorted(cited - d_ids):
+            add("error", "signal-orphan",
+                f"a success signal cites '{c}', which no deliverable defines", c)
+
+        cutoff = datetime.now().timestamp() - stale_days * 86400
+        for name in ANCHOR_DOCS:
+            p = self._general_path(root, name)
+            if p and p.exists() and p.stat().st_mtime < cutoff:
+                add("info", "stale-doc", f"{name}.md hasn't changed in over {stale_days} days", name)
+
+        find.sort(key=lambda f: self._LINT_SEVERITY.get(f["severity"], 3))
+        return {"findings": find,
+                "counts": {s: sum(1 for f in find if f["severity"] == s)
+                           for s in ("error", "warn", "info")}}
+
+    def read_portrait(self, dev_root: Path) -> dict:
+        """The PORTRAIT — what this project IS, assembled from the anchor docs into the six bands the
+        Project view renders (identity · goals · capabilities · build · deliverables · resources).
+
+        Deliberately excludes everything the dashboard already answers: decisions (volatile, often
+        work-item specific), work in motion, lint findings, status. Reading this end to end should
+        tell you what the project is in under a minute — that's the only test it has to pass.
+
+        Every band maps to exactly ONE doc, so the view can never become a place knowledge secretly
+        lives: it renders what the docs say or it renders nothing."""
+        root = Path(dev_root)
+        prd = _strip_fences(self.read_general_doc(root, "project-prd") or "")
+        arch = _strip_fences(self.read_general_doc(root, "architecture") or "")
+        caps = _strip_fences(self.read_general_doc(root, "capabilities") or "")
+        res = _strip_fences(self.read_general_doc(root, "resources") or "")
+
+        ident = _kv_bullets(_section(prd, "Identity"))
+        # Deliverables carry their delivered state from the roadmap rollup — project-level truth
+        # (this value exists now / doesn't yet), NOT the work-item detail behind it.
+        board = self.roadmap_board(root)
+        delivered = {d["id"] for d in board["deliverables"]
+                     if d["rollup"]["total"] and d["rollup"]["done"] >= d["rollup"]["total"]}
+        return {
+            "identity": {
+                "name": _project_name(prd) or Path(root).name,
+                "one_liner": _first_para(prd),
+                "who": ident.get("who it's for") or ident.get("who"),
+                "why": ident.get("why it exists") or ident.get("why"),
+            },
+            "goals": {
+                "now": _bullets(_section(prd, "Goals")),
+                "direction": _bullets(_section(prd, "Direction")),
+                "non_goals": _bullets(_section(prd, "Non-goals")),
+            },
+            # Present tense ONLY. An empty list is the honest answer for a project that hasn't
+            # shipped — never a placeholder, never the plan restated (that's the roadmap's job).
+            "capabilities": [
+                {"name": _deemph(m.group("id")), "detail": _deemph(m.group("title"))}
+                for m in (_DELIVERABLE_RE.match(ln) for ln in
+                          _section(caps, "Capabilities").splitlines()) if m],
+            "build": {
+                "stack": _kv_list(_section(arch, "Stack")),
+                "invariants": _bullets(_section(arch, "Invariants")),
+                "not_here": _bullets(_section(arch, "What's deliberately not here")),
+            },
+            "deliverables": [
+                {"id": d["id"], "value": d["value"], "title": d["title"],
+                 "delivered": d["id"] in delivered}
+                for d in _parse_deliverables(prd)],
+            # Resources are authored either as `- **Label**: pointer` or as plain bullets under
+            # topic headings; accept both rather than forcing a rewrite of every existing file.
+            "resources": _kv_list(res) or [{"key": "", "value": v} for v in _bullets(res)],
+        }
 
     def roadmap_board(self, dev_root: Path, items: list[dict] | None = None) -> dict:
         """Join the anchor scaffold (project-prd deliverables + roadmap waves) with the live
@@ -848,8 +1329,12 @@ class DevKnowledgeService:
             it["depth"] = len(rel.parts) - 1
             it["description"] = body.strip()
             it["status"] = meta.get("status")  # may be None (completed/unset)
+            if isinstance(meta.get("after"), (list, tuple)):   # peer edges: ids stay strings
+                it["after"] = [str(a) for a in meta["after"] if a]
+            it["autopilot"] = bool(meta.get("autopilot"))   # per-item policy, absent → False
+            it["cohort"] = str(meta["cohort"]) if meta.get("cohort") else None  # launch cohort (4c)
             it["artifacts"] = _norm_artifacts(meta.get("artifacts"))  # legacy str → {type,path} (R5)
-            it["session_id"] = meta.get("session_id")  # origin session, may be None
+            it["sessions"], it["session_id"] = _session_fields(meta)  # role slots + current-role sid
             it["folder"] = str(rel)
             out.append(it)
         return out

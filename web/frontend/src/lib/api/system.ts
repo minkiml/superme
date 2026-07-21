@@ -44,6 +44,29 @@ export function getRepos(): Promise<RepoOverview[]> {
   return getJSON('/api/repos')
 }
 
+// --- top-of-SuperMe attention center (Pass 2 · Q2) --------------------------------------------
+// System-wide (distinct from the per-repo `/dev/attention` engine): every `awaiting_human` hold
+// across EVERY connected repo, each classified by WHY it's parked so the notification center can
+// offer the right quick action. `kind` drives the action set; `actor` says who parked it.
+// Types are inlined until the next `gen:api` picks up AttentionHold/RepoAttention from the daemon.
+export type SystemHoldKind = 'escalation' | 'breaker' | 'paged' | 'review' | 'gate'
+export type SystemHold = {
+  id: string
+  title: string
+  session_id: string | null // the item's own dev session — Open binds the chat to it, not the general thread
+  phase: string | null
+  cohort: string | null
+  kind: SystemHoldKind
+  reason: string
+  actor: string
+}
+export type SystemRepoAttention = { repo_id: string; repo_label: string; holds: SystemHold[] }
+// Fail-soft to []: the route 404s until the daemon restart that ships it, and a down daemon should
+// never blank the whole shell — the bell just shows nothing until the feed resolves.
+export function getSystemAttention(): Promise<SystemRepoAttention[]> {
+  return getJSON<SystemRepoAttention[]>('/api/system/attention').catch(() => [])
+}
+
 // --- connect a domain (register a new repo) + the folder picker it uses -----------------------
 export type FsBrowse = Schema<'FsBrowseResponse'>
 export type ConnectedRepo = Schema<'RepoConnectResponse'>
@@ -56,6 +79,14 @@ export function browseFs(path?: string): Promise<FsBrowse> {
 // code → retrofit. The choice is stored and drives the repo's onboarding front door.
 export function connectRepo(body: { path: string; label?: string; kind: 'new' | 'existing' }): Promise<ConnectedRepo> {
   return sendJSON('/api/repos', 'POST', body)
+}
+
+export type DisconnectReceipt = Schema<'RepoDisconnectResponse'>
+// Disconnect a project — IRREVERSIBLE: forgets the registration, knowledge home, harness cell,
+// pipeline state and sessions (run traces are preserved). The project folder itself is untouched;
+// reconnecting later is a fresh connect. `confirm` must be the repo id (the typed-confirmation gate).
+export function disconnectRepo(id: string): Promise<DisconnectReceipt> {
+  return sendJSON(`/api/repos/${id}?confirm=${encodeURIComponent(id)}`, 'DELETE')
 }
 
 export function getTokens(): Promise<TokenUsage> {
@@ -127,6 +158,15 @@ export function setRepoLearning(repoId: string, enabled: boolean): Promise<{ ok:
 // default — capture is fully automatic, so this governs all of it.
 export function setSystemLearning(enabled: boolean): Promise<{ ok: boolean; learning_enabled: boolean }> {
   return sendJSON('/api/system/learning', 'POST', { enabled })
+}
+
+// The global deputy dial (autopilot slice 4): whether a deputy judges autopilot gates, and how
+// readily it escalates PER GATE (triage/plan/review, each low·medium·high·extra). Partial — send
+// only what changes; `strictness` is a partial map (only the gates that moved).
+export function setSystemDeputy(
+  patch: { enabled?: boolean; strictness?: Record<string, string> },
+): Promise<{ ok: boolean; deputy_enabled: boolean; deputy_strictness: Record<string, string> }> {
+  return sendJSON('/api/system/deputy', 'POST', patch)
 }
 
 // The tunable background agents (sweep/distill/write) — each runs on a code-level preset model,

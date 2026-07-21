@@ -33,7 +33,7 @@ class GitSyncResponse(BaseModel):
 
 
 class GitMergeResponse(BaseModel):
-    """The deliver-gate merge. `path` says which route executed: `main` (heavy, with backup ref)
+    """The review-gate merge. `path` says which route executed: `main` (heavy, with backup ref)
     or `parent` (blocking child's light merge into its parent's branch)."""
     ok: bool
     merged: bool
@@ -60,7 +60,7 @@ class GitRevertResponse(BaseModel):
 
 class GitResolveResponse(BaseModel):
     """Resolve-with-Agent accepted: the conflicted sync was left in the item's worktree and a
-    headless resolution run is in flight (poll GET /dev for run state)."""
+    background resolution run is in flight (poll GET /dev for run state)."""
     ok: bool
     status: str
     id: str

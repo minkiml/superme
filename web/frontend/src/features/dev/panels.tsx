@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, Trash2, CornerDownRight, GitBranch, ArrowRight, X, Bot, User, Loader2, MessageSquareText, ListChecks } from 'lucide-react'
+import { Plus, Trash2, CornerDownRight, GitBranch, ArrowRight, X, Bot, User, Loader2, MessageSquareText } from 'lucide-react'
 import Dropdown from '@/ui/Dropdown'
 import Markdown from '@/ui/Markdown'
 import Modal from '@/ui/Modal'
@@ -26,7 +26,7 @@ export const DEFAULT_RUN_EFFORT = DEFAULT_EFFORT
 // --- status / branch-off chrome -------------------------------------------------
 
 // The badge answers "what is this item doing?" — so a live run wins over the status word: an item
-// with an agent on it reads "triaging…", not "in progress". `running` covers both a headless run
+// with an agent on it reads "triaging…", not "in progress". `running` covers both a background run
 // fired from the board and a bound session's turn.
 export function StatusBadge({ it, running }: { it: WorkItem; running?: boolean }) {
   const s = primaryStatus(it)
@@ -63,14 +63,19 @@ function BranchInfo({ it }: { it: WorkItem }) {
 export const isActive = (it: WorkItem) => !it.done_at && it.status !== 'done'
 
 // A work-item is "plannable" — eligible for the one-shot "Plan it" gate — while it sits in the
-// pre-build phases (triage/plan) and has never run (no run telemetry yet). After the first run
-// it's forward-only (review / discuss in chat / advance phase); re-planning, if ever needed, is
-// a natural chat request, not a card affordance. The caller also gates on `!running`.
+// `plan` phase and no plan run has happened YET. The signal is the plan phase's OWN accumulated
+// tokens, not the item's grand total: auto-triage (#120) leaves ~40k triage tokens on every item,
+// so a `!total_tokens` check would wrongly read a freshly-planned item as "already run" and hide
+// the button (leaving only "Approve" for a plan that was never drafted). NOT in triage: a plan run
+// there hits the plan skill's own not-yet-triaged block (the route 409s it too) — triage runs
+// automatically on push and lands at its own one-click gate. Once a plan run lands (plan-phase
+// tokens > 0), it's forward-only (review / discuss in chat / advance); the caller also gates on
+// `!running`.
 export const isPlannable = (it: WorkItem) =>
-  ['triage', 'plan'].includes(it.phase ?? 'triage') && !it.last_run && !it.total_tokens
+  (it.phase ?? 'triage') === 'plan' && (it.phase_tokens?.plan ?? 0) === 0
 
 // Actions a board surface can offer per card. `bind` opens the item in the chat (dev);
-// `plan` fires a headless /plan turn; `delete` hard-deletes a plan/design item; `running`
+// `plan` fires a background /plan turn; `delete` hard-deletes a plan/design item; `running`
 // is the set of ids currently planning.
 export type WorkActions = {
   onOpen?: (it: WorkItem) => void // open the review popup (card click)
@@ -91,14 +96,17 @@ export function WorkspaceKanban({ items, onOpen, running, boundItemId, buckets }
   const byPhase = (key: string) => visible.filter((it) => (it.phase ?? 'triage') === key)
   // The union pipeline is 8 stages; only render columns that hold items, plus the implementation
   // core so the board always reads as a pipeline (S7 redesigns this surface properly).
-  const CORE = ['triage', 'plan', 'build', 'validate', 'deliver', 'close']
+  const CORE = ['triage', 'plan', 'build', 'vet', 'review', 'close']
   const columns = PHASES.filter((ph) => CORE.includes(ph.key) || byPhase(ph.key).length > 0)
   return (
-    <div
-      className="grid grid-cols-1 gap-3"
-      style={{ gridTemplateColumns: `repeat(${Math.min(columns.length, 6)}, minmax(0, 1fr))` }}
-    >
-      {columns.map((ph) => {
+    // Floor each column at a readable width and scroll horizontally when they don't all fit —
+    // `minmax(0, 1fr)` let columns collapse so narrow that card titles wrapped one word per line.
+    <div className="overflow-x-auto">
+      <div
+        className="grid gap-3"
+        style={{ gridTemplateColumns: `repeat(${columns.length}, minmax(150px, 1fr))` }}
+      >
+        {columns.map((ph) => {
         const col = byPhase(ph.key)
         const dot = PHASE_DOT[PHASE_ACCENT[ph.key] ?? 'dev'] ?? 'bg-line'
         return (
@@ -127,6 +135,7 @@ export function WorkspaceKanban({ items, onOpen, running, boundItemId, buckets }
           </div>
         )
       })}
+      </div>
     </div>
   )
 }
@@ -138,65 +147,62 @@ function WorkCard({
   onOpen?: (it: WorkItem) => void
   planning?: boolean
   bound?: boolean
-  bucket?: string // attention tier (S7): needs_you | running | unread — tints the card ring
+  bucket?: string // attention tier (S7): needs_you | deputy_working | running | unread — tints the card ring
 }) {
   const clickable = !!onOpen
   const running = !!planning || !!it.running
-  // Σ = the CURRENT phase's accumulated 3-type tokens (the card sits IN its phase column — the number
-  // sums every run made while the item was in this phase, NOT just the last run). Strictly per-phase:
-  // no fallback to the grand total, so it never leaks other phases' spend. Hidden until this phase has
-  // recorded tokens. The 4-type-per-phase figure is recorded behind it (phase_tokens_4type).
-  const phaseTok = it.phase ? it.phase_tokens?.[it.phase] ?? 0 : 0
-  const hasTotal = phaseTok > 0
-  const telemetryParts = [
-    it.model ? fmtModel(it.model) : null,
-    it.ctx_pct != null ? `ctx ${it.ctx_pct}%` : null,
-    hasTotal ? `Σ ${fmtTokens(phaseTok)} tok` : null,
-  ] as const
-  const hasTelemetry = telemetryParts.some(Boolean)
-  // The card is a pure glance + entry point: clicking opens the review popup AND binds the
-  // chat. All actions (model config, Plan it, Approve, Drop) live in the popup now.
-  const showFooter = running || hasTelemetry || !!it.tasks
+  // Fixed 4-row card (owner-specced): status · name · model|ctx · tokens|time. Live values win
+  // while a run is in flight; otherwise the settled figures. Tokens = the item's grand-total spend
+  // (same figure the drilldown leads with); time = the last run's duration (shows once this phase's
+  // run has started and persists through the phase — a fresh phase has no run yet, so it's hidden
+  // until one lands). The card is a pure glance + entry point — every action lives in the popup.
+  const model = (running ? it.run_model : null) ?? it.model
+  const ctx = running ? it.run_ctx_pct : it.ctx_pct
+  const tokens = running ? it.run_tokens : it.total_tokens
+  const hasTokens = (tokens ?? 0) > 0
+  const settledTime = it.last_run?.duration_ms != null ? fmtDuration(it.last_run.duration_ms) : null
+  const showMeter = running || hasTokens || !!settledTime
   const stripe = STATUS_STRIPE[primaryStatus(it)] ?? 'border-l-line'
-  // Attention tint (S7): the card carries its bucket color as a soft ring — orange pages, green
-  // means an agent is on it. (Unread applies to terminal items, which live off-board in the strip.)
+  // Attention tint (S7): the card carries its bucket color as a soft ring — orange pages, purple =
+  // the deputy is covering it, green = a phase agent is on it. (Unread applies to terminal items,
+  // which live off-board in the strip.)
   const attnRing = bucket === 'needs_you' ? 'ring-1 ring-warn/70'
+    : bucket === 'deputy_working' ? 'ring-1 ring-deputy/60'
     : bucket === 'running' ? 'ring-1 ring-success/60' : ''
   return (
     <div
       onClick={clickable ? () => onOpen!(it) : undefined}
       title={clickable ? 'Open review + chat for this work-item' : undefined}
-      className={`rounded-md border border-line border-l-2 bg-surface px-2.5 py-2 shadow-sm ${
+      className={`flex flex-col gap-1 rounded-md border border-line border-l-2 bg-surface px-2.5 py-2 shadow-sm ${
         bound ? 'border-l-accent ring-2 ring-accent' : stripe
       } ${bound ? '' : attnRing} ${clickable ? 'cursor-pointer transition hover:border-accent hover:shadow-md' : ''}`}
     >
-      <div className="flex items-start gap-1.5">
-        <div className="min-w-0 flex-1 text-[12.5px] leading-snug text-fg">{it.title}</div>
-        <BranchInfo it={it} />
+      {/* 1 · status (+ branch provenance) */}
+      <div className="flex items-center gap-1.5">
         <StatusBadge it={it} running={running} />
+        <span className="ml-auto flex items-center gap-1.5"><BranchInfo it={it} /></span>
       </div>
-      {showFooter && (
-        <div className="mt-2 text-[11px]">
-          {running ? (
-            <RunMeter it={it} />
-          ) : (
-            (it.tasks || hasTelemetry) && (
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-faint">
-                {it.tasks && <TaskProgress tasks={it.tasks} />}
-                {hasTelemetry && (
-                  <span className="flex items-center gap-0">
-                    {telemetryParts[0] && <span>{telemetryParts[0]}</span>}
-                    {telemetryParts[1] && (
-                      <><span className="mx-1">·</span><span>{telemetryParts[1]}</span></>
-                    )}
-                    {telemetryParts[2] && (
-                      <><span className="mx-1">·</span><span title="Critical tokens used, summed across all runs">{telemetryParts[2]}</span></>
-                    )}
-                  </span>
-                )}
-              </div>
-            )
-          )}
+      {/* 2 · name — one line, ellipsis when long */}
+      <div className="truncate text-[12.5px] leading-snug text-fg" title={it.title}>{it.title}</div>
+      {/* 3 · model · ctx */}
+      {(model || ctx != null) && (
+        <div className="flex items-center gap-1.5 text-[10.5px] text-muted">
+          {model && <span className="truncate">{fmtModel(model)}</span>}
+          {model && ctx != null && <span className="text-faint">·</span>}
+          {ctx != null && <span className="tabular-nums">ctx {ctx}%</span>}
+        </div>
+      )}
+      {/* 4 · tokens · time — always on once this phase's run has started */}
+      {showMeter && (
+        <div className="flex items-center gap-1.5 text-[10.5px] text-faint">
+          {running && <Loader2 size={10} className="animate-spin text-accent-text" />}
+          <span className="tabular-nums" title="Tokens used (3-type basis) — this run while live, else the item total">
+            {hasTokens ? `${fmtTokens(tokens ?? 0)} tok` : '—'}
+          </span>
+          <span>·</span>
+          {running
+            ? <LiveTimer startedAt={it.run_started_at} />
+            : <span className="tabular-nums" title="Duration of the last run">{settledTime ?? '—'}</span>}
         </div>
       )}
     </div>
@@ -212,42 +218,6 @@ function LiveTimer({ startedAt }: { startedAt?: number | null }) {
   }, [])
   if (!startedAt) return null
   return <span className="tabular-nums">{fmtDuration(now - startedAt * 1000)}</span>
-}
-
-// Live run telemetry while an agent works the item: pulse + model + elapsed time + this-run tokens.
-function RunMeter({ it }: { it: WorkItem }) {
-  return (
-    <span className="inline-flex items-center gap-1 text-accent-text" title="Agent running — model · live time · this run's tokens · context fill">
-      <Loader2 size={11} className="animate-spin" />
-      {it.run_model && <span className="text-muted">{fmtModel(it.run_model)}</span>}
-      <LiveTimer startedAt={it.run_started_at} />
-      {it.run_tokens != null && <span className="text-muted">· {fmtTokens(it.run_tokens)} tok</span>}
-      {it.run_ctx_pct != null && <span className="text-muted">· {it.run_ctx_pct}% ctx</span>}
-    </span>
-  )
-}
-
-// Build progress from the item's tasks.md checklist (done / total), with a thin bar. Hidden
-// when the item has no tasks.md (e.g. not yet planned).
-function TaskProgress({ tasks }: { tasks: { done: number; total: number } }) {
-  const { done, total } = tasks
-  const pct = total ? Math.round((done / total) * 100) : 0
-  const complete = done >= total
-  return (
-    <span
-      className="inline-flex items-center gap-1 text-faint"
-      title={`Tasks: ${done} of ${total} done`}
-    >
-      <ListChecks size={11} className={complete ? 'text-success' : undefined} />
-      <span className="tabular-nums">{done}/{total}</span>
-      <span className="h-1 w-8 overflow-hidden rounded-full bg-hover">
-        <span
-          className={`block h-full rounded-full ${complete ? 'bg-success' : 'bg-accent'}`}
-          style={{ width: `${pct}%` }}
-        />
-      </span>
-    </span>
-  )
 }
 
 // --- inbox ----------------------------------------------------------------------
@@ -288,6 +258,9 @@ export function InboxView({
   const [text, setText] = useState('')
   const [title, setTitle] = useState('')
   const [kind, setKind] = useState<InboxKind>('todo')
+  // F3: run config chosen at capture — locked into the work-item when this row is pushed.
+  const [model, setModel] = useState(DEFAULT_RUN_MODEL)
+  const [effort, setEffort] = useState(DEFAULT_RUN_EFFORT)
   const [busy, setBusy] = useState(false)
 
   const open = entries.filter((e) => e.status === 'open')
@@ -297,7 +270,7 @@ export function InboxView({
     if (!t || busy) return
     setBusy(true)
     try {
-      await addInbox({ text: t, title: title.trim() || null, kind, origin: 'user' }, contextId)
+      await addInbox({ text: t, title: title.trim() || null, kind, origin: 'user', model, effort }, contextId)
       setText('')
       setTitle('')
       onChanged()
@@ -327,6 +300,9 @@ export function InboxView({
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), submit())}
         />
+        {/* F3: run config chosen here is LOCKED into the work-item at push (no override after). */}
+        <Dropdown value={model} options={RUN_MODELS} onChange={(v) => setModel(v as typeof model)} title="Model this item's runs will use — locked in at push" />
+        <Dropdown value={effort} options={RUN_EFFORTS} onChange={(v) => setEffort(v as typeof effort)} title="Reasoning effort this item's runs will use — locked in at push" />
         <button
           onClick={submit}
           disabled={busy || !text.trim()}

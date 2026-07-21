@@ -1,6 +1,8 @@
 // Shared chat-feature types.
 
-export type Msg = { role: 'you' | 'superme'; text: string }
+// 'deputy' = the owner's stand-in acting on autopiloted items (autopilot slice 4). It speaks IN the
+// work-item thread, attributed and visually distinct, never silent under the system.
+export type Msg = { role: 'you' | 'superme' | 'deputy'; text: string }
 
 export type Approval = { id: string; tool_name: string; tool_input: any }
 

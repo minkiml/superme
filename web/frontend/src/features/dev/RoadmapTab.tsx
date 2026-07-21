@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Loader2, AlertTriangle } from 'lucide-react'
-import { getRoadmap, type RoadmapBoard as Board, type BoardWave, type BoardItem } from '@/lib/api'
+import {
+  getRoadmap,
+  type RoadmapBoard as Board, type BoardWave, type BoardItem,
+} from '@/lib/api'
+import ProjectPortrait from './ProjectPortrait'
 import { fmtLocal } from '@/lib/format'
 import { STATUS_COLOR, STATUS_LABEL, Empty } from './common'
 
@@ -67,7 +71,8 @@ function WaveRow({ w }: { w: BoardWave }) {
   )
 }
 
-export default function RoadmapTab({ contextId }: { contextId: string }) {
+// The Roadmap board proper — the forward-only plan, one of the two views under Project.
+function RoadmapBoardView({ contextId }: { contextId: string }) {
   const [board, setBoard] = useState<Board | null>(null)
   const [err, setErr] = useState<string | null>(null)
 
@@ -81,16 +86,13 @@ export default function RoadmapTab({ contextId }: { contextId: string }) {
   }, [contextId])
 
   return (
-    <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-2xl p-6">
-        <header className="mb-1 flex items-center gap-2.5">
-          <h1 className="text-[17px] font-semibold text-fg">Roadmap</h1>
-          <span className="text-[13px] text-faint">deliverable → wave → its work-items</span>
-        </header>
-        <p className="mb-6 text-[12px] text-faint">
-          The plan and what's in motion — waves come from roadmap.md; progress is live from the work-items.
-        </p>
         {err && <div className="mb-3 text-sm text-danger">Couldn’t load — {err}</div>}
+
+        <div className="mb-2 flex items-baseline gap-2">
+          <h2 className="text-[13px] font-semibold uppercase tracking-wider text-muted">Roadmap</h2>
+          <span className="text-[12px] text-faint">deliverable → wave → its work-items</span>
+        </div>
 
         {board === null ? (
           <div className="flex items-center gap-2 text-sm text-muted"><Loader2 size={14} className="animate-spin" /> Loading…</div>
@@ -109,6 +111,13 @@ export default function RoadmapTab({ contextId }: { contextId: string }) {
                   <span className="shrink-0 font-mono text-[10px] text-faint">{d.id}</span>
                   <span className="ml-auto shrink-0"><Rollup done={d.rollup.done} total={d.rollup.total} /></span>
                 </div>
+                {/* what the owner GETS from this deliverable — the reason it exists, when declared */}
+                {d.value && (
+                  <div className="flex gap-3 pb-1">
+                    <div className="w-[26px] shrink-0" />
+                    <span className="text-[12px] italic text-muted">{d.value}</span>
+                  </div>
+                )}
                 {d.waves.length === 0 && d.items.length === 0 ? (
                   <div className="flex gap-3 pb-1">
                     <div className="w-[26px] shrink-0" />
@@ -145,6 +154,47 @@ export default function RoadmapTab({ contextId }: { contextId: string }) {
             </ul>
           </div>
         )}
+
+      </div>
+  )
+}
+
+// Project — the general knowledge this project runs on, in two views. The PORTRAIT (what the
+// project is) is the front door; the ROADMAP (what's coming) sits beside it. Nothing here reports
+// status, health or work in motion — the pipeline and dashboard already answer those, and
+// repeating them would make this a console instead of a picture.
+const VIEWS = [
+  { key: 'portrait', label: 'Overview', hint: 'what this project is' },
+  { key: 'roadmap', label: 'Roadmap', hint: "what's coming" },
+] as const
+
+export default function RoadmapTab({ contextId }: { contextId: string }) {
+  const [view, setView] = useState<'portrait' | 'roadmap'>('portrait')
+
+  return (
+    <div className="flex h-full flex-col">
+      <div className="flex shrink-0 items-baseline gap-2 border-b border-line px-6 py-3">
+        <h1 className="text-[15px] font-semibold text-fg">Project</h1>
+        <span className="text-[12px] text-faint">
+          {VIEWS.find((v) => v.key === view)?.hint}
+        </span>
+        <div className="ml-auto flex gap-1 rounded-md border border-line bg-surface p-0.5">
+          {VIEWS.map((v) => (
+            <button
+              key={v.key}
+              onClick={() => setView(v.key)}
+              className={`rounded px-2.5 py-1 text-[11.5px] font-medium transition ${
+                view === v.key ? 'bg-hover text-fg' : 'text-muted hover:text-fg'}`}
+            >
+              {v.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {view === 'portrait'
+          ? <ProjectPortrait contextId={contextId} />
+          : <RoadmapBoardView contextId={contextId} />}
       </div>
     </div>
   )

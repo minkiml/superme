@@ -37,9 +37,9 @@ repos:
     persona_append: ''
     extra_mcp: []
     onboarding: retrofit
-  example-project:
-    label: example-project
-    cwd: /Users/cooma/Developer/my_docs/dummy10
+  superme-addon-1:
+    label: superme-addon-1
+    cwd: /Users/cooma/Developer/my_docs/repo-pulse
     layer: local
     persona_append: ''
     extra_mcp: []

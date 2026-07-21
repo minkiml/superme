@@ -75,6 +75,9 @@ class BoardWave(BaseModel):
 class BoardDeliverable(BaseModel):
     id: str
     title: str
+    # Typed sub-fields from the PRD (both optional — a pre-typed PRD leaves them empty).
+    value: str | None = None   # what the owner can DO once this lands
+    needs: list[str] = []      # d-ids this depends on
     waves: list[BoardWave]
     items: list[BoardItem]  # items pointing directly at the deliverable (no wave)
     rollup: Rollup
@@ -91,3 +94,76 @@ class Orphan(BaseModel):
 class RoadmapBoardResponse(BaseModel):
     deliverables: list[BoardDeliverable]
     orphans: list[Orphan]
+
+
+# --- the portrait (what the project IS) -----------------------------------------
+# Six bands, each fed by exactly ONE anchor doc, so the view can never become a place knowledge
+# secretly lives. Everything the dashboard already answers — decisions, work in motion, lint,
+# status — is deliberately absent: this is the portrait, not the console.
+
+class PortraitIdentity(BaseModel):
+    """project-prd — what it is, who for, and the load-bearing field: why it exists."""
+    name: str
+    one_liner: str | None = None
+    who: str | None = None
+    why: str | None = None
+
+
+class PortraitGoals(BaseModel):
+    """project-prd. `now` must be specific; `direction` is allowed to be directional — the horizon
+    split dissolves the vision-vs-concreteness argument instead of losing it. Non-goals carry equal
+    weight: what a project refuses is as defining as what it pursues."""
+    now: list[str] = []
+    direction: list[str] = []
+    non_goals: list[str] = []
+
+
+class PortraitCapability(BaseModel):
+    """capabilities — one thing the system can do RIGHT NOW, in user language."""
+    name: str
+    detail: str | None = None
+
+
+class StackRow(BaseModel):
+    key: str
+    value: str
+
+
+class PortraitBuild(BaseModel):
+    """architecture — only what code CAN'T say. No file trees, no component inventories: those are
+    stale duplicates by construction. Invariants, boundaries, rationale, and the refusals."""
+    stack: list[StackRow] = []
+    invariants: list[str] = []
+    not_here: list[str] = []
+
+
+class PortraitDeliverable(BaseModel):
+    """project-prd — the value statement, not the work. `delivered` is project-level truth (this
+    value exists now / doesn't yet); sequencing and progress live in the pipeline."""
+    id: str
+    value: str | None = None
+    title: str
+    delivered: bool = False
+
+
+class PortraitResponse(BaseModel):
+    identity: PortraitIdentity
+    goals: PortraitGoals
+    capabilities: list[PortraitCapability] = []
+    build: PortraitBuild
+    deliverables: list[PortraitDeliverable] = []
+    resources: list[StackRow] = []
+
+
+class LintFinding(BaseModel):
+    """One actionable finding over general/. Derived on read — never stored, so it can't go stale."""
+    severity: str          # error | warn | info
+    kind: str              # missing-doc | deliverable-unclaimed | broken-needs | no-success-signal |
+    #                        signal-orphan | open-questions | stale-doc
+    detail: str            # a full sentence the owner can act on
+    ref: str | None = None  # the doc name or d-id it points at
+
+
+class LintResponse(BaseModel):
+    findings: list[LintFinding]
+    counts: dict[str, int]

@@ -34,15 +34,15 @@ class AttentionRow(BaseModel):
     phase: str | None = None
     status: str | None = None
     outcome: str | None = None
-    bucket: str          # needs_you | running | unread
+    bucket: str          # needs_you | deputy_working | running | unread
     reason: str
     gate: str | None = None
 
 
 class AttentionBadge(BaseModel):
     """The global badge: the TOP non-empty tier only — one color, one count (D10)."""
-    tier: str            # needs_you | running | unread
-    color: str           # orange | green | blue
+    tier: str            # needs_you | deputy_working | running | unread
+    color: str           # orange | purple | green | blue
     count: int
 
 

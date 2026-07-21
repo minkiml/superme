@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { X, ArrowRight, Pencil } from 'lucide-react'
+import { X, ArrowRight, Pencil, Unplug, Loader2 } from 'lucide-react'
+import { disconnectRepo } from '@/lib/api'
 import { fmtTokens } from '@/lib/format'
 import { featureColor } from '@/lib/palette'
 import { RepoIcon } from '@/lib/repoIcons'
@@ -41,14 +42,17 @@ export default function RepoInspector({
   onOpenDev,
   onOpenCore,
   onTagSaved,
+  onDisconnected,
 }: {
   repo: OrbitRepo | null
   onClose: () => void
   onOpenDev?: (repo: OrbitRepo) => void
   onOpenCore?: (repo: OrbitRepo) => void
   onTagSaved?: (repoId: string, patch: { color: string; icon: string | null }) => void
+  onDisconnected?: (repoId: string) => void
 }) {
   const [editingTag, setEditingTag] = useState(false)
+  const [disconnecting, setDisconnecting] = useState(false)
   if (!repo) return null
   const isHub = repo.id === 'global'
   const ops = Object.entries(repo.byFeature).sort((a, b) => b[1] - a[1])
@@ -141,11 +145,133 @@ export default function RepoInspector({
               Open core dashboard <ArrowRight size={15} className="text-core" />
             </button>
           </section>
+
+          {/* danger zone — projects only (the hub is not disconnectable) */}
+          {!isHub && (
+            <button
+              onClick={() => setDisconnecting(true)}
+              className="flex w-full items-center gap-2 rounded-lg border border-line bg-surface px-3.5 py-2 text-[13px] text-muted transition hover:border-warn hover:text-warn"
+            >
+              <Unplug size={14} /> Disconnect project…
+            </button>
+          )}
         </div>
     </Modal>
     {editingTag && (
       <TagEditor repo={repo} onClose={() => setEditingTag(false)} onSaved={(patch) => onTagSaved?.(repo.id, patch)} />
     )}
+    {disconnecting && (
+      <DisconnectConfirm
+        repo={repo}
+        onClose={() => setDisconnecting(false)}
+        onDisconnected={(id) => {
+          setDisconnecting(false)
+          onDisconnected?.(id)
+        }}
+      />
+    )}
     </>
+  )
+}
+
+// The final-confirmation gate for disconnecting a project. Irreversible by design (the API also
+// demands ?confirm=<id>), so the owner must type the repo's label before the button arms. Spells
+// out exactly what goes and what stays: the project folder is untouched, run traces are kept, and
+// reconnecting later simply starts a fresh connect (retrofit onboarding).
+function DisconnectConfirm({
+  repo,
+  onClose,
+  onDisconnected,
+}: {
+  repo: OrbitRepo
+  onClose: () => void
+  onDisconnected: (repoId: string) => void
+}) {
+  const [typed, setTyped] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const armed = typed.trim() === repo.label && !busy
+
+  async function run() {
+    if (!armed) return
+    setBusy(true)
+    setError(null)
+    try {
+      await disconnectRepo(repo.id)
+      onDisconnected(repo.id)
+    } catch (e) {
+      // 409 = work still running; anything else = daemon hiccup. Either way, nothing was removed
+      // past the failure point — the repo stays connected and the owner can retry.
+      setBusy(false)
+      setError(e instanceof Error && e.message.includes('409')
+        ? 'Work is still running in this project — stop or finish it first.'
+        : 'Disconnect failed — nothing was removed. Check the daemon and retry.')
+    }
+  }
+
+  return (
+    <Modal onClose={busy ? () => {} : onClose} maxW="max-w-md">
+      <div className="flex items-center gap-3 border-b border-line px-5 py-4">
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-warn/15 text-warn">
+          <Unplug size={17} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="text-[15px] font-semibold text-fg">Disconnect “{repo.label}”?</div>
+          <div className="text-[13px] text-muted">This cannot be undone</div>
+        </div>
+        {!busy && (
+          <button onClick={onClose} className="rounded-md p-1 text-muted hover:bg-hover hover:text-fg">
+            <X size={18} />
+          </button>
+        )}
+      </div>
+
+      <div className="space-y-4 p-5">
+        <div className="space-y-1.5 text-[13.5px] leading-relaxed text-muted">
+          <p>
+            SuperMe forgets this project entirely: its <span className="text-fg">knowledge, work items,
+            inbox, learned artifacts and chat sessions</span> are permanently deleted. There is no rollback.
+          </p>
+          <p>
+            The project folder on disk is <span className="text-fg">not touched</span>, and past activity
+            logs are kept. Connecting it again later starts over as a fresh project (onboarding included).
+          </p>
+        </div>
+
+        <div>
+          <label className="mb-1.5 block text-[12px] font-medium uppercase tracking-wider text-faint">
+            Type <span className="normal-case text-fg">{repo.label}</span> to confirm
+          </label>
+          <input
+            value={typed}
+            onChange={(e) => setTyped(e.target.value)}
+            disabled={busy}
+            autoFocus
+            placeholder={repo.label}
+            className="w-full rounded-lg border border-line bg-app px-3 py-2 text-[14px] text-fg outline-none placeholder:text-faint focus:border-warn"
+          />
+        </div>
+
+        {error && <div className="rounded-lg border border-warn/40 bg-warn/10 px-3 py-2 text-[13px] text-warn">{error}</div>}
+
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={onClose}
+            disabled={busy}
+            className="rounded-lg border border-line bg-surface px-3.5 py-2 text-[13px] text-fg hover:bg-hover disabled:opacity-50"
+          >
+            Keep connected
+          </button>
+          <button
+            onClick={run}
+            disabled={!armed}
+            className="flex items-center gap-2 rounded-lg bg-warn px-3.5 py-2 text-[13px] font-medium text-on-accent transition disabled:opacity-40"
+          >
+            {busy && <Loader2 size={14} className="animate-spin" />}
+            {busy ? 'Disconnecting…' : 'Disconnect permanently'}
+          </button>
+        </div>
+      </div>
+    </Modal>
   )
 }

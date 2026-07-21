@@ -20,7 +20,13 @@ it.
 
 ## 2 — Investigate with receipts
 
-Work question by question. Keep running notes in the item folder (e.g. `artifacts/notes.md` —
+Work question by question — and when questions are independent, **fan them out**: spawn parallel
+Explore subagents, one per question (or per subsystem for a broad question), each returning
+evidence with `file:line` pointers, not summaries. You stay the synthesizer: cross-check what
+comes back before recording it — subagent findings are leads until you've seen the receipt. A
+sequential read-through is right only when the questions genuinely build on each other.
+
+Keep running notes in the item folder (e.g. `artifacts/notes.md` —
 free-form, yours): evidence with `file:line` pointers, sources, measurements, dead ends. A finding
 you can't point back to a source is an opinion; the report phase can only be as grounded as these
 notes.

@@ -1,12 +1,19 @@
 """Inbox routes (the quick-capture triage queue, D-013/D-014): /dev/inbox CRUD + push."""
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from ...app_state import DevKnowledgeService, DevStore, get_dev, get_dev_store
+from ...app_state import (
+    DevKnowledgeService, DevStore, SystemSpine, get_dev, get_dev_store, get_spine,
+)
 from ...deps import dev_root
 from ...schemas.dev.inbox import InboxRow, InboxPushResponse, InboxDeleteResponse
+from ...services.runs import fire_auto_triage
 from ....core import inbox_flow
+
+log = logging.getLogger("superme-agent")
 
 router = APIRouter()
 
@@ -20,6 +27,9 @@ class InboxBody(BaseModel):
     context_id: str = "global"
     # D3 provenance a branch-off row carries from birth: {item, relation: blocking|parallel|spawn}.
     spawned_from: dict | None = None
+    # F3: run config chosen at capture — locked into the work-item at push. NULL = inherit default.
+    model: str | None = None
+    effort: str | None = None
 
 
 class InboxPatch(BaseModel):
@@ -29,6 +39,8 @@ class InboxPatch(BaseModel):
     text: str | None = None
     title: str | None = None
     routed_to: str | None = None
+    model: str | None = None   # F3 — editable while the row is still open
+    effort: str | None = None
 
 
 class InboxPushBody(BaseModel):
@@ -42,6 +54,7 @@ async def dev_inbox_add(body: InboxBody, dev_store: DevStore = Depends(get_dev_s
         row = dev_store.add_inbox(
             body.context_id, body.text, body.kind, body.tag,
             title=body.title, origin=body.origin, spawned_from=body.spawned_from,
+            model=body.model, effort=body.effort,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -78,13 +91,15 @@ async def dev_inbox_update(item_id: int, body: InboxPatch, dev_store: DevStore =
              response_model_exclude_unset=True)
 async def dev_inbox_push(item_id: int, body: InboxPushBody,
                          dev_store: DevStore = Depends(get_dev_store),
-                         dev: DevKnowledgeService = Depends(get_dev)) -> dict:
+                         dev: DevKnowledgeService = Depends(get_dev),
+                         spine: SystemSpine = Depends(get_spine)) -> dict:
     """Push an inbox item to the workspace — the owner's push (the `spawn` relation waits for
     exactly this; blocking/parallel children auto-pushed at branch-off time never reach here
     open). One shared transaction (core/inbox_flow): creates `work-items/<id>/` at triage/active
     carrying `spawned_from` + `inbox_id`, MOVES the inbox content folder (handoff brief + extras)
     into the item as `preliminary/` (the row stays as trace), and pauses the parent when the
-    relation is blocking. Returns the new work-item + the row.
+    relation is blocking. Then fires the auto-triage run (#120 — no manual trigger). Returns the
+    new work-item + the row.
     """
     rows = dev_store.list_inbox(body.context_id)
     row = next((r for r in rows if r["id"] == item_id), None)
@@ -95,6 +110,7 @@ async def dev_inbox_push(item_id: int, body: InboxPushBody,
                                         context_id=body.context_id, actor="owner")
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
+    fire_auto_triage(body.context_id, wi["id"], spine)   # #120 — shared first-kick (services.runs)
     return {"ok": True, "work_item": wi, "inbox": dev_store.get_inbox(item_id)}
 
 

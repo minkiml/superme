@@ -3,6 +3,7 @@
     "DELETE /dev/harness/published/{proposal_id}",
     "DELETE /dev/inbox/{item_id}",
     "DELETE /dev/work-items/{item_id}",
+    "DELETE /repos/{repo_id}",
     "DELETE /sessions/{session_id}",
     "GET /contexts",
     "GET /dev",
@@ -18,18 +19,21 @@
     "GET /dev/harness/plugins",
     "GET /dev/harness/published",
     "GET /dev/harness/published/{proposal_id}/file",
+    "GET /dev/lint",
     "GET /dev/log",
     "GET /dev/memory/proposals",
     "GET /dev/memory/proposals/{proposal_id}/execution",
     "GET /dev/memory/rollup",
     "GET /dev/memory/stats",
     "GET /dev/palette",
+    "GET /dev/portrait",
     "GET /dev/project-status",
     "GET /dev/roadmap",
     "GET /dev/work-items/{item_id}/artifacts",
     "GET /dev/work-items/{item_id}/detail",
     "GET /dev/work-items/{item_id}/gate-brief",
     "GET /dev/work-items/{item_id}/git",
+    "GET /dev/work-items/{item_id}/timeline",
     "GET /dev/workgraph",
     "GET /docs",
     "GET /docs/{slug}",
@@ -44,6 +48,7 @@
     "GET /sessions/{session_id}",
     "GET /system",
     "GET /system/agent-models",
+    "GET /system/attention",
     "GET /system/compaction",
     "GET /system/inventory",
     "GET /tokens",
@@ -65,25 +70,29 @@
     "POST /dev/sweep/idle-scan",
     "POST /dev/work-items/{item_id}/abandon",
     "POST /dev/work-items/{item_id}/advance",
+    "POST /dev/work-items/{item_id}/authorize",
+    "POST /dev/work-items/{item_id}/autopilot",
     "POST /dev/work-items/{item_id}/compact",
     "POST /dev/work-items/{item_id}/complete",
-    "POST /dev/work-items/{item_id}/effort",
+    "POST /dev/work-items/{item_id}/continue",
     "POST /dev/work-items/{item_id}/git/merge",
     "POST /dev/work-items/{item_id}/git/resolve",
     "POST /dev/work-items/{item_id}/git/revert",
     "POST /dev/work-items/{item_id}/git/sync",
-    "POST /dev/work-items/{item_id}/model",
     "POST /dev/work-items/{item_id}/plan",
     "POST /dev/work-items/{item_id}/scaffold",
     "POST /dev/work-items/{item_id}/seen",
+    "POST /dev/work-items/{item_id}/vet",
     "POST /knowledge/inject",
     "POST /repos",
+    "POST /repos/{repo_id}/autopilot",
     "POST /repos/{repo_id}/effort",
     "POST /repos/{repo_id}/learning",
     "POST /repos/{repo_id}/meta",
     "POST /repos/{repo_id}/model",
     "POST /system/agent-models/{feature}",
     "POST /system/compaction",
+    "POST /system/deputy",
     "POST /system/effort",
     "POST /system/learning",
     "POST /system/model",
@@ -313,6 +322,71 @@
             "proposal_id"
           ],
           "title": "ApproveResponse",
+          "type": "object"
+        },
+        "ArchivedRepoTokens": {
+          "description": "One disconnected project's preserved spend. `label` is the tombstoned display name (falls\nback to the bare id for repos that left before tombstoning); `disconnected_at` is null there.",
+          "properties": {
+            "disconnected_at": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Disconnected At"
+            },
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "label": {
+              "title": "Label",
+              "type": "string"
+            },
+            "runs": {
+              "default": 0,
+              "title": "Runs",
+              "type": "integer"
+            },
+            "total": {
+              "default": 0,
+              "title": "Total",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "id",
+            "label"
+          ],
+          "title": "ArchivedRepoTokens",
+          "type": "object"
+        },
+        "ArchivedTokens": {
+          "description": "\"Old projects\" \u2014 spend belonging to repos that are no longer connected. Their runs are kept\nforever, so they still count in `global.total`; this bucket keeps them ATTRIBUTABLE (the orbit\nonly renders live repos, so without it the visible nodes wouldn't sum to the header).",
+          "properties": {
+            "repos": {
+              "default": [],
+              "items": {
+                "$ref": "#/components/schemas/ArchivedRepoTokens"
+              },
+              "title": "Repos",
+              "type": "array"
+            },
+            "runs": {
+              "default": 0,
+              "title": "Runs",
+              "type": "integer"
+            },
+            "total": {
+              "default": 0,
+              "title": "Total",
+              "type": "integer"
+            }
+          },
+          "title": "ArchivedTokens",
           "type": "object"
         },
         "ArtifactCall": {
@@ -618,6 +692,80 @@
           "title": "AttentionBadge",
           "type": "object"
         },
+        "AttentionHold": {
+          "description": "One parked (`awaiting_human`) work-item on the top-of-SuperMe attention center (Pass 2 \u00b7 Q2).",
+          "properties": {
+            "actor": {
+              "title": "Actor",
+              "type": "string"
+            },
+            "cohort": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cohort"
+            },
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "kind": {
+              "enum": [
+                "escalation",
+                "breaker",
+                "paged",
+                "review",
+                "gate"
+              ],
+              "title": "Kind",
+              "type": "string"
+            },
+            "phase": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Phase"
+            },
+            "reason": {
+              "title": "Reason",
+              "type": "string"
+            },
+            "session_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session Id"
+            },
+            "title": {
+              "title": "Title",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "title",
+            "kind",
+            "reason",
+            "actor"
+          ],
+          "title": "AttentionHold",
+          "type": "object"
+        },
         "AttentionResponse": {
           "description": "The attention engine's read: strict-priority buckets derived from durable state.",
           "properties": {
@@ -731,6 +879,94 @@
           "title": "AttentionRow",
           "type": "object"
         },
+        "AuthorizationRequest": {
+          "description": "A contract change a work-item couldn't self-authorize (BV-A2), awaiting the owner's grant or\ndeny at the review gate. `delegable` = whether the deputy COULD have granted it (a sync-to-\nreality scope) vs it being owner-reserved (why it reached you). The owner grants regardless.",
+          "properties": {
+            "delegable": {
+              "title": "Delegable",
+              "type": "boolean"
+            },
+            "doc": {
+              "title": "Doc",
+              "type": "string"
+            },
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "scope": {
+              "title": "Scope",
+              "type": "string"
+            },
+            "what": {
+              "title": "What",
+              "type": "string"
+            },
+            "why": {
+              "title": "Why",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "what",
+            "why",
+            "doc",
+            "scope",
+            "delegable"
+          ],
+          "title": "AuthorizationRequest",
+          "type": "object"
+        },
+        "AuthorizeBody": {
+          "properties": {
+            "auth_id": {
+              "title": "Auth Id",
+              "type": "string"
+            },
+            "context_id": {
+              "default": "global",
+              "title": "Context Id",
+              "type": "string"
+            },
+            "decision": {
+              "title": "Decision",
+              "type": "string"
+            }
+          },
+          "required": [
+            "auth_id",
+            "decision"
+          ],
+          "title": "AuthorizeBody",
+          "type": "object"
+        },
+        "AutopilotBody": {
+          "properties": {
+            "on": {
+              "title": "On",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "on"
+          ],
+          "title": "AutopilotBody",
+          "type": "object"
+        },
+        "AutopilotConcurrencyBody": {
+          "properties": {
+            "concurrency": {
+              "title": "Concurrency",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "concurrency"
+          ],
+          "title": "AutopilotConcurrencyBody",
+          "type": "object"
+        },
         "BoardDeliverable": {
           "properties": {
             "id": {
@@ -744,12 +980,31 @@
               "title": "Items",
               "type": "array"
             },
+            "needs": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Needs",
+              "type": "array"
+            },
             "rollup": {
               "$ref": "#/components/schemas/Rollup"
             },
             "title": {
               "title": "Title",
               "type": "string"
+            },
+            "value": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Value"
             },
             "waves": {
               "items": {
@@ -805,8 +1060,8 @@
                     "triage",
                     "plan",
                     "build",
-                    "validate",
-                    "deliver",
+                    "vet",
+                    "review",
                     "investigate",
                     "report",
                     "close"
@@ -825,6 +1080,8 @@
                   "enum": [
                     "active",
                     "awaiting_child",
+                    "awaiting_upstream",
+                    "awaiting_slot",
                     "awaiting_human",
                     "done"
                   ],
@@ -1447,6 +1704,64 @@
           "title": "DatabaseInfo",
           "type": "object"
         },
+        "DeputyConfigBody": {
+          "properties": {
+            "enabled": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Enabled"
+            },
+            "strictness": {
+              "anyOf": [
+                {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Strictness"
+            }
+          },
+          "title": "DeputyConfigBody",
+          "type": "object"
+        },
+        "DeputyConfigResponse": {
+          "description": "The global deputy dial: whether a deputy judges autopilot gates + how readily it escalates\nper gate (triage/plan/review, each low\u00b7medium\u00b7high\u00b7extra).",
+          "properties": {
+            "deputy_enabled": {
+              "title": "Deputy Enabled",
+              "type": "boolean"
+            },
+            "deputy_strictness": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "title": "Deputy Strictness",
+              "type": "object"
+            },
+            "ok": {
+              "title": "Ok",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok",
+            "deputy_enabled",
+            "deputy_strictness"
+          ],
+          "title": "DeputyConfigResponse",
+          "type": "object"
+        },
         "DevLogEvent": {
           "description": "One activity-log row.",
           "properties": {
@@ -1454,7 +1769,9 @@
               "enum": [
                 "owner",
                 "agent",
-                "daemon"
+                "daemon",
+                "autopilot",
+                "deputy"
               ],
               "title": "Actor",
               "type": "string"
@@ -1688,24 +2005,6 @@
             "docs"
           ],
           "title": "DocsListResponse",
-          "type": "object"
-        },
-        "EffortBody": {
-          "properties": {
-            "context_id": {
-              "default": "global",
-              "title": "Context Id",
-              "type": "string"
-            },
-            "effort": {
-              "title": "Effort",
-              "type": "string"
-            }
-          },
-          "required": [
-            "effort"
-          ],
-          "title": "EffortBody",
           "type": "object"
         },
         "EvalMetrics": {
@@ -2166,11 +2465,25 @@
           "type": "object"
         },
         "GateBriefResponse": {
-          "description": "One gate's full decision surface. `brief` is the rendered markdown (continuity \u2192 delta \u2192\nnarrative \u2192 decision); `at_gate: False` means the item is mid-phase and this previews the\nNEXT gate. Answerable without opening code \u2014 that is the contract.",
+          "description": "One gate's full decision surface. `brief` is the rendered markdown (continuity \u2192 delta \u2192\nnarrative \u2192 decision) \u2014 since the typed fields landed it is the collapsed DETAILS payload;\nthe NOW card renders facts/assumptions/flags/numbers + the embedded gate report.\n`at_gate: False` means the item is mid-phase and this previews the NEXT gate. Answerable\nwithout opening code \u2014 that is the contract.",
           "properties": {
+            "assumptions": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Assumptions",
+              "type": "array"
+            },
             "at_gate": {
               "title": "At Gate",
               "type": "boolean"
+            },
+            "authorizations": {
+              "items": {
+                "$ref": "#/components/schemas/AuthorizationRequest"
+              },
+              "title": "Authorizations",
+              "type": "array"
             },
             "brief": {
               "title": "Brief",
@@ -2186,6 +2499,20 @@
             "decision": {
               "$ref": "#/components/schemas/GateDecision"
             },
+            "facts": {
+              "items": {
+                "$ref": "#/components/schemas/GateFact"
+              },
+              "title": "Facts",
+              "type": "array"
+            },
+            "flags": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Flags",
+              "type": "array"
+            },
             "gate": {
               "title": "Gate",
               "type": "string"
@@ -2194,9 +2521,51 @@
               "title": "Id",
               "type": "string"
             },
+            "loop": {
+              "$ref": "#/components/schemas/LoopInstruments"
+            },
+            "numbers": {
+              "$ref": "#/components/schemas/GateNumbers"
+            },
+            "paged": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/PagedNotice"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "phase": {
               "title": "Phase",
               "type": "string"
+            },
+            "report_html": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Report Html"
+            },
+            "snippet": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Snippet"
+            },
+            "terminal": {
+              "title": "Terminal",
+              "type": "boolean"
             },
             "title": {
               "title": "Title",
@@ -2211,7 +2580,17 @@
             "title",
             "brief",
             "decision",
-            "checks"
+            "checks",
+            "facts",
+            "assumptions",
+            "flags",
+            "numbers",
+            "report_html",
+            "loop",
+            "snippet",
+            "terminal",
+            "paged",
+            "authorizations"
           ],
           "title": "GateBriefResponse",
           "type": "object"
@@ -2275,6 +2654,64 @@
             "effort_agent"
           ],
           "title": "GateDecision",
+          "type": "object"
+        },
+        "GateFact": {
+          "description": "One label:value row of the typed NOW card (renovation \u00a73) \u2014 a present fact, never prose.\n`tone` tints the row ('' neutral \u00b7 'warn').",
+          "properties": {
+            "label": {
+              "title": "Label",
+              "type": "string"
+            },
+            "tone": {
+              "default": "",
+              "title": "Tone",
+              "type": "string"
+            },
+            "value": {
+              "title": "Value",
+              "type": "string"
+            }
+          },
+          "required": [
+            "label",
+            "value"
+          ],
+          "title": "GateFact",
+          "type": "object"
+        },
+        "GateNumbers": {
+          "description": "The brief's real-ratio counts (law 2: counts of real things, never invented scores).",
+          "properties": {
+            "checks_pass": {
+              "title": "Checks Pass",
+              "type": "integer"
+            },
+            "checks_total": {
+              "title": "Checks Total",
+              "type": "integer"
+            },
+            "cycle": {
+              "title": "Cycle",
+              "type": "integer"
+            },
+            "tasks_done": {
+              "title": "Tasks Done",
+              "type": "integer"
+            },
+            "tasks_total": {
+              "title": "Tasks Total",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "tasks_done",
+            "tasks_total",
+            "cycle",
+            "checks_pass",
+            "checks_total"
+          ],
+          "title": "GateNumbers",
           "type": "object"
         },
         "GateOption": {
@@ -2544,7 +2981,7 @@
           "type": "object"
         },
         "GitMergeResponse": {
-          "description": "The deliver-gate merge. `path` says which route executed: `main` (heavy, with backup ref)\nor `parent` (blocking child's light merge into its parent's branch).",
+          "description": "The review-gate merge. `path` says which route executed: `main` (heavy, with backup ref)\nor `parent` (blocking child's light merge into its parent's branch).",
           "properties": {
             "already_merged": {
               "anyOf": [
@@ -2673,7 +3110,7 @@
           "type": "object"
         },
         "GitResolveResponse": {
-          "description": "Resolve-with-Agent accepted: the conflicted sync was left in the item's worktree and a\nheadless resolution run is in flight (poll GET /dev for run state).",
+          "description": "Resolve-with-Agent accepted: the conflicted sync was left in the item's worktree and a\nbackground resolution run is in flight (poll GET /dev for run state).",
           "properties": {
             "conflicts": {
               "anyOf": [
@@ -2961,10 +3398,32 @@
               "title": "Context Id",
               "type": "string"
             },
+            "effort": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Effort"
+            },
             "kind": {
               "default": "note",
               "title": "Kind",
               "type": "string"
+            },
+            "model": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Model"
             },
             "origin": {
               "default": "user",
@@ -3036,6 +3495,17 @@
         },
         "InboxPatch": {
           "properties": {
+            "effort": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Effort"
+            },
             "kind": {
               "anyOf": [
                 {
@@ -3046,6 +3516,17 @@
                 }
               ],
               "title": "Kind"
+            },
+            "model": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Model"
             },
             "routed_to": {
               "anyOf": [
@@ -3149,6 +3630,17 @@
               "title": "Created At",
               "type": "string"
             },
+            "effort": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Effort"
+            },
             "id": {
               "title": "Id",
               "type": "integer"
@@ -3162,6 +3654,17 @@
               ],
               "title": "Kind",
               "type": "string"
+            },
+            "model": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Model"
             },
             "origin": {
               "default": [],
@@ -3554,6 +4057,65 @@
           "title": "LearningRollupResponse",
           "type": "object"
         },
+        "LintFinding": {
+          "description": "One actionable finding over general/. Derived on read \u2014 never stored, so it can't go stale.",
+          "properties": {
+            "detail": {
+              "title": "Detail",
+              "type": "string"
+            },
+            "kind": {
+              "title": "Kind",
+              "type": "string"
+            },
+            "ref": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ref"
+            },
+            "severity": {
+              "title": "Severity",
+              "type": "string"
+            }
+          },
+          "required": [
+            "severity",
+            "kind",
+            "detail"
+          ],
+          "title": "LintFinding",
+          "type": "object"
+        },
+        "LintResponse": {
+          "properties": {
+            "counts": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "title": "Counts",
+              "type": "object"
+            },
+            "findings": {
+              "items": {
+                "$ref": "#/components/schemas/LintFinding"
+              },
+              "title": "Findings",
+              "type": "array"
+            }
+          },
+          "required": [
+            "findings",
+            "counts"
+          ],
+          "title": "LintResponse",
+          "type": "object"
+        },
         "LocalPluginsResponse": {
           "description": "A single host's OWN local-harness skills + agents (its `local-harness/<id>/dev` plugin tree) \u2014\nflat (no dev/core/shared split; the dev workspace is already mode-scoped).",
           "properties": {
@@ -3582,6 +4144,102 @@
             "agents"
           ],
           "title": "LocalPluginsResponse",
+          "type": "object"
+        },
+        "LoopAttempt": {
+          "description": "One loop-driver decision from the attempts ledger.",
+          "properties": {
+            "cycle": {
+              "title": "Cycle",
+              "type": "integer"
+            },
+            "decision": {
+              "title": "Decision",
+              "type": "string"
+            },
+            "reason": {
+              "title": "Reason",
+              "type": "string"
+            },
+            "ts": {
+              "title": "Ts",
+              "type": "string"
+            }
+          },
+          "required": [
+            "cycle",
+            "decision",
+            "reason",
+            "ts"
+          ],
+          "title": "LoopAttempt",
+          "type": "object"
+        },
+        "LoopCycle": {
+          "description": "One filed vet report's verdict column: check id \u2192 pass/fail.",
+          "properties": {
+            "cycle": {
+              "title": "Cycle",
+              "type": "integer"
+            },
+            "verdicts": {
+              "additionalProperties": {
+                "type": "boolean"
+              },
+              "title": "Verdicts",
+              "type": "object"
+            }
+          },
+          "required": [
+            "cycle",
+            "verdicts"
+          ],
+          "title": "LoopCycle",
+          "type": "object"
+        },
+        "LoopInstruments": {
+          "description": "The build\u27f7vet loop's live panel (renovation \u00a72 Loop row) \u2014 the checks\u00d7cycles matrix,\nthe newest failing report's Findings verbatim, and the driver trail. All derived from the\nledger + reports the loop already writes; empty checks+cycles \u21d2 nothing to show.",
+          "properties": {
+            "attempts": {
+              "items": {
+                "$ref": "#/components/schemas/LoopAttempt"
+              },
+              "title": "Attempts",
+              "type": "array"
+            },
+            "checks": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Checks",
+              "type": "array"
+            },
+            "cycles": {
+              "items": {
+                "$ref": "#/components/schemas/LoopCycle"
+              },
+              "title": "Cycles",
+              "type": "array"
+            },
+            "findings": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Findings"
+            }
+          },
+          "required": [
+            "checks",
+            "cycles",
+            "findings",
+            "attempts"
+          ],
+          "title": "LoopInstruments",
           "type": "object"
         },
         "ManagedConstitution": {
@@ -3703,24 +4361,6 @@
           "title": "MemoryStatsResponse",
           "type": "object"
         },
-        "ModelBody": {
-          "properties": {
-            "context_id": {
-              "default": "global",
-              "title": "Context Id",
-              "type": "string"
-            },
-            "model": {
-              "title": "Model",
-              "type": "string"
-            }
-          },
-          "required": [
-            "model"
-          ],
-          "title": "ModelBody",
-          "type": "object"
-        },
         "Orphan": {
           "description": "A referential-integrity break \u2014 a pointer to an id the anchor docs don't define.",
           "properties": {
@@ -3769,6 +4409,54 @@
             "reason"
           ],
           "title": "Orphan",
+          "type": "object"
+        },
+        "PagedNotice": {
+          "description": "Why an item is parked for the owner when it isn't a plain gate wait \u2014 a deputy escalation, a\nbuild\u27f7vet halt, or a blocked run. The drilldown LEADS with this so 'what's going on / what do I\ndecide' is answered on arrival, not buried under a future-gate preview. None \u21d2 a normal gate.",
+          "properties": {
+            "detail": {
+              "title": "Detail",
+              "type": "string"
+            },
+            "gate": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Gate"
+            },
+            "headline": {
+              "title": "Headline",
+              "type": "string"
+            },
+            "next": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Next"
+            },
+            "source": {
+              "title": "Source",
+              "type": "string"
+            }
+          },
+          "required": [
+            "source",
+            "gate",
+            "headline",
+            "detail",
+            "next"
+          ],
+          "title": "PagedNotice",
           "type": "object"
         },
         "PaletteResponse": {
@@ -4077,6 +4765,219 @@
             "agents"
           ],
           "title": "PluginScope",
+          "type": "object"
+        },
+        "PortraitBuild": {
+          "description": "architecture \u2014 only what code CAN'T say. No file trees, no component inventories: those are\nstale duplicates by construction. Invariants, boundaries, rationale, and the refusals.",
+          "properties": {
+            "invariants": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Invariants",
+              "type": "array"
+            },
+            "not_here": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Not Here",
+              "type": "array"
+            },
+            "stack": {
+              "default": [],
+              "items": {
+                "$ref": "#/components/schemas/StackRow"
+              },
+              "title": "Stack",
+              "type": "array"
+            }
+          },
+          "title": "PortraitBuild",
+          "type": "object"
+        },
+        "PortraitCapability": {
+          "description": "capabilities \u2014 one thing the system can do RIGHT NOW, in user language.",
+          "properties": {
+            "detail": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Detail"
+            },
+            "name": {
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "title": "PortraitCapability",
+          "type": "object"
+        },
+        "PortraitDeliverable": {
+          "description": "project-prd \u2014 the value statement, not the work. `delivered` is project-level truth (this\nvalue exists now / doesn't yet); sequencing and progress live in the pipeline.",
+          "properties": {
+            "delivered": {
+              "default": false,
+              "title": "Delivered",
+              "type": "boolean"
+            },
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "title": {
+              "title": "Title",
+              "type": "string"
+            },
+            "value": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Value"
+            }
+          },
+          "required": [
+            "id",
+            "title"
+          ],
+          "title": "PortraitDeliverable",
+          "type": "object"
+        },
+        "PortraitGoals": {
+          "description": "project-prd. `now` must be specific; `direction` is allowed to be directional \u2014 the horizon\nsplit dissolves the vision-vs-concreteness argument instead of losing it. Non-goals carry equal\nweight: what a project refuses is as defining as what it pursues.",
+          "properties": {
+            "direction": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Direction",
+              "type": "array"
+            },
+            "non_goals": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Non Goals",
+              "type": "array"
+            },
+            "now": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Now",
+              "type": "array"
+            }
+          },
+          "title": "PortraitGoals",
+          "type": "object"
+        },
+        "PortraitIdentity": {
+          "description": "project-prd \u2014 what it is, who for, and the load-bearing field: why it exists.",
+          "properties": {
+            "name": {
+              "title": "Name",
+              "type": "string"
+            },
+            "one_liner": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "One Liner"
+            },
+            "who": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Who"
+            },
+            "why": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Why"
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "title": "PortraitIdentity",
+          "type": "object"
+        },
+        "PortraitResponse": {
+          "properties": {
+            "build": {
+              "$ref": "#/components/schemas/PortraitBuild"
+            },
+            "capabilities": {
+              "default": [],
+              "items": {
+                "$ref": "#/components/schemas/PortraitCapability"
+              },
+              "title": "Capabilities",
+              "type": "array"
+            },
+            "deliverables": {
+              "default": [],
+              "items": {
+                "$ref": "#/components/schemas/PortraitDeliverable"
+              },
+              "title": "Deliverables",
+              "type": "array"
+            },
+            "goals": {
+              "$ref": "#/components/schemas/PortraitGoals"
+            },
+            "identity": {
+              "$ref": "#/components/schemas/PortraitIdentity"
+            },
+            "resources": {
+              "default": [],
+              "items": {
+                "$ref": "#/components/schemas/StackRow"
+              },
+              "title": "Resources",
+              "type": "array"
+            }
+          },
+          "required": [
+            "identity",
+            "goals",
+            "build"
+          ],
+          "title": "PortraitResponse",
           "type": "object"
         },
         "ProjectStatusResponse": {
@@ -4838,6 +5739,56 @@
           "title": "PublishedToggleResponse",
           "type": "object"
         },
+        "RepoAttention": {
+          "description": "A repo's holds, grouped so the center can label 'in <repo>'. Only repos WITH holds appear.",
+          "properties": {
+            "holds": {
+              "items": {
+                "$ref": "#/components/schemas/AttentionHold"
+              },
+              "title": "Holds",
+              "type": "array"
+            },
+            "repo_id": {
+              "title": "Repo Id",
+              "type": "string"
+            },
+            "repo_label": {
+              "title": "Repo Label",
+              "type": "string"
+            }
+          },
+          "required": [
+            "repo_id",
+            "repo_label",
+            "holds"
+          ],
+          "title": "RepoAttention",
+          "type": "object"
+        },
+        "RepoAutopilotResponse": {
+          "properties": {
+            "autopilot_concurrency": {
+              "title": "Autopilot Concurrency",
+              "type": "integer"
+            },
+            "ok": {
+              "title": "Ok",
+              "type": "boolean"
+            },
+            "repo_id": {
+              "title": "Repo Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "ok",
+            "repo_id",
+            "autopilot_concurrency"
+          ],
+          "title": "RepoAutopilotResponse",
+          "type": "object"
+        },
         "RepoConnectBody": {
           "properties": {
             "kind": {
@@ -4900,6 +5851,50 @@
             "cwd"
           ],
           "title": "RepoConnectResponse",
+          "type": "object"
+        },
+        "RepoDisconnectResponse": {
+          "description": "The receipt for a disconnect \u2014 what the cascade actually removed. Irreversible by design;\nthe project folder itself is never touched, and run traces + dev events are preserved\n(never-delete-logs), stamped session_fate='disconnected'.",
+          "properties": {
+            "harness_removed": {
+              "title": "Harness Removed",
+              "type": "boolean"
+            },
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "knowledge_removed": {
+              "title": "Knowledge Removed",
+              "type": "boolean"
+            },
+            "label": {
+              "title": "Label",
+              "type": "string"
+            },
+            "pipeline_rows_deleted": {
+              "title": "Pipeline Rows Deleted",
+              "type": "integer"
+            },
+            "sessions_deleted": {
+              "title": "Sessions Deleted",
+              "type": "integer"
+            },
+            "worktrees_removed": {
+              "title": "Worktrees Removed",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "id",
+            "label",
+            "sessions_deleted",
+            "pipeline_rows_deleted",
+            "knowledge_removed",
+            "harness_removed",
+            "worktrees_removed"
+          ],
+          "title": "RepoDisconnectResponse",
           "type": "object"
         },
         "RepoEffortBody": {
@@ -5103,6 +6098,11 @@
         },
         "RepoOverview": {
           "properties": {
+            "autopilot_concurrency": {
+              "default": 4,
+              "title": "Autopilot Concurrency",
+              "type": "integer"
+            },
             "cwd": {
               "title": "Cwd",
               "type": "string"
@@ -5478,6 +6478,17 @@
                 }
               ],
               "title": "Outcome"
+            },
+            "phase": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Phase"
             },
             "repo_id": {
               "title": "Repo Id",
@@ -5878,6 +6889,24 @@
           "title": "SpawnedFrom",
           "type": "object"
         },
+        "StackRow": {
+          "properties": {
+            "key": {
+              "title": "Key",
+              "type": "string"
+            },
+            "value": {
+              "title": "Value",
+              "type": "string"
+            }
+          },
+          "required": [
+            "key",
+            "value"
+          ],
+          "title": "StackRow",
+          "type": "object"
+        },
         "SweepConfigBody": {
           "description": "Partial update of the capture-sweep tuning \u2014 any omitted field is left unchanged.",
           "properties": {
@@ -6167,6 +7196,18 @@
               "title": "Default Repo",
               "type": "string"
             },
+            "deputy_enabled": {
+              "default": true,
+              "title": "Deputy Enabled",
+              "type": "boolean"
+            },
+            "deputy_strictness": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "title": "Deputy Strictness",
+              "type": "object"
+            },
             "identity": {
               "title": "Identity",
               "type": "string"
@@ -6293,6 +7334,145 @@
             "done"
           ],
           "title": "TaskItem",
+          "type": "object"
+        },
+        "TimelineEvent": {
+          "description": "One event in a run's trail (F2 timeline): a prompt, an assistant reply block, a tool/skill\ncall (status), or that call's result \u2014 the same rows the Activity trace shows, per run.",
+          "properties": {
+            "created_at": {
+              "title": "Created At",
+              "type": "string"
+            },
+            "description": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Description"
+            },
+            "id": {
+              "title": "Id",
+              "type": "integer"
+            },
+            "kind": {
+              "title": "Kind",
+              "type": "string"
+            },
+            "name": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Name"
+            },
+            "seq": {
+              "title": "Seq",
+              "type": "integer"
+            },
+            "tool_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tool Id"
+            }
+          },
+          "required": [
+            "id",
+            "seq",
+            "kind",
+            "created_at"
+          ],
+          "title": "TimelineEvent",
+          "type": "object"
+        },
+        "TimelineRun": {
+          "description": "One phase agent's run in the unified timeline: which phase/role it was, and its turn events.",
+          "properties": {
+            "events": {
+              "default": [],
+              "items": {
+                "$ref": "#/components/schemas/TimelineEvent"
+              },
+              "title": "Events",
+              "type": "array"
+            },
+            "feature": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Feature"
+            },
+            "model": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Model"
+            },
+            "phase": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Phase"
+            },
+            "run_id": {
+              "title": "Run Id",
+              "type": "integer"
+            },
+            "started_at": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Started At"
+            },
+            "status": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          "required": [
+            "run_id"
+          ],
+          "title": "TimelineRun",
           "type": "object"
         },
         "TokenBucket": {
@@ -6458,8 +7638,16 @@
           "type": "object"
         },
         "TokenUsageResponse": {
-          "description": "System-wide token usage: the global bucket + one bucket per repo (keyed by repo id).",
+          "description": "System-wide token usage: the global bucket + one bucket per repo (keyed by repo id) +\nthe \"Old projects\" roll-up of disconnected repos (also present in by_repo, by raw id).",
           "properties": {
+            "archived": {
+              "$ref": "#/components/schemas/ArchivedTokens",
+              "default": {
+                "repos": [],
+                "runs": 0,
+                "total": 0
+              }
+            },
             "by_repo": {
               "additionalProperties": {
                 "$ref": "#/components/schemas/RepoTokens"
@@ -6681,6 +7869,20 @@
           "additionalProperties": true,
           "description": "A dev work-item. Base fields are always present; tree-walk + telemetry fields appear only on\nthe enriched /dev list (extra='allow' tolerates any future frontmatter key).",
           "properties": {
+            "after": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "After"
+            },
             "artifacts": {
               "anyOf": [
                 {
@@ -6694,6 +7896,17 @@
                 }
               ],
               "title": "Artifacts"
+            },
+            "autopilot": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Autopilot"
             },
             "children": {
               "anyOf": [
@@ -6956,8 +8169,8 @@
                     "triage",
                     "plan",
                     "build",
-                    "validate",
-                    "deliver",
+                    "vet",
+                    "review",
                     "investigate",
                     "report",
                     "close"
@@ -7106,6 +8319,8 @@
                   "enum": [
                     "active",
                     "awaiting_child",
+                    "awaiting_upstream",
+                    "awaiting_slot",
                     "awaiting_human",
                     "done"
                   ],
@@ -7213,6 +8428,18 @@
               "title": "Id",
               "type": "string"
             },
+            "merge": {
+              "anyOf": [
+                {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Merge"
+            },
             "ok": {
               "title": "Ok",
               "type": "boolean"
@@ -7245,6 +8472,35 @@
             "artifacts"
           ],
           "title": "WorkItemArtifactsResponse",
+          "type": "object"
+        },
+        "WorkItemAutopilotResponse": {
+          "description": "Autopilot-toggle result. `changed` False = the flag was already in the requested state.",
+          "properties": {
+            "autopilot": {
+              "title": "Autopilot",
+              "type": "boolean"
+            },
+            "changed": {
+              "title": "Changed",
+              "type": "boolean"
+            },
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "ok": {
+              "title": "Ok",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok",
+            "id",
+            "autopilot",
+            "changed"
+          ],
+          "title": "WorkItemAutopilotResponse",
           "type": "object"
         },
         "WorkItemCompleteResponse": {
@@ -7433,29 +8689,6 @@
           "title": "WorkItemDetailResponse",
           "type": "object"
         },
-        "WorkItemEffortResponse": {
-          "properties": {
-            "effort": {
-              "title": "Effort",
-              "type": "string"
-            },
-            "id": {
-              "title": "Id",
-              "type": "string"
-            },
-            "ok": {
-              "title": "Ok",
-              "type": "boolean"
-            }
-          },
-          "required": [
-            "ok",
-            "id",
-            "effort"
-          ],
-          "title": "WorkItemEffortResponse",
-          "type": "object"
-        },
         "WorkItemGitRecord": {
           "description": "The git record a build entry writes onto the item (S4): its branch, worktree dir, and the\nbase it branched from (the trunk, or the parent's branch for a blocking child).",
           "properties": {
@@ -7548,29 +8781,6 @@
           "title": "WorkItemLastRun",
           "type": "object"
         },
-        "WorkItemModelResponse": {
-          "properties": {
-            "id": {
-              "title": "Id",
-              "type": "string"
-            },
-            "model": {
-              "title": "Model",
-              "type": "string"
-            },
-            "ok": {
-              "title": "Ok",
-              "type": "boolean"
-            }
-          },
-          "required": [
-            "ok",
-            "id",
-            "model"
-          ],
-          "title": "WorkItemModelResponse",
-          "type": "object"
-        },
         "WorkItemScaffoldResponse": {
           "description": "Result of setting a root work-item's anchor pointer (wave OR deliverable).",
           "properties": {
@@ -7654,6 +8864,28 @@
           "title": "WorkItemTasks",
           "type": "object"
         },
+        "WorkItemTimelineResponse": {
+          "description": "The F2 unified timeline: all of an item's runs oldest-first, each with its ordered events \u2014\nthe read-only conversation the panel mirrors across every phase.",
+          "properties": {
+            "item_id": {
+              "title": "Item Id",
+              "type": "string"
+            },
+            "runs": {
+              "default": [],
+              "items": {
+                "$ref": "#/components/schemas/TimelineRun"
+              },
+              "title": "Runs",
+              "type": "array"
+            }
+          },
+          "required": [
+            "item_id"
+          ],
+          "title": "WorkItemTimelineResponse",
+          "type": "object"
+        },
         "WriteBody": {
           "properties": {
             "content": {
@@ -7710,7 +8942,7 @@
       },
       "/dev": {
         "get": {
-          "description": "A context's parsed dev knowledge (files) + inbox queue (DB) + the glance view.\n\n`running` lists work-item ids with a headless /plan turn in flight, so the cards can\nshow a live \"planning\u2026\" state while a background agent works.",
+          "description": "A context's parsed dev knowledge (files) + inbox queue (DB) + the glance view.\n\n`running` lists work-item ids with a background /plan turn in flight, so the cards can\nshow a live \"planning\u2026\" state while a background agent works.",
           "operationId": "dev_read_dev_get",
           "parameters": [
             {
@@ -7751,7 +8983,7 @@
       },
       "/dev/attention": {
         "get": {
-          "description": "The attention engine (S7/D10): every item in at most one bucket, strict priority\nneeds_you (awaiting_human) > running (live run) > unread (terminal, never opened) \u2014 derived\nfrom durable state at read time. `badge` = the top non-empty tier's color + count, or null\nwhen nothing claims attention. Powers the workspace badge + kanban tinting.",
+          "description": "The attention engine (S7/D10): every item in at most one bucket, strict priority\nneeds_you (awaiting_human) > deputy_working (live deputy judgment) > running (live phase run)\n> unread (terminal, never opened) \u2014 derived from durable state at read time. `badge` = the top\nnon-empty tier's color + count, or null when nothing claims attention. Powers the workspace\nbadge + kanban tinting.",
           "operationId": "dev_attention_dev_attention_get",
           "parameters": [
             {
@@ -8794,7 +10026,7 @@
       },
       "/dev/inbox/{item_id}/push": {
         "post": {
-          "description": "Push an inbox item to the workspace \u2014 the owner's push (the `spawn` relation waits for\nexactly this; blocking/parallel children auto-pushed at branch-off time never reach here\nopen). One shared transaction (core/inbox_flow): creates `work-items/<id>/` at triage/active\ncarrying `spawned_from` + `inbox_id`, MOVES the inbox content folder (handoff brief + extras)\ninto the item as `preliminary/` (the row stays as trace), and pauses the parent when the\nrelation is blocking. Returns the new work-item + the row.",
+          "description": "Push an inbox item to the workspace \u2014 the owner's push (the `spawn` relation waits for\nexactly this; blocking/parallel children auto-pushed at branch-off time never reach here\nopen). One shared transaction (core/inbox_flow): creates `work-items/<id>/` at triage/active\ncarrying `spawned_from` + `inbox_id`, MOVES the inbox content folder (handoff brief + extras)\ninto the item as `preliminary/` (the row stays as trace), and pauses the parent when the\nrelation is blocking. Then fires the auto-triage run (#120 \u2014 no manual trigger). Returns the\nnew work-item + the row.",
           "operationId": "dev_inbox_push_dev_inbox__item_id__push_post",
           "parameters": [
             {
@@ -8840,6 +10072,47 @@
             }
           },
           "summary": "Dev Inbox Push"
+        }
+      },
+      "/dev/lint": {
+        "get": {
+          "description": "Health of this project's general knowledge, as findings the owner can act on \u2014 not a document\nto read. Derived fresh on every call, so the lint itself can never be stale.",
+          "operationId": "dev_lint_dev_lint_get",
+          "parameters": [
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "default": "global",
+                "title": "Context Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/LintResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Lint"
         }
       },
       "/dev/log": {
@@ -8959,7 +10232,7 @@
       },
       "/dev/memory/distill": {
         "post": {
-          "description": "The Manage-Harness \"Run distill\" button: fire a headless distill pass over the candidate\npool (no need to open Dev chat). One pass per (repo \u00d7 dev scope) at a time \u2014 guarded by a\nserver-truth spine query, not a shadow set. Returns immediately; poll `/dev/memory/stats`\n(`distilling`) for completion, then refetch the review queue.",
+          "description": "The Manage-Harness \"Run distill\" button: fire a background distill pass over the candidate\npool (no need to open Dev chat). One pass per (repo \u00d7 dev scope) at a time \u2014 guarded by a\nserver-truth spine query, not a shadow set. Returns immediately; poll `/dev/memory/stats`\n(`distilling`) for completion, then refetch the review queue.",
           "operationId": "dev_memory_distill_dev_memory_distill_post",
           "parameters": [
             {
@@ -9057,7 +10330,7 @@
       },
       "/dev/memory/proposals/{proposal_id}/approve": {
         "post": {
-          "description": "GATE 1 \u2014 owner approves the proposal's INTENT (and answers distill's clarifying questions).\nValidates the form/scope can actually be written today (core is reserved), records the answers,\nmoves the proposal to `writing`, and fires a headless per-item WRITE run that authors the final\nartifact and stages it (\u2192 `drafted`) for gate-2. Returns immediately; poll the proposal status.",
+          "description": "GATE 1 \u2014 owner approves the proposal's INTENT (and answers distill's clarifying questions).\nValidates the form/scope can actually be written today (core is reserved), records the answers,\nmoves the proposal to `writing`, and fires a background per-item WRITE run that authors the final\nartifact and stages it (\u2192 `drafted`) for gate-2. Returns immediately; poll the proposal status.",
           "operationId": "memory_proposal_approve_dev_memory_proposals__proposal_id__approve_post",
           "parameters": [
             {
@@ -9466,6 +10739,47 @@
           "summary": "Dev Palette"
         }
       },
+      "/dev/portrait": {
+        "get": {
+          "description": "The project PORTRAIT \u2014 what this project is, in six bands, one per anchor doc. Read-only and\nderived on every call: the docs are the store, this is just the shape the view needs.",
+          "operationId": "dev_portrait_dev_portrait_get",
+          "parameters": [
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "default": "global",
+                "title": "Context Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/PortraitResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Portrait"
+        }
+      },
       "/dev/project-status": {
         "get": {
           "description": "Whether this project's memory is established (its PRD defines \u22651 deliverable) + the doc-set\npresence flags + the connect-time onboarding choice. The dev workspace gates on `established`:\nfalse \u21d2 show the onboarding front door, launching `onboard_mode` when it's set.",
@@ -9757,7 +11071,7 @@
       },
       "/dev/work-items/{item_id}/advance": {
         "post": {
-          "description": "Approve \u2192 advance a work-item to its kind's next phase (the owner's gate; sequencing\ncomes from KIND_PROFILES \u2014 triage\u2192plan\u2192\u2026 per kind). Refuses if the item is at its final\nphase, terminal, or a run is in flight. The gate decision also rests the item at `active`\n(an awaiting_human item just got its answer).",
+          "description": "Approve \u2192 advance a work-item to its kind's next phase (the owner's gate; sequencing\ncomes from KIND_PROFILES \u2014 triage\u2192plan\u2192\u2026 per kind). Refuses if the item is at its final\nphase, terminal, or a run is in flight. The gate decision also rests the item at `active`\n(an awaiting_human item just got its answer). Owner-driven, so `ratify=True` \u2014 approving\nratifies the brief's assumptions; the autopilot driver uses the same core with ratify=False.",
           "operationId": "dev_work_item_advance_dev_work_items__item_id__advance_post",
           "parameters": [
             {
@@ -9853,6 +11167,116 @@
             }
           },
           "summary": "Dev Work Item Artifacts"
+        }
+      },
+      "/dev/work-items/{item_id}/authorize": {
+        "post": {
+          "description": "The owner's grant/deny on a deferred authorization at review (BV-A2.3). `granted` records the\ngrant and routes the item back to build to perform the now-allowed change; `denied` accepts the\ngap (the blocked check is waived) and leaves the item at review for the owner's approve. Unlike\nthe deputy, the owner grants unconditionally \u2014 the delegated-authority floor only binds the\ndeputy. 409 when the item/request isn't in a grantable state or a run is in flight.",
+          "operationId": "dev_work_item_authorize_dev_work_items__item_id__authorize_post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "item_id",
+              "required": true,
+              "schema": {
+                "title": "Item Id",
+                "type": "string"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthorizeBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/PlanResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Work Item Authorize"
+        }
+      },
+      "/dev/work-items/{item_id}/autopilot": {
+        "post": {
+          "description": "Enrol / un-enrol a work-item in autopilot \u2014 the per-item policy that drives its gates without\na click. Allowed only PRE-BUILD (phase in triage/plan): the inbox-stage decision, and the last\nmoment before code exists that flipping it is cheap. 409 past that. The flag is durable; the\ndriver (services/gates.maybe_autopilot_advance) reads it when a run rests the item at a gate.",
+          "operationId": "dev_work_item_autopilot_dev_work_items__item_id__autopilot_post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "item_id",
+              "required": true,
+              "schema": {
+                "title": "Item Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "default": "global",
+                "title": "Context Id",
+                "type": "string"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutopilotBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/WorkItemAutopilotResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Work Item Autopilot"
         }
       },
       "/dev/work-items/{item_id}/compact": {
@@ -9955,6 +11379,56 @@
           "summary": "Dev Work Item Complete"
         }
       },
+      "/dev/work-items/{item_id}/continue": {
+        "post": {
+          "description": "The owner's CONTINUE on a build parked at a human gate (BV-A1): RE-ENTER the build\u27f7vet loop.\nResumes the item's build thread to finalize \u2014 complete what's doable, record any wall it can't\npass itself as an assumption \u2014 then the normal build\u2192vet\u2192review flow carries the gap to review.\nThis is distinct from a bare chat reply to a paused build (which runs a `chat` turn and does NOT\nadvance the loop). 409 when the item isn't a parked build-phase item with a live worktree, or a\nrun is in flight.",
+          "operationId": "dev_work_item_continue_dev_work_items__item_id__continue_post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "item_id",
+              "required": true,
+              "schema": {
+                "title": "Item Id",
+                "type": "string"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/PlanResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Work Item Continue"
+        }
+      },
       "/dev/work-items/{item_id}/detail": {
         "get": {
           "description": "A work-item's review payload: its frontmatter/body plus the rendered artifact content\nthe review popup shows \u2014 plan.md and prd.md as Markdown bodies, the plan's `## Tasks` as a\nstructured `{text, done}` checklist, and the COMPUTED per-artifact status map (S2: derived\nfrom file existence + self-check + evidence freshness \u2014 never stored).",
@@ -10003,56 +11477,6 @@
             }
           },
           "summary": "Dev Work Item Detail"
-        }
-      },
-      "/dev/work-items/{item_id}/effort": {
-        "post": {
-          "description": "Configure the reasoning effort a work-item's runs use (plan + bound chat) \u2014 reconfigurable\nanytime from the review popup. Persisted to `item.md` frontmatter.",
-          "operationId": "dev_work_item_set_effort_dev_work_items__item_id__effort_post",
-          "parameters": [
-            {
-              "in": "path",
-              "name": "item_id",
-              "required": true,
-              "schema": {
-                "title": "Item Id",
-                "type": "string"
-              }
-            }
-          ],
-          "requestBody": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/EffortBody"
-                }
-              }
-            },
-            "required": true
-          },
-          "responses": {
-            "200": {
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "$ref": "#/components/schemas/WorkItemEffortResponse"
-                  }
-                }
-              },
-              "description": "Successful Response"
-            },
-            "422": {
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "$ref": "#/components/schemas/HTTPValidationError"
-                  }
-                }
-              },
-              "description": "Validation Error"
-            }
-          },
-          "summary": "Dev Work Item Set Effort"
         }
       },
       "/dev/work-items/{item_id}/gate-brief": {
@@ -10157,7 +11581,7 @@
       },
       "/dev/work-items/{item_id}/git/merge": {
         "post": {
-          "description": "The deliver-gate merge (owner-fired). Routes itself by topology (D4): a BLOCKING child\nmerges into its parent's branch (light path \u2014 no backup ceremony; the parent re-validates the\nfamily), everything else merges to the trunk (heavy path \u2014 overlap refusal, tagged auto-stash,\nbackup ref first, never-merge-twice). Success records merge commit (+ backup ref) on the item.\nConflicts on the main path \u2192 200 with the conflict list (fix via sync + resolve, then retry).",
+          "description": "The review-gate merge (owner-fired), as a raw route. Thin wrapper over\n`services.git_ops.review_merge` \u2014 the SAME body `advance_item` runs when the owner (or deputy)\napproves at review, so 'the review decision IS the merge' holds whether it's fired here or by\nthe Approve transition (B2). Routes by topology (D4): a BLOCKING child merges into its parent's\nbranch (light path), everything else to the trunk (heavy path \u2014 overlap refusal, backup ref,\nnever-merge-twice). Conflicts on the main path \u2192 200 with the conflict list (sync + resolve,\nthen retry / approve again).",
           "operationId": "dev_work_item_git_merge_dev_work_items__item_id__git_merge_post",
           "parameters": [
             {
@@ -10207,7 +11631,7 @@
       },
       "/dev/work-items/{item_id}/git/resolve": {
         "post": {
-          "description": "Resolve-with-Agent (D4): the human decides WHETHER, the agent resolves \u2014 they never\nhand-edit conflict markers. Re-runs the freshness sync leaving conflicts IN the worktree,\nthen fires a headless resolution run (write-sandboxed to the worktree); the daemon completes\nthe merge mechanically and the item re-enters `validate`. 409 if the sync is clean (nothing\nto resolve) or a run is in flight.",
+          "description": "Resolve-with-Agent (D4): the human decides WHETHER, the agent resolves \u2014 they never\nhand-edit conflict markers. Re-runs the freshness sync leaving conflicts IN the worktree,\nthen fires a background resolution run (write-sandboxed to the worktree); the daemon completes\nthe merge mechanically and the item re-enters `vet`. 409 if the sync is clean (nothing\nto resolve) or a run is in flight.",
           "operationId": "dev_work_item_git_resolve_dev_work_items__item_id__git_resolve_post",
           "parameters": [
             {
@@ -10307,7 +11731,7 @@
       },
       "/dev/work-items/{item_id}/git/sync": {
         "post": {
-          "description": "Freshness merge (D4): merge the trunk INTO the item branch, inside its worktree \u2014 run\nduring long builds and always before the deliver merge, so main-merge is trivial.",
+          "description": "Freshness merge (D4): merge the trunk INTO the item branch, inside its worktree \u2014 run\nduring long builds and always before the review merge, so main-merge is trivial.",
           "operationId": "dev_work_item_git_sync_dev_work_items__item_id__git_sync_post",
           "parameters": [
             {
@@ -10355,59 +11779,9 @@
           "summary": "Dev Work Item Git Sync"
         }
       },
-      "/dev/work-items/{item_id}/model": {
-        "post": {
-          "description": "Configure the model a work-item's runs use (plan + bound chat) \u2014 reconfigurable anytime\nfrom the review popup. Persisted to `item.md` frontmatter.",
-          "operationId": "dev_work_item_set_model_dev_work_items__item_id__model_post",
-          "parameters": [
-            {
-              "in": "path",
-              "name": "item_id",
-              "required": true,
-              "schema": {
-                "title": "Item Id",
-                "type": "string"
-              }
-            }
-          ],
-          "requestBody": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ModelBody"
-                }
-              }
-            },
-            "required": true
-          },
-          "responses": {
-            "200": {
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "$ref": "#/components/schemas/WorkItemModelResponse"
-                  }
-                }
-              },
-              "description": "Successful Response"
-            },
-            "422": {
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "$ref": "#/components/schemas/HTTPValidationError"
-                  }
-                }
-              },
-              "description": "Validation Error"
-            }
-          },
-          "summary": "Dev Work Item Set Model"
-        }
-      },
       "/dev/work-items/{item_id}/plan": {
         "post": {
-          "description": "Fire a headless /plan turn for a work-item \u2014 the \"Plan it\" quick-action. Opens the run\nimmediately, then returns; the agent works in the background and the item lands at\n`awaiting_human` (the pre-main gate) when done. Poll GET /dev (`running`) for live state.",
+          "description": "Fire a background /plan turn for a work-item \u2014 the \"Plan it\" quick-action. Opens the run\nimmediately, then returns; the agent works in the background and the item lands at\n`awaiting_human` (the pre-main gate) when done. Poll GET /dev (`running`) for live state.",
           "operationId": "dev_work_item_plan_dev_work_items__item_id__plan_post",
           "parameters": [
             {
@@ -10553,6 +11927,106 @@
             }
           },
           "summary": "Dev Work Item Seen"
+        }
+      },
+      "/dev/work-items/{item_id}/timeline": {
+        "get": {
+          "description": "F2 unified timeline: every run of this item, oldest-first, phase/role-tagged with its ordered\nturn events (prompt \u00b7 reply \u00b7 calls) \u2014 the read-only history the chat panel loads before\nlive-streaming new frames from the item's event broker. All phases in one chronological view.",
+          "operationId": "dev_work_item_timeline_dev_work_items__item_id__timeline_get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "item_id",
+              "required": true,
+              "schema": {
+                "title": "Item Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "default": "global",
+                "title": "Context Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/WorkItemTimelineResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Work Item Timeline"
+        }
+      },
+      "/dev/work-items/{item_id}/vet": {
+        "post": {
+          "description": "Run VET on demand and let the loop take over (build-vet-loop \u00a75): fire a background vet run\non this item's worktree. From there the daemon-side driver self-drives \u2014 passed \u2192 review \u00b7\nfailed \u2192 a build cycle handed the vet report (while `loop_autorun` and the breakers allow) \u00b7\nstale \u2192 re-vet \u00b7 unverified \u2192 fail closed. This is the owner's manual \"vet what's built now\"\naction; the AUTONOMOUS loop opens build-first (gates.enter_build_loop), so vet is the loop's\nsole DECISION point, not its entry. 409 when the item isn't a runnable vet-phase item or a run\nis in flight.",
+          "operationId": "dev_work_item_vet_dev_work_items__item_id__vet_post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "item_id",
+              "required": true,
+              "schema": {
+                "title": "Item Id",
+                "type": "string"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/PlanResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Work Item Vet"
         }
       },
       "/dev/workgraph": {
@@ -10941,6 +12415,106 @@
           "summary": "Connect Repo"
         }
       },
+      "/repos/{repo_id}": {
+        "delete": {
+          "description": "Disconnect a domain \u2014 forget the project from SuperMe entirely. IRREVERSIBLE: deletes the\nregistration (repos.yaml entry + kv overrides), the knowledge home, the per-repo harness cell,\nthe pipeline state (inbox + learning rows) and every session (row + transcript). The project\nFOLDER itself is never touched; reconnecting later is simply a fresh connect (retrofit).\nPreserved per never-delete-logs: run/run_event/run_artifact + dev-activity events \u2014 each\ndeleted session's runs are stamped session_fate='disconnected'. Guards: `?confirm=<repo id>`\nmust match (the UI's typed confirmation), the hub is refused, and live runs block with 409.",
+          "operationId": "disconnect_repo_repos__repo_id__delete",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "repo_id",
+              "required": true,
+              "schema": {
+                "title": "Repo Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "confirm",
+              "required": false,
+              "schema": {
+                "default": "",
+                "title": "Confirm",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/RepoDisconnectResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Disconnect Repo"
+        }
+      },
+      "/repos/{repo_id}/autopilot": {
+        "post": {
+          "description": "Set this repo's autopilot concurrency cap \u2014 the max autopilot items in the build\u27f7vet loop at\nonce (the slice-3 launch breaker). Per-project by owner decision; floored at 1.",
+          "operationId": "set_repo_autopilot_repos__repo_id__autopilot_post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "repo_id",
+              "required": true,
+              "schema": {
+                "title": "Repo Id",
+                "type": "string"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutopilotConcurrencyBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/RepoAutopilotResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Set Repo Autopilot"
+        }
+      },
       "/repos/{repo_id}/effort": {
         "post": {
           "description": "Set (or clear) one repo's reasoning-effort override. Clearing falls back to the system default.",
@@ -11200,7 +12774,7 @@
       },
       "/runs/{run_id}/trace": {
         "get": {
-          "description": "One run's event trail \u2014 the prompt that opened it, the assistant's reply text, and each\ntool/skill/agent call, in order. Per-RUN (not per-session), so each Activity row has its own\nthread; works for headless runs too. Empty list when nothing was recorded.",
+          "description": "One run's event trail \u2014 the prompt that opened it, the assistant's reply text, and each\ntool/skill/agent call, in order. Per-RUN (not per-session), so each Activity row has its own\nthread; works for background runs too. Empty list when nothing was recorded.",
           "operationId": "run_trace_runs__run_id__trace_get",
           "parameters": [
             {
@@ -11543,6 +13117,29 @@
           "summary": "Set Agent Model"
         }
       },
+      "/system/attention": {
+        "get": {
+          "description": "The top-of-SuperMe attention feed (Pass 2 \u00b7 Q2): every `awaiting_human` hold across ALL\nconnected repos, grouped by repo and classified (escalation \u00b7 breaker \u00b7 paged \u00b7 review \u00b7 gate)\nso the notification center can badge a count and offer the right quick actions. Only repos with\na hold appear; empty feed = nothing needs the owner.",
+          "operationId": "system_attention_system_attention_get",
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "items": {
+                      "$ref": "#/components/schemas/RepoAttention"
+                    },
+                    "title": "Response System Attention System Attention Get",
+                    "type": "array"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            }
+          },
+          "summary": "System Attention"
+        }
+      },
       "/system/compaction": {
         "get": {
           "description": "The compaction runtime knobs (S8/D11): trigger fill %, per-kind overrides, and the\neffectiveness threshold, plus the static incompressible floor the trigger may never sit\nat/below (what makes the knob safe to expose).",
@@ -11597,6 +13194,45 @@
             }
           },
           "summary": "Set System Compaction"
+        }
+      },
+      "/system/deputy": {
+        "post": {
+          "description": "The global deputy dial (Quick config): whether a deputy judges autopilot gates and how\nreadily it escalates PER GATE (triage/plan/review, each low\u00b7medium\u00b7high\u00b7extra). Partial \u2014\nomitted fields stay put; strictness sets only the gates it names. Rejects an unknown gate or\nlevel (422) rather than silently defaulting.",
+          "operationId": "set_system_deputy_system_deputy_post",
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeputyConfigBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/DeputyConfigResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Set System Deputy"
         }
       },
       "/system/effort": {

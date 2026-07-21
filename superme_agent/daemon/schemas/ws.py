@@ -71,6 +71,21 @@ class ErrorFrame(BaseModel):
     message: str
 
 
+class TimelineFrame(BaseModel):
+    """A live event from a work-item's run that this panel is WATCHING (F2 unified timeline) —
+    pushed from the item's broker (`item_stream`), independent of any turn this panel fired. Carries
+    which run it belongs to; run-lock means one live run per item, so the FE appends it to the item's
+    CURRENT phase lane. Kinds mirror the run trail: `reply` (assistant text) · a tool/skill call
+    (status kinds) · `result` (a call's output)."""
+    type: Literal["timeline"] = "timeline"
+    item_id: str
+    run_id: int | None = None
+    kind: str
+    name: str | None = None
+    description: str | None = None
+    tool_id: str | None = None
+
+
 # --- client → daemon (inbound) -----------------------------------------------------
 
 class TurnFrame(BaseModel):
@@ -98,16 +113,25 @@ class ApprovalResponseFrame(BaseModel):
     approved: bool = False
 
 
+class WatchFrame(BaseModel):
+    """Client → daemon: "this panel is now watching work-item `item_id`" — subscribe it to that
+    item's live event broker so build/vet/other-phase runs stream in (F2). `item_id: null` stops
+    watching (panel closed / switched away). Independent of turns: watching is passive observation,
+    firing a turn is separate."""
+    type: Literal["watch"] = "watch"
+    item_id: str | None = None
+
+
 # --- discriminated unions + the combined schema container --------------------------
 
 OutboundFrame = Annotated[
     Union[InitFrame, TextDeltaFrame, StatusFrame, UsageFrame,
-          ApprovalRequestFrame, ResultFrame, ErrorFrame],
+          ApprovalRequestFrame, ResultFrame, ErrorFrame, TimelineFrame],
     Field(discriminator="type"),
 ]
 
 InboundFrame = Annotated[
-    Union[TurnFrame, ApprovalResponseFrame],
+    Union[TurnFrame, ApprovalResponseFrame, WatchFrame],
     Field(discriminator="type"),
 ]
 

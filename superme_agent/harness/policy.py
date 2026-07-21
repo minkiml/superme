@@ -1,6 +1,6 @@
 """Permission policy — part of the agent's portable harness.
 
-Decides which tool calls auto-run vs. need human ✅/❌ approval. The approval
+Decides which tool calls auto-run vs. need human approval. The approval
 *mechanism* lives in runtime/permissions.py; the *policy* (what's safe) lives here
 so it travels with the agent regardless of workspace. Future per-path / per-workspace
 write rules belong here too.
@@ -57,13 +57,18 @@ SAFE_TOOLS = {
     # Work-item phase-session pens (workspace-workflow S2/S5/S6): each enforces its own
     # bound_item_id scope (a session may touch only ITS item) and writes only inside that item's
     # own folder daemon-side — the sanctioned autonomous writes the D5 scaffold-then-fill playbook
-    # depends on. Must never prompt: a headless phase run has no human to approve, and an
+    # depends on. Must never prompt: a background phase run has nothing to approve it, and an
     # interactive one shouldn't page the owner for the item's own artifacts.
     # Triage's recording surface: kind + existing-deliverable onto the item's own yaml, triage
     # phase only (the gate that follows is the human confirmation).
     "mcp__dev__set_triage_classification",
     "mcp__dev__scaffold_artifact",
     "mcp__dev__record_validation_evidence",
+    # Vet's report pen (build-vet-loop §4b): writes only the item's own vet-report-<n>.md, with the
+    # verdicts mechanically cross-checked against the evidence ledger daemon-side — and the vet
+    # session's file-write tools are denied outright, so this pen is its ONLY way to produce the
+    # handoff. A prompt here would park every background vet cycle on a human.
+    "mcp__dev__file_vet_report",
     "mcp__dev__write_checkpoint",
     # Agent-run freshness sync (D9): merges trunk INTO the item's own worktree only — trunk itself
     # is never written; conflicts abort-and-report by default.
@@ -72,6 +77,11 @@ SAFE_TOOLS = {
     "mcp__dev__stage_knowledge_delta",
     # Proposal-only: drafts the verified closeout + pages the owner; never sets an item terminal.
     "mcp__dev__propose_close",
+    # The review router (build-vet-loop §5.3): converts feedback the owner JUST gave at the
+    # review gate into a validated vet-plan check + build re-entry. The owner's statement is the
+    # authorization — a prompt would re-confirm their own words; the agent narrates exactly what
+    # was routed in its reply, and the append is code-validated (an invalid check writes nothing).
+    "mcp__dev__route_review_feedback",
 }
 
 

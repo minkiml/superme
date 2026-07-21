@@ -327,7 +327,7 @@ export function MemoryGovernance({ contextId }: { contextId: string }) {
   // Stop polling if the component unmounts mid-distill.
   useEffect(() => () => { if (poll.current) { clearInterval(poll.current); poll.current = null } }, [])
 
-  // "Run distill": fire the headless pass, then let the (server-truth) poll loop drive the
+  // "Run distill": fire the background pass, then let the (server-truth) poll loop drive the
   // spinner until it clears + refetch. `already_running` still tracks the in-flight pass.
   const onDistill = async () => {
     try {

@@ -7,15 +7,15 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from ...app_state import DevKnowledgeService, get_dev, get_spine, SystemSpine
 from ...deps import dev_root as _dev_root
-from ....core.dev_knowledge import ANCHOR_DOCS
+from ....core.dev_knowledge import ANCHOR_DOCS, LEGACY_DOCS
 from ...schemas.dev.general import (
     GeneralDocsResponse, GeneralDocResponse, GeneralDocSaveBody, GeneralDocSaveResponse,
-    ProjectStatusResponse, RoadmapBoardResponse,
+    ProjectStatusResponse, RoadmapBoardResponse, PortraitResponse, LintResponse,
 )
 
 router = APIRouter()
 
-_VALID = (*ANCHOR_DOCS, "resources")
+_VALID = (*ANCHOR_DOCS, *LEGACY_DOCS, "resources")   # legacy stays readable until it's folded in
 
 
 @router.get("/dev/general", response_model=GeneralDocsResponse)
@@ -62,3 +62,17 @@ def dev_roadmap(context_id: str = "global", dev: DevKnowledgeService = Depends(g
     """The roadmap board: deliverable → wave → its live work-item instances + rollup, plus any
     referential-integrity orphans (an item/wave pointing at an id the anchor docs don't define)."""
     return dev.roadmap_board(_dev_root(context_id))
+
+
+@router.get("/dev/portrait", response_model=PortraitResponse)
+def dev_portrait(context_id: str = "global", dev: DevKnowledgeService = Depends(get_dev)) -> dict:
+    """The project PORTRAIT — what this project is, in six bands, one per anchor doc. Read-only and
+    derived on every call: the docs are the store, this is just the shape the view needs."""
+    return dev.read_portrait(_dev_root(context_id))
+
+
+@router.get("/dev/lint", response_model=LintResponse)
+def dev_lint(context_id: str = "global", dev: DevKnowledgeService = Depends(get_dev)) -> dict:
+    """Health of this project's general knowledge, as findings the owner can act on — not a document
+    to read. Derived fresh on every call, so the lint itself can never be stale."""
+    return dev.lint_general(_dev_root(context_id))

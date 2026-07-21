@@ -24,6 +24,7 @@ from claude_agent_sdk import (
 from ..runtime.config import (
     SELF_FILE, CHARTER_FILES, HARNESS_DIR, LOCAL_HARNESS_DIR, CONSTITUTION_DIR, plugins_for,
 )
+from . import kernel_speech
 from .models import normalize_model
 from .operational import (constitution_catalog, list_repo_assets, silent_skill_names,
                           skills_in_category)
@@ -214,6 +215,7 @@ class AgentService:
         system_append: str | None = None, gate_general_mutations: bool = False,
         general_write_root: Path | None = None, write_boundary: list[Path] | None = None,
         hooks: dict | None = None, block_categories: set[str] | None = None,
+        deny_write_tools: str | None = None, background: bool = False,
     ) -> ClaudeAgentOptions:
         # Assemble layer-2 append: persona (WHO) + mode charter (WHAT MODE) + preamble
         # (WHERE) + persona_append (per-project extra). Mode falls back to core.
@@ -252,6 +254,12 @@ class AgentService:
         # Core stays session-agnostic (it has no spine), so it just appends what it's handed.
         if system_append:
             append += f"\n\n{system_append}"
+        # Background run (Thread 3 §3): a PER-TURN fact, not a session property — the same session
+        # is later resumed for interactive chat, and this block simply doesn't appear on those
+        # turns. One factual sentence (kernel-fired, kernel-processed) + the completion-report
+        # fence the kernel parses; the per-phase behaviour lives in each skill's background section.
+        if background:
+            append += f"\n\n{kernel_speech.BACKGROUND_RUN_CONTRACT}"
         # User-facing turns may not invoke `access: silent` skills (forge-* — internal pipeline
         # machinery); the owning sub-run leaves enforce_silent False so it still can. Computed from
         # the same plugin set the turn loads.
@@ -302,7 +310,7 @@ class AgentService:
             # work-item sessions). None on every other turn — no behavior change.
             hooks=hooks,
             # L2 read-guard on user-facing turns (chat / work-item): keep Read/Grep/Glob inside the
-            # host's scope. Headless runs pass scope_reads=False — they are hermetic + write-sandboxed
+            # host's scope. Background runs pass scope_reads=False — they are hermetic + write-sandboxed
             # and read their own /tmp scratch, which the guard would otherwise deny.
             can_use_tool=build_can_use_tool(
                 approve, blocked_skills=blocked,
@@ -310,12 +318,13 @@ class AgentService:
                 # relative read target against `read_roots`, and pinning the shell inside
                 # `write_boundary`. Only the former is a read-guard concern, so pass cwd
                 # unconditionally — gating it on scope_reads would silently disarm the boundary's
-                # shell allow on every headless run.
+                # shell allow on every background run.
                 cwd=ctx.cwd,
                 read_roots=_read_roots(ctx) if scope_reads else None,
                 gate_general_mutations=gate_general_mutations,
                 general_write_root=general_write_root,
                 write_boundary=write_boundary,
+                deny_write_tools=deny_write_tools,   # vet read-only (build-vet-loop §4/§8·O4)
             ),
             # SuperMe owns its OWN log+memory subsystem — it must never read from or write to
             # Claude Code's native auto-memory store (~/.claude/projects/<hash>/memory/). That
@@ -344,6 +353,8 @@ class AgentService:
         write_boundary: list[Path] | None = None,
         hooks: dict | None = None,
         block_categories: set[str] | None = None,
+        deny_write_tools: str | None = None,
+        background: bool = False,
     ) -> AsyncIterator[TurnEvent]:
         """Run one turn against `ctx`, yielding TurnEvents.
 
@@ -362,7 +373,8 @@ class AgentService:
             scope_reads=scope_reads, system_append=system_append,
             gate_general_mutations=gate_general_mutations,
             general_write_root=general_write_root, write_boundary=write_boundary,
-            hooks=hooks, block_categories=block_categories,
+            hooks=hooks, block_categories=block_categories, deny_write_tools=deny_write_tools,
+            background=background,
         )
         resolved_model = None
         # Context-window fill is measured from a SINGLE API call, not the turn aggregate.
@@ -390,11 +402,19 @@ class AgentService:
                             model=resolved_model,
                         )
                 elif isinstance(message, AssistantMessage):
+                    # ONE TextDelta per assistant MESSAGE, joining its text blocks — deliberately
+                    # not one per block. A surface renders each TextDelta as a chat bubble, and the
+                    # session transcript replays a message's blocks joined (sessions._blocks_text),
+                    # so emitting per-block would make the live view and the reloaded view disagree
+                    # about where one message ends and the next begins.
+                    said = "\n\n".join(b.text for b in message.content if hasattr(b, "text"))
+                    if said.strip():
+                        log.info("assistant: %s", said[:200])
+                        yield TextDelta(said)
                     for block in message.content:
                         if hasattr(block, "text"):
-                            log.info("assistant: %s", block.text[:200])
-                            yield TextDelta(block.text)
-                        elif hasattr(block, "name") and hasattr(block, "input"):
+                            continue
+                        if hasattr(block, "name") and hasattr(block, "input"):
                             # A tool-use block — surface its own "what it's doing" indicator.
                             tuid = getattr(block, "id", None)
                             if tuid:

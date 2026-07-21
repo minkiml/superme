@@ -1,8 +1,18 @@
 # Authoring contract — `general/architecture.md`
 
-**What it is.** How the system is **actually built right now** — components, how work flows through them,
-the durable data, the system-wide rules, and the load-bearing constraints. Current-state truth, not a
-plan and not a rationale log.
+**What it is.** How the system is **actually built right now** — the stack in force, the invariants
+that hold, what's deliberately absent, the components, how work flows through them, the durable data,
+and the system-wide rules. Current-state truth, not a plan and not a rationale log.
+
+**Two tiers, maintained differently** (the rule that keeps this doc from rotting):
+- **Durable** — `Stack`, `Invariants`, `What's deliberately not here`, `Orient`. These hold as
+  components come and go. A work item does not touch them.
+- **Named contracts** — `Components`, `Flows`, `Data`, `Cross-cutting`. These are the system's current
+  API. Change one in the code and you update its entry here **in the same change**: a stale name in
+  this file is a bug, exactly like a stale type.
+
+When a rule here and the code disagree, trust the code and fix whichever is wrong — but never break an
+invariant to make a change easier.
 **Write / update.** A thin stub at project-init; a **heavy reconstruction at retrofit** (read the code,
 write it from what's there); then grow it when a shipped change alters how the system is built.
 **Length.** A *cache of understanding*, not a file-by-file tour. Load-bearing only; tables and numbered
@@ -12,12 +22,15 @@ flows over prose. Depth scales with the codebase (skip a section rather than pad
 | # | Section | Holds |
 |---|---------|-------|
 | 0 | `## Orient` | 2–3 sentence shape + a **"Read before you touch"** list of the highest-leverage rules. |
+| 0.5 | `## Stack` | The chosen technologies — fixed facts, one line each. |
 | 1 | `## Context & externals` | The boundary (who calls in/out) + every external dep and its wiring point. |
 | 2 | `## Components` | The spine: one row per load-bearing component. |
 | 3 | `## Flows` | The 1–3 canonical paths, each a numbered step-list naming components. |
 | 4 | `## Data` | Durable stores + key entities/relationships (incl. on-disk state files). |
 | 5 | `## Cross-cutting` | System-wide rules an agent will trip over (auth, errors, config, logging, invariants). |
-| 6 | `## Constraints & debt` | Load-bearing "must not" facts + known structural debt, each pointing out. |
+| 6 | `## Invariants` | The rules that must hold no matter what changes — each one a "never" or an "always". |
+| 7 | `## What's deliberately not here` | What the project refuses to build or depend on, and why. |
+| 8 | `## Constraints & debt` | Load-bearing "must not" facts + known structural debt, each pointing out. |
 
 Omit any section that doesn't apply (say "stateless" in one line rather than keeping an empty `## Data`).
 
@@ -25,6 +38,16 @@ Omit any section that doesn't apply (say "stateless" in one line rather than kee
 - **Orient** — (a) one sentence what-it-is, (b) 2–3 sentences naming the top 3–5 components, (c) the
   densest thing in the doc: 3–6 bulleted **"Read before you touch"** rules ("all writes go through X;
   never write the DB directly"). ≤12 lines. DON'T restate the PRD's problem.
+- **Stack** — flat bullets `- **<area>**: <choice> — <one clause of why, only if non-obvious>`. No prose.
+  If the "why" is a real trade-off, it's not a stack line — it's a decision (link `see D-012`).
+- **Invariants** — bulleted absolutes an agent must never violate, phrased as rules with teeth
+  (`- The analyzed repo is never written to — read-only commands only`). Prefer the form that names the
+  single writer of a thing: *"X is the sole source of truth; Y is derived; Z is the only writer."*
+  ~30 words each, and each one should survive a refactor. 3–8 of them.
+- **What's deliberately not here** — the refusals, each with its reason:
+  `- **No <thing>** — <why it was rejected>`. This is the highest-value section in the doc, because
+  it's the one thing a reader cannot recover by reading the code. Include what you rejected and what
+  you'd have to change to revisit it.
 - **Context & externals** — an externals table `| External | Role | Integration point (file/module) |`
   (~5–15 rows) + a ≤8-line boundary (bullets, or one small diagram). Name the concrete wiring location so
   the agent can jump to code. DON'T list transitive libraries — only externals that shape the design.
@@ -42,7 +65,7 @@ Omit any section that doesn't apply (say "stateless" in one line rather than kee
   ("All API errors return `{error, code}`, thrown via `AppError`"). Omit inapplicable concerns silently
   (no "Caching: N/A" lines).
 - **Constraints & debt** — two bullet lists. State each constraint + its **consequence**, not its
-  justification. Each debt item ends with a pointer: `→ roadmap` (planned) or `→ spec D-NNN` (rationale).
+  justification. Each debt item ends with a pointer: `→ roadmap` (planned) or `→ D-NNN` (rationale, in `decisions.md`).
   This section *references* spec/roadmap, never duplicates them.
 
 ## Diagrams
@@ -60,6 +83,9 @@ diagrams — they rot immediately.
 
 **Read before you touch**
 - <highest-leverage rule an agent must not violate>
+
+## Stack
+- **<area>**: <choice> — <why, only if non-obvious>
 
 ## Context & externals
 <boundary: who calls in / what it calls out — a few bullets>
@@ -85,17 +111,25 @@ diagrams — they rot immediately.
 ## Cross-cutting
 - **<concern>** — <the rule> (enforced in `<where>`).
 
+## Invariants
+- <the rule that must always hold — an always or a never>
+
+## What's deliberately not here
+- **No <thing>** — <why it was rejected, and what would have to change to revisit>
+
 ## Constraints & debt
 - **Constraint:** <load-bearing fact> — <consequence>.
-- **Debt:** <where the structure is knowingly wrong> → roadmap / spec D-NNN.
+- **Debt:** <where the structure is knowingly wrong> → roadmap / D-NNN.
 ```
 
 ## Rules
 - **Current-state only** — describe what's shipped, not what's intended. Reconstruct §2/§3 from the code
   at retrofit; update on ship.
-- **Boundaries** — *why we chose X* lives in `spec.md` (link `→ spec D-NNN`); *what's next* lives in
-  `roadmap.md`; exact schemas/signatures live in code/migrations (capture shape only). If you're writing a
-  rationale or a plan, cut it and link.
+- **Boundaries** — *why we chose X* lives in `decisions.md` (link `→ D-NNN`); *what ships today* lives
+  in `capabilities.md`; *what's next* lives in `roadmap.md`; exact schemas/signatures live in
+  code/migrations (capture shape only). If you're writing a rationale or a plan, cut it and link.
+- **No file trees, no call graphs.** The `Components` table with its `Location` column is the jump
+  table into the code; a directory listing is a stale duplicate the moment a file moves.
 - **Location columns everywhere** — the `Location`/`Integration point` paths make the doc a jump table
   into the code; that's the biggest reader affordance.
 - **No frontmatter.**

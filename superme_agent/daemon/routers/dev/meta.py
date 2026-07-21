@@ -21,7 +21,7 @@ async def dev_read(context_id: str = "global",
                    spine: SystemSpine = Depends(get_spine)) -> dict:
     """A context's parsed dev knowledge (files) + inbox queue (DB) + the glance view.
 
-    `running` lists work-item ids with a headless /plan turn in flight, so the cards can
+    `running` lists work-item ids with a background /plan turn in flight, so the cards can
     show a live "planning…" state while a background agent works.
     """
     root = dev_root(context_id)
@@ -42,13 +42,18 @@ async def dev_attention(context_id: str = "global",
                         dev: DevKnowledgeService = Depends(get_dev),
                         spine: SystemSpine = Depends(get_spine)) -> dict:
     """The attention engine (S7/D10): every item in at most one bucket, strict priority
-    needs_you (awaiting_human) > running (live run) > unread (terminal, never opened) — derived
-    from durable state at read time. `badge` = the top non-empty tier's color + count, or null
-    when nothing claims attention. Powers the workspace badge + kanban tinting."""
+    needs_you (awaiting_human) > deputy_working (live deputy judgment) > running (live phase run)
+    > unread (terminal, never opened) — derived from durable state at read time. `badge` = the top
+    non-empty tier's color + count, or null when nothing claims attention. Powers the workspace
+    badge + kanban tinting."""
     root = dev_root(context_id)
     items = dev.read_all(root)["work_items"]
-    running = {r["item_id"] for r in spine.live_runs(context_id) if r.get("item_id")}
-    return {"context_id": context_id, **attention.assign(items, running)}
+    live = {r["item_id"]: r for r in spine.live_runs(context_id) if r.get("item_id")}
+    running = set(live)
+    # The deputy subset: live runs stamped feature="deputy" (its judgment is standing in for the
+    # owner, so it gets its own attention tier, not the generic green "running") — F1.
+    deputy = {iid for iid, r in live.items() if str(r.get("feature")) == "deputy"}
+    return {"context_id": context_id, **attention.assign(items, running, deputy)}
 
 
 @router.get("/dev/workgraph", response_model=WorkGraphResponse)

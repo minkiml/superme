@@ -25,8 +25,10 @@ const NODE_SIZE: Record<string, { w: number; h: number }> = {
 }
 
 function layout(gnodes: WorkGraphNode[], gedges: WorkGraphData['edges']): { nodes: Node[]; edges: Edge[] } {
+  // HORIZONTAL left→right (Roadmap vibe): deliverable spine flows rightward into its items;
+  // depth reads as progress, siblings stack vertically.
   const g = new dagre.graphlib.Graph()
-  g.setGraph({ rankdir: 'TB', nodesep: 28, ranksep: 56 })
+  g.setGraph({ rankdir: 'LR', nodesep: 22, ranksep: 72 })
   g.setDefaultEdgeLabel(() => ({}))
   for (const n of gnodes) {
     const s = NODE_SIZE[n.kind] ?? NODE_SIZE.work_item
@@ -73,10 +75,11 @@ function layout(gnodes: WorkGraphNode[], gedges: WorkGraphData['edges']): { node
 }
 
 export default function WorkGraphView({
-  contextId, onBindItem,
+  contextId, onBindItem, embedded = false,
 }: {
   contextId: string
   onBindItem?: (it: WorkItem, contextId: string) => void
+  embedded?: boolean // true = inside the Pipeline board's Kanban⇄Graph toggle (fixed height)
 }) {
   const [graph, setGraph] = useState<WorkGraphData | null>(null)
   const [data, setData] = useState<DevData | null>(null)
@@ -114,7 +117,7 @@ export default function WorkGraphView({
 
   const bucketOf = useMemo(() => {
     const m: Record<string, string> = {}
-    for (const tier of ['needs_you', 'running', 'unread'] as const) {
+    for (const tier of ['needs_you', 'deputy_working', 'running', 'unread'] as const) {
       for (const r of attn?.buckets?.[tier] ?? []) m[r.id] = tier
     }
     return m
@@ -146,7 +149,9 @@ export default function WorkGraphView({
   const reviewItem = reviewId ? (data?.work_items.find((w) => w.id === reviewId) ?? null) : null
 
   return (
-    <div className="relative h-full">
+    // The explicit height when embedded matters: React Flow's zoom/pan transform needs a sized
+    // container — an auto-height parent is exactly the old zoom-mismatch bug.
+    <div className={embedded ? 'relative h-[540px] overflow-hidden rounded-lg border border-line bg-canvas' : 'relative h-full'}>
       {reviewItem && (
         <WorkItemModal
           it={reviewItem}
@@ -221,6 +226,7 @@ export default function WorkGraphView({
 
 const BUCKET_RING: Record<string, string> = {
   needs_you: 'ring-2 ring-warn/80',
+  deputy_working: 'ring-2 ring-deputy/70',
   running: 'ring-2 ring-success/70',
   unread: 'ring-2 ring-accent/70',
 }
@@ -228,8 +234,8 @@ const BUCKET_RING: Record<string, string> = {
 function Dots() {
   return (
     <>
-      <Handle type="target" position={Position.Top} className="!h-1 !w-1 !border-0 !bg-transparent" />
-      <Handle type="source" position={Position.Bottom} className="!h-1 !w-1 !border-0 !bg-transparent" />
+      <Handle type="target" position={Position.Left} className="!h-1 !w-1 !border-0 !bg-transparent" />
+      <Handle type="source" position={Position.Right} className="!h-1 !w-1 !border-0 !bg-transparent" />
     </>
   )
 }
