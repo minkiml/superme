@@ -25,6 +25,8 @@ Everything here is deterministic, file-based, and spine-free — unit-testable w
 """
 
 import hashlib
+import json
+import logging
 import os
 import re
 import subprocess
@@ -35,6 +37,8 @@ from pathlib import Path
 import yaml
 
 from .kind_profiles import get_profile
+
+log = logging.getLogger(__name__)
 
 FILL = re.compile(r"<fill:[^>]*>")
 
@@ -1150,6 +1154,84 @@ def author_readiness(item_dir: Path, repo_dir: Path | None, *, title: str = "",
     path.parent.mkdir(parents=True, exist_ok=True)
     _atomic_write(path, doc)
     return path
+
+
+def author_review_report(item_dir: Path, repo_dir: Path | None, *, title: str = "",
+                         git_stats: dict | None = None, behind: int = 0) -> Path | None:
+    """Mechanically render `gate-report-review.html` at advance-to-review, the visual sibling of
+    author_readiness (B3). The review gate check requires this HTML report, but the review SKILL
+    only runs when a HUMAN drives the phase — so an autopilot item reached review with the report
+    missing and the deputy escalated 100% of clean items. This fills the review template's single
+    `{{DATA_JSON}}` slot from exactly the sources the skill uses (readiness/git stats, the evidence
+    ledger for the checks + delivered pane, plan.md for the promised pane) — every number counted,
+    never invented. NEVER raises (returns None on any trouble; the review skill can still render it
+    later). A review session may overwrite it with a richer, narrated version."""
+    try:
+        from ..runtime.config import DEV_PLUGIN_DIR
+        tmpl_path = DEV_PLUGIN_DIR / "skills" / "review" / "templates" / "gate-report.html"
+        template = tmpl_path.read_text()
+        item_dir = Path(item_dir)
+
+        # Checks + delivered pane straight off the evidence ledger (latest verdict per check).
+        latest: dict[str, dict] = {}
+        for e in evidence_entries(item_dir):
+            latest[e["check"]] = e
+        checks = [{"id": c, "pass": bool(e.get("passed"))} for c, e in latest.items()]
+        last_pass = next((e for e in reversed(evidence_entries(item_dir)) if e.get("passed")), None)
+        delivered = (last_pass or {}).get("result", "") or ""
+        status = evidence_status(item_dir, repo_dir).get("status", "unverified")
+        cycles = len(vet_reports(item_dir))
+
+        # Promised pane + surface off the plan.
+        plan_path = item_dir / "artifacts" / artifact_file("plan")
+        plan_text = plan_path.read_text() if plan_path.is_file() else ""
+        promised = parse_behavior_preview(plan_text).get("after", "") if plan_text else ""
+
+        # Warnings + recommendation — same derivation as author_readiness (single source of truth
+        # for the verdict would be nicer, but the two docs are authored side by side and cheaply).
+        unratified = unratified_assumptions(item_dir)
+        warns: list[str] = []
+        if behind and int(behind) > 0:
+            warns.append(f"Branch is {int(behind)} commit(s) behind trunk — sync from main before merging.")
+        if unratified:
+            warns.append(f"{len(unratified)} unratified assumption(s) — the close gate requires confirming them.")
+        if status != "passed":
+            warns.append(f"Evidence ledger is not green (verdict: {status}).")
+        if status != "passed":
+            rec, reason = "Hold & fix", f"the evidence ledger is not green (verdict: {status})."
+        elif behind and int(behind) > 0:
+            rec, reason = "Hold & fix", f"sync from main first (branch is {int(behind)} commit(s) behind trunk)."
+        else:
+            rec, reason = "Merge", f"all {len(checks)} check(s) green and fresh over {cycles} vet cycle(s)."
+
+        st = git_stats or {}
+        data = {
+            "title": title or item_dir.name,
+            "item": item_dir.name,
+            "ask": f"Merging lands “{title or item_dir.name}” on the trunk.",
+            "recommendation": rec,
+            "reason": reason,
+            "warnings": warns,
+            "stats": {"files": st.get("files", 0), "insertions": st.get("insertions", 0),
+                      "deletions": st.get("deletions", 0), "tests": "n/a"},
+            "by_file": [{"path": f.get("path", ""), "plus": f.get("plus", 0), "minus": f.get("minus", 0)}
+                        for f in (st.get("by_file") or [])],
+            "surface": "",
+            "promised": promised,
+            "delivered": delivered,
+            "checks": checks,
+            "cycles": cycles,
+        }
+        # Compact single line, HTML-safe inside the <script type="application/json"> slot.
+        payload = json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
+        rendered = template.replace("{{DATA_JSON}}", payload)
+        out = item_dir / "artifacts" / "gate-report-review.html"
+        out.parent.mkdir(parents=True, exist_ok=True)
+        _atomic_write(out, rendered)
+        return out
+    except Exception:
+        log.exception("author_review_report failed for %s (review skill renders it instead)", item_dir)
+        return None
 
 
 # --------------------------------------------------------------------------- vet reports (build-vet-loop §4b)

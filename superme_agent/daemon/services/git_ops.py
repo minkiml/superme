@@ -44,10 +44,18 @@ def write_review_readiness(ctx, item: dict, item_dir, dev_root) -> None:
         delta = knowledge_delta.pending_delta(item_dir)
         ops = (delta or {}).get("ops") or []
         delta_summary = f"{len(ops)} knowledge op(s) staged for merge." if ops else None
+        repo_dir = Path(str(wt)) if wt else ctx.cwd
         artifacts.author_readiness(
-            item_dir, Path(str(wt)) if wt else ctx.cwd,
+            item_dir, repo_dir,
             title=item.get("title") or str(item["id"]),
             delta_summary=delta_summary, git_stats=git_stats, behind=behind)
+        # The review gate check also requires the styled gate report; render it mechanically here
+        # (its visual sibling), else an autopilot item reaches review with the report missing and
+        # the deputy escalates 100% of clean items. A review session may enrich it later.
+        artifacts.author_review_report(
+            item_dir, repo_dir,
+            title=item.get("title") or str(item["id"]),
+            git_stats=git_stats, behind=behind)
     except Exception:
         log.exception("write_review_readiness failed for %s (review authors it instead)",
                       item.get("id"))
