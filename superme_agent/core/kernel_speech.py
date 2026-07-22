@@ -26,7 +26,6 @@ Pure functions over plain data — no daemon imports.
 """
 
 import json
-import re
 from pathlib import Path
 
 from . import artifacts, kind_profiles
@@ -790,16 +789,19 @@ def render_orient_block(item: dict, item_dir: Path, *, children: list[dict] | No
 _HANDOFF_TOTAL_CAP = 12_000   # the whole block (O10: bounded handoffs, always)
 _HANDOFF_REPORT_CAP = 8_000   # the LATEST new cycle's report, verbatim; older cycles = one line
 
-_VERDICT_LINE = re.compile(r"^- (.+ — (?:PASS|FAIL))$", re.M)
-
-
 def _report_verdict_summary(path: str) -> str:
-    """One line summarizing a vet report's verdicts (older-cycle collapse, O10)."""
+    """One line summarizing a vet report's verdicts (older-cycle collapse, O10). Routes through
+    `artifacts.parse_verdict_line` — the one reader for `write_vet_report`'s line shape — so this
+    summary can never drift from the loop-instruments parser (they used to be two regexes)."""
     try:
         text = Path(path).read_text()
     except OSError:
         return "(report unreadable)"
-    verdicts = _VERDICT_LINE.findall(text)
+    verdicts = []
+    for ln in text.splitlines():
+        pv = artifacts.parse_verdict_line(ln)
+        if pv:
+            verdicts.append(f"{pv[0]} — {'PASS' if pv[1] else 'FAIL'}")
     return "; ".join(verdicts) if verdicts else "(no verdict lines)"
 
 

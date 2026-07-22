@@ -533,7 +533,7 @@ async def _run_background_build(ctx, context_id: str, item_id: str,
         bank_auto_checkpoint(ctx, item_id, since=run_started)
     except Exception:
         log.exception("auto-checkpoint after build cycle failed")
-    log.info("background build cycle: done for %s (stopping=%s)", item_id, stopping)
+    log.info("background build cycle: done for %s (stopping=%s)", item_id, d["stopping"])
 
 
 # ------------------------------------------------------------------- review→plan re-entry (#178)

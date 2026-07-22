@@ -1443,6 +1443,17 @@ def read_attempts(item_dir: Path) -> list[dict]:
 _VERDICT_LINE = re.compile(r"^-\s+(?P<check>\S.*?)\s+—\s+(?P<verdict>PASS|FAIL)\s*$")
 
 
+def parse_verdict_line(line: str) -> tuple[str, bool] | None:
+    """Parse ONE vet-report `## Verdicts` line (`- <check> — PASS|FAIL`, the shape written by
+    `write_vet_report`) → `(check, passed)`, or None when the line isn't a verdict. THE single
+    reader for the one writer: both `loop_instruments` here and `_report_verdict_summary`
+    (kernel_speech) route through this, so the format can't desync into two divergent regexes."""
+    m = _VERDICT_LINE.match(line)
+    if not m:
+        return None
+    return m.group("check"), m.group("verdict") == "PASS"
+
+
 def loop_instruments(item_dir: Path, *, findings_cap: int = 2500) -> dict:
     """The build⟷vet loop's live instrument panel (renovation §2 Loop row) — everything derived
     from data the loop already writes, nothing stored: check ids in plan order · one verdict
@@ -1457,9 +1468,9 @@ def loop_instruments(item_dir: Path, *, findings_cap: int = 2500) -> dict:
     latest_failed = False
     for r in vet_reports(item_dir):
         text = Path(r["path"]).read_text()
-        verdicts = {m.group("check"): m.group("verdict") == "PASS"
-                    for m in (_VERDICT_LINE.match(ln) for ln in
-                              _split_sections(text).get("Verdicts", "").splitlines()) if m}
+        verdicts = {pv[0]: pv[1] for pv in
+                    (parse_verdict_line(ln) for ln in
+                     _split_sections(text).get("Verdicts", "").splitlines()) if pv}
         cycles.append({"cycle": r["cycle"], "verdicts": verdicts})
         for cid in verdicts:              # review-routed checks appear mid-loop — keep them
             if cid not in check_ids:
