@@ -1,6 +1,9 @@
 # Secrets
 .env
 
+# macOS Finder metadata (matches at any depth)
+.DS_Store
+
 # Local runtime state (per-environment, not committed)
 .sessions.json
 .sessions.v1.json
@@ -22,6 +25,15 @@
 # superme-global-knowledge/ = today's home; superme-knowledge/ = the renovation target (placeholder).
 superme-global-knowledge/
 superme-knowledge/
+
+# local-harness holds each user's OWN per-repo operational cells (constitutions, skills, agents,
+# mandates, .assets, per-repo plugin manifests) — per-deployment state, authored/regenerated
+# locally (plugin.json self-scaffolds; cells self-create on connect). Only the SHARED `asset/`
+# pool ships (+ this dir's README). Everything else — global/, dummy/, and any connected repo's
+# cell — is the user's own local-harness and must not be committed.
+superme_agent/local-harness/*
+!superme_agent/local-harness/asset/
+!superme_agent/local-harness/README.md
 
 # Python
 __pycache__/
