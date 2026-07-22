@@ -35,6 +35,7 @@
     "GET /dev/work-items/{item_id}/gate-brief",
     "GET /dev/work-items/{item_id}/git",
     "GET /dev/work-items/{item_id}/phases/{phase}/preview-input.html",
+    "GET /dev/work-items/{item_id}/runs/{run_id}/input.html",
     "GET /dev/work-items/{item_id}/timeline",
     "GET /dev/workgraph",
     "GET /docs",
@@ -12038,6 +12039,65 @@
             }
           },
           "summary": "Dev Work Item Plan"
+        }
+      },
+      "/dev/work-items/{item_id}/runs/{run_id}/input.html": {
+        "get": {
+          "description": "Prompt inspector (A): the ACTUAL input a past run sent \u2014 the exact system prompt + prompt\nbody captured at send time \u2014 as a standalone HTML page. A friendly page renders when a run has\nno capture (a pre-feature run, or a chat/deputy turn).",
+          "operationId": "dev_work_item_run_input_dev_work_items__item_id__runs__run_id__input_html_get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "item_id",
+              "required": true,
+              "schema": {
+                "title": "Item Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "path",
+              "name": "run_id",
+              "required": true,
+              "schema": {
+                "title": "Run Id",
+                "type": "integer"
+              }
+            },
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "default": "global",
+                "title": "Context Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "text/html": {
+                  "schema": {
+                    "type": "string"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Work Item Run Input"
         }
       },
       "/dev/work-items/{item_id}/scaffold": {

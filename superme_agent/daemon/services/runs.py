@@ -220,6 +220,26 @@ def capture_prompt(repo_id: str, prompt: str, *, run_id: int | None = None,
                          description=(prompt or "").strip()[:_PROMPT_CAP], run_id=run_id, item_id=item_id)
 
 
+def capture_run_input(context_id: str, item_id: str, *, ctx, system_append: str | None,
+                      prompt: str, background: bool, phase: str | None) -> None:
+    """Prompt inspector "A": persist the ACTUAL input the item's live run is about to send — the
+    assembled system prompt (built through the SAME `assemble_system_append` seam `_build_options`
+    uses, with THIS run's exact ctx / system_append / background) + the prompt body. Keyed to the
+    live run. Faithful by construction; best-effort — never breaks a turn."""
+    try:
+        info = _spine.live_run(context_id, item_id)
+        rid = (info or {}).get("id")
+        if rid is None:
+            return
+        system_prompt = _agent.assemble_system_append(ctx, system_append=system_append,
+                                                      background=background)
+        _spine.record_run_input(rid, repo_id=context_id, item_id=item_id, phase=phase,
+                                feature=(info or {}).get("feature"), background=background,
+                                system_prompt=system_prompt, prompt_body=prompt)
+    except Exception:
+        log.exception("capture_run_input failed for %s", item_id)
+
+
 def capture_event(repo_id: str, ev, *, run_id: int | None = None, item_id: str | None = None,
                   publish_live: bool = True) -> None:
     """Record one turn event onto a run's trail: a Status → its tool/skill/agent call, a ToolResult →
@@ -563,6 +583,10 @@ async def _run_background_close(ctx, context_id: str, item_id: str, item_dir: Pa
     title = item.get("title") or item_id
     prompt = kernel_speech.close_trigger(item_id, title)
     capture_prompt(context_id, prompt, item_id=item_id)
+    # Prompt inspector "A": close resumes the intake thread and passes NO system_append (its body is
+    # just the close trigger — the orient already lives in the resumed transcript).
+    capture_run_input(context_id, item_id, ctx=ctx, system_append=None, prompt=prompt,
+                      phase="close", background=True)
     final_tokens = final_usage = final_text = final_session = None
     run_started = time.time()
     live = _LiveTokens()
@@ -647,6 +671,10 @@ async def _background_intake_run(ctx, context_id: str, item_id: str, item_dir: P
     # The trail's first entry = what this run was asked to do (the trigger, not the orient bulk) —
     # interactive turns get this from the ws path; background runs record their own.
     capture_prompt(context_id, trigger, item_id=item_id)
+    # Prompt inspector "A": the intake runner passes NO system_append (the orient block in the body
+    # carries the item context), so capture with system_append=None to match the real send exactly.
+    capture_run_input(context_id, item_id, ctx=ctx, system_append=None, prompt=prompt,
+                      phase=skill, background=True)
     final_tokens = None
     final_usage = None
     final_text = None

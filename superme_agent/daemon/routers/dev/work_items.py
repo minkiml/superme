@@ -373,6 +373,20 @@ async def dev_work_item_preview_input(item_id: str, phase: str,
     return HTMLResponse(render_input_page(data, mode="preview"))
 
 
+@router.get("/dev/work-items/{item_id}/runs/{run_id}/input.html", response_class=HTMLResponse)
+async def dev_work_item_run_input(item_id: str, run_id: int,
+                                  context_id: str = "global") -> HTMLResponse:
+    """Prompt inspector (A): the ACTUAL input a past run sent — the exact system prompt + prompt
+    body captured at send time — as a standalone HTML page. A friendly page renders when a run has
+    no capture (a pre-feature run, or a chat/deputy turn)."""
+    from ...services.input_preview import (build_captured_input, render_input_page,
+                                           render_missing_input_page)
+    data = build_captured_input(context_id, item_id, run_id)
+    if data is None:
+        return HTMLResponse(render_missing_input_page(item_id, run_id))
+    return HTMLResponse(render_input_page(data, mode="captured"))
+
+
 @router.post("/dev/work-items/{item_id}/complete", response_model=WorkItemCompleteResponse)
 async def dev_work_item_complete(item_id: str, context_id: str = "global",
                                  dev: DevKnowledgeService = Depends(get_dev),

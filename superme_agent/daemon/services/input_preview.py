@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import html
 import logging
+from dataclasses import replace
+from pathlib import Path
 
 from ...core import artifacts as _arts, kernel_speech, kind_profiles
 
@@ -69,13 +71,47 @@ def build_preview_input(context_id: str, item_id: str, phase: str) -> dict | Non
     item_view["phase"] = phase
 
     is_gate = phase == "review"
-    background = not is_gate   # every non-gate phase fires a kernel background run
     preamble = kernel_speech.work_item_preamble(item_id, item_view, str(item_dir))
     trigger = _phase_trigger(phase, item_id, title, item_dir)
     orient = kernel_speech.render_orient_block(item_view, item_dir)
-    prompt_body = f"{orient}\n\n---\n\n{trigger}" if trigger else orient
+
+    # Match each phase's ACTUAL background runner — they genuinely DIFFER, and a faithful preview
+    # must reproduce that, not assume a uniform shape:
+    #   • build / vet  → loop run: system_append = work_item_preamble, at the WORKTREE cwd; body =
+    #     orient + trigger (build carries orient only on its FIRST turn — no build session yet).
+    #   • triage / plan / investigate / report → intake run: NO system_append (the orient block in
+    #     the body carries the item context); body = orient + trigger.
+    #   • close → resumes the intake thread: NO system_append; body = the close trigger ALONE (the
+    #     orient already lives in the resumed transcript).
+    #   • review → a GATE: no phase work run fires (the deputy judges with its own brief), so there
+    #     is no trigger; show the orientation the phase's session would hold, and the render marks it.
+    run_ctx = ctx
+    if phase in ("build", "vet"):
+        wt = item.get("git_worktree")
+        if wt:
+            run_ctx = replace(ctx, cwd=Path(str(wt)))
+        system_append = preamble
+        has_build_session = bool((item.get("sessions") or {}).get("build"))
+        prompt_body = trigger if (phase == "build" and has_build_session) \
+            else f"{orient}\n\n---\n\n{trigger}"
+        background = True
+    elif phase == "close":
+        system_append = None
+        prompt_body = trigger or orient
+        background = True
+    elif is_gate:                       # review — no work run
+        system_append = None
+        prompt_body = orient
+        background = False
+        trigger = None
+    else:                               # triage / plan / investigate / report
+        system_append = None
+        prompt_body = f"{orient}\n\n---\n\n{trigger}"
+        background = True
+
     # The FULL system append, assembled through the live code path (faithful by construction).
-    system_prompt = agent.assemble_system_append(ctx, system_append=preamble, background=background)
+    system_prompt = agent.assemble_system_append(run_ctx, system_append=system_append,
+                                                 background=background)
 
     meta = {
         "item_id": item_id,
@@ -90,6 +126,36 @@ def build_preview_input(context_id: str, item_id: str, phase: str) -> dict | Non
     }
     return {"meta": meta, "system_prompt": system_prompt, "prompt_body": prompt_body,
             "preamble": preamble, "trigger": trigger}
+
+
+def build_captured_input(context_id: str, item_id: str, run_id: int) -> dict | None:
+    """Prompt inspector "A": the ACTUAL input a past run sent, read back from the run_input capture
+    → the same dict shape `render_input_page` takes, or None when this run has no captured input
+    (a pre-feature run, or an interactive/chat turn that isn't captured)."""
+    from ...gateway import contexts
+    from .. import app_state
+    spine = app_state.spine
+    rec = spine.read_run_input(int(run_id))
+    if rec is None or str(rec.get("item_id") or "") != str(item_id):
+        return None
+    ctx = contexts.resolve(context_id, "dev")
+    item = (app_state.dev.read_work_item(ctx.internal_root / "dev", item_id)
+            if ctx.internal_root else None) or {}
+    run = spine.get_run(int(run_id)) or {}
+    phase = rec.get("phase") or run.get("phase") or "?"
+    try:
+        role = kind_profiles.session_role(phase)
+    except Exception:  # noqa: BLE001 — an unknown/legacy phase must still render
+        role = "?"
+    meta = {
+        "item_id": item_id, "title": item.get("title") or item_id, "phase": phase,
+        "kind": item.get("kind") or "implementation", "session_role": role,
+        "is_gate": phase == "review", "background": bool(rec.get("background")),
+        "model": run.get("model") or "—", "effort": run.get("effort") or "—",
+        "run_id": int(run_id), "started_at": run.get("started_at"),
+    }
+    return {"meta": meta, "system_prompt": rec.get("system_prompt") or "",
+            "prompt_body": rec.get("prompt_body") or "", "trigger": rec.get("prompt_body") or ""}
 
 
 # --------------------------------------------------------------------------- HTML rendering
@@ -176,5 +242,20 @@ def render_input_page(data: dict, *, mode: str = "preview") -> str:
         "(not authored by SuperMe); everything below is SuperMe's own system append plus the prompt "
         "body written into the transcript.</div>"
         f"{sys_body}{body_html}"
+        "</div></body></html>"
+    )
+
+
+def render_missing_input_page(item_id: str, run_id: int) -> str:
+    """The "A" page for a run with no captured input (a pre-feature run, or a chat/deputy turn)."""
+    return (
+        "<!doctype html><html><head><meta charset='utf-8'>"
+        f"<title>Input · run {html.escape(str(run_id))}</title><style>{_PAGE_CSS}</style></head>"
+        "<body><div class='wrap'>"
+        f"<div class='hdr'><h1>{html.escape(str(item_id))}</h1>"
+        f"<span class='chip mode-captured'>run #{html.escape(str(run_id))}</span></div>"
+        "<div class='note'>No captured input for this run. Input capture records the exact bytes a "
+        "run sends, from the moment the feature shipped — earlier runs, and interactive chat / deputy "
+        "turns, have none. Newer phase runs (triage · plan · build · vet · close) carry it.</div>"
         "</div></body></html>"
     )

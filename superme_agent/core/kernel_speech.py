@@ -768,8 +768,8 @@ def render_orient_block(item: dict, item_dir: Path, *, children: list[dict] | No
         pointers.append(f"- Your working tree (all code edits go here): `{item['git_worktree']}/`")
 
     return (
-        "### Work-item orientation (kernel-assembled at session start)\n"
-        "\n".join(head)
+        "### Work-item orientation (kernel-assembled at session start)\n\n"
+        + "\n".join(head)
         + "\n\n#### Plan\n" + plan
         + "\n\n#### Latest checkpoint\n" + checkpoint
         + "\n\n#### Gate\n" + gate

@@ -496,6 +496,23 @@ class SystemSpine:
                        updated_at TEXT NOT NULL
                    )"""
             )
+            # RUN_INPUT — the prompt inspector's "A" capture: the ACTUAL full input a run sent, the
+            # assembled system prompt (layer-2 append) + the prompt body, one row per run. Uncapped
+            # (unlike run_event's short trail rows) so the exact bytes survive. Written once at send
+            # time; durable telemetry like the run row (never deleted — never-delete-logs).
+            c.execute(
+                """CREATE TABLE IF NOT EXISTS run_input (
+                       run_id INTEGER PRIMARY KEY,
+                       repo_id TEXT NOT NULL,
+                       item_id TEXT,
+                       phase TEXT,
+                       feature TEXT,
+                       background INTEGER NOT NULL DEFAULT 0,
+                       system_prompt TEXT NOT NULL,
+                       prompt_body TEXT NOT NULL,
+                       created_at TEXT NOT NULL
+                   )"""
+            )
 
     # --- static config (loaded fresh; cheap + always current) -------------------
     def system_config(self) -> SystemConfig:
@@ -1144,6 +1161,30 @@ class SystemSpine:
                 )
         except Exception:  # noqa: BLE001 — telemetry must never break a turn
             pass
+
+    def record_run_input(self, run_id: int, *, repo_id: str, item_id: str | None, phase: str | None,
+                         feature: str | None, background: bool, system_prompt: str,
+                         prompt_body: str) -> None:
+        """Persist the ACTUAL full input a run sent (prompt inspector "A"), keyed by run_id. One row
+        per run (INSERT OR REPLACE — a re-run under the same id overwrites). Best-effort telemetry —
+        never breaks a turn."""
+        try:
+            with self._conn() as c:
+                c.execute(
+                    "INSERT OR REPLACE INTO run_input"
+                    " (run_id,repo_id,item_id,phase,feature,background,system_prompt,prompt_body,created_at)"
+                    " VALUES (?,?,?,?,?,?,?,?,?)",
+                    (int(run_id), repo_id, item_id, phase, feature, 1 if background else 0,
+                     system_prompt, prompt_body, _now()),
+                )
+        except Exception:  # noqa: BLE001 — telemetry must never break a turn
+            pass
+
+    def read_run_input(self, run_id: int) -> dict | None:
+        """The captured input for one run (or None), for the inspector's "A" page."""
+        with self._conn() as c:
+            row = c.execute("SELECT * FROM run_input WHERE run_id=?", (int(run_id),)).fetchone()
+            return dict(row) if row else None
 
     def get_run(self, run_id: int) -> dict | None:
         """One run row by id (or None) — the single-run read behind the diagnosis/inspection tool."""

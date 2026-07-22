@@ -41,7 +41,8 @@ from ...core import kernel_speech, session_contract
 from ...core.permissions import VET_READONLY_NUDGE
 from ...harness.tools.dev_tools import make_dev_mcp_server
 from .runs import (_LiveTokens, _begin_run, _end_run, _log_artifact,
-                   bank_auto_checkpoint, capture_event, capture_prompt, reset_vet_thread)
+                   bank_auto_checkpoint, capture_event, capture_prompt, capture_run_input,
+                   reset_vet_thread)
 
 log = logging.getLogger("superme-agent")
 
@@ -235,6 +236,10 @@ async def _run_background_vet(ctx, context_id: str, item_id: str,
     orient = kernel_speech.render_orient_block(item, item_dir)
     prompt = f"{orient}\n\n---\n\n{trigger}"
     capture_prompt(context_id, trigger, item_id=item_id)
+    # Prompt inspector "A": vet passes work_item_preamble as system_append at the worktree ctx.
+    capture_run_input(context_id, item_id, ctx=wt_ctx,
+                      system_append=kernel_speech.work_item_preamble(item_id, item, str(item_dir)),
+                      prompt=prompt, phase="vet", background=True)
     final_tokens = None
     final_usage = None
     final_session = None
@@ -445,6 +450,11 @@ async def _run_background_build(ctx, context_id: str, item_id: str,
     if not prev_build:   # first build turn of the item's life happening in background → orient at birth
         prompt = f"{kernel_speech.render_orient_block(item, item_dir)}\n\n---\n\n{trigger}"
     capture_prompt(context_id, trigger, item_id=item_id)
+    # Prompt inspector "A": build passes work_item_preamble as system_append at the worktree ctx;
+    # the body carries the orient block only on the item's first build turn (else just the trigger).
+    capture_run_input(context_id, item_id, ctx=wt_ctx,
+                      system_append=kernel_speech.work_item_preamble(item_id, item, str(item_dir)),
+                      prompt=prompt, phase="build", background=True)
     final_tokens = None
     final_usage = None
     final_text = None
