@@ -34,6 +34,7 @@
     "GET /dev/work-items/{item_id}/detail",
     "GET /dev/work-items/{item_id}/gate-brief",
     "GET /dev/work-items/{item_id}/git",
+    "GET /dev/work-items/{item_id}/phases/{phase}/preview-input.html",
     "GET /dev/work-items/{item_id}/timeline",
     "GET /dev/workgraph",
     "GET /docs",
@@ -11928,6 +11929,65 @@
             }
           },
           "summary": "Dev Work Item Git Sync"
+        }
+      },
+      "/dev/work-items/{item_id}/phases/{phase}/preview-input.html": {
+        "get": {
+          "description": "Prompt inspector (B): the FULL input a fresh `phase` run would receive \u2014 system prompt +\nprompt body \u2014 as a standalone HTML page for a new browser tab. Reconstructed from the item's\ncurrent state through the live assembly code (faithful by construction); fires nothing.",
+          "operationId": "dev_work_item_preview_input_dev_work_items__item_id__phases__phase__preview_input_html_get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "item_id",
+              "required": true,
+              "schema": {
+                "title": "Item Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "path",
+              "name": "phase",
+              "required": true,
+              "schema": {
+                "title": "Phase",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "default": "global",
+                "title": "Context Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "text/html": {
+                  "schema": {
+                    "type": "string"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Work Item Preview Input"
         }
       },
       "/dev/work-items/{item_id}/plan": {

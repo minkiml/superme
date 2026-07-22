@@ -201,13 +201,70 @@ class AgentService:
                           "pipeline, not from chat.")
     _CATEGORY_DENY = {
         "onboarding": (
-            "Onboarding is already done for this project — it has established memory (anchor docs), "
+            "Onboarding is already done for this project — it has established project's single source of truth (anchor docs), "
             "so the onboarding skills are closed and would overwrite that memory rather than build "
             "on it. To CHANGE an anchor doc, edit the specific section that's wrong (or raise a "
             "work-item for it); to record something new, add it. Don't re-derive the docs."
         ),
     }
     _CATEGORY_DENY_DEFAULT = "The `{category}` skills aren't available in this session."
+
+    def _resolve_scope(self, ctx: Context):
+        """The per-repo scope a turn resolves against: (op_home, const_universal, const_repo,
+        activated_assets). Deterministic from the Context — `_build_options` reuses it for the MCP
+        server + turn plugins, and `assemble_system_append` builds the catalog from it. Factored so
+        the input-preview endpoint resolves scope through the exact same code the live turn does."""
+        op_home = LOCAL_HARNESS_DIR / ctx.id / ctx.mode if ctx.id else None
+        const_universal = CONSTITUTION_DIR / ctx.mode
+        const_repo = (op_home / "constitution") if op_home is not None else None
+        activated_assets = list_repo_assets(const_repo)
+        return op_home, const_universal, const_repo, activated_assets
+
+    def _assemble_append(self, ctx: Context, *, op_home, const_universal, const_repo,
+                         activated_assets, system_append: str | None = None,
+                         background: bool = False) -> str:
+        """Assemble the layer-2 system append (system_prompt.append): persona (WHO) + mode charter
+        (WHAT MODE) + per-repo local charter + constitution CATALOG + operating-context preamble
+        (WHERE) + per-project persona_append + the per-turn session-kind block + (background only)
+        the run contract. THE single assembler — `_build_options` and the input-preview endpoint
+        both call it, so what a preview shows is byte-for-byte what a real turn sends."""
+        charter = self._charters.get(ctx.mode) or self._charters.get("core", "")
+        parts = [self._persona]
+        if charter:
+            parts.append(charter)
+        # Per-repo operational overlay: local-harness/<id>/<mode>/charter.local.md, appended AFTER
+        # the universal mode charter when present. Additive — most repos have none.
+        if op_home is not None:
+            local_charter = op_home / "charter.local.md"
+            if local_charter.is_file():
+                parts.append(local_charter.read_text())
+        # Constitution CATALOG (context-model-spec §1/§2): frontmatter-only (name + description) of
+        # ENABLED in-scope items — universal + this repo's + activated assets; bodies are pulled on
+        # demand via `pull_constitution`. Empty string when there are none.
+        catalog = constitution_catalog(ctx.mode, const_universal, const_repo,
+                                       activated=activated_assets)
+        if catalog:
+            parts.append(catalog)
+        append = "\n\n".join(parts) + self._context_preamble(ctx)
+        if ctx.persona_append:
+            append += f"\n\n{ctx.persona_append}"
+        # Per-turn session-aware block (the Focus/Guard/phase preamble the daemon hands in). Core
+        # stays session-agnostic — it just appends what it's given.
+        if system_append:
+            append += f"\n\n{system_append}"
+        # Background run (Thread 3 §3): a PER-TURN fact appended only on kernel-fired turns.
+        if background:
+            append += f"\n\n{kernel_speech.BACKGROUND_RUN_CONTRACT}"
+        return append
+
+    def assemble_system_append(self, ctx: Context, *, system_append: str | None = None,
+                               background: bool = False) -> str:
+        """Public seam for the input-preview endpoint (B): resolve scope + assemble the exact system
+        append a turn with this (ctx, session_append, background) would send. No side effects."""
+        op_home, const_universal, const_repo, activated_assets = self._resolve_scope(ctx)
+        return self._assemble_append(
+            ctx, op_home=op_home, const_universal=const_universal, const_repo=const_repo,
+            activated_assets=activated_assets, system_append=system_append, background=background)
 
     def _build_options(
         self, ctx: Context, *, resume, model, approve: ApproveFn, extra_mcp_servers,
@@ -217,49 +274,13 @@ class AgentService:
         hooks: dict | None = None, block_categories: set[str] | None = None,
         deny_write_tools: str | None = None, background: bool = False,
     ) -> ClaudeAgentOptions:
-        # Assemble layer-2 append: persona (WHO) + mode charter (WHAT MODE) + preamble
-        # (WHERE) + persona_append (per-project extra). Mode falls back to core.
-        charter = self._charters.get(ctx.mode) or self._charters.get("core", "")
-        parts = [self._persona]
-        if charter:
-            parts.append(charter)
-        # Per-repo operational overlay (renovation §4.11.1): the per-repo operational home is
-        # `local-harness/<id>/<mode>` (under the code, NOT the knowledge tree). Its
-        # `charter.local.md` is appended AFTER the universal mode charter when present, and its
-        # plugin (if any) loads via plugins_for below. Additive — most repos have none.
-        op_home = LOCAL_HARNESS_DIR / ctx.id / ctx.mode if ctx.id else None
-        if op_home is not None:
-            local_charter = op_home / "charter.local.md"
-            if local_charter.is_file():
-                parts.append(local_charter.read_text())
-        # Constitution CATALOG (context-model-spec §1/§2): frontmatter-first. The always-on context
-        # carries only the catalog (name + description) of ENABLED in-scope items — universal
-        # (harness/constitution/<mode>) + this repo's (op_home/constitution); bodies are pulled on
-        # demand via the `pull_constitution` tool (mounted below). Empty string when there are none.
-        const_universal = CONSTITUTION_DIR / ctx.mode
-        const_repo = (op_home / "constitution") if op_home is not None else None
-        # Asset pool (opt-in constitutional knowledge): the shared `local-harness/asset/` pool; this
-        # repo activates slugs via its `.assets` list. A new repo activates none — so its catalog
-        # carries only the true universals + anything it has explicitly turned on.
-        activated_assets = list_repo_assets(const_repo)
-        catalog = constitution_catalog(ctx.mode, const_universal, const_repo, activated=activated_assets)
-        if catalog:
-            parts.append(catalog)
-        append = "\n\n".join(parts) + self._context_preamble(ctx)
-        if ctx.persona_append:
-            append += f"\n\n{ctx.persona_append}"
-        # Per-turn, session-aware append (work-item-session-recognition-prd): the Focus block (a
-        # work-item session, centering the agent on its item) or the Guard block (a general session,
-        # discussion-only). Assembled by the daemon, which knows the session's durable item stamp;
-        # Core stays session-agnostic (it has no spine), so it just appends what it's handed.
-        if system_append:
-            append += f"\n\n{system_append}"
-        # Background run (Thread 3 §3): a PER-TURN fact, not a session property — the same session
-        # is later resumed for interactive chat, and this block simply doesn't appear on those
-        # turns. One factual sentence (kernel-fired, kernel-processed) + the completion-report
-        # fence the kernel parses; the per-phase behaviour lives in each skill's background section.
-        if background:
-            append += f"\n\n{kernel_speech.BACKGROUND_RUN_CONTRACT}"
+        # Resolve the per-repo scope ONCE (the MCP server + turn plugins below reuse it), then
+        # assemble the layer-2 system append through the SAME helper the input-preview endpoint
+        # calls — so a preview is byte-for-byte what this turn sends (no reproduction drift).
+        op_home, const_universal, const_repo, activated_assets = self._resolve_scope(ctx)
+        append = self._assemble_append(
+            ctx, op_home=op_home, const_universal=const_universal, const_repo=const_repo,
+            activated_assets=activated_assets, system_append=system_append, background=background)
         # User-facing turns may not invoke `access: silent` skills (forge-* — internal pipeline
         # machinery); the owning sub-run leaves enforce_silent False so it still can. Computed from
         # the same plugin set the turn loads.

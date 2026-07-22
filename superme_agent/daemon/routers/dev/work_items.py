@@ -9,6 +9,7 @@ import asyncio
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 from ...app_state import (
@@ -356,6 +357,20 @@ async def dev_work_item_timeline(item_id: str, context_id: str = "global") -> di
     turn events (prompt · reply · calls) — the read-only history the chat panel loads before
     live-streaming new frames from the item's event broker. All phases in one chronological view."""
     return build_item_timeline(context_id, item_id)
+
+
+@router.get("/dev/work-items/{item_id}/phases/{phase}/preview-input.html",
+            response_class=HTMLResponse)
+async def dev_work_item_preview_input(item_id: str, phase: str,
+                                      context_id: str = "global") -> HTMLResponse:
+    """Prompt inspector (B): the FULL input a fresh `phase` run would receive — system prompt +
+    prompt body — as a standalone HTML page for a new browser tab. Reconstructed from the item's
+    current state through the live assembly code (faithful by construction); fires nothing."""
+    from ...services.input_preview import build_preview_input, render_input_page
+    data = build_preview_input(context_id, item_id, phase)
+    if data is None:
+        raise HTTPException(status_code=404, detail="work-item or phase not found")
+    return HTMLResponse(render_input_page(data, mode="preview"))
 
 
 @router.post("/dev/work-items/{item_id}/complete", response_model=WorkItemCompleteResponse)
