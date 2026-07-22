@@ -652,23 +652,26 @@ def render_authorizations_block(pending: list[dict], delegated: list[str]) -> st
 
 def deputy_brief_block(item_id: str, title: str, gate: str, brief_md: str, *,
                        mandate: str | None = None, log_digest: str | None = None,
+                       delta: str | None = None,
                        success_signal: str | None = None, vet_note: str | None = None,
                        authorizations: str | None = None) -> str:
     """Consumer: a deputy dispatch's BIRTH prompt (the run's user-message body; the identity/floor
     rides `system_append=deputy_preamble`) · one-shot. The chosen CONTEXT the deputy judges from —
     everything else is deliberately withheld (never the build/vet transcript). Fixed order: mandate
-    → decision log (its only continuity) → the gate brief (the SAME one the owner would read, from
-    `gate_briefs.render_gate_brief`) → at review, the deliverable's verbatim PRD success signal +
-    where the vet results live. Pure over plain strings — the daemon reads the files and passes them
-    in."""
+    → decision log (this gate's prior calls — its continuity) → on a loop RE-ENTRY, the `delta`
+    (what changed since its last call — a lean pointer, never a substitute for the artifacts) → the
+    gate brief (the SAME one the owner would read) → at review, the verbatim PRD success signal + the
+    vet results. Pure over plain strings — the daemon reads the files and passes them in."""
     parts = [f"You are judging the **{gate}** gate of work-item `{item_id}` — \"{title}\".", ""]
     parts += ["### Mandate (this project's standing bar — binding)",
               _cap(mandate or "", _DEPUTY_MANDATE_CAP)
               or "_(no mandate authored yet — judge to the general deputy floor and lean "
                  "conservative.)_", ""]
-    parts += ["### Your decision log (your prior calls on this item — your only continuity)",
+    parts += ["### Your decision log (your prior calls at THIS gate on this item — your continuity)",
               _cap(log_digest or "", _DEPUTY_LOG_CAP)
-              or "_(empty — this is your first recorded call on this item.)_", ""]
+              or "_(empty — this is your first recorded call at this gate.)_", ""]
+    if (delta or "").strip():
+        parts += [_cap(delta.strip(), _DEPUTY_LOG_CAP), ""]
     parts += ["### The gate brief (what the owner would see)",
               _cap(brief_md or "", _DEPUTY_BRIEF_CAP)
               or "_(no brief could be assembled — treat as artifacts-don't-stand-alone.)_", ""]

@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
-import { ScrollText, Loader2, Bot, Sparkles, Pencil, Save, X, Plus, Trash2, Check } from 'lucide-react'
+import { ScrollText, Loader2, Bot, Sparkles, Pencil, Save, X, Plus, Trash2, Check, ShieldCheck } from 'lucide-react'
 import Markdown from '@/ui/Markdown'
 import Modal from '@/ui/Modal'
 import Toggle from '@/ui/Toggle'
 import ArtifactTabs from '@/ui/ArtifactTabs'
 import {
   getConstitutions, toggleConstitution, getLocalPlugins, getHarnessFile, saveHarnessFile,
-  getAssets, assetAction, type AssetItem, type AssetAction,
+  getAssets, assetAction, getDeputyMandate, saveDeputyMandate, type AssetItem, type AssetAction,
   type ManagedConstitution, type HarnessEntry,
 } from '@/lib/api'
 import ConstitutionModal from './ConstitutionModal'
@@ -24,7 +24,7 @@ function stripFrontmatter(text: string): string {
   return m ? text.slice(m[0].length) : text
 }
 
-type Sub = 'constitution' | 'skills' | 'agents'
+type Sub = 'constitution' | 'skills' | 'agents' | 'deputy'
 
 export default function ArtifactsTab({ contextId }: { contextId: string }) {
   const [sub, setSub] = useState<Sub>('constitution')
@@ -69,6 +69,7 @@ export default function ArtifactsTab({ contextId }: { contextId: string }) {
             { key: 'constitution', label: 'Constitution', icon: ScrollText, count: consts?.length ?? null },
             { key: 'skills', label: 'Skills', icon: Sparkles, count: skills?.length ?? null },
             { key: 'agents', label: 'Agents', icon: Bot, count: agents?.length ?? null },
+            { key: 'deputy', label: 'Deputy', icon: ShieldCheck, count: null },
           ]}
         />
         {err && <div className="mb-3 text-sm text-danger">Couldn’t load — {err}</div>}
@@ -120,6 +121,7 @@ export default function ArtifactsTab({ contextId }: { contextId: string }) {
             {(items) => <PluginRows entries={items} onOpen={setOpenPlugin} />}
           </ListOrState>
         )}
+        {sub === 'deputy' && <DeputyPanel contextId={contextId} />}
       </div>
 
       {openConst && (
@@ -387,6 +389,94 @@ function LocalFileModal({ contextId, entry, onClose }: { contextId: string; entr
         )}
       </div>
     </Modal>
+  )
+}
+
+// The deputy mandate — this repo's standing acceptance bar (a governance artifact in the harness
+// cell). One file, so an inline preview + edit panel (not a list): the deputy reads it at every gate
+// it judges while the owner is away. Seeded from a template on connect; edits take effect next dispatch.
+function DeputyPanel({ contextId }: { contextId: string }) {
+  const [content, setContent] = useState<string | null>(null)
+  const [draft, setDraft] = useState('')
+  const [editing, setEditing] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  useEffect(() => {
+    let alive = true
+    setContent(null); setEditing(false)
+    getDeputyMandate(contextId)
+      .then((d) => { if (alive) { setContent(d.content); setDraft(d.content) } })
+      .catch((e) => alive && setErr(String(e)))
+    return () => { alive = false }
+  }, [contextId])
+
+  async function save() {
+    setBusy(true); setErr(null)
+    try {
+      await saveDeputyMandate(draft, contextId)
+      setContent(draft)
+      setEditing(false)
+    } catch (e) {
+      setErr(String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <section>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="flex items-baseline gap-2">
+          <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted">Mandate</h2>
+          <span className="text-[11px] text-faint">the standing bar the deputy judges gates against while you’re away</span>
+        </div>
+        {!editing ? (
+          <button
+            onClick={() => setEditing(true)}
+            disabled={content === null}
+            className="flex items-center gap-1 rounded-md border border-line px-2 py-1 text-[11px] text-muted hover:bg-hover hover:text-fg disabled:opacity-40"
+          >
+            <Pencil size={12} /> Edit
+          </button>
+        ) : (
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => { setEditing(false); setDraft(content ?? '') }}
+              disabled={busy}
+              className="rounded-md border border-line px-2 py-1 text-[11px] text-muted hover:bg-hover hover:text-fg disabled:opacity-40"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={save}
+              disabled={busy || draft === content}
+              className="flex items-center gap-1 rounded-md bg-dev px-2 py-1 text-[11px] font-medium text-white disabled:opacity-40"
+            >
+              {busy ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} Save
+            </button>
+          </div>
+        )}
+      </div>
+      {err && <div className="mb-2 text-sm text-danger">{err}</div>}
+      {content === null ? (
+        <Loading />
+      ) : editing ? (
+        <textarea
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          spellCheck={false}
+          className="h-[60vh] w-full resize-none rounded-lg border border-line bg-surface p-3 font-mono text-[12.5px] leading-relaxed text-fg outline-none focus:border-dev"
+        />
+      ) : (
+        <div className="rounded-lg border border-line bg-surface px-4 py-3">
+          <Markdown text={stripFrontmatter(content)} variant="doc" tone="dev" />
+        </div>
+      )}
+      <p className="mt-2 text-[11px] text-faint">
+        Read alongside <span className="font-mono">project-prd.md</span> — the deliverables’ success signals are the real bar; this adds what the PRD can’t say. Effective on the next deputy dispatch.
+      </p>
+    </section>
   )
 }
 

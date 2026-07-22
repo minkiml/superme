@@ -13,6 +13,7 @@
     "GET /dev/harness/assets",
     "GET /dev/harness/constitution-file",
     "GET /dev/harness/constitutions",
+    "GET /dev/harness/deputy",
     "GET /dev/harness/foundation",
     "GET /dev/harness/local-plugins",
     "GET /dev/harness/plugin-file",
@@ -99,6 +100,7 @@
     "POST /system/sweep",
     "PUT /dev/general/{name}",
     "PUT /dev/harness/constitution-file",
+    "PUT /dev/harness/deputy",
     "PUT /dev/harness/foundation",
     "PUT /dev/harness/plugin-file",
     "PUT /dev/harness/published/{proposal_id}/file",
@@ -1760,6 +1762,66 @@
             "deputy_strictness"
           ],
           "title": "DeputyConfigResponse",
+          "type": "object"
+        },
+        "DeputyMandateBody": {
+          "properties": {
+            "content": {
+              "title": "Content",
+              "type": "string"
+            },
+            "context_id": {
+              "default": "global",
+              "title": "Context Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "content"
+          ],
+          "title": "DeputyMandateBody",
+          "type": "object"
+        },
+        "DeputyMandateResponse": {
+          "description": "The per-repo deputy mandate (the standing acceptance bar). Lives in the harness cell\n(`local-harness/<id>/dev/deputy/mandate.md`); seeded from a template on connect, editable here.",
+          "properties": {
+            "content": {
+              "title": "Content",
+              "type": "string"
+            },
+            "context_id": {
+              "title": "Context Id",
+              "type": "string"
+            },
+            "path": {
+              "title": "Path",
+              "type": "string"
+            }
+          },
+          "required": [
+            "context_id",
+            "path",
+            "content"
+          ],
+          "title": "DeputyMandateResponse",
+          "type": "object"
+        },
+        "DeputyMandateSaveResponse": {
+          "properties": {
+            "context_id": {
+              "title": "Context Id",
+              "type": "string"
+            },
+            "ok": {
+              "title": "Ok",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok",
+            "context_id"
+          ],
+          "title": "DeputyMandateSaveResponse",
           "type": "object"
         },
         "DevLogEvent": {
@@ -8233,6 +8295,17 @@
               ],
               "title": "Run Ctx Pct"
             },
+            "run_feature": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Run Feature"
+            },
             "run_model": {
               "anyOf": [
                 {
@@ -9437,6 +9510,84 @@
             }
           },
           "summary": "Dev Harness Constitution Toggle"
+        }
+      },
+      "/dev/harness/deputy": {
+        "get": {
+          "description": "This repo's deputy mandate \u2014 the standing bar the deputy judges gates against while the owner\nis away. Seeded from a template on first read, so there is always a mandate to show/edit.",
+          "operationId": "dev_harness_deputy_dev_harness_deputy_get",
+          "parameters": [
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "default": "global",
+                "title": "Context Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/DeputyMandateResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Harness Deputy"
+        },
+        "put": {
+          "description": "Save edits to this repo's deputy mandate. Takes effect on the next deputy dispatch (the mandate\nis read per gate); no daemon restart needed.",
+          "operationId": "dev_harness_deputy_save_dev_harness_deputy_put",
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeputyMandateBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/DeputyMandateSaveResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Harness Deputy Save"
         }
       },
       "/dev/harness/foundation": {

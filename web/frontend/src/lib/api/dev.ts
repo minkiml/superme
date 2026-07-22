@@ -74,6 +74,7 @@ export type WorkItem = {
   run_tokens?: number | null // live token count for the current run
   run_model?: string | null // model of the in-flight run
   run_ctx_pct?: number | null // live context-window fill of the in-flight run
+  run_feature?: string | null // the live run's role (triage/plan/build/vet/review/close/deputy)
   model?: string | null // model to show on the card (live run's, else last run's)
   effort?: string | null // configured reasoning effort (low|medium|high) its runs use
   ctx_pct?: number | null // context fill to show on the card (live run's, else last run's)
@@ -174,6 +175,16 @@ export function getFoundation(): Promise<{ files: FoundationFile[]; constitution
 // Save an identity/charter file (key = self | dev-charter | core-charter). Effective next turn.
 export function saveFoundationFile(key: string, content: string): Promise<{ ok: boolean; key: string }> {
   return sendJSON('/api/dev/harness/foundation', 'PUT', { key, content })
+}
+
+// Deputy mandate — this repo's standing acceptance bar (Artifacts → Deputy subtab). A governance
+// artifact in the harness cell (local-harness/<id>/dev/deputy/mandate.md); seeded on connect, wiped
+// on disconnect. Effective on the next deputy dispatch (read per gate).
+export function getDeputyMandate(contextId = 'global'): Promise<{ context_id: string; path: string; content: string }> {
+  return getJSON(`/api/dev/harness/deputy?context_id=${q(contextId)}`)
+}
+export function saveDeputyMandate(content: string, contextId = 'global'): Promise<{ ok: boolean; context_id: string }> {
+  return sendJSON('/api/dev/harness/deputy', 'PUT', { content, context_id: contextId })
 }
 
 export type HarnessFile = { scope: string; kind: string; name: string; path: string; content: string }

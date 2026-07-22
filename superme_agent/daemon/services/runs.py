@@ -257,7 +257,7 @@ def capture_event(repo_id: str, ev, *, run_id: int | None = None, item_id: str |
 def _publish_timeline(item_id: str | None, run_id: int | None, kind: str, name: str,
                       description: str, tool_id: str | None) -> None:
     """Fan a captured event out to any panel watching this item (F2). No-op when nobody's watching
-    (the common headless-autopilot case) so we skip the frame build entirely. Never raises."""
+    (the common background-autopilot case) so we skip the frame build entirely. Never raises."""
     if not item_id or not item_stream.has_subscribers(item_id):
         return
     try:

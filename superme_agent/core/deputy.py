@@ -1,17 +1,20 @@
-"""The deputy's durable, per-project artifacts — mandate + decision log (autopilot slice 4).
+"""The deputy's durable artifacts — the mandate (governance) and the per-item decision log (continuity).
+See general_docs/deputy-memory-lifecycle-design.md for the model.
 
-The deputy SESSION is disposable (minted fresh per gate, dies when the gate is decided). What
-carries forward across an item's gates and across the project's life is written to disk here, in
-the repo's dev-knowledge home (`<id>-knowledge/dev/deputy/`):
+The deputy SESSION is disposable (minted per gate). Two things carry forward, and they are DIFFERENT
+KINDS of thing living in DIFFERENT homes:
 
-  - **mandate.md** — who the deputy is for THIS project and the standing acceptance bar. Durable,
-    versioned like any other artifact. Seeded from a template on first read; the owner / onboarding
-    sharpens it (the project's real bar lives in project-prd.md's success signals).
-  - **decisions.md** — an append-only ledger, one line per call: "I <decided> at <gate> on <item>
-    because <ground>." It is the deputy's ONLY continuity (each dispatch reads it, never a live
-    transcript) AND the owner's accountability trail ("here's what I passed on your behalf, and
-    why"). Never rewritten, only appended — the same never-delete discipline the run trace runs
-    under.
+  - **mandate.md** — the standing acceptance bar for THIS project. A GOVERNANCE artifact (sibling of
+    constitutions), so it lives in the per-repo harness cell `local-harness/<id>/dev/deputy/` (via
+    `deputy_root`), seeded from a template on connect/first-read and wiped on disconnect. The project's
+    real bar lives in project-prd.md's success signals; the mandate adds what the PRD can't say, and is
+    where cross-item consistency is CURATED (not reverse-engineered from a log tail).
+  - **deputy-log.jsonl** — an append-only per-ITEM ledger in the item's own dir (`work-items/<id>/`),
+    one JSON object per call. It is the forgetful deputy's CONTINUITY cache (each dispatch reads its own
+    prior calls at this gate), NOT the accountability record: the permanent, never-deleted accountability
+    trace already lives in the deputy run row (`run.outcome`) and the dev events
+    (`deputy.approve`/`escalate`/`query`). So this file rightly GC's with the item — no never-delete
+    conflict (the record survives via run+events).
 
 Pure + file-based — no daemon imports; unit-testable without a spine. The strictness LEVELS live in
 `kernel_speech` (they're prompt text); this module owns the on-disk artifacts.
@@ -19,15 +22,26 @@ Pure + file-based — no daemon imports; unit-testable without a spine. The stri
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 
 from .session_contract import DEPUTY_DECISIONS
+from ..runtime.config import LOCAL_HARNESS_DIR
 
 # Below this, the item's early-gate advances (triage/plan) are cheap and machine-checked; the
 # send-back CAP (design §5.2 open-question 2, settled: max 3) bounds the deputy's own bouncing so a
 # stuck item surfaces to the owner instead of looping build⟷vet forever.
 SEND_BACK_CAP = 3
+
+
+def deputy_root(repo_id: str) -> Path:
+    """The dev-scope root under which the deputy's artifacts hang, in the per-repo operational cell:
+    `local-harness/<id>/dev`. The mandate is a GOVERNANCE artifact (a sibling of constitutions), so
+    it lives in the harness cell — NOT the knowledge home — and is wiped when the repo disconnects
+    (the disconnect route rmtree's the whole cell). See general_docs/deputy-memory-lifecycle-design.md.
+    `deputy_dir`/`mandate_path`/`log_path` all hang off the value this returns."""
+    return LOCAL_HARNESS_DIR / repo_id / "dev"
 
 
 def deputy_dir(dev_root: Path) -> Path:
@@ -38,8 +52,11 @@ def mandate_path(dev_root: Path) -> Path:
     return deputy_dir(dev_root) / "mandate.md"
 
 
-def log_path(dev_root: Path) -> Path:
-    return deputy_dir(dev_root) / "decisions.md"
+def log_path(item_dir: Path) -> Path:
+    """This item's deputy decision log — an append-only JSONL trail in the item's OWN dir (one object
+    per call). Note the arg is the ITEM dir (`work-items/<id>`), not the deputy home: the log is a
+    per-item continuity cache, whereas the mandate is per-repo governance (see `mandate_path`)."""
+    return Path(item_dir) / "deputy-log.jsonl"
 
 
 MANDATE_TEMPLATE = (
@@ -75,62 +92,75 @@ def read_mandate(dev_root: Path, *, seed: bool = True) -> str:
     return MANDATE_TEMPLATE
 
 
-def _log_entries(dev_root: Path) -> list[dict]:
-    """Parse decisions.md into rows (oldest first). Line shape (append-only):
-    `<iso> · <item_id> · <gate> · <decision> — <because>`."""
-    p = log_path(dev_root)
+def _log_entries(item_dir: Path) -> list[dict]:
+    """Parse this item's deputy-log.jsonl into rows (oldest first). Tolerant of a missing file or a
+    torn last line — a decision is a record, never a reason to 500 a judgment."""
+    p = log_path(item_dir)
     if not p.exists():
         return []
     rows: list[dict] = []
     for line in p.read_text().splitlines():
         line = line.strip()
-        if not line or line.startswith("#"):
+        if not line:
             continue
-        parts = [s.strip() for s in line.split("·", 3)]
-        if len(parts) < 4:
+        try:
+            rows.append(json.loads(line))
+        except ValueError:
             continue
-        when, item_id, gate, tail = parts
-        decision, _, because = tail.partition("—")
-        rows.append({"at": when, "item_id": item_id, "gate": gate,
-                     "decision": decision.strip(), "because": because.strip()})
     return rows
 
 
-def append_decision(dev_root: Path, item_id: str, gate: str, decision: str, because: str) -> None:
-    """Append one call to the ledger. Never rewrites. `decision` is validated against
-    DEPUTY_DECISIONS so a typo can't poison later parsing/counting."""
+def append_decision(item_dir: Path, gate: str, decision: str, because: str, *,
+                    change: str | None = None, authorize: str | None = None) -> None:
+    """Append one deputy call to THIS item's log (one JSON object per line, never rewritten).
+    `decision` is validated against DEPUTY_DECISIONS so a typo can't poison later reads/counting.
+    `change` (the send-back's asked-for fix) and `authorize` (a delegated-grant id) ride along when
+    present — they feed the next dispatch's delta."""
     if decision not in DEPUTY_DECISIONS:
         raise ValueError(f"unknown deputy decision {decision!r}")
-    when = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    because = " ".join((because or "").split())  # one line — the ledger is line-per-entry
-    line = f"{when} · {item_id} · {gate} · {decision} — {because}\n"
-    p = log_path(dev_root)
+    entry = {"at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+             "gate": gate, "decision": decision,
+             "because": " ".join((because or "").split())}
+    if change:
+        entry["change"] = " ".join(change.split())
+    if authorize:
+        entry["authorize"] = authorize
+    p = log_path(item_dir)
     p.parent.mkdir(parents=True, exist_ok=True)
     with p.open("a") as f:
-        f.write(line)
+        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
 
-def item_decisions(dev_root: Path, item_id: str) -> list[dict]:
-    """This item's prior deputy calls, oldest first — the continuity a fresh dispatch reads."""
-    return [r for r in _log_entries(dev_root) if r["item_id"] == item_id]
+def item_decisions(item_dir: Path) -> list[dict]:
+    """This item's deputy calls (every gate), oldest first."""
+    return _log_entries(item_dir)
 
 
-def count_send_backs(dev_root: Path, item_id: str) -> int:
-    """How many times the deputy has already sent THIS item back — the send-back cap counter."""
-    return sum(1 for r in item_decisions(dev_root, item_id) if r["decision"] == "send_back")
+def gate_decisions(item_dir: Path, gate: str) -> list[dict]:
+    """This item's deputy calls AT ONE GATE, oldest first — the continuity a fresh dispatch at that
+    gate reads. Item+gate scoped by design: a gate's deputy never sees another gate's calls, and there
+    is no cross-item precedent here (that is curated into the mandate)."""
+    return [r for r in _log_entries(item_dir) if r.get("gate") == gate]
 
 
-def log_digest(dev_root: Path, item_id: str, *, recent: int = 6) -> str:
-    """The digest injected into a dispatch: this item's full trail (its continuity) plus the last
-    few cross-item calls (standing precedent). Bounded, oldest-first, human-legible."""
-    mine = item_decisions(dev_root, item_id)
-    others = [r for r in _log_entries(dev_root) if r["item_id"] != item_id][-recent:]
-    lines: list[str] = []
-    if mine:
-        lines.append("On this item:")
-        lines += [f"- {r['gate']}: **{r['decision']}** — {r['because']}" for r in mine]
-    if others:
-        lines.append("Recent calls on other items (precedent):")
-        lines += [f"- `{r['item_id']}` {r['gate']}: {r['decision']} — {r['because']}"
-                  for r in others]
+def count_send_backs(item_dir: Path, gate: str | None = None) -> int:
+    """How many times the deputy has already sent this item back — the send-back cap counter. Scoped
+    to a gate when `gate` is given (else item-wide, every gate)."""
+    rows = gate_decisions(item_dir, gate) if gate else _log_entries(item_dir)
+    return sum(1 for r in rows if r.get("decision") == "send_back")
+
+
+def log_digest(item_dir: Path, gate: str) -> str:
+    """The digest injected into a dispatch: this item's prior calls AT THIS GATE (its continuity).
+    Empty when there are none (a first judgment carries no digest). Item+gate scoped — no cross-item
+    precedent, no cross-gate calls."""
+    mine = gate_decisions(item_dir, gate)
+    if not mine:
+        return ""
+    lines = ["Your prior calls at this gate on this item:"]
+    for r in mine:
+        line = f"- **{r.get('decision')}** — {r.get('because') or ''}"
+        if r.get("change"):
+            line += f" (asked: {r['change']})"
+        lines.append(line)
     return "\n".join(lines)

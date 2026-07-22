@@ -21,6 +21,7 @@ from ...schemas.dev.harness import (
     ConstitutionsResponse, ConstitutionToggleResponse, LocalPluginsResponse,
     ConstitutionFileResponse, ConstitutionFileSaveResponse,
     AssetsResponse, AssetActionResponse,
+    DeputyMandateResponse, DeputyMandateSaveResponse,
 )
 
 log = logging.getLogger("superme-agent")
@@ -144,6 +145,43 @@ async def dev_harness_foundation_save(body: FoundationFileBody) -> dict:
     path.write_text(body.content)
     log.info("saved foundation file '%s'", body.key)
     return {"ok": True, "key": body.key}
+
+
+# --- Deputy mandate: the per-repo standing acceptance bar (Artifacts → Deputy subtab) ---------
+# A GOVERNANCE artifact (sibling of constitutions), so it lives in the harness cell
+# (`local-harness/<id>/dev/deputy/mandate.md`) — seeded on connect, wiped on disconnect. Read/write
+# raw markdown, like the Foundations files. See general_docs/deputy-memory-lifecycle-design.md.
+@router.get("/dev/harness/deputy", response_model=DeputyMandateResponse)
+async def dev_harness_deputy(context_id: str = "global") -> dict:
+    """This repo's deputy mandate — the standing bar the deputy judges gates against while the owner
+    is away. Seeded from a template on first read, so there is always a mandate to show/edit."""
+    from ....core import deputy as deputy_core
+    root = deputy_core.deputy_root(context_id)
+    content = deputy_core.read_mandate(root)
+    return {"context_id": context_id, "path": str(deputy_core.mandate_path(root)), "content": content}
+
+
+class DeputyMandateBody(BaseModel):
+    content: str
+    context_id: str = "global"
+
+
+@router.put("/dev/harness/deputy", response_model=DeputyMandateSaveResponse)
+async def dev_harness_deputy_save(body: DeputyMandateBody,
+                                  dev_store: DevStore = Depends(get_dev_store)) -> dict:
+    """Save edits to this repo's deputy mandate. Takes effect on the next deputy dispatch (the mandate
+    is read per gate); no daemon restart needed."""
+    from ....core import deputy as deputy_core
+    if not (body.content or "").strip():
+        raise HTTPException(status_code=400, detail="content is empty")
+    p = deputy_core.mandate_path(deputy_core.deputy_root(body.context_id))
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(body.content)
+    log.info("saved deputy mandate for '%s'", body.context_id)
+    dev_store.log_event(
+        body.context_id, "harness.edited", "Edited the deputy mandate",
+        scope="dev", actor="owner", meta={"artifact": "deputy-mandate"})
+    return {"ok": True, "context_id": body.context_id}
 
 
 # --- Chat "/" palette: mode-correct, fresh-from-disk, category-filtered -----------------------

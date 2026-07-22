@@ -159,6 +159,14 @@ async def connect_repo(body: RepoConnectBody, spine: SystemSpine = Depends(get_s
         spine.add_repo(rc)
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e)) from e
+    # Seed the deputy mandate boilerplate in the harness cell so a freshly connected repo already has
+    # a standing bar to judge against + something to edit in the Deputy subtab (wiped on disconnect,
+    # since disconnect rmtree's the whole local-harness/<id>/ cell). Best-effort — never fail connect.
+    try:
+        from ...core import deputy as deputy_core
+        deputy_core.read_mandate(deputy_core.deputy_root(rid))  # seed=True writes the template
+    except Exception:
+        log.warning("deputy mandate seed skipped for '%s'", rid, exc_info=True)
     log.info("connected repo '%s' (%s) at %s [%s]", rid, label, p, onboarding)
     return {"id": rid, "label": label, "cwd": str(p), "onboarding": onboarding}
 

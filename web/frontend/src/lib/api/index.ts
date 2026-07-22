@@ -27,6 +27,8 @@ export {
   runDistill,
   getFoundation,
   saveFoundationFile,
+  getDeputyMandate,
+  saveDeputyMandate,
   getHarnessPlugins,
   getLocalPlugins,
   getHarnessFile,

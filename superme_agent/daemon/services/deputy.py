@@ -10,7 +10,7 @@ robot can neither end nor ratify work.
   identity + floor + strictness  →  kernel_speech.deputy_preamble  (run_turn system_append)
   the chosen context to judge    →  kernel_speech.deputy_brief_block (the prompt body)
   the verdict it emits           →  session_contract.parse_deputy_verdict
-  its durable memory + trail      →  core.deputy (mandate.md + decisions.md)
+  its mandate + per-item log      →  core.deputy (mandate.md in the harness cell + deputy-log.jsonl per item)
 
 The dispatch seam is `gates.maybe_autopilot_advance`: when the deputy is enabled it schedules
 `run_deputy_gate` instead of a blind auto-advance, so every autopilot gate is judged by SOMEONE
@@ -56,6 +56,49 @@ def _success_signal(dev_root: Path, item: dict) -> str | None:
         return None
 
 
+def _build_delta(item_dir: Path, gate: str, numbers: dict) -> str | None:
+    """The 'since your last call at this gate' delta (design §5) — assembled ONLY on a loop re-entry
+    (a prior send-back at this gate exists). Lean and structured: what the deputy asked, the agent's
+    latest checkpoint, and the movement counts the gate brief already computed. A POINTER, not the
+    source — the deputy still drills into the full artifacts on demand. None on a first judgment."""
+    prior = [r for r in deputy_core.gate_decisions(item_dir, gate) if r.get("decision") == "send_back"]
+    if not prior:
+        return None
+    asked = prior[-1].get("change") or prior[-1].get("because") or "(the change you asked for)"
+    lines = ["### Since your last call at this gate (a pointer — verify against the artifacts)",
+             f"- You asked (send_back): \"{asked}\""]
+    try:
+        from ...core import artifacts as _arts
+        cp = _arts.latest_checkpoint(item_dir, char_cap=400)
+        if cp:
+            head = next((ln.strip() for ln in (cp.get("text") or "").splitlines()
+                         if ln.strip() and not ln.startswith("#") and not ln.startswith("---")), None)
+            if head:
+                lines.append(f"- The agent's latest checkpoint: \"{head[:160]}\"")
+    except Exception:
+        pass
+    prog = []
+    if numbers.get("tasks_total"):
+        prog.append(f"tasks {numbers.get('tasks_done', 0)}/{numbers['tasks_total']}")
+    if numbers.get("cycle"):
+        prog.append(f"vet {numbers['cycle']} cycle(s)")
+    if numbers.get("checks_total"):
+        prog.append(f"{numbers.get('checks_pass', 0)}/{numbers['checks_total']} checks pass")
+    if prog:
+        lines.append("- Movement: " + " · ".join(prog))
+    lines.append("→ Judge whether the asked-for change is now met — re-inspect the delta, not the whole "
+                 "item from scratch. Open the full artifacts (brief below) if anything is unclear.")
+    return "\n".join(lines)
+
+
+def _in_review_loop(item_dir: Path) -> bool:
+    """True once the review deputy has sent this item back at least once — meaning we are inside the
+    review↔(plan-build-vet) macro-loop that the (single, persistent) review deputy OWNS (Fork A,
+    forward-only lifetime). The only route back to the plan gate after a review send-back is that
+    send-back, so a prior review send-back is a sufficient signal."""
+    return deputy_core.count_send_backs(item_dir, "review") > 0
+
+
 async def run_deputy_gate(context_id: str, item_id: str) -> None:
     """Dispatch the deputy at the item's current gate, then execute its verdict. Best-effort and
     self-contained: any failure leaves the item resting at `awaiting_human` for the owner (the safe
@@ -72,6 +115,19 @@ async def run_deputy_gate(context_id: str, item_id: str) -> None:
             return
         gate = deputy_gate_for(item)
         if gate is None:
+            return
+        # FLOW-THROUGH (Fork A, forward-only lifetime): when the item is back at the PLAN gate inside a
+        # live review loop, the persistent REVIEW deputy owns this loop — a fresh plan deputy must not
+        # compete. Skip the plan judgment and auto-advance to build; the review deputy re-judges the
+        # end result when the work climbs back. (Only plan can be re-entered backward; triage never is.)
+        if gate == "plan" and _in_review_loop(dev_root / "work-items" / item_id):
+            from . import gates as gate_svc
+            _dev_store.log_event(context_id, "deputy.flow_through",
+                                 "Plan gate flowed through un-judged — inside a review loop the review "
+                                 "deputy owns the decision",
+                                 item_id=item_id, actor="deputy",
+                                 meta={"gate": gate, "reason": "review_loop"})
+            gate_svc.autopilot_advance(ctx, context_id, item_id, actor="deputy")
             return
         # Open the deputy run — this takes the item's run-lock, so nothing else advances the item
         # while it judges. None ⇒ something is already running it; yield (it will re-rest at the gate).
@@ -114,8 +170,13 @@ async def _judge(ctx, context_id: str, item_id: str, item: dict, gate: str, dev_
     git_health = None
     brief = gate_briefs.render_gate_brief(item, item_dir, dev_root, ctx.cwd,
                                           all_items=all_items, events=events, git_health=git_health)
-    mandate = deputy_core.read_mandate(dev_root)
-    digest = deputy_core.log_digest(dev_root, item_id)
+    dep_root = deputy_core.deputy_root(context_id)  # mandate lives in the harness cell, not knowledge
+    mandate = deputy_core.read_mandate(dep_root)
+    digest = deputy_core.log_digest(item_dir, gate)  # this item's prior calls AT THIS GATE (continuity)
+    # On a loop RE-ENTRY (a prior send-back at this gate exists), feed a lean "since your last call"
+    # delta so the deputy re-judges the DELTA, not the whole item from scratch (design §5). It is a
+    # POINTER — the full artifacts stay on demand in the brief; never a substitute for ground truth.
+    delta = _build_delta(item_dir, gate, brief.get("numbers") or {})
     signal = _success_signal(dev_root, item) if gate == "review" else None
     # BV-A2.3: at review, surface the pending authorization requests + which scopes are delegated,
     # so the deputy can grant a delegated one (send_back + authorize) or escalate an owner-reserved one.
@@ -128,7 +189,8 @@ async def _judge(ctx, context_id: str, item_id: str, item: dict, gate: str, dev_
                 pending, _spine.get_deputy_delegated_authority())
     prompt = kernel_speech.deputy_brief_block(
         item_id, str(item.get("title") or item_id), gate, brief.get("brief", ""),
-        mandate=mandate, log_digest=digest, success_signal=signal, authorizations=auth_block)
+        mandate=mandate, log_digest=digest, delta=delta, success_signal=signal,
+        authorizations=auth_block)
     system_append = kernel_speech.deputy_preamble(strictness)
     capture_prompt(context_id, f"[deputy] judging the {gate} gate", item_id=item_id)
     final_text = None
@@ -176,10 +238,12 @@ def _act_on_verdict(ctx, context_id: str, item_id: str, gate: str, verdict: dict
         return
     decision = verdict["decision"]
     because = verdict.get("because") or verdict.get("checked") or ""
-    # Record the call first — the ledger is the deputy's accountability trail and the next dispatch's
-    # only continuity, so it must land even if the downstream action then fails.
+    # Record the call first into THIS item's continuity log (its per-item scratch memory). The durable
+    # accountability trail is the run row + dev events below; this must still land even if the
+    # downstream action then fails, so the next dispatch sees what it already decided.
     try:
-        deputy_core.append_decision(dev_root, item_id, gate, decision, because)
+        deputy_core.append_decision(dev_root / "work-items" / item_id, gate, decision, because,
+                                    change=verdict.get("change"), authorize=verdict.get("authorize"))
     except Exception:
         log.exception("deputy decision-log append failed for %s", item_id)
     if decision == "approve":
@@ -264,7 +328,9 @@ def _do_send_back(ctx, context_id: str, item_id: str, gate: str, verdict: dict) 
     needs, not a 4th silent loop."""
     dev_root = ctx.internal_root / "dev"
     change = verdict.get("change") or verdict.get("because") or ""
-    prior = deputy_core.count_send_backs(dev_root, item_id)  # includes the one just logged
+    # Cap is per-GATE (per-episode, forward-only model): a review loop gets its own 3 tries, not
+    # capped by earlier plan send-backs. Includes the call just logged.
+    prior = deputy_core.count_send_backs(dev_root / "work-items" / item_id, gate)
     if prior >= deputy_core.SEND_BACK_CAP:
         _do_escalate(ctx, context_id, item_id, gate, verdict, reason="send_back_cap",
                      override=(f"The deputy has sent this item back {prior}× and it still isn't "

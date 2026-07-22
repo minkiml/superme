@@ -76,6 +76,19 @@ class FoundationFileSaveResponse(BaseModel):
     key: str
 
 
+class DeputyMandateResponse(BaseModel):
+    """The per-repo deputy mandate (the standing acceptance bar). Lives in the harness cell
+    (`local-harness/<id>/dev/deputy/mandate.md`); seeded from a template on connect, editable here."""
+    context_id: str
+    path: str
+    content: str
+
+
+class DeputyMandateSaveResponse(BaseModel):
+    ok: bool
+    context_id: str
+
+
 class PluginFileResponse(BaseModel):
     """The raw markdown of one skill/agent (popup preview/edit source)."""
     scope: str
