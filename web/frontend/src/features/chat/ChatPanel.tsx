@@ -79,6 +79,7 @@ export default function ChatPanel({
   const [timelineKey, setTimelineKey] = useState(0)   // parent bumps → TimelineView re-fetches history
   const [boundPhase, setBoundPhase] = useState<string | null>(null)
   const [boundRunning, setBoundRunning] = useState(false)
+  const [runFeature, setRunFeature] = useState<string | null>(null) // the live run's role → the chat verb (Building… / Deputy reviewing…)
 
   const sessions = useSessions(contextId, mode)
   const socket = useAgentSocket(contextId, mode, {
@@ -131,18 +132,36 @@ export default function ChatPanel({
   // authoritative history and drop the reconciled live-frame tail.
   useEffect(() => {
     const id = chipItem?.id
-    if (!id || mode !== 'dev') { setBoundPhase(null); setBoundRunning(false); return }
+    if (!id || mode !== 'dev') {
+      setBoundPhase(null); setBoundRunning(false); setRunFeature(null)
+      return
+    }
     let alive = true
-    let prev = false
+    let prevRunning = false
+    let prevPhase: string | null = null
+    let ticks = 0
     const pull = () =>
       getWorkItemDetail(id, contextId)
         .then((d) => {
           if (!alive) return
           const running = !!d.item.running
-          setBoundPhase(d.item.phase ?? null)
+          const phase = d.item.phase ?? null
+          setBoundPhase(phase)
           setBoundRunning(running)
-          if (prev && !running) { setTimelineKey((k) => k + 1); setLiveFrames([]) }
-          prev = running
+          setRunFeature(running ? d.item.run_feature ?? null : null)
+          ticks += 1
+          // Re-pull the authoritative trail on any STRUCTURAL change (phase moved, or a run just
+          // ended) AND on a slow heartbeat while running. The timeline endpoint includes in-progress
+          // runs, so this lands every phase's bubbles within a couple seconds with no manual refresh —
+          // the old code re-fetched ONLY on the running true→false edge, which fast back-to-back
+          // autopilot runs slipped past (build/vet/deputy went missing until a hard refresh). The view
+          // dedups liveFrames against loaded history by run, so extra fetches never double-render.
+          const structural = phase !== prevPhase || (prevRunning && !running)
+          const heartbeat = running && ticks % 2 === 0
+          if (structural) { setTimelineKey((k) => k + 1); setLiveFrames([]) }
+          else if (heartbeat) setTimelineKey((k) => k + 1)
+          prevRunning = running
+          prevPhase = phase
         })
         .catch(() => {})
     pull()
@@ -381,9 +400,8 @@ export default function ChatPanel({
             currentPhase={boundPhase}
             liveFrames={liveFrames}
             interactiveLive={socket.live}
-            statusLabel={socket.statusLabel}
             busy={socket.busy}
-            elapsed={socket.elapsed}
+            runFeature={runFeature}
           />
           {socket.approval && (
             <div className="shrink-0 px-3 pb-1">

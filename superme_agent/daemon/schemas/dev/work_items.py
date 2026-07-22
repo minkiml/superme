@@ -117,6 +117,7 @@ class WorkItem(BaseModel):
     run_tokens: int | None = None
     run_model: str | None = None
     run_ctx_pct: int | None = None
+    run_feature: str | None = None  # the live run's role (triage/plan/…/deputy) — drives the chat verb
     ctx_pct: int | None = None
     tasks: WorkItemTasks | None = None
 

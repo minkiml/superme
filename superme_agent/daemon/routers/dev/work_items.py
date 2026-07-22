@@ -297,7 +297,8 @@ async def dev_work_item_delete(item_id: str, context_id: str = "global",
 @router.get("/dev/work-items/{item_id}/detail", response_model=WorkItemDetailResponse,
             response_model_exclude_unset=True)
 async def dev_work_item_detail(item_id: str, context_id: str = "global",
-                               dev: DevKnowledgeService = Depends(get_dev)) -> dict:
+                               dev: DevKnowledgeService = Depends(get_dev),
+                               spine: SystemSpine = Depends(get_spine)) -> dict:
     """A work-item's review payload: its frontmatter/body plus the rendered artifact content
     the review popup shows — plan.md and prd.md as Markdown bodies, the plan's `## Tasks` as a
     structured `{text, done}` checklist, and the COMPUTED per-artifact status map (S2: derived
@@ -307,6 +308,11 @@ async def dev_work_item_detail(item_id: str, context_id: str = "global",
     item = dev.read_work_item(dev_root, item_id)
     if item is None:
         raise HTTPException(status_code=404, detail="work-item not found")
+    # Decorate with the SAME live-run telemetry the board carries (running · run_tokens · run_ctx_pct
+    # · accumulated tokens), so a drilldown poll drives the chat's live "thinking… · Ns · N tokens"
+    # indicator. `read_work_item` returns raw frontmatter only — the enrich is what fills these.
+    live_by_item = {r["item_id"]: r for r in spine.live_runs(context_id) if r.get("item_id")}
+    dev.enrich_work_items(dev_root, [item], live_by_item, spine.run_stats(context_id, mode="dev"))
     item_dir = dev_root / "work-items" / item_id
     return {
         "item": item,

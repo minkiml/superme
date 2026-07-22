@@ -391,6 +391,9 @@ class DevKnowledgeService:
             it["run_tokens"] = info["tokens"] if info else None
             it["run_model"] = info.get("model") if info else None
             it["run_ctx_pct"] = info.get("ctx_pct") if info else None
+            # The live run's role (triage/plan/build/vet/review/close/deputy) — lets the chat label
+            # the incoming indicator by what's actually running ("Building…" vs "Deputy reviewing…").
+            it["run_feature"] = info.get("feature") if info else None
             # The model to show: the live run's, else the item's CONFIGURED model (frontmatter — what
             # its runs use), else the last run's. Configured wins over telemetry so a reconfigured-
             # but-not-yet-rerun item shows what it WILL use.

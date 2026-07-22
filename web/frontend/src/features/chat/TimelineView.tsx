@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Bot, User, ShieldCheck, Loader2 } from 'lucide-react'
+import { Bot, User, ShieldCheck } from 'lucide-react'
 import Markdown from '@/ui/Markdown'
 import { getWorkItemTimeline, type WorkItemTimeline } from '@/lib/api/dev'
 import type { TimelineFrame } from './hooks/useAgentSocket'
@@ -13,6 +13,12 @@ import type { TimelineFrame } from './hooks/useAgentSocket'
 
 const PHASE_LABEL: Record<string, string> = {
   triage: 'Triage', plan: 'Plan', build: 'Build', vet: 'Vet', review: 'Review', close: 'Close',
+}
+
+// The present-participle a running phase shows in the live indicator ("Building…").
+const PHASE_VERB: Record<string, string> = {
+  triage: 'Triaging', plan: 'Planning', build: 'Building', vet: 'Vetting', review: 'Reviewing',
+  close: 'Closing',
 }
 
 type Speaker = 'you' | 'agent' | 'deputy'
@@ -38,8 +44,8 @@ const SPEAKER_META: Record<Speaker, { label: string; Icon: typeof Bot; tint: str
 }
 
 export default function TimelineView({
-  itemId, contextId, refreshKey, running, currentPhase, liveFrames, interactiveLive, statusLabel,
-  busy, elapsed,
+  itemId, contextId, refreshKey, running, currentPhase, liveFrames, interactiveLive,
+  busy, runFeature,
 }: {
   itemId: string
   contextId: string
@@ -48,9 +54,8 @@ export default function TimelineView({
   currentPhase: string | null
   liveFrames: TimelineFrame[]     // socket `timeline` frames since the last history load (parent clears on refresh)
   interactiveLive: string         // the in-progress interactive turn's streaming text (intake)
-  statusLabel: string | null      // the interactive turn's current tool, if any
-  busy: boolean                   // an interactive (owner-fired) turn is in flight — drives "thinking…"
-  elapsed: number                 // seconds since that turn started
+  busy: boolean                   // an interactive (owner-fired) turn is in flight — drives the "Thinking…" verb
+  runFeature: string | null       // the live run's role (triage/…/deputy) → the phase-specific verb
 }) {
   const [data, setData] = useState<WorkItemTimeline | null>(null)
   const [err, setErr] = useState<string | null>(null)
@@ -93,12 +98,27 @@ export default function TimelineView({
   }, [data])
 
   // Live frames (background build/vet) → append to the CURRENT phase lane. Reply frames become
-  // bubbles; tool frames just bump a live tool count shown on the running indicator.
+  // bubbles; tool frames just bump a live tool count shown on the running indicator. Dedup against
+  // loaded history: the parent re-fetches the authoritative trail on a heartbeat, so a reply already
+  // in `data` must be suppressed here or it renders twice. We skip the FIRST N live reply frames per
+  // run, where N is how many replies history already has for that run — so genuinely newer frames
+  // (streamed since the last fetch) still show instantly while settled ones defer to history.
+  const historyReplies: Record<number, number> = {}
+  for (const run of data?.runs ?? []) {
+    const rid = run.run_id ?? -1
+    historyReplies[rid] = (run.events ?? []).filter((e) => e.kind === 'reply').length
+  }
   const liveBubbles: Bubble[] = []
+  const seenPerRun: Record<number, number> = {}
   let liveTools = 0
   for (let i = 0; i < liveFrames.length; i++) {
     const f = liveFrames[i]
     if (f.kind === 'reply') {
+      const rid = f.run_id ?? -1
+      const already = historyReplies[rid] ?? 0
+      const seen = seenPerRun[rid] ?? 0
+      seenPerRun[rid] = seen + 1
+      if (seen < already) continue // this reply is already rendered from history
       liveBubbles.push({ key: `live-${i}`, speaker: 'agent', phase: currentPhase, text: f.description || '', live: true })
     } else {
       liveTools += 1
@@ -110,11 +130,6 @@ export default function TimelineView({
   }
 
   const all = [...bubbles, ...liveBubbles]
-  // Only the NEWEST live bubble is genuinely still streaming — a broker `reply` frame is a COMPLETED
-  // message, so spinning every past live bubble reads as "all of these are still writing" (they're
-  // not). Spin just the last one; the rest are done.
-  let lastLiveIdx = -1
-  for (let i = 0; i < all.length; i++) if (all[i].live) lastLiveIdx = i
 
   // Auto-scroll to the newest as content grows.
   useEffect(() => {
@@ -149,7 +164,6 @@ export default function TimelineView({
                 <div className="mb-0.5 flex items-center gap-1.5 text-[10px] text-faint">
                   <span className={sm.tint}>{sm.label}</span>
                   {b.phase && <span>· {PHASE_LABEL[b.phase] ?? b.phase}</span>}
-                  {i === lastLiveIdx && <Loader2 size={9} className="animate-spin" />}
                 </div>
                 <div className={`rounded-lg border px-2.5 py-1.5 text-[12.5px] text-fg ${sm.bubble}`}>
                   <Markdown text={b.text} variant="chat" tone="dev" />
@@ -160,28 +174,25 @@ export default function TimelineView({
         )
       })}
 
-      {running && (
-        <div className="flex items-center gap-1.5 px-1 pt-0.5 text-[11px] text-accent-text">
-          <Loader2 size={12} className="animate-spin" />
-          <span>{statusLabel ? `${statusLabel}…` : `${PHASE_LABEL[currentPhase ?? ''] ?? 'Agent'} working…`}</span>
-          {liveTools > 0 && <span className="text-faint">· {liveTools} step{liveTools === 1 ? '' : 's'}</span>}
-        </div>
-      )}
-
-      {/* The interactive (owner-fired) turn's thinking indicator — the bouncing dots + elapsed the
-          old MessageList showed. Distinct from `running` above (that's the item's BACKGROUND phase run);
-          this fires only while an intake-phase turn the owner typed is in flight. */}
-      {busy && !running && (
-        <div className="flex items-center gap-2 px-1 pt-0.5 text-[11px] text-muted">
-          <span className="flex gap-0.5">
-            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--chat-accent)] [animation-delay:-0.3s]" />
-            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--chat-accent)] [animation-delay:-0.15s]" />
-            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--chat-accent)]" />
-          </span>
-          <span>{statusLabel ? `${statusLabel}…` : interactiveLive.trim() ? 'responding…' : 'thinking…'}</span>
-          <span className="tabular-nums text-faint">{elapsed.toFixed(1)}s</span>
-        </div>
-      )}
+      {/* The live incoming indicator — a gently blinking phase verb, no elapsed (the work-item card
+          already owns the live timer; a second one here just duplicates it and ticks a hair off).
+          Covers both a background phase run (`running` — Building… / Vetting… / Deputy reviewing…)
+          and an interactive owner turn (`busy` — Thinking… / Responding…). */}
+      {(running || busy) && (() => {
+        const verb = running
+          ? (runFeature === 'deputy' ? 'Deputy reviewing' : PHASE_VERB[currentPhase ?? ''] ?? 'Working')
+          : interactiveLive.trim() ? 'Responding' : 'Thinking'
+        return (
+          <div className="flex items-center gap-1.5 px-1 pt-0.5 text-[11px] text-muted">
+            <span className="flex gap-0.5">
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--chat-accent)] [animation-delay:-0.3s]" />
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--chat-accent)] [animation-delay:-0.15s]" />
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--chat-accent)]" />
+            </span>
+            <span className="animate-pulse text-accent-text">{verb}…</span>
+          </div>
+        )
+      })()}
     </div>
   )
 }
