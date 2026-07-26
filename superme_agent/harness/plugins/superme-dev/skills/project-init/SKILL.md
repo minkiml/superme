@@ -13,15 +13,15 @@ minted first and always; work-items only after Step 6's approval and the owner's
 Per-file authoring guides live in this plugin's `general-dev-knowledge-asset/` folder (paths below
 are relative to this skill).
 
-## Step 1 — Confirm the cold start
+## Step 1: Confirm the cold start
 Read `general/` at the injected dev-knowledge root. If the anchor docs already hold real content, stop:
 this is drift, not init — name the doc to edit and hand back.
 
-## Step 2 — Load the contract
+## Step 2: Load the contract
 Pull the `dev-knowledge-structure` constitution (the doc set, the two-tier scaffold, the conventions).
 Read a doc's guide from `../../general-dev-knowledge-asset/<doc>.md` before you draft it.
 
-## Step 3 — Pre-study, then report back
+## Step 3: Pre-study, then report back
 Before you ask anything, learn what you could have looked up. Spawn focused research subagents (one per
 question, self-contained prompt, explicit return shape) on what is knowable **from outside**: stack norms
 and conventions, the plumbing available, data, comparable systems and what they got right, hard constraints.
@@ -33,7 +33,7 @@ anchors them to your guess instead of surfacing theirs.
 Then **report before you question** — a short "here's what I found · here's what I still need from you."
 Cheap, and it lets the owner correct a wrong premise before it drives twenty questions.
 
-## Step 4 — Grill the owner
+## Step 4: Grill the owner
 Relentlessly interview the owner one question at a time, resolving dependencies as you go.
 Cover the PRD's sections (see its guide): what it is · who it's for · **why it exists** (the real
 reason, not the pitch) · goals now vs direction · the **deliverables** (the value chunks that become
@@ -62,7 +62,7 @@ Rules that keep it readable:
 Question the pre-study too: if Step 3 turned up a convention that conflicts with what the owner wants,
 say so now rather than quietly following one of them.
 
-## Step 5 — Draft the anchor set
+## Step 5: Draft the anchor set
 Write the docs into `general/`, each following its guide in `../../general-dev-knowledge-asset/`:
 `project-prd.md` (identity · goals · non-goals · deliverables as value) · `architecture.md` (the
 intended stack, the invariants you're committing to, and what you're deliberately not building) ·
@@ -73,11 +73,11 @@ roadmap carry the weight; architecture's components and flows grow as code lands
 After drafting `architecture.md`, call `suggest_assets` with its text — it auto-adopts the confidently-relevant
 pooled assets for this repo; note which were adopted (the owner curates them later in the dashboard).
 
-## Step 6 — Approval gate
+## Step 6: Approval gate
 Present the draft set, iterate with the owner, and converge. Nothing is established until they approve;
 a thin-but-real set passes.
 
-## Step 7 — Propose the launch, then launch it
+## Step 7: Propose the launch, then launch it
 Memory is now established. Offer to put the near-term deliverables into motion as a **launch cohort** —
 a set of work-items that run themselves through triage → plan → build⟷vet → review on autopilot, with
 no human until a review gate.
@@ -95,7 +95,7 @@ no human until a review gate.
    the `Needs`. The tool creates them all on autopilot, parks dependents at `awaiting_upstream`, and
    starts the ready ones.
 
-## Step 8 — Close out
+## Step 8: Close out
 State what is now **in motion** (not merely what was created), **when the owner is next needed**, and
 the **one place to watch** — the failure mode this replaces is a chat that just stops. Read it off the
 tool's result:

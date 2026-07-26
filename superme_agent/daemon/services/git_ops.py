@@ -22,6 +22,7 @@ from pathlib import Path
 from fastapi import HTTPException
 
 from ...core import artifacts, git_layer, knowledge_delta
+from ...core import autopilot as _autopilot
 
 log = logging.getLogger("superme-agent")
 
@@ -103,6 +104,18 @@ def review_merge(ctx, context_id: str, item_id: str, *, dev, dev_store, spine) -
             status_code=409,
             detail=f"merge is a review-gate action — this item is in `{item.get('phase')}`. "
                    "Drive it to the review gate first (the review decision IS the merge).")
+    # Throwaway prompt-extraction probe: never merge (and never apply its knowledge delta to the
+    # shared anchor docs — both live BELOW this early return). Return a SYNTHETIC merged=True so the
+    # caller (advance_item) still advances review → close, letting the close prompt get captured
+    # before the item is torn down. The real code/knowledge changes ride the disposable worktree,
+    # which is deleted at cleanup — main and the anchor docs are never touched.
+    if _autopilot.is_prompt_extraction(item):
+        dev_store.log_event(context_id, "git.merge",
+                            "Skipped merge (throwaway prompt-extraction probe — never lands on main)",
+                            item_id=item_id, actor="daemon", meta={"skipped": "prompt_extraction"})
+        return {"ok": True, "merged": True, "path": "prompt-extraction-skip",
+                "skipped": "prompt_extraction", "knowledge_ops_applied": None,
+                "knowledge_folded_into": None, "lint_warnings": None}
     branch = item.get("git_branch")
     if not branch:
         raise HTTPException(status_code=409, detail="item has no branch (created on build entry)")

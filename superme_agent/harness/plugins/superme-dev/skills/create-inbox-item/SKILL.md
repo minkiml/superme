@@ -11,7 +11,7 @@ Turn real work that surfaced in conversation into an Item Inbox ticket the owner
 work-item — by creating a new item, or by augmenting an existing one that already covers it. You only
 author the ticket; you never start the work itself.
 
-## Step 1 - Check the Item Inbox first
+## Step 1: Check the Item Inbox first
 
 Call `read_inbox` and scan the open items for one that already covers this work (same target + intent).
 
@@ -20,7 +20,7 @@ Call `read_inbox` and scan the open items for one that already covers this work 
   "I found item #N — \"<title>\" — it already covers this."
 - **Match, but this discussion adds something new** → augment it → step 3.
 
-## Step 2 - Create (new ticket)
+## Step 2: Create (new ticket)
 
 Compose the `body` in this exact shape (read a file only to pin down a reference — don't go implement):
 
@@ -59,7 +59,7 @@ behind it.
 (independent but gates the parent's completion; auto-pushes) · `spawn` (speculative follow-up;
 waits in the inbox for the owner's push). Omit both for ordinary discussion tickets.
 
-## Step 3 - Augment (existing item)
+## Step 3: Augment (existing item)
 
 You reach here when `read_inbox` matched an item that covers this work but is MISSING something this
 discussion just added. Never re-file it and never edit its existing text.
@@ -74,7 +74,7 @@ discussion just added. Never re-file it and never edit its existing text.
 3. **Call `append_inbox_item(item_id, addition)`** — one call per item. It preserves the existing
    content and marks the item agent-touched (origin gains `agent`).
 
-## Step 4 - Confirm
+## Step 4: Confirm
 
 Reply with ONE short line matching the case, then return to the discussion — no recap of the body:
 

@@ -90,10 +90,10 @@ category: <optional>
 
 <one line: what this establishes / produces>
 
-## Step 1 — <title>
-<imperative instruction>. <the non-obvious *why*, if the step has one.>
+## Step 1: <title>
+- <imperative instruction>. <the non-obvious *why*, if the step has one.>
 
-## Step 2 — <title>
+## Step 2: <title>
 …
 
 ## Pitfalls

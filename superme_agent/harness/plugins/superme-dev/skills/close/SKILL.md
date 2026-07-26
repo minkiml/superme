@@ -11,7 +11,7 @@ Write the record this item leaves behind. The kernel VERIFIES the facts against 
 (files must exist, the merge commit must be real) and rejects fabrication — write only what is
 true of the repo as it stands.
 
-## 1 — Draft the closeout
+## Step 1: Draft the closeout
 
 `scaffold_artifact(item_id, "closeout")`, then fill:
 
@@ -23,21 +23,21 @@ true of the repo as it stands.
 - **Artifacts** — bullet the item-folder paths worth keeping (plan, validation, readiness,
   findings); the folder persists after completion.
 
-## 2 — Reconcile loose ends
+## Step 2: Reconcile loose ends
 
-Unfinished `## Tasks` boxes, spawned children still open, follow-ups discovered late: name each
-and where it went (a spawn item, struck with the owner, or genuinely dropped). A clean closeout
-has no silent leftovers — anything worth doing later becomes `create_inbox_item` (relation
-`spawn`).
+- Unfinished `## Tasks` boxes, spawned children still open, follow-ups discovered late: name each and
+where it went (a spawn item, struck with the owner, or genuinely dropped).
+- A clean closeout has no silent leftovers — anything worth doing later becomes `create_inbox_item`
+(relation `spawn`).
 
-## 3 — Propose the close
+## Step 3: Propose the close
 
-Bank a final checkpoint if the session ran long, then call `propose_close(item_id)`. It runs the
-kind's mechanical close criteria (required artifacts clean, closeout claims verified, evidence
-fresh, merged-or-logged, knowledge row resolved, children terminal) — a red criterion comes back
-as an itemized fix list; repair and re-propose. All green pages the owner at the close gate;
-completion itself is their promotion, never yours. If a blocking parent is waiting on this item,
-say so — completing it is what resumes the parent.
+- Bank a final checkpoint if the session ran long, then call `propose_close(item_id)`. It runs the
+kind's mechanical close criteria (required artifacts clean, closeout claims verified, evidence fresh,
+merged-or-logged, knowledge row resolved, children terminal) — a red criterion comes back as an
+itemized fix list; repair and re-propose.
+- All green pages the owner at the close gate; completion itself is their promotion, never yours. If a
+blocking parent is waiting on this item, say so — completing it is what resumes the parent.
 
 ## Pitfalls
 

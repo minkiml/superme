@@ -17,6 +17,7 @@ export default function Modal({
   contain = false,
   column = false,
   fill = false,
+  dismissable = true,
 }: {
   onClose: () => void
   title?: ReactNode
@@ -25,6 +26,8 @@ export default function Modal({
   z?: string // Tailwind z-index class (stack nested modals higher)
   scrim?: string // Tailwind bg class for the backdrop
   contain?: boolean // absolute (fill positioned ancestor) instead of fixed (viewport)
+  dismissable?: boolean // false ⇒ a backdrop click never closes; only the X / an explicit action
+  // does. Pass `!editing` for editors, so an outside click can't silently discard unsaved input.
   column?: boolean // cap the card to the viewport/column and lay it out as a flex column, so a
   // caller with a pinned header/footer + a `flex-1 min-h-0 overflow-y-auto` body scrolls internally
   fill?: boolean // with `column`: TAKE the full height rather than just capping it, so the card is
@@ -41,7 +44,7 @@ export default function Modal({
       className={`${contain ? 'absolute' : 'fixed'} inset-0 ${z} grid place-items-center ${scrim} p-6 backdrop-blur-sm`}
       onMouseDown={(e) => { downOnScrim.current = e.target === e.currentTarget }}
       onMouseUp={(e) => {
-        if (downOnScrim.current && e.target === e.currentTarget) onClose()
+        if (dismissable && downOnScrim.current && e.target === e.currentTarget) onClose()
         downOnScrim.current = false
       }}
     >

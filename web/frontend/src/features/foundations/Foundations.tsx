@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Layers, FileText, X, Loader2, ScrollText, Pencil, Save, Sparkles, Bot, Pin } from 'lucide-react'
 import Markdown from '@/ui/Markdown'
 import Toggle from '@/ui/Toggle'
@@ -254,6 +254,9 @@ function FileViewer({ file, onClose, onSaved }: { file: FoundationFile; onClose:
   const [draft, setDraft] = useState(file.body)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  // Close only on a TRUE backdrop click — press AND release both on the scrim (not a drag that
+  // starts inside and ends out). While editing, an outside click never closes (only the X does).
+  const downOnScrim = useRef(false)
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && !editing && onClose()
@@ -274,11 +277,15 @@ function FileViewer({ file, onClose, onSaved }: { file: FoundationFile; onClose:
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm" onClick={onClose}>
-      <div
-        className="flex max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-line bg-app shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
+      onMouseDown={(e) => { downOnScrim.current = e.target === e.currentTarget }}
+      onMouseUp={(e) => {
+        if (!editing && downOnScrim.current && e.target === e.currentTarget) onClose()
+        downOnScrim.current = false
+      }}
+    >
+      <div className="flex max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-line bg-app shadow-2xl">
         <div className="flex items-center gap-2 border-b border-line px-5 py-3.5">
           <FileText size={15} className={SCOPE_COLOR[file.scope] ?? 'text-muted'} />
           <span className="text-[15px] font-semibold text-fg">{file.label}</span>

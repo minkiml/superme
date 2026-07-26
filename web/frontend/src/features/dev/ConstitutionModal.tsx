@@ -85,7 +85,7 @@ export default function ConstitutionModal({
   const onColor = tint === 'core' ? 'bg-core' : tint === 'universal' ? 'bg-universal' : 'bg-dev'
   const display = savedBody ?? body
   return (
-    <Modal onClose={onClose} column maxW="max-w-3xl">
+    <Modal onClose={onClose} column maxW="max-w-3xl" dismissable={!editing}>
       <div className={`flex shrink-0 items-center gap-2 border-b border-line px-4 py-3 ${on ? '' : 'opacity-60'}`}>
         <ScrollText size={15} className="text-muted" />
         <span className="text-sm font-semibold text-fg">{title}</span>

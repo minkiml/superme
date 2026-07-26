@@ -10,7 +10,7 @@ category: workspace
 Distill the investigation into the artifact that outlives it. The findings doc is what the owner
 reads and what future items cite — the notes were for you, this is for them.
 
-## 1 — Draft findings.md
+## Step 1: Draft findings.md
 
 `scaffold_artifact(item_id, "findings")`, then fill:
 
@@ -24,14 +24,14 @@ reads and what future items cite — the notes were for you, this is for them.
 
 Write it self-contained: readable without the notes, pointers where depth matters.
 
-## 2 — Follow-ups become items
+## Step 2: Follow-ups become items
 
-Each follow-up worth acting on → `create_inbox_item` (relation `spawn`, context in the brief) and
+- Each follow-up worth acting on → `create_inbox_item` (relation `spawn`, context in the brief) and
 name it in the Follow-ups section. A follow-up that lives only in prose is lost by next month.
 
-## 3 — Hand over
+## Step 3: Hand over
 
-Tell the owner findings are drafted — lead with the one-sentence upshot, then the per-question
+- Tell the owner findings are drafted — lead with the one-sentence upshot, then the per-question
 verdicts. The owner advances to close; research items merge nothing.
 
 ## Pitfalls

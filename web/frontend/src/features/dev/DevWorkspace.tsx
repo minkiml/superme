@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, GitBranch, Map, Brain, Package, Activity, ChevronsUpDown, Check, Loader2 } from 'lucide-react'
+import { ArrowLeft, GitBranch, Map, Brain, Package, Activity, ScanSearch, ChevronsUpDown, Check, Loader2 } from 'lucide-react'
 import { colorFor } from '@/lib/palette'
 import { RepoIcon } from '@/lib/repoIcons'
 import type { OrbitRepo } from '@/features/shell/useCommandStats'
@@ -10,6 +10,7 @@ import RoadmapTab from './RoadmapTab'
 import { MemoryGovernance, PublishedInventory } from './LearningGovernance'
 import ArtifactsTab from './ArtifactsTab'
 import ActivityLog from './ActivityLog'
+import PromptXrayTab from './PromptXrayTab'
 import OnboardingLanding, { type OnboardMode } from './OnboardingLanding'
 
 // The Dev workspace — the per-repo Tier-2 detail surface, reached from an orbit node's inspector
@@ -23,13 +24,14 @@ import OnboardingLanding, { type OnboardMode } from './OnboardingLanding'
 // `project` is the home of this repo's GENERAL knowledge — what we're building and why — as opposed
 // to Pipeline's work-in-flight. Roadmap is its first section; deliverables, open questions and the
 // decision ledger join it as the general/ docs become addressable records rather than prose.
-type Tab = 'pipeline' | 'project' | 'learning' | 'artifacts' | 'activity'
+type Tab = 'pipeline' | 'project' | 'learning' | 'artifacts' | 'activity' | 'promptxray'
 const TABS: { id: Tab; label: string; icon: typeof GitBranch }[] = [
   { id: 'pipeline', label: 'Pipeline', icon: GitBranch },
   { id: 'project', label: 'Project', icon: Map },
   { id: 'learning', label: 'Learning', icon: Brain },
   { id: 'artifacts', label: 'Artifacts', icon: Package },
   { id: 'activity', label: 'Activity', icon: Activity },
+  { id: 'promptxray', label: 'Prompt X-ray', icon: ScanSearch },
 ]
 
 export default function DevWorkspace({
@@ -196,6 +198,7 @@ export default function DevWorkspace({
             {tab === 'learning' && <LearningTab contextId={repo.id} />}
             {tab === 'artifacts' && <ArtifactsTab contextId={repo.id} />}
             {tab === 'activity' && <ActivityLog contextId={repo.id} />}
+            {tab === 'promptxray' && <PromptXrayTab contextId={repo.id} />}
           </>
         )}
       </div>

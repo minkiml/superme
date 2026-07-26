@@ -220,51 +220,99 @@ class AgentService:
         activated_assets = list_repo_assets(const_repo)
         return op_home, const_universal, const_repo, activated_assets
 
-    def _assemble_append(self, ctx: Context, *, op_home, const_universal, const_repo,
-                         activated_assets, system_append: str | None = None,
-                         background: bool = False) -> str:
-        """Assemble the layer-2 system append (system_prompt.append): persona (WHO) + mode charter
-        (WHAT MODE) + per-repo local charter + constitution CATALOG + operating-context preamble
-        (WHERE) + per-project persona_append + the per-turn session-kind block + (background only)
-        the run contract. THE single assembler — `_build_options` and the input-preview endpoint
-        both call it, so what a preview shows is byte-for-byte what a real turn sends."""
+    def _fragment_parts(self, ctx: Context, *, op_home, const_universal, const_repo,
+                        activated_assets, system_append: str | None = None,
+                        background: bool = False) -> list[dict]:
+        """The layer-2 system append as ORDERED provenance fragments: persona (WHO) · mode charter
+        (WHAT MODE) · per-repo local charter · constitution CATALOG · operating-context preamble
+        (WHERE) · per-project persona_append · the per-turn session-kind block · (background only)
+        the run contract. THE single source of truth — `_assemble_append` joins these into the exact
+        string a turn sends, and the prompt inspector captures them for per-fragment display. Each
+        fragment carries `sep` = the exact string preceding it in the joined append, so
+        `''.join(sep+text)` reproduces the append byte-for-byte."""
+        frags: list[dict] = []
+
+        def add(name: str, location: str, text: str, *, sep: str) -> None:
+            frags.append({"name": name, "location": location, "text": text, "sep": sep})
+
+        # The leading joined group (persona · charter · local charter · catalog): "\n\n" BETWEEN
+        # members, nothing before the first — exactly `"\n\n".join([...])`.
+        def add_joined(name: str, location: str, text: str) -> None:
+            add(name, location, text, sep="" if not frags else "\n\n")
+
+        add_joined("Persona — SELF (who)", "harness/SELF.md", self._persona)
         charter = self._charters.get(ctx.mode) or self._charters.get("core", "")
-        parts = [self._persona]
         if charter:
-            parts.append(charter)
+            add_joined(f"Charter — {ctx.mode} mode (what)", f"harness/{ctx.mode}-charter.md", charter)
         # Per-repo operational overlay: local-harness/<id>/<mode>/charter.local.md, appended AFTER
         # the universal mode charter when present. Additive — most repos have none.
         if op_home is not None:
             local_charter = op_home / "charter.local.md"
             if local_charter.is_file():
-                parts.append(local_charter.read_text())
+                add_joined("Local charter — repo overlay",
+                           f"local-harness/{ctx.id}/{ctx.mode}/charter.local.md",
+                           local_charter.read_text())
         # Constitution CATALOG (context-model-spec §1/§2): frontmatter-only (name + description) of
         # ENABLED in-scope items — universal + this repo's + activated assets; bodies are pulled on
         # demand via `pull_constitution`. Empty string when there are none.
         catalog = constitution_catalog(ctx.mode, const_universal, const_repo,
                                        activated=activated_assets)
         if catalog:
-            parts.append(catalog)
-        append = "\n\n".join(parts) + self._context_preamble(ctx)
+            add_joined("Constitution catalog — enabled, frontmatter only",
+                       f"harness/constitution/{ctx.mode}/ + repo asset pool", catalog)
+        # Operating context: appended with NO added separator — its own text opens with "\n\n".
+        add("Operating context (where) + orientation", "agent_service._context_preamble()",
+            self._context_preamble(ctx), sep="")
         if ctx.persona_append:
-            append += f"\n\n{ctx.persona_append}"
-        # Per-turn session-aware block (the Focus/Guard/phase preamble the daemon hands in). Core
+            add("Project persona append", "Context.persona_append (per-project)",
+                ctx.persona_append, sep="\n\n")
+        # Per-turn session-aware block (the Current-focus/Guard/phase preamble the daemon hands in). Core
         # stays session-agnostic — it just appends what it's given.
         if system_append:
-            append += f"\n\n{system_append}"
+            add("Session-kind block — focus/guard/phase",
+                "core/kernel_speech.py · work_item_preamble (Current focus/Guard/phase)", system_append,
+                sep="\n\n")
         # Background run (Thread 3 §3): a PER-TURN fact appended only on kernel-fired turns.
         if background:
-            append += f"\n\n{kernel_speech.BACKGROUND_RUN_CONTRACT}"
-        return append
+            add("Background-run contract", "core/kernel_speech.py · BACKGROUND_RUN_CONTRACT",
+                kernel_speech.BACKGROUND_RUN_CONTRACT, sep="\n\n")
+        return frags
+
+    @staticmethod
+    def _join_fragments(frags: list[dict]) -> str:
+        """Reconstruct the append string from its fragments — the byte-for-byte inverse of the split."""
+        return "".join(f["sep"] + f["text"] for f in frags)
+
+    def _assemble_append(self, ctx: Context, *, op_home, const_universal, const_repo,
+                         activated_assets, system_append: str | None = None,
+                         background: bool = False) -> str:
+        """Assemble the layer-2 system append (system_prompt.append) by joining `_fragment_parts`.
+        THE single assembler — `_build_options` and the input-preview endpoint both call it, so what
+        a preview shows is byte-for-byte what a real turn sends."""
+        return self._join_fragments(self._fragment_parts(
+            ctx, op_home=op_home, const_universal=const_universal, const_repo=const_repo,
+            activated_assets=activated_assets, system_append=system_append, background=background))
 
     def assemble_system_append(self, ctx: Context, *, system_append: str | None = None,
                                background: bool = False) -> str:
-        """Public seam for the input-preview endpoint (B): resolve scope + assemble the exact system
-        append a turn with this (ctx, session_append, background) would send. No side effects."""
+        """Public seam for the prompt inspector: resolve scope + assemble the exact system append a
+        turn with this (ctx, session_append, background) would send. No side effects."""
         op_home, const_universal, const_repo, activated_assets = self._resolve_scope(ctx)
         return self._assemble_append(
             ctx, op_home=op_home, const_universal=const_universal, const_repo=const_repo,
             activated_assets=activated_assets, system_append=system_append, background=background)
+
+    def assemble_system_fragments(self, ctx: Context, *, system_append: str | None = None,
+                                  background: bool = False) -> list[dict]:
+        """Public seam for the prompt inspector's per-fragment view: the SAME append as
+        `assemble_system_append`, but as ordered provenance fragments [{name, location, text}] (the
+        internal `sep` is dropped — it's for reconstruction, not display). Same builder → the
+        fragments always sum to the captured system prompt."""
+        op_home, const_universal, const_repo, activated_assets = self._resolve_scope(ctx)
+        frags = self._fragment_parts(
+            ctx, op_home=op_home, const_universal=const_universal, const_repo=const_repo,
+            activated_assets=activated_assets, system_append=system_append, background=background)
+        return [{"name": f["name"], "location": f["location"], "text": f["text"]} for f in frags]
 
     def _build_options(
         self, ctx: Context, *, resume, model, approve: ApproveFn, extra_mcp_servers,

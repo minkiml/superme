@@ -5,7 +5,7 @@ import Markdown from '@/ui/Markdown'
 import Modal from '@/ui/Modal'
 import { addInbox, updateInbox, deleteInbox, pushInbox, type WorkItem, type InboxEntry, type InboxKind } from '@/lib/api'
 import { fmtLocal, fmtTokens, fmtDuration, fmtModel, MODELS as MODEL_CATALOG, DEFAULT_MODEL, EFFORTS as EFFORT_CATALOG, DEFAULT_EFFORT } from '@/lib/format'
-import { PHASES, PHASE_LABEL, PHASE_ACCENT, PHASE_VERB, STATUS_COLOR, STATUS_LABEL, STATUS_STRIPE, primaryStatus, Empty } from './common'
+import { PHASE_LABEL, PHASE_VERB, STATUS_COLOR, STATUS_LABEL, STATUS_STRIPE, primaryStatus, Empty } from './common'
 
 // Phase accent → literal dot class (Tailwind needs the full string present in source).
 const PHASE_DOT: Record<string, string> = { dev: 'bg-dev', warn: 'bg-warn', success: 'bg-success' }
@@ -88,32 +88,41 @@ export type WorkActions = {
 
 // Delete is only offered while an item is in plan/design — past that gate code may be touched.
 
-// --- workspace: kanban by phase -------------------------------------------------
+// --- workspace: kanban by phase group -------------------------------------------
+
+// The 8-stage union pipeline collapsed to FOUR board columns so the whole board fits one view
+// (no horizontal scroll). Adjacent phases that read as one stage of work merge: intake (triage +
+// plan) and the build⟷vet loop (build/investigate + vet/report). Review and close stay their own
+// columns — they're the human gates. An item keeps its real phase; it's just placed in the column
+// whose group owns that phase. `accent` = the group's dot color (dev → warn → success as the
+// pipeline advances). The investigation-kind analogues (investigate/report) ride with build/vet.
+const KANBAN_GROUPS: { key: string; label: string; phases: string[]; accent: string }[] = [
+  { key: 'intake', label: 'Triage & Plan', phases: ['triage', 'plan'], accent: 'dev' },
+  { key: 'work', label: 'Build & Vet', phases: ['build', 'investigate', 'vet', 'report'], accent: 'warn' },
+  { key: 'review', label: 'Review', phases: ['review'], accent: 'success' },
+  { key: 'close', label: 'Close', phases: ['close'], accent: 'success' },
+]
 
 export function WorkspaceKanban({ items, onOpen, running, boundItemId, buckets }: { items: WorkItem[]; buckets?: Record<string, string> } & WorkActions) {
   const visible = items.filter(isActive)
   if (visible.length === 0) return <Empty>No active work-items.</Empty>
-  const byPhase = (key: string) => visible.filter((it) => (it.phase ?? 'triage') === key)
-  // The union pipeline is 8 stages; only render columns that hold items, plus the implementation
-  // core so the board always reads as a pipeline (S7 redesigns this surface properly).
-  const CORE = ['triage', 'plan', 'build', 'vet', 'review', 'close']
-  const columns = PHASES.filter((ph) => CORE.includes(ph.key) || byPhase(ph.key).length > 0)
+  const inGroup = (phases: string[]) => visible.filter((it) => phases.includes(it.phase ?? 'triage'))
   return (
-    // Floor each column at a readable width and scroll horizontally when they don't all fit —
-    // `minmax(0, 1fr)` let columns collapse so narrow that card titles wrapped one word per line.
+    // Four fixed columns floored at a readable width; they fit without scroll at normal widths and
+    // fall back to horizontal scroll only when the pane is very narrow.
     <div className="overflow-x-auto">
       <div
         className="grid gap-3"
-        style={{ gridTemplateColumns: `repeat(${columns.length}, minmax(150px, 1fr))` }}
+        style={{ gridTemplateColumns: `repeat(${KANBAN_GROUPS.length}, minmax(150px, 1fr))` }}
       >
-        {columns.map((ph) => {
-        const col = byPhase(ph.key)
-        const dot = PHASE_DOT[PHASE_ACCENT[ph.key] ?? 'dev'] ?? 'bg-line'
+        {KANBAN_GROUPS.map((g) => {
+        const col = inGroup(g.phases)
+        const dot = PHASE_DOT[g.accent] ?? 'bg-line'
         return (
-          <div key={ph.key} className="flex min-h-[7rem] flex-col rounded-xl bg-sunken p-2">
+          <div key={g.key} className="flex min-h-[7rem] flex-col rounded-xl bg-sunken p-2">
             <div className="mb-2 flex items-center gap-2 px-1">
               <span className={`h-1.5 w-1.5 rounded-full ${dot}`} />
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-fg">{ph.label}</span>
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-fg">{g.label}</span>
               <span className="ml-auto rounded-full bg-hover px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-muted">{col.length}</span>
             </div>
             <div className="space-y-2">
@@ -462,7 +471,7 @@ function InboxEditModal({
   return (
     // Contained (not viewport-fixed) so it overlays the dashboard column and leaves the chat rail
     // interactive — same containment as the work-item review popup.
-    <Modal onClose={onCancel} title="Edit inbox item" maxW="max-w-lg" z="z-40" contain>
+    <Modal onClose={onCancel} title="Edit inbox item" maxW="max-w-lg" z="z-40" contain dismissable={false}>
       <div className="p-4">
         <div className="space-y-2">
           <div className="flex items-center gap-2">

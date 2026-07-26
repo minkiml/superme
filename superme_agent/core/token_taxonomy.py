@@ -48,6 +48,10 @@ FEATURE_CATEGORY = {
     # "new unknown feature" self-flag; each still shows as its own named sub-bucket within Other.
     "onboarding": "other",
     "diagnosis": "other",
+    # Throwaway prompt-extraction probe runs (prompt inspector): a disposable lifecycle minted only
+    # to capture real per-phase input prompts, then torn down. Its tokens are real (kept trace) but
+    # it's meta/one-off, not dev spend — bucketed under Other as its own named sub-bucket.
+    "prompt-extraction": "other",
     # Kernel-driven context compaction (S8). Its usage is an ESTIMATE derived from the compact
     # boundary (the CLI reports zero API usage for a /compact turn — verified empirically):
     # input ≈ preTokens (the transcript the summarizer read), output ≈ postTokens (the summary

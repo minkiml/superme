@@ -37,6 +37,7 @@ from ..app_state import agent as _agent, dev as _dev, dev_store as _dev_store, \
     spine as _spine, sessions as _sessions
 from ...core import Usage, Result, Status, TextDelta, ToolResult, deny_all
 from ...core import artifacts as _arts
+from ...core import autopilot as _autopilot
 from ...core import kernel_speech, session_contract
 from ...core.permissions import VET_READONLY_NUDGE
 from ...harness.tools.dev_tools import make_dev_mcp_server
@@ -236,10 +237,12 @@ async def _run_background_vet(ctx, context_id: str, item_id: str,
     orient = kernel_speech.render_orient_block(item, item_dir)
     prompt = f"{orient}\n\n---\n\n{trigger}"
     capture_prompt(context_id, trigger, item_id=item_id)
-    # Prompt inspector "A": vet passes work_item_preamble as system_append at the worktree ctx.
-    capture_run_input(context_id, item_id, ctx=wt_ctx,
-                      system_append=kernel_speech.work_item_preamble(item_id, item, str(item_dir)),
-                      prompt=prompt, phase="vet", background=True)
+    # Prompt inspector "A" — throwaway probes ONLY: vet passes work_item_preamble as system_append at
+    # the worktree ctx. Normal items skip capture (the run_input table no longer grows per-run).
+    if _autopilot.is_prompt_extraction(item):
+        capture_run_input(context_id, item_id, ctx=wt_ctx,
+                          system_append=kernel_speech.work_item_preamble(item_id, item, str(item_dir), interactive=False),
+                          prompt=prompt, phase="vet", background=True)
     final_tokens = None
     final_usage = None
     final_session = None
@@ -253,7 +256,7 @@ async def _run_background_vet(ctx, context_id: str, item_id: str,
             model=model, effort=effort,
             approve=deny_all,                # background: nothing outside the boundary runs
             extra_mcp_servers=_dev_mcp(ctx, wt, ctx.cwd, item_id),
-            system_append=kernel_speech.work_item_preamble(item_id, item, str(item_dir)),
+            system_append=kernel_speech.work_item_preamble(item_id, item, str(item_dir), interactive=False),
             write_boundary=[wt, item_dir],   # boundary Bash autonomy (running checks IS the job)
             deny_write_tools=VET_READONLY_NUDGE,   # …but file-write tools die outright (§4)
             background=True,                 # per-turn run contract in the system layer (Thread 3 §3)
@@ -276,7 +279,7 @@ async def _run_background_vet(ctx, context_id: str, item_id: str,
                         log.exception("background vet: failed to persist session to %s", item_id)
             if isinstance(ev, (Status, TextDelta, ToolResult)):
                 capture_event(context_id, ev, item_id=item_id)
-    except Exception:
+    except Exception: #crash check
         turn_error = True
         log.exception("background vet run failed for %s", item_id)
     # ---- THE DRIVER (§5.1): decide off the ledger, close the run, apply, fire the next hop.
@@ -450,11 +453,13 @@ async def _run_background_build(ctx, context_id: str, item_id: str,
     if not prev_build:   # first build turn of the item's life happening in background → orient at birth
         prompt = f"{kernel_speech.render_orient_block(item, item_dir)}\n\n---\n\n{trigger}"
     capture_prompt(context_id, trigger, item_id=item_id)
-    # Prompt inspector "A": build passes work_item_preamble as system_append at the worktree ctx;
-    # the body carries the orient block only on the item's first build turn (else just the trigger).
-    capture_run_input(context_id, item_id, ctx=wt_ctx,
-                      system_append=kernel_speech.work_item_preamble(item_id, item, str(item_dir)),
-                      prompt=prompt, phase="build", background=True)
+    # Prompt inspector "A" — throwaway probes ONLY: build passes work_item_preamble as system_append
+    # at the worktree ctx; the body carries the orient block only on the item's first build turn (else
+    # just the trigger). Normal items skip capture (the run_input table no longer grows per-run).
+    if _autopilot.is_prompt_extraction(item):
+        capture_run_input(context_id, item_id, ctx=wt_ctx,
+                          system_append=kernel_speech.work_item_preamble(item_id, item, str(item_dir), interactive=False),
+                          prompt=prompt, phase="build", background=True)
     final_tokens = None
     final_usage = None
     final_text = None
@@ -469,7 +474,7 @@ async def _run_background_build(ctx, context_id: str, item_id: str,
             model=model, effort=effort,
             approve=deny_all,
             extra_mcp_servers=_dev_mcp(ctx, wt, ctx.cwd, item_id),
-            system_append=kernel_speech.work_item_preamble(item_id, item, str(item_dir)),
+            system_append=kernel_speech.work_item_preamble(item_id, item, str(item_dir), interactive=False),
             write_boundary=[wt, item_dir],   # S4 freeze: writes stay in worktree + item dir
             background=True,                 # per-turn run contract in the system layer (Thread 3 §3)
         ):

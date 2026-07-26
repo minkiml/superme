@@ -21,6 +21,10 @@ target does not by itself authorize an unjudged advance.
 # so `next_phase` returns None and it falls out naturally.
 REVIEW_PHASE = "review"
 
+# The run `feature` tag stamped on every throwaway prompt-extraction run — marks the KEPT trace
+# (folder is torn down, run rows survive) and buckets its token spend (token_taxonomy → "other").
+PROMPT_EXTRACTION_FEATURE = "prompt-extraction"
+
 # The phases that occupy a build⟷vet compute slot — the expensive, long-running loop the
 # concurrency cap governs. triage/plan are cheap and uncapped; review/close are past the loop.
 BUILD_SLOT_PHASES = ("build", "vet")
@@ -58,6 +62,14 @@ def is_autopilot(item: dict) -> bool:
     return bool(item.get("autopilot"))
 
 
+def is_prompt_extraction(item: dict) -> bool:
+    """The throwaway prompt-extraction flag — a disposable item minted only to run a real lifecycle
+    so we can CAPTURE its actual per-phase input prompts, then torn down (folder + worktree + branch),
+    leaving only the tagged run trace. Absent → False. Gates the capture-only-for-throwaway path, the
+    merge/anchor-write suppression, the deterministic review pass-through, and the post-close cleanup."""
+    return bool(item.get("prompt_extraction"))
+
+
 def auto_advance_target(item: dict, next_phase) -> str | None:
     """The phase autopilot would advance this item into, or None if it must NOT auto-advance.
 
@@ -87,3 +99,20 @@ def auto_advance_target(item: dict, next_phase) -> str | None:
     if not nxt:
         return None
     return nxt
+
+
+def throwaway_advance_target(item: dict, next_phase) -> str | None:
+    """Like `auto_advance_target` but for a throwaway prompt-extraction probe: it advances through
+    EVERY gate mechanically — INCLUDING review — because a throwaway needs no judgment (we only want
+    the captured prompts, not a quality verdict; the merge is synthetic-skipped, so nothing lands).
+    Returns None only at a non-gate rest, when terminal, or at close (no next phase → cleanup, not
+    advance)."""
+    if not is_prompt_extraction(item):
+        return None
+    if str(item.get("status")) != "awaiting_human" or item.get("done_at"):
+        return None
+    try:
+        nxt = next_phase(item.get("kind"), str(item.get("phase") or ""))
+    except KeyError:
+        return None
+    return nxt or None

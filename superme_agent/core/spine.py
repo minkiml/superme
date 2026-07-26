@@ -510,9 +510,14 @@ class SystemSpine:
                        background INTEGER NOT NULL DEFAULT 0,
                        system_prompt TEXT NOT NULL,
                        prompt_body TEXT NOT NULL,
+                       system_fragments TEXT,
                        created_at TEXT NOT NULL
                    )"""
             )
+            # `system_fragments` (JSON: ordered [{name,location,text}] the system prompt is assembled
+            # from) added after the table shipped — the prompt inspector renders per-fragment sub-cards
+            # with source provenance. Older rows have NULL → the inspector falls back to one whole card.
+            self._ensure_columns(c, "run_input", {"system_fragments": "TEXT"})
 
     # --- static config (loaded fresh; cheap + always current) -------------------
     def system_config(self) -> SystemConfig:
@@ -1164,18 +1169,20 @@ class SystemSpine:
 
     def record_run_input(self, run_id: int, *, repo_id: str, item_id: str | None, phase: str | None,
                          feature: str | None, background: bool, system_prompt: str,
-                         prompt_body: str) -> None:
+                         prompt_body: str, system_fragments: str | None = None) -> None:
         """Persist the ACTUAL full input a run sent (prompt inspector "A"), keyed by run_id. One row
-        per run (INSERT OR REPLACE — a re-run under the same id overwrites). Best-effort telemetry —
-        never breaks a turn."""
+        per run (INSERT OR REPLACE — a re-run under the same id overwrites). `system_fragments` is the
+        JSON provenance breakdown of `system_prompt` (ordered [{name,location,text}]); optional.
+        Best-effort telemetry — never breaks a turn."""
         try:
             with self._conn() as c:
                 c.execute(
                     "INSERT OR REPLACE INTO run_input"
-                    " (run_id,repo_id,item_id,phase,feature,background,system_prompt,prompt_body,created_at)"
-                    " VALUES (?,?,?,?,?,?,?,?,?)",
+                    " (run_id,repo_id,item_id,phase,feature,background,system_prompt,prompt_body,"
+                    "system_fragments,created_at)"
+                    " VALUES (?,?,?,?,?,?,?,?,?,?)",
                     (int(run_id), repo_id, item_id, phase, feature, 1 if background else 0,
-                     system_prompt, prompt_body, _now()),
+                     system_prompt, prompt_body, system_fragments, _now()),
                 )
         except Exception:  # noqa: BLE001 — telemetry must never break a turn
             pass
@@ -1185,6 +1192,49 @@ class SystemSpine:
         with self._conn() as c:
             row = c.execute("SELECT * FROM run_input WHERE run_id=?", (int(run_id),)).fetchone()
             return dict(row) if row else None
+
+    def set_run_feature(self, run_id: int, feature: str) -> None:
+        """Stamp a run's `feature` tag (used to mark a throwaway prompt-extraction run so its KEPT
+        trace + token spend bucket under 'prompt-extraction'). Best-effort telemetry."""
+        try:
+            with self._conn() as c:
+                c.execute("UPDATE run SET feature=? WHERE id=?", (feature, int(run_id)))
+        except Exception:  # noqa: BLE001 — telemetry must never break a turn
+            pass
+
+    def list_run_inputs_for_item(self, item_id: str) -> list[dict]:
+        """Every captured-input row for an item (prompt inspector "A"), oldest first — the per-phase
+        run list the Prompt X-ray tab turns into `input.html` links. Survives the throwaway item's
+        folder deletion (run_input rows are kept trace, keyed by the dangling item_id)."""
+        with self._conn() as c:
+            rows = c.execute(
+                "SELECT ri.run_id, ri.phase, ri.feature, ri.created_at, r.started_at, r.status"
+                " FROM run_input ri LEFT JOIN run r ON r.id = ri.run_id"
+                " WHERE ri.item_id=? ORDER BY ri.run_id ASC", (str(item_id),)).fetchall()
+            return [dict(r) for r in rows]
+
+    def get_prompt_extraction_state(self, repo_id: str) -> dict | None:
+        """The repo's latest Prompt X-ray probe state (or None) — {item_id, status, started_at,
+        finished_at}. A durable per-repo pointer (survives the throwaway item's teardown) so the tab
+        can list the captured A-links for the last probe even after its folder is gone."""
+        with self._conn() as c:
+            r = c.execute("SELECT value FROM system_setting WHERE key=?",
+                          (f"prompt_extraction:{repo_id}",)).fetchone()
+        if r is None or r["value"] is None:
+            return None
+        try:
+            return json.loads(r["value"])
+        except (ValueError, TypeError):
+            return None
+
+    def set_prompt_extraction_state(self, repo_id: str, state: dict) -> None:
+        """Persist the repo's latest Prompt X-ray probe state (see get_prompt_extraction_state)."""
+        with self._conn() as c:
+            c.execute(
+                "INSERT INTO system_setting (key,value,updated_at) VALUES (?,?,?)"
+                " ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at",
+                (f"prompt_extraction:{repo_id}", json.dumps(state), _now()),
+            )
 
     def get_run(self, run_id: int) -> dict | None:
         """One run row by id (or None) — the single-run read behind the diagnosis/inspection tool."""

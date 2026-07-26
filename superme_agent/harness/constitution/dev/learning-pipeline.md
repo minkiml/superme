@@ -1,5 +1,5 @@
 ---
-description: "The learning-pipeline contract — how a captured operational learning becomes a governed artifact: the candidate→proposal→published vocab, the two-gate lifecycle and its statuses, the output_form/target_scope enums, and where each lives (.dev.db vs on disk). Pull, for your own quick comprehension, when you need to know what \"learning\" or \"learning items\" mean in SuperMe, and/or when you touch the learning pipeline — capture/distill/forge, the candidate or proposal stores, or a gate."
+description: How an operational learning is captured and made into a governed artifact: the candidate→proposal→published lifecycle, its two gates and statuses, and where each lives. Use when you touch capture/distill/forge, a gate, or need what "learning" means in SuperMe. Not the project-knowledge model — that's dev-knowledge-structure.
 enabled: true
 scope: universal_dev
 category: reference

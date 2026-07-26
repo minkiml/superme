@@ -13,20 +13,20 @@ Docs first and always; work-items only after Step 6's verify and the owner's lau
 Per-file authoring guides live in this plugin's `general-dev-knowledge-asset/` folder (paths
 below are relative to this skill).
 
-## Step 1 — Confirm the cold start
+## Step 1: Confirm the cold start
 Read `general/` at the injected dev-knowledge root and confirm the repo has real code. If the anchor
 docs already hold real content, stop: this is drift, not retrofit.
 
-## Step 2 — Load the contract
+## Step 2: Load the contract
 Pull the `dev-knowledge-structure` constitution. Read a doc's guide from `../../general-dev-knowledge-asset/<doc>.md`
 before you draft it.
 
-## Step 3 — Comprehend the codebase
+## Step 3: Comprehend the codebase
 Spawn **parallel reader subagents**, one per subsystem, each with a self-contained prompt and an explicit
 return shape. Have them report: entry points, modules and responsibilities, the stack, data flow,
 external dependencies, and surprises. Merge into one comprehension map.
 
-## Step 4 — Clarify intent with the owner
+## Step 4: Clarify intent with the owner
 Where the code can't tell you *why* — intent, direction, priorities — interview the owner, one question
 at a time, to confirm the inferred intent and fill the gaps.
 
@@ -54,7 +54,7 @@ Rules that keep it readable:
 - **Cap it.** Only consequential questions get the full shape; cheap ones stay plain questions.
   Twenty questions × six lines costs the owner more than it saves.
 
-## Step 5 — Draft the anchor set
+## Step 5: Draft the anchor set
 Write the docs into `general/`, each following its guide in `../../general-dev-knowledge-asset/`:
 `architecture.md` **(heavy — reconstructed from the comprehension map; the observed stack, the
 invariants the code actually holds to, and what it conspicuously refuses to do)** · `capabilities.md`
@@ -66,11 +66,11 @@ an empty ledger is honest, an invented one is not) · `roadmap.md` (**forward-on
 `suggest_assets` with its text — it auto-adopts the confidently-relevant pooled assets for this repo;
 note which were adopted (the owner curates them later in the dashboard).
 
-## Step 6 — Verify against the code
+## Step 6: Verify against the code
 Check the drafts back against the comprehension map: every architectural claim traces to code a reader
 actually reported, not to inference. Flag anything you couldn't ground for the owner in step 7.
 
-## Step 7 — Propose the launch, then launch it
+## Step 7: Propose the launch, then launch it
 Memory is established. Offer to put the near-term deliverables into motion as a **launch cohort** —
 work-items that run themselves through triage → plan → build⟷vet → review on autopilot, no human until
 a review gate.
@@ -85,7 +85,7 @@ a review gate.
 3. On confirm, call **`itemize_and_launch`** with the batch: `key` = the deliverable id, `title`, a
    one-line `description` of the value (not a plan), and `after` from the `Needs`.
 
-## Step 8 — Close out
+## Step 8: Close out
 State what is now **in motion**, **when the owner is next needed**, and the **one place to watch**
 (Pipeline) — read it off the tool's result. If nothing was launched, hand off plainly: memory is
 established, Orient is valid, the board renders, and work begins from an inbox item when the owner is

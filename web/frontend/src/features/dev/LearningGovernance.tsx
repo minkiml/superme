@@ -205,7 +205,7 @@ export function PublishedFileModal({ item, contextId, onClose, onSaved, onGovern
   }
 
   return (
-    <Modal onClose={onClose} column maxW="max-w-3xl">
+    <Modal onClose={onClose} column maxW="max-w-3xl" dismissable={!editing}>
         <div className="flex shrink-0 items-center gap-2 border-b border-line px-4 py-3">
           <Icon size={15} className="text-muted" />
           <span className="text-sm font-semibold text-fg">{item.title}</span>
@@ -846,7 +846,7 @@ function ProposalModal({
   ]
 
   return (
-    <Modal onClose={onClose} contain maxW="max-w-3xl" z="z-40">
+    <Modal onClose={onClose} contain maxW="max-w-3xl" z="z-40" dismissable={!editingArtifact}>
       <div className="flex h-[80vh] max-h-[680px] w-full flex-col">
         {/* Header */}
         <div className="flex shrink-0 items-start gap-2 border-b border-line px-4 py-3">

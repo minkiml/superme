@@ -370,9 +370,9 @@ def constitution_catalog(mode: str, universal_dir: Path, repo_dir: Path | None, 
         lines.append(f"- **{it['slug']}** — {desc}")
     header = (
         "## Constitution catalog (operational directives — in force)\n"
-        "These directives are IN FORCE; follow them. Each line names one constitution; when its "
-        "description is relevant to what you're doing and you need the full contract, call "
-        "`pull_constitution(name)` to load its body."
+        "These are the list of some constitution of superme's framework. Each line names one constitution; when its "
+        "description is relevant to what you're doing and you need the full contract or information, call "
+        "`pull_constitution(name)` to load its body and follow them."
     )
     return header + "\n\n" + "\n".join(lines)
 

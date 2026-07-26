@@ -335,22 +335,29 @@ _PHASE_CONTRACTS: dict[str, dict] = {
 }
 
 
-def work_item_preamble(item_id: str, item: dict, item_dir) -> str:
-    """Consumer: every interactive work-item-bound turn (ws.py) AND the loop's vet/build turns ·
-    per-turn. A THIN contract derived from (item.kind, item.phase) — focus, this phase's job + its
+def work_item_preamble(item_id: str, item: dict, item_dir, *, interactive: bool = True) -> str:
+    """Consumer: EVERY work-item-bound turn — interactive (ws.py) and every background runner
+    (intake triage/plan, build/vet loop, close, feedback re-runs) · per-turn. A THIN contract
+    derived from (item.kind, item.phase) — the current focus pointer, this phase's job + its
     skill, the edit boundary, and the next gate. The PROCEDURE lives in the per-phase skill; the
     big orientation payload is injected once at session birth (the orient block), never here —
-    this block rides every turn's system prompt, so it stays small."""
+    this block rides every turn's system prompt, so it stays small. `interactive` only swaps the
+    presence line (user at the keyboard vs kernel-fired) — the pointer itself is mode-independent."""
     title = item.get("title") or item_id
     phase = str(item.get("phase") or "triage")
     kind = str(item.get("kind") or "implementation")
     c = _PHASE_CONTRACTS.get(phase, {})
+    presence = (
+        "This is an interactive chat — the user is present. Their interactions primarily "
+        "center on this item unless they point elsewhere."
+        if interactive else
+        "This run is kernel-fired for this item — it is your sole subject this run."
+    )
     lines = [
-        "## Focus",
+        "## Current focus",
         f"This session is dedicated to work-item **{item_id} — \"{title}\"** "
-        f"(kind `{kind}`, current phase `{phase}`). This is an interactive chat — the user is "
-        f"present. Their interactions primarily center on this item unless they "
-        f"point elsewhere. Its materials live at `{item_dir}/` — read on demand, NEVER guess.",
+        f"(kind `{kind}`, current phase `{phase}`). {presence} "
+        f"Its materials live at `{item_dir}/` — read on demand, NEVER guess.",
     ]
     if c:
         lines.append(

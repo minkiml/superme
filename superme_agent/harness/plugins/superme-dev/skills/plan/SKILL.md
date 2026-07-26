@@ -21,14 +21,15 @@ Outputs: `artifacts/plan.md` (always) · `artifacts/gate-report-plan.html` (alwa
 `artifacts/prd.md` (`type: prd`, only for complex/ambiguous items: problem · key decisions ·
 out of scope).
 
-## 1. Locate the item
+## Step 1: Locate the item
 
-Resolve `work-items/<id>/` from the argument, the bound session, or the owner's message. Read `item.md`
-(intent + frontmatter) and skim `artifacts/`. For prior activity, call `read_dev_log` with this `item_id`.
-If the item is **not** in `plan`, stop — it's past the planning gate; say so. *Done when:* you
-understand the item's intent.
+- Resolve `work-items/<id>/` from the argument, the bound session, or the owner's message. Read
+`item.md` (intent + frontmatter) and skim `artifacts/`. For prior activity, call `read_dev_log` with
+this `item_id`.
+- If the item is **not** in `plan`, stop — it's past the planning gate; say so.
+- *Done when:* you understand the item's intent.
 
-## 2. Size it up — recon before design
+## Step 2: Size it up — recon before design
 
 Pull what the item needs: relevant code, the dev-knowledge contract (pull the
 `dev-knowledge-structure` constitution) if unsure, linked items. Then:
@@ -44,7 +45,7 @@ Pull what the item needs: relevant code, the dev-knowledge contract (pull the
 
 *Done when:* you know the design, which components it touches, and whether a `prd.md` is warranted.
 
-## 3. Draft the plan — the gate feeds are the plan
+## Step 3: Draft the plan — the gate feeds are the plan
 
 Scaffold first — `scaffold_artifact(item_id, "plan")` writes the skeleton — then fill its
 `<fill:…>` slots. The section-by-section field spec is code-owned: see
@@ -69,7 +70,7 @@ Scaffold first — `scaffold_artifact(item_id, "plan")` writes the skeleton — 
 Interactive: propose and iterate with the owner until sound before recording. *Done when:* every
 slot is filled and the approach, touches, preview, and tasks tell one consistent story.
 
-## 4. Write the checks — this is where builds earn their autonomy
+## Step 4: Write the checks — this is where builds earn their autonomy
 
 Plan writes BOTH check lists, because this gate is the one cheap moment the owner's eyes are on
 the criteria — build must never author its own exam. Field spec: the reference above.
@@ -89,24 +90,24 @@ observable surface at all.
 *Done when:* `plan.md` has no unfilled slots and `scaffold_artifact`'s gate check would pass —
 the pre-main gate mechanically rejects a structurally broken vet plan or touches yaml.
 
-## 5. Render the gate report
+## Step 5: Render the gate report
 
-Fill `templates/gate-report.html` (in this skill's folder): replace its single `{{DATA_JSON}}`
-slot with a one-line JSON object built from the plan you just wrote — the schema is documented
-at the top of the template. Everything in it restates plan.md; invent nothing new. Write the
-result to `artifacts/gate-report-plan.html`. The gate check fails on any leftover `{{…}}` slot.
-*Done when:* the file exists and opens as a rendered report.
+- Fill `templates/gate-report.html` (in this skill's folder): replace its single `{{DATA_JSON}}`
+slot with a one-line JSON object built from the plan you just wrote — the schema is documented at
+the top of the template. Everything in it restates plan.md; invent nothing new. Write the result to
+`artifacts/gate-report-plan.html`. The gate check fails on any leftover `{{…}}` slot.
+- *Done when:* the file exists and opens as a rendered report.
 
-## 6. Record it
+## Step 6: Record it
 
-Append the artifact **path strings** to `item.md`'s `artifacts` list — e.g.
+- Append the artifact **path strings** to `item.md`'s `artifacts` list — e.g.
 `artifacts: [artifacts/plan.md, artifacts/gate-report-plan.html]` (add `artifacts/prd.md` if
-written); each markdown file's own frontmatter carries its `type`. *Done when:* `item.md` lists
-the artifacts.
+written); each markdown file's own frontmatter carries its `type`.
+- *Done when:* `item.md` lists the artifacts.
 
-## 7. Hand the gate back
+## Step 7: Hand the gate back
 
-State the plan and tasks are recorded and the owner can review them and advance the phase
+- State the plan and tasks are recorded and the owner can review them and advance the phase
 (`plan → build`) when ready. Do not self-advance.
 
 ## Background runs

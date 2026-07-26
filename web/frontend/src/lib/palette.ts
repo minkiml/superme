@@ -49,6 +49,7 @@ export function featureColor(feature: string): string {
 const FEATURE_LABEL: Record<string, string> = {
   sweep: 'capture',
   write: 'forge',
+  'prompt-extraction': 'probe',   // the throwaway Prompt X-ray run — one word in the feed
 }
 
 export function featureLabel(feature: string): string {

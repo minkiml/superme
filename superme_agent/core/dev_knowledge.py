@@ -415,6 +415,7 @@ class DevKnowledgeService:
         after: list[str] | None = None,
         autopilot: bool = False,
         cohort: str | None = None,
+        prompt_extraction: bool = False,
     ) -> dict:
         """Stamp a new top-level work-item from a pushed inbox item.
 
@@ -478,6 +479,12 @@ class DevKnowledgeService:
         # with it on; any item can be switched at the inbox stage (the last cheap moment).
         if autopilot:
             extra += "autopilot: true\n"
+        # Throwaway prompt-extraction item (prompt-inspector): a disposable item minted only to run a
+        # real lifecycle so we CAPTURE its actual per-phase input prompts, then torn down. Written
+        # only when on (absent reads False). Gates capture-only-for-throwaway, merge/anchor-write
+        # suppression, the deterministic review pass-through, and the post-close self-cleanup.
+        if prompt_extraction:
+            extra += "prompt_extraction: true\n"
         # Launch cohort (autopilot slice 4c): the batch this item was itemized with, at the end of
         # one onboarding. Shared opaque id across the batch; the observability read sums the cohort's
         # aggregate spend. Written only when set (absent reads null — no dead field on the manual
@@ -586,6 +593,7 @@ class DevKnowledgeService:
         if isinstance(meta.get("after"), (list, tuple)):   # same int-coercion trap, per element
             it["after"] = [str(a) for a in meta["after"] if a]
         it["autopilot"] = bool(meta.get("autopilot"))   # absent → False
+        it["prompt_extraction"] = bool(meta.get("prompt_extraction"))   # throwaway probe, absent → False
         it["cohort"] = str(meta["cohort"]) if meta.get("cohort") else None  # launch cohort (4c)
         it["description"] = body.strip()
         it["sessions"], it["session_id"] = _session_fields(meta)  # role slots + current-role sid
@@ -1274,8 +1282,12 @@ class DevKnowledgeService:
                   for w in d["waves"] if w.get("status") == "active"]
         if items is None:
             items = self._read_work_items(Path(dev_root) / "work-items")
+        # "In progress" = genuinely being worked. A `close`-phase item is done-pending-owner (it rests
+        # at the close gate awaiting the owner's completion), so it's excluded — otherwise a finished
+        # cohort piles up here and drowns the real signal.
         inprog = [it for it in items
-                  if it.get("status") in _LIVE_STATUSES and not it.get("done_at")]
+                  if it.get("status") in _LIVE_STATUSES and not it.get("done_at")
+                  and str(it.get("phase")) != "close"]
         if not (line or active or inprog):
             # Cold start: no project memory yet. Make the empty state VISIBLE (not silence) so the
             # charter's "Before there is any memory" rule fires — establish it before building.
@@ -1335,6 +1347,7 @@ class DevKnowledgeService:
             if isinstance(meta.get("after"), (list, tuple)):   # peer edges: ids stay strings
                 it["after"] = [str(a) for a in meta["after"] if a]
             it["autopilot"] = bool(meta.get("autopilot"))   # per-item policy, absent → False
+            it["prompt_extraction"] = bool(meta.get("prompt_extraction"))  # throwaway probe, absent → False
             it["cohort"] = str(meta["cohort"]) if meta.get("cohort") else None  # launch cohort (4c)
             it["artifacts"] = _norm_artifacts(meta.get("artifacts"))  # legacy str → {type,path} (R5)
             it["sessions"], it["session_id"] = _session_fields(meta)  # role slots + current-role sid

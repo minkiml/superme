@@ -28,7 +28,7 @@ from ...schemas.dev.work_items import (
     PlanResponse, WorkItemDeleteResponse, WorkItemDetailResponse, WorkItemArtifactsResponse,
     WorkItemCompleteResponse, WorkItemAdvanceResponse,
     WorkItemScaffoldResponse, WorkItemSeenResponse, WorkItemAutopilotResponse,
-    WorkItemTimelineResponse,
+    WorkItemTimelineResponse, PromptExtractionStatusResponse,
 )
 
 log = logging.getLogger("superme-agent")
@@ -359,20 +359,6 @@ async def dev_work_item_timeline(item_id: str, context_id: str = "global") -> di
     return build_item_timeline(context_id, item_id)
 
 
-@router.get("/dev/work-items/{item_id}/phases/{phase}/preview-input.html",
-            response_class=HTMLResponse)
-async def dev_work_item_preview_input(item_id: str, phase: str,
-                                      context_id: str = "global") -> HTMLResponse:
-    """Prompt inspector (B): the FULL input a fresh `phase` run would receive — system prompt +
-    prompt body — as a standalone HTML page for a new browser tab. Reconstructed from the item's
-    current state through the live assembly code (faithful by construction); fires nothing."""
-    from ...services.input_preview import build_preview_input, render_input_page
-    data = build_preview_input(context_id, item_id, phase)
-    if data is None:
-        raise HTTPException(status_code=404, detail="work-item or phase not found")
-    return HTMLResponse(render_input_page(data, mode="preview"))
-
-
 @router.get("/dev/work-items/{item_id}/runs/{run_id}/input.html", response_class=HTMLResponse)
 async def dev_work_item_run_input(item_id: str, run_id: int,
                                   context_id: str = "global") -> HTMLResponse:
@@ -384,7 +370,25 @@ async def dev_work_item_run_input(item_id: str, run_id: int,
     data = build_captured_input(context_id, item_id, run_id)
     if data is None:
         return HTMLResponse(render_missing_input_page(item_id, run_id))
-    return HTMLResponse(render_input_page(data, mode="captured"))
+    return HTMLResponse(render_input_page(data))
+
+
+@router.post("/dev/prompt-extraction/run", response_model=PromptExtractionStatusResponse)
+async def dev_prompt_extraction_run(context_id: str = "global") -> dict:
+    """Prompt X-ray: fire a THROWAWAY prompt-extraction probe on this repo — a disposable work-item
+    that runs the real lifecycle unattended to capture each phase's actual input prompt, then tears
+    itself down (folder + worktree + branch, keeping only the tagged run trace). One at a time per
+    repo. Returns the current probe state (running + captured links)."""
+    from ...services import prompt_extraction as px
+    return px.launch(context_id)
+
+
+@router.get("/dev/prompt-extraction/status", response_model=PromptExtractionStatusResponse)
+async def dev_prompt_extraction_status(context_id: str = "global") -> dict:
+    """Prompt X-ray: the repo's current probe state — whether one is running, and the captured "A"
+    input-page links for the last probe (which survive its teardown)."""
+    from ...services import prompt_extraction as px
+    return px.status(context_id)
 
 
 @router.post("/dev/work-items/{item_id}/complete", response_model=WorkItemCompleteResponse)

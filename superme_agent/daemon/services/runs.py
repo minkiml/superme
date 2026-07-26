@@ -9,6 +9,7 @@ Imports singletons from `app_state` (never from server.py) so there's no import 
 """
 
 import asyncio
+import json as _json
 import logging
 import time
 from datetime import datetime
@@ -20,6 +21,8 @@ from ..deps import cache_slash as _cache_slash
 from . import item_stream
 from ...core import Init, Usage, Result, Status, TextDelta, ToolResult, scoped_writes_approve, deny_all
 from ...core import artifacts as _arts
+from ...core import autopilot as _autopilot
+from ...core.autopilot import PROMPT_EXTRACTION_FEATURE
 from ...core import git_layer, kernel_speech, session_contract
 from ...core.models import MODEL_TIERS
 from ...harness.tools.dev_tools import make_dev_mcp_server
@@ -225,17 +228,33 @@ def capture_run_input(context_id: str, item_id: str, *, ctx, system_append: str 
     """Prompt inspector "A": persist the ACTUAL input the item's live run is about to send — the
     assembled system prompt (built through the SAME `assemble_system_append` seam `_build_options`
     uses, with THIS run's exact ctx / system_append / background) + the prompt body. Keyed to the
-    live run. Faithful by construction; best-effort — never breaks a turn."""
+    live run. Faithful by construction; best-effort — never breaks a turn.
+
+    Called ONLY for throwaway prompt-extraction items (the call sites gate on
+    `autopilot.is_prompt_extraction(item)`) — normal work-item runs no longer capture, so the
+    `run_input` table stops growing per-run. Also stamps `run.feature='prompt-extraction'` so the
+    KEPT trace (the item folder is torn down; the run rows survive) is tagged + token-bucketed."""
     try:
         info = _spine.live_run(context_id, item_id)
         rid = (info or {}).get("id")
         if rid is None:
             return
+        _spine.set_run_feature(rid, PROMPT_EXTRACTION_FEATURE)   # tag the kept trace
         system_prompt = _agent.assemble_system_append(ctx, system_append=system_append,
                                                       background=background)
+        # Also capture the system prompt's provenance breakdown (ordered [{name,location,text}]) so
+        # the inspector renders per-fragment sub-cards. Same builder as `system_prompt` above, so the
+        # fragments sum to it. Guarded: a serialization hiccup must never lose the whole capture.
+        try:
+            frags = _agent.assemble_system_fragments(ctx, system_append=system_append,
+                                                     background=background)
+            fragments_json = _json.dumps(frags, ensure_ascii=False)
+        except Exception:  # noqa: BLE001
+            fragments_json = None
         _spine.record_run_input(rid, repo_id=context_id, item_id=item_id, phase=phase,
-                                feature=(info or {}).get("feature"), background=background,
-                                system_prompt=system_prompt, prompt_body=prompt)
+                                feature=PROMPT_EXTRACTION_FEATURE, background=background,
+                                system_prompt=system_prompt, prompt_body=prompt,
+                                system_fragments=fragments_json)
     except Exception:
         log.exception("capture_run_input failed for %s", item_id)
 
@@ -494,6 +513,11 @@ async def _run_deputy_feedback_turn(ctx, context_id: str, item_id: str, item_dir
     the decision log) turns a 4th round into an escalation."""
     dev_root = ctx.internal_root / "dev"
     capture_prompt(context_id, prompt, item_id=item_id)
+    # Current-focus pointer (thin, per-turn): re-read the item AFTER any review→plan phase flip so
+    # the pointer names the phase this re-run actually works.
+    focus = kernel_speech.work_item_preamble(
+        item_id, _dev.read_work_item(dev_root, item_id) or {"id": item_id, "phase": phase},
+        str(item_dir), interactive=False)
     final_tokens = final_usage = final_text = final_session = None
     run_started = time.time()
     live = _LiveTokens()
@@ -505,6 +529,7 @@ async def _run_deputy_feedback_turn(ctx, context_id: str, item_id: str, item_dir
             effort=effort or _spine.effective_effort(context_id),
             approve=scoped_writes_approve(item_dir, deny_all),
             extra_mcp_servers=_dev_mcp(ctx, ctx.cwd, item_id),
+            system_append=focus,   # Current-focus pointer (item · phase · boundary · gate)
             background=True,
         ):
             if isinstance(ev, Usage):
@@ -583,10 +608,13 @@ async def _run_background_close(ctx, context_id: str, item_id: str, item_dir: Pa
     title = item.get("title") or item_id
     prompt = kernel_speech.close_trigger(item_id, title)
     capture_prompt(context_id, prompt, item_id=item_id)
-    # Prompt inspector "A": close resumes the intake thread and passes NO system_append (its body is
-    # just the close trigger — the orient already lives in the resumed transcript).
-    capture_run_input(context_id, item_id, ctx=ctx, system_append=None, prompt=prompt,
-                      phase="close", background=True)
+    # Current-focus pointer (thin, per-turn) — the resumed transcript carries the orient bulk;
+    # this is the standing phase/role pointer every runner now sends.
+    focus = kernel_speech.work_item_preamble(item_id, item, str(item_dir), interactive=False)
+    # Prompt inspector "A" — throwaway probes ONLY: capture matches the real send exactly.
+    if _autopilot.is_prompt_extraction(item):
+        capture_run_input(context_id, item_id, ctx=ctx, system_append=focus, prompt=prompt,
+                          phase="close", background=True)
     final_tokens = final_usage = final_text = final_session = None
     run_started = time.time()
     live = _LiveTokens()
@@ -598,6 +626,7 @@ async def _run_background_close(ctx, context_id: str, item_id: str, item_dir: Pa
             effort=effort or _spine.effective_effort(context_id),
             approve=scoped_writes_approve(item_dir, deny_all),
             extra_mcp_servers=_dev_mcp(ctx, ctx.cwd, item_id),
+            system_append=focus,   # Current-focus pointer (item · phase · boundary · gate)
             background=True,
         ):
             if isinstance(ev, Usage):
@@ -671,10 +700,14 @@ async def _background_intake_run(ctx, context_id: str, item_id: str, item_dir: P
     # The trail's first entry = what this run was asked to do (the trigger, not the orient bulk) —
     # interactive turns get this from the ws path; background runs record their own.
     capture_prompt(context_id, trigger, item_id=item_id)
-    # Prompt inspector "A": the intake runner passes NO system_append (the orient block in the body
-    # carries the item context), so capture with system_append=None to match the real send exactly.
-    capture_run_input(context_id, item_id, ctx=ctx, system_append=None, prompt=prompt,
-                      phase=skill, background=True)
+    # Current-focus pointer (thin, per-turn): every background runner now carries it — the orient
+    # block in the body is the one-time orientation payload; this is the standing phase/role pointer.
+    focus = kernel_speech.work_item_preamble(item_id, item, str(item_dir), interactive=False)
+    # Prompt inspector "A" — throwaway probes ONLY: capture matches the real send exactly.
+    # Normal items skip capture (the run_input table no longer grows per-run).
+    if _autopilot.is_prompt_extraction(item):
+        capture_run_input(context_id, item_id, ctx=ctx, system_append=focus, prompt=prompt,
+                          phase=skill, background=True)
     final_tokens = None
     final_usage = None
     final_text = None
@@ -689,6 +722,7 @@ async def _background_intake_run(ctx, context_id: str, item_id: str, item_dir: P
             effort=effort or _spine.effective_effort(context_id),  # item → repo → system → medium
             approve=scoped_writes_approve(item_dir, deny_all),
             extra_mcp_servers=_dev_mcp(ctx, ctx.cwd, item_id),  # F8-residual: dev tools mounted
+            system_append=focus,   # Current-focus pointer (item · phase · boundary · gate)
             background=True,   # per-turn run contract in the system layer (Thread 3 §3)
         ):
             if isinstance(ev, Usage):

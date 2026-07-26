@@ -966,6 +966,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/dev/harness/deputy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Dev Harness Deputy
+         * @description This repo's deputy mandate — the standing bar the deputy judges gates against while the owner
+         *     is away. Seeded from a template on first read, so there is always a mandate to show/edit.
+         */
+        get: operations["dev_harness_deputy_dev_harness_deputy_get"];
+        /**
+         * Dev Harness Deputy Save
+         * @description Save edits to this repo's deputy mandate. Takes effect on the next deputy dispatch (the mandate
+         *     is read per gate); no daemon restart needed.
+         */
+        put: operations["dev_harness_deputy_save_dev_harness_deputy_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/dev/palette": {
         parameters: {
             query?: never;
@@ -1416,6 +1442,72 @@ export interface paths {
          *     live-streaming new frames from the item's event broker. All phases in one chronological view.
          */
         get: operations["dev_work_item_timeline_dev_work_items__item_id__timeline_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dev/work-items/{item_id}/runs/{run_id}/input.html": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Dev Work Item Run Input
+         * @description Prompt inspector (A): the ACTUAL input a past run sent — the exact system prompt + prompt
+         *     body captured at send time — as a standalone HTML page. A friendly page renders when a run has
+         *     no capture (a pre-feature run, or a chat/deputy turn).
+         */
+        get: operations["dev_work_item_run_input_dev_work_items__item_id__runs__run_id__input_html_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dev/prompt-extraction/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dev Prompt Extraction Run
+         * @description Prompt X-ray: fire a THROWAWAY prompt-extraction probe on this repo — a disposable work-item
+         *     that runs the real lifecycle unattended to capture each phase's actual input prompt, then tears
+         *     itself down (folder + worktree + branch, keeping only the tagged run trace). One at a time per
+         *     repo. Returns the current probe state (running + captured links).
+         */
+        post: operations["dev_prompt_extraction_run_dev_prompt_extraction_run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dev/prompt-extraction/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Dev Prompt Extraction Status
+         * @description Prompt X-ray: the repo's current probe state — whether one is running, and the captured "A"
+         *     input-page links for the last probe (which survive its teardown).
+         */
+        get: operations["dev_prompt_extraction_status_dev_prompt_extraction_status_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2732,6 +2824,36 @@ export interface components {
                 [key: string]: string;
             };
         };
+        /** DeputyMandateBody */
+        DeputyMandateBody: {
+            /** Content */
+            content: string;
+            /**
+             * Context Id
+             * @default global
+             */
+            context_id: string;
+        };
+        /**
+         * DeputyMandateResponse
+         * @description The per-repo deputy mandate (the standing acceptance bar). Lives in the harness cell
+         *     (`local-harness/<id>/dev/deputy/mandate.md`); seeded from a template on connect, editable here.
+         */
+        DeputyMandateResponse: {
+            /** Context Id */
+            context_id: string;
+            /** Path */
+            path: string;
+            /** Content */
+            content: string;
+        };
+        /** DeputyMandateSaveResponse */
+        DeputyMandateSaveResponse: {
+            /** Ok */
+            ok: boolean;
+            /** Context Id */
+            context_id: string;
+        };
         /**
          * DevLogEvent
          * @description One activity-log row.
@@ -3936,6 +4058,42 @@ export interface components {
             onboard_mode?: string | null;
             /** Docs */
             docs: components["schemas"]["GeneralDoc"][];
+        };
+        /**
+         * PromptExtractionLink
+         * @description One captured "A" page for the last Prompt X-ray probe's phase runs — survives the probe's
+         *     teardown (run_input rows are kept trace, keyed by the dangling item_id).
+         */
+        PromptExtractionLink: {
+            /** Run Id */
+            run_id: number;
+            /** Phase */
+            phase?: string | null;
+            /** Started At */
+            started_at?: string | null;
+            /** Url */
+            url: string;
+        };
+        /**
+         * PromptExtractionStatusResponse
+         * @description The Prompt X-ray tab's state: a probe in flight (running) + the last probe's captured links.
+         */
+        PromptExtractionStatusResponse: {
+            /** Running */
+            running: boolean;
+            /** Status */
+            status?: string | null;
+            /** Item Id */
+            item_id?: string | null;
+            /** Started At */
+            started_at?: string | null;
+            /** Finished At */
+            finished_at?: string | null;
+            /**
+             * Links
+             * @default []
+             */
+            links: components["schemas"]["PromptExtractionLink"][];
         };
         /**
          * Proposal
@@ -5163,6 +5321,8 @@ export interface components {
             run_model?: string | null;
             /** Run Ctx Pct */
             run_ctx_pct?: number | null;
+            /** Run Feature */
+            run_feature?: string | null;
             /** Ctx Pct */
             ctx_pct?: number | null;
             tasks?: components["schemas"]["WorkItemTasks"] | null;
@@ -6875,6 +7035,70 @@ export interface operations {
             };
         };
     };
+    dev_harness_deputy_dev_harness_deputy_get: {
+        parameters: {
+            query?: {
+                context_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeputyMandateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dev_harness_deputy_save_dev_harness_deputy_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeputyMandateBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeputyMandateSaveResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     dev_palette_dev_palette_get: {
         parameters: {
             query?: {
@@ -7634,6 +7858,102 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WorkItemTimelineResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dev_work_item_run_input_dev_work_items__item_id__runs__run_id__input_html_get: {
+        parameters: {
+            query?: {
+                context_id?: string;
+            };
+            header?: never;
+            path: {
+                item_id: string;
+                run_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dev_prompt_extraction_run_dev_prompt_extraction_run_post: {
+        parameters: {
+            query?: {
+                context_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromptExtractionStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dev_prompt_extraction_status_dev_prompt_extraction_status_get: {
+        parameters: {
+            query?: {
+                context_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromptExtractionStatusResponse"];
                 };
             };
             /** @description Validation Error */

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Sparkles, FolderGit2, Folder, ArrowLeft, ArrowUp, Loader2, Check, Home, Lock, CornerDownRight } from 'lucide-react'
 import { browseFs, connectRepo, type FsBrowse, type ConnectedRepo } from '@/lib/api'
 
@@ -15,9 +15,19 @@ export default function ConnectModal({ onClose, onConnected }: {
   onConnected: (repo: ConnectedRepo) => void
 }) {
   const [kind, setKind] = useState<Kind | null>(null)
+  // Close only on a true backdrop click — press AND release both on the scrim (not a drag that
+  // begins inside the card and ends outside it).
+  const downOnScrim = useRef(false)
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-6 backdrop-blur-sm" onClick={onClose}>
-      <div className="w-full max-w-2xl overflow-hidden rounded-2xl border border-line bg-app shadow-2xl" onClick={(e) => e.stopPropagation()}>
+    <div
+      className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-6 backdrop-blur-sm"
+      onMouseDown={(e) => { downOnScrim.current = e.target === e.currentTarget }}
+      onMouseUp={(e) => {
+        if (downOnScrim.current && e.target === e.currentTarget) onClose()
+        downOnScrim.current = false
+      }}
+    >
+      <div className="w-full max-w-2xl overflow-hidden rounded-2xl border border-line bg-app shadow-2xl">
         {kind === null ? <KindStep onPick={setKind} onClose={onClose} /> : <BrowseStep kind={kind} onBack={() => setKind(null)} onConnected={onConnected} />}
       </div>
     </div>

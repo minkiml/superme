@@ -666,6 +666,17 @@ export function getWorkItemTimeline(itemId: string, contextId = 'global'): Promi
   return getJSON(`/api/dev/work-items/${q(itemId)}/timeline?context_id=${q(contextId)}`)
 }
 
+// Prompt X-ray (repo-level): fire a THROWAWAY prompt-extraction probe (a disposable work-item that
+// runs the real lifecycle to capture each phase's actual input prompt, then self-destructs), and
+// read its state — the captured "A" input-page links survive the probe's teardown.
+export type PromptExtractionStatus = Schema<'PromptExtractionStatusResponse'>
+export function runPromptExtraction(contextId = 'global'): Promise<PromptExtractionStatus> {
+  return sendJSON(`/api/dev/prompt-extraction/run?context_id=${q(contextId)}`, 'POST', {})
+}
+export function getPromptExtractionStatus(contextId = 'global'): Promise<PromptExtractionStatus> {
+  return getJSON(`/api/dev/prompt-extraction/status?context_id=${q(contextId)}`)
+}
+
 // Approve → advance a work-item to its KIND's next phase (KIND_PROFILES sequencing). The
 // owner's forward gate; backend 409s at the final phase, on terminal items, or mid-run.
 export type AdvanceResult = Omit<Schema<'WorkItemAdvanceResponse'>, 'phase' | 'from'> & {

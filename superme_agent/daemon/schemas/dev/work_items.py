@@ -157,6 +157,25 @@ class WorkItemDeleteResponse(BaseModel):
     inbox_removed: int | None = None
 
 
+class PromptExtractionLink(BaseModel):
+    """One captured "A" page for the last Prompt X-ray probe's phase runs — survives the probe's
+    teardown (run_input rows are kept trace, keyed by the dangling item_id)."""
+    run_id: int
+    phase: str | None = None
+    started_at: str | None = None
+    url: str  # /api/dev/work-items/<item>/runs/<run>/input.html?context_id=…
+
+
+class PromptExtractionStatusResponse(BaseModel):
+    """The Prompt X-ray tab's state: a probe in flight (running) + the last probe's captured links."""
+    running: bool
+    status: str | None = None       # running | done | None (never fired)
+    item_id: str | None = None
+    started_at: str | None = None
+    finished_at: str | None = None
+    links: list[PromptExtractionLink] = []
+
+
 class ArtifactStatusRow(BaseModel):
     """COMPUTED status of one artifact kind (S2 — derived from file existence + self-check +
     evidence freshness at read time; never stored in any doc, so it cannot drift)."""

@@ -3,14 +3,12 @@ import {
   X, ArrowRight, Sparkles, Trash2, Check, Loader2, FileText, ListChecks, ScrollText, History,
   Terminal, Archive, Scale, GitBranch, Milestone, FlaskConical, BookOpenText, Ban, RefreshCw,
   GitMerge, Undo2, ShieldCheck, AlertTriangle, MessageSquare, CornerUpLeft, Lock, Plane,
-  FileInput, ExternalLink,
 } from 'lucide-react'
 import Markdown from '@/ui/Markdown'
 import Modal from '@/ui/Modal'
 import SectionHeader from '@/ui/SectionHeader'
 import { TraceRows } from './ExecutionTrace'
 import { pairTrace } from '@/lib/trace'
-import { getWorkItemTimeline } from '@/lib/api/dev'
 import {
   getWorkItemDetail, getWorkItemArtifacts, advanceWorkItem, completeWorkItem,
   getDevLog, getWorkItemGateBrief, getWorkItemGit, syncWorkItemGit,
@@ -36,7 +34,7 @@ const PIPELINES: Record<string, string[]> = {
 
 // P0-curated sub-tabs per phase — the most useful reads for that stage, nothing else. `trace`
 // (the raw call-trail) is appended to every phase: one click deeper, never leading.
-type SubTab = 'gate' | 'item' | 'plan' | 'validation' | 'findings' | 'closeout' | 'checkpoints' | 'git' | 'trace' | 'deputy' | 'input'
+type SubTab = 'gate' | 'item' | 'plan' | 'validation' | 'findings' | 'closeout' | 'checkpoints' | 'git' | 'trace' | 'deputy'
 const PHASE_TABS: Record<string, SubTab[]> = {
   triage: ['gate', 'item'],
   plan: ['gate', 'plan'],
@@ -58,62 +56,6 @@ const SUB_META: Record<SubTab, { label: string; icon: typeof FileText }> = {
   git: { label: 'Git', icon: GitBranch },
   trace: { label: 'Trace', icon: Terminal },
   deputy: { label: 'Deputy', icon: ShieldCheck },
-  input: { label: 'Input', icon: FileInput },
-}
-
-// The input-prompt sub-tab (prompt inspector): links to standalone HTML pages showing the FULL
-// input a run of this phase receives — system prompt + prompt body. B (preview) is reconstructed
-// from current state; A lists the ACTUAL captured input, one link per run of this item.
-const INPUT_WORK_FEATURES = new Set(['triage', 'plan', 'build', 'vet', 'close', 'investigate', 'report'])
-function InputPane({ itemId, contextId, phase }: { itemId: string; contextId: string; phase: string }) {
-  const base = `/api/dev/work-items/${encodeURIComponent(itemId)}`
-  const cq = `context_id=${encodeURIComponent(contextId)}`
-  const previewUrl = `${base}/phases/${encodeURIComponent(phase)}/preview-input.html?${cq}`
-  const [runs, setRuns] = useState<{ run_id: number; phase: string | null; feature: string | null; started_at: string | null }[]>([])
-  useEffect(() => {
-    let alive = true
-    getWorkItemTimeline(itemId, contextId)
-      .then((d) => { if (alive) setRuns((d.runs ?? []).map((r) => ({ run_id: r.run_id, phase: r.phase ?? null, feature: r.feature ?? null, started_at: r.started_at ?? null }))) })
-      .catch(() => { if (alive) setRuns([]) })
-    return () => { alive = false }
-  }, [itemId, contextId])
-  const workRuns = runs.filter((r) => r.feature && INPUT_WORK_FEATURES.has(r.feature))
-  return (
-    <Section icon={FileInput} title="Input prompt">
-      <p className="mb-3 text-sm text-muted">
-        The full input a run receives — the system prompt (SuperMe’s layer-2 append) plus the prompt
-        body (orient block + trigger). Each link opens a standalone page in a new tab.
-      </p>
-      {/* B — preview from current state */}
-      <a
-        href={previewUrl} target="_blank" rel="noreferrer"
-        className="mb-4 inline-flex items-center gap-2 rounded-md border border-accent/40 bg-accent/10 px-3 py-2 text-sm text-accent-text transition hover:bg-accent/20"
-      >
-        <ExternalLink size={14} /> Preview input (B) — a fresh {phase} run, from current state
-      </a>
-      {/* A — actual captured input, per run */}
-      <div className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-faint">
-        Actual input (A) — as sent, per run
-      </div>
-      {workRuns.length === 0 ? (
-        <span className="text-xs text-faint">No phase runs yet — the actual input is captured when a run fires.</span>
-      ) : (
-        <div className="flex flex-col items-start gap-1.5">
-          {workRuns.map((r) => (
-            <a
-              key={r.run_id}
-              href={`${base}/runs/${r.run_id}/input.html?${cq}`} target="_blank" rel="noreferrer"
-              className="inline-flex items-center gap-2 rounded-md border border-line bg-surface px-2.5 py-1.5 text-xs text-fg transition hover:border-accent/40 hover:text-accent-text"
-            >
-              <ExternalLink size={13} />
-              <span>{PHASE_LABEL[r.phase ?? r.feature ?? ''] ?? r.feature} · run #{r.run_id}</span>
-              {r.started_at && <span className="text-faint">· {fmtLocal(r.started_at)}</span>}
-            </a>
-          ))}
-        </div>
-      )}
-    </Section>
-  )
 }
 
 // Why the item is parked for the owner when it isn't a plain gate wait (a deputy escalation, a
@@ -391,7 +333,7 @@ export default function WorkItemModal({
           // The Deputy log appears only once the deputy has acted on this item — its governance
           // moves (approve / send-back / escalate) + rationale live HERE, out of the chat (Q1-E).
           ...(events.some((e) => String(e.kind).startsWith('deputy')) ? ['deputy' as SubTab] : []),
-          'trace' as SubTab, 'input' as SubTab].map((id) => {
+          'trace' as SubTab].map((id) => {
           const { label, icon: Icon } = SUB_META[id]
           return (
             <button
@@ -468,7 +410,6 @@ export default function WorkItemModal({
             {events.length > 0 && <TimelinePane events={events} />}
           </>
         )}
-        {sub === 'input' && <InputPane itemId={it.id} contextId={contextId} phase={phaseView} />}
       </div>
 
       {/* Actions — the gates are decided HERE, from the brief above. Only ever for the item's LIVE

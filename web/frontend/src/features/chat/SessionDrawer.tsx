@@ -46,13 +46,22 @@ export default function SessionDrawer({
     setEditingId(null)
   }
 
+  // Close only on a true scrim click — press AND release both on the dim area (not a drag that
+  // starts inside the drawer and ends on the scrim). The scrim is the `flex-1` child, so match the
+  // event target against it directly.
+  const scrimRef = useRef<HTMLDivElement>(null)
+  const downOnScrim = useRef(false)
   return (
-    <div className="absolute inset-0 z-20 flex" onClick={onClose}>
-      <div className="flex-1 bg-black/40" />
-      <div
-        className="flex h-full w-72 max-w-[85%] flex-col border-l border-line bg-surface shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <div
+      className="absolute inset-0 z-20 flex"
+      onMouseDown={(e) => { downOnScrim.current = e.target === scrimRef.current }}
+      onMouseUp={(e) => {
+        if (downOnScrim.current && e.target === scrimRef.current) onClose()
+        downOnScrim.current = false
+      }}
+    >
+      <div ref={scrimRef} className="flex-1 bg-black/40" />
+      <div className="flex h-full w-72 max-w-[85%] flex-col border-l border-line bg-surface shadow-xl">
         <div className="flex items-center justify-between border-b border-line px-3 py-2.5">
           <span className="text-sm font-semibold text-fg">Conversations</span>
           <button

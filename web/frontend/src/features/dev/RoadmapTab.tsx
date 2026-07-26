@@ -173,11 +173,7 @@ export default function RoadmapTab({ contextId }: { contextId: string }) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex shrink-0 items-baseline gap-2 border-b border-line px-6 py-3">
-        <h1 className="text-[15px] font-semibold text-fg">Project</h1>
-        <span className="text-[12px] text-faint">
-          {VIEWS.find((v) => v.key === view)?.hint}
-        </span>
+      <div className="flex shrink-0 items-center gap-2 border-b border-line px-6 py-2.5">
         <div className="ml-auto flex gap-1 rounded-md border border-line bg-surface p-0.5">
           {VIEWS.map((v) => (
             <button

@@ -29,12 +29,12 @@
     "GET /dev/palette",
     "GET /dev/portrait",
     "GET /dev/project-status",
+    "GET /dev/prompt-extraction/status",
     "GET /dev/roadmap",
     "GET /dev/work-items/{item_id}/artifacts",
     "GET /dev/work-items/{item_id}/detail",
     "GET /dev/work-items/{item_id}/gate-brief",
     "GET /dev/work-items/{item_id}/git",
-    "GET /dev/work-items/{item_id}/phases/{phase}/preview-input.html",
     "GET /dev/work-items/{item_id}/runs/{run_id}/input.html",
     "GET /dev/work-items/{item_id}/timeline",
     "GET /dev/workgraph",
@@ -69,6 +69,7 @@
     "POST /dev/memory/proposals/{proposal_id}/drop",
     "POST /dev/memory/proposals/{proposal_id}/publish",
     "POST /dev/memory/proposals/{proposal_id}/reject",
+    "POST /dev/prompt-extraction/run",
     "POST /dev/sweep",
     "POST /dev/sweep/idle-scan",
     "POST /dev/work-items/{item_id}/abandon",
@@ -5075,6 +5076,113 @@
             "docs"
           ],
           "title": "ProjectStatusResponse",
+          "type": "object"
+        },
+        "PromptExtractionLink": {
+          "description": "One captured \"A\" page for the last Prompt X-ray probe's phase runs \u2014 survives the probe's\nteardown (run_input rows are kept trace, keyed by the dangling item_id).",
+          "properties": {
+            "phase": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Phase"
+            },
+            "run_id": {
+              "title": "Run Id",
+              "type": "integer"
+            },
+            "started_at": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Started At"
+            },
+            "url": {
+              "title": "Url",
+              "type": "string"
+            }
+          },
+          "required": [
+            "run_id",
+            "url"
+          ],
+          "title": "PromptExtractionLink",
+          "type": "object"
+        },
+        "PromptExtractionStatusResponse": {
+          "description": "The Prompt X-ray tab's state: a probe in flight (running) + the last probe's captured links.",
+          "properties": {
+            "finished_at": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Finished At"
+            },
+            "item_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Item Id"
+            },
+            "links": {
+              "default": [],
+              "items": {
+                "$ref": "#/components/schemas/PromptExtractionLink"
+              },
+              "title": "Links",
+              "type": "array"
+            },
+            "running": {
+              "title": "Running",
+              "type": "boolean"
+            },
+            "started_at": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Started At"
+            },
+            "status": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          "required": [
+            "running"
+          ],
+          "title": "PromptExtractionStatusResponse",
           "type": "object"
         },
         "Proposal": {
@@ -10974,6 +11082,88 @@
           "summary": "Dev Project Status"
         }
       },
+      "/dev/prompt-extraction/run": {
+        "post": {
+          "description": "Prompt X-ray: fire a THROWAWAY prompt-extraction probe on this repo \u2014 a disposable work-item\nthat runs the real lifecycle unattended to capture each phase's actual input prompt, then tears\nitself down (folder + worktree + branch, keeping only the tagged run trace). One at a time per\nrepo. Returns the current probe state (running + captured links).",
+          "operationId": "dev_prompt_extraction_run_dev_prompt_extraction_run_post",
+          "parameters": [
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "default": "global",
+                "title": "Context Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/PromptExtractionStatusResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Prompt Extraction Run"
+        }
+      },
+      "/dev/prompt-extraction/status": {
+        "get": {
+          "description": "Prompt X-ray: the repo's current probe state \u2014 whether one is running, and the captured \"A\"\ninput-page links for the last probe (which survive its teardown).",
+          "operationId": "dev_prompt_extraction_status_dev_prompt_extraction_status_get",
+          "parameters": [
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "default": "global",
+                "title": "Context Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/PromptExtractionStatusResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Prompt Extraction Status"
+        }
+      },
       "/dev/roadmap": {
         "get": {
           "description": "The roadmap board: deliverable \u2192 wave \u2192 its live work-item instances + rollup, plus any\nreferential-integrity orphans (an item/wave pointing at an id the anchor docs don't define).",
@@ -11930,65 +12120,6 @@
             }
           },
           "summary": "Dev Work Item Git Sync"
-        }
-      },
-      "/dev/work-items/{item_id}/phases/{phase}/preview-input.html": {
-        "get": {
-          "description": "Prompt inspector (B): the FULL input a fresh `phase` run would receive \u2014 system prompt +\nprompt body \u2014 as a standalone HTML page for a new browser tab. Reconstructed from the item's\ncurrent state through the live assembly code (faithful by construction); fires nothing.",
-          "operationId": "dev_work_item_preview_input_dev_work_items__item_id__phases__phase__preview_input_html_get",
-          "parameters": [
-            {
-              "in": "path",
-              "name": "item_id",
-              "required": true,
-              "schema": {
-                "title": "Item Id",
-                "type": "string"
-              }
-            },
-            {
-              "in": "path",
-              "name": "phase",
-              "required": true,
-              "schema": {
-                "title": "Phase",
-                "type": "string"
-              }
-            },
-            {
-              "in": "query",
-              "name": "context_id",
-              "required": false,
-              "schema": {
-                "default": "global",
-                "title": "Context Id",
-                "type": "string"
-              }
-            }
-          ],
-          "responses": {
-            "200": {
-              "content": {
-                "text/html": {
-                  "schema": {
-                    "type": "string"
-                  }
-                }
-              },
-              "description": "Successful Response"
-            },
-            "422": {
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "$ref": "#/components/schemas/HTTPValidationError"
-                  }
-                }
-              },
-              "description": "Validation Error"
-            }
-          },
-          "summary": "Dev Work Item Preview Input"
         }
       },
       "/dev/work-items/{item_id}/plan": {

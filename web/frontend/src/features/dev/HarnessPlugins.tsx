@@ -201,7 +201,7 @@ function HarnessFileModal({ scope, entry, onClose }: { scope: string; entry: Har
 
   const Icon = entry.kind === 'agent' ? Bot : Sparkles
   return (
-    <Modal onClose={onClose} column maxW="max-w-3xl">
+    <Modal onClose={onClose} column maxW="max-w-3xl" dismissable={!editing}>
         <div className="flex shrink-0 items-center gap-2 border-b border-line px-4 py-3">
           <Icon size={15} className="text-accent-text" />
           <span className="font-mono text-sm text-fg">{entry.name}</span>

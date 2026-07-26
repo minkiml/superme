@@ -56,6 +56,18 @@ def maybe_autopilot_advance(context_id: str, item_id: str) -> None:
         item = dev.read_work_item(dev_root, item_id)
         if item is None or not autopilot_core.is_autopilot(item):
             return
+        # Throwaway prompt-extraction probe (Prompt X-ray): NO deputy, NO judgment — it sails through
+        # every gate (incl. review, via review_merge's synthetic skip) so each phase's prompt is
+        # captured, then tears itself down once it rests at close. Handled before the deputy dispatch.
+        if autopilot_core.is_prompt_extraction(item):
+            if str(item.get("phase")) == "close" and str(item.get("status")) == "awaiting_human":
+                from . import prompt_extraction as px
+                px.teardown(context_id, item_id, reason="probe reached close")
+            elif autopilot_core.throwaway_advance_target(item, kind_profiles.next_phase):
+                # actor stays "autopilot" (a valid event-actor enum) — the probe IS autopilot-driven;
+                # "prompt-extraction" is the run FEATURE tag, never an actor.
+                autopilot_advance(ctx, context_id, item_id, actor="autopilot")
+            return
         spine = get_spine()
         # Deputy present → it judges the gate (triage/plan/review). Scheduled as a task since the
         # judgment is a headless agent turn. No running loop (offline tests) → fall through to the

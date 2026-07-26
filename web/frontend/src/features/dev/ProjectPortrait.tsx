@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Map } from 'lucide-react'
 import { getPortrait, type Portrait } from '@/lib/api'
 import { Empty } from './common'
 
@@ -78,7 +78,10 @@ export default function ProjectPortrait({ contextId }: { contextId: string }) {
     <div className="mx-auto max-w-3xl p-6">
       {/* 1 — identity. Always first, never scrolled for. */}
       <header className="mb-8">
-        <h1 className="text-[22px] font-semibold tracking-tight text-fg">{identity.name}</h1>
+        <h1 className="flex items-center gap-2.5 text-[22px] font-semibold tracking-tight text-fg">
+          <Map size={21} className="shrink-0 text-dev" />
+          {identity.name}
+        </h1>
         {identity.one_liner && (
           <p className="mt-2.5 max-w-[52em] text-[14px] leading-relaxed text-fg">{identity.one_liner}</p>
         )}

@@ -262,6 +262,19 @@ def remove_worktree(repo_dir: Path, repo_id: str, item_id: str) -> dict:
     return {"removed": removed, "verified": verified}
 
 
+def delete_branch(repo_dir: Path, branch: str) -> dict:
+    """Force-delete a branch ref (`git branch -D`). Unlike `remove_worktree`, this DOES drop the
+    branch — used ONLY for a throwaway prompt-extraction probe, whose branch is disposable scaffolding
+    (never merged, never trace), NOT a real work-item branch (those are kept, never-delete-logs).
+    Best-effort: a missing branch is a no-op. Returns {deleted}."""
+    repo_dir = Path(repo_dir)
+    if not branch:
+        return {"deleted": False}
+    with repo_lock(repo_dir):
+        r = _git(repo_dir, "branch", "-D", branch, check=False)
+    return {"deleted": r.returncode == 0}
+
+
 def _same_path(a, b) -> bool:
     """Symlink-tolerant path equality (macOS: /var ↔ /private/var)."""
     try:
