@@ -38,10 +38,10 @@ export function fmtTokens(n?: number | null): string {
 // at consumption (core/models.py MODEL_TIERS → normalize_model / resolve_agent_model), so aliases —
 // the canonical on-disk form for agent .md files — resolve to the newest, never the lagging CLI alias.
 // Mirror core/models.py MODEL_TIERS. Bump both when a newer tier ships.
-export type ModelKey = 'claude-opus-4-8' | 'claude-sonnet-5' | 'claude-haiku-4-5'
+export type ModelKey = 'claude-opus-5' | 'claude-sonnet-5' | 'claude-haiku-4-5'
 
 export const MODELS: { key: ModelKey; label: string; blurb: string }[] = [
-  { key: 'claude-opus-4-8', label: 'Opus 4.8', blurb: 'Most capable — everyday complex work' },
+  { key: 'claude-opus-5', label: 'Opus 5', blurb: 'Most capable — everyday complex work' },
   { key: 'claude-sonnet-5', label: 'Sonnet 5', blurb: 'Balanced — efficient for routine tasks' },
   { key: 'claude-haiku-4-5', label: 'Haiku 4.5', blurb: 'Fastest for quick answers' },
 ]
@@ -56,14 +56,14 @@ export const DEFAULT_MODEL: ModelKey = 'claude-sonnet-5'
 // Keep these mirroring MODELS — bump both when a newer tier ships.
 const MODEL_LABEL: Record<string, string> = {
   ...Object.fromEntries(MODELS.map((m) => [m.key, m.label])),
-  opus: 'Opus 4.8', sonnet: 'Sonnet 5', haiku: 'Haiku 4.5',
+  opus: 'Opus 5', sonnet: 'Sonnet 5', haiku: 'Haiku 4.5',
 }
 
 // Tier alias → concrete picker-option key (mirror MODEL_TIERS; bump with MODELS). Picker overrides
 // are STORED as a tier alias ("sonnet") but the option keys are concrete ("claude-sonnet-5"); this
 // maps a stored value (alias OR legacy concrete) onto the option key so the right row highlights.
 const ALIAS_KEY: Record<string, ModelKey> = {
-  opus: 'claude-opus-4-8', sonnet: 'claude-sonnet-5', haiku: 'claude-haiku-4-5',
+  opus: 'claude-opus-5', sonnet: 'claude-sonnet-5', haiku: 'claude-haiku-4-5',
 }
 /** Normalize a stored model value (tier alias or concrete id) to its concrete picker-option key.
  * Empty string for missing (so it clears a Dropdown to no-selection). */

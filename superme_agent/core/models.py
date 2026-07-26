@@ -11,7 +11,7 @@ Bump these ids when a newer model per tier ships (and mirror the FE labels in we
 
 # Tier alias → the concrete model id that runs the intended newest version.
 MODEL_TIERS: dict[str, str] = {
-    "opus": "claude-opus-4-8",
+    "opus": "claude-opus-5",
     "sonnet": "claude-sonnet-5",
     "haiku": "claude-haiku-4-5",
 }
