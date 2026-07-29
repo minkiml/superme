@@ -98,6 +98,9 @@ class WorkItem(BaseModel):
     # the `unread` bucket. Never bumps updated_at. YAML round-trips the stamp as datetime, so
     # the union keeps it faithful (datetime → isoformat on serialize), same as done_at.
     seen_at: datetime | str | None = None
+    # Set once the item's loose artifact files were folded into `archive.zip` (the on-demand
+    # folder archive). A STORAGE fact, not a lifecycle state — the item stays done/completed.
+    archived_at: datetime | str | None = None
     artifacts: list[ArtifactRef] | None = None
     session_id: str | None = None
     created_at: date | str | None = None
@@ -214,15 +217,13 @@ class WorkItemArtifactsResponse(BaseModel):
     artifacts: list[ArtifactCall]
 
 
-class WorkItemCompleteResponse(BaseModel):
+class WorkItemArchiveResponse(BaseModel):
+    """The on-demand folder archive of a DONE item — storage only, never a lifecycle change."""
     ok: bool
     id: str
-    archived: str
-    session_cleared: bool
-    runs_freed: int
-    # S4 terminal cleanup: True = worktree dir removed+verified; False = removal failed (surfaced,
-    # never silent); absent = the item never had a worktree.
-    worktree_removed: bool | None = None
+    archive: str          # the archive file, relative to the item folder
+    files: int            # how many loose files were folded in (0 on a repeat call)
+    already: bool = False # this item was already archived; nothing changed
 
 
 class TimelineEvent(BaseModel):

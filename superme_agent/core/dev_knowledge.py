@@ -973,6 +973,52 @@ class DevKnowledgeService:
         item.write_text(f"---\n{fm}\n---\n{body}")
         return True
 
+    def archive_item_folder(self, dev_root: Path, item_id: str) -> int:
+        """Fold every loose file in a work-item's folder into one `archive.zip` beside `item.md`,
+        then remove the originals and the emptied sub-folders. Returns how many files moved.
+        Lossless — the content is in the zip — and the DB trace is a different store entirely
+        (never-delete-logs). `item.md` stays: it IS the item, and the tree walk reads it."""
+        import zipfile
+        folder = Path(dev_root) / "work-items" / item_id
+        zip_path = folder / "archive.zip"
+        files = sorted(p for p in folder.rglob("*")
+                       if p.is_file() and p.name != "item.md" and p != zip_path)
+        if not files:
+            return 0
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
+            for p in files:
+                z.write(p, p.relative_to(folder).as_posix())
+        for p in files:
+            p.unlink()
+        for d in sorted((p for p in folder.rglob("*") if p.is_dir()), reverse=True):
+            try:
+                d.rmdir()   # only the ones the unlink above emptied
+            except OSError:
+                pass
+        return len(files)
+
+    def set_work_item_archived(self, dev_root: Path, item_id: str) -> bool:
+        """Stamp `archived_at` — the item's loose artifact files were folded into `archive.zip`
+        (renovation §2, on-demand archive). A storage fact about the FOLDER, not a lifecycle
+        state: the item stays `done`/`completed` and its DB trace is untouched. Returns True if
+        the file changed."""
+        item = Path(dev_root) / "work-items" / item_id / "item.md"
+        if not item.exists():
+            return False
+        text = item.read_text()
+        m = _FRONTMATTER.match(text)
+        if not m:
+            return False
+        stamp = datetime.now().isoformat(timespec="seconds")
+        fm = m.group(1)
+        if re.search(r"(?m)^archived_at:.*$", fm):
+            fm = re.sub(r"(?m)^archived_at:.*$", f"archived_at: {stamp}", fm)
+        else:
+            fm = fm.rstrip() + f"\narchived_at: {stamp}"
+        _meta, body = _parse_md(text)
+        item.write_text(f"---\n{fm}\n---\n{body}")
+        return True
+
     def set_work_item_scaffold(
         self, dev_root: Path, item_id: str, *, wave: str | None = None, deliverable: str | None = None
     ) -> bool:

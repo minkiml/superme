@@ -76,10 +76,10 @@
     "POST /dev/sweep/idle-scan",
     "POST /dev/work-items/{item_id}/abandon",
     "POST /dev/work-items/{item_id}/advance",
+    "POST /dev/work-items/{item_id}/archive",
     "POST /dev/work-items/{item_id}/authorize",
     "POST /dev/work-items/{item_id}/autopilot",
     "POST /dev/work-items/{item_id}/compact",
-    "POST /dev/work-items/{item_id}/complete",
     "POST /dev/work-items/{item_id}/continue",
     "POST /dev/work-items/{item_id}/git/merge",
     "POST /dev/work-items/{item_id}/git/resolve",
@@ -8610,6 +8610,21 @@
               ],
               "title": "After"
             },
+            "archived_at": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Archived At"
+            },
             "artifacts": {
               "anyOf": [
                 {
@@ -9206,6 +9221,40 @@
           "title": "WorkItemAdvanceResponse",
           "type": "object"
         },
+        "WorkItemArchiveResponse": {
+          "description": "The on-demand folder archive of a DONE item \u2014 storage only, never a lifecycle change.",
+          "properties": {
+            "already": {
+              "default": false,
+              "title": "Already",
+              "type": "boolean"
+            },
+            "archive": {
+              "title": "Archive",
+              "type": "string"
+            },
+            "files": {
+              "title": "Files",
+              "type": "integer"
+            },
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "ok": {
+              "title": "Ok",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok",
+            "id",
+            "archive",
+            "files"
+          ],
+          "title": "WorkItemArchiveResponse",
+          "type": "object"
+        },
         "WorkItemArtifactsResponse": {
           "properties": {
             "artifacts": {
@@ -9249,50 +9298,6 @@
             "changed"
           ],
           "title": "WorkItemAutopilotResponse",
-          "type": "object"
-        },
-        "WorkItemCompleteResponse": {
-          "properties": {
-            "archived": {
-              "title": "Archived",
-              "type": "string"
-            },
-            "id": {
-              "title": "Id",
-              "type": "string"
-            },
-            "ok": {
-              "title": "Ok",
-              "type": "boolean"
-            },
-            "runs_freed": {
-              "title": "Runs Freed",
-              "type": "integer"
-            },
-            "session_cleared": {
-              "title": "Session Cleared",
-              "type": "boolean"
-            },
-            "worktree_removed": {
-              "anyOf": [
-                {
-                  "type": "boolean"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Worktree Removed"
-            }
-          },
-          "required": [
-            "ok",
-            "id",
-            "archived",
-            "session_cleared",
-            "runs_freed"
-          ],
-          "title": "WorkItemCompleteResponse",
           "type": "object"
         },
         "WorkItemDeleteResponse": {
@@ -12027,6 +12032,56 @@
           "summary": "Dev Work Item Advance"
         }
       },
+      "/dev/work-items/{item_id}/archive": {
+        "post": {
+          "description": "Archive a DONE item's folder: every loose artifact file is folded into one `archive.zip`\nbeside `item.md`, and `archived_at` is stamped. Storage only \u2014 the item stays completed and\nthe DB trace (runs, events, artifacts) is untouched forever (never-delete-logs). Idempotent.\n\nCompletion itself has no route: an item goes terminal MECHANICALLY when its closing run\nreports (services/clearance) \u2014 there is no owner promotion and no agent proposal.",
+          "operationId": "dev_work_item_archive_dev_work_items__item_id__archive_post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "item_id",
+              "required": true,
+              "schema": {
+                "title": "Item Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "default": "global",
+                "title": "Context Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/WorkItemArchiveResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Work Item Archive"
+        }
+      },
       "/dev/work-items/{item_id}/artifacts": {
         "get": {
           "description": "The call-trail: every tool / sub-agent / skill this work-item's runs invoked, grouped by\nrun (newest run first, calls in order within a run). Powers the detail popup's Execution tab.",
@@ -12235,56 +12290,6 @@
             }
           },
           "summary": "Dev Work Item Compact"
-        }
-      },
-      "/dev/work-items/{item_id}/complete": {
-        "post": {
-          "description": "Complete + archive a close-phase work-item \u2014 the HUMAN promotion to terminal (D8: the\nagent never self-closes; this FE route has no agent-tool counterpart). Mechanically refused\nwhile any child (blocking/parallel spawned_from edge) is non-terminal (D3). Snapshots the\nexecution trace to `artifacts/execution.md` (the folder persists), stamps status=done +\noutcome=completed + done_at, resumes an awaiting_child parent whose last blocking child this\nwas (status router), then reclaims the SDK transcript + frees run rows. Events are kept.",
-          "operationId": "dev_work_item_complete_dev_work_items__item_id__complete_post",
-          "parameters": [
-            {
-              "in": "path",
-              "name": "item_id",
-              "required": true,
-              "schema": {
-                "title": "Item Id",
-                "type": "string"
-              }
-            },
-            {
-              "in": "query",
-              "name": "context_id",
-              "required": false,
-              "schema": {
-                "default": "global",
-                "title": "Context Id",
-                "type": "string"
-              }
-            }
-          ],
-          "responses": {
-            "200": {
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "$ref": "#/components/schemas/WorkItemCompleteResponse"
-                  }
-                }
-              },
-              "description": "Successful Response"
-            },
-            "422": {
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "$ref": "#/components/schemas/HTTPValidationError"
-                  }
-                }
-              },
-              "description": "Validation Error"
-            }
-          },
-          "summary": "Dev Work Item Complete"
         }
       },
       "/dev/work-items/{item_id}/continue": {

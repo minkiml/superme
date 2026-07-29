@@ -1541,7 +1541,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/dev/work-items/{item_id}/complete": {
+    "/dev/work-items/{item_id}/archive": {
         parameters: {
             query?: never;
             header?: never;
@@ -1551,15 +1551,15 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Dev Work Item Complete
-         * @description Complete + archive a close-phase work-item — the HUMAN promotion to terminal (D8: the
-         *     agent never self-closes; this FE route has no agent-tool counterpart). Mechanically refused
-         *     while any child (blocking/parallel spawned_from edge) is non-terminal (D3). Snapshots the
-         *     execution trace to `artifacts/execution.md` (the folder persists), stamps status=done +
-         *     outcome=completed + done_at, resumes an awaiting_child parent whose last blocking child this
-         *     was (status router), then reclaims the SDK transcript + frees run rows. Events are kept.
+         * Dev Work Item Archive
+         * @description Archive a DONE item's folder: every loose artifact file is folded into one `archive.zip`
+         *     beside `item.md`, and `archived_at` is stamped. Storage only — the item stays completed and
+         *     the DB trace (runs, events, artifacts) is untouched forever (never-delete-logs). Idempotent.
+         *
+         *     Completion itself has no route: an item goes terminal MECHANICALLY when its closing run
+         *     reports (services/clearance) — there is no owner promotion and no agent proposal.
          */
-        post: operations["dev_work_item_complete_dev_work_items__item_id__complete_post"];
+        post: operations["dev_work_item_archive_dev_work_items__item_id__archive_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5540,6 +5540,8 @@ export interface components {
             git_pr_opened_at?: string | null;
             /** Seen At */
             seen_at?: string | null;
+            /** Archived At */
+            archived_at?: string | null;
             /** Artifacts */
             artifacts?: components["schemas"]["ArtifactRef"][] | null;
             /** Session Id */
@@ -5601,6 +5603,25 @@ export interface components {
                 [key: string]: unknown;
             } | null;
         };
+        /**
+         * WorkItemArchiveResponse
+         * @description The on-demand folder archive of a DONE item — storage only, never a lifecycle change.
+         */
+        WorkItemArchiveResponse: {
+            /** Ok */
+            ok: boolean;
+            /** Id */
+            id: string;
+            /** Archive */
+            archive: string;
+            /** Files */
+            files: number;
+            /**
+             * Already
+             * @default false
+             */
+            already: boolean;
+        };
         /** WorkItemArtifactsResponse */
         WorkItemArtifactsResponse: {
             /** Artifacts */
@@ -5619,21 +5640,6 @@ export interface components {
             autopilot: boolean;
             /** Changed */
             changed: boolean;
-        };
-        /** WorkItemCompleteResponse */
-        WorkItemCompleteResponse: {
-            /** Ok */
-            ok: boolean;
-            /** Id */
-            id: string;
-            /** Archived */
-            archived: string;
-            /** Session Cleared */
-            session_cleared: boolean;
-            /** Runs Freed */
-            runs_freed: number;
-            /** Worktree Removed */
-            worktree_removed?: boolean | null;
         };
         /** WorkItemDeleteResponse */
         WorkItemDeleteResponse: {
@@ -8258,7 +8264,7 @@ export interface operations {
             };
         };
     };
-    dev_work_item_complete_dev_work_items__item_id__complete_post: {
+    dev_work_item_archive_dev_work_items__item_id__archive_post: {
         parameters: {
             query?: {
                 context_id?: string;
@@ -8277,7 +8283,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["WorkItemCompleteResponse"];
+                    "application/json": components["schemas"]["WorkItemArchiveResponse"];
                 };
             };
             /** @description Validation Error */

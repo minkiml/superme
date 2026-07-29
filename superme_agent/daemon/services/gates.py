@@ -466,12 +466,11 @@ def advance_item(ctx, context_id: str, item_id: str, *, dev, dev_store, spine,
         except RuntimeError:
             pass
     elif nxt == "close":
-        # #179: review→close merged the branch, but nobody was authoring the closeout — so the
-        # owner's Complete click failed the close gate and the item wedged. Fire a close run to
-        # draft closeout.md + propose_close; completion itself stays the owner's (D8 — the run
-        # prepares, never self-completes). Fires for EVERY actor: drafting the closeout has no
-        # human step inside it, and a hand-driven item left at `active` with no run is the same
-        # idle stall the auto-run branch above exists to prevent. No-op off a loop.
+        # review→close merged the branch; the closing run reflects what landed into the anchor
+        # docs and reports, and the kernel then CLEARS the item mechanically (services/clearance).
+        # Fires for EVERY actor: there is no human step inside close, and a hand-driven item left
+        # at `active` with no run is the idle stall the auto-run branch above exists to prevent.
+        # No-op off a loop.
         try:
             from .runs import fire_close_run
             asyncio.get_running_loop().call_soon(fire_close_run, context_id, item_id, spine)

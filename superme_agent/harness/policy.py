@@ -89,7 +89,6 @@ SAFE_TOOLS = {
     # here would push the agent toward the whole-file rewrite this tool exists to prevent.
     "mcp__dev__revise_plan",
     # Proposal-only: drafts the close record + pages the owner; never sets an item terminal.
-    "mcp__dev__propose_close",
 }
 
 

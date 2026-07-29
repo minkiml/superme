@@ -11,7 +11,7 @@ import SectionHeader from '@/ui/SectionHeader'
 import { TraceRows } from './ExecutionTrace'
 import { pairTrace } from '@/lib/trace'
 import {
-  getWorkItemDetail, getWorkItemArtifacts, advanceWorkItem, completeWorkItem,
+  getWorkItemDetail, getWorkItemArtifacts, advanceWorkItem, archiveWorkItem,
   getDevLog, getWorkItemGateBrief, getWorkItemGit, syncWorkItemGit, resolveWorkItemGit,
   revertWorkItemGit, abandonWorkItem, markWorkItemSeen, vetWorkItem, continueWorkItem, authorizeWorkItem,
   type WorkItem, type WorkItemDetail, type DevEvent, type RunArtifact, type GateBrief,
@@ -256,14 +256,17 @@ export default function WorkItemModal({
       setAuthBusy(null)
     }
   }
-  async function complete() {
+  // Archive (renovation §2): fold a DONE item's loose artifact files into one archive.zip. Storage
+  // only — the item stays completed and its DB trace is untouched. There is no Complete click:
+  // clearance to Done is mechanical, the moment the closing run reports.
+  async function archive() {
     setAdvancing(true)
     try {
-      await completeWorkItem(it.id, contextId)
+      await archiveWorkItem(it.id, contextId)
       onChanged()
       onClose()
     } catch (e) {
-      setMutErr(`Couldn't complete — ${e}`)
+      setMutErr(`Couldn't archive — ${e}`)
       setAdvancing(false)
     }
   }
@@ -499,19 +502,31 @@ export default function WorkItemModal({
                 <Sparkles size={14} /> Plan it
               </button>
             ) : completed ? (
-              <span className="inline-flex items-center gap-1.5 text-xs text-success">
-                <Check size={14} /> {it.outcome === 'abandoned' ? 'Dropped' : it.outcome === 'superseded' ? 'Superseded' : 'Completed · trace archived'}
-              </span>
+              <div className="inline-flex items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 text-xs text-success">
+                  <Check size={14} /> {it.outcome === 'abandoned' ? 'Dropped' : it.outcome === 'superseded' ? 'Superseded' : 'Completed'}
+                </span>
+                {it.archived_at ? (
+                  <span className="inline-flex items-center gap-1 rounded-md border border-line px-2 py-1 text-[11px] text-muted">
+                    <Archive size={11} /> archived
+                  </span>
+                ) : (
+                  <button
+                    onClick={archive}
+                    disabled={advancing}
+                    title="Archive — fold this item's artifact files into one archive.zip. The trace on record is untouched."
+                    className="inline-flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-xs font-medium transition hover:bg-hover disabled:opacity-50"
+                  >
+                    {advancing ? <Loader2 size={14} className="animate-spin" /> : <Archive size={14} />}
+                    Archive
+                  </button>
+                )}
+              </div>
             ) : atClose ? (
-              <button
-                onClick={complete}
-                disabled={advancing}
-                title="Complete — mechanically refused unless every close criterion is green"
-                className="inline-flex items-center gap-1.5 rounded-md bg-success px-3 py-1.5 text-xs font-medium text-on-accent transition hover:opacity-90 disabled:opacity-50"
-              >
-                {advancing ? <Loader2 size={14} className="animate-spin" /> : <Archive size={14} />}
-                Complete &amp; archive
-              </button>
+              <span className="inline-flex items-center gap-1.5 text-xs text-muted">
+                <Loader2 size={14} className={running ? 'animate-spin' : ''} />
+                Closing — knowledge finalization, then it clears itself
+              </span>
             ) : phase === 'vet' ? (
               <button
                 onClick={vet}

@@ -153,17 +153,18 @@ def phase_feedback_trigger(item_id: str, title: str, phase: str, skill: str, fee
 
 def close_trigger(item_id: str, title: str) -> str:
     """Consumer: the auto-fired close run (runs._run_background_close) · durable — it RESUMES the
-    item's intake thread (the whole narrative that reports honestly on what landed). #179: on an
-    autopilot item's review→close hop nobody was authoring the close record, so the owner's
-    Complete click failed the close gate; this run prepares it. Completion itself stays the
-    owner's — the run drafts + proposes, never self-closes (D8 human floor). `closeout.md` is
-    retired (§3.1 demolition): close's output is `reports/report-close.md` + the DB close record."""
+    item's intake thread (the whole narrative that knows what the item was for). This is the ONE
+    closing run: review's exit locked code and git, so close's whole job is knowledge — the anchor
+    docs + this week's change log — plus `reports/report-close.md`. Clearance to Done is
+    MECHANICAL and happens after the report (services/clearance); the run never completes the
+    item, and there is nothing for it to propose."""
     return (
         f"Work-item `{item_id}` (\"{title}\") merged and entered its CLOSE phase. Run "
-        f"superme-dev:close to write the record it leaves behind: `reports/report-close.md` from "
-        f"the item's real artifacts + git — what landed, what the anchor docs now say, what was "
-        f"skipped and why — then reconcile any loose ends and call `propose_close`. Green pages "
-        f"the owner to Complete — never advance or complete the item yourself."
+        f"superme-dev:close: reflect what LANDED into the general anchor docs through "
+        f"`apply_knowledge_delta` (nothing doc-worthy ⇒ write nothing), then write "
+        f"`reports/report-close.md` from the item's real artifacts + git — what landed, what the "
+        f"anchor docs now say, what was skipped and why. Report when done; the kernel clears the "
+        f"item from there."
     )
 
 

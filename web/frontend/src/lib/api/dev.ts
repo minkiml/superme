@@ -87,6 +87,7 @@ export type WorkItem = {
   last_run?: { tokens: number; duration_ms: number | null; model?: string | null; ctx_pct?: number | null } | null
   tasks?: { done: number; total: number } | null // tasks.md checklist progress (null = no tasks.md)
   seen_at?: string | null // owner-opened read receipt (S7 attention: terminal + unseen = unread)
+  archived_at?: string | null // the item folder's files were folded into archive.zip (storage only)
 }
 
 export type InboxKind = 'note' | 'idea' | 'todo' | 'question'
@@ -699,11 +700,12 @@ export function setWorkItemAutopilot(
     `/api/dev/work-items/${q(itemId)}/autopilot?context_id=${q(contextId)}`, 'POST', { on })
 }
 
-// Complete + archive a Done-phase item (the tick-out): snapshots the execution trace to a file,
-// stamps done_at, and frees the session transcript + run/run_artifact rows to reclaim disk.
-export type CompleteResult = Schema<'WorkItemCompleteResponse'>
-export function completeWorkItem(itemId: string, contextId = 'global'): Promise<CompleteResult> {
-  return sendJSON(`/api/dev/work-items/${q(itemId)}/complete?context_id=${q(contextId)}`, 'POST')
+// Archive a DONE item's folder: its loose artifact files fold into one archive.zip. Storage only —
+// the item stays completed and its DB trace is untouched. There is no "complete" call: an item goes
+// terminal mechanically when its closing run reports.
+export type ArchiveResult = Schema<'WorkItemArchiveResponse'>
+export function archiveWorkItem(itemId: string, contextId = 'global'): Promise<ArchiveResult> {
+  return sendJSON(`/api/dev/work-items/${q(itemId)}/archive?context_id=${q(contextId)}`, 'POST')
 }
 
 // --- work-item git layer (workspace-workflow S4/D4) -------------------------------------

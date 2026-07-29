@@ -1315,48 +1315,6 @@ def _revise_plan(*, store, context_id, dev_root=None, bound_item_id=None, **_):
     return revise_plan
 
 
-class ProposeCloseArgs(TypedDict, total=False):
-    item_id: Required[Annotated[str, "the work-item id"]]
-
-
-def _propose_close(*, store, context_id, dev_root=None, bound_item_id=None, **_):
-    async def propose_close(args: dict) -> dict:
-        from pathlib import Path
-        from ...core import gate_briefs as _gb
-        from ...core.dev_knowledge import DevKnowledgeService
-        from ...core.kind_profiles import is_final_phase
-        item_id = _s(args, "item_id")
-        if (msg := _bound_err(item_id, bound_item_id)):
-            return _err(msg)
-        d = _item_dir(dev_root, item_id)
-        if d is None:
-            return _err(f"No work-item {item_id!r} here.")
-        dev = DevKnowledgeService()
-        item = dev.read_work_item(Path(dev_root), item_id) or {}
-        if item.get("done_at") or str(item.get("status")) == "done":
-            return _err("This item is already terminal.")
-        if not is_final_phase(item.get("kind"), item.get("phase") or "triage"):
-            return _err(f"Close is proposed from the close phase — this item is at "
-                        f"`{item.get('phase')}`. Finish the phase pipeline first.")
-        all_items = dev.read_all(Path(dev_root))["work_items"]
-        cr = _gb.close_readiness(item, d, all_items)
-        if not cr["ok"]:
-            fails = [c for c in cr["checks"] if not c["ok"]]
-            return _err("Close would be refused mechanically — fix these first (nothing was "
-                        "proposed):\n- " + "\n- ".join(f"{c['criterion']}: {c['detail']}"
-                                                       for c in fails))
-        dev.set_work_item_status(Path(dev_root), item_id, "awaiting_human")
-        store.log_event(context_id, "close.proposed",
-                        f"Close proposed (all {len(cr['checks'])} criteria green): "
-                        f"{item.get('title') or item_id}",
-                        item_id=item_id, actor="agent",
-                        meta={"checks": [c["criterion"] for c in cr["checks"]]})
-        return _ok("Close proposed — every mechanical criterion is green and the owner is paged "
-                   "at the close gate. Completion itself is the owner's promotion; never claim "
-                   "the item is closed.")
-    return propose_close
-
-
 _ITEM_DEV_TOOLS: list[ToolSpec] = [
     ToolSpec(
         "set_triage_classification",
@@ -1418,12 +1376,6 @@ _ITEM_DEV_TOOLS: list[ToolSpec] = [
         "`- [x]` progress build earned survives, and every untouched section is provably "
         "untouched. Records the revision block the next build reads first.",
         RevisePlanArgs, _revise_plan,
-    ),
-    ToolSpec(
-        "propose_close",
-        "Propose the item for closing (proposal only — the owner promotes): runs the mechanical "
-        "close criteria and pages the owner at the close gate when all are green.",
-        ProposeCloseArgs, _propose_close,
     ),
 ]
 

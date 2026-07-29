@@ -697,13 +697,15 @@ async def _run_deputy_feedback_turn(ctx, context_id: str, item_id: str, item_dir
 
 
 def fire_close_run(context_id: str, item_id: str, spine) -> bool:
-    """#179: an autopilot item just merged into its CLOSE phase — author its closeout so the owner's
-    Complete click passes the close gate (nobody was doing this on the autonomous path, wedging the
-    item at close). Mirrors the auto-plan-on-advance kick: fires ONLY for an item resting at phase
-    `close` with no run in flight; the run drafts + `propose_close`, never self-completes (D8 human
-    floor). Best-effort — returns True iff the close run started; when it doesn't, the item is
-    rested at `awaiting_human` so the owner sees a gate to drive by hand rather than an `active`
-    item with no run behind it (the idle stall). Never raises."""
+    """Fire the ONE closing run of an item's CLOSE phase — knowledge finalization (anchor-doc ops
+    + the weekly change-log entry), the only knowledge write in the workflow. Mirrors the
+    auto-plan-on-advance kick: fires ONLY for an item resting at phase `close` with no run in
+    flight. When the run reports, the kernel clears the item mechanically (`_clear_or_retry` →
+    services/clearance) — there is no proposal and no owner click.
+
+    Best-effort — returns True iff the run started. When no run can start at all, the item is
+    CLEARED anyway with the knowledge gap on record: clearance always completes, so a close-phase
+    item is never left `active` with nothing behind it (the idle stall). Never raises."""
     from ...gateway import contexts   # lazy: avoid an import cycle at module load
     ctx = None
     try:
@@ -727,7 +729,8 @@ def fire_close_run(context_id: str, item_id: str, spine) -> bool:
         return False
     finally:
         # No run started and the item is still sitting `active` at close ⇒ nothing will ever move
-        # it. Rest it at the gate instead. (A started run owns the status from here.)
+        # it. Clear it instead, with the missing knowledge write on record. (A started run owns
+        # the status from here — `_begin_run` registered it before the task was created.)
         try:
             if ctx is not None and ctx.internal_root:
                 d_root = ctx.internal_root / "dev"
@@ -735,17 +738,22 @@ def fire_close_run(context_id: str, item_id: str, spine) -> bool:
                 if (not it.get("done_at") and str(it.get("phase")) == "close"
                         and str(it.get("status")) == "active"
                         and not _spine.is_item_running(context_id, item_id)):
-                    _dev.set_work_item_status(d_root, item_id, "awaiting_human")
+                    from . import clearance
+                    clearance.clear_item(
+                        context_id, item_id,
+                        knowledge_gap="no closing run could start — the anchor docs were "
+                                      "not updated")
         except Exception:
-            log.exception("close-phase status reconcile failed for %s", item_id)
+            log.exception("close-phase clearance fallback failed for %s", item_id)
 
 
 async def _run_background_close(ctx, context_id: str, item_id: str, item_dir: Path,
                                 model: str | None = None, effort: str | None = None) -> None:
-    """Drive one background CLOSE turn (#179): RESUME the item's intake thread (the narrative that
-    authors an honest closeout) and let the close skill draft closeout.md + `propose_close`. Ends
-    the item at `awaiting_human` — it rests at the close gate for the owner's Complete (the run
-    prepares; completion is the owner's, D8). Best-effort; a failure leaves it at close."""
+    """Drive the item's ONE closing turn: RESUME its intake thread (the narrative that knows what
+    the item was for) and let the close skill reflect the LOCKED changes into the general anchor
+    docs + this week's change log, then report. The kernel clears the item from there
+    (`_clear_or_retry`) — the run never completes the item itself. Best-effort: a turn that dies
+    without reporting is retried, and after the budget the item clears with the gap recorded."""
     dev_root = ctx.internal_root / "dev"
     item = _dev.read_work_item(dev_root, item_id) or {}
     session_id = ((item.get("sessions") or {}).get("intake") or item.get("session_id") or None)
@@ -797,13 +805,49 @@ async def _run_background_close(ctx, context_id: str, item_id: str, item_dir: Pa
         log.exception("auto-close run failed for %s", item_id)
     finally:
         report = read_completion(context_id, item_id, sink)
-        _end_run(ctx, context_id, item_id, final_tokens, "awaiting_human", final_usage,
-                 outcome=(report or {}).get("outcome"), session_id=final_session)
+        outcome = str((report or {}).get("outcome") or "")
+        # `active`, never `awaiting_human`: nobody is being paged. Clearance decides what happens
+        # next, and it is mechanical (the item is terminal a moment later, or retried).
+        _end_run(ctx, context_id, item_id, final_tokens, "active", final_usage,
+                 outcome=outcome or None, session_id=final_session)
         try:
             bank_auto_checkpoint(ctx, item_id, since=run_started)
         except Exception:
             log.exception("auto-checkpoint after auto-close failed")
-        log.info("auto-close: done for %s", item_id)
+        _clear_or_retry(context_id, item_id, outcome)
+
+
+def _clear_or_retry(context_id: str, item_id: str, outcome: str) -> None:
+    """The post-CLOSE kernel hook. The closing run reported ⇒ clear the item. It didn't ⇒ re-fire
+    the run, and once the retry budget is spent clear it ANYWAY with the knowledge gap on record.
+
+    Clearance always completes (renovation §2): a closing run that cannot finish is a SuperMe
+    fault to fix, never a work-item left sitting at close with no way out. Never raises."""
+    from . import clearance
+    try:
+        if outcome:
+            # Any report clears. Close has no authority to change anything (review's exit locked
+            # code and git), so a non-success outcome is a knowledge gap to record, not a hold.
+            gap = None if outcome in ("success", "clean_noop") else \
+                f"the closing run reported `{outcome}`"
+            res = clearance.clear_item(context_id, item_id, knowledge_gap=gap)
+            if not res.get("ok"):
+                log.info("close: clearance held for %s — %s", item_id, res.get("refused"))
+            return
+        tries = clearance.close_retries(context_id, item_id)
+        if tries < clearance.MAX_CLOSE_RETRY:
+            _dev_store.log_event(
+                context_id, "close.retry",
+                f"Closing run ended without a report — retry {tries + 1} of "
+                f"{clearance.MAX_CLOSE_RETRY}",
+                item_id=item_id, actor="daemon", meta={"attempt": tries + 1})
+            fire_close_run(context_id, item_id, _spine)
+            return
+        clearance.clear_item(context_id, item_id,
+                             knowledge_gap=f"the closing run ended without a report "
+                                           f"{tries + 1} times — the anchor docs were not updated")
+    except Exception:
+        log.exception("post-close clearance failed for %s", item_id)
 
 
 async def _background_intake_run(ctx, context_id: str, item_id: str, item_dir: Path, *,

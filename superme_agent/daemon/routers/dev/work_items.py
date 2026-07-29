@@ -1,5 +1,5 @@
 """Work-item lifecycle routes: the plan/design → build/eval → done pipeline + its background "Plan it"
-quick-action, review payload, call-trail, model config, phase-advance gate, and complete/archive.
+quick-action, review payload, call-trail, model config, phase-advance gate, and archive.
 
 The orchestration lives in services/ (run lifecycle in runs.py, the capture-sweep triggers in
 learning.py); these routes are the thin HTTP layer that calls them.
@@ -17,16 +17,15 @@ from ...app_state import (
     get_dev, get_dev_store, get_sessions, get_spine,
 )
 from ...deps import dev_root as _dev_root
-from ....core import artifacts, gate_briefs, git_layer, kind_profiles, status_router
+from ....core import artifacts, kind_profiles, status_router
 from ....gateway import contexts
 from ...services.runs import (
-    DEFAULT_RUN_MODEL, _begin_run, _run_background_plan, _render_execution_md, build_item_timeline,
+    DEFAULT_RUN_MODEL, _begin_run, _run_background_plan, build_item_timeline,
 )
-from ...services.learning import _fire_sweep_bg
-from ...services import scheduler, gates
+from ...services import scheduler, gates, clearance
 from ...schemas.dev.work_items import (
     PlanResponse, WorkItemDeleteResponse, WorkItemDetailResponse, WorkItemArtifactsResponse,
-    WorkItemCompleteResponse, WorkItemAdvanceResponse,
+    WorkItemArchiveResponse, WorkItemAdvanceResponse,
     WorkItemScaffoldResponse, WorkItemSeenResponse, WorkItemAutopilotResponse,
     WorkItemTimelineResponse, PromptExtractionStatusResponse,
 )
@@ -394,98 +393,18 @@ async def dev_prompt_extraction_status(context_id: str = "global") -> dict:
     return px.status(context_id)
 
 
-@router.post("/dev/work-items/{item_id}/complete", response_model=WorkItemCompleteResponse)
-async def dev_work_item_complete(item_id: str, context_id: str = "global",
-                                 dev: DevKnowledgeService = Depends(get_dev),
-                                 dev_store: DevStore = Depends(get_dev_store),
-                                 sessions: SessionStore = Depends(get_sessions),
-                                 spine: SystemSpine = Depends(get_spine)) -> dict:
-    """Complete + archive a close-phase work-item — the HUMAN promotion to terminal (D8: the
-    agent never self-closes; this FE route has no agent-tool counterpart). Mechanically refused
-    while any child (blocking/parallel spawned_from edge) is non-terminal (D3). Snapshots the
-    execution trace to `artifacts/execution.md` (the folder persists), stamps status=done +
-    outcome=completed + done_at, resumes an awaiting_child parent whose last blocking child this
-    was (status router), then reclaims the SDK transcript + frees run rows. Events are kept."""
-    ctx = contexts.resolve(context_id, "dev")
-    if not ctx.internal_root:
-        raise HTTPException(status_code=400, detail="context has no internal root")
-    dev_root = ctx.internal_root / "dev"
-    item = dev.read_work_item(dev_root, item_id)
-    if item is None:
-        raise HTTPException(status_code=404, detail="work-item not found")
-    if item.get("done_at") or str(item.get("status")) == "done":
-        raise HTTPException(status_code=409, detail="already completed")
-    if not kind_profiles.is_final_phase(item.get("kind"), item.get("phase") or "triage"):
-        raise HTTPException(status_code=409, detail="only close-phase items can be completed")
-    if spine.is_item_running(context_id, item_id):
-        raise HTTPException(status_code=409, detail="a run is in progress for this item")
-    # Close criteria (S6/D8, layer zero of the three-layer close protocol): the kind's declared
-    # criteria evaluated MECHANICALLY — required artifacts clean, children terminal, and for
-    # research the report + its itemization decision. Nothing about the WORK: review's exit locked
-    # code and git, so anything close could still refuse here would be a verdict nobody can act on.
-    # Refusal is itemized (retry-shaped); nothing changes state.
-    all_items = dev.read_all(dev_root)["work_items"]
-    cr = gate_briefs.close_readiness(item, dev_root / "work-items" / item_id, all_items)
-    if not cr["ok"]:
-        fails = "; ".join(f"{c['criterion']}: {c['detail']}"
-                          for c in cr["checks"] if not c["ok"])
-        raise HTTPException(status_code=409, detail=f"close criteria not met — {fails}")
-    # 1. snapshot BEFORE freeing rows.
-    md = _render_execution_md(context_id, item_id, item)
-    dev.write_artifact(dev_root, item_id, "execution.md", md)
-    # 2. terminal: status=done + outcome=completed + done_at (status change, never a delete).
-    dev.set_work_item_terminal(dev_root, item_id, "completed")
-    # 2a. S4 terminal git cleanup: remove the worktree DIR, KEEP the branch ref (near-free trace —
-    #     never-delete holds; the record on the item stays too). Failure is surfaced, never silent,
-    #     and never blocks completion (the item is done; a stray dir is a reconciliation concern).
-    worktree_removed = None
-    if item.get("git_worktree"):
-        try:
-            res = git_layer.remove_worktree(ctx.cwd, ctx.id, item_id)
-            worktree_removed = bool(res["verified"])
-        except (git_layer.GitError, git_layer.GitBusy) as e:
-            worktree_removed = False
-            log.warning("worktree cleanup failed for %s: %s", item_id, e)
-    # 2b. typed-awaiting router: if this was the last open BLOCKING child of an awaiting_child
-    #     parent, auto-resume the parent (no human involved — D2).
-    for it in all_items:
-        if it.get("id") == item_id:
-            it["status"] = "done"
-    resume_id = status_router.parent_to_resume(all_items, item or {"id": item_id})
-    if resume_id:
-        dev.set_work_item_status(dev_root, resume_id, "active")
-        dev_store.log_event(context_id, "item.resume",
-                            f"Blocking child {item_id} closed — parent resumed",
-                            item_id=resume_id, actor="daemon", meta={"child": item_id})
-    # 2c. peer scheduler: release every item parked at `awaiting_upstream` on this one (the
-    #     `after:` edge). Only a COMPLETED upstream releases — see services/scheduler.py.
-    for it in all_items:
-        if it.get("id") == item_id:
-            it["outcome"] = "completed"
-    scheduler.release_downstream(dev, dev_root, dev_store, context_id, all_items, item_id,
-                                 cause="completed")
-    # An item completing from build⟷vet frees an autopilot slot — pump the queue.
-    gates.pump_autopilot_slots(context_id)
-    # 3. reclaim disk: release_item_runs is STATUS-ONLY (rows are permanent — never-delete-logs;
-    #    it just closes any live row); the session transcript is reclaimed
-    #    AFTER a final capture sweep (WI-8) — the sweep must read the transcript before it's purged,
-    #    so the purge is chained behind the background sweep. When auto-learning is OFF we skip the
-    #    sweep but STILL purge (disk reclamation is not a learning concern).
-    session_ids = dev.work_item_session_ids(item)   # ALL role threads (intake/build/vet + legacy)
-    for sid in session_ids:
-        if spine.learning_enabled_for(context_id):
-            _fire_sweep_bg(ctx, sid, then_delete="retired")
-        else:
-            sessions.delete(ctx, sid, cause="retired")  # workflow done → retired
-    runs_freed = spine.release_item_runs(context_id, item_id)
-    dev_store.log_event(context_id, "item.complete",
-                        f"Completed + archived: {item.get('title') or item_id}",
-                        item_id=item_id, actor="owner", meta={"runs_freed": runs_freed})
-    out = {"ok": True, "id": item_id, "archived": "artifacts/execution.md",
-           "session_cleared": bool(session_ids), "runs_freed": runs_freed}
-    if worktree_removed is not None:
-        out["worktree_removed"] = worktree_removed
-    return out
+@router.post("/dev/work-items/{item_id}/archive", response_model=WorkItemArchiveResponse)
+async def dev_work_item_archive(item_id: str, context_id: str = "global") -> dict:
+    """Archive a DONE item's folder: every loose artifact file is folded into one `archive.zip`
+    beside `item.md`, and `archived_at` is stamped. Storage only — the item stays completed and
+    the DB trace (runs, events, artifacts) is untouched forever (never-delete-logs). Idempotent.
+
+    Completion itself has no route: an item goes terminal MECHANICALLY when its closing run
+    reports (services/clearance) — there is no owner promotion and no agent proposal."""
+    res = clearance.archive_item(context_id, item_id)
+    if not res.get("ok"):
+        raise HTTPException(status_code=409, detail=res.get("refused") or "cannot archive")
+    return res
 
 
 # Phase sequencing is KIND-driven (workspace-workflow D1/D2): the kernel's KIND_PROFILES table is
