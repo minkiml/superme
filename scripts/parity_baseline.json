@@ -13095,7 +13095,7 @@
       },
       "/dev/work-items/{item_id}/vet": {
         "post": {
-          "description": "Run VET on demand and let the loop take over (build-vet-loop \u00a75): fire a background vet run\non this item's worktree. From there the daemon-side driver self-drives \u2014 passed \u2192 review \u00b7\nfailed \u2192 a build cycle handed the vet report (while `loop_autorun` and the breakers allow) \u00b7\nstale \u2192 re-vet \u00b7 unverified \u2192 fail closed. This is the owner's manual \"vet what's built now\"\naction; the AUTONOMOUS loop opens build-first (gates.enter_build_loop), so vet is the loop's\nsole DECISION point, not its entry. 409 when the item isn't a runnable vet-phase item or a run\nis in flight.",
+          "description": "Run VET on demand and let the loop take over (build-vet-loop \u00a75): fire a background vet run\non this item's worktree. From there the daemon-side driver self-drives \u2014 passed \u2192 review \u00b7\nfailed \u2192 a build cycle handed the vet report (while the breakers allow) \u00b7\nstale \u2192 re-vet \u00b7 unverified \u2192 fail closed. This is the owner's manual \"vet what's built now\"\naction; the AUTONOMOUS loop opens build-first (gates.enter_build_loop), so vet is the loop's\nsole DECISION point, not its entry. 409 when the item isn't a runnable vet-phase item or a run\nis in flight.",
           "operationId": "dev_work_item_vet_dev_work_items__item_id__vet_post",
           "parameters": [
             {

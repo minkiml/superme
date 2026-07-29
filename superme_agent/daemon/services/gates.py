@@ -447,9 +447,9 @@ def advance_item(ctx, context_id: str, item_id: str, *, dev, dev_store, spine,
         # for hand-driven items once something started it. Gating the ENTRY on autopilot left a
         # manual item wedged at `build` with no owner-facing way to start — `/vet` refuses off-phase
         # and the modal's Continue only appears on a paged run — so the one phase that is pure
-        # agent work was the one phase nothing fired. The knob for "don't run unattended" is
-        # `loop_autorun` (it degrades every hop to decide-and-page); autopilot governs whether the
-        # GATES advance without a click, not whether the work inside a phase happens.
+        # agent work was the one phase nothing fired. Autopilot governs whether the GATES advance
+        # without a click, not whether the work inside a phase happens — and build⟷vet is
+        # human-free either way, with the token budget as its ceiling.
         try:
             asyncio.get_running_loop().create_task(enter_build_loop(context_id, item_id))
         except RuntimeError:

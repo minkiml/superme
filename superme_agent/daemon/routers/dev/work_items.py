@@ -93,7 +93,7 @@ async def dev_work_item_vet(item_id: str, body: PlanBody,
                             spine: SystemSpine = Depends(get_spine)) -> dict:
     """Run VET on demand and let the loop take over (build-vet-loop §5): fire a background vet run
     on this item's worktree. From there the daemon-side driver self-drives — passed → review ·
-    failed → a build cycle handed the vet report (while `loop_autorun` and the breakers allow) ·
+    failed → a build cycle handed the vet report (while the breakers allow) ·
     stale → re-vet · unverified → fail closed. This is the owner's manual "vet what's built now"
     action; the AUTONOMOUS loop opens build-first (gates.enter_build_loop), so vet is the loop's
     sole DECISION point, not its entry. 409 when the item isn't a runnable vet-phase item or a run

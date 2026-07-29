@@ -1966,25 +1966,12 @@ class SystemSpine:
             pass
         return self.get_loop_budget()
 
-    def get_loop_autorun(self) -> bool:
-        """Whether the loop drives its own hops (vet→build→vet) once STARTED. Default ON — the
-        loop only ever starts from an explicit owner action (the vet quick-action), and the token
-        budget is the safety; OFF degrades the driver to decide-and-page (every hop awaits the
-        owner). Distinct from the learning switch: this never fires on its own."""
-        with self._conn() as c:
-            r = c.execute("SELECT value FROM system_setting WHERE key='loop_autorun'").fetchone()
-        if r is None or r["value"] is None:
-            return True
-        return str(r["value"]).strip().lower() in ("1", "true", "on", "yes")
-
-    def set_loop_autorun(self, enabled: bool) -> None:
-        """Flip the loop's self-drive switch."""
-        with self._conn() as c:
-            c.execute(
-                "INSERT INTO system_setting (key,value,updated_at) VALUES ('loop_autorun',?,?)"
-                " ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at",
-                ("true" if enabled else "false", _now()),
-            )
+    # `loop_autorun` (get/set) is RETIRED (owner, 2026-07-30). It degraded the build⟷vet loop to
+    # decide-and-page at every hop — but that stretch is human-free by contract, so the switch had
+    # no case it served: it rested items at `awaiting_human` INSIDE the loop, indistinguishable
+    # from a real fault, in a phase with no decision surface. It also never had a route or a UI
+    # (only a test ever called the setter), so it was unreachable in practice. The token budget
+    # remains the loop's ceiling.
 
     # --- delegated deputy authority (BV-A2.2) ------------------------------------
     # The authorization scopes the deputy may GRANT on its own at the review gate. The line (build-

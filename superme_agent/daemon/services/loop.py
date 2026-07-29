@@ -24,8 +24,9 @@ already prevents two loop runs from coexisting. Every decision lands in the cycl
 `§Cycle outcome` (the driver's append, which closes the cycle) + a `loop.decision` dev event —
 the honest history review reads.
 
-Entry point: the owner starts the loop explicitly (the vet quick-action route). From there it
-self-drives while `loop_autorun` is on (default); off degrades every hop to decide-and-page.
+Entry point: approving the plan gate. From there the loop self-drives every hop to review —
+build⟷vet is a HUMAN-FREE stretch by contract (owner, 2026-07-30), so there is no switch that
+degrades it to decide-and-page and no resting state inside it that waits for a click.
 """
 
 import asyncio
@@ -53,7 +54,7 @@ log = logging.getLogger("superme-agent")
 # --------------------------------------------------------------------------- decision (pure)
 
 def decide_after_vet(item: dict, *, evidence: dict, fingerprint: str, attempts: list[dict],
-                     spent: int, budget: int, autorun: bool, turn_error: bool = False) -> dict:
+                     spent: int, budget: int, turn_error: bool = False) -> dict:
     """The driver's decision function — PURE (no I/O; the wrapper reads the ledgers and passes
     them in), so every branch is unit-testable. Returns {action, status, reason, record}:
     action ∈ none|review|build|revet|halt · status = the item's resting status · record =
@@ -119,10 +120,6 @@ def decide_after_vet(item: dict, *, evidence: dict, fingerprint: str, attempts: 
             f"cycle(s) ago and has come back"
         return {"action": "halt", "status": "awaiting_human", "record": True, "failed": failed,
                 "reason": f"no progress — {again}; escalating instead of spinning"}
-    if not autorun:
-        return {"action": "halt", "status": "awaiting_human", "record": True, "failed": failed,
-                "reason": "checks failed and loop autorun is OFF — the next build cycle awaits "
-                          "the owner"}
     return {"action": "build", "status": "active", "record": True, "failed": failed,
             "reason": f"{len(failed)} check(s) failed — handing the vet report to a build cycle"}
 
@@ -326,8 +323,7 @@ async def _run_background_vet(ctx, context_id: str, item_id: str,
     spent = _spine.item_phase_tokens(context_id, item_id)
     budget = _spine.effective_loop_budget(context_id, item.get("loop_budget"))
     d = decide_after_vet(item, evidence=evidence, fingerprint=fingerprint, attempts=attempts,
-                         spent=spent, budget=budget, autorun=_spine.get_loop_autorun(),
-                         turn_error=turn_error)
+                         spent=spent, budget=budget, turn_error=turn_error)
     # CAS flips happen BEFORE the run row closes so the next hop's row stamps the new phase.
     moved = True
     if d["action"] == "review":
@@ -591,15 +587,9 @@ async def _run_background_build(ctx, context_id: str, item_id: str,
                                  "Loop: build cycle done — re-entering vet",
                                  item_id=item_id, actor="daemon",
                                  meta={"from": "build", "to": "vet"})
-            if _spine.get_loop_autorun():
-                started, why = start_vet_run(ctx, context_id, item_id)
-                if not started:
-                    log.warning("loop: next vet did not start for %s: %s", item_id, why)
-            else:
-                _dev.set_work_item_status(dev_root, item_id, "awaiting_human")
-                _dev_store.log_event(context_id, "loop.decision",
-                                     "Loop: autorun OFF — vet re-entry awaits the owner",
-                                     item_id=item_id, actor="daemon", meta={"action": "halt"})
+            started, why = start_vet_run(ctx, context_id, item_id)
+            if not started:
+                log.warning("loop: next vet did not start for %s: %s", item_id, why)
     try:
         bank_auto_checkpoint(ctx, item_id, since=run_started)
     except Exception:
