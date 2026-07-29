@@ -420,12 +420,12 @@ async def dev_work_item_complete(item_id: str, context_id: str = "global",
     if spine.is_item_running(context_id, item_id):
         raise HTTPException(status_code=409, detail="a run is in progress for this item")
     # Close criteria (S6/D8, layer zero of the three-layer close protocol): the kind's declared
-    # criteria evaluated MECHANICALLY — required artifacts clean, children terminal, closeout
-    # claims ground-truth-verified, evidence fresh, merged-or-logged, knowledge row resolved.
+    # criteria evaluated MECHANICALLY — required artifacts clean, children terminal, and for
+    # research the report + its itemization decision. Nothing about the WORK: review's exit locked
+    # code and git, so anything close could still refuse here would be a verdict nobody can act on.
     # Refusal is itemized (retry-shaped); nothing changes state.
     all_items = dev.read_all(dev_root)["work_items"]
-    cr = gate_briefs.close_readiness(item, dev_root / "work-items" / item_id, dev_root,
-                                     ctx.cwd, all_items)
+    cr = gate_briefs.close_readiness(item, dev_root / "work-items" / item_id, all_items)
     if not cr["ok"]:
         fails = "; ".join(f"{c['criterion']}: {c['detail']}"
                           for c in cr["checks"] if not c["ok"])

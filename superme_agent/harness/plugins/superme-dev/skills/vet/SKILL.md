@@ -25,6 +25,16 @@ You never author or amend the verification plan.
 
 ## Step 2 — Execute every check, record every result
 
+- **`depth: none` — read it first.** When the plan's verification plan declares `depth: none`, the
+  owner approved that this item has no observable surface worth checking. There is nothing to run
+  and nothing to record (`record_verification` is refused — there are no check ids). Confirm the
+  judgment against the diff, then go straight to Step 3: `file_vet_report` writes the
+  nothing-was-owed report, and your closing line says so plainly — *"nothing to verify: the plan
+  declared `depth: none` (renames a constant, no behaviour changes), and the diff matches that."*
+  Silence would read as a vet that gave up; saying it is the work.
+  If you think the depth call was WRONG, do not invent checks around it — say what you would check
+  and why in your `observations` and in `report_completion`. Changing the depth is a plan revision
+  the owner makes at review.
 - **Deferrals first.** For each check your trigger names as build-deferred (pending the owner's
   authorization), call `record_verification` with its exact id, `deferred: true`, and a one-line
   note — do NOT run or judge it; only the owner can clear that wall, and re-judging it every
@@ -42,7 +52,8 @@ You never author or amend the verification plan.
 
 ## Step 3 — File the report, then stop
 
-When every plan check is recorded, call `file_vet_report` — the verdict and check table are
+When every plan check is recorded (or immediately, under `depth: none`), call `file_vet_report` —
+the verdict and check table are
 derived from what you recorded; you supply only `observations` (real concerns beyond the checks:
 crashes, smells, unwritten gaps — they go to the review gate, they don't gate the loop). State
 the verdicts in one line each and stop — the loop driver reads the record and decides; never

@@ -789,6 +789,14 @@ def record_verification(item_dir: Path, repo_dir: Path | None, *, check: str, ho
     plan_path = Path(item_dir) / "artifacts" / artifact_file("plan")
     valid_ids = [c["id"] for c in parse_vet_plan(plan_path.read_text()).get("checks", [])] \
         if plan_path.is_file() else []
+    # `depth: none` has no key space at all, so a recorded entry here could only be one vet
+    # invented — and it would then drive the loop. Refuse, and name where the observation goes.
+    if plan_vet_depth(item_dir) == "none":
+        raise ValueError(
+            "the approved plan declares `depth: none` — this item has no verification plan, so "
+            "there is no check id to record against and nothing is owed. If you believe something "
+            "here SHOULD be checked, say so in your report and in `report_completion`: the depth "
+            "call is the plan's, and changing it is a revise at review, not a record here.")
     if valid_ids:
         check = _resolve_evidence_check(check, valid_ids)
     # Target the LATEST cycle report even when the driver already closed it (a re-vet after stale
@@ -1010,6 +1018,51 @@ def _plan_check_ids(item_dir: Path) -> set[str] | None:
     return ids or None
 
 
+def plan_vet_depth(item_dir: Path) -> str:
+    """The plan's declared vet depth (`none` | `checks` | `scenarios`), or `""` when there is no
+    plan / no `## Verification plan` to read.
+
+    `none` is the OWNER-APPROVED judgment that this item has no observable surface worth checking
+    — declared by the plan agent, shown at the plan gate, and approved with it. It is NOT vet's
+    call to make: an agent that could declare "nothing to verify" for itself would reach for the
+    phrase whenever checks were inconvenient. Everything downstream that honours `none` reads it
+    from HERE, so the authority has exactly one source (slice 5b, 2026-07-30)."""
+    plan = Path(item_dir) / "artifacts" / artifact_file("plan")
+    if not plan.is_file():
+        return ""
+    vp = parse_vet_plan(plan.read_text())
+    return str(vp.get("depth") or "") if vp.get("present") else ""
+
+
+_NO_VET_LINE = "**Nothing to verify.**"
+
+
+def note_no_verification(item_dir: Path) -> str | None:
+    """Write the `depth: none` cycle's §Verification content — CODE-WRITTEN, like every other fact
+    nobody should be able to type, and quoting the plan's own `reason` so the justification on the
+    page is the one the owner approved. The vet agent narrates this in its report; what lands in
+    the cycle file is derived, so an empty §Verification can never be mistaken for a vet that gave
+    up (the failure mode the build skill already hit with unfilled slots).
+
+    Idempotent: a re-vet of the same cycle adds nothing. Returns the cycle path, or None when there
+    is no cycle report yet or the line is already there."""
+    item_dir = Path(item_dir)
+    reports = cycle_reports(item_dir)
+    if not reports:
+        return None
+    path = Path(reports[-1]["path"])
+    if _NO_VET_LINE in path.read_text():
+        return None
+    plan = item_dir / "artifacts" / artifact_file("plan")
+    reason = " ".join(str(parse_vet_plan(plan.read_text()).get("reason") or "").split()) \
+        if plan.is_file() else ""
+    _append_to_section(path, "Verification",
+                       f"{_NO_VET_LINE} The approved plan declares `depth: none`"
+                       + (f" — {reason}" if reason else "")
+                       + ". No check was owed, so none was run.\n")
+    return str(path)
+
+
 def evidence_status(item_dir: Path, repo_dir: Path | None, *, scope_to_plan: bool = True) -> dict:
     """The derived verdict over the ledger (D6 §2, hermes stale-on-edit): `unverified` (no
     entries) · `failed` (latest entry of any check failed) · `stale` (all latest entries passed
@@ -1040,6 +1093,14 @@ def evidence_status(item_dir: Path, repo_dir: Path | None, *, scope_to_plan: boo
         deferred_by_auth &= ids
         waived_by_auth &= ids
     if not entries and not deferred_by_auth:
+        # `depth: none` — the plan's owner-approved judgment that nothing here is observable. An
+        # empty ledger is then the CORRECT ledger, so it reports `passed`, not `unverified`: the
+        # loop's fail-closed rule ("an unrecorded vet is not a pass") exists to catch a vet that
+        # skipped its work, and there was no work to skip. It stays `passed` rather than a fourth
+        # status so no consumer's `== "passed"` branch can silently halt an item that is fine;
+        # `not_required` is the flag the user-facing surfaces read to say the honest thing.
+        if plan_vet_depth(item_dir) == "none":
+            return {"status": "passed", "entries": 0, "not_required": True}
         return {"status": "unverified", "entries": 0}
     latest: dict[str, dict] = {}
     for e in entries:               # last entry per check wins
@@ -1309,7 +1370,10 @@ def write_vet_user_report(item_dir: Path, repo_dir: Path | None, *, observations
     agent-asserted; the per-check history marks carry ✗→✓ across cycles), deferred from the
     authorization ledger, `observations` = vet's own prose (real concerns only). Refuses
     (ValueError, itemized) while any plan check has no recorded entry. Overwritten each cycle, so
-    the final cycle's version is the loop-exit report. Returns {path, verdict, failed}."""
+    the final cycle's version is the loop-exit report. Returns {path, verdict, failed}.
+
+    Under `depth: none` there is no table to project, and refusing would strand the cycle — so the
+    report SAYS the item owed no checks, and vet's observations still carry."""
     item_dir = Path(item_dir)
     plan_path = item_dir / "artifacts" / artifact_file("plan")
     plan_ids = [c["id"] for c in parse_vet_plan(plan_path.read_text()).get("checks", [])] \
@@ -1318,12 +1382,13 @@ def write_vet_user_report(item_dir: Path, repo_dir: Path | None, *, observations
     by_check: dict[str, list[dict]] = {}
     for e in entries:
         by_check.setdefault(e["check"], []).append(e)
-    missing = [c for c in plan_ids if c not in by_check]
+    no_vet = plan_vet_depth(item_dir) == "none" and not entries
+    missing = [] if no_vet else [c for c in plan_ids if c not in by_check]
     if missing:
         raise ValueError("; ".join(
             f"plan check {c!r} has no recorded entry — run it and record_verification first "
             "(an unrecorded check doesn't exist)" for c in missing))
-    if not by_check:
+    if not by_check and not no_vet:
         raise ValueError("no checks recorded — record_verification for every plan check first")
     ev = evidence_status(item_dir, repo_dir)
     checks = plan_ids + [c for c in by_check if c not in plan_ids]
@@ -1347,6 +1412,9 @@ def write_vet_user_report(item_dir: Path, repo_dir: Path | None, *, observations
                "stale": "green but STALE — code moved after the checks ran",
                "deferred": "green except checks deferred pending authorization",
                "unverified": "nothing recorded"}.get(ev.get("status", ""), ev.get("status", ""))
+    if ev.get("not_required"):
+        verdict = "no checks were owed — the approved plan declares `depth: none`"
+        rows = ["| _(none)_ | – | the plan declared no observable surface to check |"]
     deferred_all = sorted(deferred_auth | {c for c, h in by_check.items()
                                            if h and h[-1].get("deferred")})
     cycle = cycle_reports(item_dir)[-1]["cycle"] if cycle_reports(item_dir) else 1

@@ -1298,8 +1298,7 @@ class ProposeCloseArgs(TypedDict, total=False):
     item_id: Required[Annotated[str, "the work-item id"]]
 
 
-def _propose_close(*, store, context_id, dev_root=None, main_repo_dir=None,
-                   bound_item_id=None, **_):
+def _propose_close(*, store, context_id, dev_root=None, bound_item_id=None, **_):
     async def propose_close(args: dict) -> dict:
         from pathlib import Path
         from ...core import gate_briefs as _gb
@@ -1319,7 +1318,7 @@ def _propose_close(*, store, context_id, dev_root=None, main_repo_dir=None,
             return _err(f"Close is proposed from the close phase — this item is at "
                         f"`{item.get('phase')}`. Finish the phase pipeline first.")
         all_items = dev.read_all(Path(dev_root))["work_items"]
-        cr = _gb.close_readiness(item, d, Path(dev_root), main_repo_dir, all_items)
+        cr = _gb.close_readiness(item, d, all_items)
         if not cr["ok"]:
             fails = [c for c in cr["checks"] if not c["ok"]]
             return _err("Close would be refused mechanically — fix these first (nothing was "

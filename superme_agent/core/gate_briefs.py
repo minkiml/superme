@@ -40,16 +40,18 @@ _ITEM_ID = re.compile(r"\b(?:item:)?([0-9a-f]{12})\b")
 # --------------------------------------------------------------------------- close criteria (D8)
 
 
-def close_readiness(item: dict, item_dir: Path, dev_root: Path, main_repo_dir: Path | None,
-                    all_items: list[dict]) -> dict:
+def close_readiness(item: dict, item_dir: Path, all_items: list[dict]) -> dict:
     """Evaluate the kind's close criteria mechanically → {ok, checks:[{criterion, ok, detail}]}.
-    Universal first check: every required artifact exists and passes its self-check. Evidence
-    freshness is judged against the item's WORKTREE when it still exists (the tree validation ran
-    in — untouched by the main merge), else the main repo."""
+    Universal first check: every required artifact exists and passes its self-check.
+
+    NOTHING HERE RE-JUDGES THE WORK. Review's exit locked code + git (§2.3), so a close criterion
+    can only ask about things close can still act on. `evidence_fresh` and `knowledge_row_resolved`
+    were retired from every profile for that reason (see kind_profiles) — and with them went this
+    function's read of the evidence ledger and the knowledge delta, hence the two parameters that
+    fed them (`dev_root`, `main_repo_dir`). Every remaining criterion reads the item folder or the
+    sibling items, so those are the only inputs left."""
     profile = get_profile(item.get("kind"))
     item_dir = Path(item_dir)
-    wt = item.get("git_worktree")
-    evidence_repo = Path(str(wt)) if wt and Path(str(wt)).is_dir() else main_repo_dir
     checks: list[dict] = []
 
     missing = []
@@ -69,27 +71,6 @@ def close_readiness(item: dict, item_dir: Path, dev_root: Path, main_repo_dir: P
             checks.append({"criterion": crit, "ok": ok,
                            "detail": f"open children: {', '.join(open_ids)}" if not ok
                                      else "no open children"})
-        elif crit == "evidence_fresh":
-            v = A.evidence_status(item_dir, evidence_repo)
-            # A `deferred` status (BV-A2) isn't passed → close is correctly refused while any check
-            # awaits an authorization grant. Name the pending requests so the refusal is legible.
-            pend_auth = A.pending_authorizations(item_dir)
-            checks.append({"criterion": crit, "ok": v["status"] == "passed",
-                           "detail": f"evidence ledger: {v['status']} ({v.get('entries', 0)} entries)"
-                                     + (f" — stale: {', '.join(v['stale_checks'])}" if v.get("stale_checks") else "")
-                                     + (f" — failed: {', '.join(v['failed_checks'])}" if v.get("failed_checks") else "")
-                                     + (f" — deferred (awaiting authorization): {', '.join(v['deferred_checks'])}"
-                                        if v.get("deferred_checks") else "")
-                                     + (f" — {len(pend_auth)} authorization(s) pending: "
-                                        + "; ".join(a["what"] for a in pend_auth[:2]) if pend_auth else "")})
-        elif crit == "knowledge_row_resolved":
-            ks = KD.delta_status(item_dir, dev_root, evidence_repo)
-            ok = ks["state"] in ("none-staged", "applied", "folded")
-            checks.append({"criterion": crit, "ok": ok,
-                           "detail": f"knowledge delta: {ks['state']}"
-                                     + (f" ({ks['ops']} ops)" if ks.get("ops") else "")
-                                     + ("" if ok else " — a staged delta applies at merge; "
-                                        "merge first (or it was staged after the merge — restage window missed)")})
         elif crit == "findings_delivered":
             # The research deliverable is the report the owner decided on, not an artifact:
             # The `review` entry run writes reports/report-review.md (findings.md retired).
@@ -366,8 +347,10 @@ def render_gate_brief(item: dict, item_dir: Path, dev_root: Path,
             if soft:
                 line += "\n\n⚠ " + "\n⚠ ".join(soft)
             if depth == "none":
-                line += ("\n\n_`depth: none` means NO vet pass will run — approve only if there "
-                         "is truly no observable surface to check._")
+                line += ("\n\n_`depth: none` means NO CHECK will be run: the vet pass still "
+                         "happens, confirms there is nothing observable to check, and records "
+                         "that. Approving this depth is approving that judgment — nothing "
+                         "downstream re-opens it._")
             body += ["", line]
             facts = [{"label": "vet depth",
                       "value": depth + (f" · {len(vp['checks'])} check(s)" if vp.get("checks")
@@ -431,7 +414,9 @@ def render_gate_brief(item: dict, item_dir: Path, dev_root: Path,
         ev = A.evidence_status(item_dir, ev_repo)
         ks = KD.delta_status(item_dir, dev_root, ev_repo)
         checks.append({"criterion": "evidence_fresh", "ok": ev["status"] == "passed",
-                       "detail": f"evidence ledger: {ev['status']} ({ev.get('entries', 0)} entries)"})
+                       "detail": "no checks were owed — the approved plan declares `depth: none`"
+                                 if ev.get("not_required") else
+                                 f"evidence ledger: {ev['status']} ({ev.get('entries', 0)} entries)"})
         k_ok = ks["state"] in ("staged", "none-staged", "folded", "applied")
         checks.append({"criterion": "knowledge_row", "ok": k_ok,
                        "detail": f"knowledge delta: {ks['state']}"
@@ -517,7 +502,7 @@ def render_gate_brief(item: dict, item_dir: Path, dev_root: Path,
             "~2 min", "~30 min per re-plan")
         decision["approve_blocked_by"] = approve_blocked_by
     else:  # close
-        cr = close_readiness(item, item_dir, dev_root, main_repo_dir, all_items)
+        cr = close_readiness(item, item_dir, all_items)
         checks = cr["checks"]
         decision = _decision(
             "Complete" if cr["ok"] else "Send back",

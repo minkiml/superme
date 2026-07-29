@@ -39,12 +39,24 @@ KIND_PROFILES: dict[str, KindProfile] = {
             "plan": ("plan",),
         },
         required_artifacts=("plan",),
-        # No merge check here: review's EXIT is the merge (`advance_item` runs `review_merge` and
-        # 409s on conflict), so an item cannot reach close unmerged. A criterion that can only fail
-        # for a reason close has no move to fix is theatre — the merge is review's to get right,
-        # and review is the last gate where the owner can still act on it.
+        # CLOSE RE-ADJUDICATES NOTHING. Review's exit is the lock-in (§2.3): the merge lands, and
+        # from that instant code + git cannot change — so every question about the WORK was already
+        # answered at the last gate where the owner could act on the answer. What survives here is
+        # only what close itself can still fix, or what genuinely became true after review.
+        #
+        # Retired for that reason (2026-07-30, dogfood D5):
+        #   `evidence_fresh`         — verification is the loop's gate and review's fact. Re-checked
+        #                              after the merge it could only ever refuse the paperwork for a
+        #                              decision already made, and its whole-repo fingerprint read a
+        #                              freshness-sync commit as "the code moved", wedging items whose
+        #                              own code was untouched and whose close phase cannot re-run a
+        #                              test by design.
+        #   `knowledge_row_resolved` — close AUTHORS the anchor-doc ops (slice 5); a phase's own
+        #                              output cannot also be its entry condition.
+        # Nor a merge check: review's EXIT is the merge (`advance_item` runs `review_merge` and 409s
+        # on conflict), so an item cannot reach close unmerged.
         close_criteria=(
-            "evidence_fresh", "knowledge_row_resolved", "children_terminal",
+            "children_terminal",
         ),
     ),
     # The spine (triage · plan · review · close) is shared by every kind; only ‹WORK› differs —

@@ -104,11 +104,21 @@ def decide_after_vet(item: dict, *, evidence: dict, fingerprint: str, attempts: 
         return {"action": "halt", "status": "awaiting_human", "record": True, "failed": failed,
                 "reason": f"token budget exhausted ({spent} ≥ {budget} over build+vet) — "
                           "stopping with WIP preserved"}
-    prev_fp = next((str(a["fingerprint"]) for a in reversed(attempts) if a.get("fingerprint")), "")
-    if fingerprint and prev_fp and fingerprint == prev_fp:
+    # The no-progress guard is a RECURRENCE test, not a repeat test (slice 5c, owner 2026-07-30).
+    # Comparing only against the previous cycle missed the oscillation that matters: fail A → fix A,
+    # break B → fix B, A regresses. Every step differs from the one before it, so the loop looked
+    # like it was moving while it was going in circles. A signature that has been seen BEFORE, at
+    # any distance, means this exact failure has already been "fixed" once — the next cycle is
+    # unlikely to be the one that sticks, and a human should see it. (`fingerprint` covers only
+    # FAILING checks and is "" when nothing fails, so a green cycle can never trip this.)
+    prev_fps = [str(a["fingerprint"]) for a in attempts if a.get("fingerprint")]
+    if fingerprint and fingerprint in prev_fps:
+        again = "the same checks are failing the same way as last cycle" \
+            if prev_fps[-1] == fingerprint else \
+            f"this exact failure already happened {len(prev_fps) - prev_fps.index(fingerprint)} " \
+            f"cycle(s) ago and has come back"
         return {"action": "halt", "status": "awaiting_human", "record": True, "failed": failed,
-                "reason": "no progress between cycles (same checks failing the same way) — "
-                          "escalating instead of spinning"}
+                "reason": f"no progress — {again}; escalating instead of spinning"}
     if not autorun:
         return {"action": "halt", "status": "awaiting_human", "record": True, "failed": failed,
                 "reason": "checks failed and loop autorun is OFF — the next build cycle awaits "
@@ -300,6 +310,15 @@ async def _run_background_vet(ctx, context_id: str, item_id: str,
     # ---- THE DRIVER (§5.1): decide off the ledger, close the run, apply, fire the next hop.
     item = _dev.read_work_item(dev_root, item_id) or {}
     evidence = _arts.evidence_status(item_dir, wt)
+    # `depth: none` (slice 5b): the plan judged this item to have no observable surface, so the
+    # empty ledger IS the right ledger and the cycle report says so in the kernel's words. Written
+    # here rather than by vet, for the same reason every other derived fact is: what the plan
+    # declared is not a claim an agent should be able to author for itself.
+    if evidence.get("not_required"):
+        try:
+            _arts.note_no_verification(item_dir)
+        except (OSError, ValueError):
+            log.exception("no-verification note failed for %s", item_id)
     fingerprint = _arts.convergence_fingerprint(item_dir)
     attempts = _arts.read_cycle_outcomes(item_dir)
     reports = _arts.cycle_reports(item_dir)
