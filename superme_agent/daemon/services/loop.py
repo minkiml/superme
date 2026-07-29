@@ -4,18 +4,27 @@ The driver is CODE (§4.5.1): it fires when a background vet run finishes, reads
 verdict over the recorded checks (`evidence_status()` — the loop condition existed before the
 loop), and moves the item:
 
-    passed      → advance to review (the owner's gate — the loop's ONLY happy exit)
-    failed      → breakers? no  → new build cycle, handing over the cycle report
-                          yes → stop, awaiting_human, honest report
-    stale       → re-run vet (code moved under a green ledger; ONE consecutive re-vet, then stop)
-    unverified  → vet recorded nothing → FAIL CLOSED → awaiting_human
+**THE LOOP NEVER PARKS** (owner, 2026-07-30). build⟷vet is a human-free stretch, so it has no
+resting state: every way out lands the item at REVIEW, carrying a typed `exit` reason the owner
+decides from. There are exactly FOUR work-item exits —
 
-Breakers (§5.2): the TOKEN BUDGET is primary (measured spend over the item's build+vet phases —
-not a cycle-count proxy); the CONVERGENCE GUARD compares failure fingerprints across consecutive
-cycles (computed from ledger entries by the daemon — deterministic, never recalled by the vetter);
-anything ambiguous (vet crashed, recorded nothing, kept going stale) FAILS CLOSED. Owner holds are
-sticky: the driver only ever continues an item whose status is `active` — any human-set pause
-stops the loop and is never auto-resumed (only the owner's next action restarts it).
+    converged       every check green → review
+    not_converging  the same failure signature `_MAX_RECURRENCE` times → review
+    no_progress     a build cycle changed nothing in the tree → review (the vet is SKIPPED)
+    budget          measured build+vet spend hit the ceiling → review
+    system_fault    OUR bug, not a verdict — after `_MAX_FAULT_RETRY` retries → review
+
+— and one non-exit: `deferred`, which also goes to review (an authorization wall is the owner's
+call, not a failure).
+
+Everything else is a **SuperMe FAULT, not a verdict on the work**: a crashed turn, an empty
+ledger where checks were declared. Those get a bounded retry and, if they persist, are surfaced as
+a system fault (`loop.fault`) — the item still goes to review rather than sitting in a phase with
+no decision surface. The rule: the breakers encode work-item outcomes only; our own defects are
+bugs to fix, never workflow states.
+
+Owner holds are sticky: the driver only ever continues an item whose status is `active` — any
+human-set pause stops the loop and is never auto-resumed.
 
 Phase flips are CAS-guarded (§4.5.1, hermes claim_review_task precedent): each flip re-reads the
 item and writes only if the phase still matches, in one synchronous block — atomic under the
@@ -53,12 +62,27 @@ log = logging.getLogger("superme-agent")
 
 # --------------------------------------------------------------------------- decision (pure)
 
+# How many times the SAME failure signature may appear before the loop hands the item over. A
+# recurrence is not proof of impossibility — a build can be closing in on a fix while the
+# observable failure text stays put — so one repeat is too eager. Three appearances of the
+# identical signature is the owner's call for "give it good trials, then let me look".
+_MAX_RECURRENCE = 3
+# Bounded retries for a SuperMe fault (crashed turn, empty ledger). A fault is not an attempt:
+# retries reuse the cycle and never touch the convergence guard.
+_MAX_FAULT_RETRY = 2
+
+
 def decide_after_vet(item: dict, *, evidence: dict, fingerprint: str, attempts: list[dict],
-                     spent: int, budget: int, turn_error: bool = False) -> dict:
+                     spent: int, budget: int, turn_error: bool = False,
+                     faults: int = 0) -> dict:
     """The driver's decision function — PURE (no I/O; the wrapper reads the ledgers and passes
-    them in), so every branch is unit-testable. Returns {action, status, reason, record}:
-    action ∈ none|review|build|revet|halt · status = the item's resting status · record =
-    whether a §Cycle outcome entry is due (`none` leaves no trace — the loop didn't act)."""
+    them in), so every branch is unit-testable. Returns {action, status, reason, record[, exit]}:
+    action ∈ none|review|build|revet · status = the item's resting status · record = whether a
+    §Cycle outcome entry is due · `exit` = the typed reason review is handed.
+
+    There is NO halt: the loop never leaves an item resting inside build⟷vet, because that stretch
+    has no decision surface. `faults` is how many times this cycle has already been retried after a
+    SuperMe fault."""
     # Sticky owner holds (§5.2): the driver continues ONLY an active item. Terminal, paused,
     # or already-paged items are the owner's — a human-set stop never auto-resumes.
     status = str(item.get("status") or "")
@@ -69,22 +93,28 @@ def decide_after_vet(item: dict, *, evidence: dict, fingerprint: str, attempts: 
     if str(item.get("phase")) != "vet":
         return {"action": "none", "status": status, "record": False,
                 "reason": f"item left vet (phase={item.get('phase')}) — loop yields"}
-    # Fail closed on infrastructure (§5.2): the vet run crashed before a verdict. Never charge
-    # it as a cycle (no fingerprint recorded → it can't trip convergence), never guess a verdict.
-    if turn_error:
-        return {"action": "halt", "status": "awaiting_human", "record": True,
-                "reason": "vet run failed to complete (infrastructure) — failing closed"}
     ev = str(evidence.get("status") or "unverified")
-    if ev == "unverified":
-        return {"action": "halt", "status": "awaiting_human", "record": True,
-                "reason": "vet recorded no evidence — failing closed (an unrecorded vet is not a pass)"}
+    # --- SuperMe FAULTS (not verdicts) -------------------------------------------------------
+    # A crashed turn produced no verdict at all; an empty ledger where the plan declared checks
+    # means the recording machinery failed (both live causes to date were OUR allowlist gaps, and
+    # "genuinely nothing to verify" now has its own honest representation: `depth: none`). Neither
+    # says anything about the work, so neither may fail the item closed. Retry, then hand it over
+    # labelled as a fault so the bug is visible AS a bug.
+    fault = "vet run crashed before it could report" if turn_error else (
+        "vet recorded nothing while the plan declares checks" if ev == "unverified" else "")
+    if fault:
+        if faults < _MAX_FAULT_RETRY:
+            return {"action": "revet", "status": "active", "record": False, "fault": fault,
+                    "reason": f"{fault} — retrying (attempt {faults + 2} of {_MAX_FAULT_RETRY + 1})"}
+        return {"action": "review", "status": "awaiting_human", "record": True,
+                "exit": "system_fault", "fault": fault,
+                "reason": f"{fault}, {_MAX_FAULT_RETRY + 1} times — this is a SuperMe fault, not a "
+                          "verdict on the work; handing it to you with the trace"}
+    # --- work-item outcomes ------------------------------------------------------------------
     if ev == "stale":
-        # Code moved under a green ledger → re-vet. ONE consecutive re-vet only: a second stale
-        # in a row means something keeps touching the worktree mid-loop — stop and say so.
-        if attempts and str(attempts[-1].get("decision")) == "revet":
-            return {"action": "halt", "status": "awaiting_human", "record": True,
-                    "reason": "evidence went stale twice in a row — something is mutating the "
-                              "worktree under the loop; stopping"}
+        # The tree moved under a green ledger → re-vet. No consecutive cap: the fingerprint now
+        # tracks COMMITTED+tracked content only, so test litter can't fake this, and the budget is
+        # the backstop if something pathological ever does churn the worktree.
         return {"action": "revet", "status": "active", "record": True,
                 "reason": "evidence is green but the code moved since it was recorded — re-vetting",
                 "stale": evidence.get("stale_checks") or []}
@@ -94,32 +124,30 @@ def decide_after_vet(item: dict, *, evidence: dict, fingerprint: str, attempts: 
         # delegated deputy) grants or denies. Everything else is green.
         deferred = list(evidence.get("deferred_checks") or [])
         return {"action": "review", "status": "awaiting_human", "record": True, "deferred": deferred,
+                "exit": "converged",
                 "reason": f"{len(deferred)} check(s) deferred pending authorization — advancing to "
                           "review to grant or deny"}
     if ev == "passed":
-        return {"action": "review", "status": "awaiting_human", "record": True,
+        return {"action": "review", "status": "awaiting_human", "record": True, "exit": "converged",
                 "reason": "every check green and fresh — advancing to the review gate"}
     # failed → the breakers decide whether another cycle is spent.
     failed = list(evidence.get("failed_checks") or [])
     if spent >= budget:
-        return {"action": "halt", "status": "awaiting_human", "record": True, "failed": failed,
-                "reason": f"token budget exhausted ({spent} ≥ {budget} over build+vet) — "
-                          "stopping with WIP preserved"}
-    # The no-progress guard is a RECURRENCE test, not a repeat test (slice 5c, owner 2026-07-30).
-    # Comparing only against the previous cycle missed the oscillation that matters: fail A → fix A,
-    # break B → fix B, A regresses. Every step differs from the one before it, so the loop looked
-    # like it was moving while it was going in circles. A signature that has been seen BEFORE, at
-    # any distance, means this exact failure has already been "fixed" once — the next cycle is
-    # unlikely to be the one that sticks, and a human should see it. (`fingerprint` covers only
-    # FAILING checks and is "" when nothing fails, so a green cycle can never trip this.)
-    prev_fps = [str(a["fingerprint"]) for a in attempts if a.get("fingerprint")]
-    if fingerprint and fingerprint in prev_fps:
-        again = "the same checks are failing the same way as last cycle" \
-            if prev_fps[-1] == fingerprint else \
-            f"this exact failure already happened {len(prev_fps) - prev_fps.index(fingerprint)} " \
-            f"cycle(s) ago and has come back"
-        return {"action": "halt", "status": "awaiting_human", "record": True, "failed": failed,
-                "reason": f"no progress — {again}; escalating instead of spinning"}
+        return {"action": "review", "status": "awaiting_human", "record": True, "failed": failed,
+                "exit": "budget",
+                "reason": f"token budget exhausted ({spent} ≥ {budget} over build+vet) — handing "
+                          "over what got done"}
+    # Convergence: count how often THIS signature has already appeared. A recurrence after an
+    # intervening different failure is the oscillation a compare-with-previous test misses (fix A →
+    # break B → fix B → A regresses), but one repeat is not proof of a wall — build may be closing
+    # in while the failure text holds still. (`fingerprint` covers only FAILING checks and is ""
+    # when nothing fails, so a green cycle can never trip this.)
+    seen = sum(1 for a in attempts if str(a.get("fingerprint") or "") == fingerprint) if fingerprint else 0
+    if seen + 1 >= _MAX_RECURRENCE:
+        return {"action": "review", "status": "awaiting_human", "record": True, "failed": failed,
+                "exit": "not_converging",
+                "reason": f"the same failure has now come back {seen + 1} times — the loop is not "
+                          "converging on it; handing it to you"}
     return {"action": "build", "status": "active", "record": True, "failed": failed,
             "reason": f"{len(failed)} check(s) failed — handing the vet report to a build cycle"}
 
@@ -201,7 +229,65 @@ def _log_decision(context_id: str, item_id: str, cycle: int, d: dict) -> None:
                          f"Loop: {d['action']} — {d['reason'][:160]}",
                          item_id=item_id, actor="daemon",
                          meta={"action": d["action"], "cycle": cycle,
+                               "exit": d.get("exit") or "",
+                               "fault": d.get("fault") or "",
                                "failed": d.get("failed") or []})
+
+
+def _tree_moved_since_evidence(item_dir: Path, wt) -> bool:
+    """Has the worktree changed since the last evidence entry was recorded? True when there is no
+    evidence yet (the opening cycle has nothing to compare against, and must always be vetted).
+
+    Same fingerprint the ledger stamps, so this asks exactly the question the freshness rule asks —
+    one primitive, two readers."""
+    entries = _arts.evidence_entries(item_dir)
+    last = next((str(e.get("fingerprint") or "") for e in reversed(entries) if e.get("fingerprint")), "")
+    if not last or last == "no-git":
+        return True
+    return _arts.repo_fingerprint(wt) != last
+
+
+def _exit_no_progress(ctx, context_id: str, item_id: str, dev_root: Path, item_dir: Path) -> None:
+    """A build cycle that changed nothing: flip vet → review and hand it over, WITHOUT spending a
+    vet run. Records the same §Cycle outcome + decision event any other exit does, so the trail
+    reads the same whether the loop stopped at vet or short of it."""
+    d = {"action": "review", "status": "awaiting_human", "record": True, "exit": "no_progress",
+         "reason": "the build cycle changed nothing in the tree — no point vetting the same code "
+                   "again; handing it to you"}
+    if not _cas_phase(dev_root, item_id, "vet", "review"):
+        log.info("no-progress exit lost its CAS for %s — another actor moved it", item_id)
+        return
+    reports = _arts.cycle_reports(item_dir)
+    cycle = reports[-1]["cycle"] if reports else 0
+    try:
+        _arts.append_cycle_outcome(item_dir, evidence="unchanged", decision="review",
+                                   reason=d["reason"])
+    except Exception:
+        log.exception("§Cycle outcome append failed for %s", item_id)
+    _log_decision(context_id, item_id, cycle, d)
+    _dev_store.log_event(context_id, "phase.advance",
+                         f"Loop: {d['reason'][:120]} — advanced vet → review",
+                         item_id=item_id, actor="daemon",
+                         meta={"from": "vet", "to": "review", "exit": "no_progress"})
+    _dev.set_work_item_status(dev_root, item_id, "awaiting_human")
+    from .runs import fire_review_entry
+    if not fire_review_entry(context_id, item_id, _spine):
+        log.warning("loop: review-entry run did not start for %s", item_id)
+
+
+def _fault_retries(context_id: str, item_id: str, cycle: int) -> int:
+    """How many times THIS cycle has already been retried after a SuperMe fault — read back from
+    the decision trail rather than held in memory, so a daemon restart mid-retry can't reset the
+    counter and spin forever. A fault is not an attempt: these retries reuse the cycle number and
+    never reach the convergence guard."""
+    try:
+        rows = _dev_store.list_events(context_id, item_id=item_id, limit=40)
+    except Exception:
+        return 0
+    return sum(1 for e in rows
+               if str(e.get("kind")) == "loop.decision"
+               and (e.get("meta") or {}).get("fault")
+               and int((e.get("meta") or {}).get("cycle") or -1) == cycle)
 
 
 # --------------------------------------------------------------------------- vet runs
@@ -323,7 +409,8 @@ async def _run_background_vet(ctx, context_id: str, item_id: str,
     spent = _spine.item_phase_tokens(context_id, item_id)
     budget = _spine.effective_loop_budget(context_id, item.get("loop_budget"))
     d = decide_after_vet(item, evidence=evidence, fingerprint=fingerprint, attempts=attempts,
-                         spent=spent, budget=budget, turn_error=turn_error)
+                         spent=spent, budget=budget, turn_error=turn_error,
+                         faults=_fault_retries(context_id, item_id, cycle))
     # CAS flips happen BEFORE the run row closes so the next hop's row stamps the new phase.
     moved = True
     if d["action"] == "review":
@@ -333,11 +420,13 @@ async def _run_background_vet(ctx, context_id: str, item_id: str,
     if not moved:   # lost the CAS — someone else moved the item; theirs wins, loop yields
         d = {"action": "none", "status": str(item.get("status") or "active"), "record": False,
              "reason": "phase flip lost its CAS — another actor moved the item; loop yields"}
-    outcome = ("success" if d["action"] == "review"
-               else "blocked" if turn_error
-               else "exhausted" if d["action"] == "halt" and "budget" in d["reason"]
-               else "stagnated" if d["action"] == "halt"
-               else "success" if d["action"] in ("build", "revet") else None)
+    # The run outcome mirrors the TYPED exit, not prose: `converged` is the clean pass, the two
+    # non-convergent exits are `stagnated`, a budget exit is `exhausted`, and a fault is `blocked`
+    # (it says the run couldn't produce a verdict — never that the work is bad).
+    outcome = {"converged": "success", "budget": "exhausted",
+               "not_converging": "stagnated", "no_progress": "stagnated",
+               "system_fault": "blocked"}.get(str(d.get("exit") or "")) \
+        or ("blocked" if turn_error else "success" if d["action"] in ("build", "revet") else None)
     _end_run(ctx, context_id, item_id, final_tokens, d["status"] or "active", final_usage,
              outcome=outcome, session_id=final_session)
     if d["record"]:
@@ -350,9 +439,12 @@ async def _run_background_vet(ctx, context_id: str, item_id: str,
             log.exception("§Cycle outcome append failed for %s", item_id)
     _log_decision(context_id, item_id, cycle, d)
     if d["action"] == "review":
-        _dev_store.log_event(context_id, "phase.advance",
-                             "Loop: all checks green — advanced vet → review",
-                             item_id=item_id, actor="daemon", meta={"from": "vet", "to": "review"})
+        _dev_store.log_event(
+            context_id, "phase.advance",
+            ("Loop: all checks green — advanced vet → review" if d.get("exit") == "converged"
+             else f"Loop: {d['reason'][:120]} — advanced vet → review"),
+            item_id=item_id, actor="daemon",
+            meta={"from": "vet", "to": "review", "exit": d.get("exit") or ""})
     try:
         bank_auto_checkpoint(ctx, item_id, since=run_started)
     except Exception:
@@ -557,23 +649,53 @@ async def _run_background_build(ctx, context_id: str, item_id: str,
     outcome = (report_out or {}).get("outcome")
     d = decide_after_build(item, outcome=outcome, turn_error=turn_error)
     if d["stopping"]:
-        # `moved` = the owner moved/paused it → left theirs (loop yields). `infra` and `needs_user`
-        # are still ours → rest at awaiting_human. There is still NO content/approval stop: a
-        # deferred authorization rides to review (BV-A2), never a mid-build page.
+        # `moved` = the owner moved/paused it → theirs (loop yields). `needs_user` is 4f's commit
+        # wall — the ONE state that legitimately rests inside the loop, because nothing landed on
+        # the branch and review would show an empty diff. `infra` is a SuperMe FAULT: bounded
+        # retry, then hand the item to review labelled as our bug, never left sitting at `build`.
+        reports = _arts.cycle_reports(item_dir)
+        cycle = reports[-1]["cycle"] if reports else 0
+        if d["klass"] == "infra":
+            tries = _fault_retries(context_id, item_id, cycle)
+            if tries < _MAX_FAULT_RETRY:
+                _end_run(ctx, context_id, item_id, final_tokens, "active", final_usage,
+                         outcome="blocked", session_id=final_session)
+                _log_decision(context_id, item_id, cycle,
+                              {"action": "build", "fault": "build turn crashed before it could report",
+                               "reason": f"build turn crashed — retrying "
+                                         f"(attempt {tries + 2} of {_MAX_FAULT_RETRY + 1})"})
+                started, why = start_build_cycle(ctx, context_id, item_id)
+                if not started:
+                    log.warning("loop: build retry did not start for %s: %s", item_id, why)
+                log.info("background build cycle: fault retry for %s", item_id)
+                return
+            _end_run(ctx, context_id, item_id, final_tokens, "awaiting_human", final_usage,
+                     outcome="blocked", session_id=final_session)
+            if _cas_phase(dev_root, item_id, "build", "review"):
+                exit_d = {"action": "review", "exit": "system_fault",
+                          "fault": "build turn crashed before it could report",
+                          "reason": f"the build turn crashed {_MAX_FAULT_RETRY + 1} times — a "
+                                    "SuperMe fault, not a verdict on the work; handing it to you"}
+                _log_decision(context_id, item_id, cycle, exit_d)
+                _dev_store.log_event(context_id, "phase.advance",
+                                     f"Loop: {exit_d['reason'][:120]} — advanced build → review",
+                                     item_id=item_id, actor="daemon",
+                                     meta={"from": "build", "to": "review", "exit": "system_fault"})
+                from .runs import fire_review_entry
+                if not fire_review_entry(context_id, item_id, _spine):
+                    log.warning("loop: review-entry run did not start for %s", item_id)
+            log.info("background build cycle: system fault → review for %s", item_id)
+            return
         still_ours = d["klass"] != "moved"
         rest = "awaiting_human" if still_ours else str(item.get("status") or "active")
         _end_run(ctx, context_id, item_id, final_tokens, rest, final_usage,
                  outcome=("blocked" if turn_error else outcome), session_id=final_session)
         if d["klass"] == "moved":
             msg, meta = ("Loop: item moved during build cycle — loop yields",
-                         {"action": "halt", "outcome": outcome})
-        elif d["klass"] == "needs_user":
-            # The question is already the run's report; attention renders it as an ask card.
+                         {"action": "none", "outcome": outcome})
+        else:  # needs_user — the question is the run's report; attention renders the ask card.
             msg, meta = ("Loop: build hit a wall only the owner can clear — asking",
-                         {"action": "halt", "outcome": "needs_user"})
-        else:  # infra — a crashed turn with no verdict; the only mid-build page (BV-B retry ladder)
-            msg, meta = ("Loop: build turn crashed (infrastructure) — paging the owner",
-                         {"action": "halt", "outcome": "blocked", "class": "infra"})
+                         {"action": "ask", "outcome": "needs_user"})
         _dev_store.log_event(context_id, "loop.decision", msg,
                              item_id=item_id, actor="daemon", meta=meta)
     else:
@@ -587,9 +709,17 @@ async def _run_background_build(ctx, context_id: str, item_id: str,
                                  "Loop: build cycle done — re-entering vet",
                                  item_id=item_id, actor="daemon",
                                  meta={"from": "build", "to": "vet"})
-            started, why = start_vet_run(ctx, context_id, item_id)
-            if not started:
-                log.warning("loop: next vet did not start for %s: %s", item_id, why)
+            # NO-PROGRESS GUARD: if the tree is byte-identical to what the last evidence entry was
+            # recorded against, this build cycle changed nothing — vetting it would re-derive the
+            # same verdict at full cost. Skip the vet entirely and hand the item over. Catches both
+            # the empty build cycle and the `clean_noop` case (a revise that touched only plan text
+            # still spawning a build, then a vet on top of it).
+            if not _tree_moved_since_evidence(item_dir, wt):
+                _exit_no_progress(ctx, context_id, item_id, dev_root, item_dir)
+            else:
+                started, why = start_vet_run(ctx, context_id, item_id)
+                if not started:
+                    log.warning("loop: next vet did not start for %s: %s", item_id, why)
     try:
         bank_auto_checkpoint(ctx, item_id, since=run_started)
     except Exception:

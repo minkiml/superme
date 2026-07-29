@@ -692,12 +692,20 @@ def write_handoff_brief(folder: Path, title: str, *, background: str = "", discu
 # --------------------------------------------------------------------------- evidence ledger
 
 def repo_fingerprint(repo_dir: Path | None) -> str:
-    """A cheap fingerprint of the repo's CODE STATE: HEAD sha + working-tree porcelain status +
-    the uncommitted diff CONTENT. Any commit or uncommitted edit changes it — that's the D6
-    stale-on-edit trigger. The diff matters: porcelain alone is byte-identical when an
-    already-dirty file keeps changing (` M foo.py` stays ` M foo.py`), which would let evidence
-    recorded mid-build stay "fresh" through further edits to the same file. Non-git /
-    missing dir → 'no-git' (evidence there can't be freshness-tracked, only recorded)."""
+    """A cheap fingerprint of the repo's CODE STATE: HEAD sha + the content of every uncommitted
+    change to a TRACKED file (`git diff HEAD`). Any commit or tracked edit changes it — the D6
+    stale-on-edit trigger. The diff CONTENT is what's hashed, not a status summary: a summary is
+    byte-identical while an already-dirty file keeps changing, which would let evidence recorded
+    mid-build stay "fresh" through further edits to the same file.
+
+    UNTRACKED files are deliberately excluded (2026-07-30). They were counted via
+    `git status --porcelain`, which made a vet run stale its own evidence: running the project's
+    tests drops coverage files, temp databases and logs into the worktree, the fingerprint moved,
+    and green evidence read as `stale` — a false positive of exactly the kind that wedged the close
+    gate (dogfood D5). Build's implementation is always tracked (the commit gate sees to that), so
+    nothing this rule exists to catch lives in an untracked file.
+
+    Non-git / missing dir → 'no-git' (evidence there can't be freshness-tracked, only recorded)."""
     if not repo_dir or not Path(repo_dir).is_dir():
         return "no-git"
     try:
@@ -705,12 +713,9 @@ def repo_fingerprint(repo_dir: Path | None) -> str:
                               text=True, timeout=10)
         if head.returncode != 0:
             return "no-git"
-        status = subprocess.run(["git", "status", "--porcelain"], cwd=repo_dir,
-                                capture_output=True, text=True, timeout=10)
         diff = subprocess.run(["git", "diff", "HEAD"], cwd=repo_dir,
                               capture_output=True, text=True, timeout=15)
-        return hashlib.sha1((head.stdout.strip() + "\n" + status.stdout
-                             + "\n" + diff.stdout).encode()).hexdigest()[:16]
+        return hashlib.sha1((head.stdout.strip() + "\n" + diff.stdout).encode()).hexdigest()[:16]
     except (OSError, subprocess.SubprocessError):
         return "no-git"
 
