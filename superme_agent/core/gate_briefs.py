@@ -7,8 +7,8 @@ time. Every brief is continuity-preserving (anchors in the owner's last touchpoi
 exactly ONE decision, and closes with the uniform decision block: recommendation FIRST · stakes one
 line · per-option consequence · dual-scale effort. Every gate is answerable from its brief alone.
 
-The kernel ASSEMBLES the brief from durable state (item fields, artifacts, evidence ledger, staged
-knowledge delta, event log, git health) — the agent-authored reports are embedded as the narrative
+The kernel ASSEMBLES the brief from durable state (item fields, artifacts, evidence ledger,
+event log, git health) — the agent-authored reports are embedded as the narrative
 core, never regenerated. Mechanical rows come from code, never claims.
 
 `close_readiness` is the D8 close gate's mechanical evaluator over KIND_PROFILES.close_criteria —
@@ -21,7 +21,6 @@ import re
 from pathlib import Path
 
 from . import artifacts as A
-from . import knowledge_delta as KD
 from . import plan_revision
 from . import status_router
 from .kind_profiles import get_profile
@@ -412,18 +411,10 @@ def render_gate_brief(item: dict, item_dir: Path, dev_root: Path,
         wt = item.get("git_worktree")
         ev_repo = Path(str(wt)) if wt and Path(str(wt)).is_dir() else main_repo_dir
         ev = A.evidence_status(item_dir, ev_repo)
-        ks = KD.delta_status(item_dir, dev_root, ev_repo)
         checks.append({"criterion": "evidence_fresh", "ok": ev["status"] == "passed",
                        "detail": "no checks were owed — the approved plan declares `depth: none`"
                                  if ev.get("not_required") else
                                  f"evidence ledger: {ev['status']} ({ev.get('entries', 0)} entries)"})
-        k_ok = ks["state"] in ("staged", "none-staged", "folded", "applied")
-        checks.append({"criterion": "knowledge_row", "ok": k_ok,
-                       "detail": f"knowledge delta: {ks['state']}"
-                                 + (f" ({ks['ops']} ops — applied atomically with the merge)"
-                                    if ks["state"] == "staged" else "")
-                                 + ("; " + "; ".join(ks.get("issues", [])[:3])
-                                    if ks["state"] == "invalid" else "")})
         if git_health:
             fresh = not git_health.get("behind")
             checks.append({"criterion": "git_fresh", "ok": fresh,
@@ -431,8 +422,7 @@ def render_gate_brief(item: dict, item_dir: Path, dev_root: Path,
                                       f"behind {git_health.get('behind', 0)} vs trunk"
                                       + ("" if fresh else " — sync from main first"))})
         facts = [{"label": "evidence", "value": f"{ev['status']} ({ev.get('entries', 0)} entries)",
-                  "tone": "" if ev["status"] == "passed" else "warn"},
-                 {"label": "knowledge", "value": ks["state"]}]
+                  "tone": "" if ev["status"] == "passed" else "warn"}]
         if git_health:
             facts.append({"label": "branch",
                           "value": f"ahead {git_health.get('ahead', 0)} · "

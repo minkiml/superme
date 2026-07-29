@@ -83,7 +83,7 @@ SAFE_TOOLS = {
     # is never written; conflicts abort-and-report by default.
     "mcp__dev__sync_from_main",
     # Stages edit ops item-local (applied only later, atomically with the owner's merge).
-    "mcp__dev__stage_knowledge_delta",
+    "mcp__dev__apply_knowledge_delta",
     # The surgical plan editor (§2.1): writes only the item's own plan.md, through validated
     # section/task ops. It is the re-plan's ONLY sanctioned way to change the file, so prompting
     # here would push the agent toward the whole-file rewrite this tool exists to prevent.

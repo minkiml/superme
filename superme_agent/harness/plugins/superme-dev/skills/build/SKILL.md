@@ -105,8 +105,8 @@ The owner is not watching; nothing you ask mid-run reaches them. So decide and r
 - Rewrite `reports/report-build.md` from `templates/report-build-template.md` (this skill's
   folder), overwriting — every line traces to the cycle reports.
 - On long builds, sync with the trunk via `sync_from_main` (commit first); resolve any conflicts
-  it reports yourself. When a change makes an anchor doc wrong, stage the fix NOW via
-  `stage_knowledge_delta` — never edit anchor docs directly.
+  it reports yourself. When a change makes an anchor doc wrong, note it in `## Built` — you never
+  edit those docs, and the close run writes them once the merge locks what you did.
 - End of a session mid-work: bank `write_checkpoint` (what you're on · decisions · remaining ·
   tried-but-failed). The loop vets what you produce automatically — never advance the phase.
 

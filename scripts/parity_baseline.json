@@ -3132,28 +3132,6 @@
               ],
               "title": "Freshness"
             },
-            "knowledge_folded_into": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Knowledge Folded Into"
-            },
-            "knowledge_ops_applied": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Knowledge Ops Applied"
-            },
             "lint_warnings": {
               "anyOf": [
                 {

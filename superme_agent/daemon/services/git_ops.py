@@ -222,8 +222,7 @@ def review_merge(ctx, context_id: str, item_id: str, *, dev, dev_store, spine) -
                             "Skipped merge (throwaway prompt-extraction probe — never lands on main)",
                             item_id=item_id, actor="daemon", meta={"skipped": "prompt_extraction"})
         return {"ok": True, "merged": True, "path": "prompt-extraction-skip",
-                "skipped": "prompt_extraction", "knowledge_ops_applied": None,
-                "knowledge_folded_into": None, "lint_warnings": None}
+                "skipped": "prompt_extraction", "lint_warnings": None}
     branch = item.get("git_branch")
     if not branch:
         raise HTTPException(status_code=409, detail="item has no branch (created on build entry)")
@@ -244,19 +243,7 @@ def review_merge(ctx, context_id: str, item_id: str, *, dev, dev_store, spine) -
             detail="blocking child's parent has no worktree and was never merged — merging this "
                    "child to trunk would carry the parent's unfinished commits. Re-enter the "
                    "parent's build (its branch is kept) or abandon this child with it.")
-    # D7 pre-merge validation: a staged knowledge delta is re-validated against the tree that is
-    # ABOUT TO BECOME main (the item's worktree — freshness-synced, so its content is the merge
-    # result). An invalid delta REFUSES the merge — a doc can never acquire a dead pointer.
     item_dir = dev_root / "work-items" / item_id
-    delta = knowledge_delta.pending_delta(item_dir)
-    if delta and not parent.get("git_worktree"):
-        wt_dir = item.get("git_worktree")
-        ref_repo = Path(str(wt_dir)) if wt_dir and Path(str(wt_dir)).is_dir() else ctx.cwd
-        issues = knowledge_delta.validate_ops(delta["ops"], dev_root, ref_repo)
-        if issues:
-            raise HTTPException(status_code=409,
-                                detail="knowledge delta invalid — fix and restage before "
-                                       "merging: " + "; ".join(issues))
     # Freshness belongs to the merge, not to review (§2.3) — the anchor may have moved while this
     # item sat at the gate. Main path only: a blocking child lands on its PARENT's branch, where
     # the anchor's movement is the parent's problem to answer, not the child's.
@@ -273,7 +260,6 @@ def review_merge(ctx, context_id: str, item_id: str, *, dev, dev_store, spine) -
                                 item_id=item_id, actor="daemon", meta=fresh)
             return {"ok": True, "merged": False, "path": "main", "freshness": fresh["action"],
                     "conflicts": fresh.get("conflicts"), "stale_paths": fresh.get("paths"),
-                    "knowledge_ops_applied": None, "knowledge_folded_into": None,
                     "lint_warnings": None}
     try:
         if parent.get("git_worktree"):
@@ -295,8 +281,6 @@ def review_merge(ctx, context_id: str, item_id: str, *, dev, dev_store, spine) -
             path = "main"
     except (git_layer.GitError, git_layer.GitBusy) as e:
         raise HTTPException(status_code=409, detail=str(e))
-    knowledge_ops_applied = None
-    knowledge_folded_into = None
     lint_warnings = None
     if res.get("merged"):
         dev.set_work_item_git(dev_root, item_id,
@@ -304,45 +288,22 @@ def review_merge(ctx, context_id: str, item_id: str, *, dev, dev_store, spine) -
                               git_merged_at=datetime.now().isoformat(timespec="seconds"),
                               **({"git_backup_ref": res["backup_ref"]}
                                  if res.get("backup_ref") else {}))
-    # A still-PENDING delta on an `already_merged` retry is the crash-between-merge-and-apply
-    # window: the code is on main but the knowledge write never happened. Apply is idempotent, so
-    # the retry completes the pair (else the close gate's knowledge_row_resolved fails with no
-    # recovery route).
-    merged_now_or_before = res.get("merged") or res.get("already_merged")
-    if merged_now_or_before:
-        # D7: merge + knowledge-write = ONE "codebase changed" event.
-        if path == "main":
-            if delta:
-                applied = knowledge_delta.apply_delta(item_dir, dev_root)
-                knowledge_ops_applied = applied.get("applied", 0)
-                dev_store.log_event(context_id, "knowledge.applied",
-                                    f"Applied knowledge delta ({knowledge_ops_applied} op(s) → "
-                                    f"{', '.join(applied.get('docs', []))}) with the merge",
-                                    item_id=item_id, actor="daemon", meta=applied)
-            # Standing freshness lint — truth decay detected at every merge, never just avoided.
-            lint_warnings = knowledge_delta.freshness_lint(dev_root, ctx.cwd) or None
-            if lint_warnings:
-                dev_store.log_event(context_id, "knowledge.lint",
-                                    f"Freshness lint: {len(lint_warnings)} warning(s) after merge",
-                                    item_id=item_id, actor="daemon",
-                                    meta={"warnings": lint_warnings})
-        elif delta:  # blocking child → its delta FOLDS into the parent's staged delta
-            parent_id = str(sf.get("item"))
-            moved = knowledge_delta.fold_into_parent(
-                item_dir, dev_root / "work-items" / parent_id, parent_id)
-            if moved:
-                knowledge_folded_into = parent_id
-                dev_store.log_event(context_id, "knowledge.folded",
-                                    f"Folded {moved} knowledge op(s) into parent {parent_id}",
-                                    item_id=item_id, actor="daemon",
-                                    meta={"parent": parent_id, "ops": moved})
+    # The merge no longer WRITES general knowledge (renovation §2.3, 2026-07-30): CLOSE is its sole
+    # author, and close runs after this act locks the code. The stage-at-build / apply-at-merge
+    # pair is retired with the whole crash-between-the-two recovery window it needed. What survives
+    # is the standing freshness lint — truth decay detected at every merge, never just avoided.
+    if (res.get("merged") or res.get("already_merged")) and path == "main":
+        lint_warnings = knowledge_delta.freshness_lint(dev_root, ctx.cwd) or None
+        if lint_warnings:
+            dev_store.log_event(context_id, "knowledge.lint",
+                                f"Freshness lint: {len(lint_warnings)} warning(s) after merge",
+                                item_id=item_id, actor="daemon",
+                                meta={"warnings": lint_warnings})
     dev_store.log_event(context_id, "git.merge",
                         (f"Merged to {res.get('target') or 'trunk'}" if res.get("merged")
                          else "Already merged" if res.get("already_merged")
                          else f"Merge hit {len(res.get('conflicts') or [])} conflict(s)"),
                         item_id=item_id, actor="owner", meta={**res, "path": path})
     return {"ok": True, "merged": bool(res.get("merged")), "path": path,
-            "knowledge_ops_applied": knowledge_ops_applied,
-            "knowledge_folded_into": knowledge_folded_into,
             "lint_warnings": lint_warnings,
             **{k: v for k, v in res.items() if k != "merged"}}

@@ -2,17 +2,19 @@
 (workspace-workflow PRD stage S6).
 
 Anchor docs (`general/{project-prd,spec,roadmap,architecture}.md` + `general/resources/index.md`)
-must mirror CURRENT main-codebase truth. NO freehand writes: an implementation item DRAFTS a delta
-while its context is hot (structured edit ops, staged item-local in `artifacts/
-knowledge-delta.yaml`), the ops are VALIDATED (target section exists · no placeholders · file
-references resolve against the tree that is about to become main · deliverable slugs resolve), and
-a deterministic WRITER applies them atomically with the merge to main — merge + knowledge-write =
-one "codebase changed" event. Pre-merge failure paths are clean by construction: an unapplied
-staged file is just a draft; nothing to roll back.
+must mirror CURRENT main-codebase truth. NO freehand writes: the CLOSING run supplies structured
+edit ops, they are VALIDATED (target section exists · no placeholders · file references resolve
+against the tree · deliverable slugs resolve), and a deterministic WRITER applies them.
 
-Blocking children never write general knowledge (their merge target is the parent branch) — their
-staged delta FOLDS into the parent's, applied when the family merges to main. Research items never
-stage at all (KIND_PROFILES.knowledge_writes gates the tool).
+**Close is the sole writer** (renovation §2.3, built 2026-07-30). The old shape — build stages
+`knowledge-delta.yaml`, the merge applies it — is retired: it put the write on the far side of a
+decision the owner had not made yet, and left a staged file that every gate had to reason about.
+Close runs AFTER review locks the code, so there is no window in which a doc describes something
+that has not landed, and nothing to roll back if the run fails.
+
+Blocking children never write general knowledge: their merge target is the parent's branch, so
+their content is not on main until the parent lands. The parent's close writes for the family.
+Research items never write at all (KIND_PROFILES.knowledge_writes gates the tool).
 
 A standing FRESHNESS LINT (run at every merge + on demand) detects truth decay: anchor-doc file
 references that no longer exist, roadmap/PRD pointers that don't resolve.
@@ -22,15 +24,12 @@ Deterministic, file-based, spine-free — unit-testable without a daemon.
 
 import os
 import re
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
-
-import yaml
 
 from .artifacts import FILL, _atomic_write
 from .dev_knowledge import ANCHOR_DOCS, DevKnowledgeService, _parse_deliverables
 
-DELTA_FILE = "knowledge-delta.yaml"
 # update/append/supersede act on a section's BODY; rename_section rewrites the `## <heading>` LINE
 # itself (BV-A2 small-fix: the tool used to edit bodies only, so a heading carrying stale text —
 # e.g. a roadmap deliverable heading naming a renamed command — was unreachable).
@@ -54,33 +53,6 @@ def _doc_path(dev_root: Path, doc: str) -> Path | None:
 
 def _sections(text: str) -> list[str]:
     return re.findall(r"(?m)^##\s+(.+?)\s*$", text)
-
-
-def delta_path(item_dir: Path) -> Path:
-    return Path(item_dir) / "artifacts" / DELTA_FILE
-
-
-def read_delta(item_dir: Path) -> dict | None:
-    """The staged delta record {staged_at, applied_at, folded_into, ops: [...]}, or None. A file
-    that doesn't parse reads as None (a broken draft never blocks anything — restage it)."""
-    p = delta_path(item_dir)
-    if not p.exists():
-        return None
-    try:
-        data = yaml.safe_load(p.read_text())
-    except yaml.YAMLError:
-        return None
-    if not isinstance(data, dict) or not isinstance(data.get("ops"), list):
-        return None
-    return data
-
-
-def pending_delta(item_dir: Path) -> dict | None:
-    """The staged delta iff it is still PENDING (neither applied nor folded into a parent)."""
-    d = read_delta(item_dir)
-    if d and not d.get("applied_at") and not d.get("folded_into"):
-        return d
-    return None
 
 
 def validate_ops(ops: list, dev_root: Path, repo_dir: Path | None) -> list[str]:
@@ -139,32 +111,20 @@ def validate_ops(ops: list, dev_root: Path, repo_dir: Path | None) -> list[str]:
     return issues
 
 
-def stage_delta(item_dir: Path, ops: list) -> str:
-    """Stage (or RESTAGE — a draft, freely replaceable until applied) the item's delta. The
-    caller validates first; staging itself only records. Returns the file path."""
-    path = delta_path(item_dir)
-    rec = {"staged_at": datetime.now().isoformat(timespec="seconds"),
-           "applied_at": None, "folded_into": None, "ops": ops}
-    _atomic_write(path, yaml.safe_dump(rec, sort_keys=False, allow_unicode=True))
-    return str(path)
+def apply_ops(dev_root: Path, ops: list) -> dict:
+    """The deterministic writer: apply already-VALIDATED ops to the anchor docs, atomically per
+    doc. `update`/`supersede` REPLACE the target section's body; `append` adds at the section's
+    end; `rename_section` rewrites the heading LINE. The caller validates first — this function
+    trusts its input and fails loud on a target that vanished mid-flight.
 
-
-def _stamp(item_dir: Path, **fields) -> None:
-    d = read_delta(item_dir) or {"ops": []}
-    d.update(fields)
-    _atomic_write(delta_path(item_dir), yaml.safe_dump(d, sort_keys=False, allow_unicode=True))
-
-
-def apply_delta(item_dir: Path, dev_root: Path) -> dict:
-    """The deterministic writer: apply the item's PENDING ops to the anchor docs, atomically per
-    doc, then stamp `applied_at`. `update`/`supersede` REPLACE the target section's body;
-    `append` adds content at the section's end. The caller (the merge route) re-validates first —
-    this function trusts its input and fails loud on a target that vanished mid-flight."""
-    delta = pending_delta(item_dir)
-    if not delta:
-        return {"applied": 0}
+    Called at CLOSE, by the closing run (renovation §2.3). The staging half — `knowledge-delta.yaml`
+    drafted at build and applied at the merge — is RETIRED: knowledge writes have one owner, and it
+    is the phase that runs after the code is locked, so there is no window in which a doc describes
+    something that hasn't landed."""
+    if not ops:
+        return {"applied": 0, "docs": []}
     texts: dict[str, str] = {}
-    for op in delta["ops"]:
+    for op in ops:
         doc = str(op["doc"])
         p = _doc_path(dev_root, doc)
         text = texts.get(doc) if doc in texts else p.read_text()
@@ -189,38 +149,46 @@ def apply_delta(item_dir: Path, dev_root: Path) -> dict:
         texts[doc] = text[:m.start(2)] + body + text[m.end(2):]
     for doc, text in texts.items():
         _atomic_write(_doc_path(dev_root, doc), text)
-    _stamp(item_dir, applied_at=datetime.now().isoformat(timespec="seconds"))
-    return {"applied": len(delta["ops"]), "docs": sorted(texts)}
+    return {"applied": len(ops), "docs": sorted(texts)}
 
 
-def fold_into_parent(child_item_dir: Path, parent_item_dir: Path, parent_id: str) -> int:
-    """A blocking child's pending delta FOLDS into its parent's staged delta (D7) at the
-    child→parent merge; it applies to the anchor docs only when the family merges to main.
-    Returns the number of ops moved (0 = nothing pending)."""
-    delta = pending_delta(child_item_dir)
-    if not delta:
-        return 0
-    parent = read_delta(parent_item_dir)
-    ops = (parent["ops"] if parent and not parent.get("applied_at") else []) + delta["ops"]
-    stage_delta(parent_item_dir, ops)
-    _stamp(child_item_dir, folded_into=parent_id)
-    return len(delta["ops"])
+# --------------------------------------------------------------------------- the change log
+# `general/change-logs/delta-<N>.md`, N advancing WEEKLY (whole weeks since 1970-01-05, a Monday —
+# a monotonic integer, so files sort and no two weeks collide). One entry per item that wrote:
+# the heading names it, the table says which doc/section changed and how. The anchor docs say what
+# is true NOW; this says when each truth arrived and which item brought it.
+
+_EPOCH_MONDAY = date(1970, 1, 5)
 
 
-def delta_status(item_dir: Path, dev_root: Path, repo_dir: Path | None) -> dict:
-    """The readiness KNOWLEDGE ROW's data: `none-staged` · `staged` (n ops, currently valid) ·
-    `invalid` (staged but failing validation — itemized) · `applied` · `folded`."""
-    d = read_delta(item_dir)
-    if d is None:
-        return {"state": "none-staged", "ops": 0}
-    if d.get("applied_at"):
-        return {"state": "applied", "ops": len(d["ops"]), "applied_at": d["applied_at"]}
-    if d.get("folded_into"):
-        return {"state": "folded", "ops": len(d["ops"]), "folded_into": d["folded_into"]}
-    issues = validate_ops(d["ops"], dev_root, repo_dir)
-    if issues:
-        return {"state": "invalid", "ops": len(d["ops"]), "issues": issues}
-    return {"state": "staged", "ops": len(d["ops"])}
+def change_log_index(when: date | None = None) -> int:
+    return ((when or date.today()) - _EPOCH_MONDAY).days // 7
+
+
+def change_log_path(dev_root: Path, when: date | None = None) -> Path:
+    return (Path(dev_root) / "general" / "change-logs"
+            / f"delta-{change_log_index(when)}.md")
+
+
+def append_change_log(dev_root: Path, item_id: str, title: str, ops: list,
+                      when: date | None = None) -> str:
+    """Append this item's entry to the current week's change log, creating the file on the week's
+    first write. Append-only: the log is history, so an entry is never rewritten."""
+    path = change_log_path(dev_root, when)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    head = "" if path.exists() else (
+        f"# Change log — week {change_log_index(when)}\n\n"
+        "What each closed work-item changed in the anchor docs, newest last.\n")
+    stamp = datetime.now().isoformat(timespec="seconds")
+    rows = "\n".join(
+        f"| `{op.get('doc')}` · {op.get('section')} | {op.get('op')} | "
+        f"{' '.join(str(op.get('content') or '').split())[:90]} | `{item_id}` |"
+        for op in ops)
+    entry = (f"\n## [{stamp}] {title or item_id}\n\n"
+             "| doc · section | op | what changed | source item |\n"
+             "|---|---|---|---|\n" + rows + "\n")
+    _atomic_write(path, (head + (path.read_text() if path.exists() else "")).rstrip() + "\n" + entry)
+    return str(path)
 
 
 def freshness_lint(dev_root: Path, repo_dir: Path | None) -> list[str]:

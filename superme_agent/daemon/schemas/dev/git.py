@@ -53,10 +53,8 @@ class GitMergeResponse(BaseModel):
     # the item takes one vet cycle before it can be approved again.
     freshness: str | None = None       # park | revet (absent when the anchor was already current)
     stale_paths: list[str] | None = None
-    # D7 knowledge pipeline (S6): ops applied atomically with a main merge · the parent a blocking
-    # child's delta folded into · standing freshness-lint warnings raised by this merge.
-    knowledge_ops_applied: int | None = None
-    knowledge_folded_into: str | None = None
+    # Standing freshness-lint warnings raised by this merge. (The knowledge WRITE moved to close —
+    # renovation §2.3 — so a merge no longer reports ops applied or folded.)
     lint_warnings: list[str] | None = None
 
 

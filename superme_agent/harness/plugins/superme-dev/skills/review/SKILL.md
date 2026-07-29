@@ -26,12 +26,12 @@ Numbers come from their source, never an estimate: the diff shape from one
 `git diff --stat <base>...HEAD` run in the worktree — `<base>` is the **branch base** named in
 your `## Current focus` block — and check results from the cycles' `§Verification`.
 
-## Step 2 — Stage the knowledge delta
+## Step 2 — Name what the anchor docs will owe
 
 Did this item change something the anchor docs describe (project-prd / architecture / capabilities /
-decisions / roadmap / resources)? Then `stage_knowledge_delta(item_id, ops)` — close applies it, so
-never edit an anchor doc yourself. Nothing doc-worthy changed → stage nothing, and say so in the
-report.
+decisions / roadmap / resources)? Say so in the report, doc by doc, in one line each — the CLOSE run
+writes them, after the merge locks the code, and it reads this. Nothing doc-worthy changed → say
+that too; silence reads as an oversight.
 
 An op that DEFINES or ALTERS intent is not a sync — re-scoping a deliverable, changing a written
 success signal, setting direction. Those go through `request_authorization`, naming the ops they
@@ -41,13 +41,13 @@ cover.
 
 | the change | the call |
 |---|---|
-| `architecture.md` — record that the CSV writer moved into `reporting/` | `stage_knowledge_delta` — it describes what now exists |
+| `architecture.md` — record that the CSV writer moved into `reporting/` | name it here; close writes it — it describes what now exists |
 | `project-prd.md` — drop `--csv` from deliverable `d-reporting` and rewrite its success signal | `request_authorization` — it changes what the project promised |
 
 The tell is not which doc you touch — it is whether the line you change DEFINES what was promised.
 
-**A research item skips this step:** nothing it concluded has been implemented, so it writes no
-anchor docs. Its proposals in Step 3 are how its findings become work.
+**A research item skips this step:** nothing it concluded has been implemented, so no anchor doc
+owes it anything. Its proposals in Step 3 are how its findings become work.
 
 ## Step 3 — Write the report
 

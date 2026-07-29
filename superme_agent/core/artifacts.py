@@ -847,7 +847,7 @@ def evidence_entries(item_dir: Path) -> list[dict]:
 
 
 # --- the authorization ledger (BV-A2) -------------------------------------------
-# A work-item may PROPOSE a contract change (stage_knowledge_delta) but not every such change is
+# A work-item may PROPOSE a contract change (an anchor-doc op) but not every such change is
 # self-authorizable: the ones that DEFINE or alter intent are owner-reserved. When build hits one it
 # can't self-authorize, it records an AUTHORIZATION REQUEST here (what · why · which doc · a SCOPE
 # the deputy's delegated authority is matched against · the vet check it blocks) and lets that check

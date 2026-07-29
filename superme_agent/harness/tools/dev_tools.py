@@ -1163,35 +1163,47 @@ class KnowledgeOpArg(TypedDict):
                              "stripped). For rename_section: the new heading TEXT, one line, no `##`")]
 
 
-class StageKnowledgeDeltaArgs(TypedDict, total=False):
+class ApplyKnowledgeDeltaArgs(TypedDict, total=False):
     item_id: Required[Annotated[str, "the work-item id"]]
     ops: Required[Annotated[list[KnowledgeOpArg],
-                            ("the edit ops — validated now, applied to the anchor docs "
-                             "atomically with the merge to main")]]
+                            ("the edit ops — validated, then written to the anchor docs and "
+                             "recorded in this week's change log. A rejection writes nothing")]]
 
 
-def _stage_knowledge_delta(*, store, context_id, dev_root=None, repo_dir=None,
+def _apply_knowledge_delta(*, store, context_id, dev_root=None, repo_dir=None,
                            bound_item_id=None, **_):
-    async def stage_knowledge_delta(args: dict) -> dict:
+    async def apply_knowledge_delta(args: dict) -> dict:
         from pathlib import Path
         from ...core import knowledge_delta as _kd
-        from ...core.dev_knowledge import _parse_md
-        from ...core.kind_profiles import get_profile
+        from ...core.dev_knowledge import DevKnowledgeService as _DK
+        from ...core.kind_profiles import get_profile, is_final_phase
         item_id = _s(args, "item_id")
         if (msg := _bound_err(item_id, bound_item_id)):
             return _err(msg)
         d = _item_dir(dev_root, item_id)
         if d is None:
             return _err(f"No work-item {item_id!r} here.")
-        meta, _body = _parse_md((d / "item.md").read_text())
-        if not get_profile(meta.get("kind")).knowledge_writes:
+        item = _DK().read_work_item(Path(dev_root), item_id) or {}
+        if not get_profile(item.get("kind")).knowledge_writes:
             return _err("This item's kind never writes general dev-knowledge (D7). The anchor "
                         "docs describe what is IN the main tree, so they change only when code "
-                        "does, through an implementation item at merge. Nothing this item "
-                        "concludes has been implemented yet — its conclusions belong in its own "
-                        "report, and reach the docs later via the work that acts on them.")
-        # `ops` arrives as a real JSON array (typed schema); tolerate a JSON string too (older
-        # skill text / tests pass one).
+                        "does. Nothing this item concludes has been implemented yet — its "
+                        "conclusions belong in its own report, and reach the docs later via the "
+                        "work that acts on them.")
+        # Close is the ONLY writing moment (renovation §2.3): before it, the owner has not yet
+        # locked the code, so a doc written earlier could describe something that never lands.
+        if not is_final_phase(item.get("kind"), item.get("phase") or "triage"):
+            return _err(f"The anchor docs are written at CLOSE — this item is at "
+                        f"`{item.get('phase')}`. Until the merge locks the code there is nothing "
+                        f"true to write about it yet.")
+        # A blocking child merged into its PARENT's branch, so its content is not on main until
+        # the parent lands. The parent's close speaks for the family.
+        sf = item.get("spawned_from") or {}
+        if isinstance(sf, dict) and sf.get("relation") == "blocking":
+            return _err(f"This is a blocking child of `{sf.get('item')}` — its work landed on the "
+                        f"parent's branch, not on main, so the anchor docs cannot describe it yet. "
+                        f"The parent's close writes for the family; note what it should say in "
+                        f"your close report.")
         ops = args.get("ops")
         if isinstance(ops, str):
             try:
@@ -1200,13 +1212,22 @@ def _stage_knowledge_delta(*, store, context_id, dev_root=None, repo_dir=None,
                 return _err(f"`ops` must be a JSON array of edit ops: {e}")
         issues = _kd.validate_ops(ops, Path(dev_root), repo_dir)
         if issues:
-            return _err("Delta rejected — nothing staged. Fix and restage:\n- "
+            return _err("Delta rejected — NOTHING was written. Fix and re-apply:\n- "
                         + "\n- ".join(issues))
-        path = _kd.stage_delta(d, ops)
-        return _ok(f"Knowledge delta staged ({len(ops)} op(s)) at {path}. It stays a draft "
-                   f"(restage freely to replace it) until the review-gate merge applies it to "
-                   f"the anchor docs atomically — you never edit those docs directly.")
-    return stage_knowledge_delta
+        try:
+            res = _kd.apply_ops(Path(dev_root), ops)
+        except (ValueError, OSError) as e:
+            return _err(f"Write failed, docs unchanged: {e}")
+        log_path = _kd.append_change_log(Path(dev_root), item_id,
+                                         str(item.get("title") or ""), ops)
+        store.log_event(context_id, "knowledge.applied",
+                        f"Anchor docs updated at close ({res['applied']} op(s) → "
+                        f"{', '.join(res['docs'])})",
+                        item_id=item_id, actor="agent",
+                        meta={**res, "change_log": log_path})
+        return _ok(f"Written: {res['applied']} op(s) → {', '.join(res['docs'])}, and this week's "
+                   f"change log has the entry. Say in your close report what the docs now claim.")
+    return apply_knowledge_delta
 
 
 class PlanOpArg(TypedDict, total=False):
@@ -1384,11 +1405,11 @@ _ITEM_DEV_TOOLS: list[ToolSpec] = [
         SyncFromMainArgs, _sync_from_main,
     ),
     ToolSpec(
-        "stage_knowledge_delta",
-        "Stage this item's general dev-knowledge delta (structured edit ops against the anchor "
-        "docs) — validated now, applied atomically with the merge to main; never edit anchor "
-        "docs directly.",
-        StageKnowledgeDeltaArgs, _stage_knowledge_delta,
+        "apply_knowledge_delta",
+        "Write this item's changes into the general dev-knowledge anchor docs (structured edit "
+        "ops), and record the entry in this week's change log. Close-phase only, and the only way "
+        "those docs ever change — never edit them directly.",
+        ApplyKnowledgeDeltaArgs, _apply_knowledge_delta,
     ),
     ToolSpec(
         "revise_plan",
