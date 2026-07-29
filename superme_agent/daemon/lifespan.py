@@ -90,6 +90,57 @@ def _reconcile_worktrees() -> None:
         log.exception("worktree reconciliation failed (non-fatal)")
 
 
+def _reconcile_orphaned_items(orphans: list[dict]) -> None:
+    """Park the work-items whose run the spine just flipped `running → aborted` (dogfood D3).
+
+    `spine.reconcile()` heals the RUN row; without this, the ITEM stays `active` with no run and
+    nothing that will ever start one — permanently wedged, and until the attention engine learned
+    the stall rule (D2), completely silent. Restarting the daemon mid-run is routine in this
+    project, so this was a recurring way to lose an item: the one found on 2026-07-29 had been
+    sitting finished-but-unparked since a restart hours earlier, its close report written and its
+    gate green, simply never handed back.
+
+    `awaiting_human` is the honest resting state for ALL of them, build/vet included. The attention
+    engine deliberately excludes those two phases from the DERIVED stall — mid-loop is not parked
+    while a daemon is alive to chain them — but an orphan has no loop left, so only the owner moves
+    it, and the drilldown already offers Continue / Run vet there. Terminal items are left alone;
+    `_reconcile_close_steps` owns those. Best-effort and idempotent — `contexts` is the
+    module-level import, same as every other reconciler in this file."""
+    # The WHOLE body is guarded, like every reconciler here. Housekeeping must never be able to
+    # stop the daemon booting — the first cut of this raised at an import and took startup down
+    # with it, which is a far worse failure than the stranded item it was fixing.
+    try:
+        items_by_repo: dict[str, set[str]] = {}
+        for o in orphans:
+            if o.get("item_id"):
+                items_by_repo.setdefault(str(o["repo_id"]), set()).add(str(o["item_id"]))
+        for rid, ids in items_by_repo.items():
+            try:
+                ctx = contexts.resolve(rid, "dev")
+                if not ctx.internal_root:
+                    continue
+                dev_root = ctx.internal_root / "dev"
+                for item_id in sorted(ids):
+                    try:
+                        it = app_state.dev.read_work_item(dev_root, item_id)
+                        if not it or it.get("done_at") or \
+                                str(it.get("status")) in ("done", "awaiting_human"):
+                            continue
+                        if app_state.dev.set_work_item_status(dev_root, item_id, "awaiting_human"):
+                            app_state.dev_store.log_event(
+                                rid, "run.orphaned", item_id=item_id,
+                                summary=f"Run orphaned by a daemon restart — parked at the "
+                                        f"{it.get('phase') or 'current'} phase for your call")
+                            log.info("orphan reconcile [%s]: parked %s (was active, no run)",
+                                     rid, item_id)
+                    except Exception:
+                        log.exception("orphan reconcile failed for %s/%s", rid, item_id)
+            except Exception:
+                log.exception("orphan reconcile failed for repo %s", rid)
+    except Exception:
+        log.exception("orphan reconciliation failed (non-fatal)")
+
+
 def _reconcile_close_steps() -> None:
     """Startup reconciliation of the CLOSE step list (S6/D8, nimbalyst archive crash-hole
     lesson): a terminal transition is an ordered, re-runnable step list — a daemon dying mid-close
@@ -146,7 +197,7 @@ def _reconcile_close_steps() -> None:
 async def lifespan(app: FastAPI):
     # Flip any runs orphaned by a previous daemon's exit (running → aborted). Was at module import
     # before; doing it here keeps app_state import side-effect-free and runs it once per app start.
-    app_state.spine.reconcile()
+    _orphans = app_state.spine.reconcile()
     # Re-pin the learning sub-agents' `.md` model to their tier's current concrete id (so a
     # MODEL_TIERS bump auto-propagates to the files). No-op when already current.
     app_state.spine.reconcile_agent_models()
@@ -160,6 +211,10 @@ async def lifespan(app: FastAPI):
     _reconcile_worktrees()
     # S6 close protocol: finish any ordered close steps a dying daemon dropped mid-transition.
     _reconcile_close_steps()
+    # D3: hand back the NON-terminal items whose run died with the last daemon. Runs after the
+    # close reconcile so an item that was mid-close-transition is finished by that pass first and
+    # never parked here.
+    _reconcile_orphaned_items(_orphans)
 
     # The dashboard push channel's ONE wiring point (routing-audit §7.6). Every state change worth
     # showing the owner already writes a dev event; this turns each into a cache-invalidation topic

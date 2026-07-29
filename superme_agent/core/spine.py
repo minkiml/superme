@@ -695,18 +695,27 @@ class SystemSpine:
         return None
 
     # --- startup reconcile ------------------------------------------------------
-    def reconcile(self) -> int:
+    def reconcile(self) -> list[dict]:
         """On daemon startup, flip orphaned `running` runs → `aborted` (the daemon that owned
-        them is gone). Returns the count. Leaves an auditable trace instead of a silent vanish."""
+        them is gone). Leaves an auditable trace instead of a silent vanish.
+
+        Returns one row per orphan — `{run_id, repo_id, item_id, phase, feature}` — so the caller
+        can heal the OTHER half. Healing the run row alone left the work-item at `active` with no
+        run and nothing that would ever start one: permanently wedged, and silent until the
+        attention engine learned to page for it (dogfood D2/D3, 2026-07-29). The rows are read
+        BEFORE the update, because the flip is what destroys the evidence of which ones they were.
+        `len()` is the old count, so a caller that only wanted the number still works."""
         with self._conn() as c:
-            cur = c.execute(
+            orphans = [dict(r) for r in c.execute(
+                "SELECT id AS run_id, repo_id, item_id, phase, feature FROM run WHERE status='running'"
+            ).fetchall()]
+            c.execute(
                 "UPDATE run SET status='aborted', ended_at=? WHERE status='running'",
                 (_now(),),
             )
-            n = cur.rowcount
-        if n:
-            log.info("spine reconcile: %d orphaned run(s) → aborted", n)
-        return n
+        if orphans:
+            log.info("spine reconcile: %d orphaned run(s) → aborted", len(orphans))
+        return orphans
 
     # --- sessions ---------------------------------------------------------------
     def record_session(self, session_id: str, cwd, *, surface: str = "web",
