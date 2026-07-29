@@ -75,24 +75,21 @@ export const PHASE_VERB: Record<string, string> = {
   close: 'closing',
 }
 
-// The phases where a resting item is waiting for a PERSON (or the deputy acting for them). build
-// and vet are excluded on purpose: the loop chains them, so an item between those two runs is
-// mid-flight, not parked, and must not flash "needs you" for the second it takes to hand over.
-const GATE_PHASES = new Set(['triage', 'plan', 'review', 'close'])
-
-// The item's primary display status. Completion (done_at) reads as `done`; otherwise the stored
-// status — EXCEPT that `active` at a gate with nothing running is derived back to `awaiting_human`.
+// The item's primary display status, READ from the item's attention tier rather than re-derived
+// here. Completion (done_at) reads as `done`; a `needs_you` bucket reads as `awaiting_human`;
+// otherwise the stored status.
 //
-// Why derive rather than trust the stored word: liveness is already derived (the live run row), so
-// the board could show IN PROGRESS beside "AGENTS 0/4 running" — a contradiction on one screen.
-// `active` means "being worked", and at a gate with no run there is nothing working. Deriving also
-// heals rows that lost their hold before the ws.py fix landed, with no migration: the hold is
-// re-read from the facts each render instead of being restored by a one-off script.
-export function primaryStatus(it: WorkItem, running?: boolean): string {
+// This used to own the rule itself — `active` at a gate with nothing running was derived back to
+// `awaiting_human` from a local GATE_PHASES set. The rule is right (an item at a gate with no run
+// has nothing working on it and only the owner can move it), but owning a SECOND copy of it put
+// three different answers to "how many need you" on one screen: this derivation said 7, the deputy
+// strip's raw-status read said 5, and the daemon's attention engine said 6 — all rendering at the
+// same instant (dogfood D2, 2026-07-29). The rule now lives in `core/attention.py`, next to the run
+// table it depends on, and every surface reads that one verdict. Do not re-derive it here.
+export function primaryStatus(it: WorkItem, bucket?: string): string {
   if (it.done_at) return 'done'
-  const s = it.status ?? ''
-  if (s === 'active' && !running && GATE_PHASES.has(it.phase ?? '')) return 'awaiting_human'
-  return s
+  if (bucket === 'needs_you') return 'awaiting_human'
+  return it.status ?? ''
 }
 
 export function Empty({ children }: { children: ReactNode }) {

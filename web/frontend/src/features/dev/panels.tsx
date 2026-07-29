@@ -27,9 +27,10 @@ export const DEFAULT_RUN_EFFORT = DEFAULT_EFFORT
 
 // The badge answers "what is this item doing?" — so a live run wins over the status word: an item
 // with an agent on it reads "triaging…", not "in progress". `running` covers both a background run
-// fired from the board and a bound session's turn.
-export function StatusBadge({ it, running }: { it: WorkItem; running?: boolean }) {
-  const s = primaryStatus(it, running)
+// fired from the board and a bound session's turn. `bucket` is the item's attention tier, which is
+// where the "parked at a gate" verdict comes from (D2 — one rule, computed by the daemon).
+export function StatusBadge({ it, running, bucket }: { it: WorkItem; running?: boolean; bucket?: string }) {
+  const s = primaryStatus(it, bucket)
   const live = running && s !== 'done' ? PHASE_VERB[it.phase ?? ''] : null
   return (
     <span className={`shrink-0 whitespace-nowrap rounded bg-hover px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${
@@ -171,7 +172,7 @@ function WorkCard({
   const hasTokens = (tokens ?? 0) > 0
   const settledTime = it.last_run?.duration_ms != null ? fmtDuration(it.last_run.duration_ms) : null
   const showMeter = running || hasTokens || !!settledTime
-  const stripe = STATUS_STRIPE[primaryStatus(it, running)] ?? 'border-l-line'
+  const stripe = STATUS_STRIPE[primaryStatus(it, bucket)] ?? 'border-l-line'
   // Attention tint (S7): the card carries its bucket color as a soft ring — orange pages, purple =
   // the deputy is covering it, green = a phase agent is on it. (Unread applies to terminal items,
   // which live off-board in the strip.)
@@ -188,7 +189,7 @@ function WorkCard({
     >
       {/* 1 · status (+ branch provenance) */}
       <div className="flex items-center gap-1.5">
-        <StatusBadge it={it} running={running} />
+        <StatusBadge it={it} running={running} bucket={bucket} />
         <span className="ml-auto flex items-center gap-1.5"><BranchInfo it={it} /></span>
       </div>
       {/* 2 · name — one line, ellipsis when long */}

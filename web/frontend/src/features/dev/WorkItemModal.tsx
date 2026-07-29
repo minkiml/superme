@@ -17,6 +17,7 @@ import {
   type WorkItem, type WorkItemDetail, type DevEvent, type RunArtifact, type GateBrief,
   type GitHealth,
 } from '@/lib/api'
+import { getRepos } from '@/lib/api/system'
 import { useLive } from '@/lib/live'
 import { K } from '@/lib/live/keys'
 import { build, navigate, useRoute, type Phase } from '@/lib/router'
@@ -65,7 +66,7 @@ const SUB_META: Record<SubTab, { label: string; icon: typeof FileText }> = {
 type PagedData = { source: string; gate: string | null; headline: string; detail: string; next: string | null }
 
 export default function WorkItemModal({
-  it, contextId, onClose, onPlan, onDelete, onChanged,
+  it, contextId, onClose, onPlan, onDelete, onChanged, bucket,
 }: {
   it: WorkItem
   contextId: string
@@ -73,6 +74,10 @@ export default function WorkItemModal({
   onPlan: (it: WorkItem, model?: string, effort?: string) => void // fire a background plan run (queued items)
   onDelete: (it: WorkItem) => void // hard-delete (caller confirms)
   onChanged: () => void // reload the board after an advance
+  // The item's attention tier, passed down so the drilldown's status badge reads the SAME verdict
+  // as the card behind it. Without it the header would fall back to the stored word and re-open
+  // the D2 split — a card saying NEEDS YOU over a popup saying IN PROGRESS.
+  bucket?: string
 }) {
   // The drilldown's four feeds. Each is its own cache key, so the ones another surface already
   // keeps warm (the dev log is also read by the chat rail and the timeline) cost nothing here.
@@ -85,6 +90,12 @@ export default function WorkItemModal({
   const logQ = useLive(K.devLog(contextId, it.id, 50), () => getDevLog(contextId, { itemId: it.id, limit: 50 }), rate)
   const artifactsQ = useLive(K.itemArtifacts(contextId, it.id), () => getWorkItemArtifacts(it.id, contextId), rate)
   const briefQ = useLive<GateBrief>(K.itemGateBrief(contextId, it.id), () => getWorkItemGateBrief(it.id, contextId), rate)
+  // The repo's landing rule, for the review gate's button (D1). Read off the shared `sys:repos`
+  // key the shell already keeps warm rather than the Git pane's `/git` feed — that one is only
+  // subscribed while its tab is open, and the gate needs this whichever tab you are on. A repo
+  // setting changes about once a quarter, so 60s is generous.
+  const reposQ = useLive(K.repos, getRepos, 60_000)
+  const reviewMode = reposQ.data?.find((r) => r.id === contextId)?.review_mode ?? null
 
   const detail = detailQ.data ?? null
   const events: DevEvent[] = logQ.data?.events ?? []
@@ -112,6 +123,29 @@ export default function WorkItemModal({
   const preBuild = ['triage', 'plan'].includes(phase)
   // Does this phase end at a briefed human gate? Only then is advancing an "Approve".
   const atGate = GATED_PHASES.has(phase)
+
+  // What the review gate's Approve actually DOES, which depends on the repo's landing rule (D1).
+  // It used to say "Approve & merge" unconditionally, describing the `fast` contract — but under
+  // `strict` the first approval only OPENS the PR, and the Git tab one click away said so, so the
+  // two panes of one item gave contradictory instructions for the same click. The act itself was
+  // always right (both controls call `advanceWorkItem`); only the words were wrong.
+  const reviewApprove = (() => {
+    const merge = {
+      label: 'Approve & merge',
+      title: 'Approve & merge — the review decision IS the merge: lands the branch on the anchor '
+        + '(applies the staged knowledge delta, backup ref first), then advances to close. On '
+        + 'conflicts it holds here so you can sync + resolve, then approve again.',
+    }
+    // A PR already open means the deputy has had its turn and this click is the owner's merge —
+    // the same act `fast` performs in one step. Unknown mode (repos still loading) falls back to
+    // the merge wording rather than inventing a PR step that may not exist.
+    if (reviewMode !== 'strict' || (!!it.git_pr_opened_at && !it.git_merge_commit)) return merge
+    return {
+      label: 'Approve & open PR',
+      title: 'This repo is `strict`: approving opens the pull request and hands you the merge — '
+        + 'it does NOT land the branch. You review the diff on the PR page and merge from there.',
+    }
+  })()
 
   // Stepper selection and sub-tab are ADDRESSES (`/repo/:id/item/:itemId/:phase/:sub`), not local
   // state. An ABSENT phase segment means "whatever phase this item is at now" — so the bare item
@@ -264,7 +298,7 @@ export default function WorkItemModal({
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5">
               <span className="font-mono text-[10px] text-faint">{it.id}</span>
-              <StatusBadge it={it} running={running} />
+              <StatusBadge it={it} running={running} bucket={bucket} />
               <span className="rounded-full bg-hover px-2 py-0.5 text-[10px] uppercase tracking-wide text-faint">
                 {it.kind ?? 'implementation'}
               </span>
@@ -498,14 +532,13 @@ export default function WorkItemModal({
               <button
                 onClick={advance}
                 disabled={advancing}
-                title={phase === 'review'
-                  ? 'Approve & merge — the review decision IS the merge: lands the branch on main (applies the staged knowledge delta, backup ref first), then advances to close. On conflicts it holds here so you can sync + resolve, then approve again.'
+                title={phase === 'review' ? reviewApprove.title
                   : `Approve — advances to ${PHASE_LABEL[nextPhase] ?? nextPhase}`}
                 className="inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-on-accent transition hover:opacity-90 disabled:opacity-50"
               >
                 {advancing ? <Loader2 size={14} className="animate-spin" />
                   : phase === 'review' ? <GitMerge size={14} /> : <Check size={14} />}
-                {phase === 'review' ? 'Approve & merge' : 'Approve'}
+                {phase === 'review' ? reviewApprove.label : 'Approve'}
               </button>
             ) : null}
             <span className="ml-auto flex items-center gap-1">

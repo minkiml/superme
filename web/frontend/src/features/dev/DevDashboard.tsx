@@ -111,7 +111,9 @@ export default function DevDashboard({
   // (and auto-closes if the item disappears, e.g. after a delete).
   const reviewItem = openId ? (data?.work_items.find((w) => w.id === openId) ?? null) : null
 
-  // id → attention tier, for the kanban card tint (S7).
+  // id → attention tier. The card tint (S7), and — since D2 — the one source every surface on this
+  // screen reads its "needs you" verdict from: the cards, the stat row, the deputy strip and the
+  // drilldown badge. When three of them derived it independently they disagreed by two.
   const bucketOf: Record<string, string> = {}
   for (const tier of ['needs_you', 'deputy_working', 'running', 'unread'] as const) {
     for (const r of attn?.buckets?.[tier] ?? []) bucketOf[r.id] = tier
@@ -149,6 +151,7 @@ export default function DevDashboard({
           onPlan={handlePlan}
           onDelete={handleDelete}
           onChanged={load}
+          bucket={bucketOf[reviewItem.id]}
         />
       )}
       {confirmDel && (
@@ -224,8 +227,8 @@ export default function DevDashboard({
                     ))}
                   </div>
                 </div>
-                <DeputyStrip items={data.work_items} />
-                <WorkspaceStats items={data.work_items} running={data.running ?? []}
+                <DeputyStrip items={data.work_items} buckets={bucketOf} />
+                <WorkspaceStats items={data.work_items} buckets={bucketOf}
                                 shipped={data.glance.by_status.done ?? 0}
                                 onShowShipped={() => setShowShipped(true)} />
                 {board === 'graph' ? (
@@ -260,10 +263,15 @@ export default function DevDashboard({
 // glance answers: how many the deputy is carrying, and how many it has handed back to you. Derived
 // from the already-loaded items (no extra fetch); `awaiting_human` on an autopilot item is a deputy
 // escalation (the deputy is the one that paged you).
-function DeputyStrip({ items }: { items: WorkItem[] }) {
+//
+// D2: this read the RAW `w.status` while the board beside it applied the derived gate rule, so it
+// under-counted by the number of stalled items — 5 sitting next to a 7 next to a badge of 6. It now
+// reads the same bucket map as everything else; only the DENOMINATOR is legitimately different
+// (autopilot items only), never the rule.
+function DeputyStrip({ items, buckets }: { items: WorkItem[]; buckets: Record<string, string> }) {
   const auto = items.filter((w) => w.autopilot && w.status !== 'done' && !w.outcome)
   if (auto.length === 0) return null
-  const waiting = auto.filter((w) => w.status === 'awaiting_human').length
+  const waiting = auto.filter((w) => primaryStatus(w, buckets[w.id]) === 'awaiting_human').length
   return (
     <div className="flex items-center gap-2 rounded-md border border-warn/30 bg-warn/5 px-3 py-1.5 text-[11px]">
       <Shield size={13} className="shrink-0 text-warn" />
@@ -446,16 +454,15 @@ function StatusDots({ item, total }: { item: Record<string, number>; total: numb
 }
 
 // The work-item stat row — moved out of the page top to sit under the Workspace panel header.
-// Counted from the SAME rule the cards render by (`primaryStatus(it, running)`), not from the
+// Counted from the SAME verdict the cards render by (the item's attention bucket), not from the
 // backend's `by_status` roll-up over stored status: those two disagreed on any item whose hold was
 // derived rather than stored, so the row could read "1 in progress" above three NEEDS YOU cards.
 // One rule, one screen. `shipped` still comes from the roll-up — terminal items leave the board.
-function WorkspaceStats({ items, running, shipped, onShowShipped }: {
-  items: WorkItem[]; running: string[]; shipped: number; onShowShipped: () => void
+function WorkspaceStats({ items, buckets, shipped, onShowShipped }: {
+  items: WorkItem[]; buckets: Record<string, string>; shipped: number; onShowShipped: () => void
 }) {
-  const live = new Set(running)
   const n = (want: string) =>
-    items.filter((it) => !it.done_at && primaryStatus(it, live.has(it.id)) === want).length
+    items.filter((it) => !it.done_at && primaryStatus(it, buckets[it.id]) === want).length
   const cell = (label: string, n: number, tone = 'text-fg') => (
     <div className="flex flex-col">
       <span className={`text-xl font-semibold leading-none tabular-nums ${tone}`}>{n}</span>
