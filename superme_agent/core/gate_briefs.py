@@ -497,13 +497,20 @@ def render_gate_brief(item: dict, item_dir: Path, dev_root: Path,
                    if c["criterion"] in _MUST_RESOLVE and not c["ok"]]
         approve_blocked_by = [c["detail"] for c in checks
                               if c["criterion"] in _MUST_RESOLVE and not c["ok"]]
+        # This brief is the OWNER's decision surface, and the owner's approve ALWAYS merges —
+        # `strict` keys the PR-opening branch off `actor != "owner"` (gates.py), because the owner
+        # IS the second pair of eyes that mode exists to buy. Do not condition this text on
+        # `review_mode`: I did, on 2026-07-29, reasoning from the Git tab's `landing` line, and a
+        # live approve merged the branch while the brief promised nothing would land. `strict`
+        # changes who ELSE can approve, not what the owner's approval does.
+        _trunk = (git_health or {}).get("trunk") or "main"
         decision = _decision(
             "Approve" if not blocked else "Resolve what's open",
-            "Approving merges this to main and locks the item in — close then applies the granted "
-            "authorizations' doc ops. It cannot be un-approved.",
+            f"Approving merges this to {_trunk} and locks the item in — close then applies the "
+            f"granted authorizations' doc ops. It cannot be un-approved.",
             [{"id": "approve", "label": "Approve",
-              "consequence": ("merges to main + advances to close; revert stays one click away via "
-                              "the backup ref") if not blocked else
+              "consequence": (f"merges to {_trunk} + advances to close; revert stays one click "
+                              f"away via the backup ref") if not blocked else
                              ("greyed — " + "; ".join(approve_blocked_by))},
              {"id": "drop", "label": "Drop",
               "consequence": "disposes the work-item — terminal, branch kept, nothing merges"}],

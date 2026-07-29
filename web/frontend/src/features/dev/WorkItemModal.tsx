@@ -124,28 +124,22 @@ export default function WorkItemModal({
   // Does this phase end at a briefed human gate? Only then is advancing an "Approve".
   const atGate = GATED_PHASES.has(phase)
 
-  // What the review gate's Approve actually DOES, which depends on the repo's landing rule (D1).
-  // It used to say "Approve & merge" unconditionally, describing the `fast` contract — but under
-  // `strict` the first approval only OPENS the PR, and the Git tab one click away said so, so the
-  // two panes of one item gave contradictory instructions for the same click. The act itself was
-  // always right (both controls call `advanceWorkItem`); only the words were wrong.
-  const reviewApprove = (() => {
-    const merge = {
-      label: 'Approve & merge',
-      title: 'Approve & merge — the review decision IS the merge: lands the branch on the anchor '
-        + '(applies the staged knowledge delta, backup ref first), then advances to close. On '
-        + 'conflicts it holds here so you can sync + resolve, then approve again.',
-    }
-    // A PR already open means the deputy has had its turn and this click is the owner's merge —
-    // the same act `fast` performs in one step. Unknown mode (repos still loading) falls back to
-    // the merge wording rather than inventing a PR step that may not exist.
-    if (reviewMode !== 'strict' || (!!it.git_pr_opened_at && !it.git_merge_commit)) return merge
-    return {
-      label: 'Approve & open PR',
-      title: 'This repo is `strict`: approving opens the pull request and hands you the merge — '
-        + 'it does NOT land the branch. You review the diff on the PR page and merge from there.',
-    }
-  })()
+  // The review gate's Approve is the OWNER's control, and the owner's approve always MERGES — in
+  // both modes. `strict` keys the PR-opening branch off `actor !== 'owner'` (gates.py): it buys a
+  // second pair of eyes on the deputy's work, and the owner already is that. This was briefly
+  // conditioned on `review_mode` on 2026-07-29, reasoning from the Git tab's `landing` line; a
+  // live approve then merged the branch under a button reading "Approve & open PR". The mode
+  // changes who ELSE may approve, not what YOUR approval does — so the label must not move.
+  const reviewApprove = {
+    label: 'Approve & merge',
+    title: 'Approve & merge — the review decision IS the merge: lands the branch on the anchor '
+      + '(applies the staged knowledge delta, backup ref first), then advances to close. On '
+      + 'conflicts it holds here so you can sync + resolve, then approve again.'
+      + (reviewMode === 'strict'
+        ? ' This repo is `strict`, which means the DEPUTY cannot land it — its approval only opens '
+          + 'the PR for you. Yours merges either way.'
+        : ''),
+  }
 
   // Stepper selection and sub-tab are ADDRESSES (`/repo/:id/item/:itemId/:phase/:sub`), not local
   // state. An ABSENT phase segment means "whatever phase this item is at now" — so the bare item
@@ -1000,9 +994,14 @@ function GitPane({ it, contextId, onChanged }: {
     ['merged', health.merged ? `yes${it.git_merge_commit ? ` (${String(it.git_merge_commit).slice(0, 10)})` : ''}` : 'not yet'],
     ['dirty', health.dirty?.length ? health.dirty.join(', ') : 'clean'],
     // The repo's rule, echoed read-only where the merge is — set it in Quick config → Per-repo.
+    // NAME THE ACTOR. This used to read "strict — approving opens a PR; you merge from the PR
+    // page", which is true of the DEPUTY's approval and false of yours: the owner's approve merges
+    // in both modes (gates.py keys the PR branch off `actor != "owner"`). Read as a statement
+    // about the reader's own click, it contradicted the gate button one tab away — and on
+    // 2026-07-29 it talked me into "fixing" the button to match, until a live approve merged.
     ['landing', health.review_mode === 'strict'
-      ? 'strict — approving opens a PR; you merge from the PR page'
-      : 'fast — approving merges it'],
+      ? "strict — the deputy's approval only opens a PR; yours merges"
+      : 'fast — either approval merges it'],
   ]
   return (
     <div className="space-y-3">
@@ -1055,8 +1054,9 @@ function GitPane({ it, contextId, onChanged }: {
                 title={health.merged
                   ? 'Already merged — see the merge commit above'
                   : health.review_mode !== 'strict'
-                    ? 'This repo is `fast`: approving at the Gate (“Approve & merge”) lands it. '
-                      + 'Switch the repo to `strict` to merge from the PR page instead.'
+                    ? 'This repo is `fast`, so nothing is ever parked here for you — merge at the '
+                      + 'Gate (“Approve & merge”). Under `strict` the deputy cannot land a branch, '
+                      + 'so its approval opens a PR and this button finishes the job.'
                     : prOpen
                       ? 'Squash this branch onto the anchor and advance to close'
                       : 'Active once the deputy has approved and handed you the merge'} />

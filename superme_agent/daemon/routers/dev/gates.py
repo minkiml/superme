@@ -55,6 +55,11 @@ async def dev_work_item_gate_brief(item_id: str, context_id: str = "global",
             git_health = git_layer.worktree_health(ctx.cwd, ctx.id, item_id, item.get("git_branch"),
                                                    trunk=git_ops.repo_anchor(ctx, spine),
                                                    merge_commit=item.get("git_merge_commit"))
+            # The landing rule, from the same source the Git tab reads (`repo_review_mode`).
+            # `worktree_health` answers about the WORKTREE and knows nothing about the repo's
+            # policy — the `/git` route decorates it on, and the brief needs it for the same
+            # reason: what "Approve" does at the review gate depends on it (dogfood D1).
+            git_health["review_mode"] = git_ops.repo_review_mode(ctx, spine)
         except (git_layer.GitError, git_layer.GitBusy):
             git_health = None
     all_items = dev.read_all(dev_root)["work_items"]
