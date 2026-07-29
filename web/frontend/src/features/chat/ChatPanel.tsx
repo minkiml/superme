@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { Hammer, Plus, PanelRightOpen } from 'lucide-react'
 import ChatHeader from './ChatHeader'
 import MessageList from './MessageList'
@@ -12,7 +12,9 @@ import { useAgentSocket, type TimelineFrame } from './hooks/useAgentSocket'
 import { useSessions } from './hooks/useSessions'
 import { GLOBAL, type ContextRef } from '@/lib/contexts'
 import { getRuns, type ChatMode, type SessionMeta } from '@/lib/api'
-import { getDevLog, getWorkItemDetail } from '@/lib/api/dev'
+import { getDevLog, getWorkItemDetail, type WorkItemDetail } from '@/lib/api/dev'
+import { useLive } from '@/lib/live'
+import { K } from '@/lib/live/keys'
 import type { Msg } from './types'
 
 // F2: the phases whose session is the item's own worker (not the intake thread the owner talks in).
@@ -80,6 +82,10 @@ export default function ChatPanel({
   const [boundPhase, setBoundPhase] = useState<string | null>(null)
   const [boundRunning, setBoundRunning] = useState(false)
   const [runFeature, setRunFeature] = useState<string | null>(null) // the live run's role → the chat verb (Building… / Deputy reviewing…)
+  // Edge-detector for the bound item's detail feed (phase moved / run ended / heartbeat).
+  const prevBound = useRef<{ running: boolean; phase: string | null; ticks: number }>({
+    running: false, phase: null, ticks: 0,
+  })
 
   const sessions = useSessions(contextId, mode)
   const socket = useAgentSocket(contextId, mode, {
@@ -130,44 +136,50 @@ export default function ChatPanel({
   // F2: track the bound item's phase + running so the timeline attributes live frames to the right
   // lane and the composer greys during build/vet. On a run-end (running true→false) reload the
   // authoritative history and drop the reconciled live-frame tail.
+  // Shares the drilldown's `itemDetail` key — with the modal open over the same item this is one
+  // request between them, not two on different clocks. Cadence follows the item: brisk while a run
+  // is in flight, slow at rest (it used to poll every 2s forever, including for an idle item).
+  const boundId = mode === 'dev' ? chipItem?.id ?? null : null
+  const detailQ = useLive<WorkItemDetail>(
+    boundId ? K.itemDetail(contextId, boundId) : null,
+    () => getWorkItemDetail(boundId as string, contextId),
+    boundRunning ? 2500 : 10000,
+  )
+  const boundDetail = detailQ.data
+  const detailAt = detailQ.fetchedAt
+
   useEffect(() => {
-    const id = chipItem?.id
-    if (!id || mode !== 'dev') {
+    if (!boundId) {
       setBoundPhase(null); setBoundRunning(false); setRunFeature(null)
       return
     }
-    let alive = true
-    let prevRunning = false
-    let prevPhase: string | null = null
-    let ticks = 0
-    const pull = () =>
-      getWorkItemDetail(id, contextId)
-        .then((d) => {
-          if (!alive) return
-          const running = !!d.item.running
-          const phase = d.item.phase ?? null
-          setBoundPhase(phase)
-          setBoundRunning(running)
-          setRunFeature(running ? d.item.run_feature ?? null : null)
-          ticks += 1
-          // Re-pull the authoritative trail on any STRUCTURAL change (phase moved, or a run just
-          // ended) AND on a slow heartbeat while running. The timeline endpoint includes in-progress
-          // runs, so this lands every phase's bubbles within a couple seconds with no manual refresh —
-          // the old code re-fetched ONLY on the running true→false edge, which fast back-to-back
-          // autopilot runs slipped past (build/vet/deputy went missing until a hard refresh). The view
-          // dedups liveFrames against loaded history by run, so extra fetches never double-render.
-          const structural = phase !== prevPhase || (prevRunning && !running)
-          const heartbeat = running && ticks % 2 === 0
-          if (structural) { setTimelineKey((k) => k + 1); setLiveFrames([]) }
-          else if (heartbeat) setTimelineKey((k) => k + 1)
-          prevRunning = running
-          prevPhase = phase
-        })
-        .catch(() => {})
-    pull()
-    const t = setInterval(pull, 2000)
-    return () => { alive = false; clearInterval(t) }
-  }, [chipItem?.id, contextId, mode])
+    if (!boundDetail) return
+    const running = !!boundDetail.item.running
+    const phase = boundDetail.item.phase ?? null
+    setBoundPhase(phase)
+    setBoundRunning(running)
+    setRunFeature(running ? boundDetail.item.run_feature ?? null : null)
+    // Re-pull the authoritative trail on any STRUCTURAL change (phase moved, or a run just ended)
+    // AND on a slow heartbeat while running. The timeline endpoint includes in-progress runs, so
+    // this lands every phase's bubbles within a couple seconds with no manual refresh — re-fetching
+    // ONLY on the running true→false edge let fast back-to-back autopilot runs slip past (build/vet/
+    // deputy went missing until a hard refresh). The view dedups liveFrames against loaded history
+    // by run, so extra fetches never double-render.
+    const prev = prevBound.current
+    const structural = phase !== prev.phase || (prev.running && !running)
+    prev.ticks += 1
+    const heartbeat = running && prev.ticks % 2 === 0
+    if (structural) { setTimelineKey((k) => k + 1); setLiveFrames([]) }
+    else if (heartbeat) setTimelineKey((k) => k + 1)
+    prev.running = running
+    prev.phase = phase
+    // `detailAt` (the fetch stamp) is the dependency that makes this run once per RESPONSE — the
+    // detail object itself is referentially new on every poll whether or not anything changed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [boundId, detailAt])
+  // Reset the edge-detector when the bound item changes — otherwise the new item's first read is
+  // compared against the previous item's phase and spuriously reads as a structural change.
+  useEffect(() => { prevBound.current = { running: false, phase: null, ticks: 0 } }, [boundId])
 
   // Deputy turns woven into the bound work-item thread (autopilot slice 4b). The deputy acts in the
   // BACKGROUND (headless, at gates), so its words can't arrive over the live socket — they're
@@ -181,31 +193,19 @@ export default function ChatPanel({
   // (WorkItemModal), OUT of the channel (owner's Q1 spec), so the chat stays a clean 3-speaker
   // conversation. Here we fetch just the `deputy.query` markers: the exact text of each turn the
   // deputy fired at the agent, so the matching transcript user-bubble can be re-attributed (Q1-D).
-  const [deputyQueries, setDeputyQueries] = useState<string[]>([])
-  useEffect(() => {
-    const itemId = chipItem?.id
-    if (!itemId || mode !== 'dev') {
-      setDeputyQueries([])
-      return
-    }
-    let alive = true
-    const pull = () =>
-      getDevLog(contextId, { itemId, limit: 50 })
-        .then((d) => {
-          if (!alive) return
-          setDeputyQueries((d.events ?? [])
-            .filter((e) => String(e.kind) === 'deputy.query')
-            .map((e) => String(e.meta?.text ?? '').trim())
-            .filter(Boolean))
-        })
-        .catch(() => {})
-    pull()
-    const t = setInterval(pull, 8000)
-    return () => {
-      alive = false
-      clearInterval(t)
-    }
-  }, [chipItem?.id, contextId, mode])
+  // Same dev-log key the timeline and the drilldown read — one fetch feeds all three.
+  const deputyLog = useLive(
+    boundId ? K.devLog(contextId, boundId, 50) : null,
+    () => getDevLog(contextId, { itemId: boundId as string, limit: 50 }),
+    8000,
+  )
+  const deputyQueries = useMemo(
+    () => (deputyLog.data?.events ?? [])
+      .filter((e) => String(e.kind) === 'deputy.query')
+      .map((e) => String(e.meta?.text ?? '').trim())
+      .filter(Boolean),
+    [deputyLog.data],
+  )
 
   // Re-attribute the deputy's real turns (Q1-D): a transcript bubble the owner appears to have sent
   // that exactly matches a `deputy.query` marker was actually the DEPUTY talking to the agent on the

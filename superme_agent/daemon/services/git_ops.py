@@ -23,43 +23,151 @@ from fastapi import HTTPException
 
 from ...core import artifacts, git_layer, knowledge_delta
 from ...core import autopilot as _autopilot
+from ...core.spine import REVIEW_MODE_DEFAULT
 
 log = logging.getLogger("superme-agent")
 
 
-def write_review_readiness(ctx, item: dict, item_dir, dev_root) -> None:
-    """Author readiness.md at review entry (B3), best-effort. Gathers the git diff-stat + freshness
-    debt + the staged knowledge delta, then hands them to artifacts.author_readiness so the review
-    deputy/owner (and, later, the PR body) has a real report instead of a missing file. NEVER raises
-    — a failure just means a review session / the owner authors it (the pre-B3 status quo)."""
+def repo_anchor(ctx, spine) -> str | None:
+    """This repo's configured `anchor_branch`, or None to let git_layer derive the default branch.
+    One reader for every git site, so the setting can never be honoured in one place and ignored in
+    another. Never raises: an unknown repo (a context synthesized without a registry entry) simply
+    has no override."""
+    rc = spine.repo(ctx.id)
+    return rc.anchor_branch if rc else None
+
+
+def repo_review_mode(ctx, spine) -> str:
+    """This repo's review mode — `fast` (approve merges) | `strict` (approve opens a PR; the owner's
+    approve on the PR page merges). Read LIVE at every decision point, never cached on the item: the
+    mode describes the repo's bar today, so flipping it applies to items already sitting at review."""
+    rc = spine.repo(ctx.id)
+    return rc.review_mode if rc else REVIEW_MODE_DEFAULT
+
+
+def pr_open(item: dict) -> bool:
+    """Is this item's PR open — the deputy has approved and the merge is the OWNER's act? Derived
+    from the two facts that decide it (stamped ∧ not yet merged), so it can never disagree with the
+    git record: the merge itself is what closes the PR, and nothing has to remember to clear a
+    flag."""
+    return bool(item.get("git_pr_opened_at")) and not item.get("git_merge_commit")
+
+
+def close_pr(dev, dev_root, item_id: str) -> None:
+    """Leaving `review` WITHOUT merging closes the PR, because the approval is spent: the work it
+    described is no longer the work. Both ways back out are the same act — a `revise` routing the
+    item to plan, and the freshness rule sending it for one vet cycle — so both call this.
+
+    Without it the stamp outlives the diff it approved: `pr_open` would stay true through the
+    rework (offering the owner a Merge button on a half-built branch, at a phase where Approve
+    doesn't merge at all), and `open_pr`'s first-time guard would then swallow the NEXT approval —
+    leaving the record insisting the merge was handed over at a moment that has been superseded.
+    Clearing keeps one fact honest and lets the re-approval log its own `git.pr`."""
+    dev.set_work_item_git(dev_root, item_id, git_pr_opened_at=None)
+
+
+def open_pr(ctx, context_id: str, item_id: str, *, dev, dev_store) -> dict:
+    """`strict`'s second gate opening: record that the diff is now the owner's to merge, and page
+    them. Idempotent WITHIN one stay at review — the deputy re-judging the same diff re-pages
+    without moving the timestamp, so 'when did this land on my desk' stays the truth. An item that
+    LEFT review had its stamp cleared by `close_pr`, so its next approval opens a genuinely new PR.
+
+    This is deliberately NOT a merge and NOT a phase advance: the item stays at `review`, which is
+    what makes the owner's approve the thing that lands the code."""
+    dev_root = ctx.internal_root / "dev"
+    item = dev.read_work_item(dev_root, item_id) or {}
+    first = not item.get("git_pr_opened_at")
+    if first:
+        dev.set_work_item_git(dev_root, item_id,
+                              git_pr_opened_at=datetime.now().isoformat(timespec="seconds"))
+    dev.set_work_item_status(dev_root, item_id, "awaiting_human")
+    if first:
+        dev_store.log_event(context_id, "git.pr",
+                            "PR opened — this repo is `strict`, so the merge is yours: read the "
+                            "diff on the PR page and approve there",
+                            item_id=item_id, actor="daemon",
+                            meta={"branch": item.get("git_branch"), "review_mode": "strict"})
+    return {"ok": True, "id": item_id, "phase": "review", "from": "review", "pr_open": True}
+
+
+_DEFAULT_COMMIT_TYPE = "feat"
+
+
+def _delivered_line(item_dir: Path) -> str:
+    """The review report's **Delivered** field — what actually shipped, which is the right body for
+    the landing commit. (§2.3 named an "Outcome" line; the 4a report has no such field, and
+    `Recommendation` would put the literal word "merge" in the project's history.)
+
+    Reads the whole PARAGRAPH, not the first physical line: report-review.md is hand-written prose
+    wrapped for reading, so a two-sentence Delivered routinely spans three lines. Taking only the
+    first cut the commit body off mid-sentence — in the one artifact of this item that outlives the
+    workspace. Joined into one line here; `compose_commit` re-wraps it at 72."""
     try:
-        wt = item.get("git_worktree")
-        git_stats, behind = None, 0
-        if wt and Path(str(wt)).is_dir():
-            health = git_layer.worktree_health(ctx.cwd, ctx.id, str(item["id"]),
-                                               item.get("git_branch"))
-            behind = int(health.get("behind") or 0)
-            base = item.get("git_base") or health.get("trunk")
-            if base:
-                git_stats = git_layer.diff_numstat(Path(str(wt)), str(base))
-        delta = knowledge_delta.pending_delta(item_dir)
-        ops = (delta or {}).get("ops") or []
-        delta_summary = f"{len(ops)} knowledge op(s) staged for merge." if ops else None
-        repo_dir = Path(str(wt)) if wt else ctx.cwd
-        artifacts.author_readiness(
-            item_dir, repo_dir,
-            title=item.get("title") or str(item["id"]),
-            delta_summary=delta_summary, git_stats=git_stats, behind=behind)
-        # The review gate check also requires the styled gate report; render it mechanically here
-        # (its visual sibling), else an autopilot item reaches review with the report missing and
-        # the deputy escalates 100% of clean items. A review session may enrich it later.
-        artifacts.author_review_report(
-            item_dir, repo_dir,
-            title=item.get("title") or str(item["id"]),
-            git_stats=git_stats, behind=behind)
+        report = item_dir / "reports" / "report-review.md"
+        if not report.is_file():
+            return ""
+        parts: list[str] = []
+        for line in report.read_text().splitlines():
+            if not parts:
+                if line.strip().startswith("**Delivered:**"):
+                    parts.append(line.split("**Delivered:**", 1)[1].strip())
+                continue
+            # The field ends where its paragraph does — a blank line, or the next bold field for a
+            # report whose author forgot the blank.
+            if not line.strip() or line.strip().startswith("**"):
+                break
+            parts.append(line.strip())
+        return " ".join(p for p in parts if p).strip()
+    except OSError:
+        log.warning("commit message: could not read report-review.md in %s", item_dir)
+    return ""
+
+
+def item_trailers(item: dict, item_id: str) -> dict:
+    """The SuperMe facts that ride BELOW a commit's main message, in git trailer form. This is the
+    only place item ids and workspace vocabulary are allowed to touch a commit — everything above
+    is written for a reader who has never heard of this workspace."""
+    sf = item.get("spawned_from") or {}
+    return {
+        "SuperMe-Item": item_id,
+        "SuperMe-Parent": str(sf.get("item")) if isinstance(sf, dict) and sf.get("item") else "",
+    }
+
+
+def declared_commit(dev_store, context_id: str, item_id: str) -> dict | None:
+    """The `machine.commit` the REVIEW run declared, read back from its `run.report` event.
+
+    Newest-first and first-match: a `revise` sends the item round again, and the last review to
+    finish is the one that describes what is actually landing. Best-effort — a missing declaration
+    is a fallback, never a failed merge."""
+    try:
+        for e in dev_store.list_events(context_id, item_id=item_id, limit=40):
+            if str(e.get("kind")) != "run.report":
+                continue
+            spec = ((e.get("meta") or {}).get("machine") or {}).get("commit")
+            if isinstance(spec, dict) and spec.get("type") and spec.get("subject"):
+                return spec
     except Exception:
-        log.exception("write_review_readiness failed for %s (review authors it instead)",
-                      item.get("id"))
+        log.exception("declared commit read failed for %s", item_id)
+    return None
+
+
+def squash_message(item: dict, item_id: str, item_dir: Path, declared: dict | None = None) -> str:
+    """The landing commit's message, assembled by the KERNEL from a DECLARED spec — the one
+    artifact of this item that outlives the workspace.
+
+    `declared` is `machine.commit` from the review run's completion payload: the review agent is
+    the last phase that knows what actually shipped, so it declares `{type, subject}` (validated at
+    the tool: four types, ≤50 chars, capitalized, no trailing period) and the kernel writes it.
+    Absent — an older item, or a review that predates the field — falls back to the item title
+    under the default type, which is honest about being a fallback rather than a guess dressed up
+    as a classification."""
+    if declared and declared.get("type") and declared.get("subject"):
+        subject = f"{declared['type']}: {declared['subject']}"
+    else:
+        subject = f"{_DEFAULT_COMMIT_TYPE}: {str(item.get('title') or 'work item').strip()}"
+    return git_layer.compose_commit(subject, _delivered_line(item_dir),
+                                    item_trailers(item, item_id))
 
 
 def build_downstream_digest(item_dir: Path, *, char_cap: int = 2400) -> str | None:
@@ -70,20 +178,20 @@ def build_downstream_digest(item_dir: Path, *, char_cap: int = 2400) -> str | No
     (a review reached with no readiness and no vet — the feedback then stands alone)."""
     parts: list[str] = []
     try:
-        readiness = item_dir / "artifacts" / artifacts.artifact_file("readiness")
-        if readiness.is_file():
-            body = readiness.read_text().strip()
+        review_report = item_dir / "reports" / "report-review.md"
+        if review_report.is_file():
+            body = review_report.read_text().strip()
             if body:
                 parts.append("Readiness snapshot (built + validated at review entry):\n"
                              + body[:char_cap])
     except Exception:
-        log.exception("digest: readiness read failed for %s", item_dir)
+        log.exception("digest: review-report read failed for %s", item_dir)
     try:
-        vr = artifacts.latest_vet_report(item_dir, char_cap=char_cap)
+        vr = artifacts.latest_cycle_report(item_dir, char_cap=char_cap)
         if vr and (vr.get("text") or "").strip():
-            parts.append(f"Latest vet report (cycle {vr['cycle']}):\n{vr['text'].strip()}")
+            parts.append(f"Latest cycle report (build-vet-{vr['cycle']}.md):\n{vr['text'].strip()}")
     except Exception:
-        log.exception("digest: vet report read failed for %s", item_dir)
+        log.exception("digest: cycle report read failed for %s", item_dir)
     return "\n\n".join(parts) if parts else None
 
 
@@ -149,12 +257,41 @@ def review_merge(ctx, context_id: str, item_id: str, *, dev, dev_store, spine) -
             raise HTTPException(status_code=409,
                                 detail="knowledge delta invalid — fix and restage before "
                                        "merging: " + "; ".join(issues))
+    # Freshness belongs to the merge, not to review (§2.3) — the anchor may have moved while this
+    # item sat at the gate. Main path only: a blocking child lands on its PARENT's branch, where
+    # the anchor's movement is the parent's problem to answer, not the child's.
+    if not parent.get("git_worktree"):
+        fresh = git_layer.merge_freshness(ctx.cwd, Path(str(item.get("git_worktree") or "")),
+                                          branch, target=repo_anchor(ctx, spine))
+        if fresh["action"] != "merge":
+            dev_store.log_event(context_id, "git.freshness",
+                                (f"Anchor moved and conflicts with this branch "
+                                 f"({len(fresh.get('conflicts') or [])} file(s)) — held at review"
+                                 if fresh["action"] == "park" else
+                                 f"Anchor moved over {len(fresh.get('paths') or [])} file(s) this "
+                                 f"item also changed — re-verifying before merge"),
+                                item_id=item_id, actor="daemon", meta=fresh)
+            return {"ok": True, "merged": False, "path": "main", "freshness": fresh["action"],
+                    "conflicts": fresh.get("conflicts"), "stale_paths": fresh.get("paths"),
+                    "knowledge_ops_applied": None, "knowledge_folded_into": None,
+                    "lint_warnings": None}
     try:
         if parent.get("git_worktree"):
-            res = git_layer.merge_into_parent(ctx.cwd, branch, parent["git_worktree"])
+            # A branch-off child lands on its parent's branch and is squashed to the anchor LATER,
+            # inside the parent's own merge — so it declares its commit exactly like any other
+            # item, and the same assembler writes it.
+            res = git_layer.merge_into_parent(
+                ctx.cwd, branch, parent["git_worktree"],
+                message=squash_message(item, item_id, item_dir,
+                                       declared_commit(dev_store, context_id, item_id)))
             path = "parent"
         else:
-            res = git_layer.merge_to_main(ctx.cwd, ctx.id, item_id, branch)
+            res = git_layer.merge_to_main(ctx.cwd, ctx.id, item_id, branch,
+                                          target=repo_anchor(ctx, spine),
+                                          merged_commit=item.get("git_merge_commit"),
+                                          message=squash_message(
+                                              item, item_id, item_dir,
+                                              declared_commit(dev_store, context_id, item_id)))
             path = "main"
     except (git_layer.GitError, git_layer.GitBusy) as e:
         raise HTTPException(status_code=409, detail=str(e))

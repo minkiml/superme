@@ -3,7 +3,7 @@ send time into `run_input`) and render it as a self-contained HTML page for a ne
 
 Two channels, exactly as the doc's context-model describes them:
   • system prompt  — the layer-2 system append (persona · charter · constitution catalog ·
-    operating-context · session-kind preamble · background contract), captured through the SAME
+    operating-context · session-kind preamble incl. the background run protocol), captured through the SAME
     `AgentService.assemble_system_append` a live turn used — byte-for-byte what the run sent.
   • prompt body    — the birth-once orient block + the phase's kernel-speech trigger, as sent.
 
@@ -205,9 +205,9 @@ def render_input_page(data: dict) -> str:
     else:
         orient_html = _gate_section(
             orient_title, name="not injected on this run",
-            note="This run resumes an existing session, so the orient block was written at that "
-                 "session’s birth run and already sits earlier in the replayed transcript (not "
-                 "reproduced here). Only the trigger below is new to this run.")
+            note="No orient block on this run: the birth-injected orientation is retired "
+                 "On a pre-retirement resumed session it sits earlier in the replayed "
+                 "transcript. Only the trigger below is new to this run.")
 
     trig_title = "③ Prompt body · user message / trigger — this run’s injected message"
     if m.get("is_gate"):

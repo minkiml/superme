@@ -16,6 +16,11 @@ SAFE_TOOLS = {
     # frontmatter-first model depends on cheap pulls, and onboarding calls suggest_assets each run.
     "mcp__superme__pull_constitution",
     "mcp__superme__suggest_assets",
+    # Run-transport endings (workflow-renovation-v2 §3.2, run_tools.py): each writes only its own
+    # per-run sink (payload → DB run.report / verdict executor). They ARE the sanctioned structured
+    # endings of kernel-fired runs — a prompt here would park every background run on a human.
+    "mcp__run__report_completion",
+    "mcp__deputy__deputy_verdict",
     # The agent's read-only Slack readers (in-process MCP tools).
     "mcp__slack__read_channel", "mcp__slack__read_thread",
     # The dev agent's read-only dev event-log reader (PRD §4.9).
@@ -63,7 +68,11 @@ SAFE_TOOLS = {
     # phase only (the gate that follows is the human confirmation).
     "mcp__dev__set_triage_classification",
     "mcp__dev__scaffold_artifact",
-    "mcp__dev__record_validation_evidence",
+    "mcp__dev__record_verification",
+    # The wall-handling ledgers (BV-A1/A2): append-only, item-scoped, pre-gate records. These
+    # exist precisely so an autonomous run NEVER stalls on a person — a prompt here recreates the
+    # stall they replace (and a background run's deny_all silently swallows the record).
+    "mcp__dev__request_authorization",
     # Vet's report pen (build-vet-loop §4b): writes only the item's own vet-report-<n>.md, with the
     # verdicts mechanically cross-checked against the evidence ledger daemon-side — and the vet
     # session's file-write tools are denied outright, so this pen is its ONLY way to produce the
@@ -75,13 +84,12 @@ SAFE_TOOLS = {
     "mcp__dev__sync_from_main",
     # Stages edit ops item-local (applied only later, atomically with the owner's merge).
     "mcp__dev__stage_knowledge_delta",
-    # Proposal-only: drafts the verified closeout + pages the owner; never sets an item terminal.
+    # The surgical plan editor (§2.1): writes only the item's own plan.md, through validated
+    # section/task ops. It is the re-plan's ONLY sanctioned way to change the file, so prompting
+    # here would push the agent toward the whole-file rewrite this tool exists to prevent.
+    "mcp__dev__revise_plan",
+    # Proposal-only: drafts the close record + pages the owner; never sets an item terminal.
     "mcp__dev__propose_close",
-    # The review router (build-vet-loop §5.3): converts feedback the owner JUST gave at the
-    # review gate into a validated vet-plan check + build re-entry. The owner's statement is the
-    # authorization — a prompt would re-confirm their own words; the agent narrates exactly what
-    # was routed in its reply, and the append is code-validated (an invalid check writes nothing).
-    "mcp__dev__route_review_feedback",
 }
 
 

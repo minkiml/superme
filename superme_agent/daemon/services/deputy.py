@@ -1,6 +1,6 @@
 """The deputy — the agent that judges autopilot gates on the owner's behalf (autopilot slice 4).
 
-Dispatch model (design §2b): a HEADLESS one-shot run minted fresh per gate, a PEER of the phase
+Dispatch model (design §2b): a surfaceless one-shot background run minted fresh per gate, a PEER of the phase
 sessions (never a `Task`-subagent under them — the judged must not own its judge). It is a PURE
 JUDGE: it reads the mandate, its own decision log, and the gate brief (the same one the owner would
 see), inspects artifacts read-only, and emits a structured verdict. THIS module executes the verdict
@@ -9,7 +9,8 @@ robot can neither end nor ratify work.
 
   identity + floor + strictness  →  kernel_speech.deputy_preamble  (run_turn system_append)
   the chosen context to judge    →  kernel_speech.deputy_brief_block (the prompt body)
-  the verdict it emits           →  session_contract.parse_deputy_verdict
+  the verdict it emits           →  the deputy_verdict TOOL (run_tools) — validated at call time,
+                                    delivered through this dispatch's sink
   its mandate + per-item log      →  core.deputy (mandate.md in the harness cell + deputy-log.jsonl per item)
 
 The dispatch seam is `gates.maybe_autopilot_advance`: when the deputy is enabled it schedules
@@ -24,7 +25,8 @@ from pathlib import Path
 
 from ..app_state import agent as _agent, dev as _dev, dev_store as _dev_store, spine as _spine
 from ...core import Usage, Result, Status, TextDelta, ToolResult, deny_all
-from ...core import kernel_speech, session_contract, gate_briefs, deputy as deputy_core
+from ...core import kernel_speech, gate_briefs, deputy as deputy_core
+from ...harness.tools.run_tools import make_deputy_verdict_server
 from .runs import _begin_run, _LiveTokens, capture_prompt, capture_event, _dev_mcp
 
 log = logging.getLogger("superme-agent")
@@ -159,9 +161,9 @@ def _resolve_deputy_params(context_id: str, item: dict) -> tuple[str, str]:
 
 async def _judge(ctx, context_id: str, item_id: str, item: dict, gate: str, dev_root: Path,
                  model: str, effort: str) -> tuple[dict | None, int | None, dict | None]:
-    """Run one headless deputy turn and return (verdict|None, tokens, usage). The verdict is None
-    when the run produced no valid `deputy-verdict` fence — the caller treats that as 'couldn't
-    judge → owner', never a pass."""
+    """Run one background deputy turn and return (verdict|None, tokens, usage). The verdict is None
+    when the run never made a valid `deputy_verdict` tool call — the caller treats that as
+    'couldn't judge → owner', never a pass."""
     item_dir = dev_root / "work-items" / item_id
     strictness = _spine.get_deputy_strictness(gate)
     # The context the deputy judges from — assembled from durable state, nothing inherited.
@@ -193,35 +195,41 @@ async def _judge(ctx, context_id: str, item_id: str, item: dict, gate: str, dev_
         authorizations=auth_block)
     system_append = kernel_speech.deputy_preamble(strictness)
     capture_prompt(context_id, f"[deputy] judging the {gate} gate", item_id=item_id)
-    final_text = None
     final_tokens = None
     final_usage = None
     live = _LiveTokens()
+    sink: dict = {}   # the deputy_verdict tool (run_tools) lands the verdict here
     try:
         async for ev in _agent.run_turn(
             ctx, prompt,
             resume=None,                       # fresh per gate — the deputy FORGETS (design §2b)
             model=model, effort=effort,
             approve=deny_all,                  # read-only judge: no writes, no shell side effects
-            extra_mcp_servers=_dev_mcp(ctx, ctx.cwd, item_id),
+            extra_mcp_servers={**_dev_mcp(ctx, ctx.cwd, item_id),
+                               "deputy": make_deputy_verdict_server(sink)},
             system_append=system_append,
             deny_write_tools=_READONLY_NUDGE,  # Write/Edit die outright — it inspects, never edits
         ):
             if isinstance(ev, Usage):
                 live.bump(context_id, item_id, ev)
             elif isinstance(ev, Result):
-                final_text = ev.text
                 final_tokens = ev.tokens
                 final_usage = ev.usage
             if isinstance(ev, (Status, TextDelta, ToolResult)):
                 capture_event(context_id, ev, item_id=item_id)
     except Exception:
         log.exception("deputy judge turn failed for %s", item_id)
-    verdict = session_contract.parse_deputy_verdict(final_text)
-    return verdict, final_tokens, final_usage
+    return sink.get("verdict"), final_tokens, final_usage
 
 
 # --------------------------------------------------------------------------- verdict → action
+
+def _headline(text: str, cap: int = 240) -> str:
+    """First paragraph of `text`, capped — the one line a decision bubble carries (§2.1). The full
+    rationale never rides the bubble; it stays in the event meta for the Deputy tab."""
+    head = (text or "").strip().split("\n\n")[0].replace("\n", " ").strip()
+    return head if len(head) <= cap else head[:cap].rstrip() + "…"
+
 
 def _act_on_verdict(ctx, context_id: str, item_id: str, gate: str, verdict: dict | None) -> None:
     """Carry out the deputy's decision using the SAME levers the owner's gate buttons pull. A
@@ -267,8 +275,8 @@ def _do_grant(ctx, context_id: str, item_id: str, gate: str, verdict: dict) -> N
     """Grant a DELEGATED authorization the deputy judged ready (BV-A2.3). THE FLOOR IS MECHANICAL:
     the daemon grants only if the request's scope is in the owner's delegated set — otherwise it
     ESCALATES, because an intent-defining contract change is the owner's alone and no amount of
-    deputy conviction changes that. A grant records the decision and routes the item back to build
-    to perform the now-allowed change (grant-as-send_back)."""
+    deputy conviction changes that. A grant RECORDS the decision and routes nothing (§2.1) — the
+    item stays at its gate; the deputy's own approve (below) is what advances it."""
     from ...core import artifacts as _arts
     from . import loop as _loop
     dev_root = ctx.internal_root / "dev"
@@ -286,11 +294,25 @@ def _do_grant(ctx, context_id: str, item_id: str, gate: str, verdict: dict) -> N
                                f"it cannot give — scope `{auth.get('scope')}` is owner-reserved. "
                                f"Request: {auth.get('what')}. Grant or deny it yourself."))
         return
-    started, why = _loop.grant_authorization(ctx, context_id, item_id, auth_id, by="deputy")
-    if not started:
+    # Re-check the DECLARED scope against the STAGED OPS at the floor too (§2.1). The tool refuses
+    # a mislabel at request time, but the ops can be restaged afterwards — and a delegated grant is
+    # exactly where a wrong label would do its damage, by routing an intent change past the owner.
+    try:
+        from ...core import knowledge_delta as _kd
+        staged = (_kd.read_delta(item_dir) or {}).get("ops") or []
+    except Exception:
+        staged = []
+    if (mismatch := _arts.scope_mismatch(str(auth.get("scope") or ""), staged)):
+        _do_escalate(ctx, context_id, item_id, gate, verdict, reason="grant_scope_mismatch",
+                     override=(f"The deputy tried to grant '{auth.get('what')}' as a delegated "
+                               f"sync, but the staged ops change what the project IS — {mismatch} "
+                               f"This is yours to grant or deny."))
+        return
+    recorded, why = _loop.grant_authorization(ctx, context_id, item_id, auth_id, by="deputy")
+    if not recorded:
         _do_escalate(ctx, context_id, item_id, gate, verdict, reason="grant_undeliverable",
                      override=(f"The deputy granted authorization for '{auth.get('what')}' but the "
-                               f"build re-entry couldn't start: {why}"))
+                               f"grant could not be recorded: {why}"))
         return
     _dev_store.log_event(context_id, "deputy.approve",
                          f"Deputy granted a delegated authorization at {gate}: "
@@ -303,8 +325,8 @@ def _do_grant(ctx, context_id: str, item_id: str, gate: str, verdict: dict) -> N
 
 
 def _do_approve(ctx, context_id: str, item_id: str, gate: str, verdict: dict) -> None:
-    """Advance the gate — the deputy pulls the owner's advance lever, with `ratify=False` (the human
-    floor: a robot cannot ratify an assumption). Cap-aware entering build (slice 3)."""
+    """Advance the gate — the deputy pulls the owner's same advance lever. Cap-aware entering
+    build (slice 3)."""
     from . import gates as gate_svc
     because = verdict.get("because", "")
     _dev_store.log_event(context_id, "deputy.approve",
@@ -312,7 +334,10 @@ def _do_approve(ctx, context_id: str, item_id: str, gate: str, verdict: dict) ->
                          item_id=item_id, actor="deputy",
                          meta={"gate": gate, "checked": verdict.get("checked", "")[:400],
                                "because": because[:400],
-                               "speech": f"I approved the **{gate}** gate on your behalf. {because}"})
+                               # The headline the chat bubble shows (§2.1) — an approval that kept
+                               # things moving still says so, in one line, where the owner looks.
+                               "speech": f"I approved the **{gate}** gate on your behalf. "
+                                         + _headline(because)})
     gate_svc.autopilot_advance(ctx, context_id, item_id, actor="deputy")
 
 
@@ -367,4 +392,8 @@ def _do_escalate(ctx, context_id: str, item_id: str, gate: str, verdict: dict, *
                          item_id=item_id, actor="deputy",
                          meta={"gate": gate, "reason": reason, "escalation": escalation[:800],
                                "checked": verdict.get("checked", "")[:400],
-                               "speech": f"This one needs you at the **{gate}** gate.\n\n{escalation}"})
+                               # `speech` is the HEADLINE (§2.1): the chat bubble and the paged
+                               # notice's lead line. The runbook rides `escalation` — one line
+                               # tells the owner they're needed; the detail is one surface deeper.
+                               "speech": f"This one needs you at the **{gate}** gate. "
+                                         + _headline(verdict.get("because") or escalation)})

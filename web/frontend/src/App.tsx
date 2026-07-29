@@ -3,6 +3,7 @@ import { Radar, Layers, Activity, SlidersHorizontal, Boxes } from 'lucide-react'
 import TopBar from '@/features/shell/TopBar'
 import GlobalStrip from '@/features/shell/GlobalStrip'
 import NavColumn, { type NavRow } from '@/features/shell/NavColumn'
+import StatusBar from '@/features/shell/StatusBar'
 import Nexus from '@/features/shell/Nexus'
 import RepoInspector from '@/features/shell/RepoInspector'
 import TokenDrilldown from '@/features/shell/TokenDrilldown'
@@ -19,6 +20,10 @@ import ChatPanel, { type DevBinding, type SeedTurn } from '@/features/chat/ChatP
 import ConnectModal from '@/features/shell/ConnectModal'
 import { GLOBAL, type ContextRef } from '@/lib/contexts'
 import { listContexts, type ChatMode, type Run, type SystemHold } from '@/lib/api'
+import { invalidate } from '@/lib/live'
+import { startPush } from '@/lib/live/push'
+import { topicSystem } from '@/lib/live/keys'
+import { navigate, setParam, useParam, useRoute, type Surface } from '@/lib/router'
 
 // System & Dev local nav. Nexus (orbit) is the main entry; Me + projects are reached from orbit
 // nodes, so there's no separate Functional tier in the nav.
@@ -37,25 +42,22 @@ const CHAT_MAX = 900
 // The renovated cockpit: full-width top bar + global stats strip, then a row of
 // [navigate · orbit · chater rail] under the strip, over a slim status bar.
 export default function App() {
-  const [active, setActive] = useState('nexus')
+  // WHERE AM I is the URL, and only the URL (routing-audit §6.3). `active` and `dest` used to be
+  // component state; they are gone rather than mirrored, because two writers for one fact is the
+  // defect this exists to remove. Everything below reads `route`.
+  const route = useRoute()
   const [contexts, setContexts] = useState<ContextRef[]>([GLOBAL])
   const [chatContext, setChatContext] = useState(GLOBAL.id)
   const [chatOpen, setChatOpen] = useState(true)
   const [chatMode, setChatMode] = useState<ChatMode>('dev') // dev-chater | core-chater
-  const [selectedId, setSelectedId] = useState<string | null>(null) // orbit node → inspector
   const [connecting, setConnecting] = useState(false)
-  const [drill, setDrill] = useState<string | null>(null) // which global-strip tile is drilled in
-  // Per-repo destination that takes over the main area (Dev workspace / Core dashboard).
-  const [dest, setDest] = useState<{ repo: OrbitRepo; kind: 'dev' | 'core' } | null>(null)
   // Chat ⇄ work-item binding: clicking a work-item takes the chat rail over as that item's dev
   // thread (opens its session, tags sends). Lifted here so DevWorkspace and ChatPanel can share it.
   const [binding, setBinding] = useState<DevBinding | null>(null)
   // A one-shot turn to birth a fresh session in the chat rail (onboarding OR diagnosis launch) — set
   // here, sent once by ChatPanel when its socket is ready, then cleared via onSeedConsumed.
   const [seed, setSeed] = useState<SeedTurn | null>(null)
-  // The attention center's "Open" jumps to a specific item's dev workspace: this holds the item to
-  // auto-open in that workspace's pipeline (consumed once by DevDashboard, then cleared).
-  const [focusItem, setFocusItem] = useState<{ repoId: string; itemId: string } | null>(null)
+  // (The PR path never reaches App — main.tsx mounts the PR page instead of the cockpit for it.)
   // Optimistic tag overrides — a saved tag shows instantly, before the /repos poll confirms it.
   const [tagOverrides, setTagOverrides] = useState<Record<string, { color: string; icon: string | null }>>({})
   // Chat rail width — owner-draggable (the default 480px is cramped for reading long agent turns).
@@ -104,6 +106,44 @@ export default function App() {
       })
   }, [])
 
+  // The dashboard's live-push channel, opened once for the tab and kept open across every
+  // navigation (it is not tied to any view, which is why it lives here and not in a feature).
+  // It carries invalidation TOPICS only — the cache still reads every value over HTTP — and while
+  // it is up the polls drop to a slow backstop. See lib/live/push.ts.
+  useEffect(() => startPush(), [])
+
+  // The repo a repo-scoped route names. `null` while the roster is still loading — which is the
+  // whole reason this is derived rather than stored: deep-linking to /repo/x/dev arrives before
+  // /repos has answered, and the old `dest` object could not exist until something clicked it.
+  const repoOf = (id: string) => [stats.hub, ...stats.nodes].find((r) => r?.id === id) ?? null
+  const routeRepoId =
+    route.name === 'dev' || route.name === 'core' || route.name === 'repo' || route.name === 'item'
+      ? route.repoId
+      : null
+  const routeRepo = routeRepoId ? repoOf(routeRepoId) : null
+  // A repo id in the path that the roster doesn't have (disconnected, renamed, mistyped) must not
+  // hang on a spinner forever — once the roster HAS loaded and still doesn't know it, go home.
+  useEffect(() => {
+    if (routeRepoId && !stats.loading && !routeRepo) navigate({ name: 'nexus' }, { replace: true })
+  }, [routeRepoId, routeRepo, stats.loading])
+
+  // Opening a repo surface points the chat rail at that repo, exactly as the click handlers did —
+  // now keyed off ARRIVING at the address, so a deep link and a click behave identically instead of
+  // each carrying its own copy of the rule.
+  useEffect(() => {
+    if (route.name !== 'dev' && route.name !== 'core' && route.name !== 'item') return
+    const repoId = route.repoId
+    // Keep a binding that already belongs to this repo. The attention centre binds the item's own
+    // session and THEN navigates (deliberately — letting the board bind after mount raced the
+    // established-gate and lost); clearing unconditionally here would undo that every time.
+    setBinding((b) => (b && b.contextId === repoId ? b : null))
+    setChatContext(repoId)
+    setChatMode(route.name === 'core' ? 'core' : 'dev')
+    // Tab changes and phase/sub changes must NOT re-run this: `route.name` and the repo id are the
+    // only things that mean "you arrived somewhere new".
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [route.name, routeRepoId])
+
   // Launch a diagnosis session from an Activity row: point the rail at the run's repo dev thread and
   // seed a read-only diagnosis turn (kind=diagnosis + subject_run_id). The daemon injects the run's
   // trace so the session starts oriented. (session-kinds-diagnose)
@@ -115,77 +155,98 @@ export default function App() {
     setSeed({ prompt: query, kind: 'diagnosis', subjectRunId: run.id })
   }
 
-  // Attention center → jump to an item: take the repo's dev workspace over and hand DevDashboard the
-  // item to auto-open. No-op if the repo isn't in the roster yet (a poll race) — the bell stays put.
+  // Attention center → jump to an item. One `navigate`, where this used to be six ordered `set*`
+  // calls with a comment explaining which order avoided a race (§6.3): the path IS the destination,
+  // and the drilldown now has an address of its own rather than a `focusItem` request handed across
+  // a mount boundary and consumed once.
+  //
+  // The binding is still set HERE rather than left to the board's arrival effect: the hold carries
+  // `session_id`, so the rail can open the item's own thread immediately instead of waiting for the
+  // board's data to land (Fix C — the late bind raced the established-gate and lost).
   function gotoItem(repoId: string, hold: SystemHold) {
-    const repo = [stats.hub, ...stats.nodes].find((r) => r?.id === repoId)
-    if (!repo) return
-    setActive('nexus')
-    setDest({ repo, kind: 'dev' })
-    // Bind the chat to the ITEM's own session HERE, deterministically — don't rely on DevDashboard's
-    // focus effect to bind after mount (it races the established-gate + data-load, and lost: the rail
-    // fell back to the general thread). The hold carries session_id for exactly this.
     setBinding({ workItemId: hold.id, sessionId: hold.session_id ?? null, title: hold.title, contextId: repoId })
-    setChatContext(repoId)
-    setChatMode('dev')
     setChatOpen(true)
-    setFocusItem({ repoId, itemId: hold.id })
+    navigate({ name: 'item', repoId, itemId: hold.id, phase: null, sub: null })
   }
 
-  const selectedRepo = selectedId ? [stats.hub, ...stats.nodes].find((r) => r?.id === selectedId) ?? null : null
+  // Which global-strip tile is drilled in — read from `?stats=`, so the surface underneath is
+  // untouched and closing is just dropping the param (no history entry: a modal's exit is its
+  // close button, not the back gesture).
+  const drill = useParam('stats')
+  const closeDrill = () => setParam('stats', null)
+
+  // The inspector is the `repo` route, not a selection: `/repo/:id` is an address you can link to.
+  const selectedRepo = route.name === 'repo' ? routeRepo : null
   // The tag of the repo the chat rail is currently talking to (for the chater header).
-  const chatRepo = [stats.hub, ...stats.nodes].find((r) => r?.id === chatContext) ?? null
+  const chatRepo = repoOf(chatContext)
   const chatTag = chatRepo ? { color: chatRepo.color, icon: chatRepo.icon, isHub: chatRepo.id === 'global' } : undefined
 
-  function Section() {
-    if (active === 'nexus')
-      return <Nexus stats={stats} selectedId={selectedId} onSelectRepo={setSelectedId} onConnect={() => setConnecting(true)} />
-    if (active === 'foundations') return <Foundations />
-    if (active === 'activity') return <GlobalActivity stats={stats} onDiagnose={launchDiagnosis} />
-    if (active === 'config') return <QuickConfig stats={stats} />
-    if (active === 'internals') return <Internals />
-    return <Nexus stats={stats} selectedId={selectedId} onSelectRepo={setSelectedId} onConnect={() => setConnecting(true)} />
+  // `/` and `/repo/:id` both render the Nexus — the second with the inspector open over it.
+  const nexus = (
+    <Nexus
+      stats={stats}
+      selectedId={route.name === 'repo' ? route.repoId : null}
+      onSelectRepo={(id) => navigate(id ? { name: 'repo', repoId: id } : { name: 'nexus' })}
+      onConnect={() => setConnecting(true)}
+    />
+  )
+
+  function Main() {
+    if (route.name === 'dev' || route.name === 'core' || route.name === 'item') {
+      // The roster hasn't answered yet — a deep link arrives here before /repos does. Hold the
+      // frame rather than flashing the Nexus; the redirect effect above handles a repo that turns
+      // out not to exist.
+      if (!routeRepo) return <div className="p-6 text-sm text-muted">Loading {route.repoId}…</div>
+      if (route.name === 'core') return <CoreDashboard repo={routeRepo} onExit={() => navigate({ name: 'nexus' })} />
+      return (
+        <DevWorkspace
+          repo={routeRepo}
+          // An item drilldown is an overlay ON the pipeline board, so its address implies that tab.
+          tab={route.name === 'item' ? 'pipeline' : route.tab}
+          onTabChange={(tab) => navigate({ name: 'dev', repoId: routeRepo.id, tab })}
+          onExit={() => navigate({ name: 'nexus' })}
+          repos={[stats.hub, ...stats.nodes].filter((r): r is OrbitRepo => !!r)}
+          onSwitch={(r) => navigate({ name: 'dev', repoId: r.id, tab: 'pipeline' })}
+          boundItemId={binding?.workItemId ?? null}
+          onBindItem={(it, ctx) => {
+            // Take the chat over as this item's dev thread and reveal the rail.
+            setBinding({ workItemId: it.id, sessionId: it.session_id ?? null, title: it.title || it.id, contextId: ctx })
+            setChatContext(ctx)
+            setChatMode('dev')
+            setChatOpen(true)
+          }}
+          onUnbindItem={() => setBinding(null)}
+        />
+      )
+    }
+    if (route.name === 'surface') {
+      if (route.surface === 'foundations') return <Foundations />
+      if (route.surface === 'activity') return <GlobalActivity stats={stats} onDiagnose={launchDiagnosis} />
+      if (route.surface === 'config') return <QuickConfig stats={stats} />
+      return <Internals />
+    }
+    return nexus
   }
+
+  // Which nav row reads as current. A repo surface belongs to the Nexus branch (that is where you
+  // came from and where Back goes), so it keeps the Nexus row lit rather than lighting nothing.
+  const navActive = route.name === 'surface' ? route.surface : 'nexus'
 
   return (
     <div className="flex h-full flex-col bg-app font-sans text-fg">
       <TopBar onGoto={gotoItem} />
-      <GlobalStrip stats={stats} onDetails={setDrill} />
+      {/* A tile's breakdown is in the URL (`?stats=tokens`), not a component flag — linkable, and
+          it survives a refresh. In the QUERY rather than a path segment because it is an overlay:
+          it belongs over whatever surface you are on, and a path would have replaced that surface. */}
+      <GlobalStrip stats={stats} onDetails={(id) => setParam('stats', id)} />
 
       <div className="flex min-h-0 flex-1">
         <NavColumn
           items={NAV}
-          active={active}
-          onSelect={(id) => {
-            setActive(id)
-            setDest(null) // leaving to a nav surface exits any repo takeover
-          }}
+          active={navActive}
+          onSelect={(id) => navigate(id === 'nexus' ? { name: 'nexus' } : { name: 'surface', surface: id as Surface })}
         />
-        <main className="min-w-0 flex-1 overflow-hidden">
-          {dest?.kind === 'dev' ? (
-            <DevWorkspace
-              repo={dest.repo}
-              onExit={() => setDest(null)}
-              focusItemId={focusItem && focusItem.repoId === dest.repo.id ? focusItem.itemId : null}
-              onFocusConsumed={() => setFocusItem(null)}
-              repos={[stats.hub, ...stats.nodes].filter((r): r is OrbitRepo => !!r)}
-              onSwitch={(r) => { setDest({ repo: r, kind: 'dev' }); setBinding(null); setChatContext(r.id); setChatMode('dev') }}
-              boundItemId={binding?.workItemId ?? null}
-              onBindItem={(it, ctx) => {
-                // Take the chat over as this item's dev thread and reveal the rail.
-                setBinding({ workItemId: it.id, sessionId: it.session_id ?? null, title: it.title || it.id, contextId: ctx })
-                setChatContext(ctx)
-                setChatMode('dev')
-                setChatOpen(true)
-              }}
-              onUnbindItem={() => setBinding(null)}
-            />
-          ) : dest?.kind === 'core' ? (
-            <CoreDashboard repo={dest.repo} onExit={() => setDest(null)} />
-          ) : (
-            Section()
-          )}
-        </main>
+        <main className="min-w-0 flex-1 overflow-hidden">{Main()}</main>
 
         {/* persistent chater rail — kept mounted; full panel when open, a slim quick-switch rail
             (recent sessions + dev/core toggle) when collapsed. */}
@@ -224,45 +285,39 @@ export default function App() {
 
       <RepoInspector
         repo={selectedRepo}
-        onClose={() => setSelectedId(null)}
-        onOpenDev={(r) => {
-          setSelectedId(null)
-          setDest({ repo: r, kind: 'dev' })
-          // The chat rail follows you to the repo you open (dev workspace → its dev thread).
-          setBinding(null)
-          setChatContext(r.id)
-          setChatMode('dev')
-        }}
-        onOpenCore={(r) => {
-          setSelectedId(null)
-          setDest({ repo: r, kind: 'core' })
-          setBinding(null)
-          setChatContext(r.id)
-          setChatMode('core')
-        }}
+        onClose={() => navigate({ name: 'nexus' })}
+        // The chat rail follows you to the repo you open — now handled once, by the arrival effect
+        // above, instead of repeated in each opener.
+        onOpenDev={(r) => navigate({ name: 'dev', repoId: r.id, tab: 'pipeline' })}
+        onOpenCore={(r) => navigate({ name: 'core', repoId: r.id })}
         onTagSaved={(id, patch) => setTagOverrides((o) => ({ ...o, [id]: patch }))}
         onDisconnected={(id) => {
-          // The repo is gone — drop every surface still pointing at it (the roster poll catches up).
-          setSelectedId(null)
-          if (dest?.repo.id === id) setDest(null)
+          // The repo is gone — leave any address pointing at it, and drop the rail's hold on it.
           if (binding?.contextId === id) setBinding(null)
           if (chatContext === id) setChatContext('global')
+          navigate({ name: 'nexus' }, { replace: true })
         }}
       />
-      {drill === 'tokens' && <TokenDrilldown stats={stats} onClose={() => setDrill(null)} />}
-      {drill === 'ops' && <AgentsDrilldown stats={stats} onClose={() => setDrill(null)} />}
-      {drill === 'learning' && <LearningDrilldown onClose={() => setDrill(null)} />}
+      {drill === 'tokens' && <TokenDrilldown stats={stats} onClose={closeDrill} />}
+      {drill === 'ops' && <AgentsDrilldown stats={stats} onClose={closeDrill} />}
+      {drill === 'learning' && <LearningDrilldown onClose={closeDrill} />}
       {connecting && (
         <ConnectModal
           onClose={() => setConnecting(false)}
           onConnected={() => {
             setConnecting(false)
-            // Refresh the chat context list so the new repo is selectable; the orbit poll (/repos)
-            // surfaces its node within a few seconds, from which the owner opens onboarding.
+            // Refresh the chat context list so the new repo is selectable, and the roster with it so
+            // the orbit node appears at once rather than on its next tick.
             listContexts().then((cs) => cs.length && setContexts(cs)).catch(() => {})
+            invalidate(topicSystem)
           }}
         />
       )}
+
+      {/* The honest answer to "is this data real?" — one connection status for the whole app, plus
+          the live feed/request count. Deliberately at the bottom edge, always visible: stale data
+          must never render as current, and until this existed a dead daemon looked like a quiet one. */}
+      <StatusBar />
     </div>
   )
 }

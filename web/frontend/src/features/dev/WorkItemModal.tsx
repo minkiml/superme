@@ -3,6 +3,7 @@ import {
   X, ArrowRight, Sparkles, Trash2, Check, Loader2, FileText, ListChecks, ScrollText, History,
   Terminal, Archive, Scale, GitBranch, Milestone, FlaskConical, BookOpenText, Ban, RefreshCw,
   GitMerge, Undo2, ShieldCheck, AlertTriangle, MessageSquare, CornerUpLeft, Lock, Plane,
+  ExternalLink,
 } from 'lucide-react'
 import Markdown from '@/ui/Markdown'
 import Modal from '@/ui/Modal'
@@ -11,11 +12,14 @@ import { TraceRows } from './ExecutionTrace'
 import { pairTrace } from '@/lib/trace'
 import {
   getWorkItemDetail, getWorkItemArtifacts, advanceWorkItem, completeWorkItem,
-  getDevLog, getWorkItemGateBrief, getWorkItemGit, syncWorkItemGit,
+  getDevLog, getWorkItemGateBrief, getWorkItemGit, syncWorkItemGit, resolveWorkItemGit,
   revertWorkItemGit, abandonWorkItem, markWorkItemSeen, vetWorkItem, continueWorkItem, authorizeWorkItem,
   type WorkItem, type WorkItemDetail, type DevEvent, type RunArtifact, type GateBrief,
   type GitHealth,
 } from '@/lib/api'
+import { useLive } from '@/lib/live'
+import { K } from '@/lib/live/keys'
+import { build, navigate, useRoute, type Phase } from '@/lib/router'
 import { fmtModel, fmtTokens, fmtLocal, toModelKey } from '@/lib/format'
 import { StatusBadge, isPlannable, DEFAULT_RUN_MODEL, DEFAULT_RUN_EFFORT } from './panels'
 import { PHASE_LABEL, GATED_PHASES } from './common'
@@ -29,29 +33,26 @@ import { PHASE_LABEL, GATED_PHASES } from './common'
 // Per-kind pipeline (mirrors the backend KIND_PROFILES).
 const PIPELINES: Record<string, string[]> = {
   implementation: ['triage', 'plan', 'build', 'vet', 'review', 'close'],
-  research: ['triage', 'plan', 'investigate', 'report', 'close'],
+  research: ['triage', 'plan', 'investigate', 'review', 'close'],
 }
 
 // P0-curated sub-tabs per phase — the most useful reads for that stage, nothing else. `trace`
 // (the raw call-trail) is appended to every phase: one click deeper, never leading.
-type SubTab = 'gate' | 'item' | 'plan' | 'validation' | 'findings' | 'closeout' | 'checkpoints' | 'git' | 'trace' | 'deputy'
+type SubTab = 'gate' | 'item' | 'plan' | 'investigation' | 'checkpoints' | 'git' | 'trace' | 'deputy'
 const PHASE_TABS: Record<string, SubTab[]> = {
   triage: ['gate', 'item'],
   plan: ['gate', 'plan'],
   build: ['plan', 'checkpoints', 'git'],
-  vet: ['validation', 'checkpoints', 'git'],
+  vet: ['plan', 'checkpoints', 'git'],
   review: ['gate', 'git', 'checkpoints'],
-  investigate: ['plan', 'checkpoints'],
-  report: ['findings'],
-  close: ['gate', 'closeout'],
+  investigate: ['plan', 'investigation', 'checkpoints'],
+  close: ['gate'],
 }
 const SUB_META: Record<SubTab, { label: string; icon: typeof FileText }> = {
   gate: { label: 'Gate brief', icon: Scale },
   item: { label: 'Item', icon: ScrollText },
   plan: { label: 'Plan', icon: FileText },
-  validation: { label: 'Validation', icon: FlaskConical },
-  findings: { label: 'Findings', icon: BookOpenText },
-  closeout: { label: 'Closeout', icon: Archive },
+  investigation: { label: 'Investigation', icon: BookOpenText },
   checkpoints: { label: 'Checkpoints', icon: Milestone },
   git: { label: 'Git', icon: GitBranch },
   trace: { label: 'Trace', icon: Terminal },
@@ -73,12 +74,27 @@ export default function WorkItemModal({
   onDelete: (it: WorkItem) => void // hard-delete (caller confirms)
   onChanged: () => void // reload the board after an advance
 }) {
-  const [detail, setDetail] = useState<WorkItemDetail | null>(null)
-  const [events, setEvents] = useState<DevEvent[]>([])
-  const [artifacts, setArtifacts] = useState<RunArtifact[]>([])
-  const [brief, setBrief] = useState<GateBrief | null>(null)
-  const [briefErr, setBriefErr] = useState<string | null>(null)
-  const [err, setErr] = useState<string | null>(null)
+  // The drilldown's four feeds. Each is its own cache key, so the ones another surface already
+  // keeps warm (the dev log is also read by the chat rail and the timeline) cost nothing here.
+  // Cadence: 2.5s while a run is in flight, 10s when the item is at rest — the modal used to poll
+  // all four at 2.5s while running and then go completely silent, so an item that changed underneath
+  // an open drilldown (a deputy verdict, an autopilot advance) sat visibly wrong until it was closed
+  // and reopened.
+  const rate = it.running ? 2500 : 10000
+  const detailQ = useLive<WorkItemDetail>(K.itemDetail(contextId, it.id), () => getWorkItemDetail(it.id, contextId), rate)
+  const logQ = useLive(K.devLog(contextId, it.id, 50), () => getDevLog(contextId, { itemId: it.id, limit: 50 }), rate)
+  const artifactsQ = useLive(K.itemArtifacts(contextId, it.id), () => getWorkItemArtifacts(it.id, contextId), rate)
+  const briefQ = useLive<GateBrief>(K.itemGateBrief(contextId, it.id), () => getWorkItemGateBrief(it.id, contextId), rate)
+
+  const detail = detailQ.data ?? null
+  const events: DevEvent[] = logQ.data?.events ?? []
+  const artifacts: RunArtifact[] = artifactsQ.data?.artifacts ?? []
+  const brief = briefQ.data ?? null
+  // Errors only matter while there is nothing to show — last-good data survives a blip, and the
+  // connection banner is what tells the owner when the whole daemon is unreachable.
+  const briefErr = brief ? null : briefQ.error ? String(briefQ.error) : null
+  const [mutErr, setMutErr] = useState<string | null>(null)
+  const err = mutErr ?? (detail ? null : detailQ.error ? String(detailQ.error) : null)
   const [advancing, setAdvancing] = useState(false)
   const [abandoning, setAbandoning] = useState(false) // inline abandon confirm row
   const [abandonReason, setAbandonReason] = useState('')
@@ -97,44 +113,45 @@ export default function WorkItemModal({
   // Does this phase end at a briefed human gate? Only then is advancing an "Approve".
   const atGate = GATED_PHASES.has(phase)
 
-  // Stepper selection — defaults to the item's live phase; clicking a step views that stage.
-  const [phaseView, setPhaseView] = useState<string>(phase)
-  useEffect(() => setPhaseView(phase), [phase])
+  // Stepper selection and sub-tab are ADDRESSES (`/repo/:id/item/:itemId/:phase/:sub`), not local
+  // state. An ABSENT phase segment means "whatever phase this item is at now" — so the bare item
+  // link follows the work as it advances, exactly as the old `useEffect(() => setPhaseView(phase))`
+  // did, while a named phase pins the view for someone reading back through a finished stage.
+  const route = useRoute()
+  const routePhase = route.name === 'item' ? route.phase : null
+  const routeSub = route.name === 'item' ? route.sub : null
+  const phaseView: string = routePhase && pipeline.includes(routePhase) ? routePhase : phase
   const viewingLive = phaseView === phase
+  // Which sub-tabs a phase offers lives HERE, so the router only has to know the vocabulary. An
+  // address naming a sub that is real but wrong for its phase (a hand-edited URL, a link from
+  // before a phase's tabs changed) falls back to the phase's first tab rather than rendering blank.
+  const goItem = (p: string, s: SubTab | null) =>
+    navigate({
+      name: 'item', repoId: contextId, itemId: it.id,
+      // A sub cannot be addressed without its phase, so choosing one forces the phase segment even
+      // when it is the live phase.
+      phase: (s || p !== phase ? p : null) as Phase | null,
+      sub: s,
+    })
   // The brief carries `paged` when the item is parked for a nameable reason (not a plain gate wait).
   const briefPaged = (brief as (GateBrief & { paged?: PagedData | null }) | null)?.paged ?? null
   // BV-A2: deferred contract changes awaiting the owner's grant/deny at the review gate.
   const auths = (brief as (GateBrief & { authorizations?: AuthRow[] }) | null)?.authorizations ?? []
   const [authBusy, setAuthBusy] = useState<string | null>(null)
-  const subTabs = PHASE_TABS[phaseView] ?? ['gate']
-  const [sub, setSub] = useState<SubTab>(subTabs[0])
-  useEffect(() => setSub((PHASE_TABS[phaseView] ?? ['gate'])[0]), [phaseView])
-
-  // Pull detail + timeline + call-trail; live-poll while a run is in flight.
-  useEffect(() => {
-    let alive = true
-    const pull = () => {
-      getWorkItemDetail(it.id, contextId)
-        .then((d) => alive && setDetail(d))
-        .catch((e) => alive && setErr(String(e)))
-      getDevLog(contextId, { itemId: it.id, limit: 50 })
-        .then((d) => alive && setEvents(d.events))
-        .catch(() => {})
-      getWorkItemArtifacts(it.id, contextId)
-        .then((d) => alive && setArtifacts(d.artifacts))
-        .catch(() => {})
-      getWorkItemGateBrief(it.id, contextId)
-        .then((b) => alive && setBrief(b))
-        .catch((e) => alive && setBriefErr(String(e)))
-    }
-    pull()
-    if (!it.running) return () => { alive = false }
-    const t = setInterval(pull, 2500)
-    return () => {
-      alive = false
-      clearInterval(t)
-    }
-  }, [it.id, contextId, it.running])
+  // ONE list, used to render the tabs AND to validate the address. They were briefly two — the
+  // curated per-phase set for validation, a wider set (plus Deputy and Trace) for rendering — and
+  // the gap was immediately visible: `/…/review/deputy` was a URL you could reach by clicking, but
+  // `sub` rejected it and snapped the body back to the gate brief while the address kept claiming
+  // Deputy. Same defect class as two writers for one row, one level down.
+  const phaseTabs = PHASE_TABS[phaseView] ?? ['gate']
+  const subTabs: SubTab[] = [
+    ...phaseTabs,
+    // The Deputy log appears only once the deputy has acted on this item — its governance moves
+    // (approve / send-back / escalate) + rationale live HERE, out of the chat (Q1-E).
+    ...(events.some((e) => String(e.kind).startsWith('deputy')) ? (['deputy'] as SubTab[]) : []),
+    'trace',
+  ]
+  const sub: SubTab = routeSub && subTabs.includes(routeSub) ? routeSub : subTabs[0]
 
   // Read receipt (S7 attention): opening a terminal item's drilldown stamps it seen — the blue
   // `unread` row clears on the next attention read.
@@ -164,7 +181,7 @@ export default function WorkItemModal({
       onChanged()
       onClose()
     } catch (e) {
-      setErr(`Couldn't advance — ${e}`)
+      setMutErr(`Couldn't advance — ${e}`)
       setAdvancing(false)
     }
   }
@@ -177,7 +194,7 @@ export default function WorkItemModal({
       onChanged()
       onClose()
     } catch (e) {
-      setErr(`Couldn't start the vet loop — ${e}`)
+      setMutErr(`Couldn't start the vet loop — ${e}`)
       setAdvancing(false)
     }
   }
@@ -192,7 +209,7 @@ export default function WorkItemModal({
       onChanged()
       onClose()
     } catch (e) {
-      setErr(`Couldn't continue — ${e}`)
+      setMutErr(`Couldn't continue — ${e}`)
       setAdvancing(false)
     }
   }
@@ -207,7 +224,7 @@ export default function WorkItemModal({
       onChanged()
       onClose()
     } catch (e) {
-      setErr(`Couldn't ${decision === 'granted' ? 'grant' : 'deny'} — ${e}`)
+      setMutErr(`Couldn't ${decision === 'granted' ? 'grant' : 'deny'} — ${e}`)
       setAuthBusy(null)
     }
   }
@@ -218,7 +235,7 @@ export default function WorkItemModal({
       onChanged()
       onClose()
     } catch (e) {
-      setErr(`Couldn't complete — ${e}`)
+      setMutErr(`Couldn't complete — ${e}`)
       setAdvancing(false)
     }
   }
@@ -231,7 +248,7 @@ export default function WorkItemModal({
       onChanged()
       onClose()
     } catch (e) {
-      setErr(`Couldn't abandon — ${e}`)
+      setMutErr(`Couldn't abandon — ${e}`)
       setAdvancing(false)
       setAbandoning(false)
     }
@@ -289,7 +306,7 @@ export default function WorkItemModal({
             return (
               <button
                 key={p}
-                onClick={() => setPhaseView(p)}
+                onClick={() => goItem(p, null)}
                 title={`${PHASE_LABEL[p] ?? p}${state === 'current' ? ' — current stage' : ''}`}
                 className={`flex items-center gap-1 rounded-md px-1.5 py-1 text-[10.5px] font-medium uppercase tracking-wide transition ${
                   on ? 'bg-hover text-fg' : 'text-faint hover:text-fg'
@@ -329,16 +346,12 @@ export default function WorkItemModal({
 
       {/* Sub-tabs — P0-curated for the selected stage; the gate brief leads where one exists. */}
       <div className="flex shrink-0 gap-1 border-b border-line px-4">
-        {[...subTabs,
-          // The Deputy log appears only once the deputy has acted on this item — its governance
-          // moves (approve / send-back / escalate) + rationale live HERE, out of the chat (Q1-E).
-          ...(events.some((e) => String(e.kind).startsWith('deputy')) ? ['deputy' as SubTab] : []),
-          'trace' as SubTab].map((id) => {
+        {subTabs.map((id) => {
           const { label, icon: Icon } = SUB_META[id]
           return (
             <button
               key={id}
-              onClick={() => setSub(id)}
+              onClick={() => goItem(phaseView, id)}
               className={`flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm transition ${
                 sub === id ? 'border-accent text-fg' : 'border-transparent text-muted hover:text-fg'
               }`}
@@ -392,7 +405,7 @@ export default function WorkItemModal({
             )}
           </>
         ))}
-        {(sub === 'validation' || sub === 'findings' || sub === 'closeout') && (!detail ? <Loading /> : (
+        {sub === 'investigation' && (!detail ? <Loading /> : (
           <Section icon={SUB_META[sub].icon} title={SUB_META[sub].label}>
             {detail.docs?.[sub] ? (
               <Markdown text={detail.docs[sub]!} variant="doc" tone="dev" />
@@ -424,7 +437,7 @@ export default function WorkItemModal({
               autoFocus
               value={abandonReason}
               onChange={(e) => setAbandonReason(e.target.value)}
-              placeholder="Why abandon? (lands in the closeout)"
+              placeholder="Why drop it? (lands in the closeout)"
               className="min-w-0 flex-1 rounded-md border border-line bg-sunken px-2 py-1.5 text-xs text-fg placeholder:text-faint"
             />
             <button
@@ -432,7 +445,7 @@ export default function WorkItemModal({
               disabled={advancing}
               className="inline-flex items-center gap-1.5 rounded-md bg-danger px-3 py-1.5 text-xs font-medium text-on-accent hover:opacity-90 disabled:opacity-50"
             >
-              {advancing ? <Loader2 size={14} className="animate-spin" /> : <Ban size={14} />} Abandon
+              {advancing ? <Loader2 size={14} className="animate-spin" /> : <Ban size={14} />} Drop
             </button>
             <button onClick={() => setAbandoning(false)} className="text-xs text-muted hover:text-fg">Cancel</button>
           </div>
@@ -459,7 +472,7 @@ export default function WorkItemModal({
               </button>
             ) : completed ? (
               <span className="inline-flex items-center gap-1.5 text-xs text-success">
-                <Check size={14} /> {it.outcome === 'abandoned' ? 'Abandoned' : it.outcome === 'superseded' ? 'Superseded' : 'Completed · trace archived'}
+                <Check size={14} /> {it.outcome === 'abandoned' ? 'Dropped' : it.outcome === 'superseded' ? 'Superseded' : 'Completed · trace archived'}
               </span>
             ) : atClose ? (
               <button
@@ -514,10 +527,10 @@ export default function WorkItemModal({
               {!completed && (
                 <button
                   onClick={() => setAbandoning(true)}
-                  title="Abandon — terminal without completing: worktree removed, branch kept, zero knowledge writes"
+                  title="Drop — terminal without completing: worktree removed, branch kept, zero knowledge writes"
                   className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs text-faint transition hover:text-danger"
                 >
-                  <Ban size={14} /> Abandon
+                  <Ban size={14} /> Drop
                 </button>
               )}
               {preBuild && (
@@ -540,7 +553,7 @@ export default function WorkItemModal({
           <History size={14} />
           Viewing the {PHASE_LABEL[phaseView] ?? phaseView} stage — this item is at{' '}
           {PHASE_LABEL[phase] ?? phase}.
-          <button onClick={() => setPhaseView(phase)} className="ml-auto text-accent-text hover:underline">
+          <button onClick={() => goItem(phase, null)} className="ml-auto text-accent-text hover:underline">
             Back to current
           </button>
         </div>
@@ -818,7 +831,7 @@ function GateBriefPane({ brief, err }: { brief: GateBrief | null; err: string | 
 // coded feed. Density by omission — `.start` rows say nothing their `.end` twin doesn't, so they
 // are dropped; milestones (gates, merges, completion) read emphasized, telemetry reads quiet.
 const MILESTONE_KINDS = new Set([
-  'phase.advance', 'git.merge', 'git.worktree', 'git.revert', 'item.complete', 'item.abandon',
+  'phase.advance', 'git.merge', 'git.pr', 'git.worktree', 'git.revert', 'item.complete', 'item.abandon',
   'close.proposed', 'review.route', 'inbox.push', 'item.await',
 ])
 function TimelinePane({ events }: { events: DevEvent[] }) {
@@ -914,15 +927,20 @@ function CheckpointsPane({ stubs }: { stubs: { ts: string; headline: string; git
 
 // Live git state + the owner's git actions (S4 routes): freshness sync anytime, the review
 // merge, and the always-offered revert while the backup ref stands.
-function GitPane({ it, contextId, onChanged }: { it: WorkItem; contextId: string; onChanged: () => void }) {
-  const [health, setHealth] = useState<GitHealth | null>(null)
+function GitPane({ it, contextId, onChanged }: {
+  it: WorkItem; contextId: string; onChanged: () => void
+}) {
+  // The PR is open when the deputy approved and the merge hasn't happened — derived from the two
+  // facts that decide it, exactly as the backend does, so the two can never disagree.
+  const prOpen = !!it.git_pr_opened_at && !it.git_merge_commit
   const [busy, setBusy] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
-  const load = () => {
-    getWorkItemGit(it.id, contextId).then(setHealth).catch((e) => setMsg(String(e)))
-  }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(load, [it.id, contextId])
+  // Live, not fetch-once: ahead/behind and `dirty` move underneath an open tab whenever a build or
+  // vet cycle commits, and the previous one-shot read left the counts frozen at whatever they were
+  // when the tab was first shown.
+  const gitQ = useLive<GitHealth>(K.itemGit(contextId, it.id), () => getWorkItemGit(it.id, contextId), 10000)
+  const health = gitQ.data ?? null
+  const load = gitQ.refresh
   async function act(name: string, fn: () => Promise<unknown>) {
     setBusy(name)
     setMsg(null)
@@ -944,9 +962,14 @@ function GitPane({ it, contextId, onChanged }: { it: WorkItem; contextId: string
   const rows: [string, React.ReactNode][] = [
     ['branch', <span className="font-mono">{health.branch ?? it.git_branch}</span>],
     ['worktree', health.dir_exists ? <span className="font-mono">{health.worktree}</span> : <span className="text-faint">removed (terminal)</span>],
-    ['vs trunk', `ahead ${health.ahead ?? 0} · behind ${health.behind ?? 0}${health.behind ? ' — sync first' : ''}`],
+    ['anchor', <span className="font-mono">{health.trunk ?? '—'}</span>],
+    [`vs ${health.trunk ?? 'anchor'}`, `ahead ${health.ahead ?? 0} · behind ${health.behind ?? 0}${health.behind ? ' — sync first' : ''}`],
     ['merged', health.merged ? `yes${it.git_merge_commit ? ` (${String(it.git_merge_commit).slice(0, 10)})` : ''}` : 'not yet'],
     ['dirty', health.dirty?.length ? health.dirty.join(', ') : 'clean'],
+    // The repo's rule, echoed read-only where the merge is — set it in Quick config → Per-repo.
+    ['landing', health.review_mode === 'strict'
+      ? 'strict — approving opens a PR; you merge from the PR page'
+      : 'fast — approving merges it'],
   ]
   return (
     <div className="space-y-3">
@@ -959,17 +982,51 @@ function GitPane({ it, contextId, onChanged }: { it: WorkItem; contextId: string
         ))}
       </dl>
       <div className="flex flex-wrap items-center gap-2">
-        <GitBtn icon={RefreshCw} label="Sync from main" busy={busy === 'sync'}
+        <GitBtn icon={RefreshCw} label={`Sync from ${health.trunk ?? 'anchor'}`} busy={busy === 'sync'}
                 onClick={() => act('sync', () => syncWorkItemGit(it.id, contextId))}
-                title="Merge the trunk INTO the item branch (freshness — makes the real merge trivial)" />
+                title="Merge the anchor branch INTO the item branch (freshness — makes the real merge trivial)" />
+        {/* The park path's exit (§2.3). A conflicting sync holds the item at review and the refusal
+            says "Resolve-with-Agent" — which, until now, named a control that did not exist: the
+            route and its API binding were both built, and nothing called them. The human decides
+            WHETHER; the agent resolves in the worktree (D4) — nobody hand-edits conflict markers.
+            Offered whenever the branch is behind, since that is when a conflict is possible; the
+            route itself refuses cleanly ("nothing to resolve") if the sync turns out clean. */}
+        {!health.merged && !!health.behind && (
+          <GitBtn icon={GitMerge} label="Resolve with agent" busy={busy === 'resolve'}
+                  onClick={() => act('resolve', () => resolveWorkItemGit(it.id, contextId))}
+                  title="Conflicts only: re-runs the sync leaving the conflicts in the worktree, then an agent resolves them there. The daemon completes the merge and the item re-enters vet." />
+        )}
         {/* B2: the merge is no longer a standalone button — it IS the review gate's Approve
             ("Approve & merge" in the Gate tab). One decision, one act; a lone Merge that left the
             item at review unmerged was exactly the stranding this fix removes. */}
-        {!health.merged && it.phase === 'review' && (
-          <span className="inline-flex items-center gap-1.5 rounded-md border border-line bg-surface px-2.5 py-1.5 text-[11px] text-faint">
-            <GitMerge size={13} /> Merge happens at the Gate → “Approve &amp; merge”
-          </span>
-        )}
+        {/* Every action this pane owns is RENDERED ALWAYS and disabled when it isn't workable, with
+            the reason in the tooltip (owner rule, 2026-07-29). Mode-conditional rendering read as a
+            missing feature: a `fast` repo simply had no PR button anywhere, and nothing on screen
+            said why. A greyed control that explains itself teaches the model; an absent one hides
+            it. No Reject either way: a change that isn't good enough is said in the item's chat,
+            and the agent calls `revise` (§2.1). */}
+        {/* Opens in its OWN browser tab — a diff wants the whole screen, and this window keeps the
+            board and the item's chat where they are. It is a real path now (`/repo/:id/item/:item/pr`,
+            still forked at main.tsx above the cockpit), so the tab is linkable and bookmarkable
+            rather than carrying its state in a query string. */}
+        <GitBtn icon={ExternalLink} label="Open PR page" busy={false}
+                disabled={!health.branch_exists}
+                href={build({ name: 'pr', repoId: contextId, itemId: it.id })}
+                title={!health.branch_exists
+                  ? 'No branch yet — it is created when build starts'
+                  : 'Opens a new tab: the review report beside the branch’s diff, grouped by the '
+                    + 'plan’s tasks. Readable in any mode, before or after the merge.'} />
+        <GitBtn icon={GitMerge} label="Merge" busy={busy === 'merge'} accent
+                disabled={health.merged || health.review_mode !== 'strict' || !prOpen}
+                onClick={() => act('merge', () => advanceWorkItem(it.id, contextId))}
+                title={health.merged
+                  ? 'Already merged — see the merge commit above'
+                  : health.review_mode !== 'strict'
+                    ? 'This repo is `fast`: approving at the Gate (“Approve & merge”) lands it. '
+                      + 'Switch the repo to `strict` to merge from the PR page instead.'
+                    : prOpen
+                      ? 'Squash this branch onto the anchor and advance to close'
+                      : 'Active once the deputy has approved and handed you the merge'} />
         {it.git_backup_ref && (
           <GitBtn icon={Undo2} label="Revert merge" busy={busy === 'revert'}
                   onClick={() => act('revert', () => revertWorkItemGit(it.id, contextId))}
@@ -981,20 +1038,29 @@ function GitPane({ it, contextId, onChanged }: { it: WorkItem; contextId: string
   )
 }
 
-function GitBtn({ icon: Icon, label, onClick, busy, title, accent }: {
-  icon: typeof RefreshCw; label: string; onClick: () => void; busy?: boolean; title?: string; accent?: boolean
+function GitBtn({ icon: Icon, label, onClick, href, busy, title, accent, disabled }: {
+  icon: typeof RefreshCw; label: string; onClick?: () => void; busy?: boolean; title?: string
+  // A real link, opened in a new tab. `window.open` is a scripted popup — browsers and embedded
+  // panes are entitled to refuse it, and one of ours does. An anchor is navigation: it always
+  // opens, and it comes with ⌘-click, middle-click and "open in new window" for free.
+  href?: string
+  accent?: boolean
+  // The universal activation rule (§4): a git action is live EXACTLY when it is the one required.
+  disabled?: boolean
 }) {
+  const cls = `inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs transition disabled:opacity-50 ${
+    accent ? 'bg-accent font-medium text-on-accent hover:opacity-90'
+           : 'border border-line bg-surface text-muted hover:bg-hover hover:text-fg'
+  }`
+  const inner = <>{busy ? <Loader2 size={13} className="animate-spin" /> : <Icon size={13} />} {label}</>
+  if (href && !disabled && !busy) {
+    return (
+      <a href={href} target="_blank" rel="noopener" title={title} className={cls}>{inner}</a>
+    )
+  }
   return (
-    <button
-      onClick={onClick}
-      disabled={!!busy}
-      title={title}
-      className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs transition disabled:opacity-50 ${
-        accent ? 'bg-accent font-medium text-on-accent hover:opacity-90'
-               : 'border border-line bg-surface text-muted hover:bg-hover hover:text-fg'
-      }`}
-    >
-      {busy ? <Loader2 size={13} className="animate-spin" /> : <Icon size={13} />} {label}
+    <button onClick={onClick} disabled={!!busy || !!disabled} title={title} className={cls}>
+      {inner}
     </button>
   )
 }

@@ -23,9 +23,10 @@ from ...core import Init, Usage, Result, Status, TextDelta, ToolResult, scoped_w
 from ...core import artifacts as _arts
 from ...core import autopilot as _autopilot
 from ...core.autopilot import PROMPT_EXTRACTION_FEATURE
-from ...core import git_layer, kernel_speech, session_contract
+from ...core import git_layer, kernel_speech, kind_profiles
 from ...core.models import MODEL_TIERS
 from ...harness.tools.dev_tools import make_dev_mcp_server
+from ...harness.tools.run_tools import make_run_report_server
 
 log = logging.getLogger("superme-agent")
 
@@ -102,7 +103,7 @@ class _LiveTokens:
 def _end_run(ctx, context_id: str, item_id: str, tokens: int | None,
              status: str = "active", usage: dict | None = None,
              ctx_pct: int | None = None, outcome: str | None = None,
-             session_id: str | None = None) -> None:
+             session_id: str | None = None, summary: str = "") -> None:
     """Close out a run: finalize its spine row (keeping the accumulated live token sum, or the
     passed Result aggregate as a fallback) and set the work-item's resting status. Interactive
     (bound-chat) turns rest at `active`; a BACKGROUND phase run that ends at a human gate passes
@@ -128,7 +129,32 @@ def _end_run(ctx, context_id: str, item_id: str, tokens: int | None,
     # Scheduled (not inline) so this run's lock is fully released before the next phase's `_begin_run`
     # fires — and so a blocking git/plan step never stalls run finalization. No-op when not on a loop
     # (offline tests exercise the driver directly). See services/gates.maybe_autopilot_advance.
-    if status == "awaiting_human":
+    # Plan's grill (renovation §2): `needs_user` pages the OWNER directly — questions are not
+    # phase output, so the deputy is not in this path. The item parks per-item (the cohort keeps
+    # running); the owner's answers arrive as chat, and only the agent's post-answer report
+    # re-enters the normal judged flow.
+    # `revise` (renovation §2.1): the review conversation concluded the WORK must change. It is the
+    # ONE way back to re-work — there is no send-back button anywhere — and it rides the SAME path
+    # the deputy's send_back already uses (`fire_phase_feedback` flips review→plan and posts the
+    # turn on the item's own intake thread), because the conversation IS the context: nothing is
+    # handed over and nothing is re-derived. Owner-attributed: they concluded it, the agent only
+    # reported the conclusion.
+    # Compaction: a real turn just reported fresh usage, so release this session's defer latch —
+    # the NEXT run-start check will read this run's fill. Nothing is EVALUATED here. The trigger
+    # lives at run start (ws.py for a bound turn, gates.maybe_autopilot_advance for the background
+    # chain), where the lock is free by construction and there is no queued phase to strand.
+    if kind != "compact" and session_id:
+        from . import compaction
+        compaction.note_turn_start(session_id)
+    if outcome == "revise":
+        try:
+            fire_phase_feedback(context_id, item_id, phase="review",
+                                feedback=summary or "the review concluded this needs re-planning",
+                                by="owner")
+        except Exception:
+            log.exception("revise routing failed for %s (item stays at review)", item_id)
+        return
+    if status == "awaiting_human" and outcome != "needs_user":
         try:
             from .gates import maybe_autopilot_advance
             asyncio.get_running_loop().call_soon(
@@ -227,8 +253,9 @@ def capture_run_input(context_id: str, item_id: str, *, ctx, system_append: str 
                       prompt: str, background: bool, phase: str | None) -> None:
     """Prompt inspector "A": persist the ACTUAL input the item's live run is about to send — the
     assembled system prompt (built through the SAME `assemble_system_append` seam `_build_options`
-    uses, with THIS run's exact ctx / system_append / background) + the prompt body. Keyed to the
-    live run. Faithful by construction; best-effort — never breaks a turn.
+    uses, with THIS run's exact ctx / system_append) + the prompt body. `background` is stored as
+    display metadata only (the run-protocol delta now lives inside system_append itself). Keyed to
+    the live run. Faithful by construction; best-effort — never breaks a turn.
 
     Called ONLY for throwaway prompt-extraction items (the call sites gate on
     `autopilot.is_prompt_extraction(item)`) — normal work-item runs no longer capture, so the
@@ -240,14 +267,12 @@ def capture_run_input(context_id: str, item_id: str, *, ctx, system_append: str 
         if rid is None:
             return
         _spine.set_run_feature(rid, PROMPT_EXTRACTION_FEATURE)   # tag the kept trace
-        system_prompt = _agent.assemble_system_append(ctx, system_append=system_append,
-                                                      background=background)
+        system_prompt = _agent.assemble_system_append(ctx, system_append=system_append)
         # Also capture the system prompt's provenance breakdown (ordered [{name,location,text}]) so
         # the inspector renders per-fragment sub-cards. Same builder as `system_prompt` above, so the
         # fragments sum to it. Guarded: a serialization hiccup must never lose the whole capture.
         try:
-            frags = _agent.assemble_system_fragments(ctx, system_append=system_append,
-                                                     background=background)
+            frags = _agent.assemble_system_fragments(ctx, system_append=system_append)
             fragments_json = _json.dumps(frags, ensure_ascii=False)
         except Exception:  # noqa: BLE001
             fragments_json = None
@@ -336,6 +361,7 @@ def bank_auto_checkpoint(ctx, item_id: str, *, since: float | None = None) -> bo
     try:
         _arts.write_checkpoint(
             item_dir, repo_dir,
+            role=kind_profiles.session_role(str(item.get("phase") or "triage")),
             working_on=f"{item.get('phase') or 'triage'} phase — {item.get('title') or item_id}",
             decisions="(auto-banked at session end — the session's reasoning lives in its transcript)",
             remaining=remaining,
@@ -345,6 +371,36 @@ def bank_auto_checkpoint(ctx, item_id: str, *, since: float | None = None) -> bo
         return True
     except ValueError:
         return False
+
+
+def compacted_checkpoint(ctx, item: dict, session_id: str | None) -> str | None:
+    """The checkpoint path this thread is owed a pointer to, or None.
+
+    Owed only while the session's newest finished run IS the compaction (spine —
+    self-clearing, restart-proof), and resolved to THIS THREAD's newest checkpoint via the role
+    stamp: three threads bank into one folder, and handing a compacted intake thread the build
+    thread's checkpoint would present work it never did as recovered memory."""
+    if not (session_id and ctx.internal_root and item):
+        return None
+    if not _spine.session_compacted_pending(session_id):
+        return None
+    role = kind_profiles.session_role(str(item.get("phase") or "triage"))
+    item_dir = ctx.internal_root / "dev" / "work-items" / str(item.get("id") or "")
+    cp = _arts.latest_checkpoint(item_dir, char_cap=1, role=role)
+    return cp["path"] if cp else None
+
+
+def compacted_session_memory(ctx, session_id: str | None) -> str | None:
+    """`compacted_checkpoint`'s general-session twin (§13.4 / T5): the `session-memory/` path this
+    thread is owed a pointer to, or None. Same self-clearing gate (the session's newest finished
+    run IS the compaction), and no role scoping — a general session has exactly one thread. None
+    when the handoff turn failed to write one, so the notice is never a pointer at nothing."""
+    if not (session_id and ctx.internal_root):
+        return None
+    if not _spine.session_compacted_pending(session_id):
+        return None
+    mem = _arts.read_session_memory(ctx.internal_root / ctx.mode, session_id, char_cap=1)
+    return mem["path"] if mem else None
 
 
 def reset_vet_thread(ctx, item: dict, *, dev=None, sessions=None) -> bool:
@@ -364,6 +420,19 @@ def reset_vet_thread(ctx, item: dict, *, dev=None, sessions=None) -> bool:
     return True
 
 
+def read_completion(context_id: str, item_id: str, sink: dict) -> dict | None:
+    """A background run's completion payload out of its `report_completion` sink (run_tools) —
+    None when the run never called the tool (a legacy/unstructured ending; callers warn so drift
+    is visible). Persists the payload as the run.report event, the DB record keyed to this item's
+    run trail."""
+    report = sink.get("report")
+    if report:
+        _dev_store.log_event(context_id, "run.report",
+                             f"{report['outcome']}: {report['summary'][:160]}",
+                             item_id=item_id, actor="agent", meta=report)
+    return report
+
+
 def _dev_mcp(ctx, repo_dir: Path, item_id: str) -> dict:
     """The dev MCP server for a background intake/resolve run (F8-residual, playground-e2e-blockers:
     these runners went tool-less while the loop runners got the mount in step 5) — same shape as
@@ -375,6 +444,7 @@ def _dev_mcp(ctx, repo_dir: Path, item_id: str) -> dict:
         dev_root=ctx.internal_root / "dev",
         repo_dir=repo_dir, main_repo_dir=ctx.cwd,
         bound_item_id=item_id,
+        fire_triage=lambda child_id: fire_auto_triage(ctx.id, child_id, _spine),
     )}
 
 
@@ -385,6 +455,19 @@ async def _run_background_plan(ctx, context_id: str, item_id: str, item_dir: Pat
                                  skill="plan", model=model, effort=effort)
 
 
+async def _run_background_item_skill(ctx, context_id: str, item_id: str, item_dir: Path,
+                                     skill: str, model: str | None = None,
+                                     effort: str | None = None) -> None:
+    """The generic phase-entry runner: any auto-fired item skill that is NOT plan — `review` (every
+    kind, on review entry), research's `investigate`, and research's `itemize` on review approve.
+    All carry the item's INTAKE role (kind_profiles: one thread end to end, no fresh-perspective
+    boundary), so they ride the same runner as plan/triage and only the skill differs. Named for
+    what it does rather than for one kind: it was `_run_background_research` while review had no
+    runner and research was the only caller. Thin wrapper over _background_intake_run."""
+    await _background_intake_run(ctx, context_id, item_id, item_dir,
+                                 skill=skill, model=model, effort=effort)
+
+
 async def _run_background_triage(ctx, context_id: str, item_id: str, item_dir: Path,
                                  model: str | None = None, effort: str | None = None) -> None:
     """Auto-triage on push (#120) — one /triage turn, no surface, fired when an inbox item is
@@ -393,6 +476,50 @@ async def _run_background_triage(ctx, context_id: str, item_id: str, item_dir: P
     glances + approves). Thin wrapper over _background_intake_run."""
     await _background_intake_run(ctx, context_id, item_id, item_dir,
                                  skill="triage", model=model, effort=effort)
+
+
+def fire_review_entry(context_id: str, item_id: str, spine) -> bool:
+    """Fire the REVIEW-ENTRY run for an item that just landed at review (renovation §2.2). Shared
+    by the two ways in, so neither can drift from the other: `advance_item`'s auto-fire (an owner
+    Approve at vet, an owner force, a deputy advance) and the LOOP's vet→review hop, which
+    CAS-flips the phase itself and never touches advance_item.
+
+    That second path is why this exists as a function. The loop is how items normally reach review;
+    wiring the run only into advance_item would have left the common path with no report at all —
+    the same shape of hole that left the old review skill with no runner for its whole life.
+
+    The item rests `awaiting_human` when it gets here (the loop's rest status), so this flips it to
+    `active` for the duration: `active` with no run is an idle stall, and `awaiting_human` while a
+    run works is a lie about who is waiting. On any failure the item is put back to
+    `awaiting_human` — a review with no report is still a gate the owner can act on, just a poorer
+    one. Best-effort, never raises. Returns True iff a run was started."""
+    from ...gateway import contexts   # lazy: avoid an import cycle at module load
+    try:
+        ctx = contexts.resolve(context_id, "dev")
+        if not ctx.internal_root:
+            return False
+        dev_root = ctx.internal_root / "dev"
+        item = _dev.read_work_item(dev_root, item_id) or {}
+        if not item or str(item.get("phase")) != "review" or item.get("done_at"):
+            return False
+        if str(item.get("status")) not in ("active", "awaiting_human"):
+            return False   # paused / parked — the owner's hold wins
+        model = spine.effective_model(context_id, item_model=item.get("model"))
+        effort = spine.effective_effort(context_id, item_effort=item.get("effort"))
+        if _begin_run(ctx, context_id, item_id, "review", model, phase="review") is None:
+            return False   # a run is already in flight — don't double-fire
+        _dev.set_work_item_status(dev_root, item_id, "active")
+        asyncio.create_task(
+            _run_background_item_skill(ctx, context_id, item_id,
+                                       dev_root / "work-items" / item_id, "review", model, effort))
+        return True
+    except Exception:
+        log.exception("review-entry run failed to start for %s", item_id)
+        try:
+            _dev.set_work_item_status(ctx.internal_root / "dev", item_id, "awaiting_human")
+        except Exception:
+            pass
+        return False
 
 
 def fire_auto_triage(context_id: str, item_id: str, spine) -> bool:
@@ -464,6 +591,11 @@ def fire_phase_feedback(context_id: str, item_id: str, *, phase: str, feedback: 
         # review/build/vet context so the re-plan knows it's feedback from the earlier plan's results.
         run_phase = "plan" if phase == "review" else phase
         if phase == "review":
+            # `strict` (§2.2): a send-back spends the approval, so the PR closes with it — the diff
+            # it described is about to change. See git_ops.close_pr. No-op in `fast` repos and on
+            # any item that never had one open.
+            from .git_ops import close_pr
+            close_pr(_dev, dev_root, item_id)
             _dev.set_work_item_phase(dev_root, item_id, "plan")
             _dev_store.log_event(context_id, "review.route",
                                  f"Review feedback routed back to plan: {feedback[:160]}",
@@ -515,12 +647,14 @@ async def _run_deputy_feedback_turn(ctx, context_id: str, item_id: str, item_dir
     capture_prompt(context_id, prompt, item_id=item_id)
     # Current-focus pointer (thin, per-turn): re-read the item AFTER any review→plan phase flip so
     # the pointer names the phase this re-run actually works.
+    live_item = _dev.read_work_item(dev_root, item_id) or {"id": item_id, "phase": phase}
     focus = kernel_speech.work_item_preamble(
-        item_id, _dev.read_work_item(dev_root, item_id) or {"id": item_id, "phase": phase},
-        str(item_dir), interactive=False)
-    final_tokens = final_usage = final_text = final_session = None
+        item_id, live_item, str(item_dir), interactive=False,
+        compacted_checkpoint=compacted_checkpoint(ctx, live_item, session_id))
+    final_tokens = final_usage = final_session = None
     run_started = time.time()
     live = _LiveTokens()
+    sink: dict = {}   # report_completion lands here (run_tools) — read after the turn
     try:
         async for ev in _agent.run_turn(
             ctx, prompt,
@@ -528,17 +662,16 @@ async def _run_deputy_feedback_turn(ctx, context_id: str, item_id: str, item_dir
             model=model,
             effort=effort or _spine.effective_effort(context_id),
             approve=scoped_writes_approve(item_dir, deny_all),
-            extra_mcp_servers=_dev_mcp(ctx, ctx.cwd, item_id),
-            system_append=focus,   # Current-focus pointer (item · phase · boundary · gate)
-            background=True,
+            extra_mcp_servers={**_dev_mcp(ctx, ctx.cwd, item_id),
+                               "run": make_run_report_server(sink)},
+            system_append=focus,   # Current-focus pointer incl. the run protocol
         ):
             if isinstance(ev, Usage):
                 live.bump(context_id, item_id, ev)
             elif isinstance(ev, (Status, ToolResult)):
                 _log_artifact(context_id, item_id, ev)
             elif isinstance(ev, Result):
-                final_tokens, final_usage, final_text, final_session = (
-                    ev.tokens, ev.usage, ev.text, ev.session_id)
+                final_tokens, final_usage, final_session = (ev.tokens, ev.usage, ev.session_id)
                 _sessions.record(ctx, ev.session_id)
                 if ev.session_id:
                     try:
@@ -553,11 +686,7 @@ async def _run_deputy_feedback_turn(ctx, context_id: str, item_id: str, item_dir
     except Exception:
         log.exception("deputy feedback re-run turn failed for %s", item_id)
     finally:
-        report = session_contract.parse_completion_report(final_text)
-        if report:
-            _dev_store.log_event(context_id, "run.report",
-                                 f"{report['outcome']}: {report['summary'][:160]}",
-                                 item_id=item_id, actor="agent", meta=report)
+        report = read_completion(context_id, item_id, sink)
         _end_run(ctx, context_id, item_id, final_tokens, "awaiting_human", final_usage,
                  outcome=(report or {}).get("outcome"), session_id=final_session)
         try:
@@ -572,9 +701,11 @@ def fire_close_run(context_id: str, item_id: str, spine) -> bool:
     Complete click passes the close gate (nobody was doing this on the autonomous path, wedging the
     item at close). Mirrors the auto-plan-on-advance kick: fires ONLY for an item resting at phase
     `close` with no run in flight; the run drafts + `propose_close`, never self-completes (D8 human
-    floor). Best-effort — returns True iff the close run started; any failure leaves the item at
-    close for the owner to drive by hand, never raises."""
+    floor). Best-effort — returns True iff the close run started; when it doesn't, the item is
+    rested at `awaiting_human` so the owner sees a gate to drive by hand rather than an `active`
+    item with no run behind it (the idle stall). Never raises."""
     from ...gateway import contexts   # lazy: avoid an import cycle at module load
+    ctx = None
     try:
         ctx = contexts.resolve(context_id, "dev")
         if not ctx.internal_root:
@@ -586,7 +717,7 @@ def fire_close_run(context_id: str, item_id: str, spine) -> bool:
         model = spine.effective_model(context_id, item_model=item.get("model"))
         effort = spine.effective_effort(context_id, item_effort=item.get("effort"))
         if _begin_run(ctx, context_id, item_id, "close", model, phase="close") is None:
-            return False   # a run is already in flight — don't double-fire
+            return False   # a run is already in flight — don't double-fire (it owns the status)
         asyncio.create_task(
             _run_background_close(ctx, context_id, item_id, dev_root / "work-items" / item_id,
                                   model, effort))
@@ -594,6 +725,19 @@ def fire_close_run(context_id: str, item_id: str, spine) -> bool:
     except Exception:
         log.exception("auto-close failed to start for %s", item_id)
         return False
+    finally:
+        # No run started and the item is still sitting `active` at close ⇒ nothing will ever move
+        # it. Rest it at the gate instead. (A started run owns the status from here.)
+        try:
+            if ctx is not None and ctx.internal_root:
+                d_root = ctx.internal_root / "dev"
+                it = _dev.read_work_item(d_root, item_id) or {}
+                if (not it.get("done_at") and str(it.get("phase")) == "close"
+                        and str(it.get("status")) == "active"
+                        and not _spine.is_item_running(context_id, item_id)):
+                    _dev.set_work_item_status(d_root, item_id, "awaiting_human")
+        except Exception:
+            log.exception("close-phase status reconcile failed for %s", item_id)
 
 
 async def _run_background_close(ctx, context_id: str, item_id: str, item_dir: Path,
@@ -610,14 +754,17 @@ async def _run_background_close(ctx, context_id: str, item_id: str, item_dir: Pa
     capture_prompt(context_id, prompt, item_id=item_id)
     # Current-focus pointer (thin, per-turn) — the resumed transcript carries the orient bulk;
     # this is the standing phase/role pointer every runner now sends.
-    focus = kernel_speech.work_item_preamble(item_id, item, str(item_dir), interactive=False)
+    focus = kernel_speech.work_item_preamble(
+        item_id, item, str(item_dir), interactive=False,
+        compacted_checkpoint=compacted_checkpoint(ctx, item, session_id))
     # Prompt inspector "A" — throwaway probes ONLY: capture matches the real send exactly.
     if _autopilot.is_prompt_extraction(item):
         capture_run_input(context_id, item_id, ctx=ctx, system_append=focus, prompt=prompt,
                           phase="close", background=True)
-    final_tokens = final_usage = final_text = final_session = None
+    final_tokens = final_usage = final_session = None
     run_started = time.time()
     live = _LiveTokens()
+    sink: dict = {}   # report_completion lands here (run_tools) — read after the turn
     try:
         async for ev in _agent.run_turn(
             ctx, prompt,
@@ -625,17 +772,16 @@ async def _run_background_close(ctx, context_id: str, item_id: str, item_dir: Pa
             model=model,
             effort=effort or _spine.effective_effort(context_id),
             approve=scoped_writes_approve(item_dir, deny_all),
-            extra_mcp_servers=_dev_mcp(ctx, ctx.cwd, item_id),
-            system_append=focus,   # Current-focus pointer (item · phase · boundary · gate)
-            background=True,
+            extra_mcp_servers={**_dev_mcp(ctx, ctx.cwd, item_id),
+                               "run": make_run_report_server(sink)},
+            system_append=focus,   # Current-focus pointer incl. the run protocol
         ):
             if isinstance(ev, Usage):
                 live.bump(context_id, item_id, ev)
             elif isinstance(ev, (Status, ToolResult)):
                 _log_artifact(context_id, item_id, ev)
             elif isinstance(ev, Result):
-                final_tokens, final_usage, final_text, final_session = (
-                    ev.tokens, ev.usage, ev.text, ev.session_id)
+                final_tokens, final_usage, final_session = (ev.tokens, ev.usage, ev.session_id)
                 _sessions.record(ctx, ev.session_id)
                 if ev.session_id:
                     try:
@@ -650,11 +796,7 @@ async def _run_background_close(ctx, context_id: str, item_id: str, item_dir: Pa
     except Exception:
         log.exception("auto-close run failed for %s", item_id)
     finally:
-        report = session_contract.parse_completion_report(final_text)
-        if report:
-            _dev_store.log_event(context_id, "run.report",
-                                 f"{report['outcome']}: {report['summary'][:160]}",
-                                 item_id=item_id, actor="agent", meta=report)
+        report = read_completion(context_id, item_id, sink)
         _end_run(ctx, context_id, item_id, final_tokens, "awaiting_human", final_usage,
                  outcome=(report or {}).get("outcome"), session_id=final_session)
         try:
@@ -675,8 +817,8 @@ async def _background_intake_run(ctx, context_id: str, item_id: str, item_dir: P
     re-run (e.g. to try another model) actually re-does it instead of a resumed agent saying
     "already done". Any prior intake thread is replaced — its session is purged once the new one
     is recorded, keeping the picker clean (a no-op for a fresh triage, which has none). The run
-    contract (kernel-fired, completion-report fence) rides the per-turn system layer via
-    `background=True` — never the durable transcript, which this session keeps for later
+    protocol (kernel-fired, report_completion ending) rides the per-turn Current-focus background
+    variant — never the durable transcript, which this session keeps for later
     interactive chat. Persists the new session, sandboxes writes to the item folder; status is
     owned here: active while running → awaiting_human (the item sits at the owner's gate) on
     finish."""
@@ -686,22 +828,29 @@ async def _background_intake_run(ctx, context_id: str, item_id: str, item_dir: P
     # or its still-unadopted legacy `session_id` on a pre-roles item.
     prev_session = ((item.get("sessions") or {}).get("intake")
                     or item.get("session_id") or None)
+    # Bank BEFORE the thread dies (compaction-redesign §13, row 5). This runner mints a fresh
+    # intake session and then DELETES the previous one — so the whole triage conversation, owner
+    # clarifications at the gate included, is gone with nothing carrying it. Not resuming is right
+    # (a re-plan must not read as "already done") and deleting is right (the picker holds one
+    # intake slot), but carrying NOTHING is not: lossy beats gone. Derived, not a model call —
+    # there is no agent turn available here (the old thread is dying, nothing is running), and
+    # paying a summarization call at every triage→plan for a conversation that is often just
+    # "approve" is bad economics. `since=None` so it always banks, even if one landed recently.
+    if prev_session:
+        try:
+            bank_auto_checkpoint(ctx, item_id)
+        except Exception:
+            log.exception("pre-replace checkpoint failed for %s", item_id)
     title = item.get("title") or item_id
     # Thin trigger: which skill for which item — nothing else. The procedure lives in the
-    # superme-dev:<skill> skill (its "## Background runs" section); the run contract lives in the
-    # system layer (background=True below). On replay, sessions._strip_birth_block cuts the orient
-    # prefix and sessions._NOISE_PREFIXES drops this trigger phrase (one entry per intake skill —
-    # keep in sync when adding one).
+    # superme-dev:<skill> skill (its "## Background runs" section); the run protocol rides the
+    # Current-focus background variant below. Orientation is on-demand — the skill's directed
+    # reads over the item folder Current focus points at (the orient birth-block is retired,
+    # workflow-renovation-v2 §1). On replay, sessions._NOISE_PREFIXES drops this trigger phrase
+    # (one entry per intake skill — keep in sync when adding one).
     trigger = kernel_speech.intake_trigger(skill, item_id, title)
-    # Cold-start orient block (S5): a background intake run is always a FRESH session, so its birth
-    # prompt carries the same kernel-assembled orientation an interactive session gets.
-    orient = kernel_speech.render_orient_block(item, item_dir)
-    prompt = f"{orient}\n\n---\n\n{trigger}"
-    # The trail's first entry = what this run was asked to do (the trigger, not the orient bulk) —
-    # interactive turns get this from the ws path; background runs record their own.
+    prompt = trigger
     capture_prompt(context_id, trigger, item_id=item_id)
-    # Current-focus pointer (thin, per-turn): every background runner now carries it — the orient
-    # block in the body is the one-time orientation payload; this is the standing phase/role pointer.
     focus = kernel_speech.work_item_preamble(item_id, item, str(item_dir), interactive=False)
     # Prompt inspector "A" — throwaway probes ONLY: capture matches the real send exactly.
     # Normal items skip capture (the run_input table no longer grows per-run).
@@ -710,10 +859,10 @@ async def _background_intake_run(ctx, context_id: str, item_id: str, item_dir: P
                           phase=skill, background=True)
     final_tokens = None
     final_usage = None
-    final_text = None
     final_session = None
     run_started = time.time()
     live = _LiveTokens()   # dedupes the Usage stream by message_id for an accurate live estimate
+    sink: dict = {}   # report_completion lands here (run_tools) — read after the turn
     try:
         async for ev in _agent.run_turn(
             ctx, prompt,
@@ -721,9 +870,9 @@ async def _background_intake_run(ctx, context_id: str, item_id: str, item_dir: P
             model=model,
             effort=effort or _spine.effective_effort(context_id),  # item → repo → system → medium
             approve=scoped_writes_approve(item_dir, deny_all),
-            extra_mcp_servers=_dev_mcp(ctx, ctx.cwd, item_id),  # F8-residual: dev tools mounted
-            system_append=focus,   # Current-focus pointer (item · phase · boundary · gate)
-            background=True,   # per-turn run contract in the system layer (Thread 3 §3)
+            extra_mcp_servers={**_dev_mcp(ctx, ctx.cwd, item_id),
+                               "run": make_run_report_server(sink)},
+            system_append=focus,   # Current-focus pointer incl. the run protocol
         ):
             if isinstance(ev, Usage):
                 live.bump(context_id, item_id, ev)
@@ -732,7 +881,6 @@ async def _background_intake_run(ctx, context_id: str, item_id: str, item_dir: P
             elif isinstance(ev, Result):
                 final_tokens = ev.tokens
                 final_usage = ev.usage
-                final_text = ev.text
                 final_session = ev.session_id
                 _sessions.record(ctx, ev.session_id)
                 if ev.session_id:
@@ -759,20 +907,17 @@ async def _background_intake_run(ctx, context_id: str, item_id: str, item_dir: P
     except Exception:
         log.exception("background %s run failed for %s", skill, item_id)
     finally:
-        # Structured completion contract (S5/D2): parse the run's final report and persist its
-        # outcome onto the run row. A missing/invalid report = None (legacy/unstructured run —
-        # the event flags it so drift is visible).
-        report = session_contract.parse_completion_report(final_text)
-        if report:
-            _dev_store.log_event(context_id, "run.report",
-                                 f"{report['outcome']}: {report['summary'][:160]}",
-                                 item_id=item_id, actor="agent", meta=report)
-        else:
-            log.warning("background %s for %s ended without a completion report", skill, item_id)
+        # Structured completion (renovation §3.2): the run's report_completion payload, delivered
+        # through the sink and persisted onto the run row. A run that never called the tool is a
+        # legacy/unstructured ending — warned so drift is visible.
+        report = read_completion(context_id, item_id, sink)
+        if not report:
+            log.warning("background %s for %s ended without a report_completion call", skill, item_id)
         # Background intake finished (or died) — the item sits at the owner's pre-main gate (triage
         # exit or plan), the one status that pages them (D2 typed awaiting).
         _end_run(ctx, context_id, item_id, final_tokens, "awaiting_human", final_usage,
-                 outcome=(report or {}).get("outcome"), session_id=final_session)
+                 outcome=(report or {}).get("outcome"), session_id=final_session,
+                 summary=str((report or {}).get("summary") or ""))
         # Session-end checkpoint hook: a background session ends here — bank the fallback if the
         # run didn't write its own checkpoint.
         try:
@@ -792,13 +937,13 @@ async def _run_background_resolve(ctx, context_id: str, item_id: str, worktree: 
     re-enters `vet` on success (D4: re-vet before re-presenting). Failure pages the
     owner (`awaiting_human`) with the merge still in the tree for a retry or manual abort."""
     dev_root = ctx.internal_root / "dev"
-    # The conflict procedure is genuine task policy and stays in the trigger (kernel_speech);
-    # the run contract rides the system layer (background=True below).
+    # The conflict procedure is genuine task policy and stays in the trigger (kernel_speech).
+    # No report_completion mount here: the outcome is MECHANICAL (did the merge finish), never
+    # the agent's claim — this runner has no structured-report seam by design.
     prompt = kernel_speech.resolve_trigger(worktree, item_id, conflicts)
     capture_prompt(context_id, prompt, item_id=item_id)
     final_tokens = None
     final_usage = None
-    final_text = None
     final_session = None
     run_started = time.time()
     live = _LiveTokens()
@@ -810,7 +955,6 @@ async def _run_background_resolve(ctx, context_id: str, item_id: str, worktree: 
             effort=effort or _spine.effective_effort(context_id),
             approve=scoped_writes_approve(worktree, deny_all),
             extra_mcp_servers=_dev_mcp(ctx, worktree, item_id),  # F8-residual: dev tools mounted
-            background=True,   # per-turn run contract in the system layer (Thread 3 §3)
         ):
             if isinstance(ev, Usage):
                 live.bump(context_id, item_id, ev)
@@ -819,7 +963,6 @@ async def _run_background_resolve(ctx, context_id: str, item_id: str, worktree: 
             elif isinstance(ev, Result):
                 final_tokens = ev.tokens
                 final_usage = ev.usage
-                final_text = ev.text
                 final_session = ev.session_id
                 _sessions.record(ctx, ev.session_id)
             if isinstance(ev, (Status, TextDelta, ToolResult)):
@@ -835,13 +978,11 @@ async def _run_background_resolve(ctx, context_id: str, item_id: str, worktree: 
         detail = f"merge completed at {res['commit'][:10]}"
     except git_layer.GitError as e:
         detail = str(e)
-    # The MECHANICAL result outranks the agent's own report (ground truth over claims): a report
-    # is recorded, but the persisted outcome is success/blocked by whether the merge finished.
-    report = session_contract.parse_completion_report(final_text)
-    outcome = "success" if resolved else ((report or {}).get("outcome") or "blocked")
+    outcome = "success" if resolved else "blocked"
     if resolved:
         item = _dev.read_work_item(dev_root, item_id) or {}
-        if str(item.get("phase")) == "review":  # re-enters vet before re-presenting (D4)
+        revet = str(item.get("phase")) == "review"
+        if revet:                               # re-enters vet before re-presenting (D4)
             reset_vet_thread(ctx, item)         # vet forgets — fresh vetter for the re-entry
             _dev.set_work_item_phase(dev_root, item_id, "vet")
             # Every phase move lands in the trail — this is the one non-gate transition.
@@ -851,6 +992,19 @@ async def _run_background_resolve(ctx, context_id: str, item_id: str, worktree: 
                                  meta={"from": "review", "to": "vet"})
         _end_run(ctx, context_id, item_id, final_tokens, "active", final_usage, outcome=outcome,
                  session_id=final_session)
+        # …and something must actually RUN behind that `active`. This runner used to flip the phase
+        # and stop: no vet run was ever dispatched, so the item sat at `vet` · `active` with nothing
+        # working — the P6 idle stall, and the worst shape it takes, because `active` doesn't page
+        # the owner either. The board showed "IN PROGRESS" with a frozen timer forever. (Found live,
+        # 2026-07-29, on the first real conflict.) Fired AFTER `_end_run` — the resolve run still
+        # holds the item's lock until then, and `start_vet_run` refuses while a run is in flight.
+        if revet:
+            from .loop import start_vet_run
+            started, why = start_vet_run(ctx, context_id, item_id)
+            if not started:
+                # Never leave `active` with no run: rest it where the owner can see it instead.
+                _dev.set_work_item_status(dev_root, item_id, "awaiting_human")
+                log.warning("resolve: vet re-entry did not start for %s (%s)", item_id, why)
     else:
         # Conflicts remain in the tree (deliberate — retry or manual abort); page the owner.
         _end_run(ctx, context_id, item_id, final_tokens, "awaiting_human", final_usage,

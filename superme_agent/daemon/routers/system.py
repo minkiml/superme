@@ -17,11 +17,12 @@ from ..schemas.system import (
     SystemResponse, RepoOverview, RepoConnectResponse, RepoDisconnectResponse,
     RunsResponse, RunTraceResponse,
     SystemModelResponse, LearningResponse, RepoModelResponse, RepoLearningResponse,
-    RepoMetaResponse, RepoAutopilotResponse, TokenUsageResponse, TokenTimeseriesResponse, SweepConfigBody, SweepConfigResponse,
+    RepoMetaResponse, RepoGitResponse, RepoAutopilotResponse, TokenUsageResponse, TokenTimeseriesResponse, SweepConfigBody, SweepConfigResponse,
     CompactionConfigBody, CompactionConfigResponse, DeputyConfigResponse,
     SystemEffortResponse, RepoEffortResponse, AgentModelsResponse, RepoAttention,
 )
 from ...core.models import AGENT_MODEL_FEATURES
+from ...core import git_layer
 from ...core.spine import MODES, RepoConfig
 from ...core.models import CANONICAL_MODELS, is_valid_model, model_family, normalize_model
 
@@ -274,6 +275,8 @@ async def repos_overview(spine: SystemSpine = Depends(get_spine)) -> list[dict]:
             "learning_enabled": spine.get_repo_learning(rc.id),
             "autopilot_concurrency": spine.get_autopilot_concurrency(rc.id),
             "tag_color": meta["color"], "icon": meta["icon"],
+            "review_mode": rc.review_mode, "anchor_branch": rc.anchor_branch,
+            **_anchor_state(rc),
             "scopes": scopes,
         })
     return out
@@ -481,6 +484,44 @@ async def set_repo_autopilot(repo_id: str, body: AutopilotConcurrencyBody,
         raise HTTPException(status_code=404, detail=f"unknown repo '{repo_id}'")
     n = spine.set_autopilot_concurrency(repo_id, body.concurrency)
     return {"ok": True, "repo_id": repo_id, "autopilot_concurrency": n}
+
+
+class RepoGitBody(BaseModel):
+    # None = leave unchanged; "" clears anchor_branch back to "derive the repo's default branch".
+    review_mode: str | None = None
+    anchor_branch: str | None = None
+
+
+def _anchor_state(rc) -> dict:
+    """What this repo's anchor resolves to right now, or why it doesn't. Read at request time —
+    a branch can be deleted between two settings loads, and the owner should see that here rather
+    than at a merge."""
+    try:
+        if not git_layer.is_git_repo(rc.cwd):
+            return {"resolved_anchor": None, "anchor_error": None}
+        return {"resolved_anchor": git_layer.resolve_anchor(rc.cwd, rc.anchor_branch),
+                "anchor_error": None}
+    except git_layer.GitError as e:
+        return {"resolved_anchor": None, "anchor_error": str(e)}
+
+
+@router.post("/repos/{repo_id}/git", response_model=RepoGitResponse)
+async def set_repo_git(repo_id: str, body: RepoGitBody,
+                       spine: SystemSpine = Depends(get_spine)) -> dict:
+    """Set this repo's review mode (`fast` | `strict`) and/or anchor branch — the two knobs that
+    govern how work lands (workflow-renovation-v2 §2.2). Both are read LIVE at every decision point,
+    so a change applies immediately, including to items already sitting at review. An anchor naming
+    a branch that doesn't exist is accepted and reported back as an `error`: the setting is the
+    owner's declaration, and every git site refuses rather than silently retargeting the default."""
+    patch = {k: v for k, v in body.model_dump().items() if v is not None}
+    try:
+        rc = spine.update_repo(repo_id, **patch) if patch else spine.repo(repo_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if rc is None:
+        raise HTTPException(status_code=404, detail=f"unknown repo '{repo_id}'")
+    return {"ok": True, "repo_id": repo_id, "review_mode": rc.review_mode,
+            "anchor_branch": rc.anchor_branch, **_anchor_state(rc)}
 
 
 @router.post("/repos/{repo_id}/meta", response_model=RepoMetaResponse)

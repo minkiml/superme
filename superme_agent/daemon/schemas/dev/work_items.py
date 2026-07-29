@@ -91,6 +91,9 @@ class WorkItem(BaseModel):
     git_merge_commit: str | None = None
     git_merged_at: str | None = None
     git_backup_ref: str | None = None
+    # `strict` repos only (renovation §2.2): when the deputy approved and handed the merge to the
+    # owner. Set ∧ no merge commit = the PR is open (the FE derives it the same way the BE does).
+    git_pr_opened_at: str | None = None
     # S7 attention engine: the owner-opened read receipt — a terminal item without it sits in
     # the `unread` bucket. Never bumps updated_at. YAML round-trips the stamp as datetime, so
     # the union keeps it faithful (datetime → isoformat on serialize), same as done_at.
@@ -201,7 +204,7 @@ class WorkItemDetailResponse(BaseModel):
     tasks: list[TaskItem] | None = None
     execution: str | None = None
     artifact_status: dict[str, ArtifactStatusRow] | None = None
-    # S7 drilldown: raw text of the remaining gate docs (validation/readiness/findings/closeout;
+    # S7 drilldown: raw text of the remaining gate docs (validation/readiness/investigation/closeout;
     # value None while un-emitted) + the checkpoint continuity feed.
     docs: dict[str, str | None] | None = None
     checkpoints: list[CheckpointStub] | None = None

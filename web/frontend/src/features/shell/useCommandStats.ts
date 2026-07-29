@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useMemo } from 'react'
 import { getTokens, getRepos, getMemoryStats, type RepoOverview, type ScopeStatus } from '@/lib/api'
 import { colorFor } from '@/lib/palette'
+import { useLive } from '@/lib/live'
+import { K } from '@/lib/live/keys'
 
 // One repo as an orbit node: identity + its token signal (total + core/dev split) plus the
 // richer per-scope + per-feature detail the inspector popup needs.
@@ -18,6 +20,10 @@ export type OrbitRepo = {
   modelOverride: string | null
   effortOverride: string | null
   learningEnabled: boolean
+  reviewMode: string // 'fast' | 'strict' — whether the diff gets its own review gate before landing
+  anchorBranch: string | null // the branch every git site targets (null = the repo's own default)
+  resolvedAnchor: string | null // what anchorBranch resolves to now (null = not a git repo / broken)
+  anchorError: string | null // set when the configured branch is missing — a refusal, not a fallback
   color: string // the resolved visual-tag color (owner override, else hashed palette)
   icon: string | null // owner-set icon (emoji) shown in place of the color swatch
 }
@@ -51,71 +57,75 @@ const EMPTY: CommandStats = {
 }
 
 // Composes the command-centre's live numbers from three real sources: token aggregation
-// (/tokens), the repo roster (/repos), and global learning stats (/dev/memory/stats). Polls
-// so the strip + orbit stay live. Fails soft — a down daemon just leaves the placeholders.
+// (/tokens), the repo roster (/repos), and global learning stats (/dev/memory/stats).
+//
+// Each is its OWN cache key rather than one fused `load()` — the roster and the token aggregate are
+// wanted independently all over the app (the inspector, the drilldowns, the config surface), and
+// keying them separately is what lets those views cost zero extra requests. The three land at
+// different moments, so this composes over whatever has arrived: a partial view renders with the
+// pieces it has, exactly as the old single-shot version rendered placeholders before its first
+// response.
+//
+// No longer fails silently: a transport failure marks the app disconnected (see `useConnection` /
+// StatusBar). The numbers still hold their last good values — the difference is that the owner is
+// now told they are last-known rather than current.
 export function useCommandStats(pollMs = 5000): CommandStats {
-  const [stats, setStats] = useState<CommandStats>(EMPTY)
+  const tokensQ = useLive(K.tokens, getTokens, pollMs)
+  const reposQ = useLive(K.repos, getRepos, pollMs)
+  const memQ = useLive(K.memoryStats('global'), () => getMemoryStats('global'), pollMs)
 
-  useEffect(() => {
-    let alive = true
-    async function load() {
-      try {
-        const [tokens, repos, mem] = await Promise.all([getTokens(), getRepos(), getMemoryStats('global')])
-        if (!alive) return
-        const toRepo = (r: RepoOverview): OrbitRepo => {
-          const t = tokens.by_repo?.[r.id]
-          const scopeList = Object.values(r.scopes ?? {})
-          return {
-            id: r.id,
-            label: r.label,
-            layer: r.layer,
-            tokens: t?.total ?? 0,
-            dev: t?.by_scope?.dev ?? 0,
-            core: t?.by_scope?.core ?? 0,
-            running: scopeList.reduce((n, s) => n + (s?.running ?? 0), 0),
-            agents: scopeList.reduce((n, s) => n + (s?.agents ?? 0), 0),
-            byFeature: t?.by_feature ?? {},
-            scopes: r.scopes ?? {},
-            modelOverride: r.model_override ?? null,
-            effortOverride: r.effort_override ?? null,
-            learningEnabled: r.learning_enabled ?? true,
-            color: r.tag_color || colorFor(r.id),
-            icon: r.icon ?? null,
-          }
-        }
-        const all = repos.map(toRepo)
-        const hub = all.find((r) => r.id === 'global') ?? null
-        const nodes = all.filter((r) => r.id !== 'global')
-        const cand = mem.candidates
-        const know = mem.knowledge
-        setStats({
-          loading: false,
-          tokensTotal: tokens.global?.total ?? 0,
-          tokensByFeature: tokens.global?.by_feature ?? {},
-          projects: nodes.length,
-          opsRunning: all.reduce((n, r) => n + r.running, 0),
-          opsLive: all.reduce((n, r) => n + r.agents, 0),
-          learn: {
-            candidates: cand?.total ?? 0,
-            pending: cand?.pending_proposals ?? 0,
-            drafted: cand?.drafted_proposals ?? 0,
-            learned: know?.facts_total ?? 0,
-          },
-          hub,
-          nodes,
-          archived: Object.fromEntries((tokens.archived?.repos ?? []).map((r) => [r.id, r.label])),
-        })
-      } catch {
-        /* daemon down — keep whatever we have (placeholders) */
+  const tokens = tokensQ.data
+  const repos = reposQ.data
+  const mem = memQ.data
+
+  return useMemo(() => {
+    if (!tokens || !repos) return EMPTY
+    const toRepo = (r: RepoOverview): OrbitRepo => {
+      const t = tokens.by_repo?.[r.id]
+      const scopeList = Object.values(r.scopes ?? {})
+      return {
+        id: r.id,
+        label: r.label,
+        layer: r.layer,
+        tokens: t?.total ?? 0,
+        dev: t?.by_scope?.dev ?? 0,
+        core: t?.by_scope?.core ?? 0,
+        running: scopeList.reduce((n, s) => n + (s?.running ?? 0), 0),
+        agents: scopeList.reduce((n, s) => n + (s?.agents ?? 0), 0),
+        byFeature: t?.by_feature ?? {},
+        scopes: r.scopes ?? {},
+        modelOverride: r.model_override ?? null,
+        effortOverride: r.effort_override ?? null,
+        learningEnabled: r.learning_enabled ?? true,
+        reviewMode: r.review_mode ?? 'fast',
+        anchorBranch: r.anchor_branch ?? null,
+        resolvedAnchor: r.resolved_anchor ?? null,
+        anchorError: r.anchor_error ?? null,
+        color: r.tag_color || colorFor(r.id),
+        icon: r.icon ?? null,
       }
     }
-    load()
-    const t = setInterval(load, pollMs)
-    return () => {
-      alive = false
-      clearInterval(t)
+    const all = repos.map(toRepo)
+    const hub = all.find((r) => r.id === 'global') ?? null
+    const nodes = all.filter((r) => r.id !== 'global')
+    const cand = mem?.candidates
+    const know = mem?.knowledge
+    return {
+      loading: false,
+      tokensTotal: tokens.global?.total ?? 0,
+      tokensByFeature: tokens.global?.by_feature ?? {},
+      projects: nodes.length,
+      opsRunning: all.reduce((n, r) => n + r.running, 0),
+      opsLive: all.reduce((n, r) => n + r.agents, 0),
+      learn: {
+        candidates: cand?.total ?? 0,
+        pending: cand?.pending_proposals ?? 0,
+        drafted: cand?.drafted_proposals ?? 0,
+        learned: know?.facts_total ?? 0,
+      },
+      hub,
+      nodes,
+      archived: Object.fromEntries((tokens.archived?.repos ?? []).map((r) => [r.id, r.label])),
     }
-  }, [pollMs])
-
-  return stats
+  }, [tokens, repos, mem])
 }

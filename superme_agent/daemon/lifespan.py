@@ -13,8 +13,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from . import app_state
-from ..core import git_layer
+from ..core import dev_store, git_layer
 from ..gateway import contexts
+from .services import dashboard_stream
 from .services.learning import _idle_sweep_loop, SWEEP_POLL_SECONDS, SWEEP_IDLE_SECONDS
 
 log = logging.getLogger("superme-agent")
@@ -159,6 +160,12 @@ async def lifespan(app: FastAPI):
     _reconcile_worktrees()
     # S6 close protocol: finish any ordered close steps a dying daemon dropped mid-transition.
     _reconcile_close_steps()
+
+    # The dashboard push channel's ONE wiring point (routing-audit §7.6). Every state change worth
+    # showing the owner already writes a dev event; this turns each into a cache-invalidation topic
+    # for any open `/ws/dashboard` panel. Registered here rather than at import so a test or a script
+    # that imports the daemon doesn't acquire a live observer.
+    dev_store.subscribe_events(dashboard_stream.publish_event)
 
     task = asyncio.create_task(_idle_sweep_loop())
     log.info("idle sweep loop started (every %ds, idle threshold %ds, auto-learning=%s)",

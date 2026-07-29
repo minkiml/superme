@@ -1,7 +1,7 @@
 ---
 name: retrofit
-description: "Establish SuperMe memory for an existing codebase by reverse-engineering it — spawn parallel readers to comprehend the code, clarify intent with the owner, then draft the general/ anchor docs (architecture-heavy) to an approval gate. Use when connecting a repo that already has substantial code but no project memory yet. Don't use for a new or empty repo (use project-init) or for routine edits to an already-established doc (just edit it)."
-argument-hint: "(optional) an area of the codebase to start from"
+description: Establish SuperMe memory for an existing codebase by reverse-engineering it — spawn parallel readers to comprehend the code, clarify intent with the owner, then draft the general/ anchor docs (architecture-heavy) to an approval gate. Use when connecting a repo that already has substantial code but no project memory yet. Don't use for a new or empty repo (use project-init) or for routine edits to an already-established doc (just edit it).
+argument-hint: "[starting-area]"
 category: onboarding
 ---
 
@@ -22,8 +22,8 @@ Pull the `dev-knowledge-structure` constitution. Read a doc's guide from `../../
 before you draft it.
 
 ## Step 3: Comprehend the codebase
-Spawn **parallel reader subagents**, one per subsystem, each with a self-contained prompt and an explicit
-return shape. Have them report: entry points, modules and responsibilities, the stack, data flow,
+Spawn **parallel reader subagents** (model: sonnet), one per subsystem, each with a self-contained prompt
+and an explicit return shape. Have them report: entry points, modules and responsibilities, the stack, data flow,
 external dependencies, and surprises. Merge into one comprehension map.
 
 ## Step 4: Clarify intent with the owner

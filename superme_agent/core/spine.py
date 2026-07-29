@@ -44,6 +44,7 @@ from ..runtime.config import (
     SYSTEM_CONFIG_FILE,
     SYSTEM_DB_FILE,
 )
+from .kind_profiles import AGENT_THREAD_KINDS
 
 log = logging.getLogger("superme-agent")
 
@@ -96,6 +97,10 @@ class SystemConfig:
     default_repo: str = "global"
 
 
+REVIEW_MODES = ("fast", "strict")
+REVIEW_MODE_DEFAULT = "fast"
+
+
 @dataclass
 class RepoConfig:
     """One repo's static-meta (an entry in config/repos.yaml). Home paths are derived by
@@ -108,11 +113,23 @@ class RepoConfig:
     extra_mcp: list = field(default_factory=list)
     onboarding: str | None = None  # "project-init" | "retrofit" — the connect-time choice that
     # selects the onboarding front door until memory is established; None = let the owner pick.
+    review_mode: str = REVIEW_MODE_DEFAULT  # "fast" | "strict" — governs exactly one thing: whether
+    # the diff gets its own review gate before it lands (workflow-renovation-v2 §2.2). `fast` =
+    # approving the item merges it; `strict` = deputy approve opens the PR, the owner's approve on
+    # the PR page merges. Named `review_mode`, not `mode`: `Context.mode` already means core|dev.
+    anchor_branch: str | None = None  # the branch every git site targets (branch-from base · sync
+    # source · merge target). None = derive the repo's own default branch; set it when direct-to-main
+    # is forbidden and a sanctioned intermediate (e.g. `develop`) is the furthest SuperMe may go.
 
     def __post_init__(self):
         if not self.label:
             self.label = self.id
         self.cwd = Path(self.cwd)
+        if self.review_mode not in REVIEW_MODES:
+            log.warning("repo %r: unknown review_mode %r; using %r",
+                        self.id, self.review_mode, REVIEW_MODE_DEFAULT)
+            self.review_mode = REVIEW_MODE_DEFAULT
+        self.anchor_branch = (self.anchor_branch or "").strip() or None
 
     # --- home conventions (the relocation pass edits THESE, not the YAML) -----------
     def _knowledge_base(self) -> Path:
@@ -147,6 +164,12 @@ class RepoConfig:
         }
         if self.onboarding:
             d["onboarding"] = self.onboarding
+        # Only non-defaults are written: an entry with neither key reads as `fast` + derived anchor,
+        # which is what an untouched repo means. Keeps existing entries byte-identical.
+        if self.review_mode != REVIEW_MODE_DEFAULT:
+            d["review_mode"] = self.review_mode
+        if self.anchor_branch:
+            d["anchor_branch"] = self.anchor_branch
         return d
 
 
@@ -189,6 +212,8 @@ def load_repos(path: Path = REPOS_CONFIG_FILE) -> dict[str, RepoConfig]:
             persona_append=(spec.get("persona_append") or "").strip(),
             extra_mcp=spec.get("extra_mcp") or [],
             onboarding=spec.get("onboarding") or None,
+            review_mode=(spec.get("review_mode") or REVIEW_MODE_DEFAULT),
+            anchor_branch=spec.get("anchor_branch") or None,
         )
     return out
 
@@ -552,6 +577,70 @@ class SystemSpine:
             text += "\n"
         path.write_text(text + block)
         return rc
+
+    def update_repo(self, repo_id: str, **fields) -> RepoConfig:
+        """Edit scalar fields on an EXISTING repos.yaml entry, in place and line-by-line — so the
+        header comments, the other entries, and this entry's own untouched lines keep their exact
+        bytes (a whole-file yaml.safe_dump would flatten all three). A field set to None deletes its
+        line; a field absent from `fields` is left alone. Validates by re-loading before returning,
+        so a malformed write can never go live silently. Raises ValueError on an unknown repo or an
+        unknown/invalid field."""
+        rc = self.repos().get(repo_id)
+        if rc is None:
+            raise ValueError(f"unknown repo id '{repo_id}'")
+        allowed = {"review_mode", "anchor_branch", "label", "persona_append", "onboarding"}
+        unknown = set(fields) - allowed
+        if unknown:
+            raise ValueError(f"cannot update {sorted(unknown)} — editable fields: {sorted(allowed)}")
+        if "review_mode" in fields and fields["review_mode"] not in REVIEW_MODES:
+            raise ValueError(f"review_mode must be one of {list(REVIEW_MODES)}")
+        # Normalize: "" clears a field (the UI's empty input), and clearing means "drop the line".
+        patch = {k: (v.strip() if isinstance(v, str) else v) or None for k, v in fields.items()}
+        # A field set back to its DEFAULT is stored as absence, matching `to_dict` — so "unset" and
+        # "explicitly the default" have one representation, and setting a knob and setting it back
+        # leaves the file byte-identical.
+        if patch.get("review_mode") == REVIEW_MODE_DEFAULT:
+            patch["review_mode"] = None
+        def _line(key: str, val) -> str:
+            # Dump as a one-key mapping, not a bare scalar: safe_dump of a scalar emits a document
+            # (`develop\n...\n`), while the mapping form yields exactly `key: value`, quoted as YAML
+            # requires. Indented to 4 to match every other field in the entry.
+            return "    " + yaml.safe_dump({key: val}, sort_keys=False).strip() + "\n"
+
+        path = Path(self._repos_config_path)
+        text = path.read_text()
+        if text and not text.endswith("\n"):   # else an appended key would join the last line
+            text += "\n"
+        lines = text.splitlines(keepends=True)
+        out: list[str] = []
+        i, n = 0, len(lines)
+        while i < n:
+            ln = lines[i]
+            out.append(ln)
+            i += 1
+            if not (ln.rstrip().startswith(f"  {repo_id}:") and not ln.startswith("   ")):
+                continue
+            # Inside the entry: rewrite matching keys, keep everything else verbatim.
+            seen: set[str] = set()
+            while i < n and lines[i].startswith("    "):
+                key = lines[i].split(":", 1)[0].strip()
+                if key in patch:
+                    seen.add(key)
+                    if patch[key] is not None:
+                        out.append(_line(key, patch[key]))
+                    # else: drop the line — the field is cleared
+                else:
+                    out.append(lines[i])
+                i += 1
+            for key, val in patch.items():          # keys the entry didn't carry yet
+                if key not in seen and val is not None:
+                    out.append(_line(key, val))
+        path.write_text("".join(out))
+        updated = self.repos().get(repo_id)
+        if updated is None:
+            raise ValueError(f"repos.yaml update dropped '{repo_id}' — file left as written; "
+                             "inspect config/repos.yaml")
+        return updated
 
     def remove_repo(self, repo_id: str) -> RepoConfig:
         """Deregister a repo (disconnect): surgically drop its entry block from config/repos.yaml —
@@ -1079,6 +1168,38 @@ class SystemSpine:
             self._finish_usage_apply(c, row["id"], usage)  # authoritative per-type + reconciled tokens
             return row["id"]
 
+    def session_ctx_pct(self, session_id: str | None) -> int | None:
+        """The most recent context fill recorded for a session — the reading the compaction
+        trigger checks at run START. Every finished run stamps its authoritative end-of-turn
+        `ctx_pct` and its origin `session_id`, so the newest such row IS the session's current
+        occupancy: nothing has been added to that transcript since. None when the session has no
+        finished run yet (a brand-new session cannot be over any trigger)."""
+        if not session_id:
+            return None
+        with self._conn() as c:
+            row = c.execute(
+                "SELECT ctx_pct FROM run WHERE session_id=? AND ctx_pct IS NOT NULL"
+                " AND status!='running' ORDER BY id DESC LIMIT 1", (session_id,),
+            ).fetchone()
+        return int(row["ctx_pct"]) if row else None
+
+    def session_compacted_pending(self, session_id: str | None) -> str | None:
+        """When did this session get compacted, if no real turn has run since? Returns the compact
+        run's `ended_at`, else None.
+
+        This is the whole state behind the post-compaction notice — no new column, no in-memory
+        flag, and self-clearing: the notice is owed exactly while the NEWEST finished run on the
+        session is a `compact` one, and the first real turn afterwards makes it stop being the
+        newest. Restart-proof for free, because it is read from the run table."""
+        if not session_id:
+            return None
+        with self._conn() as c:
+            row = c.execute(
+                "SELECT feature, ended_at FROM run WHERE session_id=? AND status!='running'"
+                " ORDER BY id DESC LIMIT 1", (session_id,),
+            ).fetchone()
+        return (row["ended_at"] if row and row["feature"] == "compact" else None)
+
     def run_tokens(self, run_id: int | None) -> int:
         """The reconciled `tokens` scalar on a run row — authoritative (3-type, excl. cache_read)
         once the run has finished and its whole-turn usage was applied. Use this over a pre-finish
@@ -1480,12 +1601,20 @@ class SystemSpine:
         }
 
     # --- counts (for repo×scope summaries on the monitor dashboard) -------------
-    def session_count(self, repo_id: str, mode: str | None = None) -> int:
+    def session_count(self, repo_id: str, mode: str | None = None, *,
+                      include_agent_threads: bool = False) -> int:
+        """How many sessions this repo (× mode) has. Counts CONVERSATIONS by default — the threads
+        the owner can open and take a turn in — so the number agrees with the session picker.
+        `include_agent_threads` adds the headless build/vet threads (kind_profiles.AGENT_THREAD_KINDS)
+        for a genuine total. A NULL kind is a legacy pre-roles session: a conversation."""
         where = ["repo_id=?"]
         args: list = [repo_id]
         if mode is not None:
             where.append("mode=?")
             args.append(mode)
+        if not include_agent_threads and AGENT_THREAD_KINDS:
+            where.append(f"(kind IS NULL OR kind NOT IN ({','.join('?' * len(AGENT_THREAD_KINDS))}))")
+            args.extend(AGENT_THREAD_KINDS)
         with self._conn() as c:
             return c.execute(f"SELECT COUNT(*) FROM session WHERE {' AND '.join(where)}",
                              args).fetchone()[0]

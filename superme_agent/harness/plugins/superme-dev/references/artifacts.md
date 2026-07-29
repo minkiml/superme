@@ -1,9 +1,14 @@
 # Work-item artifacts — the single-source authoring contract
 
 Every work-item artifact follows one playbook: **code supplies form, the agent supplies content.**
-The executable single source is `superme_agent/core/artifacts.py` (templates · scaffolder ·
-self-checks · evidence ledger · checkpoints · closeout verification). Skills NEVER restate
-skeletons or section lists — they cite this contract and call the tools.
+The executable single source is `superme_agent/core/artifacts.py` (template loading · scaffolder ·
+self-checks · verification recording · checkpoints). Section skeletons live
+as ONE template file each under their authoring skill's `templates/` folder — skills never restate
+section lists; the self-check is derived from the template's own headings.
+
+Terminology: **validation** = build's own internal checks (unit tests, compile, mocks, synthetic
+errors). **verification** = vet's real, practical, safely-isolated tests (scenario runs, live
+checks). Vet verifies; it does not validate.
 
 ## The playbook (applies to every kind)
 
@@ -11,83 +16,125 @@ skeletons or section lists — they cite this contract and call the tools.
    (frontmatter, section order, timestamps); re-scaffolding an existing file is a no-op, never an
    overwrite.
 2. **Fill the `<fill:…>` slots only.** Keep the headings; replace each slot with real content.
-   Remove a slot only by filling its section.
-3. **The gate self-checks.** The phase gate that CONSUMES the doc runs the validator (required
-   sections present + filled, no slots left). A failed check is an itemized, retry-shaped list —
-   fix and re-present; nothing was persisted or advanced.
+   A comment-only section (a pen's or the driver's) is not yours to write.
+3. **The gate self-checks.** The phase gate that CONSUMES the doc runs the validator (template
+   sections present, fill-bearing sections filled, no slots left). A failed check is an itemized,
+   retry-shaped list — fix and re-present; nothing was persisted or advanced.
 4. **Facts are verified against ground truth.** Closeout claims (changed files, merge commit,
    artifact paths) are checked for real existence before the close gate accepts.
-5. **Evidence is earned, never asserted.** `record_validation_evidence` appends machine entries
-   (check · how · result · pass/fail) fingerprinted against the repo state; ANY later repo edit
-   flips the ledger to `stale` — re-run checks after changes.
+5. **Verification is earned, never asserted.** `record_verification` appends machine entries
+   (check · how · result · pass/fail) into the current cycle report's §Verification fence,
+   fingerprinted against the repo state; ANY later repo edit flips the derived verdict to
+   `stale` — re-run checks after changes.
 6. **Checkpoints are append-only continuity.** `write_checkpoint` banks conversation-native
    reasoning (working-on / decisions / remaining / notes). Reference artifacts BY PATH — never
    duplicate their content.
 
-## The kinds (D6 taxonomy)
+## The kinds
 
 Every artifact's frontmatter carries `reader: user | agent | both` (stamped by the scaffolder) —
-a LABEL saying who the doc is designed for, never a constraint. `user` docs render prominently in
-the drilldown; `agent` plumbing collapses.
+a LABEL saying who the doc is designed for, never a constraint.
 
-| artifact | file | emitted by | consumed by | notes |
-|---|---|---|---|---|
-| plan | `artifacts/plan.md` | plan phase | pre-main gate | per-kind template; section contract below |
-| validation | `artifacts/validation.md` | vet (ledger; checks come from plan.md `## Vet plan`) | review gate | evidence ledger; stale-on-edit |
-| vet-report | `artifacts/vet-report-<n>.md` | vet phase, one per cycle (`file_vet_report`) | next build cycle + review gate | envelope code-owned; verdicts must match the ledger; findings describe, never prescribe |
-| readiness | `artifacts/readiness.md` | review phase (per loop pass) | review gate | the A/B/C brief; `## Stats` fenced yaml (files/insertions/deletions/tests + by_file rows, echoed from `git diff --stat`) feeds the gate's change bars |
-| findings | `artifacts/findings.md` | investigate/report | close gate | research deliverable |
-| closeout | `artifacts/closeout.md` | close phase | close gate | tri-split; Facts yaml claims ground-truth-verified |
-| checkpoint | `checkpoints/<ts>.md` | session end + pre-compaction | next session's cold start | append-only, atomic |
-| notes | `notes/` | any phase | nobody (agent scratch) | free-form, never a gate |
-| handoff-brief | inbox `<id>/handoff-brief.md` → item `preliminary/` | itemize time | triage + plan | high-level ONLY: no plans, no implementation detail, no research findings |
-| gate-report | `artifacts/gate-report-<phase>.html` | the phase skill, from its `templates/gate-report.html` | the owner (embedded in the drilldown gate card) | `reader: user`; template owns ALL style/layout — the agent only fills `{{SLOT}}` placeholders; a leftover slot fails the gate check |
+**Agent-facing docs (`artifacts/` — the source of truth):**
+
+| artifact | file | writer · when | reader |
+|---|---|---|---|
+| brief | `artifacts/brief.md` | triage (classification + shaped ask) | plan |
+| plan | `artifacts/plan.md` | plan; updated onwards (overwrite + `## Decisions & clarifications` append) | build · vet · review |
+| cycle report | `artifacts/build-vet-<n>.md` | staged: build (§Built/§Validation) → vet's pen (§Verification fence) → loop driver (§Cycle outcome) | vet (handover) · next build cycle · review |
+| authorizations | `artifacts/authorizations.md` | `request_authorization` (build) · grants/denies at review | vet (skip deferred) · review gate |
+| investigation | `artifacts/investigation.md` | investigate (research's work-segment record — the counterpart of the cycle report) | review |
+| checkpoint | `checkpoints/<ts>.md` | any long session · pre-compaction | next session's cold start |
+| handoff-brief | inbox `<id>/handoff-brief.md` → item `preliminary/` | itemize time | triage |
+
+**User-facing reports (`reports/` — projections; every line traces to a named agent doc, no new
+facts; compact — tables over paragraphs; overwrite in place on re-runs + fill `## Changed since`):**
+
+| report | template | writer · when |
+|---|---|---|
+| `reports/report-triage.md` | `skills/plan/templates/report-intake-template.md` (shared) | triage, closing act |
+| `reports/report-plan.md` | same intake template | plan, closing act |
+| `reports/report-build.md` | `skills/build/templates/report-build-template.md` | build, at each cycle's end (overwrite — the final cycle's version is the loop-exit report) |
+| `reports/report-vet.md` | `skills/vet/templates/report-vet-template.md` | vet's `file_vet_report` pen (table derived from the recorded checks) |
+| `reports/report-investigate.md` | `skills/investigate/templates/report-investigate-template.md` | investigate, at each session's end (overwrite — reports the state of the search, not its conclusions) |
+| `reports/report-review.md` | per kind, both in `skills/review/templates/`: implementation → `report-review-template.md` · research → `report-review-research-template.md` | the `review` skill's ENTRY run, fired on entry to `review` for every kind |
+| `reports/report-close.md` | `skills/close/templates/report-close-template.md` | close, its closing act |
+
+`report-review.md` is ONE slot with a per-kind template, exactly as `plan.md` is — the slot means
+"the document the owner decides on at review"; the kind supplies its shape. Implementation's
+(written by `synthesize`) lands with its own slice.
+
+**Retired (2026-07-27, workflow-renovation-v2 §3.1 demolition):** `assumptions.md` + the
+`record_assumption` tool — an agent's judgment call now goes in its own phase record's
+`## Assumptions` section and surfaces in that phase's report · `readiness.md` — said what
+`report-review.md` already says · `closeout.md` — close's output is `reports/report-close.md` +
+the DB close record · `validation.md` — folded into `plan.md ## Verification plan`.
+Also retired: `findings.md` —
+the research record is now `artifacts/investigation.md` (evidence, agent-facing) and its verdicts
+live in `reports/report-review.md`, where the decision is actually made.
 
 Task lines live INSIDE plan.md under `## Tasks` (`- [ ]` / `- [x]`) — there is no separate tasks
 doc; build sessions tick the boxes there.
 
 ## plan.md — the section contract (implementation kind)
 
-The authoritative field spec for every plan.md section (the skill teaches the judgment; the
-fields live here). The scaffold writes them in this order; the pre-main gate validates them
-mechanically. Three of them are GATE FEEDS — structured content the owner's gate report renders
-as visuals, so their shape matters as much as their truth.
+Sections and order come from `skills/plan/templates/plan-template.md`; the pre-main gate validates
+them mechanically. What each must achieve:
 
-- **`## Approach`** — prose: what we'll build and how.
-- **`## Touches`** *(gate feed → the change map)* — ONE fenced yaml list; one row per component
-  the plan touches:
-  ```yaml
-  - component: <short name>    # the label a node gets on the map
-    path: <repo-relative path> # file or dir
-    action: new | modify | read
-  ```
-  `read` = consulted but unchanged (context the builder needs). Rows must parse — broken yaml
-  blocks the gate.
-- **`## Behavior preview`** *(gate feed → the before/after panes)* — exactly two fenced blocks:
-  `**Before**` (the observable surface today — command output, screen, API shape) then
-  `**After**` (the PREDICTED surface once the plan lands, same surface + format so the panes
-  compare line-for-line). Keep each pane ≤ ~15 lines; verbatim-shaped, never a description of
-  the output.
-- **`## Tasks`** — ordered `- [ ]` items, each small enough to verify on its own; THE task
-  tracker (progress = checkbox ratio).
-- **`## Risks & assumptions`** *(gate feed → the confirm/adjust cards)* — one bullet per
-  assumption made without the owner and per risk worth their eyes; each ONE line, concrete
-  enough to confirm or veto. `- none` only when truly none.
-- **`## Inner checks`** — bullet list of commands whose EXIT CODE decides them; build must run
-  these green before it may exit.
-- **`## Vet plan`** — the contract a fresh vet agent executes. Header lines: `depth:`
-  (`none | checks | scenarios`) · `reason:` (one line, required even for none) · `env:`
-  (recipe id or none). Then one `### <check-id>` per check (lowercase slug — it keys the
-  evidence ledger) with four `- key: value` fields:
+- **`## Intent`** — 1–3 lines, the outcome in the ask's words (from brief.md).
+- **`## Design`** — the approach and why this way · modules/files touched · interfaces and data
+  shapes (signatures, schemas, routes) · constraints and gotchas from directed reads · explicitly
+  out of scope. Build implements this section and MUST NOT amend it — a design that no longer
+  fits reality goes back through plan, never gets silently rewritten mid-build. A `## Design`
+  outgrowing a section is the SPLIT signal: propose splitting the item rather than writing a
+  design document.
+- **`## Tasks`** — ordered `- [ ]` items, each small enough to verify on its own and naming the
+  Design part it implements; THE task tracker (progress = checkbox ratio).
+- **`## Decisions & clarifications`** — owner Q&A conclusions, append-only. Starts empty.
+- **`## Verification plan`** — the contract a FRESH vet agent with zero context executes; build
+  MUST NOT amend it (it is the exam). Header lines: `depth:` (`none | checks | scenarios`) ·
+  `reason:` (one line, required even for none) · `env:` (recipe id or none). Then one
+  `### <check-id>` per check (lowercase slug — it keys the recorded entries) with four
+  `- key: value` fields:
   - `traces:` — the written requirement this check defends (PRD deliverable / user story /
-    spec decision). No traces → not a requirement → it can't gate the loop.
+    design decision). No traces → not a requirement → it can't gate the loop.
   - `mode:` — `command` (exit code / literal output match) · `interaction` (agent drives the
     real thing and judges vs expect — requires a real `env`) · `inspection` (agent reads code
-    against a stated bar). If the scenario is runnable as plain shell commands in the worktree
-    (a CLI, a script), that is `command` — even when the judgment is about output format;
-    `interaction` is only for surfaces that need a live app/environment to drive.
+    against a stated bar). If the scenario is runnable as plain shell commands in the worktree,
+    that is `command` — even when the judgment is about output format; `interaction` is only for
+    surfaces that need a live app/environment to drive.
   - `scenario:` — the real steps, concretely: commands verbatim; UI steps as a user takes them.
   - `expect:` — a falsifiable pass condition (exact output / state / rendered text).
 
   Hard rules the gate enforces: legal depth · reason present · depth `none` ⇔ zero checks ·
   every check fully fielded, legal mode, unique slug id · `interaction` requires an env recipe.
+
+## plan.md — the section contract (research kind)
+
+Sections and order come from `skills/plan/templates/plan-research-template.md`. What each must
+achieve:
+
+- **`## Questions`** — what the investigation must answer, one per line. Each has to be answerable
+  from sources that exist and worth the time it will cost; a question nobody will act on is scope.
+- **`## Method`** — per question or cluster: which sources, which code, which experiments.
+- **`## Boundaries`** — what will NOT be investigated. These are the walls investigate treats as
+  hard: a thread leading outside them becomes a follow-up, not a detour.
+- **`## Done criteria`** — falsifiable per question: the evidence that ends the search. This is the
+  research kind's exam — there is no `## Verification plan` because a research item builds nothing
+  and never enters the build⟷vet loop.
+- **`## Tasks`** / **`## Decisions & clarifications`** — as the implementation kind.
+
+## build-vet-<n>.md — the cycle report
+
+Scaffolded by the kernel at each build cycle's start from
+`skills/build/templates/build-vet-template.md`. Strictly sequential writers:
+
+- **`## Built`** (build) — what was implemented per task · files touched · how to exercise it ·
+  errors/gaps/concerns · assumptions made · authorization request ids.
+- **`## Validation`** (build) — the internal checks run, results verbatim.
+- **`## Verification`** (vet's `record_verification` pen ONLY — vet has no file writes) — the
+  fenced check table the loop driver parses.
+- **`## Cycle outcome`** (loop driver) — decision + reason; closes the cycle.
+
+This file IS the build→vet handover (vet reads §Built/§Validation instead of re-deriving from a
+raw diff) and the failed cycle's report is the next build cycle's work order.

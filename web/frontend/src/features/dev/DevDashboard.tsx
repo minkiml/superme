@@ -4,10 +4,13 @@ import PageHeader from '@/ui/PageHeader'
 import Modal from '@/ui/Modal'
 import ConfirmDialog from '@/ui/ConfirmDialog'
 import { getDev, getAttention, planWorkItem, deleteWorkItem, type AttentionData, type DevData, type DevGlance, type InboxEntry, type WorkItem } from '@/lib/api'
+import { invalidate, useLive } from '@/lib/live'
+import { K, topicRepo } from '@/lib/live/keys'
+import { navigate, useRoute } from '@/lib/router'
 import { fmtLocalDate } from '@/lib/format'
 import { WorkspaceKanban, InboxView, isActive } from './panels'
 import WorkGraphView from './WorkGraphView'
-import { STATUS_LABEL } from './common'
+import { STATUS_LABEL, primaryStatus } from './common'
 import WorkItemModal from './WorkItemModal'
 
 // The Development dashboard — a live environment for one context's dev-knowledge. Today it shows
@@ -24,41 +27,56 @@ export default function DevDashboard({
   onUnbindItem,
   boundItemId,
   embedded = false,
-  focusItemId,
-  onFocusConsumed,
 }: {
   contextId?: string
   onBindItem?: (it: WorkItem, contextId: string) => void
   onUnbindItem?: () => void
   boundItemId?: string | null
   embedded?: boolean // hosted inside the Dev workspace shell — the shell owns the header
-  focusItemId?: string | null // attention-center "Open" → pop this item's drilldown once loaded
-  onFocusConsumed?: () => void
 }) {
-  const [data, setData] = useState<DevData | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [err, setErr] = useState<string | null>(null)
-  const [zoom, setZoom] = useState<Zoom>('inbox') // repo dev dashboard opens on the Inbox (capture queue)
+  // Which item is drilled into is an ADDRESS (`/repo/:id/item/:itemId`), read straight off the
+  // router rather than threaded down as a prop. That is what retired `focusItem`: the attention
+  // centre used to hand an id across a mount boundary for this view to consume once, which is
+  // exactly the job a path does natively.
+  const route = useRoute()
+  const openId = route.name === 'item' && route.repoId === contextId ? route.itemId : null
+  // Which store is zoomed in is an ADDRESS too: `/repo/:id/dev` is the capture queue (the landing
+  // pane, unchanged) and `/repo/:id/dev/workspace` is the board. They are PEERS in the tab slot
+  // rather than nested under `pipeline` — you are looking at one or the other, never at a workspace
+  // inside an inbox (§6.1).
+  //
+  // An open item drilldown implies the board: an item lives on it, so closing the drilldown should
+  // land on the card you were reading, not back on the queue.
+  const zoom: Zoom =
+    route.name === 'item' ? 'workspace'
+      : route.name === 'dev' && route.tab === 'workspace' ? 'workspace'
+        : 'inbox'
+  const setZoom = (z: Zoom) =>
+    navigate({ name: 'dev', repoId: contextId, tab: z === 'workspace' ? 'workspace' : 'pipeline' })
   const [board, setBoard] = useState<'kanban' | 'graph'>('kanban') // Workspace projection toggle
-  const [reviewId, setReviewId] = useState<string | null>(null) // work-item open in the review popup
   const [showShipped, setShowShipped] = useState(false) // the completed-items list overlay
   const [confirmDel, setConfirmDel] = useState<WorkItem | null>(null) // item pending delete confirm
-  const [attn, setAttn] = useState<AttentionData | null>(null) // attention buckets (S7)
+  const [mutErr, setMutErr] = useState<string | null>(null) // a write this view attempted and failed
 
-  // `silent` background reloads (the running-poll) skip the `loading` flag so the manual Refresh
-  // button doesn't re-trigger its spin every 2.5s — it should spin only on a user-initiated refresh.
-  async function load(opts?: { silent?: boolean }) {
-    if (!opts?.silent) setLoading(true)
-    setErr(null)
-    try {
-      setData(await getDev(contextId))
-      getAttention(contextId).then(setAttn).catch(() => {}) // best-effort; never blocks the board
-    } catch (e) {
-      setErr(String(e))
-    } finally {
-      if (!opts?.silent) setLoading(false)
-    }
-  }
+  // The board keeps a faster cadence while ANY item has a run in flight, and the ordinary one when
+  // the repo is idle — the same rule as before, now expressed as the subscription's interval rather
+  // than a self-re-arming `setTimeout` chain. Because the cache takes the FASTEST interval any
+  // subscriber asks for, a live run speeds the shared key up for every view of it at once.
+  const boardQ = useLive<DevData>(K.dev(contextId), () => getDev(contextId), 5000)
+  const data = boardQ.data ?? null
+  const running = !!data?.running?.length
+  const fast = useLive<DevData>(running ? K.dev(contextId) : null, () => getDev(contextId), 2500)
+  void fast // subscription only — it speeds the shared key up; `data` above is the single reader
+
+  // Attention buckets (S7). The SAME key DevWorkspace's badge subscribes to: one request feeds both.
+  const attn = useLive<AttentionData>(K.devAttention(contextId), () => getAttention(contextId)).data ?? null
+
+  const loading = boardQ.loading
+  const err = mutErr ?? (boardQ.data ? null : boardQ.error ? String(boardQ.error) : null)
+
+  // A write this view made — refresh the whole repo topic so the board, the attention feed and any
+  // open drilldown all reflect it at once, instead of each waiting out its own tick.
+  const load = () => invalidate(topicRepo(contextId))
 
   // Headless "Plan it": kick off a background /plan turn, then refresh so the card flips
   // to its "planning…" state (the running-poll below keeps reloading until it settles).
@@ -84,59 +102,42 @@ export default function DevDashboard({
       await deleteWorkItem(it.id, contextId)
       if (boundItemId === it.id) onUnbindItem?.() // it's the bound item — drop the chat binding too
     } catch (e) {
-      setErr(`Couldn't delete — ${e}`)
+      setMutErr(`Couldn't delete — ${e}`)
     }
     load()
   }
 
-  useEffect(() => {
-    load()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [contextId])
-
-  // Steady background refresh so the board never goes stale — an auto-triage or loop run started
-  // elsewhere (or a gate advance) surfaces on its own, no manual Refresh button. Silent, so it
-  // never flashes the spinner. The faster running-poll below takes over while a run is in flight.
-  useEffect(() => {
-    const t = setInterval(() => load({ silent: true }), 5000)
-    return () => clearInterval(t)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [contextId])
-
-  // Poll FASTER while any work-item has a background run in flight — re-arms after each load (the
-  // `running` array identity changes per fetch) and stops once nothing is running.
-  useEffect(() => {
-    if (!data?.running?.length) return
-    const t = setTimeout(() => load({ silent: true }), 2500)
-    return () => clearTimeout(t)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data?.running])
-
   // The item open in the review popup — looked up live so it reflects the latest poll/reload
   // (and auto-closes if the item disappears, e.g. after a delete).
-  const reviewItem = reviewId ? (data?.work_items.find((w) => w.id === reviewId) ?? null) : null
+  const reviewItem = openId ? (data?.work_items.find((w) => w.id === openId) ?? null) : null
 
   // id → attention tier, for the kanban card tint (S7).
   const bucketOf: Record<string, string> = {}
   for (const tier of ['needs_you', 'deputy_working', 'running', 'unread'] as const) {
     for (const r of attn?.buckets?.[tier] ?? []) bucketOf[r.id] = tier
   }
-  function openItem(id: string) {
-    const it = data?.work_items.find((w) => w.id === id)
-    if (!it) return
-    setReviewId(id)
-    onBindItem?.(it, contextId)
-  }
+  // Opening an item is a navigation, nothing more. The chat binding is NOT done here — the arrival
+  // effect below owns it, so a click and a deep link produce the same result instead of each
+  // carrying its own copy of the rule.
+  const openItem = (id: string) =>
+    navigate({ name: 'item', repoId: contextId, itemId: id, phase: null, sub: null })
+  // Back to the board the card came from, not to the capture queue.
+  const closeItem = () => navigate({ name: 'dev', repoId: contextId, tab: 'workspace' })
 
-  // Attention-center "Open": once the board has loaded, pop the requested item's drilldown, then
-  // report it consumed (so the parent clears the request and a poll can't re-open it). If the item
-  // is already gone by the time we arrive, consume anyway — never leave the request wedged.
+  // Arriving at an item address — by click, by the attention centre's Open, or by a pasted link.
+  // Two jobs, both of which used to live in the click handler and so didn't happen for deep links:
+  // bind the chat rail to the item's thread, and refuse to sit on an address for an item that
+  // isn't there (deleted, or a mistyped id) rather than showing the board under a URL that lies.
   useEffect(() => {
-    if (!focusItemId || !data) return
-    if (data.work_items.some((w) => w.id === focusItemId)) openItem(focusItemId)
-    onFocusConsumed?.()
+    if (!openId || !data) return
+    const it = data.work_items.find((w) => w.id === openId)
+    // `replace`, not push: this is a correction, and `back` must not walk into the dead address.
+    if (!it) { navigate({ name: 'dev', repoId: contextId, tab: 'workspace' }, { replace: true }); return }
+    // `gotoItem` binds BEFORE navigating (it has the hold's session_id and the board's data may not
+    // have landed yet — Fix C), so this must not clobber a binding that is already correct.
+    if (boundItemId !== openId) onBindItem?.(it, contextId)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusItemId, data])
+  }, [openId, data])
 
   return (
     <div className="relative flex h-full flex-col">
@@ -144,7 +145,7 @@ export default function DevDashboard({
         <WorkItemModal
           it={reviewItem}
           contextId={contextId}
-          onClose={() => setReviewId(null)}
+          onClose={closeItem}
           onPlan={handlePlan}
           onDelete={handleDelete}
           onChanged={load}
@@ -165,7 +166,7 @@ export default function DevDashboard({
           items={data.work_items.filter((w) => w.done_at)}
           onOpen={(id) => {
             setShowShipped(false)
-            setReviewId(id)
+            openItem(id)
           }}
           onClose={() => setShowShipped(false)}
         />
@@ -224,18 +225,18 @@ export default function DevDashboard({
                   </div>
                 </div>
                 <DeputyStrip items={data.work_items} />
-                <WorkspaceStats g={data.glance} onShowShipped={() => setShowShipped(true)} />
+                <WorkspaceStats items={data.work_items} running={data.running ?? []}
+                                shipped={data.glance.by_status.done ?? 0}
+                                onShowShipped={() => setShowShipped(true)} />
                 {board === 'graph' ? (
                   <WorkGraphView contextId={contextId} onBindItem={onBindItem} embedded />
                 ) : (
                 <WorkspaceKanban
                   items={data.work_items}
-                  // Clicking a card opens its review popup AND binds the chat to its session —
-                  // read + discuss side by side (the popup overlays only the dashboard column).
-                  onOpen={(it) => {
-                    setReviewId(it.id)
-                    onBindItem?.(it, contextId)
-                  }}
+                  // Clicking a card navigates to the item's address; the arrival effect binds the
+                  // chat to its session — read + discuss side by side (the popup overlays only the
+                  // dashboard column).
+                  onOpen={(it) => openItem(it.id)}
                   running={data.running}
                   boundItemId={boundItemId}
                   buckets={bucketOf}
@@ -445,7 +446,16 @@ function StatusDots({ item, total }: { item: Record<string, number>; total: numb
 }
 
 // The work-item stat row — moved out of the page top to sit under the Workspace panel header.
-function WorkspaceStats({ g, onShowShipped }: { g: DevGlance; onShowShipped: () => void }) {
+// Counted from the SAME rule the cards render by (`primaryStatus(it, running)`), not from the
+// backend's `by_status` roll-up over stored status: those two disagreed on any item whose hold was
+// derived rather than stored, so the row could read "1 in progress" above three NEEDS YOU cards.
+// One rule, one screen. `shipped` still comes from the roll-up — terminal items leave the board.
+function WorkspaceStats({ items, running, shipped, onShowShipped }: {
+  items: WorkItem[]; running: string[]; shipped: number; onShowShipped: () => void
+}) {
+  const live = new Set(running)
+  const n = (want: string) =>
+    items.filter((it) => !it.done_at && primaryStatus(it, live.has(it.id)) === want).length
   const cell = (label: string, n: number, tone = 'text-fg') => (
     <div className="flex flex-col">
       <span className={`text-xl font-semibold leading-none tabular-nums ${tone}`}>{n}</span>
@@ -454,16 +464,16 @@ function WorkspaceStats({ g, onShowShipped }: { g: DevGlance; onShowShipped: () 
   )
   return (
     <div className="mb-4 flex flex-wrap items-center gap-x-7 gap-y-3 rounded-xl bg-sunken px-4 py-3">
-      {cell(STATUS_LABEL.active, g.by_status.active ?? 0, 'text-accent-text')}
-      {cell(STATUS_LABEL.awaiting_human, g.by_status.awaiting_human ?? 0, 'text-warn')}
-      {cell(STATUS_LABEL.awaiting_child, g.by_status.awaiting_child ?? 0)}
-      {(g.by_status.done ?? 0) > 0 ? (
+      {cell(STATUS_LABEL.active, n('active'), 'text-accent-text')}
+      {cell(STATUS_LABEL.awaiting_human, n('awaiting_human'), 'text-warn')}
+      {cell(STATUS_LABEL.awaiting_child, n('awaiting_child'))}
+      {shipped > 0 ? (
         <button
           onClick={onShowShipped}
           title="View completed work + their archived execution traces"
           className="ml-auto inline-flex items-center gap-1 text-[11px] text-faint underline-offset-2 hover:text-fg hover:underline"
         >
-          {g.by_status.done} shipped
+          {shipped} shipped
         </button>
       ) : (
         <span className="ml-auto text-[11px] text-faint">0 shipped</span>

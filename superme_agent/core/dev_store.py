@@ -30,6 +30,33 @@ _ORIGINS = {"user", "agent"}
 _SPAWN_RELATIONS = {"blocking", "parallel", "spawn"}
 
 
+# --- event observers (the dashboard push channel's one instrumentation point) --------------------
+# Every state change worth showing the owner already funnels through `log_event` — 78 call sites
+# across 20 modules (run start/end, phase advance, gate decisions, deputy verdicts, git ops, inbox
+# pushes, learning). Rather than instrument each, the daemon registers ONE observer here and turns
+# each event into a cache-invalidation topic (see `daemon/services/dashboard_stream.py`).
+#
+# Deliberately a plain synchronous callback list, NOT an asyncio queue: core is the data layer and
+# must not import the daemon or know a WebSocket exists. Observers are best-effort — one that raises
+# is logged and skipped, because a broken notifier must never fail the write that triggered it.
+_event_observers: list = []
+
+
+def subscribe_events(fn) -> None:
+    """Register `fn(event: dict)` to be called after every `log_event` write. The daemon installs
+    exactly one of these at startup; nothing else should."""
+    _event_observers.append(fn)
+
+
+def _notify_event(row: dict) -> None:
+    for fn in list(_event_observers):
+        try:
+            fn(row)
+        except Exception:
+            import logging
+            logging.getLogger("superme-agent").exception("dev_store event observer failed")
+
+
 def _norm_origins(value, *, default: str = "user") -> list[str]:
     """Coerce a stored/incoming origin (JSON array, legacy scalar, list, or None) to a de-duplicated,
     order-preserving list of valid origins. Empty/unknown falls back to [default]."""
@@ -400,7 +427,11 @@ class DevStore:
                   actor: str = "daemon", meta: dict | None = None) -> dict:
         """Append one event to the log. `scope` auto-derives when omitted: an event with an
         `item_id` is item-scoped, otherwise dev-native (item_id NULL). Append-only — never
-        edited. Returns the stored row (meta decoded)."""
+        edited. Returns the stored row (meta decoded).
+
+        Also notifies any registered observer AFTER the row is committed (see `subscribe_events`) —
+        this is the single point the dashboard's live-push channel hangs off. Notification is
+        best-effort and cannot affect the write."""
         scope = scope or ("item" if item_id else "dev")
         with self._conn() as c:
             cur = c.execute(
@@ -409,7 +440,9 @@ class DevStore:
                 (context_id, scope, item_id, kind, actor, summary,
                  (json.dumps(meta) if meta else None), _now()),
             )
-            return self._get_event(c, cur.lastrowid)
+            row = self._get_event(c, cur.lastrowid)
+        _notify_event(row)
+        return row
 
     def list_events(self, context_id: str, *, since: str | None = None,
                     until: str | None = None, scope: str | None = None,

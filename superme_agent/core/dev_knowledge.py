@@ -60,7 +60,7 @@ def _session_fields(meta: dict) -> tuple[dict, str | None]:
 # research stages (investigate/report) rank beside their implementation counterparts. status ranks
 # put what NEEDS THE OWNER first (awaiting_human), then runnable work, then routed waits, then done.
 _PHASE_RANK = {"triage": 0, "plan": 1, "build": 2, "investigate": 2,
-               "vet": 3, "report": 3, "review": 4, "close": 5}
+               "vet": 3, "review": 4, "close": 5}
 _STATUS_RANK = {"awaiting_human": 0, "active": 1, "awaiting_child": 2,
                 "awaiting_upstream": 3, "awaiting_slot": 3, "done": 4}
 # Statuses that read as "this item is live" (non-terminal). A parked-on-a-peer or queued-for-a-slot
@@ -1007,6 +1007,10 @@ class DevKnowledgeService:
     _GIT_FIELDS = frozenset({
         "git_branch", "git_worktree", "git_base", "git_merge_commit", "git_merged_at",
         "git_backup_ref",
+        # `strict` repos only (renovation §2.2): the instant the deputy approved and handed the
+        # merge to the owner. `pr_open` is DERIVED from it (stamped ∧ not yet merged), never stored
+        # as its own flag — one fact, one field, no pair to fall out of step.
+        "git_pr_opened_at",
     })
 
     def set_work_item_git(self, dev_root: Path, item_id: str, **fields) -> bool:

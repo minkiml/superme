@@ -11,7 +11,7 @@ Every work-item lands in AT MOST one bucket, strict priority:
                              covering the owner — the deputy is standing in for the human here.
     running  (green)       — a live PHASE-agent run is executing for it right now (spine live rows).
     unread   (blue)        — terminal, and the owner hasn't opened it since (no `seen_at` stamp):
-                             the closeout/abandon brief pushing back instead of waiting to be polled.
+                             the close/abandon brief pushing back instead of waiting to be polled.
 Everything else is quiet — active-but-autonomous work makes no attention claim.
 
 The global badge shows ONLY the top non-empty tier (its color + count) — one glance, one number.

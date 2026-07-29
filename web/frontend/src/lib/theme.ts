@@ -10,7 +10,7 @@ export function getTheme(): Theme {
   return 'dark' // default to the (now warm) dark
 }
 
-export function applyTheme(t: Theme) {
+function applyTheme(t: Theme) {
   document.documentElement.classList.toggle('dark', t === 'dark')
 }
 

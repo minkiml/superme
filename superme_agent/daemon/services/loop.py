@@ -1,11 +1,11 @@
 """The build⟷vet LOOP DRIVER + breakers (build-vet-loop §5) — the daemon-side autonomy.
 
-The driver is CODE (§4.5.1): it fires when a background vet run finishes, reads the evidence
-ledger's derived verdict (`evidence_status()` — the loop condition existed before the loop), and
-moves the item:
+The driver is CODE (§4.5.1): it fires when a background vet run finishes, reads the derived
+verdict over the recorded checks (`evidence_status()` — the loop condition existed before the
+loop), and moves the item:
 
     passed      → advance to review (the owner's gate — the loop's ONLY happy exit)
-    failed      → breakers? no  → new build cycle, handing over vet-report-<n>.md
+    failed      → breakers? no  → new build cycle, handing over the cycle report
                           yes → stop, awaiting_human, honest report
     stale       → re-run vet (code moved under a green ledger; ONE consecutive re-vet, then stop)
     unverified  → vet recorded nothing → FAIL CLOSED → awaiting_human
@@ -20,8 +20,9 @@ stops the loop and is never auto-resumed (only the owner's next action restarts 
 Phase flips are CAS-guarded (§4.5.1, hermes claim_review_task precedent): each flip re-reads the
 item and writes only if the phase still matches, in one synchronous block — atomic under the
 single asyncio loop (no await between check and set), and the per-item run-lock (`_begin_run`)
-already prevents two loop runs from coexisting. Every decision lands in `attempts.md` (the
-driver's own append-only ledger) + a `loop.decision` dev event — the honest history review reads.
+already prevents two loop runs from coexisting. Every decision lands in the cycle report's
+`§Cycle outcome` (the driver's append, which closes the cycle) + a `loop.decision` dev event —
+the honest history review reads.
 
 Entry point: the owner starts the loop explicitly (the vet quick-action route). From there it
 self-drives while `loop_autorun` is on (default); off degrades every hop to decide-and-page.
@@ -38,12 +39,13 @@ from ..app_state import agent as _agent, dev as _dev, dev_store as _dev_store, \
 from ...core import Usage, Result, Status, TextDelta, ToolResult, deny_all
 from ...core import artifacts as _arts
 from ...core import autopilot as _autopilot
-from ...core import kernel_speech, session_contract
+from ...core import kernel_speech
+from ...harness.tools.run_tools import make_run_report_server
 from ...core.permissions import VET_READONLY_NUDGE
 from ...harness.tools.dev_tools import make_dev_mcp_server
 from .runs import (_LiveTokens, _begin_run, _end_run, _log_artifact,
                    bank_auto_checkpoint, capture_event, capture_prompt, capture_run_input,
-                   reset_vet_thread)
+                   compacted_checkpoint, fire_auto_triage, read_completion, reset_vet_thread)
 
 log = logging.getLogger("superme-agent")
 
@@ -55,7 +57,7 @@ def decide_after_vet(item: dict, *, evidence: dict, fingerprint: str, attempts: 
     """The driver's decision function — PURE (no I/O; the wrapper reads the ledgers and passes
     them in), so every branch is unit-testable. Returns {action, status, reason, record}:
     action ∈ none|review|build|revet|halt · status = the item's resting status · record =
-    whether an attempts.md entry is due (`none` leaves no trace — the loop didn't act)."""
+    whether a §Cycle outcome entry is due (`none` leaves no trace — the loop didn't act)."""
     # Sticky owner holds (§5.2): the driver continues ONLY an active item. Terminal, paused,
     # or already-paged items are the owner's — a human-set stop never auto-resumes.
     status = str(item.get("status") or "")
@@ -122,16 +124,25 @@ def decide_after_build(item: dict, *, outcome: str | None, turn_error: bool) -> 
     the gap RIDES TO REVIEW, where the owner or deputy decides. So a build that ends without a
     turn_error ALWAYS advances toward vet; `blocked`/`exhausted`/`stagnated`/`approval_required` all
     advance (the deferred auth surfaces at review; the breakers catch a genuinely empty loop). Only
-    TWO things stop at build: `moved` (the owner moved/paused it — theirs, the loop yields) and
+    THREE things stop at build: `moved` (the owner moved/paused it — theirs, the loop yields),
     `infra` (a turn_error — a crashed turn with no verdict; BV-B wraps it in a retry ladder, today it
-    pages, never as a work verdict). An authorization is NOT an infra fault and NEVER pages here.
-    Returns {stopping, klass}; klass ∈ moved|infra|advance."""
+    pages, never as a work verdict), and `needs_user`. An authorization is NOT an infra fault and
+    NEVER pages here. Returns {stopping, klass}; klass ∈ moved|infra|needs_user|advance.
+
+    **Why `needs_user` is an exception and an assumption is not.** "Ride to review" rests on the
+    work being ON THE BRANCH — a gap the owner can judge against a real diff. The wall this covers
+    is the opposite: a commit the build cannot make (the project's own hook refused it, and
+    overruling that is not the agent's call). Nothing landed, so advancing would vet a tree whose
+    content cannot reach review, and the owner would meet an empty diff a whole cycle later. The
+    agent's instruction is explicit that this is not a retry: quote the refusal, park, ask."""
     moved_away = (bool(item.get("done_at")) or str(item.get("status")) != "active"
                   or str(item.get("phase")) != "build")
     if moved_away:
         return {"stopping": True, "klass": "moved"}
     if turn_error:
         return {"stopping": True, "klass": "infra"}
+    if outcome == "needs_user":
+        return {"stopping": True, "klass": "needs_user"}
     return {"stopping": False, "klass": "advance"}
 
 
@@ -174,6 +185,7 @@ def _dev_mcp(ctx, wt: Path, main_repo_dir: Path, item_id: str) -> dict:
         dev_root=ctx.internal_root / "dev",
         repo_dir=wt, main_repo_dir=main_repo_dir,
         bound_item_id=item_id,
+        fire_triage=lambda child_id: fire_auto_triage(ctx.id, child_id, _spine),
     )}
 
 
@@ -228,14 +240,13 @@ async def _run_background_vet(ctx, context_id: str, item_id: str,
         return
     wt_ctx, wt, item_dir, _ = lc
     title = item.get("title") or item_id
-    # Thin trigger (Thread 3 §4): which skill for which item. The run contract rides the
-    # per-turn system layer (background=True); the procedure lives in the vet skill. BV-A3: name the
+    # Thin trigger (Thread 3 §4): which skill for which item. The run protocol rides the
+    # Current-focus background variant; the procedure lives in the vet skill. BV-A3: name the
     # checks the build DEFERRED (needs-you items in the auth ledger) so the vetter SKIPS them — it
     # doesn't re-judge a wall only the owner can clear, so the loop converges instead of churning.
     deferred = [str(a.get("check")) for a in _arts.pending_authorizations(item_dir) if a.get("check")]
     trigger = kernel_speech.vet_trigger(item_id, title, deferred=deferred or None)
-    orient = kernel_speech.render_orient_block(item, item_dir)
-    prompt = f"{orient}\n\n---\n\n{trigger}"
+    prompt = trigger   # orientation is on-demand — the vet skill's directed reads (renovation §1)
     capture_prompt(context_id, trigger, item_id=item_id)
     # Prompt inspector "A" — throwaway probes ONLY: vet passes work_item_preamble as system_append at
     # the worktree ctx. Normal items skip capture (the run_input table no longer grows per-run).
@@ -249,17 +260,18 @@ async def _run_background_vet(ctx, context_id: str, item_id: str,
     turn_error = False
     run_started = time.time()
     live = _LiveTokens()
+    sink: dict = {}   # report_completion lands here (run_tools) — recorded; the DRIVER decides
     try:
         async for ev in _agent.run_turn(
             wt_ctx, prompt,
             resume=None,                     # vet FORGETS — fresh eyes, prior reports are data
             model=model, effort=effort,
             approve=deny_all,                # background: nothing outside the boundary runs
-            extra_mcp_servers=_dev_mcp(ctx, wt, ctx.cwd, item_id),
+            extra_mcp_servers={**_dev_mcp(ctx, wt, ctx.cwd, item_id),
+                               "run": make_run_report_server(sink)},
             system_append=kernel_speech.work_item_preamble(item_id, item, str(item_dir), interactive=False),
             write_boundary=[wt, item_dir],   # boundary Bash autonomy (running checks IS the job)
             deny_write_tools=VET_READONLY_NUDGE,   # …but file-write tools die outright (§4)
-            background=True,                 # per-turn run contract in the system layer (Thread 3 §3)
         ):
             if isinstance(ev, Usage):
                 live.bump(context_id, item_id, ev)
@@ -282,12 +294,15 @@ async def _run_background_vet(ctx, context_id: str, item_id: str,
     except Exception: #crash check
         turn_error = True
         log.exception("background vet run failed for %s", item_id)
+    # Record the vet run's own report (trail honesty); the DRIVER below decides off the LEDGER,
+    # never off this payload — vet's claims don't route the loop.
+    read_completion(context_id, item_id, sink)
     # ---- THE DRIVER (§5.1): decide off the ledger, close the run, apply, fire the next hop.
     item = _dev.read_work_item(dev_root, item_id) or {}
     evidence = _arts.evidence_status(item_dir, wt)
     fingerprint = _arts.convergence_fingerprint(item_dir)
-    attempts = _arts.read_attempts(item_dir)
-    reports = _arts.vet_reports(item_dir)
+    attempts = _arts.read_cycle_outcomes(item_dir)
+    reports = _arts.cycle_reports(item_dir)
     cycle = reports[-1]["cycle"] if reports else 0
     spent = _spine.item_phase_tokens(context_id, item_id)
     budget = _spine.effective_loop_budget(context_id, item.get("loop_budget"))
@@ -303,11 +318,6 @@ async def _run_background_vet(ctx, context_id: str, item_id: str,
     if not moved:   # lost the CAS — someone else moved the item; theirs wins, loop yields
         d = {"action": "none", "status": str(item.get("status") or "active"), "record": False,
              "reason": "phase flip lost its CAS — another actor moved the item; loop yields"}
-    # B3: mechanically author readiness.md at the vet→review transition — BEFORE _end_run dispatches
-    # the review deputy (which else escalates 100% of items for a doc no autopilot run authors).
-    if d["action"] == "review":
-        from . import git_ops
-        git_ops.write_review_readiness(ctx, item, item_dir, dev_root)
     outcome = ("success" if d["action"] == "review"
                else "blocked" if turn_error
                else "exhausted" if d["action"] == "halt" and "budget" in d["reason"]
@@ -317,12 +327,12 @@ async def _run_background_vet(ctx, context_id: str, item_id: str,
              outcome=outcome, session_id=final_session)
     if d["record"]:
         try:
-            _arts.append_attempt(item_dir, cycle=cycle, evidence=str(evidence.get("status")),
-                                 decision=d["action"], reason=d["reason"],
-                                 fingerprint=fingerprint if evidence.get("status") == "failed" else "",
-                                 failed=d.get("failed") or (), tokens=spent, budget=budget)
+            _arts.append_cycle_outcome(item_dir, evidence=str(evidence.get("status")),
+                                       decision=d["action"], reason=d["reason"],
+                                       fingerprint=fingerprint if evidence.get("status") == "failed" else "",
+                                       failed=d.get("failed") or (), tokens=spent, budget=budget)
         except Exception:
-            log.exception("attempts.md append failed for %s", item_id)
+            log.exception("§Cycle outcome append failed for %s", item_id)
     _log_decision(context_id, item_id, cycle, d)
     if d["action"] == "review":
         _dev_store.log_event(context_id, "phase.advance",
@@ -333,7 +343,27 @@ async def _run_background_vet(ctx, context_id: str, item_id: str,
     except Exception:
         log.exception("auto-checkpoint after vet failed")
     # Fire the next hop AFTER the run row is closed (the per-item run-lock frees above).
-    if d["action"] == "build":
+    if d["action"] == "review":
+        # Review ENTRY run (renovation §2.2). This hop is how items normally reach review — it
+        # CAS-flips the phase itself and never goes through `advance_item` — so the entry run has
+        # to be fired here too, through the same shared firer. Its `_end_run` then dispatches the
+        # deputy, which is why nothing deputizes the gate on this line: judging before the report
+        # exists would judge a document nobody wrote.
+        from .runs import fire_review_entry
+        if not fire_review_entry(context_id, item_id, _spine):
+            log.warning("loop: review-entry run did not start for %s", item_id)
+    elif d["action"] == "build":
+        # Compaction, run-START for the BUILD thread. Build REMEMBERS — the same session carries
+        # every cycle — so it is the other accumulating thread besides intake (vet mints fresh and
+        # never needs this). Here is its run boundary: the vet run's row is closed, the build
+        # cycle's is not yet open. Awaited, because the compaction needs that free lock.
+        try:
+            from . import compaction
+            await compaction.compact_before_run(
+                ctx, context_id, item_id, (item.get("sessions") or {}).get("build"),
+                kind=item.get("kind"), model=_resolve_run_params(context_id, item)[0])
+        except Exception:
+            log.exception("run-start compaction check failed for build cycle %s", item_id)
         started, why = start_build_cycle(ctx, context_id, item_id)
         if not started:
             log.warning("loop: build cycle did not start for %s: %s", item_id, why)
@@ -389,8 +419,8 @@ def start_build_cycle(ctx, context_id: str, item_id: str) -> tuple[bool, str]:
     lc = _loop_ctx(ctx, item)
     if lc is None:
         return False, "item has no live worktree"
-    if _arts.latest_vet_report(dev_root / "work-items" / item_id) is None:
-        return False, "no vet report to hand over — a loop build cycle needs one"
+    if _arts.latest_cycle_report(dev_root / "work-items" / item_id) is None:
+        return False, "no cycle report to hand over — a loop build cycle needs one"
     model, effort = _resolve_run_params(context_id, item)
     if not _begin_run(ctx, context_id, item_id, "build", model, phase="build"):
         return False, "a run is already in progress for this item"
@@ -445,13 +475,17 @@ async def _run_background_build(ctx, context_id: str, item_id: str,
     prev_build = (item.get("sessions") or {}).get("build")
     title = item.get("title") or item_id
     if trigger is None:
-        report = _arts.latest_vet_report(item_dir)   # capped handoff (§8·O10)
-        # Thin trigger (Thread 3 §4): the vet report IS the work order; the build skill owns the
-        # procedure (Inner checks green, commit), the system layer carries the run contract.
+        report = _arts.latest_cycle_report(item_dir)   # capped handoff (§8·O10)
+        # Thin trigger (Thread 3 §4): the failed cycle's report IS the work order; the build skill
+        # owns the procedure, the system layer carries the run contract.
         trigger = kernel_speech.build_loop_trigger(item_id, title, report["cycle"], report["text"])
-    prompt = trigger
-    if not prev_build:   # first build turn of the item's life happening in background → orient at birth
-        prompt = f"{kernel_speech.render_orient_block(item, item_dir)}\n\n---\n\n{trigger}"
+    # Open this cycle's report (renovation §3.1: build fills §Built/§Validation as it works;
+    # idempotent when the open cycle's file already exists — e.g. a continue on a parked build).
+    try:
+        _arts.scaffold_cycle(item_dir, title=title)
+    except Exception:
+        log.exception("cycle-report scaffold failed for %s", item_id)
+    prompt = trigger   # orientation is on-demand — the build skill's directed reads (renovation §1)
     capture_prompt(context_id, trigger, item_id=item_id)
     # Prompt inspector "A" — throwaway probes ONLY: build passes work_item_preamble as system_append
     # at the worktree ctx; the body carries the orient block only on the item's first build turn (else
@@ -462,21 +496,25 @@ async def _run_background_build(ctx, context_id: str, item_id: str,
                           prompt=prompt, phase="build", background=True)
     final_tokens = None
     final_usage = None
-    final_text = None
     final_session = None
     turn_error = False
     run_started = time.time()
     live = _LiveTokens()
+    sink: dict = {}   # report_completion lands here (run_tools) — read after the turn
     try:
         async for ev in _agent.run_turn(
             wt_ctx, prompt,
             resume=prev_build,               # build REMEMBERS — same thread every cycle
             model=model, effort=effort,
             approve=deny_all,
-            extra_mcp_servers=_dev_mcp(ctx, wt, ctx.cwd, item_id),
-            system_append=kernel_speech.work_item_preamble(item_id, item, str(item_dir), interactive=False),
+            extra_mcp_servers={**_dev_mcp(ctx, wt, ctx.cwd, item_id),
+                               "run": make_run_report_server(sink)},
+            # Build REMEMBERS, so it is the other thread compaction can hit — carry the
+            # post-compaction pointer when its newest finished run was the compaction itself.
+            system_append=kernel_speech.work_item_preamble(
+                item_id, item, str(item_dir), interactive=False,
+                compacted_checkpoint=compacted_checkpoint(ctx, item, prev_build)),
             write_boundary=[wt, item_dir],   # S4 freeze: writes stay in worktree + item dir
-            background=True,                 # per-turn run contract in the system layer (Thread 3 §3)
         ):
             if isinstance(ev, Usage):
                 live.bump(context_id, item_id, ev)
@@ -485,7 +523,6 @@ async def _run_background_build(ctx, context_id: str, item_id: str,
             elif isinstance(ev, Result):
                 final_tokens = ev.tokens
                 final_usage = ev.usage
-                final_text = ev.text
                 final_session = ev.session_id
                 _sessions.record(wt_ctx, ev.session_id)
                 if ev.session_id:
@@ -500,18 +537,14 @@ async def _run_background_build(ctx, context_id: str, item_id: str,
     except Exception:
         turn_error = True
         log.exception("background build cycle failed for %s", item_id)
-    report_out = session_contract.parse_completion_report(final_text)
-    if report_out:
-        _dev_store.log_event(context_id, "run.report",
-                             f"{report_out['outcome']}: {report_out['summary'][:160]}",
-                             item_id=item_id, actor="agent", meta=report_out)
+    report_out = read_completion(context_id, item_id, sink)
     item = _dev.read_work_item(dev_root, item_id) or {}
     outcome = (report_out or {}).get("outcome")
     d = decide_after_build(item, outcome=outcome, turn_error=turn_error)
     if d["stopping"]:
-        # `moved` = the owner moved/paused it → left theirs (loop yields). `infra` is still ours →
-        # rest at awaiting_human. There is NO content/approval stop here: a deferred authorization
-        # rides to review (BV-A2), never a mid-build page.
+        # `moved` = the owner moved/paused it → left theirs (loop yields). `infra` and `needs_user`
+        # are still ours → rest at awaiting_human. There is still NO content/approval stop: a
+        # deferred authorization rides to review (BV-A2), never a mid-build page.
         still_ours = d["klass"] != "moved"
         rest = "awaiting_human" if still_ours else str(item.get("status") or "active")
         _end_run(ctx, context_id, item_id, final_tokens, rest, final_usage,
@@ -519,6 +552,10 @@ async def _run_background_build(ctx, context_id: str, item_id: str,
         if d["klass"] == "moved":
             msg, meta = ("Loop: item moved during build cycle — loop yields",
                          {"action": "halt", "outcome": outcome})
+        elif d["klass"] == "needs_user":
+            # The question is already the run's report; attention renders it as an ask card.
+            msg, meta = ("Loop: build hit a wall only the owner can clear — asking",
+                         {"action": "halt", "outcome": "needs_user"})
         else:  # infra — a crashed turn with no verdict; the only mid-build page (BV-B retry ladder)
             msg, meta = ("Loop: build turn crashed (infrastructure) — paging the owner",
                          {"action": "halt", "outcome": "blocked", "class": "infra"})
@@ -551,76 +588,21 @@ async def _run_background_build(ctx, context_id: str, item_id: str,
     log.info("background build cycle: done for %s (stopping=%s)", item_id, d["stopping"])
 
 
-# ------------------------------------------------------------------- review→plan re-entry (#178)
-
-def schedule_review_plan(context_id: str, item_id: str, feedback: str) -> None:
-    """Owner feedback at the review gate → re-plan (#178, unifying the owner onto the deputy's
-    review→plan router). Called MID-TURN from `route_review_feedback`: the interactive intake turn
-    still holds the item's run-lock, so the re-plan cannot start synchronously — a background task
-    waits for that run row to close, then fires `runs.fire_phase_feedback(by='owner')`, which flips
-    review→plan and re-plans with a downstream digest. Forward flow (plan→build→vet→review) re-vets
-    by construction, so the owner's feedback converges the same way the deputy's does."""
-    asyncio.create_task(_fire_review_plan(context_id, item_id, feedback))
-
-
-async def _fire_review_plan(context_id: str, item_id: str, feedback: str) -> None:
-    from ...gateway import contexts
-    from . import git_ops
-    from . import runs as _runs
-    deadline = time.time() + _REVIEW_FIRE_WAIT
-    while time.time() < deadline:
-        if not _spine.is_item_running(context_id, item_id):
-            ctx = contexts.resolve(context_id, "dev")
-            # The re-plan wants the downstream digest (what build/vet/review found) so it knows it's
-            # feedback from the earlier plan's results — the same context the deputy's send-back carries.
-            digest = git_ops.build_downstream_digest(ctx.internal_root / "dev" / "work-items" / item_id)
-            if _runs.fire_phase_feedback(context_id, item_id, phase="review", feedback=feedback,
-                                         digest=digest, by="owner"):
-                return
-            # is_item_running was false but the fire couldn't start (item moved/terminal, or a run
-            # raced in) — one retry after a beat; a persistent refusal falls out to the timeout log.
-        await asyncio.sleep(2)
-    log.warning("loop: owner review→plan re-entry timed out waiting for the run-lock (%s)", item_id)
-    _dev_store.log_event(context_id, "loop.decision",
-                         "Loop: owner review feedback could not be routed — the running turn never ended",
-                         item_id=item_id, actor="daemon", meta={"action": "halt"})
-
-
-def start_authorized_build(ctx, context_id: str, item_id: str, *, auth: dict) -> tuple[bool, str]:
-    """Grant-as-send_back (BV-A2.3): a deferred authorization has been GRANTED at review, so route
-    the item back to build to PERFORM the now-allowed contract change. The item is at review; flip
-    it review→build and fire a build cycle whose trigger names the granted request. It exits through
-    the normal build→vet flow — the request is no longer pending, so the deferred check verifies
-    against the real change this time — then returns to review. Caller has already recorded the
-    grant (`resolve_authorization`). Returns (started, reason)."""
-    dev_root = ctx.internal_root / "dev"
-    item = _dev.read_work_item(dev_root, item_id) or {}
-    if not item:
-        return False, "work-item not found"
-    if item.get("done_at") or str(item.get("status")) not in ("active", "awaiting_human"):
-        return False, f"item is not resumable (status={item.get('status')})"
-    if str(item.get("phase")) != "review":
-        return False, f"grant re-entry runs from review (phase={item.get('phase')})"
-    if _loop_ctx(ctx, item) is None:
-        return False, "item has no live worktree"
-    if not _cas_phase(dev_root, item_id, "review", "build"):
-        return False, "item left review — grant re-entry yields"
-    title = item.get("title") or item_id
-    trigger = kernel_speech.authorized_build_trigger(item_id, title, auth)
-    model, effort = _resolve_run_params(context_id, item)
-    if not _begin_run(ctx, context_id, item_id, "build", model, phase="build"):
-        return False, "a run is already in progress for this item"
-    asyncio.create_task(_run_background_build(ctx, context_id, item_id, model, effort,
-                                              trigger=trigger))
-    return True, "build"
-
-
 def grant_authorization(ctx, context_id: str, item_id: str, auth_id: str, *,
                         by: str) -> tuple[bool, str]:
-    """Record a GRANT on a pending authorization and route the item back to build to perform it
-    (BV-A2.3). Shared by the owner's authorize action and the deputy's delegated grant. The caller
-    (deputy path) enforces delegation BEFORE calling this — the owner path grants unconditionally.
-    Returns (started, reason)."""
+    """Record a GRANT on a pending authorization. It RECORDS AND ROUTES NOTHING (renovation §2.1):
+    the item stays at review, the owner resolves every pending request in any order, and ONE exit
+    then fires — Approve (close applies the granted ops) or `revise` (they land as plan input).
+
+    `start_authorized_build` — the old grant-as-send-back — is deleted. It assumed BUILD applies
+    anchor-doc changes, but knowledge writes have one owner (close) and build's freeze boundary
+    hard-denies writes outside the worktree, so a granted `doc-sync` kicked build into a cycle that
+    could not perform the very thing it was granted. It also made per-request grants impossible: the
+    first grant flipped the item to `build`, so the second silently no-opped on its phase guard.
+
+    Shared by the owner's authorize action and the deputy's delegated grant. The caller (deputy
+    path) enforces delegation BEFORE calling this — the owner grants unconditionally.
+    Returns (recorded, reason)."""
     dev_root = ctx.internal_root / "dev"
     item_dir = dev_root / "work-items" / item_id
     auth = _arts.resolve_authorization(item_dir, auth_id, decision="granted", by=by)
@@ -631,7 +613,7 @@ def grant_authorization(ctx, context_id: str, item_id: str, auth_id: str, *,
                          item_id=item_id, actor=(by if by in ("owner", "deputy") else "daemon"),
                          meta={"auth_id": auth_id, "scope": auth.get("scope"), "by": by,
                                "check": auth.get("check")})
-    return start_authorized_build(ctx, context_id, item_id, auth=auth)
+    return True, "recorded"
 
 
 def deny_authorization(ctx, context_id: str, item_id: str, auth_id: str, *,
@@ -650,5 +632,3 @@ def deny_authorization(ctx, context_id: str, item_id: str, auth_id: str, *,
                                "check": auth.get("check")})
     return True, "denied"
 
-
-_REVIEW_FIRE_WAIT = 900   # s — how long the deferred hop waits for the routing turn's run-lock

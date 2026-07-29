@@ -30,6 +30,7 @@ repos:
     persona_append: ''
     extra_mcp: []
     onboarding: project-init
+    review_mode: strict
   dummy9:
     label: dummy9
     cwd: /Users/cooma/Developer/my_docs/dummy9

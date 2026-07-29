@@ -80,13 +80,6 @@ export const EFFORTS: { key: EffortKey; label: string; blurb: string }[] = [
   { key: 'medium', label: 'Medium', blurb: 'Balanced reasoning (default)' },
   { key: 'high', label: 'High', blurb: 'Most reasoning — hardest problems' },
 ]
-const EFFORT_LABEL: Record<string, string> = Object.fromEntries(EFFORTS.map((e) => [e.key, e.label]))
-
-/** A reasoning-effort label ("medium" → "Medium"). Empty for missing. */
-export function fmtEffort(id?: string | null): string {
-  if (!id) return ''
-  return EFFORT_LABEL[id.toLowerCase()] ?? id.charAt(0).toUpperCase() + id.slice(1)
-}
 
 /** A model label in canonical "Name Version" form. Handles both a bare alias ("sonnet" →
  * "Sonnet 5", the catalog's latest) and a full resolved id ("claude-opus-4-8" → "Opus 4.8",

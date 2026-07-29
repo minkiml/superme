@@ -640,6 +640,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/repos/{repo_id}/git": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set Repo Git
+         * @description Set this repo's review mode (`fast` | `strict`) and/or anchor branch — the two knobs that
+         *     govern how work lands (workflow-renovation-v2 §2.2). Both are read LIVE at every decision point,
+         *     so a change applies immediately, including to items already sitting at review. An anchor naming
+         *     a branch that doesn't exist is accepted and reported back as an `error`: the setting is the
+         *     owner's declaration, and every git site refuses rather than silently retargeting the default.
+         */
+        post: operations["set_repo_git_repos__repo_id__git_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/repos/{repo_id}/meta": {
         parameters: {
             query?: never;
@@ -1283,11 +1307,12 @@ export interface paths {
         put?: never;
         /**
          * Dev Work Item Authorize
-         * @description The owner's grant/deny on a deferred authorization at review (BV-A2.3). `granted` records the
-         *     grant and routes the item back to build to perform the now-allowed change; `denied` accepts the
-         *     gap (the blocked check is waived) and leaves the item at review for the owner's approve. Unlike
-         *     the deputy, the owner grants unconditionally — the delegated-authority floor only binds the
-         *     deputy. 409 when the item/request isn't in a grantable state or a run is in flight.
+         * @description The owner's grant/deny on a deferred authorization at review. Both RECORD and route nothing
+         *     (renovation §2.1): the item stays at review so every pending request can be resolved in any
+         *     order, and one exit then fires — Approve (close applies the granted ops, skips the denied ones
+         *     and records the gap) or `revise` (they land as plan input). `denied` also waives the blocked
+         *     check. Unlike the deputy, the owner grants unconditionally — the delegated-authority floor
+         *     binds only the deputy. 409 when the request isn't in a decidable state.
          */
         post: operations["dev_work_item_authorize_dev_work_items__item_id__authorize_post"];
         delete?: never;
@@ -1555,8 +1580,7 @@ export interface paths {
          * @description Approve → advance a work-item to its kind's next phase (the owner's gate; sequencing
          *     comes from KIND_PROFILES — triage→plan→… per kind). Refuses if the item is at its final
          *     phase, terminal, or a run is in flight. The gate decision also rests the item at `active`
-         *     (an awaiting_human item just got its answer). Owner-driven, so `ratify=True` — approving
-         *     ratifies the brief's assumptions; the autopilot driver uses the same core with ratify=False.
+         *     (an awaiting_human item just got its answer). The autopilot driver uses the same core.
          */
         post: operations["dev_work_item_advance_dev_work_items__item_id__advance_post"];
         delete?: never;
@@ -1598,7 +1622,9 @@ export interface paths {
         /**
          * Dev Work Item Git
          * @description The item's live git state (derived at read time, never stored): branch/dir/registration
-         *     existence, dirty files, ahead/behind vs trunk (behind = freshness debt), merged-into-trunk.
+         *     existence, dirty files, ahead/behind vs the repo's anchor (behind = freshness debt), merged.
+         *     Also echoes the repo's `review_mode`, so the rule governing the merge is visible where the
+         *     merge is — read live, never from the item, so a mode flip applies to items already at review.
          */
         get: operations["dev_work_item_git_dev_work_items__item_id__git_get"];
         put?: never;
@@ -1650,6 +1676,48 @@ export interface paths {
          *     then retry / approve again).
          */
         post: operations["dev_work_item_git_merge_dev_work_items__item_id__git_merge_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dev/work-items/{item_id}/pr": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Dev Work Item Pr
+         * @description The dedicated PR page (§4.4) — `strict`'s review surface, and readable in any mode. Read-only
+         *     by construction: the page's one action is the ordinary review Approve, which merges.
+         */
+        get: operations["dev_work_item_pr_dev_work_items__item_id__pr_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dev/work-items/{item_id}/pr/diff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Dev Work Item Pr Diff
+         * @description One file's patches under one task group, fetched when the reader expands the row — a
+         *     branch's whole diff is the one thing a review page must not make them wait for.
+         */
+        get: operations["dev_work_item_pr_diff_dev_work_items__item_id__pr_diff_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1737,7 +1805,7 @@ export interface paths {
          * Dev Work Item Abandon
          * @description Abandon a work-item — HUMAN-ONLY (no agent-tool counterpart), legal from any non-terminal
          *     phase (D8). Ordered, each step idempotent: end live runs/sessions · remove the worktree
-         *     (branch kept — near-free trace) · abandon note into closeout.md · terminal status change
+         *     (branch kept — near-free trace) · abandon note into reports/report-close.md · terminal status change
          *     (`abandoned`, or `superseded` when `superseded_by` names the replacement) · resume a paused
          *     parent whose last open blocking child this was. Dev-knowledge untouched — write-at-merge
          *     means a pre-merge abandon wrote nothing, ever. The response is the abandon brief: blocking
@@ -2440,11 +2508,13 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "escalation" | "breaker" | "paged" | "review" | "gate";
+            kind: "question" | "escalation" | "breaker" | "paged" | "review" | "gate";
             /** Reason */
             reason: string;
             /** Actor */
             actor: string;
+            /** Questions */
+            questions?: components["schemas"]["HoldQuestion"][] | null;
         };
         /**
          * AttentionResponse
@@ -2555,7 +2625,7 @@ export interface components {
             /** Title */
             title?: string | null;
             /** Phase */
-            phase?: ("triage" | "plan" | "build" | "vet" | "review" | "investigate" | "report" | "close") | null;
+            phase?: ("triage" | "plan" | "build" | "vet" | "review" | "investigate" | "close") | null;
             /** Status */
             status?: ("active" | "awaiting_child" | "awaiting_upstream" | "awaiting_slot" | "awaiting_human" | "done") | null;
             /** Done At */
@@ -3174,6 +3244,11 @@ export interface components {
             effort_user: string;
             /** Effort Agent */
             effort_agent: string;
+            /**
+             * Approve Blocked By
+             * @default []
+             */
+            approve_blocked_by: string[];
         };
         /**
          * GateFact
@@ -3275,6 +3350,8 @@ export interface components {
             worktree?: string | null;
             /** Trunk */
             trunk?: string | null;
+            /** Review Mode */
+            review_mode?: string | null;
             /** Branch Exists */
             branch_exists?: boolean | null;
             /** Dir Exists */
@@ -3314,6 +3391,10 @@ export interface components {
             conflicts?: string[] | null;
             /** Stash Warning */
             stash_warning?: string | null;
+            /** Freshness */
+            freshness?: string | null;
+            /** Stale Paths */
+            stale_paths?: string[] | null;
             /** Knowledge Ops Applied */
             knowledge_ops_applied?: number | null;
             /** Knowledge Folded Into */
@@ -3419,6 +3500,22 @@ export interface components {
             status: string;
             /** Service */
             service: string;
+        };
+        /**
+         * HoldQuestion
+         * @description One question the grill carries to the owner — the four fields `report_completion` enforces,
+         *     so the card renders labelled rows instead of parsing prose. `recommend`/`why` are absent only
+         *     on a pre-typed report replayed from an older event.
+         */
+        HoldQuestion: {
+            /** Question */
+            question: string;
+            /** Recommend */
+            recommend?: string | null;
+            /** Why */
+            why?: string | null;
+            /** Instead */
+            instead?: string | null;
         };
         /** IdleScanResponse */
         IdleScanResponse: {
@@ -4045,6 +4142,129 @@ export interface components {
             resources: components["schemas"]["StackRow"][];
         };
         /**
+         * PrCommit
+         * @description One commit as the walkthrough shows it. `body` has the SuperMe trailer block stripped —
+         *     that block is what put the commit in this group, so repeating it inside would be noise.
+         */
+        PrCommit: {
+            /** Sha */
+            sha: string;
+            /** Short */
+            short: string;
+            /** Subject */
+            subject: string;
+            /** Body */
+            body?: string | null;
+        };
+        /**
+         * PrDiffResponse
+         * @description One file's patches under one task — fetched when the reader opens the row, never up front.
+         */
+        PrDiffResponse: {
+            /** Ok */
+            ok: boolean;
+            /** Id */
+            id: string;
+            /** Path */
+            path: string;
+            /** Task */
+            task?: string | null;
+            /** Patches */
+            patches: components["schemas"]["PrPatch"][];
+        };
+        /**
+         * PrFile
+         * @description One file inside a task group, with the churn that group put on it (summed over the group's
+         *     commits, which is what ranks it — the biggest change is where the risk is).
+         */
+        PrFile: {
+            /** Path */
+            path: string;
+            /** Plus */
+            plus: number;
+            /** Minus */
+            minus: number;
+        };
+        /**
+         * PrGroup
+         * @description One task's slice of the branch. `task` is null for commits that carry no `SuperMe-Task`
+         *     trailer — they are shown last rather than hidden.
+         */
+        PrGroup: {
+            /** Task */
+            task?: string | null;
+            /** Title */
+            title?: string | null;
+            /** Done */
+            done?: boolean | null;
+            /** Commits */
+            commits: components["schemas"]["PrCommit"][];
+            /** Files */
+            files: components["schemas"]["PrFile"][];
+        };
+        /** PrPatch */
+        PrPatch: {
+            /** Sha */
+            sha: string;
+            /** Short */
+            short: string;
+            /** Subject */
+            subject: string;
+            /** Patch */
+            patch: string;
+            /** Truncated */
+            truncated?: boolean | null;
+        };
+        /**
+         * PrStat
+         * @description Header numbers: commit COUNT over the fork point, and the NET diff that actually lands
+         *     (not the sum of per-commit churn — a line written in t1 and rewritten in t3 lands once).
+         */
+        PrStat: {
+            /** Commits */
+            commits: number;
+            /** Files */
+            files: number;
+            /** Insertions */
+            insertions: number;
+            /** Deletions */
+            deletions: number;
+        };
+        /**
+         * PrViewResponse
+         * @description The dedicated PR page (§4.4): the review report on the left, the task-grouped diff
+         *     walkthrough on the right. Entirely derived at read time — nothing here is stored.
+         */
+        PrViewResponse: {
+            /** Ok */
+            ok: boolean;
+            /** Id */
+            id: string;
+            /** Title */
+            title: string;
+            /** Phase */
+            phase?: string | null;
+            /** Branch */
+            branch: string;
+            /** Base */
+            base?: string | null;
+            /** Target */
+            target?: string | null;
+            /** Review Mode */
+            review_mode?: string | null;
+            /** Pr Open */
+            pr_open: boolean;
+            /** Merged */
+            merged: boolean;
+            /** Merge Commit */
+            merge_commit?: string | null;
+            /** Report */
+            report?: string | null;
+            stat: components["schemas"]["PrStat"];
+            /** Groups */
+            groups: components["schemas"]["PrGroup"][];
+        };
+        /**
          * ProjectStatusResponse
          * @description Whether this project's memory is established (PRD defines ≥1 deliverable). The dev workspace
          *     gates on it: an un-established repo shows the onboarding front door instead of the work tabs.
@@ -4409,6 +4629,33 @@ export interface components {
             /** Effective */
             effective: string;
         };
+        /** RepoGitBody */
+        RepoGitBody: {
+            /** Review Mode */
+            review_mode?: string | null;
+            /** Anchor Branch */
+            anchor_branch?: string | null;
+        };
+        /**
+         * RepoGitResponse
+         * @description The repo's two git knobs after a write (workflow-renovation-v2 §2.2). `resolved_anchor` is
+         *     what `anchor_branch` actually points at now — None when the repo isn't a git repo; `error` when
+         *     the configured branch doesn't exist, which is a refusal at every git site, not a fallback.
+         */
+        RepoGitResponse: {
+            /** Ok */
+            ok: boolean;
+            /** Repo Id */
+            repo_id: string;
+            /** Review Mode */
+            review_mode: string;
+            /** Anchor Branch */
+            anchor_branch?: string | null;
+            /** Resolved Anchor */
+            resolved_anchor?: string | null;
+            /** Anchor Error */
+            anchor_error?: string | null;
+        };
         /** RepoLearningResponse */
         RepoLearningResponse: {
             /** Ok */
@@ -4480,6 +4727,17 @@ export interface components {
             tag_color?: string | null;
             /** Icon */
             icon?: string | null;
+            /**
+             * Review Mode
+             * @default fast
+             */
+            review_mode: string;
+            /** Anchor Branch */
+            anchor_branch?: string | null;
+            /** Resolved Anchor */
+            resolved_anchor?: string | null;
+            /** Anchor Error */
+            anchor_error?: string | null;
             /** Scopes */
             scopes: {
                 [key: string]: components["schemas"]["RepoScope"];
@@ -5257,7 +5515,7 @@ export interface components {
             /** Inbox Id */
             inbox_id?: number | null;
             /** Phase */
-            phase?: ("triage" | "plan" | "build" | "vet" | "review" | "investigate" | "report" | "close") | null;
+            phase?: ("triage" | "plan" | "build" | "vet" | "review" | "investigate" | "close") | null;
             /** Status */
             status?: ("active" | "awaiting_child" | "awaiting_upstream" | "awaiting_slot" | "awaiting_human" | "done") | null;
             /** After */
@@ -5282,6 +5540,8 @@ export interface components {
             git_merged_at?: string | null;
             /** Git Backup Ref */
             git_backup_ref?: string | null;
+            /** Git Pr Opened At */
+            git_pr_opened_at?: string | null;
             /** Seen At */
             seen_at?: string | null;
             /** Artifacts */
@@ -6502,6 +6762,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RepoAutopilotResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_repo_git_repos__repo_id__git_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                repo_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RepoGitBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RepoGitResponse"];
                 };
             };
             /** @description Validation Error */
@@ -8160,6 +8455,74 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GitMergeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dev_work_item_pr_dev_work_items__item_id__pr_get: {
+        parameters: {
+            query?: {
+                context_id?: string;
+            };
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PrViewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dev_work_item_pr_diff_dev_work_items__item_id__pr_diff_get: {
+        parameters: {
+            query: {
+                path: string;
+                task?: string | null;
+                context_id?: string;
+            };
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PrDiffResponse"];
                 };
             };
             /** @description Validation Error */

@@ -24,7 +24,6 @@ from claude_agent_sdk import (
 from ..runtime.config import (
     SELF_FILE, CHARTER_FILES, HARNESS_DIR, LOCAL_HARNESS_DIR, CONSTITUTION_DIR, plugins_for,
 )
-from . import kernel_speech
 from .models import normalize_model
 from .operational import (constitution_catalog, list_repo_assets, silent_skill_names,
                           skills_in_category)
@@ -34,7 +33,7 @@ _DEV = DevKnowledgeService()  # stateless — reused to build the dev Orient dig
 from ..harness.tools.base_tools import make_base_mcp_server
 from .context import Context
 from .events import Init, TextDelta, Status, ToolResult, Usage, Result, TurnEvent
-from .permissions import ApproveFn, build_can_use_tool
+from .permissions import ApproveFn, build_can_use_tool, deny_all
 
 log = logging.getLogger("superme-agent")
 
@@ -101,8 +100,10 @@ def _context_usage(usage: dict | None, model_usage: dict | None, model: str | No
     the fill 2–3×.
 
     The window (denominator) is the model's real contextWindow — a per-model, per-session
-    property (Sonnet 5 negotiates 1M here, Opus 1M, others differ): from `model_usage` when
-    present (ResultMessage), else the cached `window_hint` (so per-step frames match the
+    property. Measured 2026-07-28: every tier we run negotiates **200,000** (the 1M window is a
+    beta we do not request; the SDK marks it in the model name — `claude-opus-4-7[1m]` — when it
+    is on). Read from `model_usage` when present (ResultMessage), else the cached `window_hint`
+    (so per-step frames match the
     result). We DELIBERATELY do NOT fall back to a fixed guess — a %'d against the wrong
     window is a false reading, worse than none — so when the real window is unknown we
     return None and the surface simply shows no fill.
@@ -149,6 +150,47 @@ class AgentService:
         # place the SDK reports it). Lets per-step Usage frames divide by the same window
         # the Result does, instead of the 200k default. Warms after the first turn/model.
         self._window_by_model: dict[str, int] = {}
+        # Measured context FLOOR per (context, model) — see measure_context_floor.
+        self._floor_by_key: dict[str, tuple[int, int]] = {}
+
+    async def measure_context_floor(self, ctx: Context, model: str | None = None
+                                    ) -> tuple[int, int] | None:
+        """The session's incompressible FLOOR — (tokens, window) — measured, not guessed.
+
+        `get_context_usage()` read on a session built with the real `_build_options` but BEFORE
+        any turn reports exactly what every turn re-sends and no summary can ever remove: system
+        prompt + tool schemas + skills + agent defs. That is the honest denominator for
+        "did this compaction shed most of what was SHEDDABLE".
+
+        The old proxy — the session's FIRST observed fill — was wrong in both directions: a first
+        turn already carries a prompt and the item's context (it read ~16–20% against a ~10.6%
+        floor), and a daemon restart re-measured it mid-conversation, so the floor could land
+        anywhere. This depends only on the options, so it is stable and cached per
+        (context, model); the cost is one subprocess spawn the first time.
+
+        Returns None if the read fails — callers fall back to their flat threshold.
+        """
+        key = f"{ctx.id or '-'}::{ctx.mode}::{model or '-'}"
+        if key in self._floor_by_key:
+            return self._floor_by_key[key]
+        try:
+            options = self._build_options(ctx, resume=None, model=model, approve=deny_all,
+                                          extra_mcp_servers=None, scope_reads=True)
+            async with ClaudeSDKClient(options=options) as client:
+                usage = await client.get_context_usage()
+            cats = usage.get("categories") or []
+            tokens = int(usage.get("totalTokens")
+                         or sum(int(c.get("tokens") or 0) for c in cats))
+            window = int(usage.get("rawMaxTokens") or usage.get("maxTokens") or 0)
+            if not tokens or not window:
+                return None
+        except Exception:
+            log.exception("context-floor probe failed for %s", key)
+            return None
+        self._floor_by_key[key] = (tokens, window)
+        log.info("context floor %s = %d tok / %d window (%.1f%%)",
+                 key, tokens, window, tokens / window * 100)
+        return self._floor_by_key[key]
 
     def _context_preamble(self, ctx: Context) -> str:
         """A short note telling the agent which context it's operating in."""
@@ -221,12 +263,12 @@ class AgentService:
         return op_home, const_universal, const_repo, activated_assets
 
     def _fragment_parts(self, ctx: Context, *, op_home, const_universal, const_repo,
-                        activated_assets, system_append: str | None = None,
-                        background: bool = False) -> list[dict]:
+                        activated_assets, system_append: str | None = None) -> list[dict]:
         """The layer-2 system append as ORDERED provenance fragments: persona (WHO) · mode charter
         (WHAT MODE) · per-repo local charter · constitution CATALOG · operating-context preamble
-        (WHERE) · per-project persona_append · the per-turn session-kind block · (background only)
-        the run contract. THE single source of truth — `_assemble_append` joins these into the exact
+        (WHERE) · per-project persona_append · the per-turn session-kind block (which, on
+        kernel-fired work-item runs, carries the run protocol — the retired background-contract
+        block has no successor fragment). THE single source of truth — `_assemble_append` joins these into the exact
         string a turn sends, and the prompt inspector captures them for per-fragment display. Each
         fragment carries `sep` = the exact string preceding it in the joined append, so
         `''.join(sep+text)` reproduces the append byte-for-byte."""
@@ -272,10 +314,6 @@ class AgentService:
             add("Session-kind block — focus/guard/phase",
                 "core/kernel_speech.py · work_item_preamble (Current focus/Guard/phase)", system_append,
                 sep="\n\n")
-        # Background run (Thread 3 §3): a PER-TURN fact appended only on kernel-fired turns.
-        if background:
-            add("Background-run contract", "core/kernel_speech.py · BACKGROUND_RUN_CONTRACT",
-                kernel_speech.BACKGROUND_RUN_CONTRACT, sep="\n\n")
         return frags
 
     @staticmethod
@@ -284,26 +322,23 @@ class AgentService:
         return "".join(f["sep"] + f["text"] for f in frags)
 
     def _assemble_append(self, ctx: Context, *, op_home, const_universal, const_repo,
-                         activated_assets, system_append: str | None = None,
-                         background: bool = False) -> str:
+                         activated_assets, system_append: str | None = None) -> str:
         """Assemble the layer-2 system append (system_prompt.append) by joining `_fragment_parts`.
         THE single assembler — `_build_options` and the input-preview endpoint both call it, so what
         a preview shows is byte-for-byte what a real turn sends."""
         return self._join_fragments(self._fragment_parts(
             ctx, op_home=op_home, const_universal=const_universal, const_repo=const_repo,
-            activated_assets=activated_assets, system_append=system_append, background=background))
+            activated_assets=activated_assets, system_append=system_append))
 
-    def assemble_system_append(self, ctx: Context, *, system_append: str | None = None,
-                               background: bool = False) -> str:
+    def assemble_system_append(self, ctx: Context, *, system_append: str | None = None) -> str:
         """Public seam for the prompt inspector: resolve scope + assemble the exact system append a
-        turn with this (ctx, session_append, background) would send. No side effects."""
+        turn with this (ctx, session_append) would send. No side effects."""
         op_home, const_universal, const_repo, activated_assets = self._resolve_scope(ctx)
         return self._assemble_append(
             ctx, op_home=op_home, const_universal=const_universal, const_repo=const_repo,
-            activated_assets=activated_assets, system_append=system_append, background=background)
+            activated_assets=activated_assets, system_append=system_append)
 
-    def assemble_system_fragments(self, ctx: Context, *, system_append: str | None = None,
-                                  background: bool = False) -> list[dict]:
+    def assemble_system_fragments(self, ctx: Context, *, system_append: str | None = None) -> list[dict]:
         """Public seam for the prompt inspector's per-fragment view: the SAME append as
         `assemble_system_append`, but as ordered provenance fragments [{name, location, text}] (the
         internal `sep` is dropped — it's for reconstruction, not display). Same builder → the
@@ -311,7 +346,7 @@ class AgentService:
         op_home, const_universal, const_repo, activated_assets = self._resolve_scope(ctx)
         frags = self._fragment_parts(
             ctx, op_home=op_home, const_universal=const_universal, const_repo=const_repo,
-            activated_assets=activated_assets, system_append=system_append, background=background)
+            activated_assets=activated_assets, system_append=system_append)
         return [{"name": f["name"], "location": f["location"], "text": f["text"]} for f in frags]
 
     def _build_options(
@@ -320,7 +355,9 @@ class AgentService:
         system_append: str | None = None, gate_general_mutations: bool = False,
         general_write_root: Path | None = None, write_boundary: list[Path] | None = None,
         hooks: dict | None = None, block_categories: set[str] | None = None,
-        deny_write_tools: str | None = None, background: bool = False,
+        deny_write_tools: str | None = None,
+        protected_paths: list[Path] | None = None,
+        protected_nudge: str | None = None,
     ) -> ClaudeAgentOptions:
         # Resolve the per-repo scope ONCE (the MCP server + turn plugins below reuse it), then
         # assemble the layer-2 system append through the SAME helper the input-preview endpoint
@@ -328,7 +365,7 @@ class AgentService:
         op_home, const_universal, const_repo, activated_assets = self._resolve_scope(ctx)
         append = self._assemble_append(
             ctx, op_home=op_home, const_universal=const_universal, const_repo=const_repo,
-            activated_assets=activated_assets, system_append=system_append, background=background)
+            activated_assets=activated_assets, system_append=system_append)
         # User-facing turns may not invoke `access: silent` skills (forge-* — internal pipeline
         # machinery); the owning sub-run leaves enforce_silent False so it still can. Computed from
         # the same plugin set the turn loads.
@@ -394,6 +431,8 @@ class AgentService:
                 general_write_root=general_write_root,
                 write_boundary=write_boundary,
                 deny_write_tools=deny_write_tools,   # vet read-only (build-vet-loop §4/§8·O4)
+                protected_paths=protected_paths,      # review read-only on plan.md (§2.1)
+                protected_nudge=protected_nudge,
             ),
             # SuperMe owns its OWN log+memory subsystem — it must never read from or write to
             # Claude Code's native auto-memory store (~/.claude/projects/<hash>/memory/). That
@@ -423,7 +462,8 @@ class AgentService:
         hooks: dict | None = None,
         block_categories: set[str] | None = None,
         deny_write_tools: str | None = None,
-        background: bool = False,
+        protected_paths: list[Path] | None = None,
+        protected_nudge: str | None = None,
     ) -> AsyncIterator[TurnEvent]:
         """Run one turn against `ctx`, yielding TurnEvents.
 
@@ -443,7 +483,7 @@ class AgentService:
             gate_general_mutations=gate_general_mutations,
             general_write_root=general_write_root, write_boundary=write_boundary,
             hooks=hooks, block_categories=block_categories, deny_write_tools=deny_write_tools,
-            background=background,
+            protected_paths=protected_paths, protected_nudge=protected_nudge,
         )
         resolved_model = None
         # Context-window fill is measured from a SINGLE API call, not the turn aggregate.

@@ -38,6 +38,10 @@ _NOISE_PREFIXES = (
     "<local-command-caveat>",
     "Run superme-dev:plan for work-item",
     "Run superme-dev:triage for work-item",
+    # The pre-compaction handoff trigger (compaction.run_handoff_turn) — kernel plumbing on the
+    # item's own thread, and the turn right before the transcript is replaced. Replaying it would
+    # show the owner a machine asking for a checkpoint in the middle of their conversation.
+    "This session is about to be compacted",
 )
 
 

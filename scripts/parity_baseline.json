@@ -35,6 +35,8 @@
     "GET /dev/work-items/{item_id}/detail",
     "GET /dev/work-items/{item_id}/gate-brief",
     "GET /dev/work-items/{item_id}/git",
+    "GET /dev/work-items/{item_id}/pr",
+    "GET /dev/work-items/{item_id}/pr/diff",
     "GET /dev/work-items/{item_id}/runs/{run_id}/input.html",
     "GET /dev/work-items/{item_id}/timeline",
     "GET /dev/workgraph",
@@ -91,6 +93,7 @@
     "POST /repos",
     "POST /repos/{repo_id}/autopilot",
     "POST /repos/{repo_id}/effort",
+    "POST /repos/{repo_id}/git",
     "POST /repos/{repo_id}/learning",
     "POST /repos/{repo_id}/meta",
     "POST /repos/{repo_id}/model",
@@ -108,7 +111,8 @@
     "PUT /dev/harness/plugin-file",
     "PUT /dev/harness/published/{proposal_id}/file",
     "PUT /knowledge/file",
-    "WS /ws/agent"
+    "WS /ws/agent",
+    "WS /ws/dashboard"
   ],
   "openapi": {
     "components": {
@@ -721,6 +725,7 @@
             },
             "kind": {
               "enum": [
+                "question",
                 "escalation",
                 "breaker",
                 "paged",
@@ -740,6 +745,20 @@
                 }
               ],
               "title": "Phase"
+            },
+            "questions": {
+              "anyOf": [
+                {
+                  "items": {
+                    "$ref": "#/components/schemas/HoldQuestion"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Questions"
             },
             "reason": {
               "title": "Reason",
@@ -1068,7 +1087,6 @@
                     "vet",
                     "review",
                     "investigate",
-                    "report",
                     "close"
                   ],
                   "type": "string"
@@ -2687,6 +2705,14 @@
         "GateDecision": {
           "description": "The uniform decision block (D10 \u2605): recommendation FIRST, stakes one line, per-option\nconsequence, dual-scale effort.",
           "properties": {
+            "approve_blocked_by": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Approve Blocked By",
+              "type": "array"
+            },
             "effort_agent": {
               "title": "Effort Agent",
               "type": "string"
@@ -3016,6 +3042,17 @@
               ],
               "title": "Registered"
             },
+            "review_mode": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Review Mode"
+            },
             "trunk": {
               "anyOf": [
                 {
@@ -3084,6 +3121,17 @@
               ],
               "title": "Conflicts"
             },
+            "freshness": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Freshness"
+            },
             "knowledge_folded_into": {
               "anyOf": [
                 {
@@ -3142,6 +3190,20 @@
             "path": {
               "title": "Path",
               "type": "string"
+            },
+            "stale_paths": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Stale Paths"
             },
             "stash_warning": {
               "anyOf": [
@@ -3433,6 +3495,53 @@
             "service"
           ],
           "title": "HealthResponse",
+          "type": "object"
+        },
+        "HoldQuestion": {
+          "description": "One question the grill carries to the owner \u2014 the four fields `report_completion` enforces,\nso the card renders labelled rows instead of parsing prose. `recommend`/`why` are absent only\non a pre-typed report replayed from an older event.",
+          "properties": {
+            "instead": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Instead"
+            },
+            "question": {
+              "title": "Question",
+              "type": "string"
+            },
+            "recommend": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Recommend"
+            },
+            "why": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Why"
+            }
+          },
+          "required": [
+            "question"
+          ],
+          "title": "HoldQuestion",
           "type": "object"
         },
         "IdleScanResponse": {
@@ -5045,6 +5154,351 @@
           "title": "PortraitResponse",
           "type": "object"
         },
+        "PrCommit": {
+          "description": "One commit as the walkthrough shows it. `body` has the SuperMe trailer block stripped \u2014\nthat block is what put the commit in this group, so repeating it inside would be noise.",
+          "properties": {
+            "body": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Body"
+            },
+            "sha": {
+              "title": "Sha",
+              "type": "string"
+            },
+            "short": {
+              "title": "Short",
+              "type": "string"
+            },
+            "subject": {
+              "title": "Subject",
+              "type": "string"
+            }
+          },
+          "required": [
+            "sha",
+            "short",
+            "subject"
+          ],
+          "title": "PrCommit",
+          "type": "object"
+        },
+        "PrDiffResponse": {
+          "description": "One file's patches under one task \u2014 fetched when the reader opens the row, never up front.",
+          "properties": {
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "ok": {
+              "title": "Ok",
+              "type": "boolean"
+            },
+            "patches": {
+              "items": {
+                "$ref": "#/components/schemas/PrPatch"
+              },
+              "title": "Patches",
+              "type": "array"
+            },
+            "path": {
+              "title": "Path",
+              "type": "string"
+            },
+            "task": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Task"
+            }
+          },
+          "required": [
+            "ok",
+            "id",
+            "path",
+            "patches"
+          ],
+          "title": "PrDiffResponse",
+          "type": "object"
+        },
+        "PrFile": {
+          "description": "One file inside a task group, with the churn that group put on it (summed over the group's\ncommits, which is what ranks it \u2014 the biggest change is where the risk is).",
+          "properties": {
+            "minus": {
+              "title": "Minus",
+              "type": "integer"
+            },
+            "path": {
+              "title": "Path",
+              "type": "string"
+            },
+            "plus": {
+              "title": "Plus",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "path",
+            "plus",
+            "minus"
+          ],
+          "title": "PrFile",
+          "type": "object"
+        },
+        "PrGroup": {
+          "description": "One task's slice of the branch. `task` is null for commits that carry no `SuperMe-Task`\ntrailer \u2014 they are shown last rather than hidden.",
+          "properties": {
+            "commits": {
+              "items": {
+                "$ref": "#/components/schemas/PrCommit"
+              },
+              "title": "Commits",
+              "type": "array"
+            },
+            "done": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Done"
+            },
+            "files": {
+              "items": {
+                "$ref": "#/components/schemas/PrFile"
+              },
+              "title": "Files",
+              "type": "array"
+            },
+            "task": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Task"
+            },
+            "title": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Title"
+            }
+          },
+          "required": [
+            "commits",
+            "files"
+          ],
+          "title": "PrGroup",
+          "type": "object"
+        },
+        "PrPatch": {
+          "properties": {
+            "patch": {
+              "title": "Patch",
+              "type": "string"
+            },
+            "sha": {
+              "title": "Sha",
+              "type": "string"
+            },
+            "short": {
+              "title": "Short",
+              "type": "string"
+            },
+            "subject": {
+              "title": "Subject",
+              "type": "string"
+            },
+            "truncated": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Truncated"
+            }
+          },
+          "required": [
+            "sha",
+            "short",
+            "subject",
+            "patch"
+          ],
+          "title": "PrPatch",
+          "type": "object"
+        },
+        "PrStat": {
+          "description": "Header numbers: commit COUNT over the fork point, and the NET diff that actually lands\n(not the sum of per-commit churn \u2014 a line written in t1 and rewritten in t3 lands once).",
+          "properties": {
+            "commits": {
+              "title": "Commits",
+              "type": "integer"
+            },
+            "deletions": {
+              "title": "Deletions",
+              "type": "integer"
+            },
+            "files": {
+              "title": "Files",
+              "type": "integer"
+            },
+            "insertions": {
+              "title": "Insertions",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "commits",
+            "files",
+            "insertions",
+            "deletions"
+          ],
+          "title": "PrStat",
+          "type": "object"
+        },
+        "PrViewResponse": {
+          "description": "The dedicated PR page (\u00a74.4): the review report on the left, the task-grouped diff\nwalkthrough on the right. Entirely derived at read time \u2014 nothing here is stored.",
+          "properties": {
+            "base": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Base"
+            },
+            "branch": {
+              "title": "Branch",
+              "type": "string"
+            },
+            "groups": {
+              "items": {
+                "$ref": "#/components/schemas/PrGroup"
+              },
+              "title": "Groups",
+              "type": "array"
+            },
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "merge_commit": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Merge Commit"
+            },
+            "merged": {
+              "title": "Merged",
+              "type": "boolean"
+            },
+            "ok": {
+              "title": "Ok",
+              "type": "boolean"
+            },
+            "phase": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Phase"
+            },
+            "pr_open": {
+              "title": "Pr Open",
+              "type": "boolean"
+            },
+            "report": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Report"
+            },
+            "review_mode": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Review Mode"
+            },
+            "stat": {
+              "$ref": "#/components/schemas/PrStat"
+            },
+            "target": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Target"
+            },
+            "title": {
+              "title": "Title",
+              "type": "string"
+            }
+          },
+          "required": [
+            "ok",
+            "id",
+            "title",
+            "branch",
+            "pr_open",
+            "merged",
+            "stat",
+            "groups"
+          ],
+          "title": "PrViewResponse",
+          "type": "object"
+        },
         "ProjectStatusResponse": {
           "description": "Whether this project's memory is established (PRD defines \u22651 deliverable). The dev workspace\ngates on it: an un-established repo shows the onboarding front door instead of the work tabs.\n`onboard_mode` is the connect-time choice (project-init | retrofit) the front door launches\ndirectly; null \u21d2 the repo predates connect-flow, so the landing offers both paths to pick.",
           "properties": {
@@ -6120,6 +6574,91 @@
           "title": "RepoEffortResponse",
           "type": "object"
         },
+        "RepoGitBody": {
+          "properties": {
+            "anchor_branch": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Anchor Branch"
+            },
+            "review_mode": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Review Mode"
+            }
+          },
+          "title": "RepoGitBody",
+          "type": "object"
+        },
+        "RepoGitResponse": {
+          "description": "The repo's two git knobs after a write (workflow-renovation-v2 \u00a72.2). `resolved_anchor` is\nwhat `anchor_branch` actually points at now \u2014 None when the repo isn't a git repo; `error` when\nthe configured branch doesn't exist, which is a refusal at every git site, not a fallback.",
+          "properties": {
+            "anchor_branch": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Anchor Branch"
+            },
+            "anchor_error": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Anchor Error"
+            },
+            "ok": {
+              "title": "Ok",
+              "type": "boolean"
+            },
+            "repo_id": {
+              "title": "Repo Id",
+              "type": "string"
+            },
+            "resolved_anchor": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Resolved Anchor"
+            },
+            "review_mode": {
+              "title": "Review Mode",
+              "type": "string"
+            }
+          },
+          "required": [
+            "ok",
+            "repo_id",
+            "review_mode"
+          ],
+          "title": "RepoGitResponse",
+          "type": "object"
+        },
         "RepoLearningResponse": {
           "properties": {
             "learning_enabled": {
@@ -6270,6 +6809,28 @@
         },
         "RepoOverview": {
           "properties": {
+            "anchor_branch": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Anchor Branch"
+            },
+            "anchor_error": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Anchor Error"
+            },
             "autopilot_concurrency": {
               "default": 4,
               "title": "Autopilot Concurrency",
@@ -6328,6 +6889,22 @@
                 }
               ],
               "title": "Model Override"
+            },
+            "resolved_anchor": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Resolved Anchor"
+            },
+            "review_mode": {
+              "default": "fast",
+              "title": "Review Mode",
+              "type": "string"
             },
             "scopes": {
               "additionalProperties": {
@@ -8245,6 +8822,17 @@
               ],
               "title": "Git Merged At"
             },
+            "git_pr_opened_at": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Git Pr Opened At"
+            },
             "git_worktree": {
               "anyOf": [
                 {
@@ -8344,7 +8932,6 @@
                     "vet",
                     "review",
                     "investigate",
-                    "report",
                     "close"
                   ],
                   "type": "string"
@@ -11364,7 +11951,7 @@
       },
       "/dev/work-items/{item_id}/abandon": {
         "post": {
-          "description": "Abandon a work-item \u2014 HUMAN-ONLY (no agent-tool counterpart), legal from any non-terminal\nphase (D8). Ordered, each step idempotent: end live runs/sessions \u00b7 remove the worktree\n(branch kept \u2014 near-free trace) \u00b7 abandon note into closeout.md \u00b7 terminal status change\n(`abandoned`, or `superseded` when `superseded_by` names the replacement) \u00b7 resume a paused\nparent whose last open blocking child this was. Dev-knowledge untouched \u2014 write-at-merge\nmeans a pre-merge abandon wrote nothing, ever. The response is the abandon brief: blocking\nchildren listed for YOUR disposal (they existed only for this parent); parallel children\ncontinue untouched.",
+          "description": "Abandon a work-item \u2014 HUMAN-ONLY (no agent-tool counterpart), legal from any non-terminal\nphase (D8). Ordered, each step idempotent: end live runs/sessions \u00b7 remove the worktree\n(branch kept \u2014 near-free trace) \u00b7 abandon note into reports/report-close.md \u00b7 terminal status change\n(`abandoned`, or `superseded` when `superseded_by` names the replacement) \u00b7 resume a paused\nparent whose last open blocking child this was. Dev-knowledge untouched \u2014 write-at-merge\nmeans a pre-merge abandon wrote nothing, ever. The response is the abandon brief: blocking\nchildren listed for YOUR disposal (they existed only for this parent); parallel children\ncontinue untouched.",
           "operationId": "dev_work_item_abandon_dev_work_items__item_id__abandon_post",
           "parameters": [
             {
@@ -11414,7 +12001,7 @@
       },
       "/dev/work-items/{item_id}/advance": {
         "post": {
-          "description": "Approve \u2192 advance a work-item to its kind's next phase (the owner's gate; sequencing\ncomes from KIND_PROFILES \u2014 triage\u2192plan\u2192\u2026 per kind). Refuses if the item is at its final\nphase, terminal, or a run is in flight. The gate decision also rests the item at `active`\n(an awaiting_human item just got its answer). Owner-driven, so `ratify=True` \u2014 approving\nratifies the brief's assumptions; the autopilot driver uses the same core with ratify=False.",
+          "description": "Approve \u2192 advance a work-item to its kind's next phase (the owner's gate; sequencing\ncomes from KIND_PROFILES \u2014 triage\u2192plan\u2192\u2026 per kind). Refuses if the item is at its final\nphase, terminal, or a run is in flight. The gate decision also rests the item at `active`\n(an awaiting_human item just got its answer). The autopilot driver uses the same core.",
           "operationId": "dev_work_item_advance_dev_work_items__item_id__advance_post",
           "parameters": [
             {
@@ -11514,7 +12101,7 @@
       },
       "/dev/work-items/{item_id}/authorize": {
         "post": {
-          "description": "The owner's grant/deny on a deferred authorization at review (BV-A2.3). `granted` records the\ngrant and routes the item back to build to perform the now-allowed change; `denied` accepts the\ngap (the blocked check is waived) and leaves the item at review for the owner's approve. Unlike\nthe deputy, the owner grants unconditionally \u2014 the delegated-authority floor only binds the\ndeputy. 409 when the item/request isn't in a grantable state or a run is in flight.",
+          "description": "The owner's grant/deny on a deferred authorization at review. Both RECORD and route nothing\n(renovation \u00a72.1): the item stays at review so every pending request can be resolved in any\norder, and one exit then fires \u2014 Approve (close applies the granted ops, skips the denied ones\nand records the gap) or `revise` (they land as plan input). `denied` also waives the blocked\ncheck. Unlike the deputy, the owner grants unconditionally \u2014 the delegated-authority floor\nbinds only the deputy. 409 when the request isn't in a decidable state.",
           "operationId": "dev_work_item_authorize_dev_work_items__item_id__authorize_post",
           "parameters": [
             {
@@ -11874,7 +12461,7 @@
       },
       "/dev/work-items/{item_id}/git": {
         "get": {
-          "description": "The item's live git state (derived at read time, never stored): branch/dir/registration\nexistence, dirty files, ahead/behind vs trunk (behind = freshness debt), merged-into-trunk.",
+          "description": "The item's live git state (derived at read time, never stored): branch/dir/registration\nexistence, dirty files, ahead/behind vs the repo's anchor (behind = freshness debt), merged.\nAlso echoes the repo's `review_mode`, so the rule governing the merge is visible where the\nmerge is \u2014 read live, never from the item, so a mode flip applies to items already at review.",
           "operationId": "dev_work_item_git_dev_work_items__item_id__git_get",
           "parameters": [
             {
@@ -12170,6 +12757,131 @@
             }
           },
           "summary": "Dev Work Item Plan"
+        }
+      },
+      "/dev/work-items/{item_id}/pr": {
+        "get": {
+          "description": "The dedicated PR page (\u00a74.4) \u2014 `strict`'s review surface, and readable in any mode. Read-only\nby construction: the page's one action is the ordinary review Approve, which merges.",
+          "operationId": "dev_work_item_pr_dev_work_items__item_id__pr_get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "item_id",
+              "required": true,
+              "schema": {
+                "title": "Item Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "default": "global",
+                "title": "Context Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/PrViewResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Work Item Pr"
+        }
+      },
+      "/dev/work-items/{item_id}/pr/diff": {
+        "get": {
+          "description": "One file's patches under one task group, fetched when the reader expands the row \u2014 a\nbranch's whole diff is the one thing a review page must not make them wait for.",
+          "operationId": "dev_work_item_pr_diff_dev_work_items__item_id__pr_diff_get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "item_id",
+              "required": true,
+              "schema": {
+                "title": "Item Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "path",
+              "required": true,
+              "schema": {
+                "title": "Path",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "task",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Task"
+              }
+            },
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "default": "global",
+                "title": "Context Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/PrDiffResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Work Item Pr Diff"
         }
       },
       "/dev/work-items/{item_id}/runs/{run_id}/input.html": {
@@ -12965,6 +13677,56 @@
             }
           },
           "summary": "Set Repo Effort"
+        }
+      },
+      "/repos/{repo_id}/git": {
+        "post": {
+          "description": "Set this repo's review mode (`fast` | `strict`) and/or anchor branch \u2014 the two knobs that\ngovern how work lands (workflow-renovation-v2 \u00a72.2). Both are read LIVE at every decision point,\nso a change applies immediately, including to items already sitting at review. An anchor naming\na branch that doesn't exist is accepted and reported back as an `error`: the setting is the\nowner's declaration, and every git site refuses rather than silently retargeting the default.",
+          "operationId": "set_repo_git_repos__repo_id__git_post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "repo_id",
+              "required": true,
+              "schema": {
+                "title": "Repo Id",
+                "type": "string"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepoGitBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/RepoGitResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Set Repo Git"
         }
       },
       "/repos/{repo_id}/learning": {

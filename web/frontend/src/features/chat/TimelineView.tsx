@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Bot, User, ShieldCheck } from 'lucide-react'
 import Markdown from '@/ui/Markdown'
-import { getWorkItemTimeline, type WorkItemTimeline } from '@/lib/api/dev'
+import { getWorkItemTimeline, getDevLog, type WorkItemTimeline } from '@/lib/api/dev'
+import { useLive } from '@/lib/live'
+import { K } from '@/lib/live/keys'
 import type { TimelineFrame } from './hooks/useAgentSocket'
 
 // F2 — the unified work-item timeline: a READ-ONLY mirror of every phase agent's turns
@@ -23,12 +25,25 @@ const PHASE_VERB: Record<string, string> = {
 
 type Speaker = 'you' | 'agent' | 'deputy'
 
+// A phase run's closing card — the `user` half of `report_completion`, verbatim. The kernel routes
+// on `machine`; this is the half written FOR the owner, so the renderer shapes nothing: it lays out
+// the fields it was given and stops. Adding a field to the tool's `user` group is the only way to
+// add a line here (renovation §3.2 — one structured source of truth).
+type Report = {
+  outcome: string
+  summary: string
+  next: string
+  questions: { question: string; recommend?: string; why?: string; instead?: string }[]
+}
+
 type Bubble = {
   key: string
   speaker: Speaker
   phase: string | null
   text: string
   live?: boolean
+  ts?: string             // event time — orders reports against turns
+  report?: Report         // set ⇒ this entry renders as the closing card, not a speech bubble
 }
 
 // One run's `feature` → who is speaking for its reply events.
@@ -41,6 +56,48 @@ const SPEAKER_META: Record<Speaker, { label: string; Icon: typeof Bot; tint: str
   you: { label: 'You', Icon: User, tint: 'text-fg', bubble: 'bg-[--chat-accent]/10 border-[--chat-accent]/25' },
   agent: { label: 'superme', Icon: Bot, tint: 'text-accent-text', bubble: 'bg-surface border-line' },
   deputy: { label: 'Deputy', Icon: ShieldCheck, tint: 'text-deputy', bubble: 'bg-deputy/10 border-deputy/30' },
+}
+
+// Outcome → glance colour + owner-facing label. The schema value is a routing token; the owner
+// reads a phrase. This map is the ONLY shaping the card does.
+const OUTCOME_TONE: Record<string, { dot: string; text: string; label: string }> = {
+  success: { dot: 'bg-success', text: 'text-success', label: 'done' },
+  partial: { dot: 'bg-warn', text: 'text-warn', label: 'partly done' },
+  clean_noop: { dot: 'bg-line', text: 'text-muted', label: 'nothing to do' },
+  blocked: { dot: 'bg-warn', text: 'text-warn', label: 'blocked' },
+  needs_user: { dot: 'bg-warn', text: 'text-warn', label: 'needs you' },
+  split: { dot: 'bg-accent', text: 'text-accent-text', label: 'splitting' },
+  revise: { dot: 'bg-accent', text: 'text-accent-text', label: 'back to plan' },
+  exhausted: { dot: 'bg-danger', text: 'text-danger', label: 'out of budget' },
+  stagnated: { dot: 'bg-danger', text: 'text-danger', label: 'no progress' },
+}
+
+function ReportCard({ r }: { r: Report }) {
+  const t = OUTCOME_TONE[r.outcome] ?? { dot: 'bg-line', text: 'text-muted', label: r.outcome }
+  return (
+    <div className="rounded-lg border border-line bg-surface px-2.5 py-2">
+      <div className="flex items-center gap-1.5">
+        <span className={`h-1.5 w-1.5 rounded-full ${t.dot}`} />
+        <span className={`text-[11px] font-semibold uppercase tracking-wide ${t.text}`}>{t.label}</span>
+      </div>
+      <div className="mt-1 text-[12.5px] text-fg">{r.summary}</div>
+      <div className="mt-0.5 text-[12px] text-muted"><span className="text-faint">next · </span>{r.next}</div>
+      {/* needs_user only — each question carries its own recommendation, so the owner can settle the
+          round by accepting rather than reconstructing what was asked. */}
+      {r.questions.length > 0 && (
+        <ol className="mt-1.5 list-decimal space-y-1.5 pl-4 text-[12px] leading-snug">
+          {r.questions.map((q, i) => (
+            <li key={i} className="text-fg">
+              <span className="font-medium">{q.question}</span>
+              {q.recommend && <span className="mt-0.5 block text-muted"><span className="text-fg">Recommend</span> — {q.recommend}</span>}
+              {q.why && <span className="block text-muted">Why — {q.why}</span>}
+              {q.instead && <span className="block text-muted">Instead — {q.instead}</span>}
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  )
 }
 
 export default function TimelineView({
@@ -61,6 +118,66 @@ export default function TimelineView({
   const [err, setErr] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement | null>(null)
 
+  // The deputy's channel presence (renovation §2.1) — TWO things, and only these two:
+  //   `queries` — the exact text of each real turn it fired AT the agent (a send-back). Those are
+  //               genuine transcript, so the matching prompt event renders as a deputy bubble.
+  //   `says`    — its DECISIONS (approve/escalate), one headline each, from `meta.speech`.
+  // Both are dev-log events, not run replies. Its internal judging turn — the "[deputy] judging
+  // the review gate" prompt and its own reasoning — is NEVER chat: it is a private read the owner
+  // inspects in the Deputy tab, and rendering it here would put the deputy's thinking in the middle
+  // of a conversation it was never part of. Decisions are windowed to the current gate (since the
+  // last `phase.advance`) so earlier rounds don't accumulate.
+  //
+  // All three are derived from ONE dev-log read — the same cache key the drilldown and the chat
+  // rail subscribe to, so the item's log is fetched once for all of them instead of three times on
+  // three clocks. The dev log is a DIFFERENT table from the run_event trail this view renders, so
+  // reading it here can never double-render the live frames.
+  const log = useLive(K.devLog(contextId, itemId, 50), () => getDevLog(contextId, { itemId, limit: 50 }), 10000)
+  const logEvents = log.data?.events ?? []
+
+  const deputyQueries = useMemo(
+    () => logEvents
+      .filter((e) => String(e.kind) === 'deputy.query')
+      .map((e) => String(e.meta?.text ?? '').trim())
+      .filter(Boolean),
+    [logEvents],
+  )
+  const deputySays = useMemo(() => {
+    const says: string[] = []
+    for (const e of logEvents) {            // newest-first; stop at the current phase's start
+      const kind = String(e.kind)
+      if (kind === 'phase.advance') break
+      if (kind === 'deputy.approve' || kind === 'deputy.escalate') {
+        const speech = String(e.meta?.speech ?? '').trim()
+        if (speech) says.unshift(speech)
+      }
+    }
+    return says
+  }, [logEvents])
+  // Every phase run's closing card, oldest-first, from the `run.report` event's `user` payload.
+  // `meta` IS the report_completion payload (runs.read_completion / ws stores it whole), so the card
+  // reads `user` straight off it — no parsing, no FE-side reshaping.
+  const reports = useMemo(
+    () => logEvents
+      .filter((e) => String(e.kind) === 'run.report')
+      .map((e) => {
+        const m = (e.meta ?? {}) as Record<string, any>
+        const u = (m.user ?? {}) as Record<string, any>
+        return {
+          ts: String(e.created_at ?? ''),
+          report: {
+            outcome: String(m.outcome ?? ''),
+            summary: String(u.summary ?? m.summary ?? ''),
+            next: String(u.next ?? m.next ?? ''),
+            questions: Array.isArray(u.questions) ? u.questions : [],
+          } as Report,
+        }
+      })
+      .filter((r) => r.report.summary)
+      .reverse(),                            // the log is newest-first; the timeline reads oldest-first
+    [logEvents],
+  )
+
   // Load authoritative history on open and whenever the parent bumps `refreshKey` (a run just
   // ended → its events are now in the trail). Liveness BETWEEN refreshes comes from `liveFrames`
   // (broker), so we never poll here — that would double-render the run_event rows capture writes live.
@@ -78,15 +195,25 @@ export default function TimelineView({
     const out: Bubble[] = []
     const counts: Record<number, number> = {}
     for (const run of data?.runs ?? []) {
+      // The deputy's JUDGING run is not a conversation (§2.1): its prompt is a kernel string and
+      // its reply is private reasoning about work it wasn't part of. Skipped whole — what the
+      // deputy says in the channel is its send-back turns and its decision headlines, both below.
+      if (run.feature === 'deputy') continue
       let tools = 0
       for (const ev of run.events ?? []) {
         if (ev.kind === 'reply') {
           out.push({ key: `r${run.run_id}-${ev.seq}`, speaker: replySpeaker(run.feature),
-                     phase: run.phase ?? null, text: ev.description || '' })
+                     phase: run.phase ?? null, text: ev.description || '', ts: ev.created_at })
         } else if (ev.kind === 'prompt') {
-          if (run.feature === 'chat') {
-            out.push({ key: `p${run.run_id}-${ev.seq}`, speaker: 'you',
-                       phase: run.phase ?? null, text: ev.description || '' })
+          // A phase run's prompt is the internal kernel trigger — noise here. The exceptions are
+          // the two prompts a PERSON authored: the owner's own interactive turn, and a deputy
+          // send-back (matched against its `deputy.query` marker — the agent got it as a plain
+          // user turn and couldn't tell the sender; only the owner's view distinguishes them).
+          const text = ev.description || ''
+          const fromDeputy = deputyQueries.includes(text.trim())
+          if (run.feature === 'chat' || fromDeputy) {
+            out.push({ key: `p${run.run_id}-${ev.seq}`, speaker: fromDeputy ? 'deputy' : 'you',
+                       phase: run.phase ?? null, text, ts: ev.created_at })
           }
         } else {
           tools += 1
@@ -95,7 +222,7 @@ export default function TimelineView({
       counts[run.run_id] = tools
     }
     return { bubbles: out, toolCounts: counts }
-  }, [data])
+  }, [data, deputyQueries])
 
   // Live frames (background build/vet) → append to the CURRENT phase lane. Reply frames become
   // bubbles; tool frames just bump a live tool count shown on the running indicator. Dedup against
@@ -113,6 +240,9 @@ export default function TimelineView({
   let liveTools = 0
   for (let i = 0; i < liveFrames.length; i++) {
     const f = liveFrames[i]
+    // Same rule live: while the deputy judges, the indicator says "Deputy reviewing" and nothing
+    // else — its streaming reply is its private read, not a turn in this thread.
+    if (runFeature === 'deputy' && f.kind === 'reply') continue
     if (f.kind === 'reply') {
       const rid = f.run_id ?? -1
       const already = historyReplies[rid] ?? 0
@@ -129,7 +259,31 @@ export default function TimelineView({
     liveBubbles.push({ key: 'interactive-live', speaker: 'agent', phase: currentPhase, text: interactiveLive, live: true })
   }
 
-  const all = [...bubbles, ...liveBubbles]
+  // The deputy always judges the item's CURRENT state, so its call is the newest thing said about
+  // it — and it holds no position inside the thread, because it was never a turn on one.
+  const decisionBubbles: Bubble[] = deputySays.map((text, i) => ({
+    key: `deputy-say-${i}`, speaker: 'deputy' as const, phase: currentPhase, text,
+  }))
+
+  // Interleave each run's closing card by time: a report is the LAST thing its run said, so it
+  // belongs after that run's turns and before the next phase's. Reports and turns come from
+  // different tables (dev events vs run_event), so the timestamp is the only thing that relates
+  // them — a stable merge on `created_at`, not an append at the end.
+  const settled: Bubble[] = []
+  let ri = 0
+  for (const b of bubbles) {
+    while (ri < reports.length && reports[ri].ts && b.ts && reports[ri].ts <= b.ts) {
+      settled.push({ key: `rep-${ri}`, speaker: 'agent', phase: settled[settled.length - 1]?.phase ?? null,
+                     text: '', ts: reports[ri].ts, report: reports[ri].report })
+      ri += 1
+    }
+    settled.push(b)
+  }
+  for (; ri < reports.length; ri++) {
+    settled.push({ key: `rep-${ri}`, speaker: 'agent', phase: settled[settled.length - 1]?.phase ?? null,
+                   text: '', ts: reports[ri].ts, report: reports[ri].report })
+  }
+  const all = [...settled, ...liveBubbles, ...decisionBubbles]
 
   // Auto-scroll to the newest as content grows.
   useEffect(() => {
@@ -165,9 +319,13 @@ export default function TimelineView({
                   <span className={sm.tint}>{sm.label}</span>
                   {b.phase && <span>· {PHASE_LABEL[b.phase] ?? b.phase}</span>}
                 </div>
-                <div className={`rounded-lg border px-2.5 py-1.5 text-[12.5px] text-fg ${sm.bubble}`}>
-                  <Markdown text={b.text} variant="chat" tone="dev" />
-                </div>
+                {b.report
+                  ? <ReportCard r={b.report} />
+                  : (
+                    <div className={`rounded-lg border px-2.5 py-1.5 text-[12.5px] text-fg ${sm.bubble}`}>
+                      <Markdown text={b.text} variant="chat" tone="dev" />
+                    </div>
+                  )}
               </div>
             </div>
           </div>

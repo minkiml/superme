@@ -1,8 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Bell, GitMerge, ArrowUpRight, AlertTriangle, Hand, Inbox } from 'lucide-react'
+import { Bell, GitMerge, ArrowUpRight, AlertTriangle, Hand, Inbox, MessageCircleQuestion } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { getSystemAttention, advanceWorkItem, type SystemHold, type SystemHoldKind, type SystemRepoAttention } from '@/lib/api'
+import { invalidate, useLive } from '@/lib/live'
+import { K, topicRepo } from '@/lib/live/keys'
 
 // The top-of-SuperMe attention center (Pass 2 · Q2) — one bell beside the brand that surfaces every
 // `awaiting_human` hold across EVERY connected repo. Owner principle: nothing auto-stops forever; a
@@ -12,6 +14,7 @@ import { getSystemAttention, advanceWorkItem, type SystemHold, type SystemHoldKi
 // Per-kind chrome: icon + dot color + a one-word label. `kind` is the daemon's classification of WHY
 // the item is parked; it drives which quick actions the row offers.
 const KIND: Record<SystemHoldKind, { icon: LucideIcon; dot: string; label: string }> = {
+  question: { icon: MessageCircleQuestion, dot: 'bg-accent', label: 'Questions' },
   escalation: { icon: AlertTriangle, dot: 'bg-danger', label: 'Escalated' },
   breaker: { icon: Hand, dot: 'bg-warn', label: 'Paused' },
   paged: { icon: Inbox, dot: 'bg-warn', label: 'Upstream' },
@@ -20,23 +23,13 @@ const KIND: Record<SystemHoldKind, { icon: LucideIcon; dot: string; label: strin
 }
 
 export default function AttentionCenter({ onGoto }: { onGoto: (repoId: string, hold: SystemHold) => void }) {
-  const [feed, setFeed] = useState<SystemRepoAttention[]>([])
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState<string | null>(null) // itemId of a quick action in flight
   const ref = useRef<HTMLDivElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState({ top: 0, right: 0 })
 
-  async function pull() {
-    setFeed(await getSystemAttention())
-  }
-  useEffect(() => {
-    let alive = true
-    const tick = () => getSystemAttention().then((f) => alive && setFeed(f)).catch(() => {})
-    tick()
-    const t = setInterval(tick, 5000)
-    return () => { alive = false; clearInterval(t) }
-  }, [])
+  const { data: feed = [], refresh } = useLive<SystemRepoAttention[]>(K.systemAttention, getSystemAttention)
 
   const total = feed.reduce((n, r) => n + r.holds.length, 0)
 
@@ -70,7 +63,10 @@ export default function AttentionCenter({ onGoto }: { onGoto: (repoId: string, h
     setBusy(h.id)
     try {
       await advanceWorkItem(h.id, repoId)
-      await pull()
+      // The merge changed this repo's whole dev surface, not just the bell — refresh every view of
+      // it at once rather than letting each one discover the change on its own clock.
+      refresh()
+      invalidate(topicRepo(repoId))
     } catch (e) {
       // Keep the popover open and show the daemon's own words (ApiError.toString = detail).
       window.alert(String(e))
@@ -162,13 +158,31 @@ function HoldRow({
             <span className="shrink-0 rounded bg-hover px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide text-muted">{k.label}</span>
           </div>
           <p className="mt-0.5 text-xs leading-snug text-muted">{h.reason}</p>
+          {h.kind === 'question' && (h.questions?.length ?? 0) > 0 && (
+            <ol className="mt-1.5 list-decimal space-y-2 pl-4 text-xs leading-snug">
+              {h.questions!.map((q, i) => (
+                <li key={i} className="text-fg">
+                  <span className="font-medium">{q.question}</span>
+                  {/* The recommendation is the point of the card — the owner accepts it or names
+                      the alternative, without reading back through the agent's reasoning. */}
+                  {q.recommend && (
+                    <span className="mt-1 block text-muted">
+                      <span className="text-fg">Recommend</span> — {q.recommend}
+                    </span>
+                  )}
+                  {q.why && <span className="block text-muted">Why — {q.why}</span>}
+                  {q.instead && <span className="block text-muted">Instead — {q.instead}</span>}
+                </li>
+              ))}
+            </ol>
+          )}
           <div className="mt-1.5 flex items-center gap-2">
             <button
               type="button"
               onClick={onOpen}
               className="flex items-center gap-1 rounded-md border border-line px-2 py-1 text-xs text-fg hover:bg-hover"
             >
-              <ArrowUpRight size={12} /> Open
+              <ArrowUpRight size={12} /> {h.kind === 'question' ? 'Open chat' : 'Open'}
             </button>
             {onApprove && (
               <button

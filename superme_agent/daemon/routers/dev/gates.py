@@ -17,9 +17,9 @@ from ...app_state import (
     DevKnowledgeService, DevStore, SessionStore, SystemSpine,
     get_dev, get_dev_store, get_sessions, get_spine,
 )
-from ....core import artifacts, gate_briefs, git_layer, status_router
-from ....core.artifacts import artifact_file, _atomic_write
-from ...services import scheduler
+from ....core import gate_briefs, git_layer, status_router
+from ....core.artifacts import _atomic_write
+from ...services import git_ops, scheduler
 from ....gateway import contexts
 from ...schemas.dev.gates import AbandonResponse, GateBriefResponse
 
@@ -42,7 +42,8 @@ def _load(context_id: str, item_id: str, dev: DevKnowledgeService):
 @router.get("/dev/work-items/{item_id}/gate-brief", response_model=GateBriefResponse)
 async def dev_work_item_gate_brief(item_id: str, context_id: str = "global",
                                    dev: DevKnowledgeService = Depends(get_dev),
-                                   dev_store: DevStore = Depends(get_dev_store)) -> dict:
+                                   dev_store: DevStore = Depends(get_dev_store),
+                                   spine: SystemSpine = Depends(get_spine)) -> dict:
     """The item's CURRENT gate brief (or a preview of the next one when mid-phase): continuity →
     delta → narrative → the uniform decision block, plus the mechanical checks — answerable
     without opening code (D10 ★). The drilldown leads with this."""
@@ -51,7 +52,9 @@ async def dev_work_item_gate_brief(item_id: str, context_id: str = "global",
     git_health = None
     if item.get("git_branch") or item.get("git_worktree"):
         try:
-            git_health = git_layer.worktree_health(ctx.cwd, ctx.id, item_id, item.get("git_branch"))
+            git_health = git_layer.worktree_health(ctx.cwd, ctx.id, item_id, item.get("git_branch"),
+                                                   trunk=git_ops.repo_anchor(ctx, spine),
+                                                   merge_commit=item.get("git_merge_commit"))
         except (git_layer.GitError, git_layer.GitBusy):
             git_health = None
     all_items = dev.read_all(dev_root)["work_items"]
@@ -74,7 +77,7 @@ async def dev_work_item_abandon(item_id: str, body: AbandonBody,
                                 spine: SystemSpine = Depends(get_spine)) -> dict:
     """Abandon a work-item — HUMAN-ONLY (no agent-tool counterpart), legal from any non-terminal
     phase (D8). Ordered, each step idempotent: end live runs/sessions · remove the worktree
-    (branch kept — near-free trace) · abandon note into closeout.md · terminal status change
+    (branch kept — near-free trace) · abandon note into reports/report-close.md · terminal status change
     (`abandoned`, or `superseded` when `superseded_by` names the replacement) · resume a paused
     parent whose last open blocking child this was. Dev-knowledge untouched — write-at-merge
     means a pre-merge abandon wrote nothing, ever. The response is the abandon brief: blocking
@@ -108,17 +111,22 @@ async def dev_work_item_abandon(item_id: str, body: AbandonBody,
         except (git_layer.GitError, git_layer.GitBusy) as e:
             worktree_removed = False
             log.warning("abandon: worktree cleanup failed for %s: %s", item_id, e)
-    # 3. abandon note into closeout.md (scaffolded if absent) — why, in the owner's words.
+    # 3. abandon note into reports/report-close.md — why, in the owner's words. An abandon IS how
+    #    this item closed, and every user-facing doc is `report-<phase>.md` (renovation §3.3), so
+    #    the ending is recorded in the close report. No agent runs here, so CODE writes the whole
+    #    file: the facts are the item record's, not a claim anyone has to author.
     item_dir = dev_root / "work-items" / item_id
-    artifacts.scaffold(item_dir, "closeout", title=str(item.get("title") or item_id),
-                       item_kind=item.get("kind"), item_id=item_id)
-    closeout = item_dir / "artifacts" / artifact_file("closeout")
+    report = item_dir / "reports" / "report-close.md"
     note = (f"\n## Abandon note\n{outcome}"
             + (f" by `{body.superseded_by}`" if body.superseded_by else "")
             + (f" — {body.reason.strip()}" if body.reason.strip() else " (no reason given)")
             + "\n")
-    if "## Abandon note" not in closeout.read_text():
-        _atomic_write(closeout, closeout.read_text().rstrip() + "\n" + note)
+    head = "" if report.is_file() else (
+        f"# Close — {item.get('title') or item_id}\n\n"
+        f"**What landed:** nothing — the item was {outcome} at the `{item.get('phase')}` phase.\n")
+    if "## Abandon note" not in (report.read_text() if report.is_file() else ""):
+        _atomic_write(report, (head + (report.read_text() if report.is_file() else "")).rstrip()
+                      + "\n" + note)
     # 4. terminal — a status change, never a delete (folder, artifacts, branch, trace remain).
     try:
         dev.set_work_item_terminal(dev_root, item_id, outcome,

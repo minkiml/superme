@@ -14,7 +14,9 @@ import type { OrbitRepo } from './useCommandStats'
 
 function ScopeCol({ name, color, s }: { name: string; color: string; s?: { sessions?: number; agents?: number; running?: number } }) {
   const rows: [string, number][] = [
-    ['sessions', s?.sessions ?? 0],
+    // "conversations", not "sessions": the count excludes the headless build/vet agent threads,
+    // so it matches the list in the session picker exactly (kind_profiles.AGENT_THREAD_KINDS).
+    ['conversations', s?.sessions ?? 0],
     ['agents', s?.agents ?? 0],
     ['running', s?.running ?? 0],
   ]

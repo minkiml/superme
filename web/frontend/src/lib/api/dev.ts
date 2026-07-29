@@ -17,7 +17,7 @@ import type { Schema } from './generated'
 // terminal (status done) item ended.
 export type WorkKind = 'implementation' | 'research'
 export type WorkPhase =
-  | 'triage' | 'plan' | 'build' | 'vet' | 'review' | 'investigate' | 'report' | 'close'
+  | 'triage' | 'plan' | 'build' | 'vet' | 'review' | 'investigate' | 'close'
 export type WorkStatus = 'active' | 'awaiting_child' | 'awaiting_upstream' | 'awaiting_slot' | 'awaiting_human' | 'done'
 export type WorkOutcome = 'completed' | 'abandoned' | 'superseded'
 export type SpawnRelation = 'blocking' | 'parallel' | 'spawn'
@@ -60,6 +60,9 @@ export type WorkItem = {
   git_merge_commit?: string | null
   git_merged_at?: string | null
   git_backup_ref?: string | null
+  // `strict` repos (§2.2): when the deputy approved and handed the merge over. Set ∧ no merge
+  // commit = the PR is open, which is what activates the Git tab's PR actions.
+  git_pr_opened_at?: string | null
   artifacts?: Artifact[] // normalized {type, path} refs (R5); read the path via artifactPath
   session_id?: string | null // the agent session this item originated in (session:<id>)
   created_at?: string | null
@@ -726,6 +729,23 @@ export function mergeWorkItemGit(itemId: string, contextId = 'global'): Promise<
 export type GitRevertResult = Schema<'GitRevertResponse'>
 export function revertWorkItemGit(itemId: string, contextId = 'global'): Promise<GitRevertResult> {
   return sendJSON(`/api/dev/work-items/${q(itemId)}/git/revert`, 'POST', { context_id: contextId })
+}
+
+// The dedicated PR page (renovation §4.4): the review report + the branch's diff walkthrough,
+// GROUPED BY TASK off the commits' `SuperMe-Task` trailers. Read-only — the page's one action is
+// the ordinary review advance (approve = merge). The per-file patches are fetched separately, on
+// expand: a branch's whole diff is the one thing a review page must not make the reader wait for.
+export type PrView = Schema<'PrViewResponse'>
+export function getWorkItemPr(itemId: string, contextId = 'global'): Promise<PrView> {
+  return getJSON(`/api/dev/work-items/${q(itemId)}/pr?context_id=${q(contextId)}`)
+}
+
+export type PrDiff = Schema<'PrDiffResponse'>
+export function getWorkItemPrDiff(itemId: string, path: string, task: string | null,
+                                  contextId = 'global'): Promise<PrDiff> {
+  const t = task ? `&task=${q(task)}` : ''
+  return getJSON(`/api/dev/work-items/${q(itemId)}/pr/diff?context_id=${q(contextId)}`
+    + `&path=${q(path)}${t}`)
 }
 
 // Resolve-with-Agent: re-runs the sync leaving conflicts in the worktree and fires a background

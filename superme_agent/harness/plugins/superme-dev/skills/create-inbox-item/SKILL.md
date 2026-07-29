@@ -1,7 +1,7 @@
 ---
 name: create-inbox-item
 description: Author one crisp inbox ticket from a discussion or a decision to propose a real work or branch work off. Use when a general chat and discussion need to turn into real work, when the user says 'ticket this' / 'itemize this' / 'put this in the inbox' / 'make a task', or when an agent decides to spin adjacent work out of the current item. Do NOT use to push an inbox item into a work-item (that's the owner's triage), to edit an existing item, or to capture an operational learning (that's the learning pipeline).
-argument-hint: what to itemize (optional — defaults to the current discussion)
+argument-hint: "[what-to-itemize]"
 category: general
 ---
 

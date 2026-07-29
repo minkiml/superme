@@ -8,8 +8,8 @@ exactly ONE decision, and closes with the uniform decision block: recommendation
 line · per-option consequence · dual-scale effort. Every gate is answerable from its brief alone.
 
 The kernel ASSEMBLES the brief from durable state (item fields, artifacts, evidence ledger, staged
-knowledge delta, event log, git health) — agent-authored artifacts (readiness.md, closeout.md) are
-embedded as the narrative core, never regenerated. Mechanical rows come from code, never claims.
+knowledge delta, event log, git health) — the agent-authored reports are embedded as the narrative
+core, never regenerated. Mechanical rows come from code, never claims.
 
 `close_readiness` is the D8 close gate's mechanical evaluator over KIND_PROFILES.close_criteria —
 the complete/promote route refuses on any failing check (three-layer protocol, layer zero).
@@ -22,6 +22,7 @@ from pathlib import Path
 
 from . import artifacts as A
 from . import knowledge_delta as KD
+from . import plan_revision
 from . import status_router
 from .kind_profiles import get_profile
 
@@ -37,13 +38,6 @@ _ITEM_ID = re.compile(r"\b(?:item:)?([0-9a-f]{12})\b")
 
 
 # --------------------------------------------------------------------------- close criteria (D8)
-
-def _closeout_facts(item_dir: Path) -> dict:
-    path = Path(item_dir) / "artifacts" / A.artifact_file("closeout")
-    if not path.exists():
-        return {}
-    facts, _err = A._parse_facts(A._split_sections(path.read_text()).get("Facts", ""))
-    return facts
 
 
 def close_readiness(item: dict, item_dir: Path, dev_root: Path, main_repo_dir: Path | None,
@@ -75,17 +69,6 @@ def close_readiness(item: dict, item_dir: Path, dev_root: Path, main_repo_dir: P
             checks.append({"criterion": crit, "ok": ok,
                            "detail": f"open children: {', '.join(open_ids)}" if not ok
                                      else "no open children"})
-        elif crit == "merged_or_logged_no_merge":
-            facts = _closeout_facts(item_dir)
-            merged = bool(item.get("git_merge_commit") or str(facts.get("merge_commit") or "").strip())
-            reason = str(facts.get("no_merge_reason") or "").strip()
-            nothing = not (facts.get("changed_files") or [])
-            ok = merged or bool(reason) or (nothing and "changed_files" in facts)
-            checks.append({"criterion": crit, "ok": ok,
-                           "detail": ("merged" if merged else
-                                      f"no-merge reason logged: {reason}" if reason else
-                                      "no files changed — nothing to merge" if ok else
-                                      "not merged and no `no_merge_reason` logged in closeout Facts")})
         elif crit == "evidence_fresh":
             v = A.evidence_status(item_dir, evidence_repo)
             # A `deferred` status (BV-A2) isn't passed → close is correctly refused while any check
@@ -107,37 +90,20 @@ def close_readiness(item: dict, item_dir: Path, dev_root: Path, main_repo_dir: P
                                      + (f" ({ks['ops']} ops)" if ks.get("ops") else "")
                                      + ("" if ok else " — a staged delta applies at merge; "
                                         "merge first (or it was staged after the merge — restage window missed)")})
-        elif crit == "closeout_verified":
-            # Unmerged item (deliberate no-merge / nothing landed on main yet): its changed files
-            # exist only in its WORKTREE — verifying them against main would brand an honest
-            # closeout a liar forever. Merged items verify against main (the worktree may be gone).
-            claim_repo = main_repo_dir if item.get("git_merge_commit") else evidence_repo
-            ok, issues = A.verify_closeout(item_dir, claim_repo)
-            checks.append({"criterion": crit, "ok": ok,
-                           "detail": "; ".join(issues) or "all claims verified against ground truth"})
-        elif crit == "assumptions_ratified":
-            # The teeth behind the assumption ledger. A call the agent made without the owner must
-            # have been SEEN by them before the item closes — otherwise "record an assumption"
-            # degrades into the same silent parking the open-questions queue was.
-            pending = A.unratified_assumptions(item_dir)
-            checks.append({"criterion": crit, "ok": not pending,
-                           "detail": (f"{len(pending)} assumption(s) never put to you: "
-                                      + "; ".join(a["what"] for a in pending[:3]))
-                                     if pending else "no assumptions outstanding"})
         elif crit == "findings_delivered":
-            issues = A.self_check(item_dir, "findings", item_kind=profile.kind)
+            # The research deliverable is the report the owner decided on, not an artifact:
+            # The `review` entry run writes reports/report-review.md (findings.md retired).
+            issues = A.report_issues(item_dir, "report-review")
             checks.append({"criterion": crit, "ok": not issues,
-                           "detail": "; ".join(issues) or "findings.md complete"})
+                           "detail": "; ".join(issues) or "report-review.md complete"})
         elif crit == "spawns_exist":
-            path = Path(item_dir) / "artifacts" / A.artifact_file("findings")
-            follow = A._split_sections(path.read_text()).get("Follow-ups", "") if path.exists() else ""
-            ids = _ITEM_ID.findall(follow)
-            known = {str(it.get("id")) for it in all_items}
-            ghosts = [i for i in ids if i not in known]
-            checks.append({"criterion": crit, "ok": not ghosts,
-                           "detail": f"claimed spawn(s) don't exist: {', '.join(ghosts)}" if ghosts
-                                     else (f"{len(ids)} spawn(s) verified" if ids
-                                           else "no spawns claimed")})
+            # What must not happen is a research item closing with its proposals silently dropped.
+            # `itemize` records the owner's call (adopted, with inbox ids, vs declined) into the
+            # report's decision line; an unrecorded decision is one that was never put to them.
+            decision = A.owner_decision(item_dir)
+            checks.append({"criterion": crit, "ok": bool(decision),
+                           "detail": decision or "the report's proposals were never put to you — "
+                                                 "run itemize, or record that none were adopted"})
         else:  # an unknown slug fails LOUD-ish: visible, never silently green
             checks.append({"criterion": crit, "ok": False,
                            "detail": "no evaluator for this criterion (kernel gap)"})
@@ -239,7 +205,7 @@ def _numbers(item_dir: Path) -> dict:
         latest[e["check"]] = e
     passing = sum(1 for cid in plan_checks if latest.get(cid, {}).get("passed"))
     return {"tasks_done": done, "tasks_total": total,
-            "cycle": len(A.vet_reports(item_dir)),
+            "cycle": len(A.cycle_reports(item_dir)),
             "checks_pass": passing, "checks_total": len(plan_checks)}
 
 
@@ -347,9 +313,12 @@ def render_gate_brief(item: dict, item_dir: Path, dev_root: Path,
     snippet: str | None = None
     authorizations: list[dict] = []
     if gate == "triage-exit":
-        item_body = str(item.get("description") or "").strip()
-        body += ["**What triage concluded** (the item's sharpened brief):", "",
-                 _cap(item_body, _CAP_BODY) or "_(item body is empty — triage hasn't run)_"]
+        # brief.md is triage's product (renovation §3.1); pre-renovation items sharpened the item
+        # body instead — show whichever exists.
+        item_body = (_strip_fm(_artifact_text(item_dir, "brief") or "").strip()
+                     or str(item.get("description") or "").strip())
+        body += ["**What triage concluded** (the item's brief):", "",
+                 _cap(item_body, _CAP_BODY) or "_(no brief yet — triage hasn't run)_"]
         if (item_dir / "preliminary").is_dir():
             body += ["", f"_Full handoff context: `{item_dir / 'preliminary'}`_"]
         # F1 (playground-e2e-blockers): ready = the `triaged_at` stamp, written only by triage's
@@ -404,6 +373,14 @@ def render_gate_brief(item: dict, item_dir: Path, dev_root: Path,
                       "value": depth + (f" · {len(vp['checks'])} check(s)" if vp.get("checks")
                                         else ""),
                       "tone": "warn" if depth == "none" else ""}]
+        # Owner-made decisions from the grill (plan.md ## Decisions & clarifications) — settled
+        # provenance the gate shows back (≤3 newest), never re-litigated.
+        decisions = A.parse_decisions(plan)
+        if decisions:
+            facts.append({"label": "decisions", "value": f"{len(decisions)} owner-answered"})
+            body += ["", "**Owner decisions (from the Q&A):**", ""]
+            body += [f"- {d['question']} → {d['answer'] or '(answer recorded in plan)'}"
+                     for d in decisions[-3:]]
         # The renovation §2 gate feeds, lifted verbatim from the plan (empty on v1 plans — the
         # surface falls back to prose rows).
         assumptions = A.parse_assumptions(plan)
@@ -415,6 +392,21 @@ def render_gate_brief(item: dict, item_dir: Path, dev_root: Path,
                           "value": f"{len(touches)} component(s) · {newc} new · {modc} modified"})
         checks.append({"criterion": "plan_complete", "ok": not issues,
                        "detail": "; ".join(issues) or f"plan clean, {total} task(s)"})
+        # Every re-routing round owes a revision block (§2.1): `revise` is the only way back here,
+        # it always records a `review.route` event, and the only way to change plan.md is
+        # `revise_plan`, which always writes the block. A round with no block means the plan was
+        # hand-edited — so which feedback drove what is unrecoverable, and the next build reads a
+        # plan it cannot tell has changed. Fails for a real reason; the gate acts by sending it
+        # back to record the pass properly.
+        rounds = sum(1 for e in events if e.get("kind") == "review.route")
+        if rounds:
+            revs = plan_revision.revisions(item_dir)
+            checks.append({
+                "criterion": "revisions_recorded", "ok": len(revs) >= rounds,
+                "detail": (f"{len(revs)} revision block(s) for {rounds} feedback round(s): "
+                           + ", ".join(revs)) if len(revs) >= rounds else
+                          (f"{rounds} feedback round(s) but only {len(revs)} revision block(s) — "
+                           f"fold the feedback in with `revise_plan`, never by rewriting plan.md")})
         # The generated gate report (slot-validated) — only owed by plans carrying the feed
         # sections; a v1/legacy plan predates the report contract.
         if profile.kind == "implementation" and (touches or assumptions
@@ -434,16 +426,10 @@ def render_gate_brief(item: dict, item_dir: Path, dev_root: Path,
               "consequence": "item stays parked at the gate; nothing runs"}],
             "~2 min", "~20 min if revising")
     elif gate == "review":
-        readiness = _strip_fm(_artifact_text(item_dir, "readiness") or "")
-        r_issues = A.self_check(item_dir, "readiness", item_kind=profile.kind)
         wt = item.get("git_worktree")
         ev_repo = Path(str(wt)) if wt and Path(str(wt)).is_dir() else main_repo_dir
         ev = A.evidence_status(item_dir, ev_repo)
         ks = KD.delta_status(item_dir, dev_root, ev_repo)
-        body += ["**Readiness report** (agent-authored, regenerated per loop pass):", "",
-                 _cap(readiness, _CAP_EMBED) or "_(no readiness.md yet)_"]
-        checks.append({"criterion": "readiness_complete", "ok": not r_issues,
-                       "detail": "; ".join(r_issues) or "readiness.md clean"})
         checks.append({"criterion": "evidence_fresh", "ok": ev["status"] == "passed",
                        "detail": f"evidence ledger: {ev['status']} ({ev.get('entries', 0)} entries)"})
         k_ok = ks["state"] in ("staged", "none-staged", "folded", "applied")
@@ -467,18 +453,14 @@ def render_gate_brief(item: dict, item_dir: Path, dev_root: Path,
                           "value": f"ahead {git_health.get('ahead', 0)} · "
                                    f"behind {git_health.get('behind', 0)}",
                           "tone": "warn" if git_health.get("behind") else ""})
-        # Renovation review feeds: diff stats from the readiness Stats yaml (counts, agent-filled
-        # from `git diff --stat`) + the behavior snippet — the newest PASSING ledger entry's
-        # verbatim result, i.e. captured reality, not a claim.
-        stats = A.parse_readiness_stats(readiness)
-        if stats:
+        # Diff facts come from GIT (readiness.md's agent-filled Stats yaml is retired) — a count
+        # nobody typed cannot drift from the tree it describes. `git_health` is None for an item
+        # with no worktree (research), so guard the dict itself, not just the key.
+        if git_health and git_health.get("files") is not None:
             facts.append({"label": "diff",
-                          "value": f"{stats.get('files', '?')} file(s) · "
-                                   f"+{stats.get('insertions', '?')}/−{stats.get('deletions', '?')}"
-                                   + (f" · tests {stats['tests']}" if stats.get("tests") else "")})
-            r_rep = A.gate_report_issues(item_dir, "review")
-            checks.append({"criterion": "gate_report", "ok": not r_rep,
-                           "detail": "; ".join(r_rep) or "gate-report-review.html rendered"})
+                          "value": f"{git_health.get('files', '?')} file(s) · "
+                                   f"+{git_health.get('insertions', '?')}/"
+                                   f"−{git_health.get('deletions', '?')}"})
         latest_pass = next((e for e in reversed(A.evidence_entries(item_dir))
                             if e.get("passed")), None)
         if latest_pass:
@@ -504,28 +486,32 @@ def render_gate_brief(item: dict, item_dir: Path, dev_root: Path,
                      f"  _doc:_ `{a['doc'] or '—'}` · _scope:_ `{a['scope']}` "
                      f"({'the deputy could grant this — sync-to-reality' if a['delegable'] else 'owner-reserved — escalated to you'})"
                      for a in authorizations]
-        ok = all(c["ok"] for c in checks)
+        # THE MUST-RESOLVE RULE (§2.1) — what greys Approve, mechanically. Deliberately NARROWER
+        # than "every check is green": only an undecided authorization or a failing/deferred vet
+        # check is a hard block, because only those have no answer yet. Freshness debt and an
+        # unstaged knowledge row are advisory — real, worth showing, but the owner may merge over
+        # them with their eyes open. Everything softer (observations, an agent's assumption note)
+        # never blocks: it is a note to pick up on demand, not a gate.
+        _MUST_RESOLVE = ("no_pending_authorizations", "evidence_fresh")
+        blocked = [c["criterion"] for c in checks
+                   if c["criterion"] in _MUST_RESOLVE and not c["ok"]]
+        approve_blocked_by = [c["detail"] for c in checks
+                              if c["criterion"] in _MUST_RESOLVE and not c["ok"]]
         decision = _decision(
-            "Merge" if ok else "Hold & fix",
-            "Merging lands this on main and applies the knowledge delta — one 'codebase "
-            "changed' event, with a backup ref for one-click revert.",
-            [{"id": "merge", "label": "Merge",
-              "consequence": "merges to main + applies the staged knowledge delta; revert stays "
-                             "one click away via the backup ref"},
-             {"id": "hold", "label": "Hold & fix",
-              "consequence": "your feedback re-enters build as scoped input; the agent fixes, "
-                             "re-vets, and re-presents a fresh readiness report"},
-             {"id": "merge-anyway", "label": "Merge anyway",
-              "consequence": "merges despite the open warnings above — they become your risk"}],
-            "~2 min", "~30 min per fix loop")
+            "Approve" if not blocked else "Resolve what's open",
+            "Approving merges this to main and locks the item in — close then applies the granted "
+            "authorizations' doc ops. It cannot be un-approved.",
+            [{"id": "approve", "label": "Approve",
+              "consequence": ("merges to main + advances to close; revert stays one click away via "
+                              "the backup ref") if not blocked else
+                             ("greyed — " + "; ".join(approve_blocked_by))},
+             {"id": "drop", "label": "Drop",
+              "consequence": "disposes the work-item — terminal, branch kept, nothing merges"}],
+            "~2 min", "~30 min per re-plan")
+        decision["approve_blocked_by"] = approve_blocked_by
     else:  # close
         cr = close_readiness(item, item_dir, dev_root, main_repo_dir, all_items)
         checks = cr["checks"]
-        closeout = _artifact_text(item_dir, "closeout")
-        summary = (A._split_sections(closeout).get("Summary", "").strip()
-                   if closeout else "")
-        body += ["**What this item delivered:**", "",
-                 _cap(summary, _CAP_BODY) or "_(no closeout summary yet)_"]
         decision = _decision(
             "Complete" if cr["ok"] else "Send back",
             "Completing is terminal: sessions end, the worktree is removed (branch kept), the "
@@ -539,21 +525,6 @@ def render_gate_brief(item: dict, item_dir: Path, dev_root: Path,
               "consequence": "terminal without completing — worktree removed, branch kept, "
                              "zero knowledge writes"}],
             "~2 min", "~10 min per fix")
-
-    # Assumptions the agent took WITHOUT the owner during an autonomous phase. They ride every
-    # gate, not just the plan gate: the whole point of the ledger is that a call made mid-build
-    # surfaces at the next contracted human moment instead of waiting in a queue nobody reads.
-    # Approving this gate ratifies them (see routers .../gates approve) — which is why they're
-    # rendered in the brief body, not tucked behind a drilldown.
-    pending = A.unratified_assumptions(item_dir)
-    if pending:
-        assumptions += [f"{a['what']} — {a.get('why', '')} (**if wrong:** {a.get('cost', '?')})"
-                        for a in pending]
-        body += ["", f"**Assumed without you ({len(pending)}):**", ""]
-        body += [f"- **{a['what']}** — {a.get('why', '')}  \n"
-                 f"  _If wrong:_ {a.get('cost', '?')}"
-                 + (f" · _taken in {a['phase']}_" if a.get("phase") else "")
-                 for a in pending]
 
     md = "\n".join([*(_paged_md(paged) if paged else []),
                     *head, *body, "", "**Mechanical checks:**", _checks_md(checks) or "- (none)",

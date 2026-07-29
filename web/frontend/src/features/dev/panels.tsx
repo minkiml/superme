@@ -29,7 +29,7 @@ export const DEFAULT_RUN_EFFORT = DEFAULT_EFFORT
 // with an agent on it reads "triaging…", not "in progress". `running` covers both a background run
 // fired from the board and a bound session's turn.
 export function StatusBadge({ it, running }: { it: WorkItem; running?: boolean }) {
-  const s = primaryStatus(it)
+  const s = primaryStatus(it, running)
   const live = running && s !== 'done' ? PHASE_VERB[it.phase ?? ''] : null
   return (
     <span className={`shrink-0 whitespace-nowrap rounded bg-hover px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${
@@ -171,7 +171,7 @@ function WorkCard({
   const hasTokens = (tokens ?? 0) > 0
   const settledTime = it.last_run?.duration_ms != null ? fmtDuration(it.last_run.duration_ms) : null
   const showMeter = running || hasTokens || !!settledTime
-  const stripe = STATUS_STRIPE[primaryStatus(it)] ?? 'border-l-line'
+  const stripe = STATUS_STRIPE[primaryStatus(it, running)] ?? 'border-l-line'
   // Attention tint (S7): the card carries its bucket color as a soft ring — orange pages, purple =
   // the deputy is covering it, green = a phase agent is on it. (Unread applies to terminal items,
   // which live off-board in the strip.)

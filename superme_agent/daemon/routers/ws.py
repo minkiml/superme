@@ -26,15 +26,17 @@ from ..deps import load_slash_cache as _load_slash_cache, cache_slash as _cache_
 from ..protocol import (
     event_to_frame, init_frame, result_frame, approval_request_frame, error_frame, parse_inbound,
 )
-from ..schemas.ws import TurnFrame, ApprovalResponseFrame, WatchFrame
-from ..services import compaction, item_stream
+from ..schemas.ws import TurnFrame, ApprovalResponseFrame, WatchFrame, DashboardHelloFrame
+from ..services import compaction, dashboard_stream, item_stream
 from ..services.runs import (
     _begin_run, _end_run, _LiveTokens, _log_artifact,
-    bank_auto_checkpoint, capture_prompt, capture_event,
+    bank_auto_checkpoint, capture_prompt, capture_event, compacted_checkpoint,
+    compacted_session_memory, fire_auto_triage,
 )
-from ...core import kernel_speech, kind_profiles, status_router
+from ...core import kernel_speech, kind_profiles
 from ...core import (
     Init, Usage, Result, Status, TextDelta, ToolResult, scoped_writes_approve,
+    PLAN_READONLY_NUDGE,
     VET_READONLY_NUDGE,
 )
 from ...core.permissions import approval_signature
@@ -42,7 +44,7 @@ from ...gateway import contexts
 from ...harness.tools.dev_tools import make_dev_mcp_server
 from ...core.kernel_speech import (
     work_item_preamble, general_preamble, onboarding_preamble, diagnosis_preamble,
-    diagnosis_trace_block,
+    diagnosis_trace_block, compaction_notice,
 )
 from ...runtime.config import DAEMON_APPROVAL_TIMEOUT
 
@@ -96,6 +98,39 @@ def _live_resume(msg_resume: str | None, resumed: dict | None) -> str | None:
     (`resumed is None` already routed identity/kind through the birth rules above). Item-bound
     turns overwrite this with the server-authoritative role slot; this guards the general paths."""
     return msg_resume if (msg_resume and resumed is not None) else None
+
+
+def _latest_report_outcome(context_id: str, item_id: str) -> str | None:
+    """The item's NEWEST run.report outcome (renovation §3.2 payload), or None when no structured
+    report exists in the recent trail. The grill detector keys on this: `needs_user` means the plan
+    agent is parked on its questions and the bound chat is a Q&A round."""
+    try:
+        for e in _dev_store.list_events(context_id, item_id=item_id, limit=25):
+            if str(e.get("kind")) == "run.report":
+                return str((e.get("meta") or {}).get("outcome") or "") or None
+    except Exception:
+        log.exception("latest report outcome read failed for %s", item_id)
+    return None
+
+
+def _compact_reply(verdict: dict | None) -> str:
+    """The owner's answer to a manual `/compact` — the one owner-facing sentence compaction has.
+    (Compaction is otherwise agent-facing session hygiene: the captured summary and the calibration
+    record stay on the verdict event, unrendered.) They asked, so they get the outcome; the numbers
+    are the same ones the verdict event carries."""
+    if not verdict:
+        return ("Nothing to compact — this session has no fill on record yet, or it has already "
+                "backed off from compacting (two ineffective attempts).")
+    if verdict.get("skipped"):
+        return f"Compaction skipped — {verdict['skipped']}."
+    if verdict.get("error"):
+        return "Compaction failed — see the daemon log; the session is unchanged."
+    pre, post = verdict.get("pre_tokens"), verdict.get("post_tokens")
+    if not pre:
+        return "Compaction ran but recorded no boundary — the session may be too small to compact."
+    return (f"Compacted: {pre:,} → {post:,} tokens ({round(verdict.get('gain_pct') or 0)}% "
+            f"smaller). A checkpoint was banked first, so what only this conversation knew is "
+            f"on disk.")
 
 
 # --- session-aware per-turn append (work-item-session-recognition + session-kinds-diagnose) ----
@@ -256,12 +291,20 @@ async def ws_agent(ws: WebSocket) -> None:
                 session_kind = "work_item"
 
             # Shared command layer: non-native commands (/model) are handled here and
-            # answered directly — no agent turn. Everything else (incl. native /compact,
-            # /clear, skills) falls through to the CLI below.
+            # answered directly — no agent turn. Everything else (/clear, skills) falls through
+            # to the CLI below. `/compact` is the exception: it is INTERCEPTED further down and
+            # routed through the kernel's own sequence (see `manual_compact`).
             cmd_reply = _commands.handle(ctx, prompt)
             if cmd_reply is not None:
                 await send(result_frame(cmd_reply))
                 continue
+
+            # The owner's manual "compact now" (§13.1 row 4). Bare `/compact` used to fall through
+            # to the CLI, which compacts but skips everything the kernel puts AROUND a compaction:
+            # no handoff turn, no banked checkpoint, no verdict, no post-compaction notice. So the
+            # kernel takes it — the SAME path the threshold trigger uses, with the threshold
+            # bypassed. It is not a second mechanism; it is the same one, asked for by hand.
+            manual_compact = prompt.strip().lower() == "/compact"
 
             # The bound work-item (if any): its configured model/effort feed resolution, and its
             # folder sandboxes writes below. Empty dict when unbound. Read ONCE here.
@@ -336,11 +379,15 @@ async def ws_agent(ws: WebSocket) -> None:
             # pre-build thread; the intake thread now persists for review/close.
             write_boundary = None
             deny_write_tools = None   # vet turns set this: file-writes denied outright (§4)
+            protected_paths = None    # review turns set this: plan.md is not review's to write
             item_worktree = None
             turn_resume = _live_resume(msg.resume, resumed)
             session_role = None   # the bound turn's session role (intake|build|vet); None unbound
             handoff_mark = None   # step-6 watermark to persist at Result (a promotion rode this turn)
             main_repo_dir = ctx.cwd   # the REAL repo root, captured before any worktree swap
+            grill_parked = False   # plan's grill (renovation §2): this bound chat is a Q&A round
+            grill_sink: dict = {}  # this turn's report_completion payload (grill round OR a review `revise`)
+            compact_verdict: dict | None = None  # set when a compaction fired at this run's start
             if work_item_id and item.get("git_worktree"):
                 wt = Path(str(item["git_worktree"]))
                 if wt.is_dir():
@@ -351,6 +398,12 @@ async def ws_agent(ws: WebSocket) -> None:
                 # else still defers to the surface approval. (`item` + `model`/`effort` were resolved
                 # above — the item's configured model already factored into `model`.)
                 turn_approve = scoped_writes_approve(item_dir, turn_approve)
+                # …EXCEPT plan.md at review (§2.1). The item folder is otherwise review's to write
+                # (report-review.md, checkpoints), so the carve-out is per-FILE. Scoped to review
+                # ONLY: build legitimately edits plan.md — it ticks `- [x]` per task, the one
+                # progress signal — so a phase-agnostic deny would silently stop that.
+                if str(item.get("phase")) == "review":
+                    protected_paths = [item_dir / "artifacts" / "plan.md"]
                 session_role, slot_sid = resolve_item_session(
                     item, worktree=item_worktree, repo_dir=main_repo_dir,
                     get_session=_spine.get_session,
@@ -358,7 +411,7 @@ async def ws_agent(ws: WebSocket) -> None:
                         ctx.internal_root / "dev", work_item_id, sid, role=r),
                 )
                 # Server-authoritative session choice: the bound turn runs in the CURRENT role's
-                # slot — mint fresh when empty (orient block injects at birth below). msg.resume
+                # slot — mint fresh when empty. msg.resume
                 # (possibly another role's thread opened from the picker) is REDIRECTED here, and
                 # the off-role thread is left alone — never retired.
                 turn_resume = slot_sid
@@ -377,22 +430,36 @@ async def ws_agent(ws: WebSocket) -> None:
                 # (running checks IS the job) under the freeze-boundary rule above.
                 if session_role == "vet":
                     deny_write_tools = VET_READONLY_NUDGE
+                # Plan's grill (renovation §2): the item is parked on the plan agent's questions —
+                # this bound chat IS the Q&A. Mount the run report pen so the resumed agent can
+                # DECLARE the grill finished (re-report); until it does, the item stays parked and
+                # the deputy stays out. Detection: newest run.report outcome, which holds across
+                # multi-round grills (a mid-grill chat turn logs no new report).
+                if (session_role == "intake" and str(item.get("phase")) == "plan"
+                        and _latest_report_outcome(ctx.id, work_item_id) == "needs_user"):
+                    grill_parked = True
+                # Compaction, run-START (compaction §trigger): the ONE check, before the lock. If
+                # this session is over its trigger, compact it now and let this turn land in the
+                # compacted thread — awaited, because `run_compaction` needs the same run-lock
+                # `_begin_run` is about to take, and because a prompt sent mid-compaction is
+                # exactly the mid-task case the placement exists to prevent. Cheap when it says no.
+                try:
+                    compact_verdict = await compaction.compact_before_run(
+                        ctx, ctx.id, work_item_id, turn_resume,
+                        kind=(item or {}).get("kind"), model=model, force=manual_compact)
+                except Exception:
+                    log.exception("run-start compaction check failed")
                 item_run_id = _begin_run(ctx, ctx.id, work_item_id, "chat", model, phase=item.get("phase"))
                 began_run = item_run_id is not None
                 last_bound = (ctx, work_item_id)
-                session_append = work_item_preamble(work_item_id, item, item_dir)
-                # Cold-start orient block (S5/D11 §3): kernel-assembled, injected ONCE at session
-                # BIRTH into the transcript (later turns cache-read it; never re-sent per turn).
-                # `resumed is None` = no stored session row = this turn mints the session.
+                session_append = work_item_preamble(
+                    work_item_id, item, item_dir,
+                    # Post-compaction pointer: owed only while this thread's newest finished run
+                    # is the compaction itself, so the very next turn carries it and no other.
+                    compacted_checkpoint=compacted_checkpoint(ctx, item, turn_resume))
+                # No birth-injected orient block (workflow-renovation-v2 §1): Current focus carries
+                # the pointer per-turn; state is read on demand from the item folder it names.
                 prompt_prefixes: list[str] = []
-                if resumed is None:
-                    try:
-                        siblings = _dev.read_all(ctx.internal_root / "dev")["work_items"]
-                        kids = status_router.children_of(siblings, work_item_id)
-                    except Exception:
-                        kids = []
-                    prompt_prefixes.append(
-                        kernel_speech.render_orient_block(item, item_dir, children=kids))
                 # Handoff promotion (build-vet-loop §1.4 / step 6): NEW loop records (driver
                 # decisions + vet verdicts, curated + capped) inject ONCE into the intake thread —
                 # this turn's transcript entry — so review narrates from the record. The watermark
@@ -428,6 +495,35 @@ async def ws_agent(ws: WebSocket) -> None:
                     onboarding_preamble((_spine.repo(ctx.id).onboarding if _spine.repo(ctx.id) else None))
                     if is_onboarding else general_preamble()
                 )
+            # Compaction seam for the sessions with NO work-item (§13.4 / T5). Same run-START
+            # placement and same awaited call as the bound branch above — a general session had no
+            # SuperMe compaction at all before this and fell through to the CLI's own 83.5%
+            # autocompact, with nothing banked. Its handoff writes `session-memory/<sid>.md`, so
+            # the trigger cannot run without a knowledge home to write into.
+            # Diagnosis is excluded: it is strictly read-only and its bulk (the subject-run trace)
+            # is re-derivable from the run trail, so there is nothing here worth a model call.
+            if (not work_item_id and ctx.mode == "dev" and session_kind != "diagnosis"
+                    and ctx.internal_root):
+                try:
+                    compact_verdict = await compaction.compact_before_run(
+                        ctx, ctx.id, None, turn_resume, kind=None, model=model,
+                        force=manual_compact)
+                except Exception:
+                    log.exception("run-start compaction check failed (general session)")
+            # The post-compaction pointer for a non-item thread. Appended here rather than taken as
+            # a preamble parameter because all three unbound preambles (general / onboarding /
+            # diagnosis) want the identical line, and the notice is already its own registry entry.
+            # `has_artifacts=False`: there is no item folder to fall back to — the banked memory is
+            # the only surviving copy of this thread.
+            if session_append and not work_item_id:
+                session_append += compaction_notice(
+                    compacted_session_memory(ctx, turn_resume), has_artifacts=False)
+            # A manual `/compact` IS the whole turn — it has already run above. Report what it did
+            # and stop; sending the literal "/compact" on to the CLI now would compact a session
+            # that was compacted seconds ago, on top of the summary it just wrote.
+            if manual_compact:
+                await send(result_frame(_compact_reply(compact_verdict)))
+                continue
             # Onboarding skills are ONE-SHOT per repo: they exist to establish project memory, so
             # once it IS established they can only do harm — `retrofit` re-derives the anchor docs
             # from the code and would overwrite the owner's approved ones. Nothing in the skills'
@@ -460,6 +556,31 @@ async def ws_agent(ws: WebSocket) -> None:
                     return {}
 
                 turn_hooks = {"PreCompact": [HookMatcher(hooks=[_pre_compact])]}
+            elif ctx.mode == "dev" and session_kind != "diagnosis":
+                # T5's half of the same net. A general session CAN still hit the CLI's own 167K
+                # autocompact — one turn that adds ~28% of the window jumps the gap between our
+                # run-start check and theirs, mid-turn, where we cannot intervene (measured
+                # 2026-07-28: a session at 67% took one big turn and came back at 12%). We have
+                # nothing to bank here — the handoff needs a turn, and we are INSIDE one, and a
+                # general session has no artifacts to derive from — so this logs. Without it the
+                # boundary is fully invisible: no compact run row means `session_compacted_pending`
+                # stays false, so the notice never fires either, and the thread loses its memory
+                # with nothing anywhere saying so.
+                _hook_ctx_id = ctx.id
+
+                async def _pre_compact_general(_input, _tool_use_id, _hctx):
+                    try:
+                        _dev_store.log_event(
+                            _hook_ctx_id, "compaction.checkpoint",
+                            "The CLI compacted this general session on its own, mid-turn — "
+                            "nothing was banked (no turn available to write one)",
+                            actor="daemon", meta={"hook": True, "banked": False,
+                                                  "by_agent": False, "cli_initiated": True})
+                    except Exception:
+                        log.exception("PreCompact general-session log failed")
+                    return {}
+
+                turn_hooks = {"PreCompact": [HookMatcher(hooks=[_pre_compact_general])]}
             chat_feature = ("onboarding" if is_onboarding
                             else "diagnosis" if session_kind == "diagnosis" else "chat")
             chat_run_id = None if began_run else _spine.start_run(
@@ -486,9 +607,21 @@ async def ws_agent(ws: WebSocket) -> None:
                     # Worker tool-scoping (S5/D9): the item write-tools operate ONLY this
                     # session's bound item; a general session gets refusals, not silence.
                     bound_item_id=work_item_id,
+                    # An auto-pushed blocking/parallel child gets the same first kick the owner's
+                    # push gives it — otherwise it lands at triage/active with no run behind it.
+                    fire_triage=lambda child_id: fire_auto_triage(ctx.id, child_id, _spine),
                 )}
                 if ctx.mode == "dev" else None
             )
+            if work_item_id and ctx.mode == "dev":
+                # EVERY bound work-item chat turn gets the run-report pen, not just the grill.
+                # Live-gate finding (2026-07-27): the review CONVERSATION happens here, and §2.1
+                # says it ends by signalling `revise` — but the pen was mounted only for a parked
+                # grill, so the review agent could see the one way back and not reach it ("that
+                # tool belonged to the background run that already finished"). A phase agent must
+                # be able to declare its outcome from the surface it is actually talking on.
+                from ...harness.tools.run_tools import make_run_report_server
+                turn_mcp = {**(turn_mcp or {}), "run": make_run_report_server(grill_sink)}
             final_tokens = None
             final_usage = None
             final_session = None
@@ -512,6 +645,8 @@ async def ws_agent(ws: WebSocket) -> None:
                     general_write_root=general_write_root,  # …except writing this project's general/ memory
                     write_boundary=write_boundary,  # S4 freeze: build writes stay in worktree+item dir
                     deny_write_tools=deny_write_tools,  # vet: no file-write capability at all (§4)
+                    protected_paths=protected_paths,    # review: plan.md is not review's to write
+                    protected_nudge=PLAN_READONLY_NUDGE,
                     hooks=turn_hooks,               # S8: PreCompact checkpoint-first safety net
                     block_categories=block_categories,  # onboarding skills die once memory exists
                 ):
@@ -574,26 +709,51 @@ async def ws_agent(ws: WebSocket) -> None:
                     # event_to_frame would reject it, so never send it down the socket.
                     if not isinstance(ev, ToolResult):
                         await send(event_to_frame(ev))
-                # Turn done — an interactive (bound-chat) turn rests the item at `active`
-                # (the conversation continues; gates set awaiting_human, not chat turns).
+                # Turn done. A chat turn rests a WORKING item at `active` (the conversation
+                # continues) — but it never CLEARS a hold: an item the owner found parked at a gate
+                # is still parked when they stop typing, because a gate is cleared by Approve or by
+                # a routing outcome, never by talking about it. Before this rule, chatting with a
+                # `review / awaiting_human` item flipped it to `active`: the board read IN PROGRESS
+                # with nothing running, and — worse — the attention feed (which lists only
+                # `awaiting_human`) dropped it while it still needed a decision. It also covers
+                # plan's grill in both directions: a round that re-reports `needs_user` is still
+                # asking, and one that declares itself finished rests back at its judged gate,
+                # where _end_run's hook re-enters the normal deputy/owner flow.
                 if began_run:
-                    _end_run(ctx, ctx.id, work_item_id, final_tokens, "active", final_usage,
-                             final_ctx, session_id=final_session)
-                    # S8 compaction trigger: a REAL bound turn just finished with fresh usage —
-                    # clear the defer latch / attempt budget, then evaluate the fill against the
-                    # (floor-aware) trigger. Fire-and-forget: the compact run takes the item's
-                    # run-lock itself and never blocks this reply.
-                    if final_session and final_ctx is not None:
-                        try:
-                            compaction.note_turn_start(final_session)
-                            compaction.maybe_compact(
-                                ctx, ctx.id, work_item_id, final_session,
-                                ctx_pct=final_ctx, kind=(item or {}).get("kind"), model=model)
-                        except Exception:
-                            log.exception("compaction trigger evaluation failed")
+                    report = grill_sink.get("report")
+                    outcome = report.get("outcome") if report else None
+                    summary = (report or {}).get("summary", "")
+                    if report:
+                        _dev_store.log_event(
+                            ctx.id, "run.report", f"{outcome}: {summary[:160]}",
+                            item_id=work_item_id, actor="agent", meta=report)
+                    # `revise` (§2.1) — the review conversation concluded the work must change.
+                    # Honoured ONLY at review: it is a phase-boundary crossing, and _end_run's
+                    # router flips review→plan. Reported anywhere else it is just a logged report
+                    # (the phase that owns the fix is already the one running).
+                    if outcome == "revise" and str((item or {}).get("phase")) != "review":
+                        outcome = None
+                    # `revise` is the one outcome that MOVES the item, so it alone drops the hold.
+                    rest_status = ("awaiting_human"
+                                   if str((item or {}).get("status")) == "awaiting_human"
+                                   and outcome != "revise" else "active")
+                    _end_run(ctx, ctx.id, work_item_id, final_tokens, rest_status, final_usage,
+                             final_ctx, outcome=outcome, session_id=final_session,
+                             summary=summary)
+                    # A REAL turn just reported fresh usage — release the defer latch so the NEXT
+                    # run-start check reads this turn's fill. No compaction is evaluated here: the
+                    # trigger lives at run start (above), and firing at turn end is what put a
+                    # compaction between the owner's message and their next one.
+                    if final_session:
+                        compaction.note_turn_start(final_session)
                 elif chat_run_id:
                     _spine.finish_run(chat_run_id, usage=final_usage, session_id=final_session,
                                       model=final_model, ctx_pct=final_ctx)
+                    # Same defer release as the bound branch (T5): an unbound session compacts too
+                    # now, so its latch needs the same "a real turn reported fresh usage" signal —
+                    # without it the seam above would keep reading the stale pre-compaction fill.
+                    if final_session:
+                        compaction.note_turn_start(final_session)
                 # No chat-side capture: the conversation is swept automatically (idle-timeout +
                 # phase-advance/completion), so nothing fires here per-turn.
             except Exception as e:
@@ -621,3 +781,45 @@ async def ws_agent(ws: WebSocket) -> None:
                 bank_auto_checkpoint(last_bound[0], last_bound[1], since=conn_started)
             except Exception:
                 log.exception("session-end auto-checkpoint failed")
+
+
+# --- the dashboard invalidation channel (`/ws/dashboard`) ---------------------------------------
+# Send-only, and it sends TOPICS, never values (routing-audit §7.6). The panel's reaction to a frame
+# is to refetch over HTTP, so every number on screen keeps exactly one source and push can never
+# disagree with poll about a value. That is the whole reason this is safe where a data-carrying
+# channel would not be.
+#
+# Separate from `/ws/agent` on purpose: the agent socket is per-chat-panel, carries a turn's
+# lifecycle, and dies with the conversation. This one is per-BROWSER-TAB, carries no conversation,
+# and must survive every navigation the tab makes. Multiplexing them would tie the dashboard's
+# liveness to whether a chat happens to be open.
+
+
+@router.websocket("/ws/dashboard")
+async def ws_dashboard(ws: WebSocket) -> None:
+    await ws.accept()
+    q = dashboard_stream.subscribe()
+
+    async def pump() -> None:
+        """Forward coalesced invalidation frames until cancelled."""
+        while True:
+            await ws.send_json(await q.get())
+
+    # The hello IS the contract: its arrival tells the browser push is live, which is its cue to
+    # raise polling to the slow backstop. No hello (or a dropped socket) ⇒ it keeps the ordinary
+    # cadence, so a broken channel degrades to the pre-push behaviour instead of to a stale screen.
+    await ws.send_json(DashboardHelloFrame(coalesce_ms=dashboard_stream.COALESCE_MS).model_dump())
+    task = asyncio.create_task(pump())
+    try:
+        # The client never speaks. This await is purely how a close is noticed — without a pending
+        # receive, a disconnect would only surface on the next send, which may be minutes away on a
+        # quiet system.
+        while True:
+            await ws.receive_text()
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        log.debug("dashboard socket closed: %s", e)
+    finally:
+        task.cancel()
+        dashboard_stream.unsubscribe(q)

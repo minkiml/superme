@@ -31,8 +31,21 @@ FEATURE_CATEGORY = {
     "write": "learning",
     "ratify": "learning",
     # Work-item agents (autonomous build ops)
+    "triage": "workitem",
     "plan": "workitem",
     "build": "workitem",
+    # A research item's own work: the investigation and the itemization of what it proposed. Its
+    # review-entry write-up is no longer here — it is the shared `review` run (below). Same bucket
+    # as the implementation phases: all the item's autonomous work.
+    "investigate": "workitem",
+    "itemize": "workitem",
+    # The review-entry run, every kind (renovation §2.2). Before 2026-07-29 review had NO runner at
+    # all, so this feature never appeared in a run row; research's ran under `research-report`.
+    "review": "workitem",
+    # Historical: the retired `report` PHASE and the absorbed `research-report` skill. Kept so runs
+    # recorded before those changes still aggregate under work-item rather than self-flagging.
+    "report": "workitem",
+    "research-report": "workitem",
     # The loop's fresh-eyes verification runs (build-vet-loop §5) — same bucket as the build
     # cycles they gate.
     "vet": "workitem",
@@ -52,10 +65,11 @@ FEATURE_CATEGORY = {
     # to capture real per-phase input prompts, then torn down. Its tokens are real (kept trace) but
     # it's meta/one-off, not dev spend — bucketed under Other as its own named sub-bucket.
     "prompt-extraction": "other",
-    # Kernel-driven context compaction (S8). Its usage is an ESTIMATE derived from the compact
-    # boundary (the CLI reports zero API usage for a /compact turn — verified empirically):
-    # input ≈ preTokens (the transcript the summarizer read), output ≈ postTokens (the summary
-    # it wrote). Bucketed under Other as silent maintenance, never interactive spend.
+    # Kernel-driven context compaction (S8). Reports ZERO usage: the summarization happens inside
+    # the CLI and never surfaces through the session, so there is nothing to count and the run row
+    # stays 0. It is NOT free — it is unmeasured, and the shrink it achieved is a compaction metric
+    # on the `compaction.verdict` event, not a usage figure (owner, 2026-07-28: do not mix column
+    # definitions). Bucketed under Other as silent maintenance, never interactive spend.
     "compact": "other",
     # System / on-behalf features register here as they appear (e.g. "autotitle": "system").
 }

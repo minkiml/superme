@@ -209,7 +209,18 @@ def scoped_writes_approve(allowed_dir: Path, fallback: ApproveFn) -> ApproveFn:
     — e.g. a planning agent can freely write its own work-item but not real source code.
 
     With `fallback=deny_all` this is a hard sandbox (background: nothing to ask); with
-    `fallback=<surface approve>` the outside-writes still prompt the human (interactive)."""
+    `fallback=<surface approve>` the outside-writes still prompt the human (interactive).
+
+    `Bash` gets the same folder scope, and needs it: these sessions run with the REPO as cwd (they
+    read real code), so a mutating command has no in-boundary cwd to be auto-allowed by — and under
+    `deny_all` it is simply denied, with no human to ask. That silently costs a research
+    investigation its whole measurement half: a throwaway benchmark or probe is EVIDENCE, and an
+    agent that cannot run one falls back to reasoning it should have measured. So a command that
+    EXPLICITLY scopes itself into `allowed_dir` (`cd <item-dir> && …`) and names no path outside it
+    auto-allows — the same rule the freeze boundary already applies to review/close (P4), with the
+    same honest limit (Bash is not path-checkable). A bare mutating command at the repo cwd still
+    defers to the fallback: read-only work needs no scoping, and unscoped mutation is exactly what
+    a read-only phase must not do to the real tree."""
     allowed = allowed_dir.resolve()
 
     async def approve(tool_name: str, tool_input: dict) -> bool:
@@ -222,6 +233,12 @@ def scoped_writes_approve(allowed_dir: Path, fallback: ApproveFn) -> ApproveFn:
                         return True
                 except (OSError, ValueError):
                     pass
+        if tool_name == "Bash":
+            command = tool_input.get("command", "")
+            roots = [allowed]
+            if _bash_scoped_into_boundary(command, roots) \
+                    and not _bash_escapes_boundary(command, roots):
+                return True
         return await fallback(tool_name, tool_input)
 
     return approve
@@ -269,9 +286,24 @@ _FREEZE_NUDGE = (
 # file-write tools — a verifier that physically cannot edit cannot report a fix it didn't make.
 # Denied outright with the reason (never a human prompt); the shell stays available for RUNNING
 # checks (tests, env) under the freeze-boundary rule.
+# Review is read-only on the PLAN (workflow-renovation-v2 §2.1). The `revise_plan` tool already
+# refuses outside the plan phase — but the tool guard is not the boundary that matters: at review
+# the write boundary is directory-level (`[worktree, item_dir]`), so `artifacts/plan.md` sits
+# inside it and a plain `Edit` auto-allows. Locking the sanctioned path while the unsanctioned one
+# stays open is backwards. Denied OUTRIGHT with the reason, never a human prompt: a permission
+# card here would be meaningless to the owner (they can't tell a tick from a rewrite), and
+# approving it would grant exactly the wholesale rewrite the surgical revise exists to prevent.
+PLAN_READONLY_NUDGE = (
+    "`plan.md` is the PLAN phase's to write, and this item is at review — editing it here would "
+    "change the contract with nothing downstream re-running against it. If the conversation "
+    "concluded the work must change, end your run with "
+    "`report_completion(machine.outcome='revise')`, carrying the owner's words verbatim: the item "
+    "returns to plan on this same thread and folds them in surgically."
+)
+
 VET_READONLY_NUDGE = (
     "This is a VET session — file writes are disabled by design (a verifier that can edit could "
-    "grade its own fixes). Record each check's outcome with record_validation_evidence and file "
+    "grade its own fixes). Record each check's outcome with record_verification and file "
     "the cycle's report with file_vet_report. If the build is wrong, FAIL the check and describe "
     "exactly what you observed — the fix happens in the build session, never here."
 )
@@ -356,6 +388,41 @@ def _bash_scoped_into_boundary(command: str, roots: list[Path]) -> bool:
     return False
 
 
+# Bypassing the commit gate is denied for every session, in every phase — the one shell rule that
+# is not about the write boundary. An agent whose commit is refused WILL find `--no-verify`; it is
+# the first answer anywhere. Prose already lost this argument once (the trailer rule), so the flag
+# is taken away rather than discouraged, and the deny message carries the actual instruction.
+_NO_VERIFY_NUDGE = (
+    "Skipping git hooks is not available here. A hook refused your commit for a reason, and "
+    "bypassing it converts that reason into a defect someone finds later.\n\n"
+    "If the refusal was SuperMe's task-trailer rule, add the trailer and commit again. If it came "
+    "from a check this project owns, that is not yours to overrule: leave the work staged and end "
+    "your run with report_completion(machine.outcome='needs_user'), quoting the refusal verbatim "
+    "and naming what you think the owner should do about it. Do not retry the same commit."
+)
+
+# Flags that turn hooks off, and the subcommands they'd turn them off for. Matched only AFTER the
+# subcommand token: `grep -n foo && git commit -m x` is an ordinary command, and reading `-n` there
+# as a bypass would deny it.
+_HOOK_BYPASS_FLAGS = {"--no-verify", "-n"}
+_HOOK_RUNNING_SUBCOMMANDS = {"commit", "merge", "rebase", "cherry-pick", "revert", "am"}
+_SHELL_BREAKS = {"&&", "||", ";", "|", "&"}
+
+
+def bypasses_commit_hooks(command: str) -> bool:
+    """True if this shell command runs a hook-firing git subcommand with hooks turned off."""
+    toks = [t.strip("'\"") for t in shlex_split_safe(command)]
+    for i, tok in enumerate(toks):
+        if tok not in _HOOK_RUNNING_SUBCOMMANDS:
+            continue
+        for nxt in toks[i + 1:]:
+            if nxt in _SHELL_BREAKS:
+                break
+            if nxt in _HOOK_BYPASS_FLAGS:
+                return True
+    return False
+
+
 # Shell multiplexers whose SUBCOMMAND is the meaningful unit for approval memory (`git commit` vs
 # `git push`); everything else is keyed by its program name alone.
 _BASH_MULTIPLEXERS = {"git", "npm", "yarn", "pnpm", "npx", "cargo", "go", "make", "python",
@@ -404,7 +471,9 @@ def build_can_use_tool(approve: ApproveFn, *, blocked_skills: dict[str, str] | N
                        gate_general_mutations: bool = False,
                        general_write_root: Path | None = None,
                        write_boundary: list[Path] | None = None,
-                       deny_write_tools: str | None = None):
+                       deny_write_tools: str | None = None,
+                       protected_paths: list[Path] | None = None,
+                       protected_nudge: str | None = None):
     """Wrap a surface's ApproveFn into the SDK `can_use_tool` callback.
 
     Safe (read-only) tools auto-allow; everything else defers to `approve`. `blocked_skills` maps a
@@ -472,6 +541,15 @@ def build_can_use_tool(approve: ApproveFn, *, blocked_skills: dict[str, str] | N
         if deny_write_tools and tool_name in _WRITE_TOOLS:
             log.info("vet read-only denied %s", tool_name)
             return PermissionResultDeny(message=deny_write_tools)
+        # Per-FILE carve-out inside the boundary. Checked BEFORE the in-boundary auto-allow (the
+        # protected file lives inside it) and before `approve`, so it can never become a permission
+        # card. Today's only user is review's `plan.md` — and it is deliberately a caller-supplied
+        # path list, not a phase rule baked in here: the caller knows the phase, this layer only
+        # knows paths, exactly as `write_boundary` is passed in.
+        if protected_paths and tool_name in _WRITE_TOOLS \
+                and _target_in_any(input_data, protected_paths):
+            log.info("protected path denied %s", tool_name)
+            return PermissionResultDeny(message=protected_nudge or _FREEZE_NUDGE)
         # Build-phase freeze boundary (S4): writes live-or-die on the worktree/item roots.
         if write_boundary and tool_name in _WRITE_TOOLS:
             if _target_in_any(input_data, write_boundary):
@@ -496,6 +574,11 @@ def build_can_use_tool(approve: ApproveFn, *, blocked_skills: dict[str, str] | N
         # tools — "no code mutation, including via shell"); elsewhere it defers to approval as before.
         if tool_name == "Bash":
             command = input_data.get("command", "")
+            # Before everything else, including the read-only fast path: no session, in any phase,
+            # gets to run git with its hooks off.
+            if bypasses_commit_hooks(command):
+                log.info("hook bypass denied: %s", command)
+                return PermissionResultDeny(message=_NO_VERIFY_NUDGE)
             if is_read_only_bash(command):
                 return PermissionResultAllow()
             if gate_general_mutations:

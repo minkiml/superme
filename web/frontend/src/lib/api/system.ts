@@ -49,7 +49,10 @@ export function getRepos(): Promise<RepoOverview[]> {
 // across EVERY connected repo, each classified by WHY it's parked so the notification center can
 // offer the right quick action. `kind` drives the action set; `actor` says who parked it.
 // Types are inlined until the next `gen:api` picks up AttentionHold/RepoAttention from the daemon.
-export type SystemHoldKind = 'escalation' | 'breaker' | 'paged' | 'review' | 'gate'
+export type SystemHoldKind = 'question' | 'escalation' | 'breaker' | 'paged' | 'review' | 'gate'
+// One grill question, in the four fields report_completion enforces — the card renders them as
+// labelled rows. Only `question` is guaranteed: a report predating the typed shape carries prose.
+export type SystemHoldQuestion = { question: string; recommend?: string; why?: string; instead?: string }
 export type SystemHold = {
   id: string
   title: string
@@ -59,6 +62,7 @@ export type SystemHold = {
   kind: SystemHoldKind
   reason: string
   actor: string
+  questions?: SystemHoldQuestion[] // kind 'question' only — the plan agent's clarifying questions (ask-card)
 }
 export type SystemRepoAttention = { repo_id: string; repo_label: string; holds: SystemHold[] }
 // Fail-soft to []: the route 404s until the daemon restart that ships it, and a down daemon should
@@ -200,6 +204,16 @@ export function getCompactionConfig(): Promise<CompactionConfig> {
 }
 export function setCompactionConfig(patch: { trigger_pct?: number; by_kind?: Record<string, number>; min_gain_pct?: number | 'auto' }): Promise<CompactionConfig> {
   return sendJSON('/api/system/compaction', 'POST', patch)
+}
+
+// The repo's two git knobs (workflow-renovation-v2 §2.2): `review_mode` — 'fast' (approving an item
+// merges it) | 'strict' (approve opens a PR; the owner merges from the PR page) — and `anchor_branch`,
+// the branch every git site targets ('' clears it back to the repo's own default branch). Both apply
+// immediately, including to items already sitting at review. A named branch that doesn't exist comes
+// back as `anchor_error`: it is accepted and then refused at every git site, never silently ignored.
+export type RepoGit = Schema<'RepoGitResponse'>
+export function setRepoGit(repoId: string, patch: { review_mode?: string; anchor_branch?: string }): Promise<RepoGit> {
+  return sendJSON(`/api/repos/${encodeURIComponent(repoId)}/git`, 'POST', patch)
 }
 
 // Set a repo's VISUAL tag (owner-defined color + icon). Omit a field (undefined) to leave it as-is;

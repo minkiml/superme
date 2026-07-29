@@ -34,7 +34,7 @@ DAEMON = os.environ.get("SUPERME_DAEMON_URL", "http://127.0.0.1:8787").rstrip("/
 BASELINE = Path(__file__).resolve().parent / "parity_baseline.json"
 
 # Routes OpenAPI can't enumerate (WebSocket) — tracked explicitly so the inventory stays complete.
-WS_ROUTES = ["WS /ws/agent"]
+WS_ROUTES = ["WS /ws/agent", "WS /ws/dashboard"]
 
 
 def _fetch_openapi() -> dict:
@@ -55,14 +55,17 @@ def _inventory(openapi: dict) -> list[str]:
     return sorted(items + WS_ROUTES)
 
 
-def _ws_ok() -> bool:
-    """Open the agent socket and close it immediately (no turn sent → no side effect)."""
-    ws_url = DAEMON.replace("http://", "ws://").replace("https://", "wss://") + "/ws/agent"
+def _ws_ok(name: str) -> bool:
+    """Open one daemon socket and close it immediately. Both are side-effect-free to merely open:
+    the agent socket does nothing until a turn frame arrives, and the dashboard socket is send-only.
+    Sockets are absent from the OpenAPI, so without this probe they could break silently while the
+    route inventory stayed green — which is exactly what a parity net exists to prevent."""
+    base = DAEMON.replace("http://", "ws://").replace("https://", "wss://")
 
     async def _probe() -> bool:
         import websockets  # available (SDK dep); imported lazily so --no-ws needs nothing
         try:
-            async with websockets.connect(ws_url, open_timeout=5, close_timeout=2):
+            async with websockets.connect(f"{base}/ws/{name}", open_timeout=5, close_timeout=2):
                 return True
         except Exception:  # noqa: BLE001
             return False
@@ -129,11 +132,12 @@ def check(*, strict_shapes: bool, do_ws: bool) -> int:
 
     # --- WS HANDSHAKE ---
     if do_ws:
-        if _ws_ok():
-            print("✓ ws /ws/agent reachable")
-        else:
-            failed = True
-            print("✗ ws /ws/agent UNREACHABLE")
+        for name in ("agent", "dashboard"):
+            if _ws_ok(name):
+                print(f"✓ ws /ws/{name} reachable")
+            else:
+                failed = True
+                print(f"✗ ws /ws/{name} UNREACHABLE")
 
     print("—" * 4, "PARITY FAIL" if failed else "PARITY OK")
     return 1 if failed else 0

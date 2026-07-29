@@ -16,9 +16,11 @@ from pydantic import BaseModel
 from ...app_state import DevKnowledgeService, DevStore, SystemSpine, get_dev, get_dev_store, get_spine
 from ....core import git_layer
 from ....gateway import contexts
+from ...services import git_ops, pr_view
 from ...services.runs import _begin_run, _run_background_resolve
 from ...schemas.dev.git import (
     GitHealthResponse, GitSyncResponse, GitMergeResponse, GitRevertResponse, GitResolveResponse,
+    PrViewResponse, PrDiffResponse,
 )
 
 log = logging.getLogger("superme-agent")
@@ -52,13 +54,19 @@ def _require_worktree(item: dict) -> str:
 @router.get("/dev/work-items/{item_id}/git", response_model=GitHealthResponse,
             response_model_exclude_unset=True)
 async def dev_work_item_git(item_id: str, context_id: str = "global",
-                            dev: DevKnowledgeService = Depends(get_dev)) -> dict:
+                            dev: DevKnowledgeService = Depends(get_dev),
+                            spine: SystemSpine = Depends(get_spine)) -> dict:
     """The item's live git state (derived at read time, never stored): branch/dir/registration
-    existence, dirty files, ahead/behind vs trunk (behind = freshness debt), merged-into-trunk."""
+    existence, dirty files, ahead/behind vs the repo's anchor (behind = freshness debt), merged.
+    Also echoes the repo's `review_mode`, so the rule governing the merge is visible where the
+    merge is — read live, never from the item, so a mode flip applies to items already at review."""
     ctx, _root, item = _load(context_id, item_id, dev)
+    mode = {"review_mode": git_ops.repo_review_mode(ctx, spine)}
     if not item.get("git_branch") and not item.get("git_worktree"):
-        return {"ok": False, "reason": "no git record (worktree is created on build entry)"}
-    return git_layer.worktree_health(ctx.cwd, ctx.id, item_id, item.get("git_branch"))
+        return {"ok": False, "reason": "no git record (worktree is created on build entry)", **mode}
+    return {**git_layer.worktree_health(ctx.cwd, ctx.id, item_id, item.get("git_branch"),
+                                        trunk=git_ops.repo_anchor(ctx, spine),
+                                        merge_commit=item.get("git_merge_commit")), **mode}
 
 
 class SyncBody(GitBody):
@@ -80,7 +88,8 @@ async def dev_work_item_git_sync(item_id: str, body: SyncBody,
     if spine.is_item_running(body.context_id, item_id):
         raise HTTPException(status_code=409, detail="a run is in progress for this item")
     try:
-        res = git_layer.sync_from_main(ctx.cwd, wt, leave_conflicts=body.leave_conflicts)
+        res = git_layer.sync_from_main(ctx.cwd, wt, target=git_ops.repo_anchor(ctx, spine),
+                                       leave_conflicts=body.leave_conflicts)
     except (git_layer.GitError, git_layer.GitBusy) as e:
         raise HTTPException(status_code=409, detail=str(e))
     dev_store.log_event(body.context_id, "git.sync",
@@ -105,16 +114,38 @@ async def dev_work_item_git_merge(item_id: str, body: GitBody,
     branch (light path), everything else to the trunk (heavy path — overlap refusal, backup ref,
     never-merge-twice). Conflicts on the main path → 200 with the conflict list (sync + resolve,
     then retry / approve again)."""
-    from ...services import git_ops
     ctx, _root, _item = _load(body.context_id, item_id, dev)
     return git_ops.review_merge(ctx, body.context_id, item_id,
                                 dev=dev, dev_store=dev_store, spine=spine)
 
 
+@router.get("/dev/work-items/{item_id}/pr", response_model=PrViewResponse)
+async def dev_work_item_pr(item_id: str, context_id: str = "global",
+                           dev: DevKnowledgeService = Depends(get_dev),
+                           spine: SystemSpine = Depends(get_spine)) -> dict:
+    """The dedicated PR page (§4.4) — `strict`'s review surface, and readable in any mode. Read-only
+    by construction: the page's one action is the ordinary review Approve, which merges."""
+    ctx = contexts.resolve(context_id, "dev")
+    return pr_view.pr_view(ctx, context_id, item_id, dev=dev, spine=spine)
+
+
+@router.get("/dev/work-items/{item_id}/pr/diff", response_model=PrDiffResponse)
+async def dev_work_item_pr_diff(item_id: str, path: str, task: str | None = None,
+                                context_id: str = "global",
+                                dev: DevKnowledgeService = Depends(get_dev),
+                                spine: SystemSpine = Depends(get_spine)) -> dict:
+    """One file's patches under one task group, fetched when the reader expands the row — a
+    branch's whole diff is the one thing a review page must not make them wait for."""
+    ctx = contexts.resolve(context_id, "dev")
+    return pr_view.pr_file_diff(ctx, context_id, item_id, path=path, task=task,
+                                dev=dev, spine=spine)
+
+
 @router.post("/dev/work-items/{item_id}/git/revert", response_model=GitRevertResponse)
 async def dev_work_item_git_revert(item_id: str, body: GitBody,
                                    dev: DevKnowledgeService = Depends(get_dev),
-                                   dev_store: DevStore = Depends(get_dev_store)) -> dict:
+                                   dev_store: DevStore = Depends(get_dev_store),
+                                   spine: SystemSpine = Depends(get_spine)) -> dict:
     """Restore the trunk to its pre-merge state via the item's recorded backup ref — the
     always-offered undo behind every main merge (D4 guardrail). Safe-only: refuses once anything
     else has landed on top. Clears the item's merge record (the branch itself is untouched)."""
@@ -123,7 +154,7 @@ async def dev_work_item_git_revert(item_id: str, body: GitBody,
     if not backup:
         raise HTTPException(status_code=409, detail="item has no recorded backup ref (no main merge to revert)")
     try:
-        res = git_layer.revert_merge(ctx.cwd, backup)
+        res = git_layer.revert_merge(ctx.cwd, backup, target=git_ops.repo_anchor(ctx, spine))
     except (git_layer.GitError, git_layer.GitBusy) as e:
         raise HTTPException(status_code=409, detail=str(e))
     dev.set_work_item_git(dev_root, item_id, git_merge_commit=None, git_merged_at=None,
@@ -148,7 +179,8 @@ async def dev_work_item_git_resolve(item_id: str, body: GitBody,
     if spine.is_item_running(body.context_id, item_id):
         raise HTTPException(status_code=409, detail="a run is in progress for this item")
     try:
-        res = git_layer.sync_from_main(ctx.cwd, wt, leave_conflicts=True)
+        res = git_layer.sync_from_main(ctx.cwd, wt, target=git_ops.repo_anchor(ctx, spine),
+                                       leave_conflicts=True)
     except (git_layer.GitError, git_layer.GitBusy) as e:
         raise HTTPException(status_code=409, detail=str(e))
     if not res.get("conflicts"):

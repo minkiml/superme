@@ -14,22 +14,51 @@ import logging
 log = logging.getLogger("superme-agent")
 
 # Hold kinds → what quick actions the surface should offer (the FE reads `kind`):
+#   question   — the plan agent paused on clarifying questions → open chat (answer them)
 #   escalation — the deputy paged the owner with a runbook   → Proceed · go-to · Have it fixed
 #   breaker    — a build⟷vet breaker stopped the loop (WIP)  → Proceed (grant/continue) · go-to
 #   paged      — an upstream ended without completing         → go-to (decide the dependent's fate)
 #   review     — the normal review gate (vet green, waiting)  → go-to (Approve & merge)
 #   gate       — any other gate decision the owner owes       → go-to
-HOLD_KINDS = ("escalation", "breaker", "paged", "review", "gate")
+HOLD_KINDS = ("question", "escalation", "breaker", "paged", "review", "gate")
+
+
+def _ask_card(raw) -> list[dict]:
+    """The grill's questions as the ask-card's four fields. Pre-typed reports (and any hand-written
+    event) carried one prose string per question — surface those as `question` alone rather than
+    dropping the hold; the fields are enforced at the tool, not re-litigated here."""
+    out: list[dict] = []
+    for q in raw or []:
+        if isinstance(q, dict):
+            fields = {k: str(q.get(k) or "").strip() for k in
+                      ("question", "recommend", "why", "instead")}
+            if fields["question"]:
+                out.append({k: v for k, v in fields.items() if v})
+        elif str(q).strip():
+            out.append({"question": str(q).strip()})
+    return out
 
 
 def classify_hold(item: dict, events: list[dict]) -> dict:
     """Why is this awaiting_human item parked? Read its events NEWEST-FIRST and take the first that
     names a parking cause; fall back to the phase (review = the review gate, else a generic gate
     wait). Returns {kind, reason, actor} — pure, no IO."""
+    report_seen = False
     for e in events:
         kind = str(e.get("kind") or "")
         meta = e.get("meta") or {}
         summary = str(e.get("summary") or "")
+        # Plan's grill (renovation §2): the run ended on clarifying questions — the owner is the
+        # unblocking actor, and the questions themselves ride the hold for the ask-card. Only the
+        # NEWEST run.report may classify: a later run's outcome supersedes an older needs_user.
+        if kind == "run.report":
+            if not report_seen and str(meta.get("outcome")) == "needs_user":
+                qs = _ask_card((meta.get("user") or {}).get("questions"))
+                return {"kind": "question",
+                        "reason": summary or "The agent has questions before it can finish the plan.",
+                        "actor": "agent", "questions": qs}
+            report_seen = True
+            continue
         if kind.startswith("deputy.escalate"):
             return {"kind": "escalation", "reason": summary or "The deputy escalated this gate to you.",
                     "actor": "deputy"}
@@ -41,6 +70,14 @@ def classify_hold(item: dict, events: list[dict]) -> dict:
                     "actor": "daemon"}
     phase = str(item.get("phase") or "")
     if phase == "review":
+        # `strict` repos (§2.2): the deputy already approved and the PR is open, so the owner's
+        # act is narrower and lives elsewhere — say which one it is rather than offering the
+        # generic gate. Derived from the item's own record; still pure.
+        if item.get("git_pr_opened_at") and not item.get("git_merge_commit"):
+            return {"kind": "review",
+                    "reason": "The PR is open and the merge is yours — read the diff on the PR "
+                              "page, then approve.",
+                    "actor": "owner"}
         return {"kind": "review", "reason": "Ready for your review — Approve & merge, or send back.",
                 "actor": "owner"}
     return {"kind": "gate", "reason": f"Waiting for your decision at the {phase or 'current'} gate.",

@@ -1,7 +1,5 @@
 // Barrel: import from '@/lib/api' regardless of which resource module a call lives in.
 export { listContexts } from './contexts'
-export { listDocs, readDoc, type DocMeta, type DocsList, type Doc } from './docs'
-export { getTree, readFile, writeFile, injectNote, type TreeNode } from './knowledge'
 export {
   listSessions,
   readSession,
@@ -126,6 +124,8 @@ export {
   mergeWorkItemGit,
   revertWorkItemGit,
   resolveWorkItemGit,
+  getWorkItemPr,
+  getWorkItemPrDiff,
   getWorkGraph,
   getAttention,
   markWorkItemSeen,
@@ -135,6 +135,8 @@ export {
   type GitHealth,
   type GitSyncResult,
   type GitMergeResult,
+  type PrView,
+  type PrDiff,
   type WorkGraphData,
   type WorkGraphNode,
   type WorkGraphEdge,
@@ -181,6 +183,8 @@ export {
   type CompactionConfig,
   setRepoMeta,
   type RepoMeta,
+  setRepoGit,
+  type RepoGit,
   browseFs,
   connectRepo,
   disconnectRepo,

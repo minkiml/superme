@@ -42,7 +42,6 @@ async def _run_background_distill(ctx, context_id: str, run_id: int) -> None:
     resumable picker. A clean finish purges the run row; an error keeps it as `aborted` for audit.
     Nothing is applied — the owner still gates every proposal."""
     # Thin trigger: name the agent + the job, nothing else. The steps live in the distill agent;
-    # the run contract rides the system layer (background=True).
     prompt = kernel_speech.distill_trigger()
     # The trail's first entry = what this run was asked to do (these transcripts are disposed,
     # so the trail is the only record).
@@ -65,7 +64,6 @@ async def _run_background_distill(ctx, context_id: str, run_id: int) -> None:
             effort=_spine.resolve_agent_effort("distill"),  # its .md effort field (default medium)
             approve=deny_all,                 # distill writes only via DB tools (pre-approved), not files
             extra_mcp_servers=turn_mcp,
-            background=True,                  # per-turn run contract in the system layer (Thread 3 §3)
         ):
             if isinstance(ev, Usage):
                 _spine.bump_run(run_id, add_tokens=ev.total_tokens, ctx_pct=ev.ctx_pct)
@@ -198,7 +196,6 @@ async def _run_background_write(ctx, context_id: str, proposal_id: int, run_id: 
             # auto-allowed for this hermetic, disposable run. stage_artifact stays DB-only (safe).
             approve=learning_write_approve(workspace),
             extra_mcp_servers=turn_mcp,
-            background=True,                  # per-turn run contract in the system layer (Thread 3 §3)
         ):
             if isinstance(ev, Usage):
                 _spine.bump_run(run_id, add_tokens=ev.total_tokens, ctx_pct=ev.ctx_pct)
@@ -319,7 +316,6 @@ async def run_sweep(ctx, session_id: str, focus: str | None = None) -> dict:
             effort=_spine.resolve_agent_effort("sweep"),  # its .md effort field (default medium)
             approve=deny_all,                 # capture writes only via the file_candidate DB tool
             extra_mcp_servers=turn_mcp,
-            background=True,                  # per-turn run contract in the system layer (Thread 3 §3)
         ):
             if isinstance(ev, Usage):
                 _spine.bump_run(run_id, add_tokens=ev.total_tokens, ctx_pct=ev.ctx_pct)

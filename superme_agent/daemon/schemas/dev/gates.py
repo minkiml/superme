@@ -26,6 +26,11 @@ class GateDecision(BaseModel):
     options: list[GateOption]
     effort_user: str
     effort_agent: str
+    # The MUST-RESOLVE set (§2.1): why Approve is greyed, one line each. Empty ⇒ Approve is live.
+    # Mechanical, never a judgment — an undecided authorization or a failing/deferred vet check.
+    # The FE disables the button on non-empty and shows these as the reason, so "why can't I
+    # approve?" always has a specific answer instead of a disabled control with no explanation.
+    approve_blocked_by: list[str] = []
 
 
 class GateFact(BaseModel):

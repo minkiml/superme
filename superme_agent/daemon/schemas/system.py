@@ -68,6 +68,9 @@ class RepoScope(BaseModel):
     active: bool
     current_item: str | None = None
     last_activity: str | None = None
+    # CONVERSATIONS — the sessions the owner can open and take a turn in. The headless build/vet
+    # agent threads are excluded (kind_profiles.AGENT_THREAD_KINDS) so this agrees with the session
+    # picker; surfaced as "conversations", not "sessions".
     sessions: int
     agents: int
     running: int
@@ -84,7 +87,23 @@ class RepoOverview(BaseModel):
     autopilot_concurrency: int = 4  # per-repo autopilot build⟷vet cap (slice 3)
     tag_color: str | None = None   # owner-set visual tag color (None = hashed-palette default)
     icon: str | None = None        # owner-set icon (emoji) shown in place of the color swatch
+    review_mode: str = "fast"      # "fast" | "strict" — whether the diff gets its own review gate
+    anchor_branch: str | None = None  # the branch every git site targets (None = the repo's default)
+    resolved_anchor: str | None = None  # what `anchor_branch` resolves to right now (None = the repo
+    # isn't a git repo, or the configured branch is missing — `anchor_error` says which)
+    anchor_error: str | None = None  # set when the configured branch doesn't exist: every git site
+    # refuses rather than falling back, so the settings UI must show it before a merge does
     scopes: dict[str, RepoScope]
+
+
+class HoldQuestion(BaseModel):
+    """One question the grill carries to the owner — the four fields `report_completion` enforces,
+    so the card renders labelled rows instead of parsing prose. `recommend`/`why` are absent only
+    on a pre-typed report replayed from an older event."""
+    question: str
+    recommend: str | None = None
+    why: str | None = None
+    instead: str | None = None
 
 
 class AttentionHold(BaseModel):
@@ -94,9 +113,12 @@ class AttentionHold(BaseModel):
     session_id: str | None = None  # the item's own dev session — so Open binds the chat to it, not the general thread
     phase: str | None = None
     cohort: str | None = None
-    kind: Literal["escalation", "breaker", "paged", "review", "gate"]
+    kind: Literal["question", "escalation", "breaker", "paged", "review", "gate"]
     reason: str
     actor: str
+    # kind "question" only — the plan agent's clarifying questions (renovation §2 grill), rendered
+    # as the ask-card. Absent on every other hold kind.
+    questions: list[HoldQuestion] | None = None
 
 
 class RepoAttention(BaseModel):
@@ -248,6 +270,18 @@ class DeputyConfigResponse(BaseModel):
     ok: bool
     deputy_enabled: bool
     deputy_strictness: dict[str, str]  # {gate: low·medium·high·extra}
+
+
+class RepoGitResponse(BaseModel):
+    """The repo's two git knobs after a write (workflow-renovation-v2 §2.2). `resolved_anchor` is
+    what `anchor_branch` actually points at now — None when the repo isn't a git repo; `error` when
+    the configured branch doesn't exist, which is a refusal at every git site, not a fallback."""
+    ok: bool
+    repo_id: str
+    review_mode: str
+    anchor_branch: str | None = None
+    resolved_anchor: str | None = None
+    anchor_error: str | None = None
 
 
 class RepoMetaResponse(BaseModel):

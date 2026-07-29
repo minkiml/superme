@@ -648,7 +648,7 @@ class CreateInboxItemArgs(TypedDict, total=False):
     constraints: Annotated[str, "handoff brief: constraints, tried-but-failed, out-of-scope"]
 
 
-def _create_inbox_item(*, store, context_id, dev_root=None, **_):
+def _create_inbox_item(*, store, context_id, dev_root=None, fire_triage=None, **_):
     async def create_inbox_item(args: dict) -> dict:
         from pathlib import Path
         from ...core import artifacts as _arts
@@ -665,8 +665,20 @@ def _create_inbox_item(*, store, context_id, dev_root=None, **_):
         if parent:
             if relation not in ("blocking", "parallel", "spawn"):
                 return _err("`relation` must be blocking | parallel | spawn.")
-            if not dev_root or not dev.read_work_item(Path(dev_root), parent):
+            parent_item = dev.read_work_item(Path(dev_root), parent) if dev_root else None
+            if not parent_item:
                 return _err(f"Parent work-item {parent!r} not found — a branch-off must name a real item.")
+            # blocking/parallel AUTO-PUSH and branch off git: blocking from the parent's own branch,
+            # parallel alongside it. A kind with no worktree (research) has no branch to hand over
+            # and nothing running to wait on it — and auto-pushing from one would start work the
+            # owner never chose. `spawn` is the decoupled relation those items use.
+            if relation in ("blocking", "parallel"):
+                from ...core.kind_profiles import get_profile
+                if not get_profile(parent_item.get("kind")).worktree:
+                    return _err(
+                        f"A {parent_item.get('kind')!r} item has no worktree, so it cannot carry a "
+                        f"{relation!r} branch-off (those auto-push and branch off git). Use "
+                        "`relation: \"spawn\"` — it waits in the inbox for the owner's push.")
             spawned_from = {"item": parent, "relation": relation}
         try:
             row = store.add_inbox(
@@ -692,10 +704,21 @@ def _create_inbox_item(*, store, context_id, dev_root=None, **_):
                                            context_id=context_id, actor="agent")
             except Exception as e:
                 return _err(f"Inbox item #{row['id']} created but auto-push failed: {e}")
+            # First kick — the same one the owner's push gets. Without it the child lands at
+            # triage/active with no run behind it and never moves (a BLOCKING child wedges its
+            # parent there too). Injected by the daemon; absent in a bare/test server, where the
+            # child simply waits for a hand-driven triage.
+            triaged = False
+            if fire_triage:
+                try:
+                    triaged = bool(fire_triage(wi["id"]))
+                except Exception:
+                    triaged = False
             paused = " Parent paused (awaiting_child) until it closes." if relation == "blocking" else ""
+            kick = " Triage is running on it." if triaged else " It rests at triage for a triage pass."
             return _ok(f"Branch-off filed and AUTO-PUSHED: inbox #{row['id']} → work-item "
                        f"{wi['id']} ({relation} child of {parent}; brief moved to its "
-                       f"preliminary/).{paused}")
+                       f"preliminary/).{paused}{kick}")
         where = f" Handoff brief at {brief}." if brief else ""
         # An empty brief throws away exactly the context this session holds — flag it back so the
         # agent fills the fields (the future triage session cold-starts from this brief).
@@ -822,8 +845,8 @@ def _bound_err(item_id, bound_item_id) -> str | None:
 
 class ScaffoldArtifactArgs(TypedDict, total=False):
     item_id: Required[Annotated[str, "the work-item id (folder name)"]]
-    artifact: Required[Annotated[Literal["plan", "validation", "readiness", "findings", "closeout"],
-                                 "which gate doc to scaffold"]]
+    artifact: Required[Annotated[Literal["brief", "plan", "investigation"],
+                                 "which artifact skeleton to scaffold"]]
 
 
 def _scaffold_artifact(*, store, context_id, dev_root=None, bound_item_id=None, **_):
@@ -907,19 +930,21 @@ def _set_triage_classification(*, store, context_id, dev_root=None, bound_item_i
     return set_triage_classification
 
 
-class RecordEvidenceArgs(TypedDict, total=False):
+class RecordVerificationArgs(TypedDict, total=False):
     item_id: Required[Annotated[str, "the work-item id"]]
-    check: Required[Annotated[str, "WHAT was verified, one line (e.g. 'unit tests', 'parity')"]]
+    check: Required[Annotated[str, "the verification-plan check id, verbatim (it keys the ledger)"]]
     how: Required[Annotated[str, "the exact command / procedure that ran"]]
     result: Required[Annotated[str, "the MACHINE result — exit code, counts, output tail"]]
     passed: Required[Annotated[bool, "did the check pass (false when deferred)"]]
+    note: Annotated[str, "for a failure: expected vs actual in one line"]
     deferred: Annotated[bool, ("set true for a check the BUILD deferred to the owner (a needs-you "
                                "item pending authorization at review): it is recorded as an "
                                "intentional skip, not a failure — you did NOT run it")]
 
 
-def _record_evidence(*, store, context_id, dev_root=None, repo_dir=None, bound_item_id=None, **_):
-    async def record_validation_evidence(args: dict) -> dict:
+def _record_verification(*, store, context_id, dev_root=None, repo_dir=None,
+                         bound_item_id=None, **_):
+    async def record_verification(args: dict) -> dict:
         from ...core import artifacts as _arts
         item_id = _s(args, "item_id")
         if (msg := _bound_err(item_id, bound_item_id)):
@@ -928,24 +953,19 @@ def _record_evidence(*, store, context_id, dev_root=None, repo_dir=None, bound_i
         if d is None:
             return _err(f"No work-item {item_id!r} here.")
         try:
-            e = _arts.record_evidence(d, repo_dir, check=_s(args, "check"), how=_s(args, "how"),
-                                      result=_s(args, "result"), passed=bool(args.get("passed")),
-                                      deferred=bool(args.get("deferred")))
+            e = _arts.record_verification(d, repo_dir, check=_s(args, "check"),
+                                          how=_s(args, "how"), result=_s(args, "result"),
+                                          passed=bool(args.get("passed")),
+                                          deferred=bool(args.get("deferred")),
+                                          note=_s(args, "note"))
         except ValueError as err:
             return _err(str(err))
         verdict = _arts.evidence_status(d, repo_dir)
-        return _ok(f"Evidence recorded: {e['check']} · passed={e['passed']} · "
-                   f"fingerprint={e['fingerprint']}. Ledger verdict now: {verdict['status']} "
+        return _ok(f"Recorded: {e['check']} · passed={e['passed']} · cycle {e['cycle']} · "
+                   f"fingerprint={e['fingerprint']}. Derived verdict now: {verdict['status']} "
                    f"({verdict['entries']} entries). Evidence goes STALE on any further repo edit — "
-                   f"re-run checks after changes; never claim validated without a fresh green ledger.")
-    return record_validation_evidence
-
-
-class RecordAssumptionArgs(TypedDict, total=False):
-    item_id: Required[Annotated[str, "the work-item id"]]
-    what: Required[Annotated[str, "the call you took, one line, stated as a decision not a question"]]
-    why: Required[Annotated[str, "one line: why this default over the alternative"]]
-    cost: Required[Annotated[str, "what breaks if this turns out wrong, and how hard to reverse"]]
+                   f"re-run checks after changes; never claim verified without a fresh green record.")
+    return record_verification
 
 
 class RequestAuthorizationArgs(TypedDict, total=False):
@@ -964,33 +984,6 @@ class RequestAuthorizationArgs(TypedDict, total=False):
     check: Annotated[str, "the vet-plan check id this blocks — so vet DEFERS it instead of failing it"]
 
 
-def _record_assumption(*, store, context_id, dev_root=None, bound_item_id=None, **_):
-    async def record_assumption(args: dict) -> dict:
-        from ...core import artifacts as _arts
-        item_id = _s(args, "item_id")
-        if (msg := _bound_err(item_id, bound_item_id)):
-            return _err(msg)
-        d = _item_dir(dev_root, item_id)
-        if d is None:
-            return _err(f"No work-item {item_id!r} here.")
-        item = {}
-        try:
-            from ...core.dev_knowledge import DevKnowledgeService as _DK
-            item = _DK().read_work_item(dev_root, item_id) or {}
-        except Exception:
-            pass
-        try:
-            a = _arts.record_assumption(d, what=_s(args, "what"), why=_s(args, "why"),
-                                        cost=_s(args, "cost"), phase=str(item.get("phase") or ""))
-        except ValueError as err:
-            return _err(str(err))
-        n = len(_arts.unratified_assumptions(d))
-        return _ok(f"Assumption recorded: {a['what']}. {n} now awaiting the owner. It goes in front "
-                   f"of them at the NEXT GATE as a confirm/adjust card, and the close gate refuses "
-                   f"while any is unratified — so keep working; do not stop to ask.")
-    return record_assumption
-
-
 def _request_authorization(*, store, context_id, dev_root=None, bound_item_id=None, **_):
     async def request_authorization(args: dict) -> dict:
         from ...core import artifacts as _arts
@@ -1006,6 +999,16 @@ def _request_authorization(*, store, context_id, dev_root=None, bound_item_id=No
             item = _DK().read_work_item(dev_root, item_id) or {}
         except Exception:
             pass
+        # The declared scope is checked against the STAGED OPS, not taken on trust (§2.1): claiming
+        # a delegable `doc-sync` for ops that rewrite what the project IS would route an
+        # intent change past the owner to a delegated deputy. Refuse with the scope to use instead.
+        try:
+            from ...core import knowledge_delta as _kd
+            staged = (_kd.read_delta(d) or {}).get("ops") or []
+        except Exception:
+            staged = []
+        if (mismatch := _arts.scope_mismatch(_s(args, "scope"), staged)):
+            return _err(f"Authorization refused — {mismatch}")
         try:
             a = _arts.record_authorization(
                 d, what=_s(args, "what"), why=_s(args, "why"), doc=_s(args, "doc"),
@@ -1021,31 +1024,19 @@ def _request_authorization(*, store, context_id, dev_root=None, bound_item_id=No
     return request_authorization
 
 
-class VetVerdictArg(TypedDict):
-    check: Annotated[str, "the plan's vet-plan check id, verbatim (it keys the evidence ledger)"]
-    passed: Annotated[bool, "did the check meet its `expect` — must match the ledger's latest entry"]
-
-
 class FileVetReportArgs(TypedDict, total=False):
     item_id: Required[Annotated[str, "the work-item id"]]
-    verdicts: Required[Annotated[list[VetVerdictArg],
-                                 ("one verdict per vet-plan check — EVERY plan check must appear, "
-                                  "each backed by a record_validation_evidence entry")]]
-    findings: Annotated[str, ("markdown for the failing checks: per check `### <check-id>` with "
-                              "expected / actual / verbatim evidence / where. DESCRIBE what you "
-                              "saw — never prescribe the fix (the builder decides how). Required "
-                              "when any verdict fails")]
-    out_of_scope: Annotated[str, ("real-but-unwritten observations (crashes, smells) — these do "
-                                  "NOT gate the loop; they go to the review gate. Omit if none")]
+    observations: Annotated[str, ("real concerns beyond the checks (crashes, smells, "
+                                  "real-but-unwritten gaps), up to 3 lines — these do NOT gate "
+                                  "the loop; they go to the review gate. Omit if none")]
 
 
-def _file_vet_report(*, store, context_id, dev_root=None, bound_item_id=None, **_):
+def _file_vet_report(*, store, context_id, dev_root=None, repo_dir=None, bound_item_id=None, **_):
     async def file_vet_report(args: dict) -> dict:
-        """The vet cycle's narrative handoff (build-vet-loop §4b): code writes the envelope
-        (`vet-report-<n>.md`, cycle-numbered), the agent supplies findings prose. Verdicts are
-        cross-checked MECHANICALLY against the plan's vet plan and the evidence ledger — a verdict
-        with no evidence, or contradicting the ledger's latest entry, is refused (anti-self-report:
-        the ledger is the truth, not the prose)."""
+        """The vet cycle's user report (`reports/report-vet.md`): the verdict + check table are
+        DERIVED from the recorded §Verification entries (never asserted by the agent — the fence
+        is the truth); the agent supplies only the observations prose. Refused while any plan
+        check has no recorded entry."""
         from ...core import artifacts as _arts
         item_id = _s(args, "item_id")
         if (msg := _bound_err(item_id, bound_item_id)):
@@ -1053,25 +1044,27 @@ def _file_vet_report(*, store, context_id, dev_root=None, bound_item_id=None, **
         d = _item_dir(dev_root, item_id)
         if d is None:
             return _err(f"No work-item {item_id!r} here.")
-        verdicts = args.get("verdicts") or []
-        if not isinstance(verdicts, list) or not all(isinstance(v, dict) for v in verdicts):
-            return _err("verdicts must be a list of {check, passed} objects")
+        title = ""
         try:
-            r = _arts.write_vet_report(d, verdicts=verdicts,
-                                       findings=_s(args, "findings") or "",
-                                       out_of_scope=_s(args, "out_of_scope") or "")
+            from ...core.dev_knowledge import _parse_md
+            meta, _b = _parse_md((d / "item.md").read_text())
+            title = str(meta.get("title") or "")
+        except Exception:
+            pass
+        try:
+            r = _arts.write_vet_user_report(d, repo_dir,
+                                            observations=_s(args, "observations") or "",
+                                            title=title)
         except ValueError as err:
             return _err(f"Vet report refused — {err}")
         store.log_event(context_id, "vet.report",
-                        f"Vet report filed (cycle {r['cycle']}): "
-                        + ", ".join(f"{v['check']}={'PASS' if v.get('passed') else 'FAIL'}"
-                                    for v in verdicts),
+                        f"Vet report filed: verdict {r['verdict']}"
+                        + (f" · failing: {', '.join(r['failed'])}" if r["failed"] else ""),
                         item_id=item_id, actor="agent",
-                        meta={"cycle": r["cycle"],
-                              "failed": [v["check"] for v in verdicts if not v.get("passed")]})
-        return _ok(f"Vet report filed: {r['path']} (cycle {r['cycle']}). The verdicts matched the "
-                   "ledger. This session's job is done — do not attempt fixes; the loop hands "
-                   "failures back to the build session.")
+                        meta={"verdict": r["verdict"], "failed": r["failed"]})
+        return _ok(f"Vet report filed: {r['path']} (derived verdict: {r['verdict']}). This "
+                   "session's job is done — do not attempt fixes; the loop hands failures back "
+                   "to the build session.")
     return file_vet_report
 
 
@@ -1092,10 +1085,21 @@ def _write_checkpoint(*, store, context_id, dev_root=None, repo_dir=None, bound_
         d = _item_dir(dev_root, item_id)
         if d is None:
             return _err(f"No work-item {item_id!r} here.")
+        # The banking THREAD, derived from the item's phase — never asked of the agent, which has
+        # no reason to know its own session role. Continuity reads filter on it.
+        role = None
+        try:
+            from ...core import kind_profiles as _kp, dev_knowledge as _dk  # noqa: F401
+            from ...daemon import app_state as _app
+            it = _app.dev.read_work_item(dev_root, item_id) or {}
+            role = _kp.session_role(str(it.get("phase") or "triage"))
+        except Exception:
+            pass
         try:
             p = _arts.write_checkpoint(d, repo_dir, working_on=_s(args, "working_on"),
                                        decisions=_s(args, "decisions"),
-                                       remaining=_s(args, "remaining"), notes=_s(args, "notes"))
+                                       remaining=_s(args, "remaining"), notes=_s(args, "notes"),
+                                       role=role)
         except ValueError as err:
             return _err(str(err))
         return _ok(f"Checkpoint banked: {p} (append-only; the next session's cold start reads the "
@@ -1107,7 +1111,8 @@ class SyncFromMainArgs(TypedDict, total=False):
     item_id: Required[Annotated[str, "the work-item id (must have a live worktree — build phase)"]]
 
 
-def _sync_from_main(*, store, context_id, dev_root=None, main_repo_dir=None, bound_item_id=None, **_):
+def _sync_from_main(*, store, context_id, dev_root=None, main_repo_dir=None, bound_item_id=None,
+                    spine=None, **_):
     async def sync_from_main(args: dict) -> dict:
         from pathlib import Path
         from ...core import git_layer as _gl
@@ -1124,7 +1129,11 @@ def _sync_from_main(*, store, context_id, dev_root=None, main_repo_dir=None, bou
             return _err("This item has no live worktree — sync applies only during build "
                         "(the worktree is created at build entry).")
         try:
-            res = _gl.sync_from_main(main_repo_dir or Path(str(wt)), Path(str(wt)))
+            # Sync from the repo's ANCHOR, not whatever git calls the default branch — a repo
+            # anchored on `develop` must not pull `main` into an item branch mid-build.
+            rc = spine.repo(context_id) if spine else None
+            res = _gl.sync_from_main(main_repo_dir or Path(str(wt)), Path(str(wt)),
+                                     target=rc.anchor_branch if rc else None)
         except (_gl.GitError, _gl.GitBusy) as e:
             return _err(str(e))
         if res.get("up_to_date"):
@@ -1176,9 +1185,11 @@ def _stage_knowledge_delta(*, store, context_id, dev_root=None, repo_dir=None,
             return _err(f"No work-item {item_id!r} here.")
         meta, _body = _parse_md((d / "item.md").read_text())
         if not get_profile(meta.get("kind")).knowledge_writes:
-            return _err("This item's kind never writes general dev-knowledge (D7 — research "
-                        "findings stay item-local in findings.md; docs change only via an "
-                        "implementation item after real code changes).")
+            return _err("This item's kind never writes general dev-knowledge (D7). The anchor "
+                        "docs describe what is IN the main tree, so they change only when code "
+                        "does, through an implementation item at merge. Nothing this item "
+                        "concludes has been implemented yet — its conclusions belong in its own "
+                        "report, and reach the docs later via the work that acts on them.")
         # `ops` arrives as a real JSON array (typed schema); tolerate a JSON string too (older
         # skill text / tests pass one).
         ops = args.get("ops")
@@ -1196,6 +1207,91 @@ def _stage_knowledge_delta(*, store, context_id, dev_root=None, repo_dir=None,
                    f"(restage freely to replace it) until the review-gate merge applies it to "
                    f"the anchor docs atomically — you never edit those docs directly.")
     return stage_knowledge_delta
+
+
+class PlanOpArg(TypedDict, total=False):
+    op: Required[Annotated[Literal["update", "append", "add_task", "edit_task", "remove_task"],
+                           "update/append act on a section BODY; the *_task ops act on ONE task "
+                           "line in `## Tasks` (its `- [x]` state survives an edit)"]]
+    section: Annotated[str, "section ops only: the exact `## heading` text (must already exist)"]
+    task: Annotated[str, "edit_task/remove_task only: the task id, e.g. `t3`"]
+    content: Annotated[str, ("the new text — a section BODY (no `## heading`) for section ops, the "
+                             "task text (no `- [ ] t<n> —` prefix) for add_task/edit_task; omit "
+                             "for remove_task")]
+    answers: Required[Annotated[str, ("the feedback point this op answers, in a few words — a "
+                                      "point with no op is a dropped point, and this is what "
+                                      "makes that visible")]]
+
+
+class RevisePlanArgs(TypedDict, total=False):
+    item_id: Required[Annotated[str, "the work-item id"]]
+    feedback: Required[Annotated[str, ("the feedback driving this revision, VERBATIM — the "
+                                       "owner's (or deputy's) words, never your paraphrase")]]
+    scope: Required[Annotated[Literal["targeted", "redesign"],
+                              "targeted = fold the feedback into the standing plan; redesign = "
+                              "the approach itself was wrong, so the plan is rewritten in place "
+                              "and every task checkbox resets"]]
+    ops: Required[Annotated[list[PlanOpArg], "the edits — validated first; a refusal writes nothing"]]
+    superseded: Annotated[str, ("redesign only: what prior work is void and what build must undo "
+                                "(forward, with new commits — never a reset)")]
+
+
+def _revise_plan(*, store, context_id, dev_root=None, bound_item_id=None, **_):
+    async def revise_plan(args: dict) -> dict:
+        from ...core import plan_revision as _pr
+        item_id = _s(args, "item_id")
+        if (msg := _bound_err(item_id, bound_item_id)):
+            return _err(msg)
+        d = _item_dir(dev_root, item_id)
+        if d is None:
+            return _err(f"No work-item {item_id!r} here.")
+        path = _pr.plan_path(d)
+        if not path.is_file():
+            return _err("This item has no plan.md yet — scaffold and author it first "
+                        "(`scaffold_artifact`); a revision edits a plan that already exists.")
+        # PLAN PHASE ONLY (§2.1). plan.md is the plan phase's to write, and the review agent is
+        # read-only on it — which is exactly why review has `revise`. Caught live on 2026-07-27:
+        # the review agent folded owner feedback straight into the plan and stayed at review, so
+        # the plan changed with nothing downstream re-running against it. The bound-item check
+        # can't catch this — review rides the SAME intake session, so it holds the same binding.
+        from ...core.dev_knowledge import _parse_md
+        phase = str((_parse_md((d / "item.md").read_text())[0] or {}).get("phase") or "")
+        if phase != "plan":
+            return _err(
+                f"plan.md is the PLAN phase's to write — this item is at `{phase}`. "
+                f"If the conversation concluded the plan must change, end your run with "
+                f"`report_completion(machine.outcome='revise')` and carry the owner's words in "
+                f"`machine.summary`: the item flips to plan in this same thread and the plan turn "
+                f"makes the edit, so build and vet re-run against what changed. Editing it here "
+                f"would change the contract with nothing downstream re-running against it.")
+        feedback = (_s(args, "feedback") or "").strip()
+        if not feedback:
+            return _err("`feedback` is required — the words that drove this revision are what the "
+                        "next build reads first.")
+        scope = _s(args, "scope") or "targeted"
+        ops = args.get("ops")
+        if isinstance(ops, str):   # tolerate a JSON string (older skill text / tests)
+            try:
+                ops = json.loads(ops) if ops.strip() else None
+            except (ValueError, TypeError) as e:
+                return _err(f"`ops` must be a JSON array of edit ops: {e}")
+        issues = _pr.validate(path.read_text(), ops, scope)
+        if issues:
+            return _err("Revision rejected — plan.md is unchanged. Fix and re-send:\n- "
+                        + "\n- ".join(issues))
+        res = _pr.revise(d, ops=ops, scope=scope, feedback=feedback,
+                         superseded=_s(args, "superseded") or "")
+        store.log_event(context_id, "plan.revised",
+                        f"plan.md revised ({res['revision']}, {scope}): {feedback[:160]}",
+                        item_id=item_id, actor="agent",
+                        meta={"revision": res["revision"], "scope": scope,
+                              "changed": res["changed"]})
+        return _ok(f"plan.md revised as {res['revision']} ({scope}, {res['ops']} op(s)): "
+                   + "; ".join(res["changed"])
+                   + ". Every other section is untouched — nothing wrote them. The revision block "
+                     "records what drove this, and the next cycle report stamps the revision it "
+                     "implements.")
+    return revise_plan
 
 
 class ProposeCloseArgs(TypedDict, total=False):
@@ -1241,56 +1337,6 @@ def _propose_close(*, store, context_id, dev_root=None, main_repo_dir=None,
     return propose_close
 
 
-class RouteReviewFeedbackArgs(TypedDict, total=False):
-    item_id: Required[Annotated[str, "the work-item id"]]
-    feedback: Required[Annotated[str, ("the review feedback VERBATIM — the owner's (or deputy's) "
-                                       "words are the requirement being routed; never paraphrase "
-                                       "into this field")]]
-
-
-def _route_review_feedback(*, store, context_id, dev_root=None, spine=None,
-                           bound_item_id=None, **_):
-    async def route_review_feedback(args: dict) -> dict:
-        """The review router (#178): hold-&-fix feedback at the review gate is NEW information the
-        loop must act on — this routes it back through the workflow instead of you doing the work in
-        this un-vetted review session. Flips review→plan and, once this turn ends, fires a re-plan
-        carrying the feedback + a downstream digest; forward flow (plan→build→vet→review) re-vets by
-        construction. Owner feedback and the deputy's send-back use the SAME path — the chat is a
-        shared terminal, and feedback advances the loop the same way whoever gives it."""
-        from pathlib import Path
-        from ...core.dev_knowledge import DevKnowledgeService
-        item_id = _s(args, "item_id")
-        if (msg := _bound_err(item_id, bound_item_id)):
-            return _err(msg)
-        d = _item_dir(dev_root, item_id)
-        if d is None:
-            return _err(f"No work-item {item_id!r} here.")
-        dev = DevKnowledgeService()
-        item = dev.read_work_item(Path(dev_root), item_id) or {}
-        if item.get("done_at") or str(item.get("status")) == "done":
-            return _err("This item is already terminal.")
-        if str(item.get("phase")) != "review":
-            return _err(f"Review routing applies at the review gate — this item is at "
-                        f"`{item.get('phase')}`. Mid-loop findings go through the vet report; "
-                        f"new scope goes to the inbox (create_inbox_item).")
-        feedback = (_s(args, "feedback") or "").strip()
-        if not feedback:
-            return _err("`feedback` is required — the reviewer's words ARE the requirement "
-                        "being routed.")
-        # A run is in flight (this very turn holds the item's run-lock), so the re-plan cannot fire
-        # synchronously — schedule it to fire once this turn's run row closes. The scheduler flips
-        # review→plan and re-plans with a downstream digest (loop.schedule_review_plan).
-        from ...daemon.services import loop as _loop
-        _loop.schedule_review_plan(context_id, item_id, feedback)
-        return _ok("Feedback routed → re-planning. Once this turn ends the item flips review→plan "
-                   "and re-plans against your feedback, then runs forward (plan→build→vet→review) and "
-                   "is re-vetted before it comes back. Tell the owner exactly what was routed, then "
-                   "STOP — do NOT fix anything in this review session (it isn't vetted here; the loop "
-                   "does the work and proves it). Feedback that is genuinely NEW SCOPE (a feature, "
-                   "not a shortfall of this item) goes to the inbox (create_inbox_item) instead.")
-    return route_review_feedback
-
-
 _ITEM_DEV_TOOLS: list[ToolSpec] = [
     ToolSpec(
         "set_triage_classification",
@@ -1301,22 +1347,15 @@ _ITEM_DEV_TOOLS: list[ToolSpec] = [
     ),
     ToolSpec(
         "scaffold_artifact",
-        "Scaffold a work-item artifact skeleton (plan/validation/readiness/findings/closeout) — "
+        "Scaffold a work-item artifact skeleton (brief/plan/investigation) — "
         "code owns the structure, you fill the <fill:…> prose slots.",
         ScaffoldArtifactArgs, _scaffold_artifact,
     ),
     ToolSpec(
-        "record_validation_evidence",
-        "Append one machine-checked evidence entry to a work-item's validation ledger "
+        "record_verification",
+        "Record one machine-checked verification entry into the current cycle report "
         "(check + how + result + pass/fail; freshness-tracked against the repo state).",
-        RecordEvidenceArgs, _record_evidence,
-    ),
-    ToolSpec(
-        "record_assumption",
-        "Record a call you made WITHOUT the owner during an autonomous phase (what · why · cost of "
-        "being wrong). Use this instead of stopping to ask: it surfaces at the next gate as a "
-        "confirm/adjust card and blocks close until they've seen it.",
-        RecordAssumptionArgs, _record_assumption,
+        RecordVerificationArgs, _record_verification,
     ),
     ToolSpec(
         "request_authorization",
@@ -1328,9 +1367,9 @@ _ITEM_DEV_TOOLS: list[ToolSpec] = [
     ),
     ToolSpec(
         "file_vet_report",
-        "File a vet cycle's report (vet phase): one verdict per vet-plan check, each backed by "
-        "recorded evidence — the envelope and cycle number are code-owned; you supply the "
-        "findings (describe what you saw, never the fix).",
+        "File the verification report (vet phase, after every check is recorded): the verdict "
+        "and check table are derived from the recorded entries; you supply only the "
+        "observations (real concerns, never fixes).",
         FileVetReportArgs, _file_vet_report,
     ),
     ToolSpec(
@@ -1353,12 +1392,12 @@ _ITEM_DEV_TOOLS: list[ToolSpec] = [
         StageKnowledgeDeltaArgs, _stage_knowledge_delta,
     ),
     ToolSpec(
-        "route_review_feedback",
-        "Route the owner's review-gate feedback into the loop (review phase only): phrase it as "
-        "a new vet-plan check (traces + falsifiable expect) — the check is appended code-owned "
-        "and validated, the item re-enters build, and the loop drives it to green. This is how "
-        "owner feedback becomes a written requirement the loop can close on.",
-        RouteReviewFeedbackArgs, _route_review_feedback,
+        "revise_plan",
+        "Fold review feedback into an EXISTING plan.md through section ops — the only way a "
+        "re-plan changes it. Never rewrite the file: `## Tasks` takes task-level ops so the "
+        "`- [x]` progress build earned survives, and every untouched section is provably "
+        "untouched. Records the revision block the next build reads first.",
+        RevisePlanArgs, _revise_plan,
     ),
     ToolSpec(
         "propose_close",

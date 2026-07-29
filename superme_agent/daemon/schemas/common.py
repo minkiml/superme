@@ -32,7 +32,7 @@ from typing import Literal
 # `outcome` stamps HOW an item ended (with status=done): completed | abandoned | superseded —
 # status changes only, never deletes (never-delete standing constraint).
 WorkKind = Literal["implementation", "research"]
-WorkPhase = Literal["triage", "plan", "build", "vet", "review", "investigate", "report", "close"]
+WorkPhase = Literal["triage", "plan", "build", "vet", "review", "investigate", "close"]
 WorkStatus = Literal["active", "awaiting_child", "awaiting_upstream", "awaiting_slot",
                      "awaiting_human", "done"]
 WorkOutcome = Literal["completed", "abandoned", "superseded"]

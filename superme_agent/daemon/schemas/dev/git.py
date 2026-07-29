@@ -11,7 +11,10 @@ class GitHealthResponse(BaseModel):
     reason: str | None = None
     branch: str | None = None
     worktree: str | None = None
-    trunk: str | None = None
+    trunk: str | None = None    # the repo's ANCHOR branch — what ahead/behind and the merge target are
+    # The repo's review mode (`fast` | `strict`), read live and echoed here so the rule governing the
+    # merge is visible where the merge is. Not stored on the item: a mode flip applies immediately.
+    review_mode: str | None = None
     branch_exists: bool | None = None
     dir_exists: bool | None = None
     registered: bool | None = None
@@ -44,6 +47,12 @@ class GitMergeResponse(BaseModel):
     target: str | None = None
     conflicts: list[str] | None = None
     stash_warning: str | None = None
+    # The merge act owns freshness (§2.3). Neither value is a failure — the anchor moved while the
+    # item sat at the gate. `park` = syncing it in conflicts, the owner resolves. `revet` = it
+    # merged cleanly but over `stale_paths` this item also changed, so the evidence is stale and
+    # the item takes one vet cycle before it can be approved again.
+    freshness: str | None = None       # park | revet (absent when the anchor was already current)
+    stale_paths: list[str] | None = None
     # D7 knowledge pipeline (S6): ops applied atomically with a main merge · the parent a blocking
     # child's delta folded into · standing freshness-lint warnings raised by this merge.
     knowledge_ops_applied: int | None = None
@@ -56,6 +65,78 @@ class GitRevertResponse(BaseModel):
     reverted: bool
     target: str | None = None
     head: str | None = None
+
+
+class PrCommit(BaseModel):
+    """One commit as the walkthrough shows it. `body` has the SuperMe trailer block stripped —
+    that block is what put the commit in this group, so repeating it inside would be noise."""
+    sha: str
+    short: str
+    subject: str
+    body: str | None = None
+
+
+class PrFile(BaseModel):
+    """One file inside a task group, with the churn that group put on it (summed over the group's
+    commits, which is what ranks it — the biggest change is where the risk is)."""
+    path: str
+    plus: int
+    minus: int
+
+
+class PrGroup(BaseModel):
+    """One task's slice of the branch. `task` is null for commits that carry no `SuperMe-Task`
+    trailer — they are shown last rather than hidden."""
+    task: str | None = None
+    title: str | None = None    # the plan's `## Tasks` line for this id, when the plan still has it
+    done: bool | None = None
+    commits: list[PrCommit]
+    files: list[PrFile]
+
+
+class PrStat(BaseModel):
+    """Header numbers: commit COUNT over the fork point, and the NET diff that actually lands
+    (not the sum of per-commit churn — a line written in t1 and rewritten in t3 lands once)."""
+    commits: int
+    files: int
+    insertions: int
+    deletions: int
+
+
+class PrViewResponse(BaseModel):
+    """The dedicated PR page (§4.4): the review report on the left, the task-grouped diff
+    walkthrough on the right. Entirely derived at read time — nothing here is stored."""
+    ok: bool
+    id: str
+    title: str
+    phase: str | None = None
+    branch: str
+    base: str | None = None
+    target: str | None = None
+    review_mode: str | None = None
+    pr_open: bool
+    merged: bool
+    merge_commit: str | None = None
+    report: str | None = None   # reports/report-review.md, rendered by the FE
+    stat: PrStat
+    groups: list[PrGroup]
+
+
+class PrPatch(BaseModel):
+    sha: str
+    short: str
+    subject: str
+    patch: str
+    truncated: bool | None = None
+
+
+class PrDiffResponse(BaseModel):
+    """One file's patches under one task — fetched when the reader opens the row, never up front."""
+    ok: bool
+    id: str
+    path: str
+    task: str | None = None
+    patches: list[PrPatch]
 
 
 class GitResolveResponse(BaseModel):

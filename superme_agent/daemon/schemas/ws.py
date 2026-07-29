@@ -5,8 +5,11 @@ through these models (single source of truth), and the router validates inbound 
 The combined JSON schema (`WsFrames`) is exported for the frontend's WS-type codegen, the same drift-
 proof pipeline R8 uses for REST — see `scripts/ws_schema.py` + `npm run gen:ws`.
 
-  client → daemon : turn · approval_response
-  daemon → client : init · text_delta · status · usage · approval_request · result · error
+  /ws/agent      client → daemon : turn · approval_response · watch
+                 daemon → client : init · text_delta · status · usage · approval_request ·
+                                   result · error · timeline
+  /ws/dashboard  daemon → client : dashboard_hello · invalidate   (send-only; the browser speaks
+                                   only by closing)
 """
 
 from typing import Annotated, Literal, Union
@@ -86,6 +89,26 @@ class TimelineFrame(BaseModel):
     tool_id: str | None = None
 
 
+class InvalidateFrame(BaseModel):
+    """`/ws/dashboard` → the browser: "everything under these topics changed; refetch it."
+
+    **Carries no values, by design.** The frame names cache topics (`dev:<repo>:`, `sys:`); the
+    browser then reads over ordinary HTTP. That keeps ONE source for every number on screen, so a
+    pushed frame and a polled read cannot disagree — the failure mode that would otherwise come with
+    a push channel. Coalesced: one frame per burst, carrying the union of its topics."""
+    type: Literal["invalidate"] = "invalidate"
+    topics: list[str] = []
+
+
+class DashboardHelloFrame(BaseModel):
+    """Sent once when a dashboard panel connects. Its arrival is the browser's signal that push is
+    live — which is when it raises its polling to the slow backstop. Losing the socket drops it back
+    to the ordinary cadence automatically, so a dead channel degrades to the old behaviour rather
+    than to silence."""
+    type: Literal["dashboard_hello"] = "dashboard_hello"
+    coalesce_ms: int = 250
+
+
 # --- client → daemon (inbound) -----------------------------------------------------
 
 class TurnFrame(BaseModel):
@@ -126,7 +149,10 @@ class WatchFrame(BaseModel):
 
 OutboundFrame = Annotated[
     Union[InitFrame, TextDeltaFrame, StatusFrame, UsageFrame,
-          ApprovalRequestFrame, ResultFrame, ErrorFrame, TimelineFrame],
+          ApprovalRequestFrame, ResultFrame, ErrorFrame, TimelineFrame,
+          # /ws/dashboard's two frames. A separate socket, but the same frame vocabulary and the
+          # same codegen artifact — one protocol file, not two.
+          InvalidateFrame, DashboardHelloFrame],
     Field(discriminator="type"),
 ]
 

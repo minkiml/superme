@@ -156,11 +156,12 @@ class AuthorizeBody(BaseModel):
 async def dev_work_item_authorize(item_id: str, body: AuthorizeBody,
                                   dev: DevKnowledgeService = Depends(get_dev),
                                   spine: SystemSpine = Depends(get_spine)) -> dict:
-    """The owner's grant/deny on a deferred authorization at review (BV-A2.3). `granted` records the
-    grant and routes the item back to build to perform the now-allowed change; `denied` accepts the
-    gap (the blocked check is waived) and leaves the item at review for the owner's approve. Unlike
-    the deputy, the owner grants unconditionally — the delegated-authority floor only binds the
-    deputy. 409 when the item/request isn't in a grantable state or a run is in flight."""
+    """The owner's grant/deny on a deferred authorization at review. Both RECORD and route nothing
+    (renovation §2.1): the item stays at review so every pending request can be resolved in any
+    order, and one exit then fires — Approve (close applies the granted ops, skips the denied ones
+    and records the gap) or `revise` (they land as plan input). `denied` also waives the blocked
+    check. Unlike the deputy, the owner grants unconditionally — the delegated-authority floor
+    binds only the deputy. 409 when the request isn't in a decidable state."""
     from ...services.loop import grant_authorization, deny_authorization
     ctx = contexts.resolve(body.context_id, "dev")
     if not ctx.internal_root:
@@ -177,7 +178,7 @@ async def dev_work_item_authorize(item_id: str, body: AuthorizeBody,
     if not ok:
         raise HTTPException(status_code=409, detail=reason)
     model = spine.effective_model(body.context_id)
-    status = "building" if body.decision == "granted" else "denied"
+    status = "granted" if body.decision == "granted" else "denied"
     return {"ok": True, "status": status, "id": item_id, "model": model}
 
 
@@ -323,9 +324,11 @@ async def dev_work_item_detail(item_id: str, context_id: str = "global",
         # The execution archive (present once the item is completed; live items use the rows).
         "execution": dev.read_artifact_text(dev_root, item_id, "execution.md"),
         "artifact_status": artifacts.artifact_status(item, item_dir, ctx.cwd),
-        # S7 drilldown: the remaining gate docs as raw text (rendered per-phase sub-tab)…
+        # S7 drilldown: the remaining gate docs as raw text (rendered per-phase sub-tab). The
+        # retired names (validation/readiness/closeout) are GONE — asking artifact_file for one
+        # now raises, so this list tracks `_SPECS`, never a remembered set.
         "docs": {name: dev.read_artifact_text(dev_root, item_id, artifacts.artifact_file(name))
-                 for name in ("validation", "readiness", "findings", "closeout")},
+                 for name in ("brief", "investigation")},
         # …and the continuity feed (newest-first checkpoint stubs).
         "checkpoints": artifacts.checkpoint_feed(item_dir),
     }
@@ -502,11 +505,10 @@ async def dev_work_item_advance(item_id: str, context_id: str = "global",
     """Approve → advance a work-item to its kind's next phase (the owner's gate; sequencing
     comes from KIND_PROFILES — triage→plan→… per kind). Refuses if the item is at its final
     phase, terminal, or a run is in flight. The gate decision also rests the item at `active`
-    (an awaiting_human item just got its answer). Owner-driven, so `ratify=True` — approving
-    ratifies the brief's assumptions; the autopilot driver uses the same core with ratify=False."""
+    (an awaiting_human item just got its answer). The autopilot driver uses the same core."""
     ctx = contexts.resolve(context_id, "dev")
     return gates.advance_item(ctx, context_id, item_id, dev=dev, dev_store=dev_store,
-                              spine=spine, ratify=True, actor="owner")
+                              spine=spine, actor="owner")
 
 
 class AutopilotBody(BaseModel):

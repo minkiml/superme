@@ -1,7 +1,7 @@
 ---
 name: project-init
-description: "Establish a brand-new project's SuperMe memory from scratch — research the knowable, grill the owner, and draft the general/ anchor docs (PRD · architecture · roadmap · decisions) to an approval gate. Use when connecting a new or empty repo that has no project memory yet, or when the owner asks to initialize / set up / establish this project's memory. Don't use for an existing codebase with real code (use retrofit) or for routine edits to an already-established doc (just edit it)."
-argument-hint: "(optional) a one-line intent for the project"
+description: Establish a brand-new project's SuperMe memory from scratch — research the knowable, grill the owner, and draft the general/ anchor docs (PRD · architecture · roadmap · decisions) to an approval gate. Use when connecting a new or empty repo that has no project memory yet, or when the owner asks to initialize / set up / establish this project's memory. Don't use for an existing codebase with real code (use retrofit) or for routine edits to an already-established doc (just edit it).
+argument-hint: "[project-intent]"
 category: onboarding
 ---
 
@@ -22,8 +22,8 @@ Pull the `dev-knowledge-structure` constitution (the doc set, the two-tier scaff
 Read a doc's guide from `../../general-dev-knowledge-asset/<doc>.md` before you draft it.
 
 ## Step 3: Pre-study, then report back
-Before you ask anything, learn what you could have looked up. Spawn focused research subagents (one per
-question, self-contained prompt, explicit return shape) on what is knowable **from outside**: stack norms
+Before you ask anything, learn what you could have looked up. Spawn focused research subagents (model:
+sonnet; one per question, self-contained prompt, explicit return shape) on what is knowable **from outside**: stack norms
 and conventions, the plumbing available, data, comparable systems and what they got right, hard constraints.
 
 **Scope boundary — do not research product intent.** What this is for, who it's for, the first

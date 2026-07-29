@@ -26,7 +26,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .session_contract import DEPUTY_DECISIONS
+from ..harness.tools.run_tools import DEPUTY_DECISIONS
 from ..runtime.config import LOCAL_HARNESS_DIR
 
 # Below this, the item's early-gate advances (triage/plan) are cheap and machine-checked; the

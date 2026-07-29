@@ -28,17 +28,6 @@ export const PHASE_LABEL: Record<string, string> = Object.fromEntries(PHASES.map
 
 // Per-phase accent token (dot + column rail) — reads left→right as the pipeline advances:
 // intake/plan = dev-blue (thinking), mid-flight = warn-amber, review/close = success-green.
-export const PHASE_ACCENT: Record<string, string> = {
-  triage: 'dev',
-  plan: 'dev',
-  build: 'warn',
-  investigate: 'warn',
-  vet: 'warn',
-  report: 'success',
-  review: 'success',
-  close: 'success',
-}
-
 // Display status = the runnable axis (D2), plus the derived terminal state `done`.
 // `awaiting_human` is the attention color — it pages the owner.
 export const STATUS_COLOR: Record<string, string> = {
@@ -86,18 +75,24 @@ export const PHASE_VERB: Record<string, string> = {
   close: 'closing',
 }
 
-// The item's primary display status: completion (done_at) reads as `done`, else the active status.
-export function primaryStatus(it: WorkItem): string {
-  if (it.done_at) return 'done'
-  return it.status ?? ''
-}
+// The phases where a resting item is waiting for a PERSON (or the deputy acting for them). build
+// and vet are excluded on purpose: the loop chains them, so an item between those two runs is
+// mid-flight, not parked, and must not flash "needs you" for the second it takes to hand over.
+const GATE_PHASES = new Set(['triage', 'plan', 'review', 'close'])
 
-export function Pill({ children }: { children: ReactNode }) {
-  return (
-    <span className="rounded-full bg-hover px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted">
-      {children}
-    </span>
-  )
+// The item's primary display status. Completion (done_at) reads as `done`; otherwise the stored
+// status — EXCEPT that `active` at a gate with nothing running is derived back to `awaiting_human`.
+//
+// Why derive rather than trust the stored word: liveness is already derived (the live run row), so
+// the board could show IN PROGRESS beside "AGENTS 0/4 running" — a contradiction on one screen.
+// `active` means "being worked", and at a gate with no run there is nothing working. Deriving also
+// heals rows that lost their hold before the ws.py fix landed, with no migration: the hold is
+// re-read from the facts each render instead of being restored by a one-off script.
+export function primaryStatus(it: WorkItem, running?: boolean): string {
+  if (it.done_at) return 'done'
+  const s = it.status ?? ''
+  if (s === 'active' && !running && GATE_PHASES.has(it.phase ?? '')) return 'awaiting_human'
+  return s
 }
 
 export function Empty({ children }: { children: ReactNode }) {

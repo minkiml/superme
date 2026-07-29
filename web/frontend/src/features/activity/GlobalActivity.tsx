@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Activity, RefreshCw, Loader2, ChevronDown, Link2Off } from 'lucide-react'
 import { colorFor, featureColor, featureLabel } from '@/lib/palette'
 import { RepoIcon } from '@/lib/repoIcons'
 import { fmtTokens, fmtLocal, fmtModel, fmtDuration } from '@/lib/format'
 import { getRuns, type Run } from '@/lib/api'
+import { useLive } from '@/lib/live'
+import { K } from '@/lib/live/keys'
 import type { CommandStats, OrbitRepo } from '@/features/shell/useCommandStats'
 import { Empty } from '@/features/dev/common'
 import RunTraceModal from './RunTraceModal'
@@ -28,12 +30,27 @@ export default function GlobalActivity({
   stats: CommandStats
   onDiagnose?: (run: Run, query: string) => void
 }) {
-  const [runs, setRuns] = useState<Run[] | null>(null)
-  const [err, setErr] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
   const [limit, setLimit] = useState(PAGE) // grows by PAGE each "Load more"; the fetch pulls this many
-  const [hasMore, setHasMore] = useState(false)
   const [openRun, setOpenRun] = useState<Run | null>(null)
+
+  // `limit` is part of the cache key: growing the page is a different request, and the previous
+  // page's data stays cached under its own key (so collapsing back is instant).
+  const feed = useLive(K.runs(limit), () => getRuns(undefined, limit))
+  const loading = feed.loading
+  const err = feed.data ? null : feed.error ? String(feed.error) : null
+
+  // `history` (recent_runs) already includes in-flight runs, and `live` repeats them — so the naive
+  // [...live, ...history] double-lists a running run (same id → duplicate React key, which also
+  // breaks reconciliation so the stale row lingered until a full reload). Dedup by id, live first
+  // so the running row wins.
+  const runs: Run[] | null = useMemo(() => {
+    const d = feed.data
+    if (!d) return null
+    const seen = new Set<number>()
+    return [...d.live, ...d.history].filter((r) => !seen.has(r.id) && seen.add(r.id))
+  }, [feed.data])
+  // A full page of history back means there may be more to fetch.
+  const hasMore = (feed.data?.history.length ?? 0) >= limit
 
   // Live roster first; a run whose repo was disconnected falls through to its tombstoned label
   // (so history keeps reading "Dummy Project", not the bare id) and is marked as gone.
@@ -51,35 +68,7 @@ export default function GlobalActivity({
     [stats.hub, stats.nodes, stats.archived],
   )
 
-  // `silent` polls in the background without flipping the spinner or clobbering an error toast.
-  const load = useCallback((silent = false) => {
-    if (!silent) { setLoading(true); setErr(null) }
-    getRuns(undefined, limit)
-      .then((d) => {
-        // `history` (recent_runs) already includes in-flight runs, and `live` repeats them — so the
-        // naive [...live, ...history] double-lists a running run (same id → duplicate React key,
-        // which also breaks reconciliation so the stale row lingered until a full reload). Dedup by
-        // id, live first so the running row wins.
-        const seen = new Set<number>()
-        const rows = [...d.live, ...d.history].filter((r) => !seen.has(r.id) && seen.add(r.id))
-        setRuns(rows)
-        // A full page of history back means there may be more to fetch.
-        setHasMore(d.history.length >= limit)
-      })
-      .catch((e) => { if (!silent) setErr(String(e)) })
-      .finally(() => { if (!silent) setLoading(false) })
-  }, [limit])
-
-  useEffect(() => {
-    load()
-  }, [load])
-
-  // Auto-refresh: poll the run feed every 5s so live runs (and their completion) surface without a
-  // manual click. Silent, so it never flashes the spinner or drops an open trace modal.
-  useEffect(() => {
-    const id = setInterval(() => load(true), 5000)
-    return () => clearInterval(id)
-  }, [load])
+  const load = feed.refresh
 
   return (
     <div className="h-full overflow-y-auto">

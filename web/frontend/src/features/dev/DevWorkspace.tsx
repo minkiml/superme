@@ -4,6 +4,8 @@ import { colorFor } from '@/lib/palette'
 import { RepoIcon } from '@/lib/repoIcons'
 import type { OrbitRepo } from '@/features/shell/useCommandStats'
 import { getProjectStatus, getAttention, type AttentionBadge, type WorkItem } from '@/lib/api'
+import { useLive } from '@/lib/live'
+import { K } from '@/lib/live/keys'
 import TabBar from '@/ui/TabBar'
 import DevDashboard from './DevDashboard'
 import RoadmapTab from './RoadmapTab'
@@ -24,8 +26,10 @@ import OnboardingLanding, { type OnboardMode } from './OnboardingLanding'
 // `project` is the home of this repo's GENERAL knowledge — what we're building and why — as opposed
 // to Pipeline's work-in-flight. Roadmap is its first section; deliverables, open questions and the
 // decision ledger join it as the general/ docs become addressable records rather than prose.
-type Tab = 'pipeline' | 'project' | 'learning' | 'artifacts' | 'activity' | 'promptxray'
-const TABS: { id: Tab; label: string; icon: typeof GitBranch }[] = [
+// `workspace` is Pipeline's other PANE, not a seventh tab: it addresses the board where `pipeline`
+// addresses the capture queue. Both light the same rail entry — see `pipelineTab` below.
+type Tab = 'pipeline' | 'workspace' | 'project' | 'learning' | 'artifacts' | 'activity' | 'promptxray'
+const TABS: { id: Exclude<Tab, 'workspace'>; label: string; icon: typeof GitBranch }[] = [
   { id: 'pipeline', label: 'Pipeline', icon: GitBranch },
   { id: 'project', label: 'Project', icon: Map },
   { id: 'learning', label: 'Learning', icon: Brain },
@@ -36,73 +40,67 @@ const TABS: { id: Tab; label: string; icon: typeof GitBranch }[] = [
 
 export default function DevWorkspace({
   repo,
+  tab,
+  onTabChange,
   onExit,
   repos = [],
   onSwitch,
   onBindItem,
   onUnbindItem,
   boundItemId,
-  focusItemId,
-  onFocusConsumed,
 }: {
   repo: OrbitRepo
+  // The tab is an ADDRESS (`/repo/:id/dev/:tab`), not local state — so it survives a refresh and is
+  // linkable. Owned by the router; this component only asks to change it.
+  tab: Tab
+  onTabChange: (tab: Tab) => void
   onExit: () => void
   repos?: OrbitRepo[] // the full roster (hub + connected projects) — powers the quick-switch dropdown
   onSwitch?: (repo: OrbitRepo) => void // jump this workspace to another repo's dev dashboard
   onBindItem?: (it: WorkItem, contextId: string) => void // clicking a work-item binds the chat to it
   onUnbindItem?: () => void
   boundItemId?: string | null
-  focusItemId?: string | null // attention-center "Open" → auto-open this item in the pipeline
-  onFocusConsumed?: () => void
 }) {
-  const [tab, setTab] = useState<Tab>('pipeline')
-
-  // Arriving from the attention center: snap to the pipeline tab so DevDashboard can pop the item's
-  // modal. (The item lives on the pipeline board; any other tab would swallow the focus.)
-  useEffect(() => {
-    if (focusItemId) setTab('pipeline')
-  }, [focusItemId])
+  // (There is no "snap to the pipeline tab" effect any more: an item drilldown IS an address whose
+  // tab is Pipeline by construction — `App` derives the tab from the route — so arriving from the
+  // attention centre cannot land on the wrong tab in the first place.)
   const isHub = repo.id === 'global'
   const c = colorFor(repo.id)
+  // Either of Pipeline's two panes means the Pipeline tab is what's showing.
+  const pipelineTab = tab === 'pipeline' || tab === 'workspace'
 
-  // Attention badge (S7/D10): the top non-empty tier's color + count, polled from durable state.
-  const [badge, setBadge] = useState<AttentionBadge | null>(null)
-  useEffect(() => {
-    let alive = true
-    const pull = () => getAttention(repo.id).then((a) => alive && setBadge(a.badge ?? null)).catch(() => {})
-    pull()
-    const t = setInterval(pull, 5000)
-    return () => { alive = false; clearInterval(t) }
-  }, [repo.id])
+  // Attention badge (S7/D10): the top non-empty tier's color + count, read from durable state.
+  // Same cache key DevDashboard subscribes to, so the two surfaces cost ONE request between them
+  // rather than the two they used to fire on separate clocks.
+  const attn = useLive(K.devAttention(repo.id), () => getAttention(repo.id))
+  const badge: AttentionBadge | null = attn.data?.badge ?? null
 
   // Onboarding gate (S5·B): a repo whose project memory isn't established yet (PRD defines no
   // deliverables) shows the onboarding front door instead of the work tabs — you can't take on work
-  // before there's memory. null = still checking. Re-checkable after the owner finishes onboarding.
-  const [established, setEstablished] = useState<boolean | null>(null)
-  const [onboardMode, setOnboardMode] = useState<OnboardMode | null>(null)
-  function checkStatus() {
-    setEstablished(null)
-    getProjectStatus(repo.id)
-      .then((s) => {
-        setEstablished(s.established)
-        setOnboardMode((s.onboard_mode as OnboardMode | null) ?? null)
-      })
-      .catch(() => setEstablished(true)) // fail-open: a status hiccup shouldn't wall off the workspace
-  }
-  useEffect(checkStatus, [repo.id])
-
-  // Auto-flip to the work tabs the moment onboarding establishes memory: while the front door is up
-  // (established === false), poll project-status; establishment (the agent writes the PRD's first
-  // deliverable) flips it without a manual "Recheck". Stops as soon as it's established.
+  // before there's memory. `undefined` (nothing fetched yet) = still checking.
+  //
+  // The cadence is the gate itself: while the front door is up, establishment can arrive at any
+  // moment (the onboarding agent writes the PRD's first deliverable) and the tabs must flip without
+  // a manual "Recheck" — so it polls. Once established, the answer cannot change back, so the poll
+  // stops entirely rather than asking forever. That replaces the old pair of effects (a one-shot
+  // check plus a second interval that existed only to watch for the flip).
+  const [settled, setSettled] = useState(false)
+  const status = useLive(
+    K.projectStatus(repo.id),
+    () => getProjectStatus(repo.id),
+    settled ? 0 : 5000,
+  )
   useEffect(() => {
-    if (established !== false) return
-    const t = setInterval(() => {
-      getProjectStatus(repo.id)
-        .then((s) => { if (s.established) setEstablished(true) })
-        .catch(() => {})
-    }, 5000)
-    return () => clearInterval(t)
-  }, [established, repo.id])
+    if (status.data?.established) setSettled(true)
+  }, [status.data?.established])
+  // A repo switch re-arms the gate: the new repo's answer is unknown again.
+  useEffect(() => { setSettled(false) }, [repo.id])
+  // Fail-open, as before: a status hiccup must not wall off the workspace. An error with no data is
+  // treated as established; last-good data survives a blip on its own.
+  const established: boolean | null =
+    status.data ? status.data.established : status.error ? true : null
+  const onboardMode = (status.data?.onboard_mode as OnboardMode | null) ?? null
+  const checkStatus = status.refresh
 
   // The other repos you can hop to (current one excluded) — hub first, then connected projects.
   const others = repos.filter((r) => r.id !== repo.id)
@@ -154,11 +152,12 @@ export default function DevWorkspace({
           <div className="mt-3 flex gap-1">
             {TABS.map((t) => {
               const Icon = t.icon
-              const on = tab === t.id
+              // Pipeline stays lit for either of its panes — the rail names the tab, not the pane.
+              const on = t.id === 'pipeline' ? pipelineTab : tab === t.id
               return (
                 <button
                   key={t.id}
-                  onClick={() => setTab(t.id)}
+                  onClick={() => onTabChange(t.id)}
                   style={on ? { color: c, borderColor: c } : undefined}
                   className={`flex items-center gap-1.5 border-b-2 px-3 py-2 text-[13px] font-medium transition ${
                     on ? '' : 'border-transparent text-muted hover:text-fg'
@@ -183,15 +182,13 @@ export default function DevWorkspace({
           <OnboardingLanding repoLabel={isHub ? 'SuperMe Hub' : repo.label} mode={onboardMode} />
         ) : (
           <>
-            {tab === 'pipeline' && (
+            {pipelineTab && (
               <DevDashboard
                 contextId={repo.id}
                 embedded
                 onBindItem={onBindItem}
                 onUnbindItem={onUnbindItem}
                 boundItemId={boundItemId}
-                focusItemId={focusItemId}
-                onFocusConsumed={onFocusConsumed}
               />
             )}
             {tab === 'project' && <RoadmapTab contextId={repo.id} />}

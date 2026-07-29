@@ -5,8 +5,10 @@ the daemon. Two forwarders cover the whole surface:
 
 - A **generic HTTP reverse proxy**: `/api/{path}` → `{daemon}/{path}`, forwarding method,
   query, body and status verbatim. Adding a daemon route needs zero BFF work.
-- An **explicit WebSocket relay** for the chat: browser <-> BFF <-> daemon, so the
-  frontend only ever opens `/api/ws/agent` and never knows the daemon exists.
+- A **generic WebSocket relay**: `/api/ws/{name}` → `{daemon}/ws/{name}`, browser <-> BFF <->
+  daemon, so the frontend only ever opens `/api/ws/*` and never knows the daemon exists. Adding a
+  daemon socket needs zero BFF work either (this was hard-coded to `agent` until the dashboard
+  invalidation channel arrived and made the second one real).
 
 The web ingress/boundary role (port separation, a future home for CORS/auth/rate-limiting)
 stays here; the 1:1 route mirroring is gone.
@@ -26,7 +28,7 @@ log = logging.getLogger("superme-web-bff")
 logging.basicConfig(level=logging.INFO)
 
 DAEMON_HTTP = os.environ.get("SUPERME_DAEMON_URL", "http://127.0.0.1:8787")
-DAEMON_WS = DAEMON_HTTP.replace("http", "ws", 1) + "/ws/agent"
+DAEMON_WS_BASE = DAEMON_HTTP.replace("http", "ws", 1)
 
 # Hop-by-hop headers must not be forwarded; let httpx / the response layer recompute
 # framing and content negotiation rather than passing stale values through.
@@ -45,12 +47,15 @@ async def health() -> dict:
     return {"status": "ok", "service": "superme-web-bff", "daemon": DAEMON_HTTP}
 
 
-# --- chat WebSocket relay (explicit; the one bidirectional seam) -----------------
-@app.websocket("/api/ws/agent")
-async def ws_relay(browser: WebSocket) -> None:
+# --- generic WebSocket relay: /api/ws/{name} -> {daemon}/ws/{name} ---------------
+# Bidirectional and name-agnostic, so a send-only daemon socket (the dashboard's invalidation
+# channel) relays through the same code as the fully duplex chat one — the browser-to-daemon leg
+# simply never carries anything, and the pair-of-tasks shape still notices the close.
+@app.websocket("/api/ws/{name}")
+async def ws_relay(name: str, browser: WebSocket) -> None:
     await browser.accept()
     try:
-        async with websockets.connect(DAEMON_WS) as daemon:
+        async with websockets.connect(f"{DAEMON_WS_BASE}/ws/{name}") as daemon:
 
             async def browser_to_daemon() -> None:
                 try:

@@ -19,7 +19,9 @@ export interface WsFrames {
     | ApprovalRequestFrame
     | ResultFrame
     | ErrorFrame
-    | TimelineFrame;
+    | TimelineFrame
+    | InvalidateFrame
+    | DashboardHelloFrame;
 }
 /**
  * A turn request. Lenient (every field defaulted) so a sparse client frame still validates.
@@ -135,4 +137,26 @@ export interface TimelineFrame {
   name?: string | null;
   description?: string | null;
   tool_id?: string | null;
+}
+/**
+ * `/ws/dashboard` → the browser: "everything under these topics changed; refetch it."
+ *
+ * **Carries no values, by design.** The frame names cache topics (`dev:<repo>:`, `sys:`); the
+ * browser then reads over ordinary HTTP. That keeps ONE source for every number on screen, so a
+ * pushed frame and a polled read cannot disagree — the failure mode that would otherwise come with
+ * a push channel. Coalesced: one frame per burst, carrying the union of its topics.
+ */
+export interface InvalidateFrame {
+  type?: "invalidate";
+  topics?: string[];
+}
+/**
+ * Sent once when a dashboard panel connects. Its arrival is the browser's signal that push is
+ * live — which is when it raises its polling to the slow backstop. Losing the socket drops it back
+ * to the ordinary cadence automatically, so a dead channel degrades to the old behaviour rather
+ * than to silence.
+ */
+export interface DashboardHelloFrame {
+  type?: "dashboard_hello";
+  coalesce_ms?: number;
 }

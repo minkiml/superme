@@ -52,6 +52,21 @@
       },
       "type": "object"
     },
+    "DashboardHelloFrame": {
+      "description": "Sent once when a dashboard panel connects. Its arrival is the browser's signal that push is\nlive \u2014 which is when it raises its polling to the slow backstop. Losing the socket drops it back\nto the ordinary cadence automatically, so a dead channel degrades to the old behaviour rather\nthan to silence.",
+      "properties": {
+        "type": {
+          "const": "dashboard_hello",
+          "default": "dashboard_hello",
+          "type": "string"
+        },
+        "coalesce_ms": {
+          "default": 250,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
     "ErrorFrame": {
       "description": "The turn raised \u2014 surfaced to the client.",
       "properties": {
@@ -94,6 +109,24 @@
             }
           ],
           "default": null
+        }
+      },
+      "type": "object"
+    },
+    "InvalidateFrame": {
+      "description": "`/ws/dashboard` \u2192 the browser: \"everything under these topics changed; refetch it.\"\n\n**Carries no values, by design.** The frame names cache topics (`dev:<repo>:`, `sys:`); the\nbrowser then reads over ordinary HTTP. That keeps ONE source for every number on screen, so a\npushed frame and a polled read cannot disagree \u2014 the failure mode that would otherwise come with\na push channel. Coalesced: one frame per burst, carrying the union of its topics.",
+      "properties": {
+        "type": {
+          "const": "invalidate",
+          "default": "invalidate",
+          "type": "string"
+        },
+        "topics": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         }
       },
       "type": "object"
@@ -463,8 +496,10 @@
       "discriminator": {
         "mapping": {
           "approval_request": "#/$defs/ApprovalRequestFrame",
+          "dashboard_hello": "#/$defs/DashboardHelloFrame",
           "error": "#/$defs/ErrorFrame",
           "init": "#/$defs/InitFrame",
+          "invalidate": "#/$defs/InvalidateFrame",
           "result": "#/$defs/ResultFrame",
           "status": "#/$defs/StatusFrame",
           "text_delta": "#/$defs/TextDeltaFrame",
@@ -497,6 +532,12 @@
         },
         {
           "$ref": "#/$defs/TimelineFrame"
+        },
+        {
+          "$ref": "#/$defs/InvalidateFrame"
+        },
+        {
+          "$ref": "#/$defs/DashboardHelloFrame"
         }
       ]
     }

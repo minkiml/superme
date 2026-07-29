@@ -38,67 +38,16 @@ function Row({ m, tone }: { m: Msg; tone?: 'dev' | 'core' }) {
         )}
         {m.role === 'you'
           ? <span className="whitespace-pre-wrap">{m.text}</span>
-          : m.role === 'deputy'
-            ? <Markdown text={m.text} tone={tone} />
-            : <AssistantContent text={m.text} tone={tone} />}
+          : <Markdown text={m.text} tone={tone} />}
       </div>
     </div>
   )
 }
 
-// A run's completion-report fence (```completion-report\n outcome/summary/next \n```) is the
-// end-of-run handshake the daemon parses AND a glance for the owner. Rendered raw it's an ugly code
-// block; lift it out and show a compact card (outcome badge + summary + next), keeping the prose
-// around it as normal Markdown.
-const REPORT_RE = /```completion-report\s*\n([\s\S]*?)```/
-function splitReport(text: string): { body: string; report: Record<string, string> | null; tail: string } {
-  const m = text.match(REPORT_RE)
-  if (!m || m.index == null) return { body: text, report: null, tail: '' }
-  const fields: Record<string, string> = {}
-  for (const line of m[1].split('\n')) {
-    const mm = line.match(/^\s*(outcome|summary|next)\s*:\s*(.+?)\s*$/)
-    if (mm) fields[mm[1]] = mm[2]
-  }
-  if (!fields.outcome) return { body: text, report: null, tail: '' }
-  return { body: text.slice(0, m.index).trimEnd(), report: fields, tail: text.slice(m.index + m[0].length).trim() }
-}
-
-// Outcome → glance colour + owner-facing label (the schema value is terse; humanize it).
-const OUTCOME_TONE: Record<string, { dot: string; text: string; label: string }> = {
-  success: { dot: 'bg-success', text: 'text-success', label: 'success' },
-  clean_noop: { dot: 'bg-line', text: 'text-muted', label: 'nothing to do' },
-  blocked: { dot: 'bg-warn', text: 'text-warn', label: 'blocked' },
-  approval_required: { dot: 'bg-warn', text: 'text-warn', label: 'needs you' },
-  exhausted: { dot: 'bg-danger', text: 'text-danger', label: 'out of budget' },
-  stagnated: { dot: 'bg-danger', text: 'text-danger', label: 'no progress' },
-}
-
-function CompletionReport({ r }: { r: Record<string, string> }) {
-  const t = OUTCOME_TONE[r.outcome] ?? { dot: 'bg-line', text: 'text-muted', label: r.outcome }
-  return (
-    <div className="mt-2 rounded-md border border-line bg-surface px-2.5 py-2">
-      <div className="flex items-center gap-1.5">
-        <span className={`h-1.5 w-1.5 rounded-full ${t.dot}`} />
-        <span className={`text-[11px] font-semibold uppercase tracking-wide ${t.text}`}>{t.label}</span>
-        <span className="ml-auto text-[9px] uppercase tracking-wider text-faint">run report</span>
-      </div>
-      {r.summary && <div className="mt-1 text-xs text-fg">{r.summary}</div>}
-      {r.next && <div className="mt-0.5 text-xs text-muted"><span className="text-faint">next · </span>{r.next}</div>}
-    </div>
-  )
-}
-
-// Assistant bubble content: prose as Markdown, with any completion-report fence promoted to a card.
-function AssistantContent({ text, tone }: { text: string; tone?: 'dev' | 'core' }) {
-  const { body, report, tail } = splitReport(text)
-  return (
-    <>
-      {body && <Markdown text={body} tone={tone} />}
-      {report && <CompletionReport r={report} />}
-      {tail && <Markdown text={tail} tone={tone} />}
-    </>
-  )
-}
+// NOTE (renovation §3.2): a run's closing report is no longer prose to be parsed out of the reply.
+// It arrives as the `report_completion` tool's `user` payload and is persisted as the `run.report`
+// event; the card that renders it lives in TimelineView, which is what a work-item thread uses.
+// This list renders general chats, which have no phase runs and so no report — plain Markdown.
 
 // The scrollable transcript: replayed + live bubbles, the typing indicator while a turn
 // is in flight, and any pending approval. Owns its own scroll element and keeps it pinned

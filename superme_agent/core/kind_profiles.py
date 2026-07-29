@@ -35,30 +35,34 @@ KIND_PROFILES: dict[str, KindProfile] = {
         worktree=True,
         knowledge_writes=True,
         emits={
+            "triage": ("brief",),
             "plan": ("plan",),
-            "vet": ("validation",),
-            "review": ("readiness",),
-            "close": ("closeout",),
         },
-        required_artifacts=("plan", "validation", "readiness", "closeout"),
+        required_artifacts=("plan",),
+        # No merge check here: review's EXIT is the merge (`advance_item` runs `review_merge` and
+        # 409s on conflict), so an item cannot reach close unmerged. A criterion that can only fail
+        # for a reason close has no move to fix is theatre — the merge is review's to get right,
+        # and review is the last gate where the owner can still act on it.
         close_criteria=(
-            "merged_or_logged_no_merge", "evidence_fresh", "knowledge_row_resolved",
-            "closeout_verified", "children_terminal", "assumptions_ratified",
+            "evidence_fresh", "knowledge_row_resolved", "children_terminal",
         ),
     ),
+    # The spine (triage · plan · review · close) is shared by every kind; only ‹WORK› differs —
+    # `investigate` here, `build ⟷ vet` above. The old `report` PHASE is retired: it sat where
+    # `review` belongs, and its work is now the shared review-ENTRY run — ONE `review` skill for
+    # every kind, with a per-kind report template inside it (renovation §2.2).
     "research": KindProfile(
         kind="research",
-        phases=("triage", "plan", "investigate", "report", "close"),
+        phases=("triage", "plan", "investigate", "review", "close"),
         worktree=False,
         knowledge_writes=False,
         emits={
+            "triage": ("brief",),
             "plan": ("plan",),
-            "report": ("findings",),
-            "close": ("closeout",),
+            "investigate": ("investigation",),
         },
-        required_artifacts=("plan", "findings", "closeout"),
-        close_criteria=("findings_delivered", "spawns_exist", "closeout_verified",
-                        "assumptions_ratified"),
+        required_artifacts=("plan", "investigation"),
+        close_criteria=("findings_delivered", "spawns_exist"),
     ),
 }
 
@@ -88,12 +92,26 @@ SESSION_ROLES: tuple[str, ...] = ("intake", "build", "vet")
 # a session item-bound. Each kind's identity PREAMBLE lives in core/kernel_speech.py.
 SESSION_KINDS = ("general", "work_item", "onboarding", "diagnosis", "intake", "build", "vet")
 
+# Of those, the ones that are the AGENTS' OWN threads rather than the owner's: `build` and `vet` run
+# headless in a worktree (background turns, denied approval, no chat surface) — working memory, not
+# conversation. The owner cannot open one, cannot answer in one, and never sees it in the session
+# picker; counting them as "sessions" made the repo tile disagree with the list on screen. Their work
+# reaches the owner as artifacts and the run trace instead.
+# An UNKNOWN kind reads as a conversation: a new kind that HAS a chat surface must appear (the count
+# self-flags), while a new headless one is a deliberate addition that registers itself here.
+AGENT_THREAD_KINDS: tuple[str, ...] = ("build", "vet")
+
+
+def is_conversation(kind: str | None) -> bool:
+    """Whether a session is one the owner can open and take a turn in (vs an agent's own thread)."""
+    return (kind or "") not in AGENT_THREAD_KINDS
+
 _ROLE_FOR_PHASE: dict[str, str] = {
     "triage": "intake", "plan": "intake", "review": "intake", "close": "intake",
     "build": "build",
     "vet": "vet",
     # research: no fresh-perspective boundary anywhere — one intake thread end to end.
-    "investigate": "intake", "report": "intake",
+    "investigate": "intake",
 }
 
 
