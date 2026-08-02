@@ -24,14 +24,63 @@ from ...core import artifacts as _arts
 from ...core import autopilot as _autopilot
 from ...core.autopilot import PROMPT_EXTRACTION_FEATURE
 from ...core import git_layer, kernel_speech, kind_profiles
+from ...core.faults import RETRY_LADDER
 from ...core.models import MODEL_TIERS
 from ...harness.tools.dev_tools import make_dev_mcp_server
 from ...harness.tools.run_tools import make_run_report_server
+from .turns import ResilientTurn
 
 log = logging.getLogger("superme-agent")
 
 # Work-items default to the latest Sonnet (concrete id — the `sonnet` alias lags; see core/models.py).
 DEFAULT_RUN_MODEL = MODEL_TIERS["sonnet"]
+
+
+def mark_item_error(ctx, context_id: str, item_id: str, reason: str, *, phase: str = "") -> bool:
+    """Stop an item at `error` with the reason its work stopped (recovery-resilience R2).
+
+    The ONE writer of that status. Called where a run died — after R1's ladder is spent, or on a
+    fault that was never retryable — so the item stays at the phase it died in, labelled, instead
+    of resting `awaiting_human` (which claims a decision is wanted) or `active` (which claims
+    something is working). Both of those lies were live: an outage left items reading IN PROGRESS
+    with a frozen timer, and the owner had no way to tell them from real work.
+
+    Not terminal, ever: `error` is the entry point to Resume (R4) and re-run (R5). Best-effort —
+    a failure to LABEL a failure must not itself raise inside a runner's tail."""
+    if not (item_id and getattr(ctx, "internal_root", None)):
+        return False
+    try:
+        line = " ".join(str(reason or "").split()) or "the work stopped unexpectedly"
+        if not _dev.set_work_item_error(ctx.internal_root / "dev", item_id, line):
+            return False
+        _dev_store.log_event(
+            context_id, "run.error",
+            f"Work stopped{f' during {phase}' if phase else ''} — {line[:160]}",
+            item_id=item_id, actor="daemon", meta={"phase": phase, "reason": line})
+        log.warning("item %s stopped at error%s: %s", item_id,
+                    f" ({phase})" if phase else "", line[:160])
+        return True
+    except Exception:
+        log.exception("could not mark %s as error", item_id)
+        return False
+
+
+def retry_notice(context_id: str, item_id: str, phase: str):
+    """The trail a retry leaves (R1). A run asleep on the ladder for five minutes is externally
+    indistinguishable from a hung one, so every wait writes a dev event naming what failed and how
+    long we are giving it — the difference between "SuperMe is stuck" and "SuperMe is waiting out
+    an outage". Every background runner passes one of these to its `ResilientTurn`."""
+    def _notify(fault, attempt: int, delay: int) -> None:
+        try:
+            _dev_store.log_event(
+                context_id, "run.retry",
+                f"{phase.capitalize()} paused — {fault.reason}. Retry {attempt} of "
+                f"{len(RETRY_LADDER)} in {max(1, delay // 60)} min",
+                item_id=item_id, actor="daemon",
+                meta={"phase": phase, "kind": fault.kind, "attempt": attempt, "delay": delay})
+        except Exception:
+            log.exception("retry notice failed for %s", item_id)
+    return _notify
 
 
 def _set_status(ctx, item_id: str, status: str) -> None:
@@ -184,9 +233,18 @@ def _artifact_desc(tool_name: str, ti: dict) -> tuple[str, str, str]:
     # it "Agent - <type>" (same label·detail shape as skills: "skill - <name>"), so the trace says WHICH
     # agent ran (e.g. `superme-dev:capture`) instead of a generic "Agent". kind=subagent → the Bot icon.
     if tool_name in ("Task", "Agent"):
-        sub = (ti.get("subagent_type") or ti.get("subagentType") or ti.get("agent_type")
-               or ti.get("agentType") or ti.get("name") or "agent")
-        return "subagent", "Agent", str(sub)
+        # The row always reads "Agent - Subagent", and NAMES the worker in parentheses when the
+        # spawn said which: `Subagent (superme-dev:capture)`. The bare form is the honest fallback
+        # for a spawn whose input carried no recognizable type key — it says a sub-agent ran, which
+        # is true, instead of the old "Agent - agent", which said nothing twice.
+        who = (ti.get("subagent_type") or ti.get("subagentType") or ti.get("agent_type")
+               or ti.get("agentType") or ti.get("name") or ti.get("description") or "")
+        # The MODEL, when the spawn overrode it. `vet` fans out on haiku and `plan` on sonnet by
+        # skill instruction — without this the trail cannot show whether that instruction was
+        # actually followed, which is the whole question a delegation review asks.
+        model = ti.get("model") or ti.get("modelName")
+        inner = " · ".join(x for x in (str(who).strip(), str(model).strip() if model else "") if x)
+        return "subagent", "Agent", (f"Subagent ({inner[:48]})" if inner else "Subagent")
     if tool_name == "Skill":
         # The skill identity may arrive under any of several keys depending on the SDK build.
         name = (ti.get("command") or ti.get("name") or ti.get("skill")
@@ -228,18 +286,11 @@ def _result_row(ev: ToolResult) -> tuple[str, str]:
     return name, body[:_RESULT_CAP]
 
 
-def _log_artifact(repo_id: str, item_id: str, ev) -> None:
-    """Best-effort: record a tool-use (Status) or its output (ToolResult) the item's run made onto
-    the run_artifact trail, carrying the tool_use id so result→call pairs. Never raises into the loop."""
-    try:
-        if isinstance(ev, ToolResult):
-            name, desc = _result_row(ev)
-            _spine.log_artifact(repo_id, item_id, kind="result", name=name, description=desc, tool_id=ev.tool_id)
-            return
-        kind, head, detail = _artifact_desc(ev.tool_name, ev.tool_input or {})
-        _spine.log_artifact(repo_id, item_id, kind=kind, name=head, description=detail, tool_id=ev.tool_id)
-    except Exception:
-        log.exception("failed to log artifact %s for %s", getattr(ev, "tool_name", "?"), item_id)
+# `_log_artifact` is GONE (2026-07-31). Every runner that called it also called `capture_event` on
+# the same event stream, so it wrote a second, POORER copy of the same trail: `run_artifact` skipped
+# prompt/reply rows and was never written by deputy or compaction runs at all. The drilldown's Runs
+# pane happened to read that copy and was silently showing 17 of one item's 34 runs. `run_event` is
+# the one trail now. The TABLE and its rows stay (never-delete-logs) — frozen history, no new writes.
 
 
 def capture_prompt(repo_id: str, prompt: str, *, run_id: int | None = None,
@@ -295,31 +346,41 @@ def capture_event(repo_id: str, ev, *, run_id: int | None = None, item_id: str |
     one live run per item, so the FE attributes each live frame to the item's CURRENT phase lane.
     `publish_live=False` for the INTERACTIVE ws turn — it already streams itself directly to the panel
     that fired it, so broadcasting would double it there (run-lock means no other panel needs the echo)."""
+    # Resolve the run ONCE, here. Every background phase caller passes only `item_id` and lets
+    # `log_run_event` resolve the run for the DB row — but the live frame was being published with
+    # the caller's `run_id`, i.e. None, so the browser could not match it to the history it already
+    # held and rendered every streaming reply a second time on top (owner, 2026-08-02: duplicated
+    # bubbles for the length of a run, correct the instant it ended and the live buffer cleared).
+    if run_id is None and item_id is not None:
+        run_id = _spine.running_run_id(repo_id, item_id)
     if isinstance(ev, Status):
         kind, head, detail = _artifact_desc(ev.tool_name, ev.tool_input or {})
         _spine.log_run_event(repo_id=repo_id, kind=kind, name=head, description=detail,
-                             run_id=run_id, item_id=item_id, tool_id=ev.tool_id)
+                             run_id=run_id, item_id=item_id, tool_id=ev.tool_id,
+                             parent_tool_id=ev.parent_tool_id)
         if publish_live:
-            _publish_timeline(item_id, run_id, kind, head, detail, ev.tool_id)
+            _publish_timeline(item_id, run_id, kind, head, detail, ev.tool_id, ev.parent_tool_id)
     elif isinstance(ev, ToolResult):
         name, desc = _result_row(ev)
         # Record with the tool_use id so the FE pairs result→call exactly (concurrent tools return
         # out of order). Empty output stays empty (the call just won't be expandable).
         _spine.log_run_event(repo_id=repo_id, kind="result", name=name, description=desc,
-                             run_id=run_id, item_id=item_id, tool_id=ev.tool_id)
+                             run_id=run_id, item_id=item_id, tool_id=ev.tool_id,
+                             parent_tool_id=ev.parent_tool_id)
         if publish_live:
-            _publish_timeline(item_id, run_id, "result", name, desc, ev.tool_id)
+            _publish_timeline(item_id, run_id, "result", name, desc, ev.tool_id, ev.parent_tool_id)
     elif isinstance(ev, TextDelta):
         txt = (ev.text or "").strip()
         if txt:
             _spine.log_run_event(repo_id=repo_id, kind="reply", name="reply", description=txt[:_REPLY_CAP],
                                  run_id=run_id, item_id=item_id)
             if publish_live:
-                _publish_timeline(item_id, run_id, "reply", "reply", txt[:_REPLY_CAP], None)
+                _publish_timeline(item_id, run_id, "reply", "reply", txt[:_REPLY_CAP], None, None)
 
 
 def _publish_timeline(item_id: str | None, run_id: int | None, kind: str, name: str,
-                      description: str, tool_id: str | None) -> None:
+                      description: str, tool_id: str | None,
+                      parent_tool_id: str | None) -> None:
     """Fan a captured event out to any panel watching this item (F2). No-op when nobody's watching
     (the common background-autopilot case) so we skip the frame build entirely. Never raises."""
     if not item_id or not item_stream.has_subscribers(item_id):
@@ -328,6 +389,7 @@ def _publish_timeline(item_id: str | None, run_id: int | None, kind: str, name: 
         item_stream.publish(item_id, {
             "type": "timeline", "item_id": str(item_id), "run_id": run_id,
             "kind": kind, "name": name, "description": description, "tool_id": tool_id,
+            "parent_tool_id": parent_tool_id,
         })
     except Exception:
         log.debug("item_stream publish failed for %s", item_id, exc_info=True)
@@ -420,16 +482,23 @@ def reset_vet_thread(ctx, item: dict, *, dev=None, sessions=None) -> bool:
     return True
 
 
-def read_completion(context_id: str, item_id: str, sink: dict) -> dict | None:
-    """A background run's completion payload out of its `report_completion` sink (run_tools) —
-    None when the run never called the tool (a legacy/unstructured ending; callers warn so drift
-    is visible). Persists the payload as the run.report event, the DB record keyed to this item's
-    run trail."""
+def read_completion(context_id: str, item_id: str, sink: dict,
+                    run_id: int | None = None) -> dict | None:
+    """A run's completion payload out of its `report_completion` sink (run_tools) — None when the
+    run never called the tool (a legacy/unstructured ending; callers warn so drift is visible).
+    Persists the payload as the run.report event, the DB record keyed to this item's run trail.
+
+    `run_id` names the run this report ENDS — resolved from the item's live row when the caller
+    doesn't already hold it (every background runner logs before `_end_run`, so the row is still
+    open). The timeline needs it to place the card inside its run and to drop anything the agent
+    says after its own ending. Stored ALONGSIDE the payload, never inside it: `meta` stays the
+    verbatim `report_completion` call plus this one kernel-added key."""
     report = sink.get("report")
     if report:
+        rid = run_id if run_id is not None else _spine.running_run_id(context_id, item_id)
         _dev_store.log_event(context_id, "run.report",
                              f"{report['outcome']}: {report['summary'][:160]}",
-                             item_id=item_id, actor="agent", meta=report)
+                             item_id=item_id, actor="agent", meta={**report, "run_id": rid})
     return report
 
 
@@ -655,45 +724,51 @@ async def _run_deputy_feedback_turn(ctx, context_id: str, item_id: str, item_dir
     run_started = time.time()
     live = _LiveTokens()
     sink: dict = {}   # report_completion lands here (run_tools) — read after the turn
+    turn = ResilientTurn("deputy feedback", item_id=item_id,
+                         notify=retry_notice(context_id, item_id, phase))
+    async for ev in turn.stream(
+        _agent, ctx, prompt,
+        resume=session_id,   # RESUME — the deputy's turn lands in the item's own transcript
+        model=model,
+        effort=effort or _spine.effective_effort(context_id),
+        approve=scoped_writes_approve(item_dir, deny_all),
+        sandbox_writes=[item_dir],   # sandboxed shell; the item folder is its one outside write
+        extra_mcp_servers={**_dev_mcp(ctx, ctx.cwd, item_id),
+                           "run": make_run_report_server(sink)},
+        system_append=focus,   # Current-focus pointer incl. the run protocol
+    ):
+        if isinstance(ev, Usage):
+            live.bump(context_id, item_id, ev)
+        elif isinstance(ev, Result):
+            final_tokens, final_usage, final_session = (ev.tokens, ev.usage, ev.session_id)
+            _sessions.record(ctx, ev.session_id)
+            if ev.session_id:
+                try:
+                    _dev.set_work_item_session(dev_root, item_id, ev.session_id, role="intake")
+                    _spine.stamp_session_item(ev.session_id, item_id)
+                except Exception:
+                    log.exception("deputy feedback: failed to persist session to %s", item_id)
+        elif isinstance(ev, Init):
+            _cache_slash(ctx.id, ev.slash_commands)
+        if isinstance(ev, (Status, TextDelta, ToolResult)):
+            capture_event(context_id, ev, item_id=item_id)
+    # The `finally` this replaces guaranteed the run row closed even on a crash. `ResilientTurn`
+    # returns rather than raises, so the closing block below is reached on every path — including
+    # a spent retry ladder, where `turn.fault` names what beat us.
+    report = read_completion(context_id, item_id, sink)
+    stopped = turn.fault.failed and not report
+    if stopped:
+        mark_item_error(ctx, context_id, item_id, turn.fault.reason, phase=phase)
+    _end_run(ctx, context_id, item_id, final_tokens,
+             "error" if stopped else "awaiting_human", final_usage,
+             outcome="blocked" if stopped else (report or {}).get("outcome"),
+             session_id=final_session)
     try:
-        async for ev in _agent.run_turn(
-            ctx, prompt,
-            resume=session_id,   # RESUME — the deputy's turn lands in the item's own transcript
-            model=model,
-            effort=effort or _spine.effective_effort(context_id),
-            approve=scoped_writes_approve(item_dir, deny_all),
-            extra_mcp_servers={**_dev_mcp(ctx, ctx.cwd, item_id),
-                               "run": make_run_report_server(sink)},
-            system_append=focus,   # Current-focus pointer incl. the run protocol
-        ):
-            if isinstance(ev, Usage):
-                live.bump(context_id, item_id, ev)
-            elif isinstance(ev, (Status, ToolResult)):
-                _log_artifact(context_id, item_id, ev)
-            elif isinstance(ev, Result):
-                final_tokens, final_usage, final_session = (ev.tokens, ev.usage, ev.session_id)
-                _sessions.record(ctx, ev.session_id)
-                if ev.session_id:
-                    try:
-                        _dev.set_work_item_session(dev_root, item_id, ev.session_id, role="intake")
-                        _spine.stamp_session_item(ev.session_id, item_id)
-                    except Exception:
-                        log.exception("deputy feedback: failed to persist session to %s", item_id)
-            elif isinstance(ev, Init):
-                _cache_slash(ctx.id, ev.slash_commands)
-            if isinstance(ev, (Status, TextDelta, ToolResult)):
-                capture_event(context_id, ev, item_id=item_id)
+        bank_auto_checkpoint(ctx, item_id, since=run_started)
     except Exception:
-        log.exception("deputy feedback re-run turn failed for %s", item_id)
-    finally:
-        report = read_completion(context_id, item_id, sink)
-        _end_run(ctx, context_id, item_id, final_tokens, "awaiting_human", final_usage,
-                 outcome=(report or {}).get("outcome"), session_id=final_session)
-        try:
-            bank_auto_checkpoint(ctx, item_id, since=run_started)
-        except Exception:
-            log.exception("auto-checkpoint after deputy feedback failed")
-        log.info("deputy feedback re-run: done for %s (%s)", item_id, phase)
+        log.exception("auto-checkpoint after deputy feedback failed")
+    log.info("deputy feedback re-run: done for %s (%s%s)", item_id, phase,
+             f", {turn.fault.kind}" if turn.fault.failed else "")
 
 
 def fire_close_run(context_id: str, item_id: str, spine) -> bool:
@@ -773,47 +848,51 @@ async def _run_background_close(ctx, context_id: str, item_id: str, item_dir: Pa
     run_started = time.time()
     live = _LiveTokens()
     sink: dict = {}   # report_completion lands here (run_tools) — read after the turn
+    turn = ResilientTurn("auto-close", item_id=item_id,
+                         notify=retry_notice(context_id, item_id, "close"))
+    async for ev in turn.stream(
+        _agent, ctx, prompt,
+        resume=session_id,   # RESUME the intake thread — the closeout narrates the whole item
+        model=model,
+        effort=effort or _spine.effective_effort(context_id),
+        approve=scoped_writes_approve(item_dir, deny_all),
+        sandbox_writes=[item_dir],   # sandboxed shell; the item folder is its one outside write
+        extra_mcp_servers={**_dev_mcp(ctx, ctx.cwd, item_id),
+                           "run": make_run_report_server(sink)},
+        system_append=focus,   # Current-focus pointer incl. the run protocol
+    ):
+        if isinstance(ev, Usage):
+            live.bump(context_id, item_id, ev)
+        elif isinstance(ev, Result):
+            final_tokens, final_usage, final_session = (ev.tokens, ev.usage, ev.session_id)
+            _sessions.record(ctx, ev.session_id)
+            if ev.session_id:
+                try:
+                    _dev.set_work_item_session(dev_root, item_id, ev.session_id, role="intake")
+                    _spine.stamp_session_item(ev.session_id, item_id)
+                except Exception:
+                    log.exception("auto-close: failed to persist session to %s", item_id)
+        elif isinstance(ev, Init):
+            _cache_slash(ctx.id, ev.slash_commands)
+        if isinstance(ev, (Status, TextDelta, ToolResult)):
+            capture_event(context_id, ev, item_id=item_id)
+    report = read_completion(context_id, item_id, sink)
+    outcome = str((report or {}).get("outcome") or "")
+    # `active`, never `awaiting_human`: nobody is being paged. Clearance decides what happens
+    # next, and it is mechanical (the item is terminal a moment later, or retried).
+    stopped = turn.fault.failed and not outcome
+    if stopped:
+        mark_item_error(ctx, context_id, item_id, turn.fault.reason, phase="close")
+    _end_run(ctx, context_id, item_id, final_tokens, "error" if stopped else "active", final_usage,
+             outcome="blocked" if stopped else (outcome or None), session_id=final_session)
     try:
-        async for ev in _agent.run_turn(
-            ctx, prompt,
-            resume=session_id,   # RESUME the intake thread — the closeout narrates the whole item
-            model=model,
-            effort=effort or _spine.effective_effort(context_id),
-            approve=scoped_writes_approve(item_dir, deny_all),
-            extra_mcp_servers={**_dev_mcp(ctx, ctx.cwd, item_id),
-                               "run": make_run_report_server(sink)},
-            system_append=focus,   # Current-focus pointer incl. the run protocol
-        ):
-            if isinstance(ev, Usage):
-                live.bump(context_id, item_id, ev)
-            elif isinstance(ev, (Status, ToolResult)):
-                _log_artifact(context_id, item_id, ev)
-            elif isinstance(ev, Result):
-                final_tokens, final_usage, final_session = (ev.tokens, ev.usage, ev.session_id)
-                _sessions.record(ctx, ev.session_id)
-                if ev.session_id:
-                    try:
-                        _dev.set_work_item_session(dev_root, item_id, ev.session_id, role="intake")
-                        _spine.stamp_session_item(ev.session_id, item_id)
-                    except Exception:
-                        log.exception("auto-close: failed to persist session to %s", item_id)
-            elif isinstance(ev, Init):
-                _cache_slash(ctx.id, ev.slash_commands)
-            if isinstance(ev, (Status, TextDelta, ToolResult)):
-                capture_event(context_id, ev, item_id=item_id)
+        bank_auto_checkpoint(ctx, item_id, since=run_started)
     except Exception:
-        log.exception("auto-close run failed for %s", item_id)
-    finally:
-        report = read_completion(context_id, item_id, sink)
-        outcome = str((report or {}).get("outcome") or "")
-        # `active`, never `awaiting_human`: nobody is being paged. Clearance decides what happens
-        # next, and it is mechanical (the item is terminal a moment later, or retried).
-        _end_run(ctx, context_id, item_id, final_tokens, "active", final_usage,
-                 outcome=outcome or None, session_id=final_session)
-        try:
-            bank_auto_checkpoint(ctx, item_id, since=run_started)
-        except Exception:
-            log.exception("auto-checkpoint after auto-close failed")
+        log.exception("auto-checkpoint after auto-close failed")
+    # A STOPPED close run must not feed the clearance retry: that budget exists for a run that
+    # finished without reporting, and spending it on an outage would burn the item's last chances
+    # and then clear it with a knowledge gap nobody chose. `error` holds it for Resume instead.
+    if not stopped:
         _clear_or_retry(context_id, item_id, outcome)
 
 
@@ -907,68 +986,72 @@ async def _background_intake_run(ctx, context_id: str, item_id: str, item_dir: P
     run_started = time.time()
     live = _LiveTokens()   # dedupes the Usage stream by message_id for an accurate live estimate
     sink: dict = {}   # report_completion lands here (run_tools) — read after the turn
+    turn = ResilientTurn(f"background {skill}", item_id=item_id,
+                         notify=retry_notice(context_id, item_id, skill))
+    async for ev in turn.stream(
+        _agent, ctx, prompt,
+        resume=None,   # fresh pass — re-plan re-does the work, doesn't resume "already done"
+        model=model,
+        effort=effort or _spine.effective_effort(context_id),  # item → repo → system → medium
+        approve=scoped_writes_approve(item_dir, deny_all),
+        sandbox_writes=[item_dir],   # sandboxed shell; the item folder is its one outside write
+        extra_mcp_servers={**_dev_mcp(ctx, ctx.cwd, item_id),
+                           "run": make_run_report_server(sink)},
+        system_append=focus,   # Current-focus pointer incl. the run protocol
+    ):
+        if isinstance(ev, Usage):
+            live.bump(context_id, item_id, ev)
+        elif isinstance(ev, Result):
+            final_tokens = ev.tokens
+            final_usage = ev.usage
+            final_session = ev.session_id
+            _sessions.record(ctx, ev.session_id)
+            if ev.session_id:
+                try:
+                    _dev.set_work_item_session(dev_root, item_id, ev.session_id,
+                                               role="intake")
+                    # Reverse stamp: the fresh background intake session is a work-item session,
+                    # born here — stamp its durable identity (work-item-session-recognition-prd)
+                    # + its ROLE (plan phase ⇒ intake, §1.3).
+                    _spine.stamp_session_item(ev.session_id, item_id)
+                    _spine.stamp_session_kind(ev.session_id, "intake")
+                except Exception:
+                    log.exception("background %s: failed to persist session to %s" % (skill, item_id))
+                # The replaced thread is superseded — delete it so the picker stays clean; its
+                # run trace is preserved + labeled 'retired'.
+                if prev_session and prev_session != ev.session_id:
+                    _sessions.delete(ctx, prev_session, cause="retired")
+        elif isinstance(ev, Init):
+            _cache_slash(ctx.id, ev.slash_commands)
+        # Per-run trail for the Activity trace: the reply text + each call + its output, keyed to
+        # this run (resolved from the item's running row). Parallel to the work-item run_artifact log.
+        if isinstance(ev, (Status, TextDelta, ToolResult)):
+            capture_event(context_id, ev, item_id=item_id)
+    # Structured completion (renovation §3.2): the run's report_completion payload, delivered
+    # through the sink and persisted onto the run row. A run that never called the tool is a
+    # legacy/unstructured ending — warned so drift is visible.
+    report = read_completion(context_id, item_id, sink)
+    if not report:
+        log.warning("background %s for %s ended without a report_completion call", skill, item_id)
+    # Background intake finished (or died). Finished ⇒ the item sits at the owner's pre-main gate
+    # (triage exit or plan), the one status that pages them (D2 typed awaiting). DIED ⇒ `error`
+    # (R2): resting a stopped run at `awaiting_human` claims a decision is wanted, and the owner
+    # would open the gate to find no report and no explanation.
+    stopped = turn.fault.failed and not report
+    if stopped:
+        mark_item_error(ctx, context_id, item_id, turn.fault.reason, phase=skill)
+    _end_run(ctx, context_id, item_id, final_tokens,
+             "error" if stopped else "awaiting_human", final_usage,
+             outcome="blocked" if stopped else (report or {}).get("outcome"),
+             session_id=final_session, summary=str((report or {}).get("summary") or ""))
+    # Session-end checkpoint hook: a background session ends here — bank the fallback if the
+    # run didn't write its own checkpoint.
     try:
-        async for ev in _agent.run_turn(
-            ctx, prompt,
-            resume=None,   # fresh pass — re-plan re-does the work, doesn't resume "already done"
-            model=model,
-            effort=effort or _spine.effective_effort(context_id),  # item → repo → system → medium
-            approve=scoped_writes_approve(item_dir, deny_all),
-            extra_mcp_servers={**_dev_mcp(ctx, ctx.cwd, item_id),
-                               "run": make_run_report_server(sink)},
-            system_append=focus,   # Current-focus pointer incl. the run protocol
-        ):
-            if isinstance(ev, Usage):
-                live.bump(context_id, item_id, ev)
-            elif isinstance(ev, (Status, ToolResult)):
-                _log_artifact(context_id, item_id, ev)
-            elif isinstance(ev, Result):
-                final_tokens = ev.tokens
-                final_usage = ev.usage
-                final_session = ev.session_id
-                _sessions.record(ctx, ev.session_id)
-                if ev.session_id:
-                    try:
-                        _dev.set_work_item_session(dev_root, item_id, ev.session_id,
-                                                   role="intake")
-                        # Reverse stamp: the fresh background intake session is a work-item session,
-                        # born here — stamp its durable identity (work-item-session-recognition-prd)
-                        # + its ROLE (plan phase ⇒ intake, §1.3).
-                        _spine.stamp_session_item(ev.session_id, item_id)
-                        _spine.stamp_session_kind(ev.session_id, "intake")
-                    except Exception:
-                        log.exception("background %s: failed to persist session to %s" % (skill, item_id))
-                    # The replaced thread is superseded — delete it so the picker stays clean; its
-                    # run trace is preserved + labeled 'retired'.
-                    if prev_session and prev_session != ev.session_id:
-                        _sessions.delete(ctx, prev_session, cause="retired")
-            elif isinstance(ev, Init):
-                _cache_slash(ctx.id, ev.slash_commands)
-            # Per-run trail for the Activity trace: the reply text + each call + its output, keyed to
-            # this run (resolved from the item's running row). Parallel to the work-item run_artifact log.
-            if isinstance(ev, (Status, TextDelta, ToolResult)):
-                capture_event(context_id, ev, item_id=item_id)
+        bank_auto_checkpoint(ctx, item_id, since=run_started)
     except Exception:
-        log.exception("background %s run failed for %s", skill, item_id)
-    finally:
-        # Structured completion (renovation §3.2): the run's report_completion payload, delivered
-        # through the sink and persisted onto the run row. A run that never called the tool is a
-        # legacy/unstructured ending — warned so drift is visible.
-        report = read_completion(context_id, item_id, sink)
-        if not report:
-            log.warning("background %s for %s ended without a report_completion call", skill, item_id)
-        # Background intake finished (or died) — the item sits at the owner's pre-main gate (triage
-        # exit or plan), the one status that pages them (D2 typed awaiting).
-        _end_run(ctx, context_id, item_id, final_tokens, "awaiting_human", final_usage,
-                 outcome=(report or {}).get("outcome"), session_id=final_session,
-                 summary=str((report or {}).get("summary") or ""))
-        # Session-end checkpoint hook: a background session ends here — bank the fallback if the
-        # run didn't write its own checkpoint.
-        try:
-            bank_auto_checkpoint(ctx, item_id, since=run_started)
-        except Exception:
-            log.exception("auto-checkpoint after background %s failed", skill)
-        log.info("background %s: done for %s", skill, item_id)
+        log.exception("auto-checkpoint after background %s failed", skill)
+    log.info("background %s: done for %s%s", skill, item_id,
+             f" ({turn.fault.kind})" if turn.fault.failed else "")
 
 
 async def _run_background_resolve(ctx, context_id: str, item_id: str, worktree: Path,
@@ -991,28 +1074,26 @@ async def _run_background_resolve(ctx, context_id: str, item_id: str, worktree: 
     final_session = None
     run_started = time.time()
     live = _LiveTokens()
-    try:
-        async for ev in _agent.run_turn(
-            ctx, prompt,
-            resume=None,
-            model=model,
-            effort=effort or _spine.effective_effort(context_id),
-            approve=scoped_writes_approve(worktree, deny_all),
-            extra_mcp_servers=_dev_mcp(ctx, worktree, item_id),  # F8-residual: dev tools mounted
-        ):
-            if isinstance(ev, Usage):
-                live.bump(context_id, item_id, ev)
-            elif isinstance(ev, (Status, ToolResult)):
-                _log_artifact(context_id, item_id, ev)
-            elif isinstance(ev, Result):
-                final_tokens = ev.tokens
-                final_usage = ev.usage
-                final_session = ev.session_id
-                _sessions.record(ctx, ev.session_id)
-            if isinstance(ev, (Status, TextDelta, ToolResult)):
-                capture_event(context_id, ev, item_id=item_id)
-    except Exception:
-        log.exception("background resolve run failed for %s", item_id)
+    turn = ResilientTurn("background resolve", item_id=item_id,
+                         notify=retry_notice(context_id, item_id, "resolve"))
+    async for ev in turn.stream(
+        _agent, ctx, prompt,
+        resume=None,
+        model=model,
+        effort=effort or _spine.effective_effort(context_id),
+        approve=scoped_writes_approve(worktree, deny_all),
+        sandbox_writes=[worktree],   # resolving a conflict is git + edits inside the tree, nothing more
+        extra_mcp_servers=_dev_mcp(ctx, worktree, item_id),  # F8-residual: dev tools mounted
+    ):
+        if isinstance(ev, Usage):
+            live.bump(context_id, item_id, ev)
+        elif isinstance(ev, Result):
+            final_tokens = ev.tokens
+            final_usage = ev.usage
+            final_session = ev.session_id
+            _sessions.record(ctx, ev.session_id)
+        if isinstance(ev, (Status, TextDelta, ToolResult)):
+            capture_event(context_id, ev, item_id=item_id)
     # Mechanically finish the merge — ground truth (marker scan + git state), not the agent's claim.
     resolved = False
     detail = ""
@@ -1049,6 +1130,13 @@ async def _run_background_resolve(ctx, context_id: str, item_id: str, worktree: 
                 # Never leave `active` with no run: rest it where the owner can see it instead.
                 _dev.set_work_item_status(dev_root, item_id, "awaiting_human")
                 log.warning("resolve: vet re-entry did not start for %s (%s)", item_id, why)
+    elif turn.fault.failed:
+        # The resolver never ran to completion — an outage, not a hard conflict. Same distinction
+        # as everywhere else (R2): "I tried and the conflict beat me" is a decision for the owner,
+        # "I never got to try" is a stop to resume. The merge is still in the tree either way.
+        mark_item_error(ctx, context_id, item_id, turn.fault.reason, phase="resolve")
+        _end_run(ctx, context_id, item_id, final_tokens, "error", final_usage,
+                 outcome=outcome, session_id=final_session)
     else:
         # Conflicts remain in the tree (deliberate — retry or manual abort); page the owner.
         _end_run(ctx, context_id, item_id, final_tokens, "awaiting_human", final_usage,
@@ -1090,11 +1178,16 @@ def _render_execution_md(context_id: str, item_id: str, item: dict) -> str:
     so the item folder carries its own copy after completion (the spine rows themselves are
     permanent — never-delete-logs). Chronological (oldest run
     first)."""
-    arts = _spine.artifacts_for_item(context_id, item_id)
+    # The item's whole trail, minus the turn TEXT — this snapshot is the call trail, and the
+    # prompt/reply rows belong to the conversation (the Trace tab renders them the same way).
+    # Reading `run_event` rather than the retired `run_artifact` copy also means the snapshot now
+    # includes the deputy's and the loop's runs, which the old feed dropped entirely.
+    arts = [e for e in _spine.events_for_item(context_id, item_id)
+            if e.get("kind") not in ("prompt", "reply")]
     runs = {r["id"]: r for r in _spine.run_history(context_id)}
     title = item.get("title") or item_id
     out = [f"# Execution trace — {title}", "",
-           f"Work-item `{item_id}` · archived {datetime.now().date().isoformat()}", ""]
+           f"Work-item `{item_id}` · snapshot taken {datetime.now().date().isoformat()}", ""]
     if not arts:
         return "\n".join(out + ["_No tool / sub-agent / skill calls were recorded._", ""])
     # `arts` is newest-run-first; collect run ids in that order, then emit oldest-first.
@@ -1113,6 +1206,10 @@ def _render_execution_md(context_id: str, item_id: str, item: dict) -> str:
         out += [head, ""]
         for a in calls:
             d = f" — {a['description']}" if a.get("description") else ""
-            out.append(f"{a['seq']}. **{a['name']}**{d}")
+            # A call made INSIDE a sub-agent is indented under its spawn, so the snapshot keeps
+            # the same shape the live trace shows — a flat list would read as the parent doing work
+            # three delegated readers actually did.
+            indent = "    " if a.get("parent_tool_id") else ""
+            out.append(f"{indent}{a['seq']}. **{a['name']}**{d}")
         out.append("")
     return "\n".join(out).rstrip() + "\n"

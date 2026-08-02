@@ -16,11 +16,12 @@ log = logging.getLogger("superme-agent")
 # Hold kinds → what quick actions the surface should offer (the FE reads `kind`):
 #   question   — the plan agent paused on clarifying questions → open chat (answer them)
 #   escalation — the deputy paged the owner with a runbook   → Proceed · go-to · Have it fixed
-#   breaker    — a build⟷vet breaker stopped the loop (WIP)  → Proceed (grant/continue) · go-to
 #   paged      — an upstream ended without completing         → go-to (decide the dependent's fate)
 #   review     — the normal review gate (vet green, waiting)  → go-to (Approve & merge)
 #   gate       — any other gate decision the owner owes       → go-to
-HOLD_KINDS = ("question", "escalation", "breaker", "paged", "review", "gate")
+# `breaker` was retired with the loop's parking state (2026-07-31): since "the loop never parks"
+# (loop.py, owner 2026-07-30) `decide_after_vet` has no `halt` action, so nothing could produce it.
+HOLD_KINDS = ("question", "escalation", "paged", "review", "gate")
 
 
 def _ask_card(raw) -> list[dict]:
@@ -62,9 +63,6 @@ def classify_hold(item: dict, events: list[dict]) -> dict:
         if kind.startswith("deputy.escalate"):
             return {"kind": "escalation", "reason": summary or "The deputy escalated this gate to you.",
                     "actor": "deputy"}
-        if kind == "loop.decision" and str(meta.get("action")) == "halt":
-            return {"kind": "breaker", "reason": summary or "The build⟷vet loop stopped with WIP preserved.",
-                    "actor": "daemon"}
         if "page" in kind or kind.startswith("scheduler"):
             return {"kind": "paged", "reason": summary or "An upstream item ended without completing.",
                     "actor": "daemon"}
@@ -75,12 +73,14 @@ def classify_hold(item: dict, events: list[dict]) -> dict:
         # generic gate. Derived from the item's own record; still pure.
         if item.get("git_pr_opened_at") and not item.get("git_merge_commit"):
             return {"kind": "review",
-                    "reason": "The PR is open and the merge is yours — read the diff on the PR "
-                              "page, then approve.",
+                    "reason": "Ready for your review and the PR is open",
                     "actor": "owner"}
-        return {"kind": "review", "reason": "Ready for your review — Approve & merge, or send back.",
+        return {"kind": "review", "reason": "Ready for your review",
                 "actor": "owner"}
-    return {"kind": "gate", "reason": f"Waiting for your decision at the {phase or 'current'} gate.",
+    # The phase name opens the sentence, so it is capitalized here — the value is a lowercase enum
+    # (`triage`), and a sentence the owner reads starts with a capital like any other.
+    return {"kind": "gate",
+            "reason": f"{(phase or 'current').capitalize()} is finished and waiting for your decision.",
             "actor": "owner"}
 
 

@@ -187,25 +187,9 @@ def artifact_file(artifact: str) -> str:
 ARTIFACT_READERS: dict[str, str] = {
     **{k: s["reader"] for k, s in _SPECS.items()},
     "prd": "both", "vet-report": "agent", "checkpoint": "agent", "notes": "agent",
-    "attempts": "agent", "gate-report": "user",
+    "attempts": "agent",
 }
 
-
-def reader_for_filename(name: str) -> str:
-    """Best-effort reader label for an on-disk artifact filename (files may predate stamping)."""
-    if _VET_REPORT_FILE.match(name) or _CYCLE_FILE.match(name):
-        return "agent"
-    if name.startswith("gate-report"):
-        return "user"
-    stem = {s["file"]: k for k, s in _SPECS.items()}.get(name)
-    if stem:
-        return ARTIFACT_READERS[stem]
-    if name == "prd.md":
-        return "both"
-    return "agent"
-
-
-# --------------------------------------------------------------------------- scaffold + self-check
 
 def _atomic_write(path: Path, text: str) -> None:
     """tmp + os.replace in the target dir — a reader never sees a half-written artifact."""
@@ -271,11 +255,26 @@ def _section_filled(body: str) -> bool:
 # structure); SOFT flags surface in the gate brief for the owner (judgment — a human is present,
 # the one place fail-open is correct).
 
+# Evidence PROVENANCE (design §4): who actually performed the check. `machine` = the kernel ran the
+# check's literal `run:` block in the sandbox; `agent` = a vetter did it and attested. Old entries
+# carry neither and read as `agent`, which is what they were.
+BY_MACHINE = "machine"
+BY_AGENT = "agent"
+
+# Ledger entry KINDS. A verdict answers "did this check pass"; a diagnosis answers "where and why
+# did it fail". They share the fence and the check id, and nothing else — see `diagnoses`.
+KIND_VERDICT = "verdict"
+KIND_DIAGNOSIS = "diagnosis"
+
 VET_DEPTHS = ("none", "checks", "scenarios")
 VET_MODES = ("command", "interaction", "inspection")
 _VET_CHECK_ID = re.compile(r"^[a-z0-9-]+$")
 _VET_HEADER_KEY = re.compile(r"^(depth|reason|env):\s*(.*)$")
-_VET_FIELD = re.compile(r"^-\s*(traces|mode|scenario|expect):\s*(.*)$")
+_VET_FIELD = re.compile(r"^-\s*(traces|covers|mode|scenario|run|expect):\s*(.*)$")
+# `run:` — the optional literal command the KERNEL executes for this check (design §4). One line,
+# because a check is one exit code: several steps join with `&&`. A scenario that cannot be said in
+# one line is exactly the scenario that stays agent-attested, so there is nothing to bend here.
+# The same grammar `## Inner checks` already uses — a command whose exit status decides it.
 _VET_CHECK_HEAD = re.compile(r"^###\s+(.+?)\s*$")
 # Vagueness heuristic for `expect` (soft): non-falsifiable filler words, or too short to pin
 # an observable outcome. A banned-word list is too brittle to BLOCK on — hence soft.
@@ -302,11 +301,17 @@ def parse_vet_plan(plan_text: str) -> dict:
         return {"present": False, "depth": "", "reason": "", "env": "", "checks": []}
     out: dict = {"present": True, "depth": "", "reason": "", "env": "", "checks": []}
     cur: dict | None = None
+    last = ""              # the field a wrapped continuation line belongs to
     for line in body.splitlines():
         h = _VET_CHECK_HEAD.match(line)
         if h:
-            cur = {"id": _vet_value(h.group(1)), "traces": "", "mode": "",
-                   "scenario": "", "expect": ""}
+            last = ""
+            # `covers` = the plan task id(s) this check defends — the Proof view's join key (§4.2).
+            # NOT a hard issue when absent: requiring it would retroactively fail every in-flight
+            # plan's self-check, the same trap `## Revisions`-in-the-template was. An untagged check
+            # lands in Proof's item-wide row.
+            cur = {"id": _vet_value(h.group(1)), "traces": "", "covers": "", "mode": "",
+                   "scenario": "", "run": "", "expect": ""}
             out["checks"].append(cur)
             continue
         if cur is None:
@@ -317,6 +322,12 @@ def parse_vet_plan(plan_text: str) -> dict:
             m = _VET_FIELD.match(line.strip())
             if m:
                 cur[m.group(1)] = _vet_value(m.group(2))
+                last = m.group(1)
+            elif last and line.startswith((" ", "\t")) and line.strip():
+                # A wrapped field — markdown folds it, so we do too. Without this the value stops
+                # mid-sentence, and `expect:` (the falsifiable condition, and the one field the
+                # owner reads at the plan gate) is exactly the field long enough to wrap.
+                cur[last] = (cur[last] + " " + line.strip()).strip()
     return out
 
 
@@ -498,15 +509,6 @@ def parse_tasks(plan_text: str) -> list[dict]:
             for m in _TASK_LINE.finditer(body)]
 
 
-def parse_behavior_preview(plan_text: str) -> dict:
-    """plan.md's `## Behavior preview` → {before, after} (the two fenced blocks, in order).
-    Absent/unfilled → empty strings."""
-    body = _split_sections(plan_text).get("Behavior preview", "")
-    blocks = [b for b in _fenced_blocks(body) if not FILL.search(b)]
-    return {"before": blocks[0].strip() if blocks else "",
-            "after": blocks[1].strip() if len(blocks) > 1 else ""}
-
-
 _DECISION_HEAD = re.compile(r"^### (?P<ts>\S+) — (?P<q>.+)$", re.M)
 
 
@@ -534,19 +536,104 @@ def parse_decisions(plan_text: str) -> list[dict]:
     return out
 
 
-def parse_assumptions(plan_text: str) -> list[str]:
-    """plan.md's `## Risks & assumptions` bullets → one string per line (unfilled slots and a
-    lone 'none' skipped)."""
-    body = _split_sections(plan_text).get("Risks & assumptions", "")
-    out = []
-    for line in body.splitlines():
-        m = re.match(r"^\s*[-*]\s+(.+?)\s*$", line)
-        if not m:
-            continue
-        val = _vet_value(m.group(1))
-        if val and val.lower() not in ("none", "none.", "—"):
-            out.append(val)
-    return out
+_LABEL_LINE = re.compile(r"^\*\*[^*]+:\*\*")
+
+
+def _space_labels(text: str) -> str:
+    """Put a blank line before every `**Label:**` block that doesn't already have one.
+
+    Reports are agent-COPIED from a template, so their line spacing is prose, not structure — and
+    markdown is unforgiving about it: two label lines in a row fold into one paragraph ("…the print
+    path. **Key points:**"), and a label line under a bullet becomes a lazy continuation OF that
+    bullet. The templates now carry the blank lines, but a template is a suggestion to a model and
+    this is the read path both the owner's Reports tab and the deputy go through, so normalize here
+    rather than trust every future author. Fences are left alone — a blank line inside one is
+    content."""
+    out: list[str] = []
+    fenced = False
+    for line in text.split("\n"):
+        if line.lstrip().startswith("```"):
+            fenced = not fenced
+        elif not fenced and _LABEL_LINE.match(line) and out and out[-1].strip():
+            out.append("")
+        out.append(line)
+    return "\n".join(out)
+
+
+# A value that means the author had nothing to say. Every template tells them to DELETE the block
+# instead; this is what happens when they don't.
+_DEAD_VALUES = {"", "none", "none.", "n/a", "na", "-", "—", "nothing", "(none)",
+                "(first run — n/a)", "(first run - n/a)", "first run — n/a", "first run - n/a"}
+_HEADING = re.compile(r"^#{1,6}\s")
+
+
+def _drop_dead_blocks(text: str) -> str:
+    """Delete `**Label:** none` blocks and an empty `## Changed since …` section on the READ path.
+
+    A report is agent-copied from a template, and every template says to delete a block it has
+    nothing to put under. Two of them survived in the very first report the owner read ("Needs your
+    attention: none." and a "Changed since v<n>" holding "(first run — n/a)") — lines that exist
+    only to say nothing, in a document whose whole budget is half a screen. Instructions to a model
+    are a suggestion; this is the one read path both the Reports tab and the deputy go through, so
+    the hygiene lands here, same reasoning as `_space_labels`.
+
+    Deliberately literal: a block goes only when its value is one of a short list of dead tokens.
+    Anything with real content — even one word — is left exactly as written."""
+    lines, out = text.split("\n"), []
+    i, fenced = 0, False
+    while i < len(lines):
+        line = lines[i]
+        if line.lstrip().startswith("```"):
+            fenced = not fenced
+        if not fenced and _LABEL_LINE.match(line):
+            value = line.split(":**", 1)[1].strip()
+            # A label whose value is on the FOLLOWING lines (bullets etc.) is never dead — only a
+            # same-line value can be, and only if the block ends right there.
+            nxt = lines[i + 1].strip() if i + 1 < len(lines) else ""
+            if value.lower() in _DEAD_VALUES and not nxt:
+                i += 2                      # drop the label line and its trailing blank
+                while out and not out[-1].strip():
+                    out.pop()               # …and the blank that preceded it
+                out.append("")
+                continue
+        if not fenced and _HEADING.match(line) and "changed since" in line.lower():
+            body = [ln for ln in lines[i + 1:] if not _HEADING.match(ln)]
+            joined = "\n".join(body).strip().strip("()").strip().lower()
+            # "first run" is its own family of phrasings ("(first run)", "first run — n/a", …) and
+            # they all mean the same nothing, so this one gets a prefix match rather than another
+            # entry in the token list every time an author words it differently.
+            if joined in _DEAD_VALUES or joined.startswith("first run"):
+                break                       # nothing after it but the dead section
+        out.append(line)
+        i += 1
+    return "\n".join(out).rstrip() + "\n"
+
+
+def report_text(item_dir: Path, phase: str) -> dict | None:
+    """A phase's user-facing report, for the two surfaces that read it: the drilldown's Reports tab
+    and the deputy's prompt (§2.1 — the deputy reads what the owner reads). Returns
+    {phase, name, text, path, mtime, contract} or None when that phase hasn't written one.
+
+    `contract` is the RELATIVE path to the phase's full agent-facing artifact — §4.3's "Open full
+    contract", and the deputy's on-demand read. The report is the compact projection; the contract is
+    the whole thing, never pasted into it (§3.3 keeps them two documents). Review and close have no
+    separate contract: their report IS the record."""
+    path = Path(item_dir) / "reports" / f"report-{phase}.md"
+    if not path.is_file():
+        return None
+    contract = {"triage": "artifacts/brief.md", "plan": "artifacts/plan.md",
+                "investigate": "artifacts/investigation.md"}.get(phase)
+    if phase in ("build", "vet"):
+        # The cycle the report covers is the newest one — build and vet both project the same file.
+        reports = cycle_reports(item_dir)
+        contract = f"artifacts/{Path(reports[-1]['path']).name}" if reports else None
+    try:
+        st = path.stat()
+    except OSError:
+        return None
+    return {"phase": phase, "name": f"report-{phase}",
+            "text": _drop_dead_blocks(_space_labels(path.read_text())),
+            "path": str(path), "mtime": st.st_mtime, "contract": contract}
 
 
 def report_issues(item_dir: Path, name: str) -> list[str]:
@@ -581,22 +668,6 @@ def owner_decision(item_dir: Path) -> str:
         return ""
     value = m.group(1).strip()
     return "" if FILL.search(value) else value
-
-
-def gate_report_issues(item_dir: Path, phase: str = "plan") -> list[str]:
-    """The slot check on a generated gate report (`artifacts/gate-report-<phase>.html`): file
-    present + no template placeholder left unfilled. Itemized like every gate check."""
-    path = Path(item_dir) / "artifacts" / f"gate-report-{phase}.html"
-    if not path.is_file():
-        return [f"gate-report-{phase}.html does not exist — render it from the skill's template"]
-    # Strip html comments first — the template documents its own slots in a comment header,
-    # and documentation is not an unfilled slot.
-    text = re.sub(r"<!--.*?-->", "", path.read_text(), flags=re.DOTALL)
-    left = sorted(set(_REPORT_SLOT.findall(text)))
-    if left:
-        return [f"gate-report-{phase}.html has unfilled template slot(s): "
-                + ", ".join(left[:8])]
-    return []
 
 
 def self_check(item_dir: Path, artifact: str, *, item_kind: str | None = None,
@@ -761,7 +832,8 @@ def _parse_ledger_entries(text: str) -> list[dict]:
             cur = {"ts": m.group("ts"), "check": m.group("check")}
             entries.append(cur)
         elif cur is not None:
-            kv = re.match(r"^- (how|result|note|passed|deferred|fingerprint): (.*)$", line)
+            kv = re.match(r"^- (how|result|note|by|kind|where|why|unknown|passed|deferred|"
+                          r"fingerprint): (.*)$", line)
             if kv:
                 k, v = kv.group(1), kv.group(2).strip()
                 cur[k] = (v == "true") if k in ("passed", "deferred") else v
@@ -770,13 +842,20 @@ def _parse_ledger_entries(text: str) -> list[dict]:
 
 def record_verification(item_dir: Path, repo_dir: Path | None, *, check: str, how: str,
                         result: str, passed: bool, deferred: bool = False, note: str = "",
-                        title: str = "") -> dict:
+                        title: str = "", by: str = BY_AGENT) -> dict:
     """Append one machine entry to the current cycle report's `§Verification` check fence
     (renovation §3.1 — the fence replaces the retired validation.md ledger; scaffolds the cycle
     file first if none exists): check + how it ran + the machine result + pass/fail + the repo
     fingerprint at record time. Entries are APPEND-ONLY; 'verified' is derived from them, never
     asserted. The `check` MUST be an exact verification-plan id when the plan has one (B4) — see
     _resolve_evidence_check. `note` is the one-line expected-vs-actual context for a failure.
+
+    `by` is the entry's PROVENANCE (design §4): `machine` when the kernel executed the check's
+    literal `run:` block itself, `agent` when a vetter performed it and attested to the result.
+    Both are legitimate evidence; they are not equally strong, and a reader who cannot tell them
+    apart is reading a weaker record than they think. A machine entry already written this cycle
+    is FINAL — a later agent record against the same check is refused, because the one property
+    that makes kernel execution worth having is that nothing downstream can revise it.
 
     `deferred=True` (BV-A2) records a check the build could NOT satisfy because it needs an
     authorization it lacks: it is neither pass nor fail — it advances the item to review with the
@@ -809,25 +888,102 @@ def record_verification(item_dir: Path, repo_dir: Path | None, *, check: str, ho
     reports = cycle_reports(item_dir)
     cy = ({"cycle": reports[-1]["cycle"], "path": reports[-1]["path"]}
           if reports else scaffold_cycle(item_dir, title=title))
+    # A machine entry is the cycle's final word on that check. Without this an agent could re-record
+    # over a red kernel result and the loop would advance on the agent's version — which would make
+    # kernel execution decorative rather than load-bearing.
+    if by != BY_MACHINE and any(e["check"] == check and e.get("by") == BY_MACHINE
+                                for e in evidence_entries(item_dir)
+                                if e.get("cycle") == cy["cycle"]):
+        raise ValueError(
+            f"check {check!r} was executed by the kernel this cycle — that result stands and "
+            "cannot be re-recorded. Read it, judge the rest, and if you believe it is wrong say "
+            "so in your report; the plan's `run:` block is what changes it, not a second entry.")
     ts = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     fp = repo_fingerprint(repo_dir)
     entry = (f"### {ts} — {check}\n"
              f"- how: {how}\n"
              f"- result: {result}\n"
              + (f"- note: {note}\n" if note else "")
+             + f"- by: {by}\n"
              + f"- passed: {'true' if passed else 'false'}\n"
              + ("- deferred: true\n" if deferred else "")
              + f"- fingerprint: {fp}\n")
     _append_to_section(Path(cy["path"]), "Verification", entry, in_checks_fence=True)
-    return {"ts": ts, "check": check, "passed": passed, "deferred": deferred,
+    return {"ts": ts, "check": check, "passed": passed, "deferred": deferred, "by": by,
             "fingerprint": fp, "cycle": cy["cycle"]}
 
 
+def record_diagnosis(item_dir: Path, *, check: str, where: str, why: str,
+                     unknown: str = "") -> dict:
+    """Append vet's DIAGNOSIS of a failed check (design §5): where it broke, why, and what could
+    not be determined. Never the fix — build reasons that out inside the same plan, because a
+    remedy named here is a remedy vet then grades itself on.
+
+    Refused unless the check's latest verdict is an actual failure: a diagnosis of a passing check
+    is noise in the one place the next build cycle is told to look, and a diagnosis of a deferral
+    invents a cause for work nobody did.
+
+    `unknown` is optional and load-bearing when present — "the request never reached the handler,
+    and I could not tell whether the router or the middleware dropped it" is a better handoff than
+    a confident guess. Silence about the limits of the evidence is how a build cycle gets sent
+    somewhere the vetter never actually looked."""
+    item_dir = Path(item_dir)
+
+    def _one_line(s: str) -> str:
+        return " ".join((s or "").split())
+    check, where, why, unknown = (_one_line(check), _one_line(where), _one_line(why),
+                                  _one_line(unknown))
+    if not (check and where and why):
+        raise ValueError("a diagnosis needs the check, `where` (the narrowest located source) and "
+                         "`why` (the mechanism, as far as the evidence supports it)")
+    latest = {e["check"]: e for e in evidence_entries(item_dir)}
+    e = latest.get(check)
+    if e is None:
+        raise ValueError(f"check {check!r} has no recorded verdict — record the result first; a "
+                         "diagnosis explains a failure that is already on the record")
+    if e.get("passed") or e.get("deferred"):
+        raise ValueError(f"check {check!r} is not failing — a diagnosis explains a FAILURE. If you "
+                         "have a concern about a passing check, it belongs in your report's "
+                         "observations, where the review gate reads it")
+    reports = cycle_reports(item_dir)
+    if not reports:
+        raise ValueError("no cycle report to record into")
+    cy = reports[-1]
+    entry = (f"### {datetime.now().strftime('%Y-%m-%dT%H:%M:%S')} — {check}\n"
+             f"- kind: {KIND_DIAGNOSIS}\n"
+             f"- where: {where}\n"
+             f"- why: {why}\n"
+             + (f"- unknown: {unknown}\n" if unknown else ""))
+    _append_to_section(Path(cy["path"]), "Verification", entry, in_checks_fence=True)
+    return {"check": check, "where": where, "why": why, "unknown": unknown, "cycle": cy["cycle"]}
+
+
+def undiagnosed_failures(item_dir: Path) -> list[str]:
+    """Checks whose latest verdict is a failure with no diagnosis in that same cycle — the vet
+    report's closing bar (design §5). Same-cycle, deliberately: a check that failed in c1 and fails
+    again in c3 needs c3's reading, because the code moved in between and last cycle's cause may
+    have been fixed and replaced by another."""
+    latest = {e["check"]: e for e in evidence_entries(item_dir)}
+    diag = diagnoses(item_dir)
+    return [c for c, e in latest.items()
+            if not e.get("passed") and not e.get("deferred")
+            and diag.get(c, {}).get("cycle") != e.get("cycle")]
+
+
 def evidence_entries(item_dir: Path) -> list[dict]:
-    """Every recorded check entry, in record order: each cycle report's §Verification fence, in
-    cycle order. One derived view, so evidence_status and the briefs never care where an entry
-    lives. (`validation.md` — the pre-renovation ledger — is retired; a still-open item carrying
-    one predates the loop entirely and has no live cycle to gate.)"""
+    """Every recorded VERDICT, in record order: each cycle report's §Verification fence, in cycle
+    order. One derived view, so evidence_status and the briefs never care where an entry lives.
+    (`validation.md` — the pre-renovation ledger — is retired; a still-open item carrying one
+    predates the loop entirely and has no live cycle to gate.)
+
+    Diagnosis entries share the fence but are NOT verdicts and are filtered out here — every caller
+    (freshness, the loop's convergence fingerprint, the check table) counts verdicts, and a
+    diagnosis leaking into that count would read as a second, failing entry."""
+    return [e for e in _ledger(item_dir) if e.get("kind", KIND_VERDICT) == KIND_VERDICT]
+
+
+def _ledger(item_dir: Path) -> list[dict]:
+    """Every entry in the §Verification fences, verdicts and diagnoses alike, in record order."""
     entries: list[dict] = []
     for r in cycle_reports(item_dir):
         body = _split_sections(Path(r["path"]).read_text()).get("Verification", "")
@@ -835,6 +991,167 @@ def evidence_entries(item_dir: Path) -> list[dict]:
             for e in _parse_ledger_entries(block):
                 entries.append({**e, "cycle": r["cycle"]})
     return entries
+
+
+def diagnoses(item_dir: Path) -> dict[str, dict]:
+    """The latest diagnosis per check → {check: {where, why, unknown, cycle}} (design §5).
+
+    A diagnosis is a separate act from the verdict, deliberately: the verdict says a check failed,
+    the diagnosis says where and why — and for a kernel-run check the two even have different
+    authors (the daemon owns the exit code, vet owns the reading of it). Keeping them as one record
+    would mean either letting an agent rewrite a machine verdict to attach its reading, or leaving
+    machine failures undiagnosed. Both are worse than a second entry."""
+    out: dict[str, dict] = {}
+    for e in _ledger(item_dir):
+        if e.get("kind") == KIND_DIAGNOSIS:
+            out[e["check"]] = {"where": str(e.get("where") or ""),
+                               "why": str(e.get("why") or ""),
+                               "unknown": str(e.get("unknown") or ""),
+                               "cycle": e.get("cycle")}
+    return out
+
+
+# --- Proof: the connected view (renovation v2 §4.2) ------------------------------------------
+# One row per BUILT THING, each carrying its own validation → verification. A bare grid of check ids
+# tells the owner nothing; "this feature, proven this way" does. The join key is the plan's `## Tasks`
+# id: cycle §Built / §Validation bullets lead with `t<n> —`, and vet-plan checks name `covers:`.
+# Assembled mechanically — no LLM anywhere in this path.
+#
+# TOLERANT BY DESIGN. Untagged content is not dropped and not guessed at: it lands in the item-wide
+# row. Requiring the tags would fail every in-flight item, and a Proof view that silently omits work
+# is worse than one that admits it couldn't attribute it.
+# The id may be EMPHASIZED. Live finding (2026-07-30): every real cycle report on the playground
+# writes `- **t1** (\`file.py:49\`): …`, so a bare `t\d+` match found nothing and every bullet fell
+# into the item-wide row — the tolerant path hid the bug instead of failing it. Agents bold the id
+# because it reads better, and the format they actually produce is the one to parse.
+# `\b` sits BEFORE the closing emphasis, not after it: `t1**` followed by a space has no word
+# boundary after the asterisks, so a trailing `\b` makes the regex backtrack to consuming zero of
+# them and the `**` survives into the text.
+_TAGGED_BULLET = re.compile(r"^\s*[-*]\s*[*`_]{0,2}(t\d+)\b[*`_]{0,2}[\s—:.\-]*(.*)$")
+
+
+def _tagged_bullets(body: str) -> tuple[dict[str, list[str]], list[str]]:
+    """A report section's bullets split by leading task id → ({task: [text, …]}, [untagged, …]).
+    A bullet is a BLOCK: continuation lines belong to the bullet above (the template wraps long
+    ones, and the line-wise reading of exactly this shape is what corrupted a plan on 2026-07-28)."""
+    by_task: dict[str, list[str]] = {}
+    loose: list[str] = []
+    cur: list[str] | None = None
+    for line in (body or "").splitlines():
+        if FILL.search(line):     # an unfilled slot is not content
+            continue
+        m = _TAGGED_BULLET.match(line)
+        if m:
+            cur = by_task.setdefault(m.group(1), [])
+            cur.append(m.group(2).strip())
+        elif re.match(r"^\s*[-*]\s+\S", line):
+            cur = None
+            loose.append(line.strip().lstrip("-* ").strip())
+        elif line.strip() and cur is not None and cur:
+            cur[-1] = (cur[-1] + " " + line.strip()).strip()
+        elif line.strip() and cur is None and loose:
+            loose[-1] = (loose[-1] + " " + line.strip()).strip()
+    return {k: [v for v in vals if v] for k, vals in by_task.items()}, [v for v in loose if v]
+
+
+def proof_rows(item_dir: Path) -> list[dict]:
+    """The Proof view's rows → [{task, text, done, built[], validated[], verified[]}], the plan's
+    tasks in order, then one `task: ""` item-wide row for everything that named no task.
+
+    `verified` entries are the PLANNED checks — the plan's `## Verification plan` is the list, and a
+    recorded verdict is joined onto it. A check the loop hasn't reached yet is still a row (`ran:
+    False`), because the exam is decided at plan and the owner reads it there: rows that only appear
+    once vet has run left the Task tab empty at exactly the gate where the owner is asked whether
+    this proof is enough. A check is attached to a task when its `covers:` names it; one covering two
+    tasks appears under both — it genuinely proves both. The item-wide row also carries the
+    whole-item validation lines (a suite run isn't per-task) and any check that named nothing."""
+    item_dir = Path(item_dir)
+    plan_path = item_dir / "artifacts" / artifact_file("plan")
+    plan = plan_path.read_text() if plan_path.is_file() else ""
+    tasks = parse_tasks(plan)
+    checks = parse_vet_plan(plan).get("checks", [])
+    # check id → the task ids it defends, straight off the approved plan.
+    covers_of = {c["id"]: str(c.get("covers") or "") for c in checks}
+    built: dict[str, list[str]] = {}
+    validated: dict[str, list[str]] = {}
+    built_loose: list[str] = []
+    valid_loose: list[str] = []
+    for r in cycle_reports(item_dir):
+        sections = _split_sections(Path(r["path"]).read_text())
+        b, bl = _tagged_bullets(sections.get("Built", ""))
+        v, vl = _tagged_bullets(sections.get("Validation", ""))
+        for src, dst in ((b, built), (v, validated)):
+            for k, vals in src.items():
+                dst.setdefault(k, []).extend(vals)
+        built_loose += bl
+        valid_loose += vl
+
+    # Each check's pass/fail sequence by cycle, so the surface can render `c3 ✗→✓` — the one thing
+    # latest-per-check loses, and the whole point of showing a LOOP's proof rather than a snapshot.
+    history: dict[str, list[dict]] = {}
+    for e in evidence_entries(item_dir):
+        history.setdefault(e["check"], []).append(
+            {"cycle": e.get("cycle"), "passed": bool(e.get("passed"))})
+
+    # The planned exam, joined with whatever the loop has recorded. Planned order first; a recorded
+    # check the plan no longer declares still shows (a revision dropped it — the verdict is real and
+    # silently losing it would hide a result the owner may have already read).
+    verdicts = {r["check"]: r for r in verdict_rows(item_dir)}
+    # `by` on a PLANNED row is the promise, not the record: a check carrying a `run:` block will be
+    # executed by the kernel, and the owner reading the plan gate should see which parts of the exam
+    # are machine-decided before approving it. Once it runs, the ledger's own `by` overwrites this.
+    planned = [{"check": c["id"], "expect": str(c.get("expect") or ""),
+                "mode": str(c.get("mode") or ""), "ran": False,
+                "by": BY_MACHINE if c.get("run") else BY_AGENT,
+                "passed": False, "deferred": False, "cycle": None, "how": "", "result": ""}
+               for c in checks]
+    ordered = planned + [{"check": k, "expect": "", "mode": ""} for k in verdicts
+                         if k not in covers_of]
+    verified: dict[str, list[dict]] = {}
+    verified_loose: list[dict] = []
+    for base in ordered:
+        v = verdicts.get(base["check"])
+        row = {**base, **(v or {}), "ran": v is not None,
+               "history": history.get(base["check"], [])}
+        covers = re.findall(r"t\d+", covers_of.get(row["check"], ""))
+        if covers:
+            for t in covers:
+                verified.setdefault(t, []).append(row)
+        else:
+            verified_loose.append(row)
+
+    rows = [{"task": t["id"], "text": t["text"], "done": t["done"],
+             "built": built.get(t["id"], []), "validated": validated.get(t["id"], []),
+             "verified": verified.get(t["id"], [])}
+            for t in tasks]
+    if built_loose or valid_loose or verified_loose:
+        rows.append({"task": "", "text": "item-wide", "done": False, "built": built_loose,
+                     "validated": valid_loose, "verified": verified_loose})
+    return rows
+
+
+def verdict_rows(item_dir: Path) -> list[dict]:
+    """The LATEST verdict per check, in first-seen order → [{check, passed, deferred, cycle, how,
+    result}]. The vet's actual findings, which is what a review reader needs and what a count of
+    ledger entries can't say. Read by the review deputy's prompt (slice 6b) and the Proof view.
+
+    Latest-per-check, not every entry: a check that failed in c1 and passed in c3 IS passing, and
+    showing both rows invites the reader to average two contradictory facts. Same rule
+    `evidence_status` uses to decide freshness — one definition of "where this check stands"."""
+    latest: dict[str, dict] = {}
+    for e in evidence_entries(item_dir):
+        latest[e["check"]] = e
+    diag = diagnoses(item_dir)
+    return [{"check": c, "passed": bool(e.get("passed")), "deferred": bool(e.get("deferred")),
+             "cycle": e.get("cycle"), "how": str(e.get("how") or ""),
+             "result": str(e.get("result") or ""),
+             # Pre-provenance entries read as `agent` — that is what they were.
+             "by": str(e.get("by") or BY_AGENT),
+             # The located cause, joined from this cycle's diagnosis (empty on a passing check, and
+             # on a stale one from an earlier cycle — a cause the code has moved past misleads).
+             **{k: (diag.get(c, {}).get(k, "") if diag.get(c, {}).get("cycle") == e.get("cycle")
+                    else "") for k in ("where", "why", "unknown")}}
+            for c, e in latest.items()]
 
 
 # --- assumptions: RETIRED (workflow-renovation-v2 §3.1 demolition, 2026-07-27) --------------
@@ -1138,84 +1455,6 @@ def evidence_status(item_dir: Path, repo_dir: Path | None, *, scope_to_plan: boo
 # written at advance-to-review into a slot the owner had no reason to open twice.
 
 
-def author_review_report(item_dir: Path, repo_dir: Path | None, *, title: str = "",
-                         git_stats: dict | None = None, behind: int = 0) -> Path | None:
-    """Mechanically render `gate-report-review.html` at advance-to-review, the visual sibling of
-    author_readiness (B3). The review gate check requires this HTML report, but the review SKILL
-    only runs when a HUMAN drives the phase — so an autopilot item reached review with the report
-    missing and the deputy escalated 100% of clean items. This fills the review template's single
-    `{{DATA_JSON}}` slot from exactly the sources the skill uses (readiness/git stats, the evidence
-    ledger for the checks + delivered pane, plan.md for the promised pane) — every number counted,
-    never invented. NEVER raises (returns None on any trouble; the review skill can still render it
-    later). A review session may overwrite it with a richer, narrated version."""
-    try:
-        from ..runtime.config import DEV_PLUGIN_DIR
-        tmpl_path = DEV_PLUGIN_DIR / "skills" / "review" / "templates" / "gate-report.html"
-        template = tmpl_path.read_text()
-        item_dir = Path(item_dir)
-
-        # Checks + delivered pane straight off the evidence ledger (latest verdict per check).
-        latest: dict[str, dict] = {}
-        for e in evidence_entries(item_dir):
-            latest[e["check"]] = e
-        checks = [{"id": c, "pass": bool(e.get("passed"))} for c, e in latest.items()]
-        last_pass = next((e for e in reversed(evidence_entries(item_dir)) if e.get("passed")), None)
-        delivered = (last_pass or {}).get("result", "") or ""
-        status = evidence_status(item_dir, repo_dir).get("status", "unverified")
-        cycles = len(cycle_reports(item_dir))
-
-        # Promised pane + surface off the plan.
-        plan_path = item_dir / "artifacts" / artifact_file("plan")
-        plan_text = plan_path.read_text() if plan_path.is_file() else ""
-        # New-shape plans have no Behavior preview — the promised pane falls back to ## Intent.
-        promised = ""
-        if plan_text:
-            promised = (parse_behavior_preview(plan_text).get("after", "")
-                        or _split_sections(plan_text).get("Intent", "").strip())
-
-        # Warnings + recommendation, derived — never asserted.
-        warns: list[str] = []
-        if behind and int(behind) > 0:
-            warns.append(f"Branch is {int(behind)} commit(s) behind trunk — sync from main before merging.")
-        if status != "passed":
-            warns.append(f"Evidence ledger is not green (verdict: {status}).")
-        if status != "passed":
-            rec, reason = "Hold & fix", f"the evidence ledger is not green (verdict: {status})."
-        elif behind and int(behind) > 0:
-            rec, reason = "Hold & fix", f"sync from main first (branch is {int(behind)} commit(s) behind trunk)."
-        else:
-            rec, reason = "Merge", f"all {len(checks)} check(s) green and fresh over {cycles} vet cycle(s)."
-
-        st = git_stats or {}
-        data = {
-            "title": title or item_dir.name,
-            "item": item_dir.name,
-            "ask": f"Merging lands “{title or item_dir.name}” on the trunk.",
-            "recommendation": rec,
-            "reason": reason,
-            "warnings": warns,
-            "stats": {"files": st.get("files", 0), "insertions": st.get("insertions", 0),
-                      "deletions": st.get("deletions", 0), "tests": "n/a"},
-            "by_file": [{"path": f.get("path", ""), "plus": f.get("plus", 0), "minus": f.get("minus", 0)}
-                        for f in (st.get("by_file") or [])],
-            "surface": "",
-            "promised": promised,
-            "delivered": delivered,
-            "checks": checks,
-            "cycles": cycles,
-        }
-        # Compact single line, HTML-safe inside the <script type="application/json"> slot.
-        payload = json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
-        rendered = template.replace("{{DATA_JSON}}", payload)
-        out = item_dir / "artifacts" / "gate-report-review.html"
-        out.parent.mkdir(parents=True, exist_ok=True)
-        _atomic_write(out, rendered)
-        return out
-    except Exception:
-        log.exception("author_review_report failed for %s (review skill renders it instead)", item_dir)
-        return None
-
-
 # --------------------------------------------------------------------------- cycle reports (renovation §3.1)
 # ONE report per build⟷vet cycle: `artifacts/build-vet-<n>.md`, scaffolded from the build skill's
 # template at cycle start. Strictly sequential writers — build fills §Built/§Validation, the vet
@@ -1227,8 +1466,13 @@ _CYCLE_FILE = re.compile(r"^build-vet-(\d+)\.md$")
 _VET_REPORT_FILE = re.compile(r"^vet-report-(\d+)\.md$")   # legacy files — reader labeling only
 
 
+_CYCLE_REVISION = re.compile(r"(?m)^plan_revision:\s*(r\d+)\s*$")
+
+
 def cycle_reports(item_dir: Path) -> list[dict]:
-    """All cycle reports in cycle order: [{cycle, path}]."""
+    """All cycle reports in cycle order: [{cycle, path, revision}] — `revision` is the plan
+    revision the report was scaffolded under (`''` for the original plan), which is what scopes the
+    loop's guards to the current generation (§3-bis.4)."""
     adir = Path(item_dir) / "artifacts"
     if not adir.is_dir():
         return []
@@ -1236,7 +1480,9 @@ def cycle_reports(item_dir: Path) -> list[dict]:
     for p in adir.iterdir():
         m = _CYCLE_FILE.match(p.name)
         if m:
-            out.append({"cycle": int(m.group(1)), "path": str(p)})
+            rev = _CYCLE_REVISION.search(p.read_text()[:400])
+            out.append({"cycle": int(m.group(1)), "path": str(p),
+                        "revision": rev.group(1) if rev else ""})
     return sorted(out, key=lambda r: r["cycle"])
 
 
@@ -1322,12 +1568,15 @@ _OUTCOME_HEAD = re.compile(r"^### (?P<ts>\S+) — (?P<decision>\S+)$", re.MULTIL
 
 def append_cycle_outcome(item_dir: Path, *, evidence: str, decision: str, reason: str,
                          fingerprint: str = "", failed: list[str] | tuple = (),
-                         tokens: int | None = None, budget: int | None = None) -> dict | None:
+                         tokens: int | None = None, budget: int | None = None,
+                         loop_exit: str = "") -> dict | None:
     """Append one driver decision to the LATEST cycle report's §Cycle outcome (closing the cycle).
     `evidence` is the evidence_status verdict; `decision` what the driver did (review|build|revet|
-    halt); `fingerprint` the failure fingerprint (convergence-guard input); `tokens`/`budget` the
-    meter reading. Returns None (nothing recorded) when no cycle report exists yet — the DB
-    loop.decision event still carries the decision."""
+    halt); `loop_exit` the TYPED loop exit when this decision ended the loop (converged | budget |
+    not_converging | no_progress | system_fault) — the record a revision reads its `concerns` off
+    (§3-bis.3), so the tag is never guessed; `fingerprint` the failure fingerprint (convergence-guard
+    input); `tokens`/`budget` the meter reading. Returns None (nothing recorded) when no cycle report
+    exists yet — the DB loop.decision event still carries the decision."""
     def _one_line(s: str) -> str:
         return " ".join((s or "").split())
     reports = cycle_reports(item_dir)
@@ -1337,6 +1586,8 @@ def append_cycle_outcome(item_dir: Path, *, evidence: str, decision: str, reason
     entry = (f"### {ts} — {_one_line(decision)}\n"
              f"- evidence: {_one_line(evidence)}\n"
              f"- reason: {_one_line(reason)}\n")
+    if loop_exit:
+        entry += f"- exit: {_one_line(loop_exit)}\n"
     if fingerprint:
         entry += f"- fingerprint: {_one_line(fingerprint)}\n"
     if failed:
@@ -1347,12 +1598,18 @@ def append_cycle_outcome(item_dir: Path, *, evidence: str, decision: str, reason
     return {"ts": ts, "cycle": reports[-1]["cycle"], "decision": decision}
 
 
-def read_cycle_outcomes(item_dir: Path) -> list[dict]:
+def read_cycle_outcomes(item_dir: Path, *, revision: str | None = None) -> list[dict]:
     """Every driver decision across the cycle reports, in order: [{ts, cycle, decision, evidence,
-    reason, fingerprint?, failed?, tokens?}]. The convergence guard reads the last entry's
-    fingerprint; the stale guard the last entry's decision."""
+    reason, exit?, fingerprint?, failed?, tokens?}]. The convergence guard reads the last entry's
+    fingerprint; the stale guard the last entry's decision.
+
+    `revision` scopes the read to ONE generation (§3-bis.4): pass the plan's current revision and
+    only cycles scaffolded under it count, so three identical failures recorded before a redesign
+    no longer trip the recurrence guard after it. `None` reads the item's whole life."""
     out: list[dict] = []
     for r in cycle_reports(item_dir):
+        if revision is not None and r["revision"] != revision:
+            continue
         body = _split_sections(Path(r["path"]).read_text()).get("Cycle outcome", "")
         cur: dict | None = None
         for line in body.splitlines():
@@ -1362,7 +1619,7 @@ def read_cycle_outcomes(item_dir: Path) -> list[dict]:
                        "decision": m.group("decision")}
                 out.append(cur)
             elif cur is not None:
-                kv = re.match(r"^- (evidence|reason|fingerprint|failed|tokens): (.*)$", line)
+                kv = re.match(r"^- (evidence|reason|exit|fingerprint|failed|tokens): (.*)$", line)
                 if kv:
                     cur[kv.group(1)] = kv.group(2).strip()
     return out
@@ -1395,6 +1652,14 @@ def write_vet_user_report(item_dir: Path, repo_dir: Path | None, *, observations
             "(an unrecorded check doesn't exist)" for c in missing))
     if not by_check and not no_vet:
         raise ValueError("no checks recorded — record_verification for every plan check first")
+    # The diagnosis duty has its teeth here (design §5). A cycle that reports "3 checks failing"
+    # and nothing about WHERE sends the next build cycle hunting, which is the tax this whole
+    # stage exists to remove — and the report is the last moment anyone can still be asked.
+    if (undiag := undiagnosed_failures(item_dir)):
+        raise ValueError("; ".join(
+            f"check {c!r} is failing with no diagnosis this cycle — call record_diagnosis with "
+            "`where` it broke and `why`, so the next build cycle starts at the cause instead of "
+            "the symptom (never the fix: that is build's to reason out)" for c in undiag))
     ev = evidence_status(item_dir, repo_dir)
     checks = plan_ids + [c for c in by_check if c not in plan_ids]
     deferred_auth = {a["check"] for a in pending_authorizations(item_dir) if a.get("check")}
@@ -1404,14 +1669,18 @@ def write_vet_user_report(item_dir: Path, repo_dir: Path | None, *, observations
     rows, failed = [], []
     for c in checks:
         hist = by_check.get(c, [])
-        marks = " ".join(_mark(e) for e in hist)
         last = hist[-1] if hist else {}
-        res = _mark(last) if hist else "?"
+        # One cycle has no story to tell — `✓ (✓)` is the same mark twice. Show the sequence only
+        # when the check actually CHANGED across cycles (`✗→✓`), which is the whole reason a loop's
+        # proof beats a snapshot. Same rule the Proof pane uses, so the two agree.
+        marks = [_mark(e) for e in hist]
+        collapsed = [m for i, m in enumerate(marks) if i == 0 or m != marks[i - 1]]
+        res = "→".join(collapsed) if collapsed else "?"
         if hist and not last.get("passed") and not last.get("deferred"):
             failed.append(c)
         evid = " ".join(filter(None, [str(last.get("result") or "")[:160],
                                       str(last.get("note") or "")[:120]]))
-        rows.append(f"| `{c}` | {res} ({marks}) | {evid} |")
+        rows.append(f"| `{c}` | {res} | {evid} |")
     verdict = {"passed": "all checks green and fresh",
                "failed": f"{len(failed)} check(s) failing: " + ", ".join(failed),
                "stale": "green but STALE — code moved after the checks ran",
@@ -1433,9 +1702,18 @@ def write_vet_user_report(item_dir: Path, repo_dir: Path | None, *, observations
         changed = ", ".join(deltas) if deltas else "no verdict changes"
     body = skill_template("report-vet")
     body = re.sub(r"<!--.*?-->\n?", "", body, flags=re.DOTALL)   # authoring note, not report content
+    # What broke and where, for the failing checks only — a table because it is pairs, and the
+    # reader's question ("what do I look at") is answered by the WHERE column alone. `unknown` rides
+    # the same cell as the why: it is a qualifier on the reading, not a separate finding.
+    diag = diagnoses(item_dir)
+    drows = [f"| `{c}` | {d['where']} | {d['why']}"
+             + (f" _(undetermined: {d['unknown']})_" if d.get("unknown") else "") + " |"
+             for c in failed if (d := diag.get(c))]
+    diag_block = ("**What broke:**\n\n| check | where | why |\n|---|---|---|\n"
+                  + "\n".join(drows) + "\n") if drows else ""
     body = body.format(
         title=title or item_dir.name, verdict=verdict,
-        check_rows="\n".join(rows),
+        check_rows="\n".join(rows), diagnoses=diag_block,
         deferred=", ".join(f"`{c}`" for c in deferred_all) or "none",
         observations=(observations or "").strip() or "none",
         prev=max(cycle - 1, 0) or "0", changed=changed)
@@ -1479,43 +1757,6 @@ def convergence_fingerprint(item_dir: Path) -> str:
     if not failing:
         return ""
     return hashlib.sha1("\n".join(f"{c}|{sig}" for c, sig in failing).encode()).hexdigest()[:12]
-
-
-def loop_instruments(item_dir: Path, *, findings_cap: int = 2500) -> dict:
-    """The build⟷vet loop's live instrument panel (renovation §2 Loop row) — everything derived
-    from data the loop already writes, nothing stored: check ids in plan order · one verdict
-    column per cycle report's §Verification fence (the checks×cycles matrix) · the newest cycle's
-    failing entries (the expected-vs-actual the builder is working from) · the driver's §Cycle
-    outcome trail. Empty checks + cycles ⇒ the surface hides the panel."""
-    item_dir = Path(item_dir)
-    plan_path = item_dir / "artifacts" / artifact_file("plan")
-    vp = parse_vet_plan(plan_path.read_text()) if plan_path.is_file() else {"checks": []}
-    check_ids = [c["id"] for c in vp.get("checks", [])]
-    by_cycle: dict[int, dict[str, bool]] = {}
-    for e in evidence_entries(item_dir):
-        cyc = int(e.get("cycle") or 0)
-        by_cycle.setdefault(cyc, {})[e["check"]] = bool(e.get("passed"))
-        if e["check"] not in check_ids:   # review-routed checks appear mid-loop — keep them
-            check_ids.append(e["check"])
-    cycles = [{"cycle": c, "verdicts": v} for c, v in sorted(by_cycle.items()) if c > 0]
-    findings = None
-    if cycles and not all(cycles[-1]["verdicts"].values()):
-        last_cycle = cycles[-1]["cycle"]
-        fails = [e for e in evidence_entries(item_dir)
-                 if int(e.get("cycle") or 0) == last_cycle and not e.get("passed")
-                 and not e.get("deferred")]
-        latest_fail: dict[str, dict] = {}
-        for e in fails:
-            latest_fail[e["check"]] = e
-        body = "\n\n".join(
-            f"### {c}\n- result: {e.get('result', '')}"
-            + (f"\n- note: {e['note']}" if e.get("note") else "")
-            for c, e in latest_fail.items())
-        findings = body[:findings_cap] if body else None
-    attempts = [{"cycle": a["cycle"], "decision": a.get("decision", ""),
-                 "reason": a.get("reason", ""), "ts": a["ts"]}
-                for a in read_cycle_outcomes(item_dir)]
-    return {"checks": check_ids, "cycles": cycles, "findings": findings, "attempts": attempts}
 
 
 # --------------------------------------------------------------------------- checkpoints

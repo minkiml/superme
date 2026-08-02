@@ -5,6 +5,7 @@ import { getWorkItemTimeline, getDevLog, type WorkItemTimeline } from '@/lib/api
 import { useLive } from '@/lib/live'
 import { K } from '@/lib/live/keys'
 import type { TimelineFrame } from './hooks/useAgentSocket'
+import { useStickyScroll } from './useStickyScroll'
 
 // F2 — the unified work-item timeline: a READ-ONLY mirror of every phase agent's turns
 // (triage · plan · build · vet · review · close) in one chronological scroll, with handover
@@ -42,6 +43,7 @@ type Bubble = {
   phase: string | null
   text: string
   live?: boolean
+  run?: number | null     // which run said it — the attribution header prints once per (speaker, run)
   ts?: string             // event time — orders reports against turns
   report?: Report         // set ⇒ this entry renders as the closing card, not a speech bubble
 }
@@ -116,7 +118,6 @@ export default function TimelineView({
 }) {
   const [data, setData] = useState<WorkItemTimeline | null>(null)
   const [err, setErr] = useState<string | null>(null)
-  const scrollRef = useRef<HTMLDivElement | null>(null)
 
   // The deputy's channel presence (renovation §2.1) — TWO things, and only these two:
   //   `queries` — the exact text of each real turn it fired AT the agent (a send-back). Those are
@@ -155,16 +156,26 @@ export default function TimelineView({
     return says
   }, [logEvents])
   // Every phase run's closing card, oldest-first, from the `run.report` event's `user` payload.
-  // `meta` IS the report_completion payload (runs.read_completion / ws stores it whole), so the card
-  // reads `user` straight off it — no parsing, no FE-side reshaping.
-  const reports = useMemo(
-    () => logEvents
+  // `meta` IS the report_completion payload (runs.read_completion / ws stores it whole) plus the
+  // kernel's `run_id` stamp, so the card reads `user` straight off it — no parsing, no reshaping.
+  const reports = useMemo(() => {
+    // A report is written at its run's very END, so a row logged before the stamp existed belongs
+    // to the newest run that had already started when it landed. Oldest-first, so the last match wins.
+    const starts = (data?.runs ?? [])
+      .filter((r) => r.started_at)
+      .map((r) => ({ id: r.run_id, at: String(r.started_at) }))
+      .sort((a, b) => (a.at < b.at ? -1 : 1))
+    return logEvents
       .filter((e) => String(e.kind) === 'run.report')
       .map((e) => {
         const m = (e.meta ?? {}) as Record<string, any>
         const u = (m.user ?? {}) as Record<string, any>
+        const ts = String(e.created_at ?? '')
+        let run: number | null = typeof m.run_id === 'number' ? m.run_id : null
+        if (run == null) for (const s of starts) if (s.at <= ts) run = s.id
         return {
-          ts: String(e.created_at ?? ''),
+          ts,
+          run,                                 // which run this card ENDS
           report: {
             outcome: String(m.outcome ?? ''),
             summary: String(u.summary ?? m.summary ?? ''),
@@ -174,9 +185,8 @@ export default function TimelineView({
         }
       })
       .filter((r) => r.report.summary)
-      .reverse(),                            // the log is newest-first; the timeline reads oldest-first
-    [logEvents],
-  )
+      .reverse()                             // the log is newest-first; the timeline reads oldest-first
+  }, [logEvents, data])
 
   // Load authoritative history on open and whenever the parent bumps `refreshKey` (a run just
   // ended → its events are now in the trail). Liveness BETWEEN refreshes comes from `liveFrames`
@@ -199,11 +209,22 @@ export default function TimelineView({
       // its reply is private reasoning about work it wasn't part of. Skipped whole — what the
       // deputy says in the channel is its send-back turns and its decision headlines, both below.
       if (run.feature === 'deputy') continue
+      // `report_completion` IS the run's closing statement — the owner reads that card as its last
+      // word, so anything the agent types after the call is a restatement of it. The call sits in
+      // the trail, so the cut is exact and works on runs logged before any of this existed. (Time
+      // can't do this job: the run.report event is written at run END, i.e. after the extra line.)
+      // The full text stays in the run trail either way — that is a log. Interactive turns are
+      // exempt: there a person is in the room, so a reply after the report is a reply to them.
+      let ended = false
       let tools = 0
       for (const ev of run.events ?? []) {
+        if (ev.kind === 'mcp' && (ev.description || '').includes('report_completion')
+            && run.feature !== 'chat') ended = true
         if (ev.kind === 'reply') {
+          if (ended) continue
           out.push({ key: `r${run.run_id}-${ev.seq}`, speaker: replySpeaker(run.feature),
-                     phase: run.phase ?? null, text: ev.description || '', ts: ev.created_at })
+                     phase: run.phase ?? null, run: run.run_id ?? null,
+                     text: ev.description || '', ts: ev.created_at })
         } else if (ev.kind === 'prompt') {
           // A phase run's prompt is the internal kernel trigger — noise here. The exceptions are
           // the two prompts a PERSON authored: the owner's own interactive turn, and a deputy
@@ -213,7 +234,7 @@ export default function TimelineView({
           const fromDeputy = deputyQueries.includes(text.trim())
           if (run.feature === 'chat' || fromDeputy) {
             out.push({ key: `p${run.run_id}-${ev.seq}`, speaker: fromDeputy ? 'deputy' : 'you',
-                       phase: run.phase ?? null, text, ts: ev.created_at })
+                       phase: run.phase ?? null, run: run.run_id ?? null, text, ts: ev.created_at })
           }
         } else {
           tools += 1
@@ -249,7 +270,8 @@ export default function TimelineView({
       const seen = seenPerRun[rid] ?? 0
       seenPerRun[rid] = seen + 1
       if (seen < already) continue // this reply is already rendered from history
-      liveBubbles.push({ key: `live-${i}`, speaker: 'agent', phase: currentPhase, text: f.description || '', live: true })
+      liveBubbles.push({ key: `live-${i}`, speaker: 'agent', phase: currentPhase, run: rid,
+                        text: f.description || '', live: true })
     } else {
       liveTools += 1
     }
@@ -274,7 +296,7 @@ export default function TimelineView({
   for (const b of bubbles) {
     while (ri < reports.length && reports[ri].ts && b.ts && reports[ri].ts <= b.ts) {
       settled.push({ key: `rep-${ri}`, speaker: 'agent', phase: settled[settled.length - 1]?.phase ?? null,
-                     text: '', ts: reports[ri].ts, report: reports[ri].report })
+                     run: reports[ri].run, text: '', ts: reports[ri].ts, report: reports[ri].report })
       ri += 1
     }
     settled.push(b)
@@ -285,24 +307,26 @@ export default function TimelineView({
   }
   const all = [...settled, ...liveBubbles, ...decisionBubbles]
 
-  // Auto-scroll to the newest as content grows.
-  useEffect(() => {
-    const el = scrollRef.current
-    if (el) el.scrollTop = el.scrollHeight
-  }, [all.length, interactiveLive])
+  // Same scroll rule as the chat rail: follow the newest only while the owner is reading the bottom.
+  const { scrollRef, onScroll } = useStickyScroll([all.length, interactiveLive])
 
   return (
-    <div ref={scrollRef} className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-3 py-3">
+    <div ref={scrollRef} onScroll={onScroll} className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-3 py-3">
       {err && !data && <div className="px-1 text-[12px] text-danger">Couldn’t load the timeline — {err}</div>}
       {data && all.length === 0 && (
         <div className="px-1 pt-4 text-center text-[12px] text-faint">No turns yet — this item’s agents haven’t run.</div>
       )}
       {all.map((b, i) => {
-        const prevPhase = i > 0 ? all[i - 1].phase : null
-        const showDivider = b.phase && b.phase !== prevPhase
+        const prev = i > 0 ? all[i - 1] : null
+        const showDivider = b.phase && b.phase !== (prev?.phase ?? null)
         const sm = SPEAKER_META[b.speaker]
+        // ONE attribution per speaker per run (owner, 2026-08-02). A phase agent says four things
+        // in a row and they are one turn of one speaker — repeating "superme" above each made the
+        // column read as four separate arrivals. The header reappears when the speaker changes, the
+        // run changes, or a phase divider has just re-set the context.
+        const lead = showDivider || !prev || prev.speaker !== b.speaker || (prev.run ?? null) !== (b.run ?? null)
         return (
-          <div key={b.key}>
+          <div key={b.key} className={lead ? '' : '-mt-1'}>
             {showDivider && (
               <div className="my-2 flex items-center gap-2 text-[10px] font-medium uppercase tracking-wide text-faint">
                 <span className="h-px flex-1 bg-line" />
@@ -311,14 +335,18 @@ export default function TimelineView({
               </div>
             )}
             <div className="flex gap-2">
+              {/* The icon gutter is held even on a continuation row, so every bubble in a run stays
+                  on one left edge instead of stepping out when its header is dropped. */}
               <div className={`mt-0.5 shrink-0 ${sm.tint}`} title={sm.label}>
-                <sm.Icon size={14} />
+                {lead ? <sm.Icon size={14} /> : <span className="block h-[14px] w-[14px]" />}
               </div>
               <div className="min-w-0 flex-1">
-                <div className="mb-0.5 flex items-center gap-1.5 text-[10px] text-faint">
-                  <span className={sm.tint}>{sm.label}</span>
-                  {b.phase && <span>· {PHASE_LABEL[b.phase] ?? b.phase}</span>}
-                </div>
+                {lead && (
+                  <div className="mb-0.5 flex items-center gap-1.5 text-[10px] text-faint">
+                    <span className={sm.tint}>{sm.label}</span>
+                    {b.phase && <span>· {PHASE_LABEL[b.phase] ?? b.phase}</span>}
+                  </div>
+                )}
                 {b.report
                   ? <ReportCard r={b.report} />
                   : (

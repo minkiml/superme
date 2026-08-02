@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { Activity, RefreshCw, Loader2, ChevronDown, Link2Off } from 'lucide-react'
 import { colorFor, featureColor, featureLabel } from '@/lib/palette'
 import { RepoIcon } from '@/lib/repoIcons'
@@ -43,12 +43,20 @@ export default function GlobalActivity({
   // [...live, ...history] double-lists a running run (same id → duplicate React key, which also
   // breaks reconciliation so the stale row lingered until a full reload). Dedup by id, live first
   // so the running row wins.
-  const runs: Run[] | null = useMemo(() => {
+  const rows: Run[] | null = useMemo(() => {
     const d = feed.data
     if (!d) return null
     const seen = new Set<number>()
     return [...d.live, ...d.history].filter((r) => !seen.has(r.id) && seen.add(r.id))
   }, [feed.data])
+  // KEEP THE LAST GOOD PAGE ON SCREEN while a bigger one loads. `limit` is part of the cache key, so
+  // growing the page is a cache MISS: `feed.data` went undefined, the whole table unmounted for the
+  // "Loading…" spinner, and remounting reset the scroll container to the top — the owner clicked
+  // "Load 30 more" and got thrown back to row 1. Rows are keyed by id, so React reuses the existing
+  // DOM and only appends; the button's own spinner is the loading signal.
+  const lastGood = useRef<Run[] | null>(null)
+  if (rows) lastGood.current = rows
+  const runs = rows ?? lastGood.current
   // A full page of history back means there may be more to fetch.
   const hasMore = (feed.data?.history.length ?? 0) >= limit
 
@@ -188,6 +196,11 @@ function RunRow({ r, meta, last, onOpen }: { r: Run; meta: { label: string; colo
       </span>
       <span className="text-[11px] text-faint">{r.mode}</span>
       <span className="truncate text-[11px] text-muted" title={r.model ?? undefined}>{r.model ? fmtModel(r.model) : '—'}</span>
+      {/* `r.tokens` is ALREADY the 3-type display amount — `spine._run_dict` overrides it through
+          `_display_tokens` (input + cache_write + output, excluding cache_read) so every
+          run-returning surface reconciles with the token dashboard's default. Do NOT recompute it
+          here from typed columns: they are not on the wire, and a second definition of one number is
+          how the two surfaces drift apart. */}
       <span className="text-right font-mono text-[11px] text-muted">{fmtTokens(r.tokens)}</span>
       <span className="text-right font-mono text-[11px] text-faint">{took(r)}</span>
       <span className="text-right font-mono text-[11px] text-faint">{fmtLocal(r.started_at)}</span>

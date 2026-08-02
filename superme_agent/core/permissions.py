@@ -164,8 +164,10 @@ def _write_target_under(input_data: dict, root: Path) -> bool:
     return target == r or r in target.parents
 
 # File-reading tools the L2 read-guard scopes to the host's allowlist (context-model-spec §3).
-# Bash is deliberately NOT here — the SDK has no fs-sandbox mode, so shell reads are the accepted
-# ceiling (L3, deferred). This guard is defense-in-depth over the by-construction scoping.
+# Bash is deliberately NOT here: shell READS are the accepted ceiling. The OS sandbox (core.sandbox)
+# bounds where a command may WRITE and whether it may reach the network — it does not scope reads,
+# so an unlisted Bash here would still be the same hole. This guard is defense-in-depth over the
+# by-construction scoping.
 _READ_TOOLS = {"Read", "Grep", "Glob"}
 
 
@@ -501,7 +503,10 @@ def build_can_use_tool(approve: ApproveFn, *, blocked_skills: dict[str, str] | N
     boundary root a write AUTO-allows (the agent works autonomously in its own tree, "commits
     freely"); outside it hard-denies with the boundary explained (no human prompt — an outside
     write during build is an accident by construction). Cleared at terminal by simply not passing
-    it. Honest limit: accident-prevention, not security (Bash is not path-checkable).
+    it. This layer stays accident-prevention rather than security — a command string is not
+    path-checkable — but it is no longer the only wall: a run that also passes `sandbox_writes`
+    hands the same roots to the OS sandbox, where an out-of-boundary write fails as a syscall
+    (`core.sandbox`). Reading a command and constraining a process are different jobs; both run.
 
     The boundary governs `Bash` too, and must: an agent that has to ask before running its own
     tests isn't autonomous, and the build⟷vet loop can't run at all if every command parks

@@ -72,6 +72,10 @@ class WorkItem(BaseModel):
     inbox_id: int | None = None
     phase: WorkPhase | None = None
     status: WorkStatus | None = None
+    # Why the work stopped, in one owner-facing line. Present ONLY while `status == "error"` —
+    # cleared the moment the item leaves that status, so it can never describe a stop that was
+    # already resolved (recovery-resilience R2).
+    error_reason: str | None = None
     # Peer sequencing (autopilot slice 1): ids this item may not start before. Present when set;
     # an item with an open upstream rests at status `awaiting_upstream` until the scheduler releases.
     after: list[str] | None = None
@@ -83,8 +87,11 @@ class WorkItem(BaseModel):
     # (date → isoformat "YYYY-MM-DD" on serialize, exactly as the raw jsonable_encoder path did).
     done_at: date | str | None = None
     # --- git record (workspace-workflow S4/D4) --- written at build entry (branch + worktree +
-    # base) and at the review merge (merge commit + backup ref). A terminal item KEEPS the record
-    # minus the removed dir (the branch ref is trace — never deleted).
+    # base) and at the review merge (merge commit + backup ref). A terminal item KEEPS THE WHOLE
+    # record, `git_worktree` included: clearance removes the DIRECTORY but leaves the field as the
+    # record of where the work happened (`services/clearance.py` §2a). So on a closed item the path
+    # names a dir that no longer exists — that is the trace, not a stale value. The branch ref is
+    # likewise kept, never deleted.
     git_branch: str | None = None
     git_worktree: str | None = None
     git_base: str | None = None
@@ -98,9 +105,6 @@ class WorkItem(BaseModel):
     # the `unread` bucket. Never bumps updated_at. YAML round-trips the stamp as datetime, so
     # the union keeps it faithful (datetime → isoformat on serialize), same as done_at.
     seen_at: datetime | str | None = None
-    # Set once the item's loose artifact files were folded into `archive.zip` (the on-demand
-    # folder archive). A STORAGE fact, not a lifecycle state — the item stays done/completed.
-    archived_at: datetime | str | None = None
     artifacts: list[ArtifactRef] | None = None
     session_id: str | None = None
     created_at: date | str | None = None
@@ -136,7 +140,8 @@ class TaskItem(BaseModel):
 
 class ArtifactCall(BaseModel):
     """One row of a work-item's run call-trail (tool / sub-agent / skill invocation, or its result).
-    `tool_id` pairs a `result` row back to its call (concurrent tools return out of order)."""
+    `tool_id` pairs a `result` row back to its call (concurrent tools return out of order);
+    `parent_tool_id` names the sub-agent spawn the row happened inside (null = the parent itself)."""
     id: int
     run_id: int | None = None
     seq: int
@@ -144,6 +149,7 @@ class ArtifactCall(BaseModel):
     name: str
     description: str | None = None
     tool_id: str | None = None
+    parent_tool_id: str | None = None
     created_at: str
 
 
@@ -154,13 +160,6 @@ class PlanResponse(BaseModel):
     status: str
     id: str          # the planned work-item's id — named `id` to match every sibling WorkItem*Response
     model: str
-
-
-class WorkItemDeleteResponse(BaseModel):
-    ok: bool
-    id: str
-    session_cleared: bool
-    inbox_removed: int | None = None
 
 
 class PromptExtractionLink(BaseModel):
@@ -213,17 +212,23 @@ class WorkItemDetailResponse(BaseModel):
     checkpoints: list[CheckpointStub] | None = None
 
 
+class RunHeader(BaseModel):
+    """What one of an item's runs WAS — so a call-trail group can name itself. `feature` is the
+    answer to "why did this run open with a shell command instead of a phase skill": `chat` (an
+    owner turn), `resolve` (the conflict resolver), a resumed `build` cycle, `deputy`, `compact`."""
+    id: int
+    feature: str | None = None
+    phase: str | None = None
+    status: str | None = None
+    model: str | None = None
+    tokens: int = 0
+    started_at: str | None = None
+
+
 class WorkItemArtifactsResponse(BaseModel):
     artifacts: list[ArtifactCall]
+    runs: list[RunHeader] = []
 
-
-class WorkItemArchiveResponse(BaseModel):
-    """The on-demand folder archive of a DONE item — storage only, never a lifecycle change."""
-    ok: bool
-    id: str
-    archive: str          # the archive file, relative to the item folder
-    files: int            # how many loose files were folded in (0 on a repeat call)
-    already: bool = False # this item was already archived; nothing changed
 
 
 class TimelineEvent(BaseModel):
@@ -235,6 +240,7 @@ class TimelineEvent(BaseModel):
     name: str | None = None
     description: str | None = None
     tool_id: str | None = None
+    parent_tool_id: str | None = None   # the sub-agent spawn this row came from (null = the parent)
     created_at: str
 
 

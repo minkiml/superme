@@ -130,8 +130,9 @@ export default function QuickConfig({ stats }: { stats: CommandStats }) {
         <section className="mb-8">
           <div className="mb-1 text-[12px] font-semibold uppercase tracking-wider text-muted">Compaction</div>
           <p className="mb-3 text-[12px] text-faint">
-            When a work-item session auto-compacts. System-wide; each session still raises its own
-            effective trigger above its measured floor.
+            When a work-item session auto-compacts. System-wide — the runtime honours this number as
+            given; the per-session “observed floor + margin” lift was retired (it read the first fill
+            as a floor and a restart re-measured it mid-conversation).
           </p>
           <CompactionTuning />
         </section>
@@ -336,16 +337,31 @@ function ConfigRow({ title, hint, children }: { title: string; hint: string; chi
   )
 }
 
-// A compact labeled integer stepper with a unit suffix. The text is FREE while typing and clamps
-// to [min, max] only on blur/Enter — clamping per keystroke makes fields with a high `min`
-// untypeable (typing "60" into min=26 became 26 → 260 → 95 before the fix). The ± buttons still
-// clamp-commit instantly.
+// A compact labeled integer stepper with a unit suffix.
+//
+// Two rules, and they fought each other twice:
+//
+// 1. The text is FREE while typing — CLAMPING per keystroke makes a field with a high `min`
+//    untypeable (typing "60" into min=26 became 26 → 260 → 95).
+// 2. But an in-range keystroke must still REACH the parent, because the parent's `dirty` flag is
+//    what enables Apply. Deferring every commit to blur/Enter (the fix for rule 1) broke that: the
+//    owner typed 55, Apply stayed grey, and clicking it did nothing — the mousedown blurs the input
+//    and commits, but the browser does not dispatch a click to a button that was disabled when the
+//    press began, so the first click was always swallowed.
+//
+// So: propagate on every keystroke that parses INTO range, and clamp only on blur/Enter. An
+// out-of-range draft (mid-typing "6" toward "60") stays local until then, which is rule 1 intact.
 function NumberField({ value, min, max, unit, onChange }: {
   value: number; min: number; max: number; unit: string; onChange: (v: number) => void
 }) {
   const clamp = (v: number) => Math.max(min, Math.min(max, v))
   const [text, setText] = useState(String(value))
   useEffect(() => { setText(String(value)) }, [value])  // ± / reset / apply re-sync the draft
+  function type(raw: string) {
+    setText(raw)
+    const n = parseInt(raw, 10)
+    if (!Number.isNaN(n) && n >= min && n <= max && n !== value) onChange(n)
+  }
   function commit() {
     const n = parseInt(text, 10)
     const v = clamp(Number.isNaN(n) ? value : n)
@@ -363,7 +379,7 @@ function NumberField({ value, min, max, unit, onChange }: {
           value={text}
           min={min}
           max={max}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => type(e.target.value)}
           onBlur={commit}
           onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
           className="min-w-0 flex-1 bg-transparent text-right text-[13px] tabular-nums text-fg outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
@@ -489,8 +505,13 @@ function CompactionTuning() {
 
   return (
     <div className="space-y-3 rounded-xl border border-line bg-surface p-4">
-      <Row title="Trigger" hint={`context fill that fires auto-compaction (floor ${cfg.floor_pct}% — lower values are refused)`}>
-        <NumberField value={draft.trigger} min={cfg.floor_pct + 1} max={95} unit="%" onChange={(v) => setDraft((d) => ({ ...d, trigger: v }))} />
+      {/* `min` is the SERVER's accepted minimum, never `floor_pct + 1`. Clearing the incompressible
+          floor is not the same as leaving working room: a trigger just above it lands the session near
+          the floor and one exchange puts it straight back over, so it re-fires every turn (observed at
+          26%). Deriving the bound here was one rule in two places, and this copy allowed the value the
+          backend now refuses. */}
+      <Row title="Trigger" hint={`context fill that fires auto-compaction (min ${cfg.min_pct}% — the incompressible floor is ${cfg.floor_pct}%, plus room to work)`}>
+        <NumberField value={draft.trigger} min={cfg.min_pct} max={95} unit="%" onChange={(v) => setDraft((d) => ({ ...d, trigger: v }))} />
       </Row>
       <div className="h-px bg-line" />
       <Row

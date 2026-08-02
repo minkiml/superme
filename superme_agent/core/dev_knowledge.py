@@ -61,12 +61,16 @@ def _session_fields(meta: dict) -> tuple[dict, str | None]:
 # put what NEEDS THE OWNER first (awaiting_human), then runnable work, then routed waits, then done.
 _PHASE_RANK = {"triage": 0, "plan": 1, "build": 2, "investigate": 2,
                "vet": 3, "review": 4, "close": 5}
-_STATUS_RANK = {"awaiting_human": 0, "active": 1, "awaiting_child": 2,
-                "awaiting_upstream": 3, "awaiting_slot": 3, "done": 4}
+# `error` outranks even awaiting_human: an item whose work STOPPED is a louder claim than one
+# resting at a gate by design (recovery-resilience R2).
+_STATUS_RANK = {"error": 0, "awaiting_human": 1, "active": 2, "awaiting_child": 3,
+                "awaiting_upstream": 4, "awaiting_slot": 4, "done": 5}
 # Statuses that read as "this item is live" (non-terminal). A parked-on-a-peer or queued-for-a-slot
 # item IS live — nothing is asked of the owner, but the work is real and queued, so it belongs in
-# the board.
-_LIVE_STATUSES = ("active", "awaiting_child", "awaiting_upstream", "awaiting_slot", "awaiting_human")
+# the board. `error` is live too, and emphatically so: it is not terminal, it is work waiting to be
+# resumed or re-run — a dead-end item is exactly what this status exists to prevent.
+_LIVE_STATUSES = ("active", "awaiting_child", "awaiting_upstream", "awaiting_slot",
+                  "awaiting_human", "error")
 _SPAWN_RELATIONS = ("blocking", "parallel", "spawn")
 
 
@@ -760,7 +764,7 @@ class DevKnowledgeService:
         return True
 
     def write_artifact(self, dev_root: Path, item_id: str, name: str, text: str) -> bool:
-        """Write a file into a work-item's `artifacts/` (daemon-side, e.g. the execution archive).
+        """Write a file into a work-item's `artifacts/` (daemon-side, e.g. the execution snapshot).
         Creates the folder if needed. Returns True if the item folder exists."""
         folder = Path(dev_root) / "work-items" / item_id
         if not folder.is_dir():
@@ -921,6 +925,44 @@ class DevKnowledgeService:
         if not m:
             return False
         fm = re.sub(r"(?m)^status:.*$", f"status: {status}", m.group(1))
+        # Leaving `error` clears the reason with it (R2). A stale "the vet run stopped — upstream
+        # was unavailable" line surviving a successful Resume would make the item read broken
+        # forever; the reason exists only to explain a CURRENT stop.
+        if status != "error":
+            fm = re.sub(r"(?m)^error_reason:.*\n?", "", fm)
+        fm = re.sub(r"(?m)^updated_at:.*$", f"updated_at: {date.today().isoformat()}", fm)
+        item.write_text(f"---\n{fm}\n---\n{body}")
+        return True
+
+    def set_work_item_error(self, dev_root: Path, item_id: str, reason: str) -> bool:
+        """Stop an item at `error` with the reason it stopped (recovery-resilience R2).
+
+        `error` is NOT `system_fault` and the two must not merge (owner, 2026-07-31): a system fault
+        is a run that COMPLETED while our machinery misbehaved — review's business, the work still
+        advanced. `error` is a run that STOPPED — a crash, an outage that outlasted the retry ladder,
+        a daemon restart — so the item stays where it died, labelled, until the owner resumes or
+        re-runs it. Neither is terminal and neither is a verdict on the work.
+
+        The reason is owner-facing prose, one line, written where the item stopped. Terminal items
+        are refused, same as every other status write."""
+        item = Path(dev_root) / "work-items" / item_id / "item.md"
+        if not item.exists():
+            return False
+        text = item.read_text()
+        meta, body = _parse_md(text)
+        if meta.get("done_at") or str(meta.get("status")) == "done":
+            return False
+        m = _FRONTMATTER.match(text)
+        if not m:
+            return False
+        # One line, no colons-then-newlines: the frontmatter is line-parsed, so a multi-line reason
+        # would corrupt it. Quoted for the same reason — a bare `:` in the prose would read as YAML.
+        clean = " ".join(str(reason or "the work stopped").split())[:200].replace('"', "'")
+        fm = re.sub(r"(?m)^status:.*$", "status: error", m.group(1))
+        if re.search(r"(?m)^error_reason:.*$", fm):
+            fm = re.sub(r"(?m)^error_reason:.*$", f'error_reason: "{clean}"', fm)
+        else:
+            fm = fm.rstrip() + f'\nerror_reason: "{clean}"'
         fm = re.sub(r"(?m)^updated_at:.*$", f"updated_at: {date.today().isoformat()}", fm)
         item.write_text(f"---\n{fm}\n---\n{body}")
         return True
@@ -969,52 +1011,6 @@ class DevKnowledgeService:
             fm = re.sub(r"(?m)^seen_at:.*$", f"seen_at: {stamp}", fm)
         else:
             fm = fm.rstrip() + f"\nseen_at: {stamp}"
-        _meta, body = _parse_md(text)
-        item.write_text(f"---\n{fm}\n---\n{body}")
-        return True
-
-    def archive_item_folder(self, dev_root: Path, item_id: str) -> int:
-        """Fold every loose file in a work-item's folder into one `archive.zip` beside `item.md`,
-        then remove the originals and the emptied sub-folders. Returns how many files moved.
-        Lossless — the content is in the zip — and the DB trace is a different store entirely
-        (never-delete-logs). `item.md` stays: it IS the item, and the tree walk reads it."""
-        import zipfile
-        folder = Path(dev_root) / "work-items" / item_id
-        zip_path = folder / "archive.zip"
-        files = sorted(p for p in folder.rglob("*")
-                       if p.is_file() and p.name != "item.md" and p != zip_path)
-        if not files:
-            return 0
-        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
-            for p in files:
-                z.write(p, p.relative_to(folder).as_posix())
-        for p in files:
-            p.unlink()
-        for d in sorted((p for p in folder.rglob("*") if p.is_dir()), reverse=True):
-            try:
-                d.rmdir()   # only the ones the unlink above emptied
-            except OSError:
-                pass
-        return len(files)
-
-    def set_work_item_archived(self, dev_root: Path, item_id: str) -> bool:
-        """Stamp `archived_at` — the item's loose artifact files were folded into `archive.zip`
-        (renovation §2, on-demand archive). A storage fact about the FOLDER, not a lifecycle
-        state: the item stays `done`/`completed` and its DB trace is untouched. Returns True if
-        the file changed."""
-        item = Path(dev_root) / "work-items" / item_id / "item.md"
-        if not item.exists():
-            return False
-        text = item.read_text()
-        m = _FRONTMATTER.match(text)
-        if not m:
-            return False
-        stamp = datetime.now().isoformat(timespec="seconds")
-        fm = m.group(1)
-        if re.search(r"(?m)^archived_at:.*$", fm):
-            fm = re.sub(r"(?m)^archived_at:.*$", f"archived_at: {stamp}", fm)
-        else:
-            fm = fm.rstrip() + f"\narchived_at: {stamp}"
         _meta, body = _parse_md(text)
         item.write_text(f"---\n{fm}\n---\n{body}")
         return True
@@ -1362,6 +1358,96 @@ class DevKnowledgeService:
             return False
         shutil.rmtree(folder)
         return True
+
+    # --- re-run: reset the item in place (recovery-resilience R5) -----------------
+    #
+    # A re-run keeps the item and throws away its WORK. Which fields survive that is the whole
+    # decision, so it is written as a KEEPLIST rather than a list of things to clear: a field
+    # nobody classified is DROPPED, which is the safe direction. The alternative (clear-list)
+    # fails the other way — a lifecycle field added next month would silently survive a re-run
+    # and the item would come back carrying half of its old life.
+    #
+    # KEEP = who this item is (identity), what it hangs off (relations), what was asked for
+    # (the original intent), and how the owner configured it. Everything else is produced BY the
+    # lifecycle and is exactly what the re-run is throwing away.
+    _RERUN_KEEP = (
+        # identity — the id never changes on a re-run; that is the point (a new id would mean
+        # re-pointing every edge, and would orphan the permanent run/event trace).
+        "id", "root_id", "parent_id", "title", "kind", "created_at",
+        # relations — the work-graph edges. Losing one of these wedges the scheduler.
+        "spawned_from", "after", "cohort", "wave", "deliverable", "inbox_id",
+        # the owner's configuration of this item, which a re-run is not a decision to revisit
+        "autopilot", "prompt_extraction", "model", "effort",
+        # the code line. The branch is KEPT (it is code, not data — same rule as Drop); only the
+        # worktree DIR is torn down, and `create_worktree` re-adds one to the existing branch.
+        "git_branch", "git_base",
+    )
+
+    def reset_work_item(self, dev_root: Path, item_id: str) -> dict | None:
+        """Reset a work-item to its entry phase, keeping identity/relations/ask — the file half of
+        a re-run. Returns `{phase, status, removed:[…]}`, or None if there is no item.
+
+        Three acts, in order:
+          1. `item.md` is REBUILT from `_RERUN_KEEP` (body — the original ask — untouched), with
+             phase/status back at the kind profile's entry.
+          2. The produced folders go: `artifacts/`, `reports/`, `checkpoints/`, `deputy-log.jsonl`.
+             `preliminary/` STAYS — it is the pushed input, not work this item did.
+          3. Nothing else. Runs, run events and dev-activity are permanent trace and are not this
+             function's business (see [[never-delete-logs]]); the caller handles sessions and the
+             worktree, which are not files under the item.
+
+        `status` comes back `awaiting_upstream` when any `after` peer is still open — the same
+        rule `create_work_item` applies at birth, because a reset item must no more start against
+        unlanded work than a new one."""
+        from .kind_profiles import get_profile
+        folder = Path(dev_root) / "work-items" / item_id
+        item_md = folder / "item.md"
+        if not item_md.exists():
+            return None
+        meta, body = _parse_md(item_md.read_text())
+        if not meta:
+            return None
+        kept = {k: meta[k] for k in self._RERUN_KEEP if k in meta}
+        phase = get_profile(str(meta.get("kind") or "implementation")).phases[0]
+        after_ids = [str(a) for a in (meta.get("after") or []) if a]
+        status = "active"
+        if any(str((self.read_work_item(dev_root, a) or {}).get("status")) != "done"
+               for a in after_ids):
+            status = "awaiting_upstream"
+        today = date.today().isoformat()
+
+        def _render(val) -> str:
+            if val is None:
+                return "null"
+            if isinstance(val, bool):
+                return "true" if val else "false"
+            if isinstance(val, (dict, list)):
+                return json.dumps(val)     # JSON is valid YAML flow syntax
+            if isinstance(val, str):
+                return json.dumps(val)
+            return str(val)
+
+        lines = [f"{k}: {_render(v)}" for k, v in kept.items()]
+        # No re-run COUNTER is written (owner, 2026-07-31). A `generation: N` field only existed to
+        # explain why the item's files were younger than its run history — and the soft delete
+        # ended that mismatch: a re-run item now reads as a fresh item, because its discarded rows
+        # have left its own views. A number nobody needs is a number that goes stale.
+        lines += [f"phase: {phase}", f"status: {status}", "done_at: null", "artifacts: []",
+                  "session_id: null", f"updated_at: {today}"]
+        item_md.write_text("---\n" + "\n".join(lines) + "\n---\n" + body.lstrip("\n"))
+
+        removed = []
+        for name in ("artifacts", "reports", "checkpoints"):
+            sub = folder / name
+            if sub.is_dir():
+                shutil.rmtree(sub)
+                removed.append(name + "/")
+        (folder / "artifacts").mkdir(parents=True, exist_ok=True)   # as `create_work_item` leaves it
+        log_file = folder / "deputy-log.jsonl"
+        if log_file.exists():
+            log_file.unlink()
+            removed.append(log_file.name)
+        return {"phase": phase, "status": status, "removed": removed}
 
     # NOTE: the legacy `add_decision` (D-###.md scheme) was retired — decisions are now a
     # `memory` type in the §4.9 knowledge subsystem, not an orphan folder. See PRD §4.9.

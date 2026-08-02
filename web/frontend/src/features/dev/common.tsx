@@ -19,11 +19,6 @@ export const PHASES: { key: string; label: string }[] = [
   { key: 'close', label: 'Close' },
 ]
 
-// The four phases that END at a briefed human gate (mirrors core/gate_briefs.GATE_FOR_PHASE). The
-// owner's Approve button belongs on THESE and nowhere else: build→vet and vet→review
-// are the autonomous loop's edges, and rendering a gate button there invents a decision the owner
-// was never asked to make.
-export const GATED_PHASES = new Set(['triage', 'plan', 'review', 'close'])
 export const PHASE_LABEL: Record<string, string> = Object.fromEntries(PHASES.map((p) => [p.key, p.label]))
 
 // Per-phase accent token (dot + column rail) — reads left→right as the pipeline advances:
@@ -32,6 +27,9 @@ export const PHASE_LABEL: Record<string, string> = Object.fromEntries(PHASES.map
 // `awaiting_human` is the attention color — it pages the owner.
 export const STATUS_COLOR: Record<string, string> = {
   active: 'text-accent-text',
+  // `error` (R2) is the only red on this axis: the work STOPPED. Louder than awaiting_human's
+  // amber, which means "resting at a gate by design".
+  error: 'text-danger',
   awaiting_human: 'text-warn',
   awaiting_child: 'text-muted',
   awaiting_upstream: 'text-muted',
@@ -43,6 +41,7 @@ export const STATUS_COLOR: Record<string, string> = {
 // Tailwind keeps them). Overrides only the card's left border color; width comes from `border-l-2`.
 export const STATUS_STRIPE: Record<string, string> = {
   active: 'border-l-accent',
+  error: 'border-l-danger',
   awaiting_human: 'border-l-warn',
   awaiting_child: 'border-l-line',
   awaiting_upstream: 'border-l-line',
@@ -55,6 +54,7 @@ export const STATUS_STRIPE: Record<string, string> = {
 // their names; only this render boundary is friendly.
 export const STATUS_LABEL: Record<string, string> = {
   active: 'in progress',
+  error: 'stopped',
   awaiting_human: 'needs you',
   awaiting_child: 'blocked on sub-item',
   awaiting_upstream: 'queued behind another item',
@@ -88,6 +88,9 @@ export const PHASE_VERB: Record<string, string> = {
 // table it depends on, and every surface reads that one verdict. Do not re-derive it here.
 export function primaryStatus(it: WorkItem, bucket?: string): string {
   if (it.done_at) return 'done'
+  // Same rule as needs_you: READ the tier, never re-derive it. `error` outranks it in the engine,
+  // so an item in this bucket is stopped no matter what else its row says.
+  if (bucket === 'error') return 'error'
   if (bucket === 'needs_you') return 'awaiting_human'
   return it.status ?? ''
 }

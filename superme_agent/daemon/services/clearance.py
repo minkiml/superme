@@ -16,7 +16,6 @@ the last child clears (the resume branch below re-enters clearance for the paren
 """
 
 import logging
-from pathlib import Path
 
 from ..app_state import dev as _dev, dev_store as _dev_store, \
     spine as _spine, sessions as _sessions
@@ -100,9 +99,11 @@ def clear_item(context_id: str, item_id: str, *, actor: str = "daemon",
     resume_id = status_router.parent_to_resume(all_items, item or {"id": item_id})
     if resume_id:
         _dev.set_work_item_status(dev_root, resume_id, "active")
+        rel = status_router.relation_of(item or {})
         _dev_store.log_event(context_id, "item.resume",
-                             f"Blocking child {item_id} closed — parent resumed",
-                             item_id=resume_id, actor="daemon", meta={"child": item_id})
+                             f"{rel.capitalize()} child {item_id} closed — parent resumed",
+                             item_id=resume_id, actor="daemon",
+                             meta={"child": item_id, "relation": rel})
         parent = _dev.read_work_item(dev_root, resume_id) or {}
         if (_depth < _MAX_PARENT_DEPTH
                 and kind_profiles.is_final_phase(parent.get("kind"),
@@ -136,7 +137,7 @@ def clear_item(context_id: str, item_id: str, *, actor: str = "daemon",
                          item_id=item_id, actor=actor,
                          meta={"runs_freed": runs_freed,
                                **({"knowledge_gap": knowledge_gap} if knowledge_gap else {})})
-    out = {"ok": True, "id": item_id, "archived": "artifacts/execution.md",
+    out = {"ok": True, "id": item_id, "execution_snapshot": "artifacts/execution.md",
            "session_cleared": bool(session_ids), "runs_freed": runs_freed}
     if worktree_removed is not None:
         out["worktree_removed"] = worktree_removed
@@ -151,27 +152,3 @@ def close_retries(context_id: str, item_id: str) -> int:
     except Exception:
         return 0
     return sum(1 for r in rows if str(r.get("kind") or "") == "close.retry")
-
-
-def archive_item(context_id: str, item_id: str) -> dict:
-    """Fold a terminal item's artifact files into ONE archive (`archive.zip` beside `item.md`) —
-    the on-demand shrink of a finished item's folder. The DB trace is untouched forever
-    (never-delete-logs); nothing is lost, the files just stop being loose. Terminal items only,
-    and idempotent — a second call reports the archive that is already there."""
-    ctx = contexts.resolve(context_id, "dev")
-    if not ctx.internal_root:
-        return _refused("context has no internal root")
-    dev_root = ctx.internal_root / "dev"
-    item = _dev.read_work_item(dev_root, item_id)
-    if item is None:
-        return _refused("work-item not found")
-    if not (item.get("done_at") or str(item.get("status")) == "done"):
-        return _refused("only a terminal item can be archived")
-    if item.get("archived_at") and (Path(dev_root) / "work-items" / item_id / "archive.zip").exists():
-        return {"ok": True, "id": item_id, "archive": "archive.zip", "files": 0, "already": True}
-    moved = _dev.archive_item_folder(dev_root, item_id)
-    _dev.set_work_item_archived(dev_root, item_id)
-    _dev_store.log_event(context_id, "item.archive",
-                         f"Archived {moved} file(s): {item.get('title') or item_id}",
-                         item_id=item_id, actor="owner", meta={"files": moved})
-    return {"ok": True, "id": item_id, "archive": "archive.zip", "files": moved}

@@ -23,6 +23,12 @@ a system fault (`loop.fault`) — the item still goes to review rather than sitt
 no decision surface. The rule: the breakers encode work-item outcomes only; our own defects are
 bugs to fix, never workflow states.
 
+Both breakers meter one GENERATION, not the item's whole life (§3-bis.4): a plan revision opens a
+generation, so `spent` reads since the current revision's `spend_at` and the recurrence guard counts
+only cycles scaffolded under it. Otherwise a `budget` exit could never be answered — every revise
+round would die on its first vet with the ceiling already crossed. Total spend stays owner-bounded
+because only a revision opens a generation, and only a human triggers a revision.
+
 Owner holds are sticky: the driver only ever continues an item whose status is `active` — any
 human-set pause stops the loop and is never auto-resumed.
 
@@ -50,12 +56,16 @@ from ...core import Usage, Result, Status, TextDelta, ToolResult, deny_all
 from ...core import artifacts as _arts
 from ...core import autopilot as _autopilot
 from ...core import kernel_speech
+from ...core import plan_revision as _plan_revision
+from . import checks as _checks
+from .turns import ResilientTurn
 from ...harness.tools.run_tools import make_run_report_server
 from ...core.permissions import VET_READONLY_NUDGE
 from ...harness.tools.dev_tools import make_dev_mcp_server
-from .runs import (_LiveTokens, _begin_run, _end_run, _log_artifact,
+from .runs import (_LiveTokens, _begin_run, _end_run,
                    bank_auto_checkpoint, capture_event, capture_prompt, capture_run_input,
-                   compacted_checkpoint, fire_auto_triage, read_completion, reset_vet_thread)
+                   compacted_checkpoint, fire_auto_triage, mark_item_error, read_completion,
+                   reset_vet_thread, retry_notice)
 
 log = logging.getLogger("superme-agent")
 
@@ -74,15 +84,17 @@ _MAX_FAULT_RETRY = 2
 
 def decide_after_vet(item: dict, *, evidence: dict, fingerprint: str, attempts: list[dict],
                      spent: int, budget: int, turn_error: bool = False,
-                     faults: int = 0) -> dict:
+                     faults: int = 0, fault_reason: str = "") -> dict:
     """The driver's decision function — PURE (no I/O; the wrapper reads the ledgers and passes
     them in), so every branch is unit-testable. Returns {action, status, reason, record[, exit]}:
-    action ∈ none|review|build|revet · status = the item's resting status · record = whether a
-    §Cycle outcome entry is due · `exit` = the typed reason review is handed.
+    action ∈ none|review|build|revet|error · status = the item's resting status · record = whether
+    a §Cycle outcome entry is due · `exit` = the typed reason review is handed.
 
-    There is NO halt: the loop never leaves an item resting inside build⟷vet, because that stretch
-    has no decision surface. `faults` is how many times this cycle has already been retried after a
-    SuperMe fault."""
+    The loop never leaves an item resting inside build⟷vet with work still to do, because that
+    stretch has no decision surface — but `error` is not resting, it is STOPPED (R2), and an item
+    whose run died has to stay where it died rather than be advanced past work that never happened.
+    `faults` is how many times this cycle has already been retried after a recording fault;
+    `fault_reason` is R1's typed verdict on a stopped turn, used verbatim as the owner's label."""
     # Sticky owner holds (§5.2): the driver continues ONLY an active item. Terminal, paused,
     # or already-paged items are the owner's — a human-set stop never auto-resumes.
     status = str(item.get("status") or "")
@@ -94,15 +106,24 @@ def decide_after_vet(item: dict, *, evidence: dict, fingerprint: str, attempts: 
         return {"action": "none", "status": status, "record": False,
                 "reason": f"item left vet (phase={item.get('phase')}) — loop yields"}
     ev = str(evidence.get("status") or "unverified")
+    # --- the run STOPPED (R2) -----------------------------------------------------------------
+    # A crashed vet turn produced no verdict at all — and by the time this is reached, R1's ladder
+    # has already waited it out (up to seven times, ~29 minutes). So there is nothing left to retry
+    # here: the item STOPS at `error`, where it died, carrying the reason, until the owner Resumes
+    # or re-runs it. Deliberately NOT `system_fault`: that word is for a run that COMPLETED while
+    # our machinery misbehaved (below), which is review's business because the work still advanced.
+    if turn_error:
+        return {"action": "error", "status": "error", "record": True, "exit": "error",
+                "fault": "the vet run stopped before it could report",
+                "reason": fault_reason or "the vet run stopped before it could report"}
     # --- SuperMe FAULTS (not verdicts) -------------------------------------------------------
-    # A crashed turn produced no verdict at all; an empty ledger where the plan declared checks
-    # means the recording machinery failed (both live causes to date were OUR allowlist gaps, and
-    # "genuinely nothing to verify" now has its own honest representation: `depth: none`). Neither
-    # says anything about the work, so neither may fail the item closed. Retry, then hand it over
-    # labelled as a fault so the bug is visible AS a bug.
-    fault = "vet run crashed before it could report" if turn_error else (
-        "vet recorded nothing while the plan declares checks" if ev == "unverified" else "")
-    if fault:
+    # An empty ledger where the plan declared checks means the RECORDING machinery failed — the run
+    # itself finished (both live causes to date were OUR allowlist gaps, and "genuinely nothing to
+    # verify" now has its own honest representation: `depth: none`). That says nothing about the
+    # work, so it may not fail the item closed. Retry — re-running vet IS the cure for a lost
+    # ledger — then hand it over labelled as a fault so the bug is visible AS a bug.
+    if ev == "unverified":
+        fault = "vet recorded nothing while the plan declares checks"
         if faults < _MAX_FAULT_RETRY:
             return {"action": "revet", "status": "active", "record": False, "fault": fault,
                     "reason": f"{fault} — retrying (attempt {faults + 2} of {_MAX_FAULT_RETRY + 1})"}
@@ -135,7 +156,7 @@ def decide_after_vet(item: dict, *, evidence: dict, fingerprint: str, attempts: 
     if spent >= budget:
         return {"action": "review", "status": "awaiting_human", "record": True, "failed": failed,
                 "exit": "budget",
-                "reason": f"token budget exhausted ({spent} ≥ {budget} over build+vet) — handing "
+                "reason": f"token budget exhausted ({spent} ≥ {budget} this generation) — handing "
                           "over what got done"}
     # Convergence: count how often THIS signature has already appeared. A recurrence after an
     # intervening different failure is the oscillation a compare-with-previous test misses (fix A →
@@ -338,7 +359,18 @@ async def _run_background_vet(ctx, context_id: str, item_id: str,
     # checks the build DEFERRED (needs-you items in the auth ledger) so the vetter SKIPS them — it
     # doesn't re-judge a wall only the owner can clear, so the loop converges instead of churning.
     deferred = [str(a.get("check")) for a in _arts.pending_authorizations(item_dir) if a.get("check")]
-    trigger = kernel_speech.vet_trigger(item_id, title, deferred=deferred or None)
+    # The kernel runs what can be run BEFORE the session opens (design §4), so the vetter meets
+    # those results as facts rather than as work. Deferrals are excluded — a check waiting on the
+    # owner's authorization is not ours to execute. A failure here is a check verdict, never a run
+    # fault: the loop is supposed to learn that the code is broken.
+    try:
+        machine = await asyncio.to_thread(_checks.execute, item_dir, wt,
+                                          skip=deferred, title=title)
+    except Exception:
+        log.exception("kernel checks failed for %s — vet proceeds and performs them itself", item_id)
+        machine = []
+    trigger = kernel_speech.vet_trigger(item_id, title, deferred=deferred or None,
+                                        machine=machine or None)
     prompt = trigger   # orientation is on-demand — the vet skill's directed reads (renovation §1)
     capture_prompt(context_id, trigger, item_id=item_id)
     # Prompt inspector "A" — throwaway probes ONLY: vet passes work_item_preamble as system_append at
@@ -350,43 +382,43 @@ async def _run_background_vet(ctx, context_id: str, item_id: str,
     final_tokens = None
     final_usage = None
     final_session = None
-    turn_error = False
     run_started = time.time()
     live = _LiveTokens()
     sink: dict = {}   # report_completion lands here (run_tools) — recorded; the DRIVER decides
-    try:
-        async for ev in _agent.run_turn(
-            wt_ctx, prompt,
-            resume=None,                     # vet FORGETS — fresh eyes, prior reports are data
-            model=model, effort=effort,
-            approve=deny_all,                # background: nothing outside the boundary runs
-            extra_mcp_servers={**_dev_mcp(ctx, wt, ctx.cwd, item_id),
-                               "run": make_run_report_server(sink)},
-            system_append=kernel_speech.work_item_preamble(item_id, item, str(item_dir), interactive=False),
-            write_boundary=[wt, item_dir],   # boundary Bash autonomy (running checks IS the job)
-            deny_write_tools=VET_READONLY_NUDGE,   # …but file-write tools die outright (§4)
-        ):
-            if isinstance(ev, Usage):
-                live.bump(context_id, item_id, ev)
-            elif isinstance(ev, (Status, ToolResult)):
-                _log_artifact(context_id, item_id, ev)
-            elif isinstance(ev, Result):
-                final_tokens = ev.tokens
-                final_usage = ev.usage
-                final_session = ev.session_id
-                _sessions.record(wt_ctx, ev.session_id)
-                if ev.session_id:
-                    try:
-                        _dev.set_work_item_session(dev_root, item_id, ev.session_id, role="vet")
-                        _spine.stamp_session_item(ev.session_id, item_id)
-                        _spine.stamp_session_kind(ev.session_id, "vet")
-                    except Exception:
-                        log.exception("background vet: failed to persist session to %s", item_id)
-            if isinstance(ev, (Status, TextDelta, ToolResult)):
-                capture_event(context_id, ev, item_id=item_id)
-    except Exception: #crash check
-        turn_error = True
-        log.exception("background vet run failed for %s", item_id)
+    # R1: the turn carries its own retry ladder. A vet that never got off the ground (upstream 5xx,
+    # a dropped socket) is waited out here rather than surfacing as a fault the owner has to clear —
+    # and `turn.fault` afterwards is a typed verdict, not a bare "something threw".
+    turn = ResilientTurn("vet", item_id=item_id,
+                         notify=retry_notice(context_id, item_id, "vet"))
+    async for ev in turn.stream(
+        _agent, wt_ctx, prompt,
+        resume=None,                     # vet FORGETS — fresh eyes, prior reports are data
+        model=model, effort=effort,
+        approve=deny_all,                # background: nothing outside the boundary runs
+        extra_mcp_servers={**_dev_mcp(ctx, wt, ctx.cwd, item_id),
+                           "run": make_run_report_server(sink)},
+        system_append=kernel_speech.work_item_preamble(item_id, item, str(item_dir), interactive=False),
+        write_boundary=[wt, item_dir],   # boundary Bash autonomy (running checks IS the job)
+        sandbox_writes=[wt, item_dir],   # …and the kernel holds that same boundary (sandbox.py)
+        deny_write_tools=VET_READONLY_NUDGE,   # …but file-write tools die outright (§4)
+    ):
+        if isinstance(ev, Usage):
+            live.bump(context_id, item_id, ev)
+        elif isinstance(ev, Result):
+            final_tokens = ev.tokens
+            final_usage = ev.usage
+            final_session = ev.session_id
+            _sessions.record(wt_ctx, ev.session_id)
+            if ev.session_id:
+                try:
+                    _dev.set_work_item_session(dev_root, item_id, ev.session_id, role="vet")
+                    _spine.stamp_session_item(ev.session_id, item_id)
+                    _spine.stamp_session_kind(ev.session_id, "vet")
+                except Exception:
+                    log.exception("background vet: failed to persist session to %s", item_id)
+        if isinstance(ev, (Status, TextDelta, ToolResult)):
+            capture_event(context_id, ev, item_id=item_id)
+    turn_error = turn.fault.failed
     # Record the vet run's own report (trail honesty); the DRIVER below decides off the LEDGER,
     # never off this payload — vet's claims don't route the loop.
     read_completion(context_id, item_id, sink)
@@ -403,14 +435,20 @@ async def _run_background_vet(ctx, context_id: str, item_id: str,
         except (OSError, ValueError):
             log.exception("no-verification note failed for %s", item_id)
     fingerprint = _arts.convergence_fingerprint(item_dir)
-    attempts = _arts.read_cycle_outcomes(item_dir)
+    # Both breakers read THIS GENERATION only (§3-bis.4): a revision opens a generation, so the
+    # budget refreshes and a pre-redesign failure history stops counting against work it can't
+    # describe. Without this, any revise round after a `budget` exit died on its first vet.
+    revision = _plan_revision.current_revision(item_dir)
+    attempts = _arts.read_cycle_outcomes(item_dir, revision=revision)
     reports = _arts.cycle_reports(item_dir)
     cycle = reports[-1]["cycle"] if reports else 0
-    spent = _spine.item_phase_tokens(context_id, item_id)
+    spent = max(0, _spine.item_phase_tokens(context_id, item_id)
+                - _plan_revision.spend_at(item_dir))
     budget = _spine.effective_loop_budget(context_id, item.get("loop_budget"))
     d = decide_after_vet(item, evidence=evidence, fingerprint=fingerprint, attempts=attempts,
                          spent=spent, budget=budget, turn_error=turn_error,
-                         faults=_fault_retries(context_id, item_id, cycle))
+                         faults=_fault_retries(context_id, item_id, cycle),
+                         fault_reason=turn.fault.reason)
     # CAS flips happen BEFORE the run row closes so the next hop's row stamps the new phase.
     moved = True
     if d["action"] == "review":
@@ -425,14 +463,19 @@ async def _run_background_vet(ctx, context_id: str, item_id: str,
     # (it says the run couldn't produce a verdict — never that the work is bad).
     outcome = {"converged": "success", "budget": "exhausted",
                "not_converging": "stagnated", "no_progress": "stagnated",
-               "system_fault": "blocked"}.get(str(d.get("exit") or "")) \
+               "system_fault": "blocked", "error": "blocked"}.get(str(d.get("exit") or "")) \
         or ("blocked" if turn_error else "success" if d["action"] in ("build", "revet") else None)
+    # R2: the item STOPS where it died. No phase flip — advancing past work that never happened is
+    # exactly the lie this status exists to stop telling — and the reason is the one R1 classified.
+    if d["action"] == "error":
+        mark_item_error(ctx, context_id, item_id, d["reason"], phase="vet")
     _end_run(ctx, context_id, item_id, final_tokens, d["status"] or "active", final_usage,
              outcome=outcome, session_id=final_session)
     if d["record"]:
         try:
             _arts.append_cycle_outcome(item_dir, evidence=str(evidence.get("status")),
                                        decision=d["action"], reason=d["reason"],
+                                       loop_exit=str(d.get("exit") or ""),
                                        fingerprint=fingerprint if evidence.get("status") == "failed" else "",
                                        failed=d.get("failed") or (), tokens=spent, budget=budget)
         except Exception:
@@ -535,36 +578,6 @@ def start_build_cycle(ctx, context_id: str, item_id: str) -> tuple[bool, str]:
     return True, "build"
 
 
-def start_continue_build(ctx, context_id: str, item_id: str) -> tuple[bool, str]:
-    """The owner's CONTINUE on a build parked at a human gate — RE-ENTER the loop (BV-A1). Reached
-    only when a build parked for an infra reason (or a legacy pre-BV-A2 page); a content wall or a
-    deferred authorization no longer parks here (they ride to review). The owner saw where it stopped
-    and said keep going. This RESUMES the item's build thread with a finalize
-    trigger — complete what's doable, record any wall as an assumption — and lets the normal
-    build→vet→review flow carry the gap to review. Distinct from a bare chat reply to a paused build
-    ([ws.py] `chat` run), which does NOT advance the loop. Guards mirror start_build_cycle EXCEPT
-    the vet-report requirement (a parked opening build has none) and it accepts an awaiting_human
-    item (the continue IS the answer; _begin_run rests it active). Returns (started, reason)."""
-    dev_root = ctx.internal_root / "dev"
-    item = _dev.read_work_item(dev_root, item_id) or {}
-    if not item:
-        return False, "work-item not found"
-    if item.get("done_at") or str(item.get("status")) not in ("active", "awaiting_human"):
-        return False, f"item is not resumable (status={item.get('status')})"
-    if str(item.get("phase")) != "build":
-        return False, f"item is not in build (phase={item.get('phase')})"
-    if _loop_ctx(ctx, item) is None:
-        return False, "item has no live worktree"
-    title = item.get("title") or item_id
-    trigger = kernel_speech.build_continue_trigger(item_id, title)
-    model, effort = _resolve_run_params(context_id, item)
-    if not _begin_run(ctx, context_id, item_id, "build", model, phase="build"):
-        return False, "a run is already in progress for this item"
-    asyncio.create_task(_run_background_build(ctx, context_id, item_id, model, effort,
-                                              trigger=trigger))
-    return True, "build"
-
-
 async def _run_background_build(ctx, context_id: str, item_id: str,
                               model: str, effort: str, *, trigger: str | None = None) -> None:
     """Drive one background build turn in the item's worktree, handing over the cycle's work order
@@ -581,11 +594,23 @@ async def _run_background_build(ctx, context_id: str, item_id: str,
     wt_ctx, wt, item_dir, _ = lc
     prev_build = (item.get("sessions") or {}).get("build")
     title = item.get("title") or item_id
+    # Was this thread compacted since its last cycle? Build REMEMBERS, so the skill is invoked once
+    # (cycle 1) and later cycles resume with the procedure already in context — a compaction can cut
+    # it away, and nothing would re-invoke it. Same signal the checkpoint pointer uses.
+    compacted = compacted_checkpoint(ctx, item, prev_build)
     if trigger is None:
         report = _arts.latest_cycle_report(item_dir)   # capped handoff (§8·O10)
         # Thin trigger (Thread 3 §4): the failed cycle's report IS the work order; the build skill
         # owns the procedure, the system layer carries the run contract.
-        trigger = kernel_speech.build_loop_trigger(item_id, title, report["cycle"], report["text"])
+        # Vet's located causes lead the work order (design §5) — the report carries them too, but
+        # buried, and a build cycle that has to go find them re-derives what vet already knew.
+        # Failing checks only: `verdict_rows` carries a diagnosis only while it matches the cycle
+        # of the verdict it explains, so a cause the code has already moved past never leads.
+        found = {r["check"]: r for r in _arts.verdict_rows(item_dir)
+                 if r.get("why") and not r["passed"] and not r["deferred"]}
+        trigger = kernel_speech.build_loop_trigger(item_id, title, report["cycle"], report["text"],
+                                                   reload_skill=bool(compacted),
+                                                   diagnoses=found or None)
     # Open this cycle's report (renovation §3.1: build fills §Built/§Validation as it works;
     # idempotent when the open cycle's file already exists — e.g. a continue on a parked build).
     try:
@@ -604,46 +629,48 @@ async def _run_background_build(ctx, context_id: str, item_id: str,
     final_tokens = None
     final_usage = None
     final_session = None
-    turn_error = False
     run_started = time.time()
     live = _LiveTokens()
     sink: dict = {}   # report_completion lands here (run_tools) — read after the turn
-    try:
-        async for ev in _agent.run_turn(
-            wt_ctx, prompt,
-            resume=prev_build,               # build REMEMBERS — same thread every cycle
-            model=model, effort=effort,
-            approve=deny_all,
-            extra_mcp_servers={**_dev_mcp(ctx, wt, ctx.cwd, item_id),
-                               "run": make_run_report_server(sink)},
-            # Build REMEMBERS, so it is the other thread compaction can hit — carry the
-            # post-compaction pointer when its newest finished run was the compaction itself.
-            system_append=kernel_speech.work_item_preamble(
-                item_id, item, str(item_dir), interactive=False,
-                compacted_checkpoint=compacted_checkpoint(ctx, item, prev_build)),
-            write_boundary=[wt, item_dir],   # S4 freeze: writes stay in worktree + item dir
-        ):
-            if isinstance(ev, Usage):
-                live.bump(context_id, item_id, ev)
-            elif isinstance(ev, (Status, ToolResult)):
-                _log_artifact(context_id, item_id, ev)
-            elif isinstance(ev, Result):
-                final_tokens = ev.tokens
-                final_usage = ev.usage
-                final_session = ev.session_id
-                _sessions.record(wt_ctx, ev.session_id)
-                if ev.session_id:
-                    try:
-                        _dev.set_work_item_session(dev_root, item_id, ev.session_id, role="build")
-                        _spine.stamp_session_item(ev.session_id, item_id)
-                        _spine.stamp_session_kind(ev.session_id, "build")
-                    except Exception:
-                        log.exception("background build: failed to persist session to %s", item_id)
-            if isinstance(ev, (Status, TextDelta, ToolResult)):
-                capture_event(context_id, ev, item_id=item_id)
-    except Exception:
-        turn_error = True
-        log.exception("background build cycle failed for %s", item_id)
+    # R1: same ladder as vet. An upstream API error arrives as assistant TEXT rather than an
+    # exception, so without a classifier the turn looks like a clean no-op and `decide_after_build`
+    # advances it to vet as a successful cycle (run 804, 2026-07-30). `ResilientTurn` catches that
+    # shape — no tool call, and a reply that IS the SDK's error line — waits it out, and only when
+    # the ladder is spent reports a failure the loop treats as a fault.
+    turn = ResilientTurn("build", item_id=item_id,
+                         notify=retry_notice(context_id, item_id, "build"))
+    async for ev in turn.stream(
+        _agent, wt_ctx, prompt,
+        resume=prev_build,               # build REMEMBERS — same thread every cycle
+        model=model, effort=effort,
+        approve=deny_all,
+        extra_mcp_servers={**_dev_mcp(ctx, wt, ctx.cwd, item_id),
+                           "run": make_run_report_server(sink)},
+        # Build REMEMBERS, so it is the other thread compaction can hit — carry the
+        # post-compaction pointer when its newest finished run was the compaction itself.
+        system_append=kernel_speech.work_item_preamble(
+            item_id, item, str(item_dir), interactive=False,
+            compacted_checkpoint=compacted),
+        write_boundary=[wt, item_dir],   # S4 freeze: writes stay in worktree + item dir
+        sandbox_writes=[wt, item_dir],   # …enforced for shell commands by the OS (sandbox.py)
+    ):
+        if isinstance(ev, Usage):
+            live.bump(context_id, item_id, ev)
+        elif isinstance(ev, Result):
+            final_tokens = ev.tokens
+            final_usage = ev.usage
+            final_session = ev.session_id
+            _sessions.record(wt_ctx, ev.session_id)
+            if ev.session_id:
+                try:
+                    _dev.set_work_item_session(dev_root, item_id, ev.session_id, role="build")
+                    _spine.stamp_session_item(ev.session_id, item_id)
+                    _spine.stamp_session_kind(ev.session_id, "build")
+                except Exception:
+                    log.exception("background build: failed to persist session to %s", item_id)
+        if isinstance(ev, (Status, TextDelta, ToolResult)):
+            capture_event(context_id, ev, item_id=item_id)
+    turn_error = turn.fault.failed
     report_out = read_completion(context_id, item_id, sink)
     item = _dev.read_work_item(dev_root, item_id) or {}
     outcome = (report_out or {}).get("outcome")
@@ -656,35 +683,19 @@ async def _run_background_build(ctx, context_id: str, item_id: str,
         reports = _arts.cycle_reports(item_dir)
         cycle = reports[-1]["cycle"] if reports else 0
         if d["klass"] == "infra":
-            tries = _fault_retries(context_id, item_id, cycle)
-            if tries < _MAX_FAULT_RETRY:
-                _end_run(ctx, context_id, item_id, final_tokens, "active", final_usage,
-                         outcome="blocked", session_id=final_session)
-                _log_decision(context_id, item_id, cycle,
-                              {"action": "build", "fault": "build turn crashed before it could report",
-                               "reason": f"build turn crashed — retrying "
-                                         f"(attempt {tries + 2} of {_MAX_FAULT_RETRY + 1})"})
-                started, why = start_build_cycle(ctx, context_id, item_id)
-                if not started:
-                    log.warning("loop: build retry did not start for %s: %s", item_id, why)
-                log.info("background build cycle: fault retry for %s", item_id)
-                return
-            _end_run(ctx, context_id, item_id, final_tokens, "awaiting_human", final_usage,
+            # R2: the build run STOPPED. R1's ladder already waited it out (up to seven attempts,
+            # ~29 minutes), so a second retry ladder here would only multiply the wait — and the
+            # old ending was worse than that: it advanced the item to REVIEW, presenting a gate on
+            # a cycle that never ran. The item stops at `build`, where it died, labelled with R1's
+            # typed reason, and Resume (R4) or re-run (R5) is the way out. Never terminal.
+            reason = turn.fault.reason or "the build run stopped before it could report"
+            mark_item_error(ctx, context_id, item_id, reason, phase="build")
+            _end_run(ctx, context_id, item_id, final_tokens, "error", final_usage,
                      outcome="blocked", session_id=final_session)
-            if _cas_phase(dev_root, item_id, "build", "review"):
-                exit_d = {"action": "review", "exit": "system_fault",
-                          "fault": "build turn crashed before it could report",
-                          "reason": f"the build turn crashed {_MAX_FAULT_RETRY + 1} times — a "
-                                    "SuperMe fault, not a verdict on the work; handing it to you"}
-                _log_decision(context_id, item_id, cycle, exit_d)
-                _dev_store.log_event(context_id, "phase.advance",
-                                     f"Loop: {exit_d['reason'][:120]} — advanced build → review",
-                                     item_id=item_id, actor="daemon",
-                                     meta={"from": "build", "to": "review", "exit": "system_fault"})
-                from .runs import fire_review_entry
-                if not fire_review_entry(context_id, item_id, _spine):
-                    log.warning("loop: review-entry run did not start for %s", item_id)
-            log.info("background build cycle: system fault → review for %s", item_id)
+            _log_decision(context_id, item_id, cycle,
+                          {"action": "error", "exit": "error", "fault": reason,
+                           "reason": f"the build run stopped — {reason}; the item is held at build "
+                                     "for you to resume or re-run"})
             return
         still_ours = d["klass"] != "moved"
         rest = "awaiting_human" if still_ours else str(item.get("status") or "active")

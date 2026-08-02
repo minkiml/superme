@@ -69,6 +69,10 @@ SAFE_TOOLS = {
     "mcp__dev__set_triage_classification",
     "mcp__dev__scaffold_artifact",
     "mcp__dev__record_verification",
+    # Vet's reading of a failure (verification-model §5) — the same append-only, item-scoped pen as
+    # the verdict above, and the vet report refuses without it, so a prompt here would park the loop
+    # on a human at the exact moment it has something useful to hand back.
+    "mcp__dev__record_diagnosis",
     # The wall-handling ledgers (BV-A1/A2): append-only, item-scoped, pre-gate records. These
     # exist precisely so an autonomous run NEVER stalls on a person — a prompt here recreates the
     # stall they replace (and a background run's deny_all silently swallows the record).

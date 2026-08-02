@@ -14,8 +14,10 @@ happened. Fixes belong to the build session, never here.
 ## Step 1 — Directed reads
 
 - `plan.md` `## Verification plan` — the authoritative checklist; its `### <check-id>` entries
-  (traces/mode/scenario/expect) are the checks, and their ids key everything you record
-  (verbatim — invented or glued-on ids are refused).
+  (traces/covers/mode/scenario/expect) are the checks, and their ids key everything you record
+  (verbatim — invented or glued-on ids are refused). It is LIVE: a revision mid-item may have
+  changed what gets verified, so read the file, never a memory of it, and take the section where it
+  sits — last in the document, after any `## Revision r<n>` blocks.
 - The current cycle report's `## Built` / `## Validation` (`artifacts/build-vet-<n>.md`, highest
   n) — what build claims it did and how to exercise it. Claims are leads, not results.
 - Prior cycles' §Verification entries are data: know what failed last time, re-verify everything
@@ -39,6 +41,9 @@ You never author or amend the verification plan.
   authorization), call `record_verification` with its exact id, `deferred: true`, and a one-line
   note — do NOT run or judge it; only the owner can clear that wall, and re-judging it every
   cycle never converges.
+- **Kernel-run checks are already done.** Your trigger names the checks whose `run:` block the
+  kernel executed in the sandbox and recorded. Do not re-run them and do not record them — a second
+  entry is refused. Read each result, treat it as a finding of yours, and carry it into the report.
 - Run each remaining check's `scenario` live in the worktree (shell via `Bash` — running things
   IS the job). Checks are independent: when several are expensive, fan them out to parallel
   subagents (model: haiku — the work is mechanical execution, not judgment), one check per
@@ -49,6 +54,22 @@ You never author or amend the verification plan.
 - After EACH check call `record_verification`: the exact id, the command/procedure verbatim, the
   machine result (exit code, counts, output tail — never a summary), the verdict, and for a
   failure a `note` with expected vs actual. An unrecorded check doesn't exist.
+
+## Step 2b — Diagnose every failure
+
+A failing check is only half the finding. For each one — including the checks the kernel ran —
+call `record_diagnosis`:
+
+- **where** — the narrowest source you actually located: `file.py:214`, the failing frame, the
+  request that errored. "In the date parser" when you know the line is a diagnosis you gave up on.
+- **why** — the mechanism the evidence supports: what the code actually does, not what it should.
+- **unknown** — what you could not determine. An honest gap is worth more than a confident guess:
+  it tells the next build cycle where you did NOT look.
+
+**Never the fix.** Name the cause; the change is build's to reason out inside the current plan. If
+you prescribe it, the next cycle implements your idea and you grade your own design.
+
+The report is refused while any failing check has no diagnosis this cycle.
 
 ## Step 3 — File the report, then stop
 

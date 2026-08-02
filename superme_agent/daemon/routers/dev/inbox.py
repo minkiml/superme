@@ -30,6 +30,7 @@ class InboxBody(BaseModel):
     # F3: run config chosen at capture — locked into the work-item at push. NULL = inherit default.
     model: str | None = None
     effort: str | None = None
+    autopilot: bool = True     # drives its own gates after push; the card's toggle opts out
 
 
 class InboxPatch(BaseModel):
@@ -39,8 +40,10 @@ class InboxPatch(BaseModel):
     text: str | None = None
     title: str | None = None
     routed_to: str | None = None
-    model: str | None = None   # F3 — editable while the row is still open
+    # The per-item config, editable for as long as the row is open (push freezes all three).
+    model: str | None = None
     effort: str | None = None
+    autopilot: bool | None = None
 
 
 class InboxPushBody(BaseModel):
@@ -54,7 +57,7 @@ async def dev_inbox_add(body: InboxBody, dev_store: DevStore = Depends(get_dev_s
         row = dev_store.add_inbox(
             body.context_id, body.text, body.kind, body.tag,
             title=body.title, origin=body.origin, spawned_from=body.spawned_from,
-            model=body.model, effort=body.effort,
+            model=body.model, effort=body.effort, autopilot=body.autopilot,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -81,6 +84,7 @@ async def dev_inbox_update(item_id: int, body: InboxPatch, dev_store: DevStore =
     item = dev_store.update_inbox(
         item_id, status=body.status, kind=body.kind, tag=body.tag,
         text=body.text, title=body.title, routed_to=body.routed_to,
+        model=body.model, effort=body.effort, autopilot=body.autopilot,
     )
     if item is None:
         raise HTTPException(status_code=404, detail="inbox item not found")

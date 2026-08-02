@@ -284,7 +284,7 @@ export interface paths {
         /**
          * System Attention
          * @description The top-of-SuperMe attention feed (Pass 2 · Q2): every `awaiting_human` hold across ALL
-         *     connected repos, grouped by repo and classified (escalation · breaker · paged · review · gate)
+         *     connected repos, grouped by repo and classified (escalation · paged · review · gate)
          *     so the notification center can badge a count and offer the right quick actions. Only repos with
          *     a hold appear; empty feed = nothing needs the owner.
          */
@@ -884,6 +884,10 @@ export interface paths {
          *     Filters: `item_id` (an item's own timeline), `scope` (item|dev|global), `since`/`until`
          *     (ISO timestamps — e.g. "what happened yesterday"). Newest first. Powers the dashboard
          *     activity view and the chat "what was done…" queries.
+         *
+         *     Discarded rows (a re-run's soft-deleted attempt) follow the reader split: an ITEM read is the
+         *     drilldown asking "what is happening on this item", so it sees the current attempt only; a
+         *     REPO-WIDE read is the project's history, which includes the attempts that were thrown away.
          */
         get: operations["dev_log_dev_log_get"];
         put?: never;
@@ -1223,7 +1227,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/dev/work-items/{item_id}/plan": {
+    "/dev/work-items/{item_id}/run": {
         parameters: {
             query?: never;
             header?: never;
@@ -1233,19 +1237,26 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Dev Work Item Plan
-         * @description Fire a background /plan turn for a work-item — the "Plan it" quick-action. Opens the run
-         *     immediately, then returns; the agent works in the background and the item lands at
-         *     `awaiting_human` (the pre-main gate) when done. Poll GET /dev (`running`) for live state.
+         * Dev Work Item Run
+         * @description The owner's manual RUN — fire the current phase's own background run (owner, 2026-07-31).
+         *
+         *     ONE route replacing `/plan` and `/vet`, which were two doors onto the same dispatcher with
+         *     hand-written per-phase guards that drifted from it (`/plan` refused anything outside `plan`,
+         *     `/vet` outside `vet`, and neither could reach triage/build/investigate at all). This is the
+         *     manual driver for a repo that is not on autopilot; on autopilot every phase fires itself.
+         *
+         *     409 when the item is terminal, stopped (that is Resume's), parked at a gate (that is Approve's),
+         *     at a phase with no run of its own, or already running — the same rule the drilldown's `run`
+         *     button reads, so a live-looking button can never 409.
          */
-        post: operations["dev_work_item_plan_dev_work_items__item_id__plan_post"];
+        post: operations["dev_work_item_run_dev_work_items__item_id__run_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/dev/work-items/{item_id}/vet": {
+    "/dev/work-items/{item_id}/resume": {
         parameters: {
             query?: never;
             header?: never;
@@ -1255,23 +1266,27 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Dev Work Item Vet
-         * @description Run VET on demand and let the loop take over (build-vet-loop §5): fire a background vet run
-         *     on this item's worktree. From there the daemon-side driver self-drives — passed → review ·
-         *     failed → a build cycle handed the vet report (while the breakers allow) ·
-         *     stale → re-vet · unverified → fail closed. This is the owner's manual "vet what's built now"
-         *     action; the AUTONOMOUS loop opens build-first (gates.enter_build_loop), so vet is the loop's
-         *     sole DECISION point, not its entry. 409 when the item isn't a runnable vet-phase item or a run
-         *     is in flight.
+         * Dev Work Item Resume
+         * @description The owner's RESUME on a work-item whose run STOPPED (recovery R4): re-fire the phase's own
+         *     background run. Nothing is rewound — the branch, the worktree and every artifact stand; only the
+         *     run is new, which is what makes this cheap enough to offer as a button.
+         *
+         *     Distinct from Re-run, which reads alike and does the opposite: Resume picks the run back up
+         *     that hit a wall it could not pass and carries the gap to review (the RUN succeeded, the work
+         *     stopped). Resume re-runs a run that never finished (the work is fine, the RUN stopped).
+         *
+         *     409 when the item isn't stopped, is terminal, has a run in flight, or sits at a phase with no
+         *     background run to re-fire — the same conditions the drilldown's button reads to stay inactive,
+         *     from the same function, so the tooltip can never disagree with the outcome.
          */
-        post: operations["dev_work_item_vet_dev_work_items__item_id__vet_post"];
+        post: operations["dev_work_item_resume_dev_work_items__item_id__resume_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/dev/work-items/{item_id}/continue": {
+    "/dev/work-items/{item_id}/rerun": {
         parameters: {
             query?: never;
             header?: never;
@@ -1281,15 +1296,20 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Dev Work Item Continue
-         * @description The owner's CONTINUE on a build parked at a human gate (BV-A1): RE-ENTER the build⟷vet loop.
-         *     Resumes the item's build thread to finalize — complete what's doable, record any wall it can't
-         *     pass itself as an assumption — then the normal build→vet→review flow carries the gap to review.
-         *     This is distinct from a bare chat reply to a paused build (which runs a `chat` turn and does NOT
-         *     advance the loop). 409 when the item isn't a parked build-phase item with a live worktree, or a
-         *     run is in flight.
+         * Dev Work Item Rerun
+         * @description The owner's RE-RUN: throw this item's work away and start it over in place (recovery R5).
+         *     Destructive, and the only recovery act that is — artifacts, reports, checkpoints, the deputy's
+         *     log and every session are DELETED, the worktree dir is removed, and the item re-enters at its
+         *     kind's first phase with `generation` bumped.
+         *
+         *     What it keeps is what makes it a re-run and not a new item: the id, the branch, every run and
+         *     dev-activity row (permanent trace), the inbox row, `preliminary/`, and every graph relation.
+         *
+         *     Distinct from `/resume`, which rewinds NOTHING and re-fires the run that died. Reach for this
+         *     only when there is no run worth re-firing. 409 when the item is terminal or has a run in
+         *     flight — the same rule the drilldown's button reads, from the same function.
          */
-        post: operations["dev_work_item_continue_dev_work_items__item_id__continue_post"];
+        post: operations["dev_work_item_rerun_dev_work_items__item_id__rerun_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1366,28 +1386,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/dev/work-items/{item_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /**
-         * Dev Work Item Delete
-         * @description Hard-delete a pre-build work-item and erase its trace: the `work-items/<id>/` folder,
-         *     its SDK session transcript + index entry, and the originating inbox row. Only allowed while
-         *     the item is in triage/plan (past that gate, code may have been touched). 409 otherwise.
-         */
-        delete: operations["dev_work_item_delete_dev_work_items__item_id__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/dev/work-items/{item_id}/detail": {
         parameters: {
             query?: never;
@@ -1442,7 +1440,12 @@ export interface paths {
         /**
          * Dev Work Item Artifacts
          * @description The call-trail: every tool / sub-agent / skill this work-item's runs invoked, grouped by
-         *     run (newest run first, calls in order within a run). Powers the detail popup's Execution tab.
+         *     run (newest run first, calls in order within a run) — the drilldown's Runs pane.
+         *
+         *     `runs` rides along so each group can say WHAT that run was. Without it a group header reads
+         *     "Run #653" and the owner has to guess why it opened with a shell command instead of a phase
+         *     skill — the answer being that it was a chat turn, or a resumed build cycle, or the conflict
+         *     resolver. Naming the feature answers it on the row.
          */
         get: operations["dev_work_item_artifacts_dev_work_items__item_id__artifacts_get"];
         put?: never;
@@ -1497,6 +1500,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/dev/work-items/{item_id}/doc.html": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Dev Work Item Doc
+         * @description One of the item's AGENT-FACING artifacts (brief.md · plan.md · build-vet-<n>.md) as a
+         *     standalone page — what a report's "full contract" link opens. `path` is the report's own
+         *     relative pointer; anything outside the item's `artifacts/` folder is refused as missing.
+         */
+        get: operations["dev_work_item_doc_dev_work_items__item_id__doc_html_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/dev/prompt-extraction/run": {
         parameters: {
             query?: never;
@@ -1535,31 +1560,6 @@ export interface paths {
         get: operations["dev_prompt_extraction_status_dev_prompt_extraction_status_get"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/dev/work-items/{item_id}/archive": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Dev Work Item Archive
-         * @description Archive a DONE item's folder: every loose artifact file is folded into one `archive.zip`
-         *     beside `item.md`, and `archived_at` is stamped. Storage only — the item stays completed and
-         *     the DB trace (runs, events, artifacts) is untouched forever (never-delete-logs). Idempotent.
-         *
-         *     Completion itself has no route: an item goes terminal MECHANICALLY when its closing run
-         *     reports (services/clearance) — there is no owner promotion and no agent proposal.
-         */
-        post: operations["dev_work_item_archive_dev_work_items__item_id__archive_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1629,27 +1629,6 @@ export interface paths {
         get: operations["dev_work_item_git_dev_work_items__item_id__git_get"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/dev/work-items/{item_id}/git/sync": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Dev Work Item Git Sync
-         * @description Freshness merge (D4): merge the trunk INTO the item branch, inside its worktree — run
-         *     during long builds and always before the review merge, so main-merge is trivial.
-         */
-        post: operations["dev_work_item_git_sync_dev_work_items__item_id__git_sync_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1770,7 +1749,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/dev/work-items/{item_id}/gate-brief": {
+    "/dev/work-items/{item_id}/report/{phase}": {
         parameters: {
             query?: never;
             header?: never;
@@ -1778,12 +1757,38 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Dev Work Item Gate Brief
-         * @description The item's CURRENT gate brief (or a preview of the next one when mid-phase): continuity →
-         *     delta → narrative → the uniform decision block, plus the mechanical checks — answerable
-         *     without opening code (D10 ★). The drilldown leads with this.
+         * Dev Work Item Report
+         * @description One phase's user-facing report (`reports/report-<phase>.md`) for the Reports tab — the markdown
+         *     1:1, plus the path to the full agent-facing contract behind it (§4.3). 404 when that phase hasn't
+         *     written one; the tab greys itself from `DrilldownResponse.reports` rather than probing.
          */
-        get: operations["dev_work_item_gate_brief_dev_work_items__item_id__gate_brief_get"];
+        get: operations["dev_work_item_report_dev_work_items__item_id__report__phase__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dev/work-items/{item_id}/drilldown": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Dev Work Item Drilldown
+         * @description Everything the drilldown renders, computed once (§4): the live strip · the
+         *     WHAT-YOU-NEED-TO-DO card · at-a-glance · the gate's named check rows with `blocking` · every
+         *     control's activation + reason · the Proof rows · which phases have a report.
+         *
+         *     Server-computed activation is the point. The gate brief carried `approve_blocked_by` and no
+         *     component ever read it, so the greying rule lived in TypeScript beside the rule the backend
+         *     enforces.
+         */
+        get: operations["dev_work_item_drilldown_dev_work_items__item_id__drilldown_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2361,7 +2366,8 @@ export interface components {
         /**
          * ArtifactCall
          * @description One row of a work-item's run call-trail (tool / sub-agent / skill invocation, or its result).
-         *     `tool_id` pairs a `result` row back to its call (concurrent tools return out of order).
+         *     `tool_id` pairs a `result` row back to its call (concurrent tools return out of order);
+         *     `parent_tool_id` names the sub-agent spawn the row happened inside (null = the parent itself).
          */
         ArtifactCall: {
             /** Id */
@@ -2374,13 +2380,15 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "tool" | "subagent" | "skill" | "mcp" | "result";
+            kind: "tool" | "subagent" | "skill" | "mcp" | "result" | "prompt" | "reply";
             /** Name */
             name: string;
             /** Description */
             description?: string | null;
             /** Tool Id */
             tool_id?: string | null;
+            /** Parent Tool Id */
+            parent_tool_id?: string | null;
             /** Created At */
             created_at: string;
         };
@@ -2425,6 +2433,29 @@ export interface components {
             evidence?: {
                 [key: string]: unknown;
             } | null;
+        };
+        /**
+         * AskQuestion
+         * @description One question from a parked grill run — the ask-card's fields, as the reporting tool typed them.
+         */
+        AskQuestion: {
+            /** Question */
+            question: string;
+            /**
+             * Recommend
+             * @default
+             */
+            recommend: string;
+            /**
+             * Why
+             * @default
+             */
+            why: string;
+            /**
+             * Instead
+             * @default
+             */
+            instead: string;
         };
         /** AssetActionBody */
         AssetActionBody: {
@@ -2490,6 +2521,29 @@ export interface components {
             count: number;
         };
         /**
+         * AttentionCard
+         * @description §4.2's WHAT-YOU-NEED-TO-DO card — the drilldown's single most important element, and the answer
+         *     to "I opened this and don't know what's needed from me". Three connected parts: WHY (the back
+         *     story) · DO (the exact act + the one control that performs it) · BASIS (pointers to what decides
+         *     it). None when nothing needs the owner — the card is hidden entirely, never an empty shell.
+         */
+        AttentionCard: {
+            /** Kind */
+            kind: string;
+            /** Why */
+            why: string;
+            /** Detail */
+            detail: string;
+            /** Do */
+            do: string;
+            /** Click */
+            click: string;
+            /** Basis */
+            basis: string[];
+            /** Questions */
+            questions: components["schemas"]["AskQuestion"][];
+        };
+        /**
          * AttentionHold
          * @description One parked (`awaiting_human`) work-item on the top-of-SuperMe attention center (Pass 2 · Q2).
          */
@@ -2508,7 +2562,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "question" | "escalation" | "breaker" | "paged" | "review" | "gate";
+            kind: "question" | "escalation" | "paged" | "review" | "gate";
             /** Reason */
             reason: string;
             /** Actor */
@@ -2627,7 +2681,7 @@ export interface components {
             /** Phase */
             phase?: ("triage" | "plan" | "build" | "vet" | "review" | "investigate" | "close") | null;
             /** Status */
-            status?: ("active" | "awaiting_child" | "awaiting_upstream" | "awaiting_slot" | "awaiting_human" | "done") | null;
+            status?: ("active" | "awaiting_child" | "awaiting_upstream" | "awaiting_slot" | "awaiting_human" | "error" | "done") | null;
             /** Done At */
             done_at?: string | null;
             /** Date */
@@ -2749,6 +2803,8 @@ export interface components {
             min_gain_pct: number | "auto";
             /** Floor Pct */
             floor_pct: number;
+            /** Min Pct */
+            min_pct: number;
         };
         /**
          * ConstitutionEntry
@@ -3021,6 +3077,68 @@ export interface components {
             docs: components["schemas"]["DocSummary"][];
         };
         /**
+         * DrilldownAction
+         * @description One control, with its activation decided SERVER-SIDE (§4's universal rule + the owner's slice-6
+         *     input). `reason` is populated either way: greyed it says what would make it live, live it says
+         *     what clicking does. `home` places it — `actions` (the frame's bar) or `git` (the Git tab).
+         *
+         *     Never hide a control: a `fast` repo with no PR button anywhere read as a missing feature, with
+         *     nothing on screen saying why.
+         */
+        DrilldownAction: {
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Home */
+            home: string;
+            /** Active */
+            active: boolean;
+            /** Reason */
+            reason: string;
+        };
+        /**
+         * DrilldownResponse
+         * @description Everything the work-item drilldown renders, computed once per poll. One route instead of four,
+         *     because every tab reads the same item folder — and one computation of the gate's checks, shared
+         *     with the deputy's prompt, because two summaries of one gate is how the owner loses the ability to
+         *     check the deputy's call.
+         */
+        DrilldownResponse: {
+            /** Id */
+            id: string;
+            /** Phase */
+            phase: string;
+            /** Gate */
+            gate: string;
+            /** Gate Label */
+            gate_label: string;
+            /** At Gate */
+            at_gate: boolean;
+            /** Terminal */
+            terminal: boolean;
+            now: components["schemas"]["NowStrip"];
+            attention: components["schemas"]["AttentionCard"] | null;
+            /** Glance */
+            glance: {
+                [key: string]: string;
+            };
+            /** Checks */
+            checks: components["schemas"]["GateCheck"][];
+            /** Blocked By */
+            blocked_by: string[];
+            numbers: components["schemas"]["GateNumbers"];
+            /** Authorizations */
+            authorizations: components["schemas"]["AuthorizationRequest"][];
+            paged: components["schemas"]["PagedNotice"] | null;
+            /** Actions */
+            actions: components["schemas"]["DrilldownAction"][];
+            /** Proof */
+            proof: components["schemas"]["ProofRow"][];
+            /** Reports */
+            reports: string[];
+        };
+        /**
          * EvalMetrics
          * @description The artifact's own run cost on a synthetic task (forge_kit/eval.py). kind 'run' = skill/agent
          *     measured once; kind 'overhead' = constitution's always-on per-turn cost. Tolerant of pre-metrics
@@ -3175,50 +3293,13 @@ export interface components {
             empty: boolean;
         };
         /**
-         * GateBriefResponse
-         * @description One gate's full decision surface. `brief` is the rendered markdown (continuity → delta →
-         *     narrative → decision) — since the typed fields landed it is the collapsed DETAILS payload;
-         *     the NOW card renders facts/assumptions/flags/numbers + the embedded gate report.
-         *     `at_gate: False` means the item is mid-phase and this previews the NEXT gate. Answerable
-         *     without opening code — that is the contract.
-         */
-        GateBriefResponse: {
-            /** Id */
-            id: string;
-            /** Gate */
-            gate: string;
-            /** At Gate */
-            at_gate: boolean;
-            /** Phase */
-            phase: string;
-            /** Title */
-            title: string;
-            /** Brief */
-            brief: string;
-            decision: components["schemas"]["GateDecision"];
-            /** Checks */
-            checks: components["schemas"]["GateCheck"][];
-            /** Facts */
-            facts: components["schemas"]["GateFact"][];
-            /** Assumptions */
-            assumptions: string[];
-            /** Flags */
-            flags: string[];
-            numbers: components["schemas"]["GateNumbers"];
-            /** Report Html */
-            report_html: string | null;
-            loop: components["schemas"]["LoopInstruments"];
-            /** Snippet */
-            snippet: string | null;
-            /** Terminal */
-            terminal: boolean;
-            paged: components["schemas"]["PagedNotice"] | null;
-            /** Authorizations */
-            authorizations: components["schemas"]["AuthorizationRequest"][];
-        };
-        /**
          * GateCheck
          * @description One mechanical row of a gate's evaluation — computed from durable state, never a claim.
+         *
+         *     `blocking` is the must-resolve marker (§2.1): a FAILING blocking check greys Approve, and every
+         *     other row is a named, visible fact the owner may act over with their eyes open. Both halves
+         *     matter — the old surface rendered checks as coloured dots with the reason hidden in a `title`
+         *     attribute, so a red gate looked identical whether it was fatal or advisory.
          */
         GateCheck: {
             /** Criterion */
@@ -3227,48 +3308,15 @@ export interface components {
             ok: boolean;
             /** Detail */
             detail: string;
-        };
-        /**
-         * GateDecision
-         * @description The uniform decision block (D10 ★): recommendation FIRST, stakes one line, per-option
-         *     consequence, dual-scale effort.
-         */
-        GateDecision: {
-            /** Recommendation */
-            recommendation: string;
-            /** Stakes */
-            stakes: string;
-            /** Options */
-            options: components["schemas"]["GateOption"][];
-            /** Effort User */
-            effort_user: string;
-            /** Effort Agent */
-            effort_agent: string;
             /**
-             * Approve Blocked By
-             * @default []
+             * Blocking
+             * @default false
              */
-            approve_blocked_by: string[];
-        };
-        /**
-         * GateFact
-         * @description One label:value row of the typed NOW card (renovation §3) — a present fact, never prose.
-         *     `tone` tints the row ('' neutral · 'warn').
-         */
-        GateFact: {
-            /** Label */
-            label: string;
-            /** Value */
-            value: string;
-            /**
-             * Tone
-             * @default
-             */
-            tone: string;
+            blocking: boolean;
         };
         /**
          * GateNumbers
-         * @description The brief's real-ratio counts (law 2: counts of real things, never invented scores).
+         * @description The real-ratio counts (law 2: counts of real things, never invented scores).
          */
         GateNumbers: {
             /** Tasks Done */
@@ -3281,15 +3329,6 @@ export interface components {
             checks_pass: number;
             /** Checks Total */
             checks_total: number;
-        };
-        /** GateOption */
-        GateOption: {
-            /** Id */
-            id: string;
-            /** Label */
-            label: string;
-            /** Consequence */
-            consequence: string;
         };
         /** GeneralDoc */
         GeneralDoc: {
@@ -3425,25 +3464,6 @@ export interface components {
             head?: string | null;
         };
         /**
-         * GitSyncResponse
-         * @description Freshness merge (trunk INTO the item branch). Conflicts: `in_tree=False` means the merge
-         *     was aborted and reported; True means it was deliberately left in the tree for resolution.
-         */
-        GitSyncResponse: {
-            /** Ok */
-            ok: boolean;
-            /** Merged */
-            merged: boolean;
-            /** Up To Date */
-            up_to_date?: boolean | null;
-            /** Commit */
-            commit?: string | null;
-            /** Conflicts */
-            conflicts?: string[] | null;
-            /** In Tree */
-            in_tree?: boolean | null;
-        };
-        /**
          * Glance
          * @description The dashboard glance summary (counts + bucketed item stubs). `awaiting_human` is the
          *     attention bucket (D10: the only status that pages the owner).
@@ -3551,6 +3571,11 @@ export interface components {
             model?: string | null;
             /** Effort */
             effort?: string | null;
+            /**
+             * Autopilot
+             * @default true
+             */
+            autopilot: boolean;
         };
         /** InboxDeleteResponse */
         InboxDeleteResponse: {
@@ -3577,6 +3602,8 @@ export interface components {
             model?: string | null;
             /** Effort */
             effort?: string | null;
+            /** Autopilot */
+            autopilot?: boolean | null;
         };
         /** InboxPushBody */
         InboxPushBody: {
@@ -3635,6 +3662,11 @@ export interface components {
             model?: string | null;
             /** Effort */
             effort?: string | null;
+            /**
+             * Autopilot
+             * @default true
+             */
+            autopilot: boolean;
         };
         /** InjectBody */
         InjectBody: {
@@ -3797,48 +3829,6 @@ export interface components {
             agents: components["schemas"]["PluginEntry"][];
         };
         /**
-         * LoopAttempt
-         * @description One loop-driver decision from the attempts ledger.
-         */
-        LoopAttempt: {
-            /** Cycle */
-            cycle: number;
-            /** Decision */
-            decision: string;
-            /** Reason */
-            reason: string;
-            /** Ts */
-            ts: string;
-        };
-        /**
-         * LoopCycle
-         * @description One filed vet report's verdict column: check id → pass/fail.
-         */
-        LoopCycle: {
-            /** Cycle */
-            cycle: number;
-            /** Verdicts */
-            verdicts: {
-                [key: string]: boolean;
-            };
-        };
-        /**
-         * LoopInstruments
-         * @description The build⟷vet loop's live panel (renovation §2 Loop row) — the checks×cycles matrix,
-         *     the newest failing report's Findings verbatim, and the driver trail. All derived from the
-         *     ledger + reports the loop already writes; empty checks+cycles ⇒ nothing to show.
-         */
-        LoopInstruments: {
-            /** Checks */
-            checks: string[];
-            /** Cycles */
-            cycles: components["schemas"]["LoopCycle"][];
-            /** Findings */
-            findings: string | null;
-            /** Attempts */
-            attempts: components["schemas"]["LoopAttempt"][];
-        };
-        /**
          * ManagedConstitution
          * @description One constitution for management — dir-scanned (provenance-agnostic: hand-authored + learned
          *     alike), keyed by (scope, slug). Powers the enable/disable surfaces for ALL constitutions.
@@ -3882,6 +3872,20 @@ export interface components {
             knowledge: components["schemas"]["KnowledgeStat"];
         };
         /**
+         * NowStrip
+         * @description What is happening right now: the live phase + cycle, and the newest recorded event.
+         */
+        NowStrip: {
+            /** Phase */
+            phase: string;
+            /** Cycle */
+            cycle: number;
+            /** Running */
+            running: boolean;
+            /** Last */
+            last: string;
+        };
+        /**
          * Orphan
          * @description A referential-integrity break — a pointer to an id the anchor docs don't define.
          */
@@ -3898,8 +3902,7 @@ export interface components {
         /**
          * PagedNotice
          * @description Why an item is parked for the owner when it isn't a plain gate wait — a deputy escalation, a
-         *     build⟷vet halt, or a blocked run. The drilldown LEADS with this so 'what's going on / what do I
-         *     decide' is answered on arrival, not buried under a future-gate preview. None ⇒ a normal gate.
+         *     build⟷vet halt, or a blocked run. None ⇒ a normal gate.
          */
         PagedNotice: {
             /** Source */
@@ -3921,6 +3924,26 @@ export interface components {
             mode: string;
             /** Commands */
             commands: string[];
+        };
+        /**
+         * PhaseReportResponse
+         * @description One phase's user-facing report for the Reports tab — the markdown 1:1, plus the path to the
+         *     full agent-facing contract behind it (§4.3's "Open full contract"). The report is the compact
+         *     read; the contract is the whole thing, one click away, never pasted in.
+         */
+        PhaseReportResponse: {
+            /** Phase */
+            phase: string;
+            /** Name */
+            name: string;
+            /** Text */
+            text: string;
+            /** Path */
+            path: string;
+            /** Mtime */
+            mtime: number;
+            /** Contract */
+            contract: string | null;
         };
         /** PlanBody */
         PlanBody: {
@@ -4310,6 +4333,88 @@ export interface components {
              * @default []
              */
             links: components["schemas"]["PromptExtractionLink"][];
+        };
+        /**
+         * ProofRow
+         * @description §4.2's connected view: one row per BUILT THING, each carrying its own validation →
+         *     verification. The join key is the plan task id — cycle §Built/§Validation bullets lead with it and
+         *     vet-plan checks name it in `covers:`. `task: ""` is the item-wide row, where untagged content
+         *     lands: nothing is dropped and nothing is guessed at.
+         */
+        ProofRow: {
+            /** Task */
+            task: string;
+            /** Text */
+            text: string;
+            /** Done */
+            done: boolean;
+            /** Built */
+            built: string[];
+            /** Validated */
+            validated: string[];
+            /** Verified */
+            verified: components["schemas"]["ProofVerdict"][];
+        };
+        /**
+         * ProofVerdict
+         * @description One check of the plan's exam: what it will prove (`expect`, `mode`), and where it stands.
+         *     `ran` False ⇒ the loop hasn't reached it yet — the row exists from the plan gate on, so the
+         *     owner approving a plan can see the proof they are approving. `result` is the vet's captured
+         *     output, verbatim — a failing row IS the expected-vs-actual.
+         */
+        ProofVerdict: {
+            /** Check */
+            check: string;
+            /**
+             * Expect
+             * @default
+             */
+            expect: string;
+            /**
+             * Mode
+             * @default
+             */
+            mode: string;
+            /**
+             * Ran
+             * @default false
+             */
+            ran: boolean;
+            /**
+             * By
+             * @default agent
+             */
+            by: string;
+            /** Passed */
+            passed: boolean;
+            /** Deferred */
+            deferred: boolean;
+            /** Cycle */
+            cycle: number | null;
+            /** How */
+            how: string;
+            /** Result */
+            result: string;
+            /**
+             * Where
+             * @default
+             */
+            where: string;
+            /**
+             * Why
+             * @default
+             */
+            why: string;
+            /**
+             * Unknown
+             * @default
+             */
+            unknown: string;
+            /**
+             * History
+             * @default []
+             */
+            history: components["schemas"]["VerdictHistory"][];
         };
         /**
          * Proposal
@@ -4827,7 +4932,9 @@ export interface components {
          * RunEventRow
          * @description One entry of a run's event trail: a prompt, an assistant reply block, a tool/skill/agent call,
          *     or that call's `result`. `kind` ∈ prompt | reply | tool | mcp | skill | agent | subagent | result;
-         *     `name` is the label, `description` the body; `tool_id` pairs a result back to its call.
+         *     `name` is the label, `description` the body; `tool_id` pairs a result back to its call, and
+         *     `parent_tool_id` names the sub-agent spawn a row happened inside (null = the parent's own call),
+         *     so a fan-out reads as nested work rather than as the parent doing everything itself.
          */
         RunEventRow: {
             /** Id */
@@ -4842,8 +4949,35 @@ export interface components {
             description?: string | null;
             /** Tool Id */
             tool_id?: string | null;
+            /** Parent Tool Id */
+            parent_tool_id?: string | null;
             /** Created At */
             created_at: string;
+        };
+        /**
+         * RunHeader
+         * @description What one of an item's runs WAS — so a call-trail group can name itself. `feature` is the
+         *     answer to "why did this run open with a shell command instead of a phase skill": `chat` (an
+         *     owner turn), `resolve` (the conflict resolver), a resumed `build` cycle, `deputy`, `compact`.
+         */
+        RunHeader: {
+            /** Id */
+            id: number;
+            /** Feature */
+            feature?: string | null;
+            /** Phase */
+            phase?: string | null;
+            /** Status */
+            status?: string | null;
+            /** Model */
+            model?: string | null;
+            /**
+             * Tokens
+             * @default 0
+             */
+            tokens: number;
+            /** Started At */
+            started_at?: string | null;
         };
         /**
          * RunRow
@@ -5089,19 +5223,6 @@ export interface components {
             /** Filed */
             filed: number;
         };
-        /** SyncBody */
-        SyncBody: {
-            /**
-             * Context Id
-             * @default global
-             */
-            context_id: string;
-            /**
-             * Leave Conflicts
-             * @default false
-             */
-            leave_conflicts: boolean;
-        };
         /** SystemEffortBody */
         SystemEffortBody: {
             /** Effort */
@@ -5216,6 +5337,8 @@ export interface components {
             description?: string | null;
             /** Tool Id */
             tool_id?: string | null;
+            /** Parent Tool Id */
+            parent_tool_id?: string | null;
             /** Created At */
             created_at: string;
         };
@@ -5442,6 +5565,16 @@ export interface components {
             ctx?: Record<string, never>;
         };
         /**
+         * VerdictHistory
+         * @description One cycle's verdict for a check — the sequence renders as `c3 ✗→✓`.
+         */
+        VerdictHistory: {
+            /** Cycle */
+            cycle: number | null;
+            /** Passed */
+            passed: boolean;
+        };
+        /**
          * WorkGraphEdge
          * @description One typed edge: contains | spawned_from (carries `relation`) | supersedes.
          */
@@ -5513,7 +5646,9 @@ export interface components {
             /** Phase */
             phase?: ("triage" | "plan" | "build" | "vet" | "review" | "investigate" | "close") | null;
             /** Status */
-            status?: ("active" | "awaiting_child" | "awaiting_upstream" | "awaiting_slot" | "awaiting_human" | "done") | null;
+            status?: ("active" | "awaiting_child" | "awaiting_upstream" | "awaiting_slot" | "awaiting_human" | "error" | "done") | null;
+            /** Error Reason */
+            error_reason?: string | null;
             /** After */
             after?: string[] | null;
             /** Autopilot */
@@ -5540,8 +5675,6 @@ export interface components {
             git_pr_opened_at?: string | null;
             /** Seen At */
             seen_at?: string | null;
-            /** Archived At */
-            archived_at?: string | null;
             /** Artifacts */
             artifacts?: components["schemas"]["ArtifactRef"][] | null;
             /** Session Id */
@@ -5603,29 +5736,15 @@ export interface components {
                 [key: string]: unknown;
             } | null;
         };
-        /**
-         * WorkItemArchiveResponse
-         * @description The on-demand folder archive of a DONE item — storage only, never a lifecycle change.
-         */
-        WorkItemArchiveResponse: {
-            /** Ok */
-            ok: boolean;
-            /** Id */
-            id: string;
-            /** Archive */
-            archive: string;
-            /** Files */
-            files: number;
-            /**
-             * Already
-             * @default false
-             */
-            already: boolean;
-        };
         /** WorkItemArtifactsResponse */
         WorkItemArtifactsResponse: {
             /** Artifacts */
             artifacts: components["schemas"]["ArtifactCall"][];
+            /**
+             * Runs
+             * @default []
+             */
+            runs: components["schemas"]["RunHeader"][];
         };
         /**
          * WorkItemAutopilotResponse
@@ -5640,17 +5759,6 @@ export interface components {
             autopilot: boolean;
             /** Changed */
             changed: boolean;
-        };
-        /** WorkItemDeleteResponse */
-        WorkItemDeleteResponse: {
-            /** Ok */
-            ok: boolean;
-            /** Id */
-            id: string;
-            /** Session Cleared */
-            session_cleared: boolean;
-            /** Inbox Removed */
-            inbox_removed?: number | null;
         };
         /** WorkItemDetailResponse */
         WorkItemDetailResponse: {
@@ -7793,7 +7901,7 @@ export interface operations {
             };
         };
     };
-    dev_work_item_plan_dev_work_items__item_id__plan_post: {
+    dev_work_item_run_dev_work_items__item_id__run_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -7828,7 +7936,7 @@ export interface operations {
             };
         };
     };
-    dev_work_item_vet_dev_work_items__item_id__vet_post: {
+    dev_work_item_resume_dev_work_items__item_id__resume_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -7863,7 +7971,7 @@ export interface operations {
             };
         };
     };
-    dev_work_item_continue_dev_work_items__item_id__continue_post: {
+    dev_work_item_rerun_dev_work_items__item_id__rerun_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -7990,39 +8098,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WorkItemScaffoldResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    dev_work_item_delete_dev_work_items__item_id__delete: {
-        parameters: {
-            query?: {
-                context_id?: string;
-            };
-            header?: never;
-            path: {
-                item_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorkItemDeleteResponse"];
                 };
             };
             /** @description Validation Error */
@@ -8202,6 +8277,40 @@ export interface operations {
             };
         };
     };
+    dev_work_item_doc_dev_work_items__item_id__doc_html_get: {
+        parameters: {
+            query: {
+                path: string;
+                context_id?: string;
+            };
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     dev_prompt_extraction_run_dev_prompt_extraction_run_post: {
         parameters: {
             query?: {
@@ -8251,39 +8360,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PromptExtractionStatusResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    dev_work_item_archive_dev_work_items__item_id__archive_post: {
-        parameters: {
-            query?: {
-                context_id?: string;
-            };
-            header?: never;
-            path: {
-                item_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorkItemArchiveResponse"];
                 };
             };
             /** @description Validation Error */
@@ -8387,41 +8463,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GitHealthResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    dev_work_item_git_sync_dev_work_items__item_id__git_sync_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                item_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SyncBody"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["GitSyncResponse"];
                 };
             };
             /** @description Validation Error */
@@ -8608,7 +8649,41 @@ export interface operations {
             };
         };
     };
-    dev_work_item_gate_brief_dev_work_items__item_id__gate_brief_get: {
+    dev_work_item_report_dev_work_items__item_id__report__phase__get: {
+        parameters: {
+            query?: {
+                context_id?: string;
+            };
+            header?: never;
+            path: {
+                item_id: string;
+                phase: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhaseReportResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dev_work_item_drilldown_dev_work_items__item_id__drilldown_get: {
         parameters: {
             query?: {
                 context_id?: string;
@@ -8627,7 +8702,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["GateBriefResponse"];
+                    "application/json": components["schemas"]["DrilldownResponse"];
                 };
             };
             /** @description Validation Error */

@@ -43,6 +43,7 @@ from ...core import artifacts
 from ...core.context import Context
 from ...core.kind_profiles import get_profile
 from ...core.permissions import deny_all
+from .turns import ResilientTurn
 
 log = logging.getLogger("superme-agent")
 
@@ -52,15 +53,34 @@ log = logging.getLogger("superme-agent")
 # per-model one. 25% is that floor plus room for one exchange; a trigger at or below it could
 # only thrash, so `validate_trigger` refuses one at config time.
 FLOOR_MIN_PCT = 25
+# …and the minimum a TRIGGER may sit at, which is a different question the guard used to conflate.
+# Clearing the floor is not enough: a trigger just above it re-fires on the next turn, because
+# compaction lands the session near the floor and one exchange puts it back over.
+#
+# OBSERVED 2026-07-30 (item `dc00c47bc74f`, trigger 26%): seven compactions in three days, EVERY ONE
+# 80–93% effective, each reclaiming to ~5% and re-crossed 26% within a turn. Nothing flagged it,
+# because the strike rule only counts INEFFECTIVE compactions.
+#
+# Derived from the same measurement `FLOOR_MIN_PCT` uses, not picked: the floor is 10.6%
+# (21.3K/200K) and 25% is that plus room for ONE exchange — so one exchange is ~14 points. A trigger
+# needs the floor plus one exchange to do work in, and one more before it fires again: 10.6 + 2×14 ≈
+# 40. Below that, compaction is a treadmill however well it shrinks.
+TRIGGER_MIN_PCT = 40
 STRIKES_TO_BACKOFF = 2
+# A compaction has to buy at least this many real turns of runway, or it was a treadmill step.
+MIN_RUNWAY_TURNS = 2
 _CHECKPOINT_DEDUPE_S = 120  # skip the derived bank if a checkpoint landed this recently
 
 
 @dataclass
 class _SessState:
     defer: bool = False              # latch: wait for the next real turn's usage before re-firing
-    strikes: int = 0                 # consecutive ineffective compactions
+    strikes: int = 0                 # consecutive compactions that bought nothing
     backed_off: bool = False
+    # Real turns since this session last compacted. `None` = it has not compacted yet. This is what
+    # makes THRASH visible: a compaction that shrinks 90% but is re-crossed by the very next turn
+    # bought no runway, and shrink alone cannot tell you that (see `_bought_runway`).
+    turns_since_compact: int | None = None
 
 
 _state: dict[str, _SessState] = {}
@@ -73,9 +93,15 @@ def _s(session_id: str) -> _SessState:
 def note_turn_start(session_id: str | None) -> None:
     """A real (non-compact) turn ran on this session, so the next reading will be fresh — release
     the defer latch. This is the ONLY thing that releases it: without it, a seam that re-enters
-    right after an ineffective compaction would read the same over-threshold fill and fire again."""
+    right after an ineffective compaction would read the same over-threshold fill and fire again.
+
+    It also COUNTS the turn, which is the runway measure: how much work a compaction actually
+    bought before the trigger was crossed again."""
     if session_id and session_id in _state:
-        _state[session_id].defer = False
+        st = _state[session_id]
+        st.defer = False
+        if st.turns_since_compact is not None:
+            st.turns_since_compact += 1
 
 
 def validate_trigger(pct: int) -> str | None:
@@ -84,6 +110,11 @@ def validate_trigger(pct: int) -> str | None:
     if pct <= FLOOR_MIN_PCT:
         return (f"trigger {pct}% is at/below the incompressible floor ({FLOOR_MIN_PCT}% — "
                 f"system prompt + tools alone); it would fire-loop. Use a higher value.")
+    if pct < TRIGGER_MIN_PCT:
+        return (f"trigger {pct}% clears the floor but leaves no working room: compaction lands a "
+                f"session near {FLOOR_MIN_PCT}% and one exchange (~14 points) puts it back over "
+                f"{pct}%, so it would re-fire almost every turn — effectively, and pointlessly. "
+                f"Use {TRIGGER_MIN_PCT}% or more.")
     if pct > 95:
         return "trigger above 95% leaves no room to act — the model would truncate first."
     return None
@@ -252,16 +283,14 @@ async def run_handoff_turn(ctx: Context, context_id: str, item_id: str | None, s
         write_dir.mkdir(parents=True, exist_ok=True)   # the scope must exist to be writable
         mcp = None   # no item tools for a general session — the skill writes the file directly
     capture_prompt(context_id, prompt, item_id=item_id)
-    try:
-        async for ev in _agent.run_turn(
-            ctx, prompt, resume=session_id, model=model,
-            approve=scoped_writes_approve(write_dir, deny_all) if write_dir else deny_all,
-            extra_mcp_servers=mcp,
-        ):
-            if isinstance(ev, Result):
-                return True
-    except Exception:
-        log.exception("handoff turn failed for %s/%s", context_id, item_id or "(session)")
+    turn = ResilientTurn("handoff", item_id=item_id)
+    async for ev in turn.stream(
+        _agent, ctx, prompt, resume=session_id, model=model,
+        approve=scoped_writes_approve(write_dir, deny_all) if write_dir else deny_all,
+        extra_mcp_servers=mcp,
+    ):
+        if isinstance(ev, Result):
+            return True
     return False
 
 
@@ -320,8 +349,9 @@ async def run_compaction(ctx: Context, context_id: str, item_id: str | None, ses
         #    keeps the full pre-compaction history + gains the boundary record).
         real_usage: dict | None = None
         window: int | None = None
-        async for ev in _agent.run_turn(ctx, "/compact", resume=session_id, model=model,
-                                        approve=deny_all):
+        compact_turn = ResilientTurn("compact", item_id=item_id)
+        async for ev in compact_turn.stream(_agent, ctx, "/compact", resume=session_id,
+                                            model=model, approve=deny_all):
             if isinstance(ev, Result):
                 real_usage = ev.usage
                 window = ev.context_window   # the model's real window — converts floor % → tokens
@@ -373,21 +403,48 @@ async def run_compaction(ctx: Context, context_id: str, item_id: str | None, ses
         # 0.48 of reclaimable, just under the bar) — two hand-typed `/compact`s on a short thread
         # would have retired its auto-compaction for good. An effective one still CLEARS strikes:
         # that is evidence the session is compactable again, whoever asked.
-        if verdict["effective"]:
+        #
+        # RUNWAY, not just shrink (2026-07-30). `effective` answers "did it get smaller"; it cannot
+        # answer "did that buy any working room", and those came apart in practice: seven consecutive
+        # 80–93%-effective compactions on one item, each re-crossing the trigger within a turn, with
+        # strikes pinned at 0 the whole time. A compaction that bought fewer than MIN_RUNWAY_TURNS
+        # real turns is a treadmill step and counts against the back-off however well it shrank.
+        bought_runway = (st.turns_since_compact is None            # first compaction on this session
+                         or st.turns_since_compact >= MIN_RUNWAY_TURNS)
+        verdict["bought_runway"] = bought_runway
+        verdict["runway_turns"] = st.turns_since_compact
+        # `or manual` keeps the manual carve-out intact: the owner asked, and a hand-run compaction
+        # cannot loop, so it clears the board on effectiveness alone. The runway condition is for the
+        # AUTO trigger, which is the only thing that can treadmill.
+        if verdict["effective"] and (bought_runway or manual):
             st.strikes = 0
         elif not manual:
             st.strikes += 1
+        st.turns_since_compact = 0   # this compaction is now the one runway is measured from
         # The verdict event's meta is the durable CALIBRATION record (v2 runway tuning reads
         # these + the per-turn ctx_pct history on run rows): full measurement — mode, floor,
         # window, reclaimable, ratio — not just the outcome. `trigger_pct` is None for a manual
         # "Compact now" (no trigger fired — a 0 here would poison the calibration data).
+        # `post_pct` came off the `/compact` turn's Result and was ALWAYS None: a compact turn
+        # reports no usage (that is why its run row reads `Σ 0 tok`), so the SDK has no fill to give.
+        # It is derived here instead, from two MEASURED numbers the boundary does record — post
+        # tokens over the model's real window. Not an estimate: a ratio of two measurements, which is
+        # what a fill percentage is everywhere else in the system.
+        if post_pct is None and window and verdict.get("post_tokens"):
+            post_pct = round(verdict["post_tokens"] / window * 100)
         verdict.update(strikes=st.strikes, trigger_pct=pre_pct, post_pct=post_pct)
         pre, post = verdict["pre_tokens"], verdict["post_tokens"]
         _dev_store.log_event(context_id, "compaction.verdict",
                              (f"Compaction {'effective' if verdict['effective'] else 'INEFFECTIVE'}: "
                               f"{pre} → {post} tokens ({round(verdict['gain_pct'])}% shrink"
                               + (f", {round(verdict['reclaimed_ratio'] * 100)}% of reclaimable"
-                                 if verdict.get("reclaimed_ratio") is not None else "") + ")"
+                                 if verdict.get("reclaimed_ratio") is not None else "")
+                              + (f" → {post_pct}% fill" if post_pct is not None else "") + ")"
+                              # The treadmill, named where the owner actually reads it. A shrink
+                              # figure alone let seven of these look like seven successes.
+                              + ("" if verdict.get("bought_runway", True) else
+                                 f" — but bought only {verdict.get('runway_turns')} turn(s) of "
+                                 f"runway; the trigger is too low for this session")
                               if pre else "Compaction produced no boundary — counted ineffective"),
                              item_id=item_id, actor="daemon",
                              meta={**verdict, "session_id": session_id, "window": window,

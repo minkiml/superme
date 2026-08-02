@@ -36,7 +36,9 @@ export const K = {
   // ── one work-item ────────────────────────────────────────────────────────────────────────────
   itemDetail: (ctx: string, id: string) => `dev:${ctx}:item:${id}:detail`,
   itemArtifacts: (ctx: string, id: string) => `dev:${ctx}:item:${id}:artifacts`,
-  itemGateBrief: (ctx: string, id: string) => `dev:${ctx}:item:${id}:gate-brief`,
+  itemDrilldown: (ctx: string, id: string) => `dev:${ctx}:item:${id}:drilldown`,
+  itemReport: (ctx: string, id: string, phase: string) =>
+    `dev:${ctx}:item:${id}:report:${phase}`,
   itemGit: (ctx: string, id: string) => `dev:${ctx}:item:${id}:git`,
 } as const
 

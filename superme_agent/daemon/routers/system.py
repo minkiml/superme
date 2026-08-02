@@ -285,7 +285,7 @@ async def repos_overview(spine: SystemSpine = Depends(get_spine)) -> list[dict]:
 @router.get("/system/attention", response_model=list[RepoAttention])
 async def system_attention() -> list[dict]:
     """The top-of-SuperMe attention feed (Pass 2 · Q2): every `awaiting_human` hold across ALL
-    connected repos, grouped by repo and classified (escalation · breaker · paged · review · gate)
+    connected repos, grouped by repo and classified (escalation · paged · review · gate)
     so the notification center can badge a count and offer the right quick actions. Only repos with
     a hold appear; empty feed = nothing needs the owner."""
     from ..services import attention
@@ -413,8 +413,9 @@ async def get_system_compaction(spine: SystemSpine = Depends(get_spine)) -> dict
     """The compaction runtime knobs (S8/D11): trigger fill %, per-kind overrides, and the
     effectiveness threshold, plus the static incompressible floor the trigger may never sit
     at/below (what makes the knob safe to expose)."""
-    from ..services.compaction import FLOOR_MIN_PCT
-    return {"ok": True, **spine.get_compaction_config(), "floor_pct": FLOOR_MIN_PCT}
+    from ..services.compaction import FLOOR_MIN_PCT, TRIGGER_MIN_PCT
+    return {"ok": True, **spine.get_compaction_config(),
+            "floor_pct": FLOOR_MIN_PCT, "min_pct": TRIGGER_MIN_PCT}
 
 
 @router.post("/system/compaction", response_model=CompactionConfigResponse)
@@ -422,7 +423,7 @@ async def set_system_compaction(body: CompactionConfigBody,
                                 spine: SystemSpine = Depends(get_spine)) -> dict:
     """Tune the compaction runtime. Any omitted field is left unchanged. FLOOR-AWARE: a trigger
     the incompressible floor alone would exceed is refused (409) — never stored, never fired."""
-    from ..services.compaction import FLOOR_MIN_PCT, validate_trigger
+    from ..services.compaction import FLOOR_MIN_PCT, TRIGGER_MIN_PCT, validate_trigger
     for pct in [body.trigger_pct, *(body.by_kind or {}).values()]:
         if pct is None:
             continue
@@ -436,7 +437,7 @@ async def set_system_compaction(body: CompactionConfigBody,
                                       min_gain_pct=body.min_gain_pct)
     log.info("compaction config: trigger=%d%% by_kind=%s min_gain=%s",
              cfg["trigger_pct"], cfg["by_kind"], cfg["min_gain_pct"])
-    return {"ok": True, **cfg, "floor_pct": FLOOR_MIN_PCT}
+    return {"ok": True, **cfg, "floor_pct": FLOOR_MIN_PCT, "min_pct": TRIGGER_MIN_PCT}
 
 
 @router.post("/repos/{repo_id}/model", response_model=RepoModelResponse)

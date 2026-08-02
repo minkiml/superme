@@ -2,6 +2,13 @@
 nimbalyst near-verbatim).
 
 Every work-item lands in AT MOST one bucket, strict priority:
+    error    (red)         — the work STOPPED: a crashed turn, an outage that outlasted the retry
+                             ladder, a daemon restart (durable `status == error`, carrying the
+                             `error_reason` it stopped with). Ranked above `needs_you` because an
+                             item resting at a gate is the workflow working as designed, while this
+                             one is not working at all. It is never terminal — the owner Resumes it
+                             or re-runs it — and it is NOT the run-level `system_fault`, which is a
+                             run that finished while our machinery misbehaved (recovery R2).
     needs_you (orange)     — sits at a human gate: durable `status == awaiting_human`, never an
                              ephemeral flag (restart-proof; only awaiting{human} pages — child/
                              external stay silent, D2). Reserved for a TRUE human decision.
@@ -27,8 +34,9 @@ Derived at read time from durable state; nothing stored, nothing to drift.
 from .gate_briefs import GATE_FOR_PHASE
 from .kind_profiles import get_profile
 
-TIER_ORDER = ("needs_you", "deputy_working", "running", "unread")
-TIER_COLOR = {"needs_you": "orange", "deputy_working": "purple", "running": "green", "unread": "blue"}
+TIER_ORDER = ("error", "needs_you", "deputy_working", "running", "unread")
+TIER_COLOR = {"error": "red", "needs_you": "orange", "deputy_working": "purple",
+              "running": "green", "unread": "blue"}
 
 
 def _is_terminal(item: dict) -> bool:
@@ -37,6 +45,13 @@ def _is_terminal(item: dict) -> bool:
 
 def _reason(item: dict, bucket: str, stalled: bool = False) -> str:
     phase = str(item.get("phase") or "")
+    if bucket == "error":
+        # The stored reason IS the message — written where the work stopped, by the runner that
+        # watched it stop. This reader never re-derives it: guessing a cause from the phase alone
+        # is how "unexpected error" labels that tell the owner nothing get born.
+        why = str(item.get("error_reason") or "").strip()
+        where = f"during {phase}" if phase else "mid-run"
+        return f"the work stopped {where} — {why}" if why else f"the work stopped {where}"
     if bucket == "needs_you":
         gate = GATE_FOR_PHASE.get(phase)
         if stalled:
@@ -67,7 +82,11 @@ def assign(items: list[dict], running_ids: set[str], deputy_ids: set[str] = froz
         iid = str(it.get("id"))
         terminal = _is_terminal(it)
         stalled = False
-        if str(it.get("status")) == "awaiting_human":
+        # FIRST, above every other claim: a stopped item is not resting, it is broken, and it stays
+        # invisible to every tier below (they all key on active/awaiting_human, which it is not).
+        if str(it.get("status")) == "error" and not terminal:
+            tier = "error"
+        elif str(it.get("status")) == "awaiting_human":
             tier = "needs_you"
         elif iid in deputy_ids and not terminal:
             tier = "deputy_working"

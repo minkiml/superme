@@ -19,7 +19,7 @@ from ....gateway import contexts
 from ...services import git_ops, pr_view
 from ...services.runs import _begin_run, _run_background_resolve
 from ...schemas.dev.git import (
-    GitHealthResponse, GitSyncResponse, GitMergeResponse, GitRevertResponse, GitResolveResponse,
+    GitHealthResponse, GitMergeResponse, GitRevertResponse, GitResolveResponse,
     PrViewResponse, PrDiffResponse,
 )
 
@@ -67,38 +67,6 @@ async def dev_work_item_git(item_id: str, context_id: str = "global",
     return {**git_layer.worktree_health(ctx.cwd, ctx.id, item_id, item.get("git_branch"),
                                         trunk=git_ops.repo_anchor(ctx, spine),
                                         merge_commit=item.get("git_merge_commit")), **mode}
-
-
-class SyncBody(GitBody):
-    # True leaves a conflicted merge IN the tree (the resolve route does this itself; direct use
-    # is for a human who wants to inspect). Default aborts + reports — the safe path.
-    leave_conflicts: bool = False
-
-
-@router.post("/dev/work-items/{item_id}/git/sync", response_model=GitSyncResponse,
-             response_model_exclude_unset=True)
-async def dev_work_item_git_sync(item_id: str, body: SyncBody,
-                                 dev: DevKnowledgeService = Depends(get_dev),
-                                 dev_store: DevStore = Depends(get_dev_store),
-                                 spine: SystemSpine = Depends(get_spine)) -> dict:
-    """Freshness merge (D4): merge the trunk INTO the item branch, inside its worktree — run
-    during long builds and always before the review merge, so main-merge is trivial."""
-    ctx, _root, item = _load(body.context_id, item_id, dev)
-    wt = _require_worktree(item)
-    if spine.is_item_running(body.context_id, item_id):
-        raise HTTPException(status_code=409, detail="a run is in progress for this item")
-    try:
-        res = git_layer.sync_from_main(ctx.cwd, wt, target=git_ops.repo_anchor(ctx, spine),
-                                       leave_conflicts=body.leave_conflicts)
-    except (git_layer.GitError, git_layer.GitBusy) as e:
-        raise HTTPException(status_code=409, detail=str(e))
-    dev_store.log_event(body.context_id, "git.sync",
-                        ("Synced trunk into item branch" if res.get("merged")
-                         else "Already up to date" if res.get("up_to_date")
-                         else f"Sync hit {len(res.get('conflicts') or [])} conflict(s)"),
-                        item_id=item_id, actor="owner", meta=res)
-    return {"ok": True, "merged": bool(res.get("merged")), **{k: v for k, v in res.items()
-                                                              if k != "merged"}}
 
 
 @router.post("/dev/work-items/{item_id}/git/merge", response_model=GitMergeResponse,

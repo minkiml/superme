@@ -19,6 +19,7 @@ from ..app_state import agent as _agent, dev_store as _dev_store, spine as _spin
     sessions as _sessions
 from ..deps import cache_slash as _cache_slash, proposal_slug as _proposal_slug
 from .runs import capture_prompt, capture_event
+from .turns import ResilientTurn
 from ...core import kernel_speech
 from ...core import Init, Usage, Result, Status, TextDelta, ToolResult, deny_all, learning_write_approve
 from ...gateway import contexts
@@ -56,45 +57,43 @@ async def _run_background_distill(ctx, context_id: str, run_id: int) -> None:
     session_id = None
     run_model = None
     run_usage = None
-    try:
-        async for ev in _agent.run_turn(
-            ctx, prompt,
-            resume=None,
-            model=_spine.resolve_agent_model("distill"),   # its .md tier → latest concrete (never the lagging CLI alias)
-            effort=_spine.resolve_agent_effort("distill"),  # its .md effort field (default medium)
-            approve=deny_all,                 # distill writes only via DB tools (pre-approved), not files
-            extra_mcp_servers=turn_mcp,
-        ):
-            if isinstance(ev, Usage):
-                _spine.bump_run(run_id, add_tokens=ev.total_tokens, ctx_pct=ev.ctx_pct)
-            elif isinstance(ev, Result):
-                session_id = ev.session_id    # captured ONLY to dispose the throwaway transcript
-                run_model = ev.model          # the model the SDK resolved for this background run
-                run_usage = ev.usage          # whole-turn usage — typed-column fallback at finish
-            elif isinstance(ev, Init):
-                _cache_slash(ctx.id, ev.slash_commands)
-            # Per-run trail for the Activity trace: this background run's reply text + tool/skill/agent
-            # calls (its throwaway session transcript is disposed, so this is the only record).
-            if isinstance(ev, (Status, TextDelta, ToolResult)):
-                capture_event(context_id, ev, run_id=run_id)
-            # NB: never _sessions.record — distill is sessionless; its transcript is disposed below.
-    except Exception:
-        log.exception("background distill run failed for %s", context_id)
+    turn = ResilientTurn("distill")
+    async for ev in turn.stream(
+        _agent, ctx, prompt,
+        resume=None,
+        model=_spine.resolve_agent_model("distill"),   # its .md tier → latest concrete (never the lagging CLI alias)
+        effort=_spine.resolve_agent_effort("distill"),  # its .md effort field (default medium)
+        approve=deny_all,                 # distill writes only via DB tools (pre-approved), not files
+        extra_mcp_servers=turn_mcp,
+    ):
+        if isinstance(ev, Usage):
+            _spine.bump_run(run_id, add_tokens=ev.total_tokens, ctx_pct=ev.ctx_pct)
+        elif isinstance(ev, Result):
+            session_id = ev.session_id    # captured ONLY to dispose the throwaway transcript
+            run_model = ev.model          # the model the SDK resolved for this background run
+            run_usage = ev.usage          # whole-turn usage — typed-column fallback at finish
+        elif isinstance(ev, Init):
+            _cache_slash(ctx.id, ev.slash_commands)
+        # Per-run trail for the Activity trace: this background run's reply text + tool/skill/agent
+        # calls (its throwaway session transcript is disposed, so this is the only record).
+        if isinstance(ev, (Status, TextDelta, ToolResult)):
+            capture_event(context_id, ev, run_id=run_id)
+        # NB: never _sessions.record — distill is sessionless; its transcript is disposed below.
+    if turn.fault.failed:
         run_status = "aborted"
-    finally:
-        # The run is LOGGED (the spine run row is kept as durable telemetry + the event below),
-        # but the session is fully DISPOSABLE — delete its throwaway transcript so nothing
-        # resumable lingers on disk.
-        _spine.finish_run(run_id, status=run_status, model=run_model, usage=run_usage)
-        if session_id:
-            _sessions.discard_transcript(ctx, session_id)
-        props_after = len(_dev_store.list_memory_proposals(context_id, status="proposed"))
-        filed = max(0, props_after - props_before)
-        _dev_store.log_event(context_id, "distill.end",
-                             f"Finished distill ({run_status}) · {filed} proposal(s) filed",
-                             scope="dev", actor="daemon",
-                             meta={"status": run_status, "proposals_filed": filed})
-        log.info("background distill: %s for %s (%d proposals filed)", run_status, context_id, filed)
+    # The run is LOGGED (the spine run row is kept as durable telemetry + the event below),
+    # but the session is fully DISPOSABLE — delete its throwaway transcript so nothing
+    # resumable lingers on disk.
+    _spine.finish_run(run_id, status=run_status, model=run_model, usage=run_usage)
+    if session_id:
+        _sessions.discard_transcript(ctx, session_id)
+    props_after = len(_dev_store.list_memory_proposals(context_id, status="proposed"))
+    filed = max(0, props_after - props_before)
+    _dev_store.log_event(context_id, "distill.end",
+                         f"Finished distill ({run_status}) · {filed} proposal(s) filed",
+                         scope="dev", actor="daemon",
+                         meta={"status": run_status, "proposals_filed": filed})
+    log.info("background distill: %s for %s (%d proposals filed)", run_status, context_id, filed)
 
 
 # --- WRITE phase (WI-8 §Phase 3 / 4c) — gate-1 approval → background per-item authoring -----------
@@ -186,50 +185,48 @@ async def _run_background_write(ctx, context_id: str, proposal_id: int, run_id: 
     write_prompt = kernel_speech.write_trigger(prop, slug=slug, workspace=workspace,
                                                existing_path=existing_path, forge_kit=FORGE_KIT)
     capture_prompt(context_id, write_prompt, run_id=run_id)
-    try:
-        async for ev in _agent.run_turn(
-            ctx, write_prompt,
-            resume=None,
-            model=_spine.resolve_agent_model("write"),   # its .md tier → latest concrete (never the lagging CLI alias)
-            effort=_spine.resolve_agent_effort("write"),  # its .md effort field (default medium)
-            # forge needs Bash (forge_kit) + Write (draft into the scratch workspace); both are
-            # auto-allowed for this hermetic, disposable run. stage_artifact stays DB-only (safe).
-            approve=learning_write_approve(workspace),
-            extra_mcp_servers=turn_mcp,
-        ):
-            if isinstance(ev, Usage):
-                _spine.bump_run(run_id, add_tokens=ev.total_tokens, ctx_pct=ev.ctx_pct)
-            elif isinstance(ev, Result):
-                session_id = ev.session_id
-                run_model = ev.model          # the model the SDK resolved for this background run
-                run_usage = ev.usage          # whole-turn usage — typed-column fallback at finish
-            elif isinstance(ev, Init):
-                _cache_slash(ctx.id, ev.slash_commands)
-            # Per-run trail for the Activity trace: this background run's reply text + tool/skill/agent
-            # calls (its throwaway session transcript is disposed, so this is the only record).
-            if isinstance(ev, (Status, TextDelta, ToolResult)):
-                capture_event(context_id, ev, run_id=run_id)
-    except Exception:
-        log.exception("background write run failed for proposal %s", proposal_id)
+    turn = ResilientTurn("write")
+    async for ev in turn.stream(
+        _agent, ctx, write_prompt,
+        resume=None,
+        model=_spine.resolve_agent_model("write"),   # its .md tier → latest concrete (never the lagging CLI alias)
+        effort=_spine.resolve_agent_effort("write"),  # its .md effort field (default medium)
+        # forge needs Bash (forge_kit) + Write (draft into the scratch workspace); both are
+        # auto-allowed for this hermetic, disposable run. stage_artifact stays DB-only (safe).
+        approve=learning_write_approve(workspace),
+        extra_mcp_servers=turn_mcp,
+    ):
+        if isinstance(ev, Usage):
+            _spine.bump_run(run_id, add_tokens=ev.total_tokens, ctx_pct=ev.ctx_pct)
+        elif isinstance(ev, Result):
+            session_id = ev.session_id
+            run_model = ev.model          # the model the SDK resolved for this background run
+            run_usage = ev.usage          # whole-turn usage — typed-column fallback at finish
+        elif isinstance(ev, Init):
+            _cache_slash(ctx.id, ev.slash_commands)
+        # Per-run trail for the Activity trace: this background run's reply text + tool/skill/agent
+        # calls (its throwaway session transcript is disposed, so this is the only record).
+        if isinstance(ev, (Status, TextDelta, ToolResult)):
+            capture_event(context_id, ev, run_id=run_id)
+    if turn.fault.failed:
         run_status = "aborted"
-    finally:
-        _spine.finish_run(run_id, status=run_status, model=run_model, usage=run_usage)
-        if session_id:
-            _sessions.discard_transcript(ctx, session_id)
-        after = _dev_store.get_memory_proposal(proposal_id)
-        status_now = after.get("status") if after else None
-        # Moved past `writing` (→ drafted, or already published by a fast gate-2) ⇒ the agent staged.
-        # Still `writing` ⇒ it never staged (failed/declined) — revert so the owner can re-approve.
-        staged = status_now in ("drafted", "published")
-        if status_now == "writing":
-            _dev_store.set_proposal_status(proposal_id, "proposed")
-        _dev_store.log_event(context_id, "write.end",
-                             f"Finished write ({run_status}) · proposal #{proposal_id} "
-                             f"{'staged → drafted' if staged else 'not staged (reverted)'}",
-                             scope="dev", actor="daemon",
-                             meta={"proposal_id": proposal_id, "status": run_status, "staged": staged})
-        log.info("background write: %s for proposal %s (staged=%s)", run_status, proposal_id, staged)
-        shutil.rmtree(workspace, ignore_errors=True)
+    _spine.finish_run(run_id, status=run_status, model=run_model, usage=run_usage)
+    if session_id:
+        _sessions.discard_transcript(ctx, session_id)
+    after = _dev_store.get_memory_proposal(proposal_id)
+    status_now = after.get("status") if after else None
+    # Moved past `writing` (→ drafted, or already published by a fast gate-2) ⇒ the agent staged.
+    # Still `writing` ⇒ it never staged (failed/declined) — revert so the owner can re-approve.
+    staged = status_now in ("drafted", "published")
+    if status_now == "writing":
+        _dev_store.set_proposal_status(proposal_id, "proposed")
+    _dev_store.log_event(context_id, "write.end",
+                         f"Finished write ({run_status}) · proposal #{proposal_id} "
+                         f"{'staged → drafted' if staged else 'not staged (reverted)'}",
+                         scope="dev", actor="daemon",
+                         meta={"proposal_id": proposal_id, "status": run_status, "staged": staged})
+    log.info("background write: %s for proposal %s (staged=%s)", run_status, proposal_id, staged)
+    shutil.rmtree(workspace, ignore_errors=True)
 
 
 # --- capture sweep: deterministic trigger → agentic remembering (WI-8) ---------------------
@@ -309,48 +306,46 @@ async def run_sweep(ctx, session_id: str, focus: str | None = None) -> dict:
     run_model = None
     run_usage = None
     filed = 0
-    try:
-        async for ev in _agent.run_turn(
-            ctx, prompt, resume=None,
-            model=_spine.resolve_agent_model("sweep"),   # its .md tier → latest concrete (never the lagging CLI alias)
-            effort=_spine.resolve_agent_effort("sweep"),  # its .md effort field (default medium)
-            approve=deny_all,                 # capture writes only via the file_candidate DB tool
-            extra_mcp_servers=turn_mcp,
-        ):
-            if isinstance(ev, Usage):
-                _spine.bump_run(run_id, add_tokens=ev.total_tokens, ctx_pct=ev.ctx_pct)
-            elif isinstance(ev, Result):
-                sub_session = ev.session_id   # captured ONLY to dispose the throwaway transcript
-                run_model = ev.model          # the model the SDK resolved for this background run
-                run_usage = ev.usage          # whole-turn usage — typed-column fallback at finish
-            elif isinstance(ev, Init):
-                _cache_slash(ctx.id, ev.slash_commands)
-            # Per-run trail for the Activity trace: this background run's reply text + tool/skill/agent
-            # calls (its throwaway session transcript is disposed, so this is the only record).
-            if isinstance(ev, (Status, TextDelta, ToolResult)):
-                capture_event(context_id, ev, run_id=run_id)
-            # NB: never _sessions.record — the sweep is sessionless; its transcript is disposed below.
-    except Exception:
-        log.exception("capture sweep run failed for %s (session %s)", context_id, session_id)
+    turn = ResilientTurn("capture sweep")
+    async for ev in turn.stream(
+        _agent, ctx, prompt, resume=None,
+        model=_spine.resolve_agent_model("sweep"),   # its .md tier → latest concrete (never the lagging CLI alias)
+        effort=_spine.resolve_agent_effort("sweep"),  # its .md effort field (default medium)
+        approve=deny_all,                 # capture writes only via the file_candidate DB tool
+        extra_mcp_servers=turn_mcp,
+    ):
+        if isinstance(ev, Usage):
+            _spine.bump_run(run_id, add_tokens=ev.total_tokens, ctx_pct=ev.ctx_pct)
+        elif isinstance(ev, Result):
+            sub_session = ev.session_id   # captured ONLY to dispose the throwaway transcript
+            run_model = ev.model          # the model the SDK resolved for this background run
+            run_usage = ev.usage          # whole-turn usage — typed-column fallback at finish
+        elif isinstance(ev, Init):
+            _cache_slash(ctx.id, ev.slash_commands)
+        # Per-run trail for the Activity trace: this background run's reply text + tool/skill/agent
+        # calls (its throwaway session transcript is disposed, so this is the only record).
+        if isinstance(ev, (Status, TextDelta, ToolResult)):
+            capture_event(context_id, ev, run_id=run_id)
+        # NB: never _sessions.record — the sweep is sessionless; its transcript is disposed below.
+    if turn.fault.failed:
         run_status = "aborted"
-    finally:
-        _spine.finish_run(run_id, status=run_status, model=run_model, usage=run_usage)
-        if sub_session:
-            _sessions.discard_transcript(ctx, sub_session)
-        # Advance the watermark ONLY on a clean pass — an aborted sweep must re-sweep the same slice.
-        if run_status == "done":
-            _spine.set_sweep_watermark(session_id, head)
-        cands_after = len(_dev_store.list_memory_candidates(context_id, status="candidate"))
-        filed = max(0, cands_after - cands_before)
-        _dev_store.log_event(context_id, "sweep.end",
-                             f"Finished capture sweep ({run_status}) · {filed} candidate(s) filed",
-                             scope="dev", actor="daemon",
-                             meta={"session_id": session_id, "status": run_status,
-                                   "candidates_filed": filed,
-                                   "watermark": head if run_status == "done" else mark})
-        _sweeping.discard(session_id)
-        log.info("capture sweep: %s for %s (session %s, %d filed)",
-                 run_status, context_id, session_id, filed)
+    _spine.finish_run(run_id, status=run_status, model=run_model, usage=run_usage)
+    if sub_session:
+        _sessions.discard_transcript(ctx, sub_session)
+    # Advance the watermark ONLY on a clean pass — an aborted sweep must re-sweep the same slice.
+    if run_status == "done":
+        _spine.set_sweep_watermark(session_id, head)
+    cands_after = len(_dev_store.list_memory_candidates(context_id, status="candidate"))
+    filed = max(0, cands_after - cands_before)
+    _dev_store.log_event(context_id, "sweep.end",
+                         f"Finished capture sweep ({run_status}) · {filed} candidate(s) filed",
+                         scope="dev", actor="daemon",
+                         meta={"session_id": session_id, "status": run_status,
+                               "candidates_filed": filed,
+                               "watermark": head if run_status == "done" else mark})
+    _sweeping.discard(session_id)
+    log.info("capture sweep: %s for %s (session %s, %d filed)",
+             run_status, context_id, session_id, filed)
     return {"status": run_status, "session_id": session_id, "filed": filed,
             "watermark": head if run_status == "done" else mark}
 

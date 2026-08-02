@@ -131,7 +131,7 @@ export default function DevWorkspace({
                 <span
                   title={`${badge.count} item(s) in the '${badge.tier}' attention tier`}
                   className={`inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[10px] font-bold text-on-accent ${
-                    badge.tier === 'needs_you' ? 'bg-warn' : badge.tier === 'deputy_working' ? 'bg-deputy' : badge.tier === 'running' ? 'bg-success' : 'bg-accent'
+                    badge.tier === 'error' ? 'bg-danger' : badge.tier === 'needs_you' ? 'bg-warn' : badge.tier === 'deputy_working' ? 'bg-deputy' : badge.tier === 'running' ? 'bg-success' : 'bg-accent'
                   }`}
                 >
                   {badge.count}

@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Hammer, ArrowLeft, ArrowRight, Boxes, Inbox, Circle, Clock, Check, Bot, Archive, Shield } from 'lucide-react'
+import { Hammer, ArrowLeft, ArrowRight, Boxes, Inbox, Circle, Clock, Check, Bot, Archive, Shield, ChevronRight } from 'lucide-react'
 import PageHeader from '@/ui/PageHeader'
 import Modal from '@/ui/Modal'
 import ConfirmDialog from '@/ui/ConfirmDialog'
-import { getDev, getAttention, planWorkItem, deleteWorkItem, type AttentionData, type DevData, type DevGlance, type InboxEntry, type WorkItem } from '@/lib/api'
+import { getDev, getAttention, resumeWorkItem, markWorkItemSeen, type AttentionData, type DevData, type DevGlance, type InboxEntry, type WorkItem } from '@/lib/api'
 import { invalidate, useLive } from '@/lib/live'
 import { K, topicRepo } from '@/lib/live/keys'
 import { navigate, useRoute } from '@/lib/router'
@@ -55,7 +55,6 @@ export default function DevDashboard({
     navigate({ name: 'dev', repoId: contextId, tab: z === 'workspace' ? 'workspace' : 'pipeline' })
   const [board, setBoard] = useState<'kanban' | 'graph'>('kanban') // Workspace projection toggle
   const [showShipped, setShowShipped] = useState(false) // the completed-items list overlay
-  const [confirmDel, setConfirmDel] = useState<WorkItem | null>(null) // item pending delete confirm
   const [mutErr, setMutErr] = useState<string | null>(null) // a write this view attempted and failed
 
   // The board keeps a faster cadence while ANY item has a run in flight, and the ordinary one when
@@ -78,31 +77,14 @@ export default function DevDashboard({
   // open drilldown all reflect it at once, instead of each waiting out its own tick.
   const load = () => invalidate(topicRepo(contextId))
 
-  // Headless "Plan it": kick off a background /plan turn, then refresh so the card flips
-  // to its "planning…" state (the running-poll below keeps reloading until it settles).
-  async function handlePlan(it: WorkItem, model?: string, effort?: string) {
+  // Resume a STOPPED item straight from its card (R4) — the one card-level action, because a
+  // stopped item's next act is unambiguous. Failures surface in the same error slot every other
+  // write on this view uses; the board refresh then shows whether the run actually took.
+  async function resumeItem(it: WorkItem) {
     try {
-      await planWorkItem(it.id, contextId, model, effort)
-    } catch {
-      /* surfaced on next load */
-    }
-    load()
-  }
-
-  // Hard-delete a plan/design item and erase its trace (folder + session + inbox row). Irreversible,
-  // so it goes through the themed ConfirmDialog (handleDelete just opens it); doDelete runs on confirm.
-  function handleDelete(it: WorkItem) {
-    setConfirmDel(it)
-  }
-  async function doDelete() {
-    const it = confirmDel
-    if (!it) return
-    setConfirmDel(null)
-    try {
-      await deleteWorkItem(it.id, contextId)
-      if (boundItemId === it.id) onUnbindItem?.() // it's the bound item — drop the chat binding too
+      await resumeWorkItem(it.id, contextId)
     } catch (e) {
-      setMutErr(`Couldn't delete — ${e}`)
+      setMutErr(`Couldn't resume — ${e}`)
     }
     load()
   }
@@ -115,14 +97,14 @@ export default function DevDashboard({
   // screen reads its "needs you" verdict from: the cards, the stat row, the deputy strip and the
   // drilldown badge. When three of them derived it independently they disagreed by two.
   const bucketOf: Record<string, string> = {}
-  for (const tier of ['needs_you', 'deputy_working', 'running', 'unread'] as const) {
+  for (const tier of ['error', 'needs_you', 'deputy_working', 'running', 'unread'] as const) {
     for (const r of attn?.buckets?.[tier] ?? []) bucketOf[r.id] = tier
   }
   // Opening an item is a navigation, nothing more. The chat binding is NOT done here — the arrival
   // effect below owns it, so a click and a deep link produce the same result instead of each
   // carrying its own copy of the rule.
   const openItem = (id: string) =>
-    navigate({ name: 'item', repoId: contextId, itemId: id, phase: null, sub: null })
+    navigate({ name: 'item', repoId: contextId, itemId: id, tab: null, sub: null })
   // Back to the board the card came from, not to the capture queue.
   const closeItem = () => navigate({ name: 'dev', repoId: contextId, tab: 'workspace' })
 
@@ -148,25 +130,18 @@ export default function DevDashboard({
           it={reviewItem}
           contextId={contextId}
           onClose={closeItem}
-          onPlan={handlePlan}
-          onDelete={handleDelete}
           onChanged={load}
+          // The ask-card's one-click "answer in chat". Binding is already done on arrival (the effect
+          // above); re-firing it is what REVEALS the rail, which is the part the owner needs.
+          onOpenChat={() => onBindItem?.(reviewItem, contextId)}
           bucket={bucketOf[reviewItem.id]}
-        />
-      )}
-      {confirmDel && (
-        <ConfirmDialog
-          title="Delete this work-item?"
-          body={<>“{confirmDel.title || confirmDel.id}” will be permanently removed — its work-item, session, and inbox row are all erased. This can’t be undone.</>}
-          confirmLabel="Delete"
-          z="z-50" // above the work-item drilldown (z-40), which stays open behind the confirm
-          onCancel={() => setConfirmDel(null)}
-          onConfirm={doDelete}
         />
       )}
       {showShipped && data && (
         <ShippedList
           items={data.work_items.filter((w) => w.done_at)}
+          contextId={contextId}
+          onSeen={load}
           onOpen={(id) => {
             setShowShipped(false)
             openItem(id)
@@ -240,6 +215,7 @@ export default function DevDashboard({
                   // chat to its session — read + discuss side by side (the popup overlays only the
                   // dashboard column).
                   onOpen={(it) => openItem(it.id)}
+                  onResume={resumeItem}
                   running={data.running}
                   boundItemId={boundItemId}
                   buckets={bucketOf}
@@ -292,6 +268,7 @@ function DeputyStrip({ items, buckets }: { items: WorkItem[]; buckets: Record<st
 // clicking a row opens its drilldown, which stamps it seen and clears the blue.
 
 const TIER_STYLE: Record<string, { dot: string; label: string }> = {
+  error: { dot: 'bg-danger', label: 'Error' },
   needs_you: { dot: 'bg-warn', label: 'Needs you' },
   deputy_working: { dot: 'bg-deputy', label: 'Deputy reviewing' },
   running: { dot: 'bg-success', label: 'Running' },
@@ -299,7 +276,7 @@ const TIER_STYLE: Record<string, { dot: string; label: string }> = {
 }
 
 function AttentionStrip({ attn, onOpen }: { attn: AttentionData; onOpen: (id: string) => void }) {
-  const tiers = (['needs_you', 'deputy_working', 'running', 'unread'] as const)
+  const tiers = (['error', 'needs_you', 'deputy_working', 'running', 'unread'] as const)
     .map((t) => ({ tier: t, rows: attn.buckets?.[t] ?? [] }))
     .filter((x) => x.rows.length > 0)
   if (tiers.length === 0) return null
@@ -471,19 +448,34 @@ function WorkspaceStats({ items, buckets, shipped, onShowShipped }: {
   )
   return (
     <div className="mb-4 flex flex-wrap items-center gap-x-7 gap-y-3 rounded-xl bg-sunken px-4 py-3">
+      {/* Stopped work leads the row and appears ONLY when there is some (R2): a permanent "0
+          stopped" tile trains the eye to skip the one place it must not. */}
+      {n('error') > 0 && cell('stopped', n('error'), 'text-danger')}
       {cell(STATUS_LABEL.active, n('active'), 'text-accent-text')}
       {cell(STATUS_LABEL.awaiting_human, n('awaiting_human'), 'text-warn')}
       {cell(STATUS_LABEL.awaiting_child, n('awaiting_child'))}
+      {/* Shipped is a TILE, not a footnote. It carried the same weight as a caption — 11px, faint,
+          no affordance — while being the only way into completed work and its execution traces, so
+          it read as decoration and went unclicked. It keeps the row's tile shape (count over label)
+          and gains the chevron + hover that say it opens something. */}
       {shipped > 0 ? (
         <button
           onClick={onShowShipped}
           title="View completed work + their archived execution traces"
-          className="ml-auto inline-flex items-center gap-1 text-[11px] text-faint underline-offset-2 hover:text-fg hover:underline"
+          className="group ml-auto flex flex-col items-start rounded-lg px-2 py-1 -my-1 text-left hover:bg-hover"
         >
-          {shipped} shipped
+          <span className="text-xl font-semibold leading-none tabular-nums text-success">
+            {shipped}
+          </span>
+          <span className="mt-1 inline-flex items-center gap-0.5 text-[10px] uppercase tracking-wide text-muted group-hover:text-fg">
+            shipped <ChevronRight size={11} className="-mr-0.5" />
+          </span>
         </button>
       ) : (
-        <span className="ml-auto text-[11px] text-faint">0 shipped</span>
+        <div className="ml-auto flex flex-col">
+          <span className="text-xl font-semibold leading-none tabular-nums text-faint">0</span>
+          <span className="mt-1 text-[10px] uppercase tracking-wide text-muted">shipped</span>
+        </div>
       )}
     </div>
   )
@@ -494,13 +486,29 @@ function WorkspaceStats({ items, buckets, shipped, onShowShipped }: {
 // Completed items leave the active board; this overlay lists them (newest-completed first) so
 // the owner can reopen one and read its Review + the archived Execution trace.
 function ShippedList({
-  items, onOpen, onClose,
+  items, contextId, onSeen, onOpen, onClose,
 }: {
   items: WorkItem[]
+  contextId: string
+  onSeen: () => void
   onOpen: (id: string) => void
   onClose: () => void
 }) {
   const sorted = [...items].sort((a, b) => (b.done_at ?? '').localeCompare(a.done_at ?? ''))
+  // Opening this list IS reading the notice — every completed item is named on screen, so they all
+  // get their read receipt here. Before this, `seen_at` was stamped in ONE place: opening an item's
+  // own drilldown. So the `unread` attention tier (terminal + no `seen_at`) could only ever grow —
+  // 21 shipped items meant 21 chips that no amount of looking at the list would clear, and the only
+  // way down was opening 21 modals one at a time. The tier still does its job for the NEXT thing
+  // that lands overnight; it just stops accumulating what the owner has already been shown.
+  useEffect(() => {
+    const unseen = sorted.filter((it) => !it.seen_at)
+    if (!unseen.length) return
+    Promise.allSettled(unseen.map((it) => markWorkItemSeen(it.id, contextId))).then(onSeen)
+    // Mount-only: the list is a snapshot of what was on screen when it opened. Re-running as
+    // `sorted` changes underneath would re-stamp on every board poll.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   return (
     <Modal
       onClose={onClose}

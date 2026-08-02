@@ -53,6 +53,9 @@ def push_inbox_item(store, dev: DevKnowledgeService, dev_root: Path, row: dict, 
             description=row.get("text") or "",
             spawned_from=row.get("spawned_from"),
             inbox_id=inbox_id,
+            # The third capture-time policy: whether the item drives its own gates. Set at BIRTH
+            # rather than after, so an autopilot item never sits one manual click short of moving.
+            autopilot=bool(row.get("autopilot")),
         )
         # F3: the push button LOCKS IN the capture-time run config — model/effort chosen on the
         # inbox row become the work-item's immutable defaults (no per-work-item override after).

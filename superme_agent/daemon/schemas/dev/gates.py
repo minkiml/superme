@@ -1,4 +1,10 @@
-"""Response schemas for the gate-brief + lifecycle routes (routers/dev/gates.py — S6/D8/D10)."""
+"""Response schemas for the drilldown + lifecycle routes (routers/dev/gates.py — §4/D8).
+
+The GATE BRIEF is gone (renovation v2 slice 6): a markdown narrative that embedded a truncated copy
+of the phase artifact and closed with a recommendation. What replaced it is typed all the way down —
+`DrilldownResponse` — and the shapes here are deliberately dumb: every field is either a fact
+computed in `core/` or a decision made in `services/drilldown.py`. Nothing is derived at render time.
+"""
 
 from __future__ import annotations
 
@@ -6,43 +12,20 @@ from pydantic import BaseModel
 
 
 class GateCheck(BaseModel):
-    """One mechanical row of a gate's evaluation — computed from durable state, never a claim."""
+    """One mechanical row of a gate's evaluation — computed from durable state, never a claim.
+
+    `blocking` is the must-resolve marker (§2.1): a FAILING blocking check greys Approve, and every
+    other row is a named, visible fact the owner may act over with their eyes open. Both halves
+    matter — the old surface rendered checks as coloured dots with the reason hidden in a `title`
+    attribute, so a red gate looked identical whether it was fatal or advisory."""
     criterion: str
     ok: bool
     detail: str
-
-
-class GateOption(BaseModel):
-    id: str
-    label: str
-    consequence: str
-
-
-class GateDecision(BaseModel):
-    """The uniform decision block (D10 ★): recommendation FIRST, stakes one line, per-option
-    consequence, dual-scale effort."""
-    recommendation: str
-    stakes: str
-    options: list[GateOption]
-    effort_user: str
-    effort_agent: str
-    # The MUST-RESOLVE set (§2.1): why Approve is greyed, one line each. Empty ⇒ Approve is live.
-    # Mechanical, never a judgment — an undecided authorization or a failing/deferred vet check.
-    # The FE disables the button on non-empty and shows these as the reason, so "why can't I
-    # approve?" always has a specific answer instead of a disabled control with no explanation.
-    approve_blocked_by: list[str] = []
-
-
-class GateFact(BaseModel):
-    """One label:value row of the typed NOW card (renovation §3) — a present fact, never prose.
-    `tone` tints the row ('' neutral · 'warn')."""
-    label: str
-    value: str
-    tone: str = ""
+    blocking: bool = False
 
 
 class GateNumbers(BaseModel):
-    """The brief's real-ratio counts (law 2: counts of real things, never invented scores)."""
+    """The real-ratio counts (law 2: counts of real things, never invented scores)."""
     tasks_done: int
     tasks_total: int
     cycle: int
@@ -50,34 +33,9 @@ class GateNumbers(BaseModel):
     checks_total: int
 
 
-class LoopCycle(BaseModel):
-    """One filed vet report's verdict column: check id → pass/fail."""
-    cycle: int
-    verdicts: dict[str, bool]
-
-
-class LoopAttempt(BaseModel):
-    """One loop-driver decision from the attempts ledger."""
-    cycle: int
-    decision: str
-    reason: str
-    ts: str
-
-
-class LoopInstruments(BaseModel):
-    """The build⟷vet loop's live panel (renovation §2 Loop row) — the checks×cycles matrix,
-    the newest failing report's Findings verbatim, and the driver trail. All derived from the
-    ledger + reports the loop already writes; empty checks+cycles ⇒ nothing to show."""
-    checks: list[str]
-    cycles: list[LoopCycle]
-    findings: str | None
-    attempts: list[LoopAttempt]
-
-
 class PagedNotice(BaseModel):
     """Why an item is parked for the owner when it isn't a plain gate wait — a deputy escalation, a
-    build⟷vet halt, or a blocked run. The drilldown LEADS with this so 'what's going on / what do I
-    decide' is answered on arrival, not buried under a future-gate preview. None ⇒ a normal gate."""
+    build⟷vet halt, or a blocked run. None ⇒ a normal gate."""
     source: str          # deputy | loop | agent
     gate: str | None     # the gate the deputy escalated, when source == deputy
     headline: str        # one line: who paged and why
@@ -97,30 +55,134 @@ class AuthorizationRequest(BaseModel):
     delegable: bool
 
 
-class GateBriefResponse(BaseModel):
-    """One gate's full decision surface. `brief` is the rendered markdown (continuity → delta →
-    narrative → decision) — since the typed fields landed it is the collapsed DETAILS payload;
-    the NOW card renders facts/assumptions/flags/numbers + the embedded gate report.
-    `at_gate: False` means the item is mid-phase and this previews the NEXT gate. Answerable
-    without opening code — that is the contract."""
-    id: str
-    gate: str      # triage-exit | pre-main | review | close
-    at_gate: bool
+class DrilldownAction(BaseModel):
+    """One control, with its activation decided SERVER-SIDE (§4's universal rule + the owner's slice-6
+    input). `reason` is populated either way: greyed it says what would make it live, live it says
+    what clicking does. `home` places it — `actions` (the frame's bar) or `git` (the Git tab).
+
+    Never hide a control: a `fast` repo with no PR button anywhere read as a missing feature, with
+    nothing on screen saying why."""
+    id: str        # approve | drop | plan | vet | resume | rerun | continue | force | pr | merge
+    label: str
+    home: str      # actions | git
+    active: bool
+    reason: str
+
+
+class AskQuestion(BaseModel):
+    """One question from a parked grill run — the ask-card's fields, as the reporting tool typed them."""
+    question: str
+    recommend: str = ""
+    why: str = ""
+    instead: str = ""
+
+
+class AttentionCard(BaseModel):
+    """§4.2's WHAT-YOU-NEED-TO-DO card — the drilldown's single most important element, and the answer
+    to "I opened this and don't know what's needed from me". Three connected parts: WHY (the back
+    story) · DO (the exact act + the one control that performs it) · BASIS (pointers to what decides
+    it). None when nothing needs the owner — the card is hidden entirely, never an empty shell."""
+    kind: str              # question | escalation | paged | review | gate
+    why: str
+    detail: str
+    do: str
+    click: str             # the action id that performs it ('chat' = the item's chat rail)
+    basis: list[str]
+    questions: list[AskQuestion]
+
+
+class NowStrip(BaseModel):
+    """What is happening right now: the live phase + cycle, and the newest recorded event."""
     phase: str
-    title: str
-    brief: str
-    decision: GateDecision
+    cycle: int
+    running: bool
+    last: str
+
+
+class VerdictHistory(BaseModel):
+    """One cycle's verdict for a check — the sequence renders as `c3 ✗→✓`."""
+    cycle: int | None
+    passed: bool
+
+
+class ProofVerdict(BaseModel):
+    """One check of the plan's exam: what it will prove (`expect`, `mode`), and where it stands.
+    `ran` False ⇒ the loop hasn't reached it yet — the row exists from the plan gate on, so the
+    owner approving a plan can see the proof they are approving. `result` is the vet's captured
+    output, verbatim — a failing row IS the expected-vs-actual."""
+    check: str
+    expect: str = ""
+    mode: str = ""
+    ran: bool = False
+    # Provenance: `machine` = the kernel ran the check's `run:` block, `agent` = a vetter attested.
+    # On a row that hasn't run it is the plan's promise of which one it will be.
+    by: str = "agent"
+    passed: bool
+    deferred: bool
+    cycle: int | None
+    how: str
+    result: str
+    # Vet's reading of a failure (design §5) — where it broke, why, and what it could not
+    # determine. Empty on a passing check, and on a cause from an earlier cycle: a located cause
+    # the code has already moved past misleads more than silence.
+    where: str = ""
+    why: str = ""
+    unknown: str = ""
+    history: list[VerdictHistory] = []
+
+
+class ProofRow(BaseModel):
+    """§4.2's connected view: one row per BUILT THING, each carrying its own validation →
+    verification. The join key is the plan task id — cycle §Built/§Validation bullets lead with it and
+    vet-plan checks name it in `covers:`. `task: ""` is the item-wide row, where untagged content
+    lands: nothing is dropped and nothing is guessed at."""
+    task: str
+    text: str
+    done: bool
+    built: list[str]
+    validated: list[str]
+    verified: list[ProofVerdict]
+
+
+class DrilldownResponse(BaseModel):
+    """Everything the work-item drilldown renders, computed once per poll. One route instead of four,
+    because every tab reads the same item folder — and one computation of the gate's checks, shared
+    with the deputy's prompt, because two summaries of one gate is how the owner loses the ability to
+    check the deputy's call."""
+    id: str
+    phase: str
+    gate: str            # triage-exit | pre-main | review | close
+    gate_label: str
+    at_gate: bool        # False ⇒ mid-phase; the payload describes the NEXT gate
+    terminal: bool
+    now: NowStrip
+    attention: AttentionCard | None
+    # The status strip — a strip, not a feed (the feed is Trace). An ORDERED label→value map, not
+    # fixed fields: the server composes both halves, so adding or dropping a row (`next` went on
+    # 2026-07-31) is a one-line change in `_glance` instead of an edit in four places that fails as
+    # a 500 if any one of them is missed. The FE renders the entries in order and reads no key by
+    # name — the labels ARE the contract's payload, not its shape.
+    glance: dict[str, str]
     checks: list[GateCheck]
-    facts: list[GateFact]
-    assumptions: list[str]   # pre-main: plan.md `## Risks & assumptions`, verbatim
-    flags: list[str]         # soft judgment flags (e.g. vague vet `expect`s) — never blocking
+    blocked_by: list[str]   # empty ⇔ Approve is live
     numbers: GateNumbers
-    report_html: str | None  # the gate's generated report (self-contained html), embed-ready
-    loop: LoopInstruments    # the build⟷vet panel; empty checks+cycles ⇒ hidden
-    snippet: str | None      # review: newest passing ledger entry verbatim (captured reality)
-    terminal: bool           # done/abandoned — the surface collapses the decision entirely
-    paged: PagedNotice | None  # why it's parked (escalation/halt/block) — leads the drilldown; None = plain gate
-    authorizations: list[AuthorizationRequest]  # review (BV-A2): deferred contract changes awaiting grant/deny
+    authorizations: list[AuthorizationRequest]
+    paged: PagedNotice | None
+    actions: list[DrilldownAction]
+    proof: list[ProofRow]
+    reports: list[str]      # phases that have a report to read; the rest grey out
+
+
+class PhaseReportResponse(BaseModel):
+    """One phase's user-facing report for the Reports tab — the markdown 1:1, plus the path to the
+    full agent-facing contract behind it (§4.3's "Open full contract"). The report is the compact
+    read; the contract is the whole thing, one click away, never pasted in."""
+    phase: str
+    name: str
+    text: str
+    path: str
+    mtime: float
+    contract: str | None    # relative path, or None where the report IS the record (review/close)
 
 
 class AbandonResponse(BaseModel):

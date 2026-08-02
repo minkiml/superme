@@ -1,14 +1,19 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, type ReactNode } from 'react'
 import { Plus, Trash2, CornerDownRight, GitBranch, ArrowRight, X, Bot, User, Loader2, MessageSquareText } from 'lucide-react'
 import Dropdown from '@/ui/Dropdown'
 import Markdown from '@/ui/Markdown'
 import Modal from '@/ui/Modal'
-import { addInbox, updateInbox, deleteInbox, pushInbox, type WorkItem, type InboxEntry, type InboxKind } from '@/lib/api'
-import { fmtLocal, fmtTokens, fmtDuration, fmtModel, MODELS as MODEL_CATALOG, DEFAULT_MODEL, EFFORTS as EFFORT_CATALOG, DEFAULT_EFFORT } from '@/lib/format'
+import SectionHeader from '@/ui/SectionHeader'
+import TabBar from '@/ui/TabBar'
+import Toggle from '@/ui/Toggle'
+import { addInbox, updateInbox, deleteInbox, pushInbox, getRepos, type WorkItem, type InboxEntry, type InboxKind } from '@/lib/api'
+import { useLive } from '@/lib/live'
+import { K } from '@/lib/live/keys'
+import { fmtLocal, fmtTokens, fmtDuration, fmtModel, toModelKey, MODELS as MODEL_CATALOG, DEFAULT_MODEL, EFFORTS as EFFORT_CATALOG, DEFAULT_EFFORT } from '@/lib/format'
 import { PHASE_LABEL, PHASE_VERB, STATUS_COLOR, STATUS_LABEL, STATUS_STRIPE, primaryStatus, Empty } from './common'
 
 // Phase accent → literal dot class (Tailwind needs the full string present in source).
-const PHASE_DOT: Record<string, string> = { dev: 'bg-dev', warn: 'bg-warn', success: 'bg-success' }
+// (the per-lane dot colour map lived here until 2026-07-31 — see KANBAN_GROUPS for why it went)
 
 // Models selectable per run on a work-item card. Values are the canonical catalog's concrete ids; the
 // daemon normalizes any value to the latest concrete at consumption. Labels come from the catalog.
@@ -17,6 +22,18 @@ export const DEFAULT_RUN_MODEL = DEFAULT_MODEL
 // Reasoning-effort levels selectable per run, alongside the model. Default "medium".
 export const RUN_EFFORTS = EFFORT_CATALOG.map((e) => ({ value: e.key, label: e.label }))
 export const DEFAULT_RUN_EFFORT = DEFAULT_EFFORT
+
+// What Save on an inbox card writes back. Content and setting travel together because the card has
+// one Save. `model`/`effort` are always concrete — the picker offers the three catalog options and
+// opens on the repo's default, so saving states a pick rather than an inheritance.
+type InboxConfigPatch = {
+  title: string | null
+  text: string
+  kind: InboxKind
+  model: string
+  effort: string
+  autopilot: boolean
+}
 
 // Shared dev-knowledge store views — the bodies for Workspace (work-items) and Inbox. Rendered
 // both by the main Development map (in-panel zooms) and reusable elsewhere. Workspace-workflow
@@ -63,31 +80,18 @@ function BranchInfo({ it }: { it: WorkItem }) {
 // abandoned, or superseded). Terminal items leave the interface; their trace stays.
 export const isActive = (it: WorkItem) => !it.done_at && it.status !== 'done'
 
-// A work-item is "plannable" — eligible for the one-shot "Plan it" gate — while it sits in the
-// `plan` phase and no plan run has happened YET. The signal is the plan phase's OWN accumulated
-// tokens, not the item's grand total: auto-triage (#120) leaves ~40k triage tokens on every item,
-// so a `!total_tokens` check would wrongly read a freshly-planned item as "already run" and hide
-// the button (leaving only "Approve" for a plan that was never drafted). NOT in triage: a plan run
-// there hits the plan skill's own not-yet-triaged block (the route 409s it too) — triage runs
-// automatically on push and lands at its own one-click gate. Once a plan run lands (plan-phase
-// tokens > 0), it's forward-only (review / discuss in chat / advance); the caller also gates on
-// `!running`.
-export const isPlannable = (it: WorkItem) =>
-  (it.phase ?? 'triage') === 'plan' && (it.phase_tokens?.plan ?? 0) === 0
-
 // Actions a board surface can offer per card. `bind` opens the item in the chat (dev);
-// `plan` fires a background /plan turn; `delete` hard-deletes a plan/design item; `running`
-// is the set of ids currently planning.
+// `plan` fires a background /plan turn; `running` is the set of ids currently planning.
 export type WorkActions = {
   onOpen?: (it: WorkItem) => void // open the review popup (card click)
   onBind?: (it: WorkItem) => void // bind the chat to the item (review popup's "Discuss")
   onPlan?: (it: WorkItem, model?: string) => void
-  onDelete?: (it: WorkItem) => void
+  // R4: re-fire the run of a STOPPED item. Offered on the card because that item's next act is
+  // unambiguous; every other control still lives in the popup.
+  onResume?: (it: WorkItem) => void
   running?: string[]
   boundItemId?: string | null
 }
-
-// Delete is only offered while an item is in plan/design — past that gate code may be touched.
 
 // --- workspace: kanban by phase group -------------------------------------------
 
@@ -95,16 +99,25 @@ export type WorkActions = {
 // (no horizontal scroll). Adjacent phases that read as one stage of work merge: intake (triage +
 // plan) and the build⟷vet loop (build/investigate + vet/report). Review and close stay their own
 // columns — they're the human gates. An item keeps its real phase; it's just placed in the column
-// whose group owns that phase. `accent` = the group's dot color (dev → warn → success as the
-// pipeline advances). The investigation-kind analogues (investigate/report) ride with build/vet.
-const KANBAN_GROUPS: { key: string; label: string; phases: string[]; accent: string }[] = [
-  { key: 'intake', label: 'Triage & Plan', phases: ['triage', 'plan'], accent: 'dev' },
-  { key: 'work', label: 'Build & Vet', phases: ['build', 'investigate', 'vet', 'report'], accent: 'warn' },
-  { key: 'review', label: 'Review', phases: ['review'], accent: 'success' },
-  { key: 'close', label: 'Close', phases: ['close'], accent: 'success' },
+// whose group owns that phase. The investigation-kind analogues (investigate/report) ride with
+// build/vet.
+//
+// The lane dots CARRY NO COLOUR (2026-07-31). They used to walk the status palette — dev-blue,
+// warn-amber, success-green — and that palette already means something everywhere else on this
+// screen: green is completed work (`21 done`, `21 shipped`), amber is needs-you, red is stopped.
+// So `success` meant "review lane" here and "finished" ten pixels away, and review + close were
+// literally the same green. Two fixes were tried before this one (recolour close, then grey it);
+// both just moved the collision. The lane's identity is its LABEL and its position in the row —
+// left-to-right already IS the progression — so the dot is a bullet, not a signal, and the palette
+// goes back to meaning one thing per colour.
+const KANBAN_GROUPS: { key: string; label: string; phases: string[] }[] = [
+  { key: 'intake', label: 'Triage & Plan', phases: ['triage', 'plan'] },
+  { key: 'work', label: 'Build & Vet', phases: ['build', 'investigate', 'vet', 'report'] },
+  { key: 'review', label: 'Review', phases: ['review'] },
+  { key: 'close', label: 'Close', phases: ['close'] },
 ]
 
-export function WorkspaceKanban({ items, onOpen, running, boundItemId, buckets }: { items: WorkItem[]; buckets?: Record<string, string> } & WorkActions) {
+export function WorkspaceKanban({ items, onOpen, onResume, running, boundItemId, buckets }: { items: WorkItem[]; buckets?: Record<string, string> } & WorkActions) {
   const visible = items.filter(isActive)
   if (visible.length === 0) return <Empty>No active work-items.</Empty>
   const inGroup = (phases: string[]) => visible.filter((it) => phases.includes(it.phase ?? 'triage'))
@@ -118,11 +131,10 @@ export function WorkspaceKanban({ items, onOpen, running, boundItemId, buckets }
       >
         {KANBAN_GROUPS.map((g) => {
         const col = inGroup(g.phases)
-        const dot = PHASE_DOT[g.accent] ?? 'bg-line'
         return (
           <div key={g.key} className="flex min-h-[7rem] flex-col rounded-xl bg-sunken p-2">
             <div className="mb-2 flex items-center gap-2 px-1">
-              <span className={`h-1.5 w-1.5 rounded-full ${dot}`} />
+              <span className="h-1.5 w-1.5 rounded-full bg-line" />
               <span className="text-[11px] font-semibold uppercase tracking-wide text-fg">{g.label}</span>
               <span className="ml-auto rounded-full bg-hover px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-muted">{col.length}</span>
             </div>
@@ -138,6 +150,7 @@ export function WorkspaceKanban({ items, onOpen, running, boundItemId, buckets }
                     planning={running?.includes(it.id)}
                     bound={boundItemId === it.id}
                     bucket={buckets?.[it.id]}
+                    onResume={onResume}
                   />
                 ))
               )}
@@ -151,13 +164,14 @@ export function WorkspaceKanban({ items, onOpen, running, boundItemId, buckets }
 }
 
 function WorkCard({
-  it, onOpen, planning, bound, bucket,
+  it, onOpen, planning, bound, bucket, onResume,
 }: {
   it: WorkItem
   onOpen?: (it: WorkItem) => void
   planning?: boolean
   bound?: boolean
-  bucket?: string // attention tier (S7): needs_you | deputy_working | running | unread — tints the card ring
+  bucket?: string // attention tier (S7): error | needs_you | deputy_working | running | unread — tints the card ring
+  onResume?: (it: WorkItem) => void // R4: only ever called for a STOPPED card (see below)
 }) {
   const clickable = !!onOpen
   const running = !!planning || !!it.running
@@ -173,10 +187,12 @@ function WorkCard({
   const settledTime = it.last_run?.duration_ms != null ? fmtDuration(it.last_run.duration_ms) : null
   const showMeter = running || hasTokens || !!settledTime
   const stripe = STATUS_STRIPE[primaryStatus(it, bucket)] ?? 'border-l-line'
+  const stopped = primaryStatus(it, bucket) === 'error'
   // Attention tint (S7): the card carries its bucket color as a soft ring — orange pages, purple =
   // the deputy is covering it, green = a phase agent is on it. (Unread applies to terminal items,
   // which live off-board in the strip.)
-  const attnRing = bucket === 'needs_you' ? 'ring-1 ring-warn/70'
+  const attnRing = bucket === 'error' ? 'ring-1 ring-danger/80'
+    : bucket === 'needs_you' ? 'ring-1 ring-warn/70'
     : bucket === 'deputy_working' ? 'ring-1 ring-deputy/60'
     : bucket === 'running' ? 'ring-1 ring-success/60' : ''
   return (
@@ -214,6 +230,19 @@ function WorkCard({
             ? <LiveTimer startedAt={it.run_started_at} />
             : <span className="tabular-nums" title="Duration of the last run">{settledTime ?? '—'}</span>}
         </div>
+      )}
+      {/* 5 · the ONE action a card carries (R4). The card is otherwise a pure glance — every other
+          control lives in the popup — but a STOPPED item is the one case where the owner's next act
+          is unambiguous and shouldn't cost a click to reach. Rendered only when stopped, so the
+          exception can't spread. `stopPropagation` keeps it from also opening the drilldown. */}
+      {stopped && onResume && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onResume(it) }}
+          title={it.error_reason ? `Re-fire the run that stopped — ${it.error_reason}` : 'Re-fire the run that stopped'}
+          className="mt-0.5 self-start rounded border border-danger/50 px-1.5 py-0.5 text-[10.5px] font-medium text-danger transition hover:bg-danger/10"
+        >
+          Resume
+        </button>
       )}
     </div>
   )
@@ -268,10 +297,11 @@ export function InboxView({
   const [text, setText] = useState('')
   const [title, setTitle] = useState('')
   const [kind, setKind] = useState<InboxKind>('todo')
-  // F3: run config chosen at capture — locked into the work-item when this row is pushed.
-  const [model, setModel] = useState(DEFAULT_RUN_MODEL)
-  const [effort, setEffort] = useState(DEFAULT_RUN_EFFORT)
   const [busy, setBusy] = useState(false)
+  // The repo's Quick-config defaults, so a card's Config tab can NAME what an unset row inherits
+  // ("Repo default — Sonnet 5") instead of showing a blank that looks like nothing is configured.
+  const repos = useLive(K.repos, getRepos).data
+  const repo = repos?.find((r) => r.id === contextId)
 
   const open = entries.filter((e) => e.status === 'open')
 
@@ -280,7 +310,7 @@ export function InboxView({
     if (!t || busy) return
     setBusy(true)
     try {
-      await addInbox({ text: t, title: title.trim() || null, kind, origin: 'user', model, effort }, contextId)
+      await addInbox({ text: t, title: title.trim() || null, kind, origin: 'user' }, contextId)
       setText('')
       setTitle('')
       onChanged()
@@ -310,9 +340,9 @@ export function InboxView({
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), submit())}
         />
-        {/* F3: run config chosen here is LOCKED into the work-item at push (no override after). */}
-        <Dropdown value={model} options={RUN_MODELS} onChange={(v) => setModel(v as typeof model)} title="Model this item's runs will use — locked in at push" />
-        <Dropdown value={effort} options={RUN_EFFORTS} onChange={(v) => setEffort(v as typeof effort)} title="Reasoning effort this item's runs will use — locked in at push" />
+        {/* Model/effort are NOT chosen here (owner, 2026-08-02). Capture is a one-line act; a row
+            is born inheriting the repo's Quick-config defaults, and the per-item config lives in
+            the card's Config tab — where it sits next to autopilot and the row's metadata. */}
         <button
           onClick={submit}
           disabled={busy || !text.trim()}
@@ -343,6 +373,8 @@ export function InboxView({
                     <InboxCard
                       key={e.id}
                       e={e}
+                      repoModel={repo?.model_override}
+                      repoEffort={repo?.effort_override}
                       onPush={() => pushInbox(e.id, contextId).then(onChanged)}
                       onSave={(patch) => updateInbox(e.id, patch).then(onChanged)}
                       onDelete={() => deleteInbox(e.id).then(onChanged)}
@@ -360,13 +392,17 @@ export function InboxView({
 
 function InboxCard({
   e,
+  repoModel,
+  repoEffort,
   onPush,
   onSave,
   onDelete,
 }: {
   e: InboxEntry
+  repoModel?: string | null
+  repoEffort?: string | null
   onPush: () => void
-  onSave: (patch: { title: string | null; text: string; kind: InboxKind }) => void
+  onSave: (patch: InboxConfigPatch) => void
   onDelete: () => void
 }) {
   const [editing, setEditing] = useState(false)
@@ -447,6 +483,8 @@ function InboxCard({
     {editing && (
       <InboxEditModal
         e={e}
+        repoModel={repoModel}
+        repoEffort={repoEffort}
         onCancel={() => setEditing(false)}
         onSave={(patch) => { onSave(patch); setEditing(false) }}
       />
@@ -455,42 +493,112 @@ function InboxCard({
   )
 }
 
-// Popup editor for one inbox item — title, kind, and text. Backdrop click cancels.
+// Popup editor for one inbox item. Two tabs, because a row carries two unrelated kinds of
+// question: WHAT it says (Content) and HOW it will be worked (Setting) — mixing them put run
+// config in the capture row, where it was answered by accident on every keystroke.
 function InboxEditModal({
   e,
+  repoModel,
+  repoEffort,
   onSave,
   onCancel,
 }: {
   e: InboxEntry
-  onSave: (patch: { title: string | null; text: string; kind: InboxKind }) => void
+  repoModel?: string | null   // the repo's Quick-config default — what an unset row starts at
+  repoEffort?: string | null
+  onSave: (patch: InboxConfigPatch) => void
   onCancel: () => void
 }) {
+  const [tab, setTab] = useState<'content' | 'setting'>('content')
   const [title, setTitle] = useState(e.title ?? '')
   const [text, setText] = useState(e.text)
   const [kind, setKind] = useState<InboxKind>(e.kind)
+  // Model/effort are always a CONCRETE pick — three options each, no "inherit" row (owner,
+  // 2026-08-02). A row that has never been touched shows the repo's Quick-config value as its
+  // starting position, so the picker states the answer instead of deferring it one level.
+  const [model, setModel] = useState(toModelKey(e.model) || toModelKey(repoModel) || DEFAULT_RUN_MODEL)
+  const [effort, setEffort] = useState(e.effort ?? repoEffort ?? DEFAULT_RUN_EFFORT)
+  const [autopilot, setAutopilot] = useState(!!e.autopilot)
 
   return (
     // Contained (not viewport-fixed) so it overlays the dashboard column and leaves the chat rail
     // interactive — same containment as the work-item review popup.
-    <Modal onClose={onCancel} title="Edit inbox item" maxW="max-w-lg" z="z-40" contain dismissable={false}>
+    <Modal onClose={onCancel} title="Inbox item" maxW="max-w-lg" z="z-40" contain dismissable={false}>
       <div className="p-4">
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <Dropdown value={kind} options={KIND_OPTS} onChange={(v) => setKind(v as InboxKind)} />
-            <input
-              className="min-w-0 flex-1 rounded border border-line bg-sunken px-2 py-1.5 text-sm font-medium text-fg outline-none focus:border-accent placeholder:text-faint"
-              placeholder="Title (optional)"
-              value={title}
-              onChange={(ev) => setTitle(ev.target.value)}
-              autoFocus
+        <TabBar
+          tabs={[['content', 'Content'], ['setting', 'Setting']] as const}
+          value={tab}
+          onChange={setTab}
+          size="sm"
+          className="mb-3"
+        />
+
+        {/* One fixed body height for both tabs — switching tabs must not resize the dialog under
+            the cursor (the Save row would jump out from under a click). */}
+        <div className="h-[21rem] overflow-y-auto">
+        {tab === 'content' ? (
+          <div className="flex h-full flex-col gap-2">
+            <div className="flex items-center gap-2">
+              <Dropdown value={kind} options={KIND_OPTS} onChange={(v) => setKind(v as InboxKind)} />
+              <input
+                className="min-w-0 flex-1 rounded border border-line bg-sunken px-2 py-1.5 text-[13px] font-medium text-fg outline-none focus:border-accent placeholder:text-faint"
+                placeholder="Title (optional)"
+                value={title}
+                onChange={(ev) => setTitle(ev.target.value)}
+                autoFocus
+              />
+            </div>
+            <textarea
+              className="w-full flex-1 resize-none rounded border border-line bg-sunken px-2 py-1.5 text-[13px] leading-relaxed text-fg outline-none focus:border-accent"
+              value={text}
+              onChange={(ev) => setText(ev.target.value)}
             />
           </div>
-          <textarea
-            className="min-h-[16rem] w-full flex-1 resize-none rounded border border-line bg-sunken px-2 py-1.5 text-sm leading-relaxed text-fg outline-none focus:border-accent"
-            value={text}
-            onChange={(ev) => setText(ev.target.value)}
-          />
+        ) : (
+          <div className="space-y-4">
+            {/* ── how this item will be worked ─────────────────────────────────────────────── */}
+            <section className="rounded-md border border-line bg-sunken px-3 py-2.5">
+              <SectionHeader>Setting</SectionHeader>
+              <div className="mt-1 text-[11px] leading-snug text-faint">
+                Set here while the row is open — push freezes all three onto the work-item.
+              </div>
+              <div className="mt-2.5 space-y-2.5">
+                <ConfigRow label="Autopilot" hint="Drives its own gates; the deputy judges each one for you.">
+                  <Toggle on={autopilot} onChange={setAutopilot} onColor="bg-accent" />
+                </ConfigRow>
+                <ConfigRow label="Model" hint="Which model this item's runs use.">
+                  <Dropdown value={model} options={RUN_MODELS} onChange={setModel} width="w-36" align="right" />
+                </ConfigRow>
+                <ConfigRow label="Effort" hint="How much reasoning each run spends.">
+                  <Dropdown value={effort} options={RUN_EFFORTS} onChange={setEffort} width="w-36" align="right" />
+                </ConfigRow>
+              </div>
+            </section>
+
+            {/* ── what this row is ─────────────────────────────────────────────────────────── */}
+            <section className="rounded-md border border-line bg-sunken px-3 py-2.5">
+              <SectionHeader>Meta info</SectionHeader>
+              <dl className="mt-2 space-y-1.5">
+                <MetaRow label="Id">#{e.id}</MetaRow>
+                <MetaRow label="Status">{e.status}</MetaRow>
+                <MetaRow label="Created by">{(e.origin ?? []).join(' · ') || '—'}</MetaRow>
+                <MetaRow label="Captured">{fmtLocal(e.created_at)}</MetaRow>
+                <MetaRow label="Updated">{fmtLocal(e.updated_at)}</MetaRow>
+                {e.spawned_from && (
+                  <MetaRow label="Branched from">
+                    <span className="font-mono">{e.spawned_from.item}</span>
+                    <span className="ml-1.5 text-muted">({e.spawned_from.relation})</span>
+                  </MetaRow>
+                )}
+                {e.routed_to && (
+                  <MetaRow label="Work-item"><span className="font-mono">{e.routed_to}</span></MetaRow>
+                )}
+              </dl>
+            </section>
+          </div>
+        )}
         </div>
+
         <div className="mt-3 flex justify-end gap-2">
           <button className="rounded-md bg-hover px-3 py-1.5 text-xs text-fg hover:text-fg" onClick={onCancel}>
             Cancel
@@ -498,13 +606,46 @@ function InboxEditModal({
           <button
             className="rounded-md bg-accent px-3 py-1.5 text-xs text-on-accent hover:opacity-90 disabled:opacity-40"
             disabled={!text.trim()}
-            onClick={() => onSave({ title: title.trim() || null, text: text.trim() || e.text, kind })}
+            onClick={() =>
+              onSave({
+                title: title.trim() || null,
+                text: text.trim() || e.text,
+                kind,
+                model,
+                effort,
+                autopilot,
+              })
+            }
           >
             Save
           </button>
         </div>
       </div>
     </Modal>
+  )
+}
+
+// One labelled control in the Config section: name + one-line why on the left, the control right.
+function ConfigRow({ label, hint, children }: { label: string; hint: string; children: ReactNode }) {
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <div className="min-w-0">
+        <div className="text-[13px] text-fg">{label}</div>
+        <div className="text-[11px] leading-snug text-faint">{hint}</div>
+      </div>
+      <div className="shrink-0 pt-0.5">{children}</div>
+    </div>
+  )
+}
+
+// One fact in the Meta section — the label names it, the value IS it (colour rule: muted label,
+// fg fact).
+function MetaRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex gap-2 text-[13px] leading-snug">
+      <dt className="w-[6.5rem] shrink-0 text-[11px] leading-[1.45] text-muted">{label}</dt>
+      <dd className="min-w-0 break-words text-fg">{children}</dd>
+    </div>
   )
 }
 

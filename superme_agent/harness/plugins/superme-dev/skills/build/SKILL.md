@@ -9,10 +9,16 @@ category: workspace
 
 Turn `artifacts/plan.md` into working code inside this item's git worktree. The plan is the
 contract: `## Design` is what you implement, `## Tasks` is the tracker you tick, and
-`## Verification plan` is the exam a separate vet agent runs against what you produce. When
-`## Revisions` carries a newer entry than the cycle you last worked, read that entry FIRST — it
-says which feedback changed the plan and, on a `redesign`, what of your own work is now void and
-must be undone forward (new commits that revert; never a reset or a force-push).
+`## Verification plan` is the exam a separate vet agent runs against what you produce. Those two
+live sections sit LAST in the file — they are the current truth, and nothing above them overrides
+them.
+
+When a `## Revision r<n>` block is newer than the cycle you last worked, read that block FIRST:
+`directive` is what this generation does differently, `still in force` is what earlier revisions
+still bind (read it — the older blocks are history, that line is not), and a `redesign` change says
+what of your own work is void and must be undone FORWARD (new commits that revert; never a reset or
+a force-push). `## Tasks` is the only task authority — a revision may have removed tasks you
+already ticked.
 
 ## Contract
 
@@ -102,6 +108,11 @@ The owner is not watching; nothing you ask mid-run reaches them. So decide and r
   honestly. **A cycle with nothing to build still fills them** — "nothing: r3 was a plan-text fix,
   no design or task changed" is an answer; a leftover `<fill:…>` slot is indistinguishable from a
   build that gave up, and the vetter and the owner both read it that way.
+- **Every per-task bullet in both sections LEADS with its task id** (`- t2 — …`), the same id as the
+  commit trailer. That id is what joins your work to its validation and to the vet's verdict, so the
+  owner's Proof view can say "this feature, proven this way" instead of listing check ids. Work that
+  belongs to no single task (a shared refactor, a stale doc fixed in passing) leads with no id and
+  reads as item-wide — say it, don't file it under whichever task was open.
 - Rewrite `reports/report-build.md` from `templates/report-build-template.md` (this skill's
   folder), overwriting — every line traces to the cycle reports.
 - On long builds, sync with the trunk via `sync_from_main` (commit first); resolve any conflicts

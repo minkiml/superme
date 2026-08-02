@@ -1,10 +1,11 @@
-"""Gate-brief + lifecycle routes (workspace-workflow S6): the four human gates' decision surface
-and the human-only abandon path.
+"""Drilldown + lifecycle routes (renovation v2 §4): the work-item surface's server-computed payload,
+its per-phase report reads, and the human-only abandon path.
 
-The brief is kernel-ASSEMBLED from durable state (core/gate_briefs) — this layer only gathers the
-inputs (item, events, git health) and serves the render. Abandon is D8's human-only terminal path:
-ordered, idempotent effects; zero general-knowledge writes (write-at-merge means a pre-merge
-abandon never wrote anything); blocking children surfaced for the owner's disposal.
+This layer only GATHERS inputs (item, events, git health) — the payload is assembled in
+`services/drilldown` over `core/gate_briefs.gate_state`, so the drilldown and the deputy's prompt
+read one computation of a gate's checks. Abandon is D8's human-only terminal path: ordered,
+idempotent effects; zero general-knowledge writes (write-at-merge means a pre-merge abandon never
+wrote anything); blocking children surfaced for the owner's disposal.
 """
 
 import logging
@@ -17,11 +18,11 @@ from ...app_state import (
     DevKnowledgeService, DevStore, SessionStore, SystemSpine,
     get_dev, get_dev_store, get_sessions, get_spine,
 )
-from ....core import gate_briefs, git_layer, status_router
+from ....core import artifacts, git_layer, status_router
 from ....core.artifacts import _atomic_write
-from ...services import git_ops, scheduler
+from ...services import drilldown, git_ops, scheduler
 from ....gateway import contexts
-from ...schemas.dev.gates import AbandonResponse, GateBriefResponse
+from ...schemas.dev.gates import AbandonResponse, DrilldownResponse, PhaseReportResponse
 
 log = logging.getLogger("superme-agent")
 
@@ -39,33 +40,55 @@ def _load(context_id: str, item_id: str, dev: DevKnowledgeService):
     return ctx, dev_root, item
 
 
-@router.get("/dev/work-items/{item_id}/gate-brief", response_model=GateBriefResponse)
-async def dev_work_item_gate_brief(item_id: str, context_id: str = "global",
-                                   dev: DevKnowledgeService = Depends(get_dev),
-                                   dev_store: DevStore = Depends(get_dev_store),
-                                   spine: SystemSpine = Depends(get_spine)) -> dict:
-    """The item's CURRENT gate brief (or a preview of the next one when mid-phase): continuity →
-    delta → narrative → the uniform decision block, plus the mechanical checks — answerable
-    without opening code (D10 ★). The drilldown leads with this."""
+@router.get("/dev/work-items/{item_id}/report/{phase}", response_model=PhaseReportResponse)
+async def dev_work_item_report(item_id: str, phase: str, context_id: str = "global",
+                               dev: DevKnowledgeService = Depends(get_dev)) -> dict:
+    """One phase's user-facing report (`reports/report-<phase>.md`) for the Reports tab — the markdown
+    1:1, plus the path to the full agent-facing contract behind it (§4.3). 404 when that phase hasn't
+    written one; the tab greys itself from `DrilldownResponse.reports` rather than probing."""
+    _ctx, dev_root, _item = _load(context_id, item_id, dev)
+    report = artifacts.report_text(dev_root / "work-items" / item_id, phase)
+    if report is None:
+        raise HTTPException(status_code=404, detail=f"no report-{phase}.md for this item")
+    return report
+
+
+@router.get("/dev/work-items/{item_id}/drilldown", response_model=DrilldownResponse)
+async def dev_work_item_drilldown(item_id: str, context_id: str = "global",
+                                  dev: DevKnowledgeService = Depends(get_dev),
+                                  dev_store: DevStore = Depends(get_dev_store),
+                                  spine: SystemSpine = Depends(get_spine)) -> dict:
+    """Everything the drilldown renders, computed once (§4): the live strip · the
+    WHAT-YOU-NEED-TO-DO card · at-a-glance · the gate's named check rows with `blocking` · every
+    control's activation + reason · the Proof rows · which phases have a report.
+
+    Server-computed activation is the point. The gate brief carried `approve_blocked_by` and no
+    component ever read it, so the greying rule lived in TypeScript beside the rule the backend
+    enforces."""
     ctx, dev_root, item = _load(context_id, item_id, dev)
+    # The board's live-run telemetry (running · tokens · ctx) — the Now strip reads `running`, and
+    # without the enrich a working agent renders as idle.
+    live_by_item = {r["item_id"]: r for r in spine.live_runs(context_id) if r.get("item_id")}
+    dev.enrich_work_items(dev_root, [item], live_by_item, spine.run_stats(context_id, mode="dev"))
     events = dev_store.list_events(context_id, item_id=item_id, limit=100)
+    # The landing rule is a REPO fact, read unconditionally and passed on its own. It used to be
+    # decorated onto `git_health`, which made it disappear whenever there was no branch yet or the
+    # health read raised — and `mode != "strict"` then told the owner of a STRICT repo that their
+    # repo was `fast`. What "Approve" does at review depends on this, so it must not ride a
+    # nullable carrier that answers a different question (dogfood D1, then this).
+    review_mode = git_ops.repo_review_mode(ctx, spine)
     git_health = None
     if item.get("git_branch") or item.get("git_worktree"):
         try:
             git_health = git_layer.worktree_health(ctx.cwd, ctx.id, item_id, item.get("git_branch"),
                                                    trunk=git_ops.repo_anchor(ctx, spine),
                                                    merge_commit=item.get("git_merge_commit"))
-            # The landing rule, from the same source the Git tab reads (`repo_review_mode`).
-            # `worktree_health` answers about the WORKTREE and knows nothing about the repo's
-            # policy — the `/git` route decorates it on, and the brief needs it for the same
-            # reason: what "Approve" does at the review gate depends on it (dogfood D1).
-            git_health["review_mode"] = git_ops.repo_review_mode(ctx, spine)
         except (git_layer.GitError, git_layer.GitBusy):
             git_health = None
     all_items = dev.read_all(dev_root)["work_items"]
-    return gate_briefs.render_gate_brief(item, dev_root / "work-items" / item_id, dev_root,
-                                         ctx.cwd, all_items=all_items, events=events,
-                                         git_health=git_health)
+    return drilldown.build_payload(item, dev_root / "work-items" / item_id, dev_root, ctx.cwd,
+                                   all_items=all_items, events=events, git_health=git_health,
+                                   review_mode=review_mode)
 
 
 class AbandonBody(BaseModel):
@@ -145,9 +168,11 @@ async def dev_work_item_abandon(item_id: str, body: AbandonBody,
     resume_id = status_router.parent_to_resume(all_items, item)
     if resume_id:
         dev.set_work_item_status(dev_root, resume_id, "active")
+        rel = status_router.relation_of(item)
         dev_store.log_event(body.context_id, "item.resume",
-                            f"Blocking child {item_id} abandoned — parent resumed",
-                            item_id=resume_id, actor="daemon", meta={"child": item_id})
+                            f"{rel.capitalize()} child {item_id} abandoned — parent resumed",
+                            item_id=resume_id, actor="daemon",
+                            meta={"child": item_id, "relation": rel})
     # 5b. peers parked on this item (`after:`) — an abandon/supersede is NOT a release. They page
     #     the owner instead: the thing they were queued behind is never landing.
     for it in all_items:

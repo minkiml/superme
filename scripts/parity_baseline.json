@@ -2,7 +2,6 @@
   "inventory": [
     "DELETE /dev/harness/published/{proposal_id}",
     "DELETE /dev/inbox/{item_id}",
-    "DELETE /dev/work-items/{item_id}",
     "DELETE /repos/{repo_id}",
     "DELETE /sessions/{session_id}",
     "GET /contexts",
@@ -33,10 +32,12 @@
     "GET /dev/roadmap",
     "GET /dev/work-items/{item_id}/artifacts",
     "GET /dev/work-items/{item_id}/detail",
-    "GET /dev/work-items/{item_id}/gate-brief",
+    "GET /dev/work-items/{item_id}/doc.html",
+    "GET /dev/work-items/{item_id}/drilldown",
     "GET /dev/work-items/{item_id}/git",
     "GET /dev/work-items/{item_id}/pr",
     "GET /dev/work-items/{item_id}/pr/diff",
+    "GET /dev/work-items/{item_id}/report/{phase}",
     "GET /dev/work-items/{item_id}/runs/{run_id}/input.html",
     "GET /dev/work-items/{item_id}/timeline",
     "GET /dev/workgraph",
@@ -76,19 +77,17 @@
     "POST /dev/sweep/idle-scan",
     "POST /dev/work-items/{item_id}/abandon",
     "POST /dev/work-items/{item_id}/advance",
-    "POST /dev/work-items/{item_id}/archive",
     "POST /dev/work-items/{item_id}/authorize",
     "POST /dev/work-items/{item_id}/autopilot",
     "POST /dev/work-items/{item_id}/compact",
-    "POST /dev/work-items/{item_id}/continue",
     "POST /dev/work-items/{item_id}/git/merge",
     "POST /dev/work-items/{item_id}/git/resolve",
     "POST /dev/work-items/{item_id}/git/revert",
-    "POST /dev/work-items/{item_id}/git/sync",
-    "POST /dev/work-items/{item_id}/plan",
+    "POST /dev/work-items/{item_id}/rerun",
+    "POST /dev/work-items/{item_id}/resume",
+    "POST /dev/work-items/{item_id}/run",
     "POST /dev/work-items/{item_id}/scaffold",
     "POST /dev/work-items/{item_id}/seen",
-    "POST /dev/work-items/{item_id}/vet",
     "POST /knowledge/inject",
     "POST /repos",
     "POST /repos/{repo_id}/autopilot",
@@ -399,7 +398,7 @@
           "type": "object"
         },
         "ArtifactCall": {
-          "description": "One row of a work-item's run call-trail (tool / sub-agent / skill invocation, or its result).\n`tool_id` pairs a `result` row back to its call (concurrent tools return out of order).",
+          "description": "One row of a work-item's run call-trail (tool / sub-agent / skill invocation, or its result).\n`tool_id` pairs a `result` row back to its call (concurrent tools return out of order);\n`parent_tool_id` names the sub-agent spawn the row happened inside (null = the parent itself).",
           "properties": {
             "created_at": {
               "title": "Created At",
@@ -426,7 +425,9 @@
                 "subagent",
                 "skill",
                 "mcp",
-                "result"
+                "result",
+                "prompt",
+                "reply"
               ],
               "title": "Kind",
               "type": "string"
@@ -434,6 +435,17 @@
             "name": {
               "title": "Name",
               "type": "string"
+            },
+            "parent_tool_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Parent Tool Id"
             },
             "run_id": {
               "anyOf": [
@@ -557,6 +569,35 @@
             "status"
           ],
           "title": "ArtifactStatusRow",
+          "type": "object"
+        },
+        "AskQuestion": {
+          "description": "One question from a parked grill run \u2014 the ask-card's fields, as the reporting tool typed them.",
+          "properties": {
+            "instead": {
+              "default": "",
+              "title": "Instead",
+              "type": "string"
+            },
+            "question": {
+              "title": "Question",
+              "type": "string"
+            },
+            "recommend": {
+              "default": "",
+              "title": "Recommend",
+              "type": "string"
+            },
+            "why": {
+              "default": "",
+              "title": "Why",
+              "type": "string"
+            }
+          },
+          "required": [
+            "question"
+          ],
+          "title": "AskQuestion",
           "type": "object"
         },
         "AssetActionBody": {
@@ -701,6 +742,56 @@
           "title": "AttentionBadge",
           "type": "object"
         },
+        "AttentionCard": {
+          "description": "\u00a74.2's WHAT-YOU-NEED-TO-DO card \u2014 the drilldown's single most important element, and the answer\nto \"I opened this and don't know what's needed from me\". Three connected parts: WHY (the back\nstory) \u00b7 DO (the exact act + the one control that performs it) \u00b7 BASIS (pointers to what decides\nit). None when nothing needs the owner \u2014 the card is hidden entirely, never an empty shell.",
+          "properties": {
+            "basis": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Basis",
+              "type": "array"
+            },
+            "click": {
+              "title": "Click",
+              "type": "string"
+            },
+            "detail": {
+              "title": "Detail",
+              "type": "string"
+            },
+            "do": {
+              "title": "Do",
+              "type": "string"
+            },
+            "kind": {
+              "title": "Kind",
+              "type": "string"
+            },
+            "questions": {
+              "items": {
+                "$ref": "#/components/schemas/AskQuestion"
+              },
+              "title": "Questions",
+              "type": "array"
+            },
+            "why": {
+              "title": "Why",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "why",
+            "detail",
+            "do",
+            "click",
+            "basis",
+            "questions"
+          ],
+          "title": "AttentionCard",
+          "type": "object"
+        },
         "AttentionHold": {
           "description": "One parked (`awaiting_human`) work-item on the top-of-SuperMe attention center (Pass 2 \u00b7 Q2).",
           "properties": {
@@ -727,7 +818,6 @@
               "enum": [
                 "question",
                 "escalation",
-                "breaker",
                 "paged",
                 "review",
                 "gate"
@@ -1106,6 +1196,7 @@
                     "awaiting_upstream",
                     "awaiting_slot",
                     "awaiting_human",
+                    "error",
                     "done"
                   ],
                   "type": "string"
@@ -1438,6 +1529,10 @@
               ],
               "title": "Min Gain Pct"
             },
+            "min_pct": {
+              "title": "Min Pct",
+              "type": "integer"
+            },
             "ok": {
               "title": "Ok",
               "type": "boolean"
@@ -1452,7 +1547,8 @@
             "trigger_pct",
             "by_kind",
             "min_gain_pct",
-            "floor_pct"
+            "floor_pct",
+            "min_pct"
           ],
           "title": "CompactionConfigResponse",
           "type": "object"
@@ -2090,6 +2186,165 @@
           "title": "DocsListResponse",
           "type": "object"
         },
+        "DrilldownAction": {
+          "description": "One control, with its activation decided SERVER-SIDE (\u00a74's universal rule + the owner's slice-6\ninput). `reason` is populated either way: greyed it says what would make it live, live it says\nwhat clicking does. `home` places it \u2014 `actions` (the frame's bar) or `git` (the Git tab).\n\nNever hide a control: a `fast` repo with no PR button anywhere read as a missing feature, with\nnothing on screen saying why.",
+          "properties": {
+            "active": {
+              "title": "Active",
+              "type": "boolean"
+            },
+            "home": {
+              "title": "Home",
+              "type": "string"
+            },
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "label": {
+              "title": "Label",
+              "type": "string"
+            },
+            "reason": {
+              "title": "Reason",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "label",
+            "home",
+            "active",
+            "reason"
+          ],
+          "title": "DrilldownAction",
+          "type": "object"
+        },
+        "DrilldownResponse": {
+          "description": "Everything the work-item drilldown renders, computed once per poll. One route instead of four,\nbecause every tab reads the same item folder \u2014 and one computation of the gate's checks, shared\nwith the deputy's prompt, because two summaries of one gate is how the owner loses the ability to\ncheck the deputy's call.",
+          "properties": {
+            "actions": {
+              "items": {
+                "$ref": "#/components/schemas/DrilldownAction"
+              },
+              "title": "Actions",
+              "type": "array"
+            },
+            "at_gate": {
+              "title": "At Gate",
+              "type": "boolean"
+            },
+            "attention": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/AttentionCard"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "authorizations": {
+              "items": {
+                "$ref": "#/components/schemas/AuthorizationRequest"
+              },
+              "title": "Authorizations",
+              "type": "array"
+            },
+            "blocked_by": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Blocked By",
+              "type": "array"
+            },
+            "checks": {
+              "items": {
+                "$ref": "#/components/schemas/GateCheck"
+              },
+              "title": "Checks",
+              "type": "array"
+            },
+            "gate": {
+              "title": "Gate",
+              "type": "string"
+            },
+            "gate_label": {
+              "title": "Gate Label",
+              "type": "string"
+            },
+            "glance": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "title": "Glance",
+              "type": "object"
+            },
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "now": {
+              "$ref": "#/components/schemas/NowStrip"
+            },
+            "numbers": {
+              "$ref": "#/components/schemas/GateNumbers"
+            },
+            "paged": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/PagedNotice"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "phase": {
+              "title": "Phase",
+              "type": "string"
+            },
+            "proof": {
+              "items": {
+                "$ref": "#/components/schemas/ProofRow"
+              },
+              "title": "Proof",
+              "type": "array"
+            },
+            "reports": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Reports",
+              "type": "array"
+            },
+            "terminal": {
+              "title": "Terminal",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "id",
+            "phase",
+            "gate",
+            "gate_label",
+            "at_gate",
+            "terminal",
+            "now",
+            "attention",
+            "glance",
+            "checks",
+            "blocked_by",
+            "numbers",
+            "authorizations",
+            "paged",
+            "actions",
+            "proof",
+            "reports"
+          ],
+          "title": "DrilldownResponse",
+          "type": "object"
+        },
         "EvalMetrics": {
           "additionalProperties": true,
           "description": "The artifact's own run cost on a synthetic task (forge_kit/eval.py). kind 'run' = skill/agent\nmeasured once; kind 'overhead' = constitution's always-on per-turn cost. Tolerant of pre-metrics\nand error rows (everything optional, extra='allow' for forward-compat).",
@@ -2547,140 +2802,14 @@
           "title": "FsEntry",
           "type": "object"
         },
-        "GateBriefResponse": {
-          "description": "One gate's full decision surface. `brief` is the rendered markdown (continuity \u2192 delta \u2192\nnarrative \u2192 decision) \u2014 since the typed fields landed it is the collapsed DETAILS payload;\nthe NOW card renders facts/assumptions/flags/numbers + the embedded gate report.\n`at_gate: False` means the item is mid-phase and this previews the NEXT gate. Answerable\nwithout opening code \u2014 that is the contract.",
-          "properties": {
-            "assumptions": {
-              "items": {
-                "type": "string"
-              },
-              "title": "Assumptions",
-              "type": "array"
-            },
-            "at_gate": {
-              "title": "At Gate",
-              "type": "boolean"
-            },
-            "authorizations": {
-              "items": {
-                "$ref": "#/components/schemas/AuthorizationRequest"
-              },
-              "title": "Authorizations",
-              "type": "array"
-            },
-            "brief": {
-              "title": "Brief",
-              "type": "string"
-            },
-            "checks": {
-              "items": {
-                "$ref": "#/components/schemas/GateCheck"
-              },
-              "title": "Checks",
-              "type": "array"
-            },
-            "decision": {
-              "$ref": "#/components/schemas/GateDecision"
-            },
-            "facts": {
-              "items": {
-                "$ref": "#/components/schemas/GateFact"
-              },
-              "title": "Facts",
-              "type": "array"
-            },
-            "flags": {
-              "items": {
-                "type": "string"
-              },
-              "title": "Flags",
-              "type": "array"
-            },
-            "gate": {
-              "title": "Gate",
-              "type": "string"
-            },
-            "id": {
-              "title": "Id",
-              "type": "string"
-            },
-            "loop": {
-              "$ref": "#/components/schemas/LoopInstruments"
-            },
-            "numbers": {
-              "$ref": "#/components/schemas/GateNumbers"
-            },
-            "paged": {
-              "anyOf": [
-                {
-                  "$ref": "#/components/schemas/PagedNotice"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "phase": {
-              "title": "Phase",
-              "type": "string"
-            },
-            "report_html": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Report Html"
-            },
-            "snippet": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Snippet"
-            },
-            "terminal": {
-              "title": "Terminal",
-              "type": "boolean"
-            },
-            "title": {
-              "title": "Title",
-              "type": "string"
-            }
-          },
-          "required": [
-            "id",
-            "gate",
-            "at_gate",
-            "phase",
-            "title",
-            "brief",
-            "decision",
-            "checks",
-            "facts",
-            "assumptions",
-            "flags",
-            "numbers",
-            "report_html",
-            "loop",
-            "snippet",
-            "terminal",
-            "paged",
-            "authorizations"
-          ],
-          "title": "GateBriefResponse",
-          "type": "object"
-        },
         "GateCheck": {
-          "description": "One mechanical row of a gate's evaluation \u2014 computed from durable state, never a claim.",
+          "description": "One mechanical row of a gate's evaluation \u2014 computed from durable state, never a claim.\n\n`blocking` is the must-resolve marker (\u00a72.1): a FAILING blocking check greys Approve, and every\nother row is a named, visible fact the owner may act over with their eyes open. Both halves\nmatter \u2014 the old surface rendered checks as coloured dots with the reason hidden in a `title`\nattribute, so a red gate looked identical whether it was fatal or advisory.",
           "properties": {
+            "blocking": {
+              "default": false,
+              "title": "Blocking",
+              "type": "boolean"
+            },
             "criterion": {
               "title": "Criterion",
               "type": "string"
@@ -2702,77 +2831,8 @@
           "title": "GateCheck",
           "type": "object"
         },
-        "GateDecision": {
-          "description": "The uniform decision block (D10 \u2605): recommendation FIRST, stakes one line, per-option\nconsequence, dual-scale effort.",
-          "properties": {
-            "approve_blocked_by": {
-              "default": [],
-              "items": {
-                "type": "string"
-              },
-              "title": "Approve Blocked By",
-              "type": "array"
-            },
-            "effort_agent": {
-              "title": "Effort Agent",
-              "type": "string"
-            },
-            "effort_user": {
-              "title": "Effort User",
-              "type": "string"
-            },
-            "options": {
-              "items": {
-                "$ref": "#/components/schemas/GateOption"
-              },
-              "title": "Options",
-              "type": "array"
-            },
-            "recommendation": {
-              "title": "Recommendation",
-              "type": "string"
-            },
-            "stakes": {
-              "title": "Stakes",
-              "type": "string"
-            }
-          },
-          "required": [
-            "recommendation",
-            "stakes",
-            "options",
-            "effort_user",
-            "effort_agent"
-          ],
-          "title": "GateDecision",
-          "type": "object"
-        },
-        "GateFact": {
-          "description": "One label:value row of the typed NOW card (renovation \u00a73) \u2014 a present fact, never prose.\n`tone` tints the row ('' neutral \u00b7 'warn').",
-          "properties": {
-            "label": {
-              "title": "Label",
-              "type": "string"
-            },
-            "tone": {
-              "default": "",
-              "title": "Tone",
-              "type": "string"
-            },
-            "value": {
-              "title": "Value",
-              "type": "string"
-            }
-          },
-          "required": [
-            "label",
-            "value"
-          ],
-          "title": "GateFact",
-          "type": "object"
-        },
         "GateNumbers": {
-          "description": "The brief's real-ratio counts (law 2: counts of real things, never invented scores).",
+          "description": "The real-ratio counts (law 2: counts of real things, never invented scores).",
           "properties": {
             "checks_pass": {
               "title": "Checks Pass",
@@ -2803,29 +2863,6 @@
             "checks_total"
           ],
           "title": "GateNumbers",
-          "type": "object"
-        },
-        "GateOption": {
-          "properties": {
-            "consequence": {
-              "title": "Consequence",
-              "type": "string"
-            },
-            "id": {
-              "title": "Id",
-              "type": "string"
-            },
-            "label": {
-              "title": "Label",
-              "type": "string"
-            }
-          },
-          "required": [
-            "id",
-            "label",
-            "consequence"
-          ],
-          "title": "GateOption",
           "type": "object"
         },
         "GeneralDoc": {
@@ -3292,72 +3329,6 @@
           "title": "GitRevertResponse",
           "type": "object"
         },
-        "GitSyncResponse": {
-          "description": "Freshness merge (trunk INTO the item branch). Conflicts: `in_tree=False` means the merge\nwas aborted and reported; True means it was deliberately left in the tree for resolution.",
-          "properties": {
-            "commit": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Commit"
-            },
-            "conflicts": {
-              "anyOf": [
-                {
-                  "items": {
-                    "type": "string"
-                  },
-                  "type": "array"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Conflicts"
-            },
-            "in_tree": {
-              "anyOf": [
-                {
-                  "type": "boolean"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "In Tree"
-            },
-            "merged": {
-              "title": "Merged",
-              "type": "boolean"
-            },
-            "ok": {
-              "title": "Ok",
-              "type": "boolean"
-            },
-            "up_to_date": {
-              "anyOf": [
-                {
-                  "type": "boolean"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Up To Date"
-            }
-          },
-          "required": [
-            "ok",
-            "merged"
-          ],
-          "title": "GitSyncResponse",
-          "type": "object"
-        },
         "Glance": {
           "additionalProperties": true,
           "description": "The dashboard glance summary (counts + bucketed item stubs). `awaiting_human` is the\nattention bucket (D10: the only status that pages the owner).",
@@ -3545,6 +3516,11 @@
         },
         "InboxBody": {
           "properties": {
+            "autopilot": {
+              "default": true,
+              "title": "Autopilot",
+              "type": "boolean"
+            },
             "context_id": {
               "default": "global",
               "title": "Context Id",
@@ -3647,6 +3623,17 @@
         },
         "InboxPatch": {
           "properties": {
+            "autopilot": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Autopilot"
+            },
             "effort": {
               "anyOf": [
                 {
@@ -3774,6 +3761,11 @@
         "InboxRow": {
           "description": "One quick-capture triage-queue row. kind/status/origin are locked (R5): DevStore validates\nthem against its own value-sets on write, so the Literal can't 500 on a real row.",
           "properties": {
+            "autopilot": {
+              "default": true,
+              "title": "Autopilot",
+              "type": "boolean"
+            },
             "context_id": {
               "title": "Context Id",
               "type": "string"
@@ -4298,102 +4290,6 @@
           "title": "LocalPluginsResponse",
           "type": "object"
         },
-        "LoopAttempt": {
-          "description": "One loop-driver decision from the attempts ledger.",
-          "properties": {
-            "cycle": {
-              "title": "Cycle",
-              "type": "integer"
-            },
-            "decision": {
-              "title": "Decision",
-              "type": "string"
-            },
-            "reason": {
-              "title": "Reason",
-              "type": "string"
-            },
-            "ts": {
-              "title": "Ts",
-              "type": "string"
-            }
-          },
-          "required": [
-            "cycle",
-            "decision",
-            "reason",
-            "ts"
-          ],
-          "title": "LoopAttempt",
-          "type": "object"
-        },
-        "LoopCycle": {
-          "description": "One filed vet report's verdict column: check id \u2192 pass/fail.",
-          "properties": {
-            "cycle": {
-              "title": "Cycle",
-              "type": "integer"
-            },
-            "verdicts": {
-              "additionalProperties": {
-                "type": "boolean"
-              },
-              "title": "Verdicts",
-              "type": "object"
-            }
-          },
-          "required": [
-            "cycle",
-            "verdicts"
-          ],
-          "title": "LoopCycle",
-          "type": "object"
-        },
-        "LoopInstruments": {
-          "description": "The build\u27f7vet loop's live panel (renovation \u00a72 Loop row) \u2014 the checks\u00d7cycles matrix,\nthe newest failing report's Findings verbatim, and the driver trail. All derived from the\nledger + reports the loop already writes; empty checks+cycles \u21d2 nothing to show.",
-          "properties": {
-            "attempts": {
-              "items": {
-                "$ref": "#/components/schemas/LoopAttempt"
-              },
-              "title": "Attempts",
-              "type": "array"
-            },
-            "checks": {
-              "items": {
-                "type": "string"
-              },
-              "title": "Checks",
-              "type": "array"
-            },
-            "cycles": {
-              "items": {
-                "$ref": "#/components/schemas/LoopCycle"
-              },
-              "title": "Cycles",
-              "type": "array"
-            },
-            "findings": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Findings"
-            }
-          },
-          "required": [
-            "checks",
-            "cycles",
-            "findings",
-            "attempts"
-          ],
-          "title": "LoopInstruments",
-          "type": "object"
-        },
         "ManagedConstitution": {
           "description": "One constitution for management \u2014 dir-scanned (provenance-agnostic: hand-authored + learned\nalike), keyed by (scope, slug). Powers the enable/disable surfaces for ALL constitutions.",
           "properties": {
@@ -4513,6 +4409,35 @@
           "title": "MemoryStatsResponse",
           "type": "object"
         },
+        "NowStrip": {
+          "description": "What is happening right now: the live phase + cycle, and the newest recorded event.",
+          "properties": {
+            "cycle": {
+              "title": "Cycle",
+              "type": "integer"
+            },
+            "last": {
+              "title": "Last",
+              "type": "string"
+            },
+            "phase": {
+              "title": "Phase",
+              "type": "string"
+            },
+            "running": {
+              "title": "Running",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "phase",
+            "cycle",
+            "running",
+            "last"
+          ],
+          "title": "NowStrip",
+          "type": "object"
+        },
         "Orphan": {
           "description": "A referential-integrity break \u2014 a pointer to an id the anchor docs don't define.",
           "properties": {
@@ -4564,7 +4489,7 @@
           "type": "object"
         },
         "PagedNotice": {
-          "description": "Why an item is parked for the owner when it isn't a plain gate wait \u2014 a deputy escalation, a\nbuild\u27f7vet halt, or a blocked run. The drilldown LEADS with this so 'what's going on / what do I\ndecide' is answered on arrival, not buried under a future-gate preview. None \u21d2 a normal gate.",
+          "description": "Why an item is parked for the owner when it isn't a plain gate wait \u2014 a deputy escalation, a\nbuild\u27f7vet halt, or a blocked run. None \u21d2 a normal gate.",
           "properties": {
             "detail": {
               "title": "Detail",
@@ -4635,6 +4560,52 @@
             "commands"
           ],
           "title": "PaletteResponse",
+          "type": "object"
+        },
+        "PhaseReportResponse": {
+          "description": "One phase's user-facing report for the Reports tab \u2014 the markdown 1:1, plus the path to the\nfull agent-facing contract behind it (\u00a74.3's \"Open full contract\"). The report is the compact\nread; the contract is the whole thing, one click away, never pasted in.",
+          "properties": {
+            "contract": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Contract"
+            },
+            "mtime": {
+              "title": "Mtime",
+              "type": "number"
+            },
+            "name": {
+              "title": "Name",
+              "type": "string"
+            },
+            "path": {
+              "title": "Path",
+              "type": "string"
+            },
+            "phase": {
+              "title": "Phase",
+              "type": "string"
+            },
+            "text": {
+              "title": "Text",
+              "type": "string"
+            }
+          },
+          "required": [
+            "phase",
+            "name",
+            "text",
+            "path",
+            "mtime",
+            "contract"
+          ],
+          "title": "PhaseReportResponse",
           "type": "object"
         },
         "PlanBody": {
@@ -5615,6 +5586,143 @@
             "running"
           ],
           "title": "PromptExtractionStatusResponse",
+          "type": "object"
+        },
+        "ProofRow": {
+          "description": "\u00a74.2's connected view: one row per BUILT THING, each carrying its own validation \u2192\nverification. The join key is the plan task id \u2014 cycle \u00a7Built/\u00a7Validation bullets lead with it and\nvet-plan checks name it in `covers:`. `task: \"\"` is the item-wide row, where untagged content\nlands: nothing is dropped and nothing is guessed at.",
+          "properties": {
+            "built": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Built",
+              "type": "array"
+            },
+            "done": {
+              "title": "Done",
+              "type": "boolean"
+            },
+            "task": {
+              "title": "Task",
+              "type": "string"
+            },
+            "text": {
+              "title": "Text",
+              "type": "string"
+            },
+            "validated": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Validated",
+              "type": "array"
+            },
+            "verified": {
+              "items": {
+                "$ref": "#/components/schemas/ProofVerdict"
+              },
+              "title": "Verified",
+              "type": "array"
+            }
+          },
+          "required": [
+            "task",
+            "text",
+            "done",
+            "built",
+            "validated",
+            "verified"
+          ],
+          "title": "ProofRow",
+          "type": "object"
+        },
+        "ProofVerdict": {
+          "description": "One check of the plan's exam: what it will prove (`expect`, `mode`), and where it stands.\n`ran` False \u21d2 the loop hasn't reached it yet \u2014 the row exists from the plan gate on, so the\nowner approving a plan can see the proof they are approving. `result` is the vet's captured\noutput, verbatim \u2014 a failing row IS the expected-vs-actual.",
+          "properties": {
+            "by": {
+              "default": "agent",
+              "title": "By",
+              "type": "string"
+            },
+            "check": {
+              "title": "Check",
+              "type": "string"
+            },
+            "cycle": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cycle"
+            },
+            "deferred": {
+              "title": "Deferred",
+              "type": "boolean"
+            },
+            "expect": {
+              "default": "",
+              "title": "Expect",
+              "type": "string"
+            },
+            "history": {
+              "default": [],
+              "items": {
+                "$ref": "#/components/schemas/VerdictHistory"
+              },
+              "title": "History",
+              "type": "array"
+            },
+            "how": {
+              "title": "How",
+              "type": "string"
+            },
+            "mode": {
+              "default": "",
+              "title": "Mode",
+              "type": "string"
+            },
+            "passed": {
+              "title": "Passed",
+              "type": "boolean"
+            },
+            "ran": {
+              "default": false,
+              "title": "Ran",
+              "type": "boolean"
+            },
+            "result": {
+              "title": "Result",
+              "type": "string"
+            },
+            "unknown": {
+              "default": "",
+              "title": "Unknown",
+              "type": "string"
+            },
+            "where": {
+              "default": "",
+              "title": "Where",
+              "type": "string"
+            },
+            "why": {
+              "default": "",
+              "title": "Why",
+              "type": "string"
+            }
+          },
+          "required": [
+            "check",
+            "passed",
+            "deferred",
+            "cycle",
+            "how",
+            "result"
+          ],
+          "title": "ProofVerdict",
           "type": "object"
         },
         "Proposal": {
@@ -7077,7 +7185,7 @@
           "type": "object"
         },
         "RunEventRow": {
-          "description": "One entry of a run's event trail: a prompt, an assistant reply block, a tool/skill/agent call,\nor that call's `result`. `kind` \u2208 prompt | reply | tool | mcp | skill | agent | subagent | result;\n`name` is the label, `description` the body; `tool_id` pairs a result back to its call.",
+          "description": "One entry of a run's event trail: a prompt, an assistant reply block, a tool/skill/agent call,\nor that call's `result`. `kind` \u2208 prompt | reply | tool | mcp | skill | agent | subagent | result;\n`name` is the label, `description` the body; `tool_id` pairs a result back to its call, and\n`parent_tool_id` names the sub-agent spawn a row happened inside (null = the parent's own call),\nso a fan-out reads as nested work rather than as the parent doing everything itself.",
           "properties": {
             "created_at": {
               "title": "Created At",
@@ -7106,6 +7214,17 @@
               "title": "Name",
               "type": "string"
             },
+            "parent_tool_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Parent Tool Id"
+            },
             "seq": {
               "title": "Seq",
               "type": "integer"
@@ -7130,6 +7249,80 @@
             "created_at"
           ],
           "title": "RunEventRow",
+          "type": "object"
+        },
+        "RunHeader": {
+          "description": "What one of an item's runs WAS \u2014 so a call-trail group can name itself. `feature` is the\nanswer to \"why did this run open with a shell command instead of a phase skill\": `chat` (an\nowner turn), `resolve` (the conflict resolver), a resumed `build` cycle, `deputy`, `compact`.",
+          "properties": {
+            "feature": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Feature"
+            },
+            "id": {
+              "title": "Id",
+              "type": "integer"
+            },
+            "model": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Model"
+            },
+            "phase": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Phase"
+            },
+            "started_at": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Started At"
+            },
+            "status": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            },
+            "tokens": {
+              "default": 0,
+              "title": "Tokens",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "title": "RunHeader",
           "type": "object"
         },
         "RunRow": {
@@ -7768,22 +7961,6 @@
           "title": "SweptItem",
           "type": "object"
         },
-        "SyncBody": {
-          "properties": {
-            "context_id": {
-              "default": "global",
-              "title": "Context Id",
-              "type": "string"
-            },
-            "leave_conflicts": {
-              "default": false,
-              "title": "Leave Conflicts",
-              "type": "boolean"
-            }
-          },
-          "title": "SyncBody",
-          "type": "object"
-        },
         "SystemEffortBody": {
           "properties": {
             "effort": {
@@ -8099,6 +8276,17 @@
                 }
               ],
               "title": "Name"
+            },
+            "parent_tool_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Parent Tool Id"
             },
             "seq": {
               "title": "Seq",
@@ -8482,6 +8670,32 @@
           "title": "ValidationError",
           "type": "object"
         },
+        "VerdictHistory": {
+          "description": "One cycle's verdict for a check \u2014 the sequence renders as `c3 \u2717\u2192\u2713`.",
+          "properties": {
+            "cycle": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cycle"
+            },
+            "passed": {
+              "title": "Passed",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "cycle",
+            "passed"
+          ],
+          "title": "VerdictHistory",
+          "type": "object"
+        },
         "WorkGraphEdge": {
           "additionalProperties": true,
           "description": "One typed edge: contains | spawned_from (carries `relation`) | supersedes.",
@@ -8610,21 +8824,6 @@
               ],
               "title": "After"
             },
-            "archived_at": {
-              "anyOf": [
-                {
-                  "format": "date-time",
-                  "type": "string"
-                },
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Archived At"
-            },
             "artifacts": {
               "anyOf": [
                 {
@@ -8748,6 +8947,17 @@
                 }
               ],
               "title": "Effort"
+            },
+            "error_reason": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Error Reason"
             },
             "folder": {
               "anyOf": [
@@ -9085,6 +9295,7 @@
                     "awaiting_upstream",
                     "awaiting_slot",
                     "awaiting_human",
+                    "error",
                     "done"
                   ],
                   "type": "string"
@@ -9221,40 +9432,6 @@
           "title": "WorkItemAdvanceResponse",
           "type": "object"
         },
-        "WorkItemArchiveResponse": {
-          "description": "The on-demand folder archive of a DONE item \u2014 storage only, never a lifecycle change.",
-          "properties": {
-            "already": {
-              "default": false,
-              "title": "Already",
-              "type": "boolean"
-            },
-            "archive": {
-              "title": "Archive",
-              "type": "string"
-            },
-            "files": {
-              "title": "Files",
-              "type": "integer"
-            },
-            "id": {
-              "title": "Id",
-              "type": "string"
-            },
-            "ok": {
-              "title": "Ok",
-              "type": "boolean"
-            }
-          },
-          "required": [
-            "ok",
-            "id",
-            "archive",
-            "files"
-          ],
-          "title": "WorkItemArchiveResponse",
-          "type": "object"
-        },
         "WorkItemArtifactsResponse": {
           "properties": {
             "artifacts": {
@@ -9262,6 +9439,14 @@
                 "$ref": "#/components/schemas/ArtifactCall"
               },
               "title": "Artifacts",
+              "type": "array"
+            },
+            "runs": {
+              "default": [],
+              "items": {
+                "$ref": "#/components/schemas/RunHeader"
+              },
+              "title": "Runs",
               "type": "array"
             }
           },
@@ -9298,40 +9483,6 @@
             "changed"
           ],
           "title": "WorkItemAutopilotResponse",
-          "type": "object"
-        },
-        "WorkItemDeleteResponse": {
-          "properties": {
-            "id": {
-              "title": "Id",
-              "type": "string"
-            },
-            "inbox_removed": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Inbox Removed"
-            },
-            "ok": {
-              "title": "Ok",
-              "type": "boolean"
-            },
-            "session_cleared": {
-              "title": "Session Cleared",
-              "type": "boolean"
-            }
-          },
-          "required": [
-            "ok",
-            "id",
-            "session_cleared"
-          ],
-          "title": "WorkItemDeleteResponse",
           "type": "object"
         },
         "WorkItemDetailResponse": {
@@ -10948,7 +11099,7 @@
       },
       "/dev/log": {
         "get": {
-          "description": "The activity log \u2014 a SELECTIVE read over the events table (PRD \u00a74.9), never a dump.\nFilters: `item_id` (an item's own timeline), `scope` (item|dev|global), `since`/`until`\n(ISO timestamps \u2014 e.g. \"what happened yesterday\"). Newest first. Powers the dashboard\nactivity view and the chat \"what was done\u2026\" queries.",
+          "description": "The activity log \u2014 a SELECTIVE read over the events table (PRD \u00a74.9), never a dump.\nFilters: `item_id` (an item's own timeline), `scope` (item|dev|global), `since`/`until`\n(ISO timestamps \u2014 e.g. \"what happened yesterday\"). Newest first. Powers the dashboard\nactivity view and the chat \"what was done\u2026\" queries.\n\nDiscarded rows (a re-run's soft-deleted attempt) follow the reader split: an ITEM read is the\ndrilldown asking \"what is happening on this item\", so it sees the current attempt only; a\nREPO-WIDE read is the project's history, which includes the attempts that were thrown away.",
           "operationId": "dev_log_dev_log_get",
           "parameters": [
             {
@@ -11882,56 +12033,6 @@
           "summary": "Dev Sweep Idle Scan"
         }
       },
-      "/dev/work-items/{item_id}": {
-        "delete": {
-          "description": "Hard-delete a pre-build work-item and erase its trace: the `work-items/<id>/` folder,\nits SDK session transcript + index entry, and the originating inbox row. Only allowed while\nthe item is in triage/plan (past that gate, code may have been touched). 409 otherwise.",
-          "operationId": "dev_work_item_delete_dev_work_items__item_id__delete",
-          "parameters": [
-            {
-              "in": "path",
-              "name": "item_id",
-              "required": true,
-              "schema": {
-                "title": "Item Id",
-                "type": "string"
-              }
-            },
-            {
-              "in": "query",
-              "name": "context_id",
-              "required": false,
-              "schema": {
-                "default": "global",
-                "title": "Context Id",
-                "type": "string"
-              }
-            }
-          ],
-          "responses": {
-            "200": {
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "$ref": "#/components/schemas/WorkItemDeleteResponse"
-                  }
-                }
-              },
-              "description": "Successful Response"
-            },
-            "422": {
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "$ref": "#/components/schemas/HTTPValidationError"
-                  }
-                }
-              },
-              "description": "Validation Error"
-            }
-          },
-          "summary": "Dev Work Item Delete"
-        }
-      },
       "/dev/work-items/{item_id}/abandon": {
         "post": {
           "description": "Abandon a work-item \u2014 HUMAN-ONLY (no agent-tool counterpart), legal from any non-terminal\nphase (D8). Ordered, each step idempotent: end live runs/sessions \u00b7 remove the worktree\n(branch kept \u2014 near-free trace) \u00b7 abandon note into reports/report-close.md \u00b7 terminal status change\n(`abandoned`, or `superseded` when `superseded_by` names the replacement) \u00b7 resume a paused\nparent whose last open blocking child this was. Dev-knowledge untouched \u2014 write-at-merge\nmeans a pre-merge abandon wrote nothing, ever. The response is the abandon brief: blocking\nchildren listed for YOUR disposal (they existed only for this parent); parallel children\ncontinue untouched.",
@@ -12032,59 +12133,9 @@
           "summary": "Dev Work Item Advance"
         }
       },
-      "/dev/work-items/{item_id}/archive": {
-        "post": {
-          "description": "Archive a DONE item's folder: every loose artifact file is folded into one `archive.zip`\nbeside `item.md`, and `archived_at` is stamped. Storage only \u2014 the item stays completed and\nthe DB trace (runs, events, artifacts) is untouched forever (never-delete-logs). Idempotent.\n\nCompletion itself has no route: an item goes terminal MECHANICALLY when its closing run\nreports (services/clearance) \u2014 there is no owner promotion and no agent proposal.",
-          "operationId": "dev_work_item_archive_dev_work_items__item_id__archive_post",
-          "parameters": [
-            {
-              "in": "path",
-              "name": "item_id",
-              "required": true,
-              "schema": {
-                "title": "Item Id",
-                "type": "string"
-              }
-            },
-            {
-              "in": "query",
-              "name": "context_id",
-              "required": false,
-              "schema": {
-                "default": "global",
-                "title": "Context Id",
-                "type": "string"
-              }
-            }
-          ],
-          "responses": {
-            "200": {
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "$ref": "#/components/schemas/WorkItemArchiveResponse"
-                  }
-                }
-              },
-              "description": "Successful Response"
-            },
-            "422": {
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "$ref": "#/components/schemas/HTTPValidationError"
-                  }
-                }
-              },
-              "description": "Validation Error"
-            }
-          },
-          "summary": "Dev Work Item Archive"
-        }
-      },
       "/dev/work-items/{item_id}/artifacts": {
         "get": {
-          "description": "The call-trail: every tool / sub-agent / skill this work-item's runs invoked, grouped by\nrun (newest run first, calls in order within a run). Powers the detail popup's Execution tab.",
+          "description": "The call-trail: every tool / sub-agent / skill this work-item's runs invoked, grouped by\nrun (newest run first, calls in order within a run) \u2014 the drilldown's Runs pane.\n\n`runs` rides along so each group can say WHAT that run was. Without it a group header reads\n\"Run #653\" and the owner has to guess why it opened with a shell command instead of a phase\nskill \u2014 the answer being that it was a chat turn, or a resumed build cycle, or the conflict\nresolver. Naming the feature answers it on the row.",
           "operationId": "dev_work_item_artifacts_dev_work_items__item_id__artifacts_get",
           "parameters": [
             {
@@ -12292,56 +12343,6 @@
           "summary": "Dev Work Item Compact"
         }
       },
-      "/dev/work-items/{item_id}/continue": {
-        "post": {
-          "description": "The owner's CONTINUE on a build parked at a human gate (BV-A1): RE-ENTER the build\u27f7vet loop.\nResumes the item's build thread to finalize \u2014 complete what's doable, record any wall it can't\npass itself as an assumption \u2014 then the normal build\u2192vet\u2192review flow carries the gap to review.\nThis is distinct from a bare chat reply to a paused build (which runs a `chat` turn and does NOT\nadvance the loop). 409 when the item isn't a parked build-phase item with a live worktree, or a\nrun is in flight.",
-          "operationId": "dev_work_item_continue_dev_work_items__item_id__continue_post",
-          "parameters": [
-            {
-              "in": "path",
-              "name": "item_id",
-              "required": true,
-              "schema": {
-                "title": "Item Id",
-                "type": "string"
-              }
-            }
-          ],
-          "requestBody": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PlanBody"
-                }
-              }
-            },
-            "required": true
-          },
-          "responses": {
-            "200": {
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "$ref": "#/components/schemas/PlanResponse"
-                  }
-                }
-              },
-              "description": "Successful Response"
-            },
-            "422": {
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "$ref": "#/components/schemas/HTTPValidationError"
-                  }
-                }
-              },
-              "description": "Validation Error"
-            }
-          },
-          "summary": "Dev Work Item Continue"
-        }
-      },
       "/dev/work-items/{item_id}/detail": {
         "get": {
           "description": "A work-item's review payload: its frontmatter/body plus the rendered artifact content\nthe review popup shows \u2014 plan.md and prd.md as Markdown bodies, the plan's `## Tasks` as a\nstructured `{text, done}` checklist, and the COMPUTED per-artifact status map (S2: derived\nfrom file existence + self-check + evidence freshness \u2014 never stored).",
@@ -12392,10 +12393,69 @@
           "summary": "Dev Work Item Detail"
         }
       },
-      "/dev/work-items/{item_id}/gate-brief": {
+      "/dev/work-items/{item_id}/doc.html": {
         "get": {
-          "description": "The item's CURRENT gate brief (or a preview of the next one when mid-phase): continuity \u2192\ndelta \u2192 narrative \u2192 the uniform decision block, plus the mechanical checks \u2014 answerable\nwithout opening code (D10 \u2605). The drilldown leads with this.",
-          "operationId": "dev_work_item_gate_brief_dev_work_items__item_id__gate_brief_get",
+          "description": "One of the item's AGENT-FACING artifacts (brief.md \u00b7 plan.md \u00b7 build-vet-<n>.md) as a\nstandalone page \u2014 what a report's \"full contract\" link opens. `path` is the report's own\nrelative pointer; anything outside the item's `artifacts/` folder is refused as missing.",
+          "operationId": "dev_work_item_doc_dev_work_items__item_id__doc_html_get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "item_id",
+              "required": true,
+              "schema": {
+                "title": "Item Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "path",
+              "required": true,
+              "schema": {
+                "title": "Path",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "default": "global",
+                "title": "Context Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "text/html": {
+                  "schema": {
+                    "type": "string"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Work Item Doc"
+        }
+      },
+      "/dev/work-items/{item_id}/drilldown": {
+        "get": {
+          "description": "Everything the drilldown renders, computed once (\u00a74): the live strip \u00b7 the\nWHAT-YOU-NEED-TO-DO card \u00b7 at-a-glance \u00b7 the gate's named check rows with `blocking` \u00b7 every\ncontrol's activation + reason \u00b7 the Proof rows \u00b7 which phases have a report.\n\nServer-computed activation is the point. The gate brief carried `approve_blocked_by` and no\ncomponent ever read it, so the greying rule lived in TypeScript beside the rule the backend\nenforces.",
+          "operationId": "dev_work_item_drilldown_dev_work_items__item_id__drilldown_get",
           "parameters": [
             {
               "in": "path",
@@ -12422,7 +12482,7 @@
               "content": {
                 "application/json": {
                   "schema": {
-                    "$ref": "#/components/schemas/GateBriefResponse"
+                    "$ref": "#/components/schemas/DrilldownResponse"
                   }
                 }
               },
@@ -12439,7 +12499,7 @@
               "description": "Validation Error"
             }
           },
-          "summary": "Dev Work Item Gate Brief"
+          "summary": "Dev Work Item Drilldown"
         }
       },
       "/dev/work-items/{item_id}/git": {
@@ -12642,106 +12702,6 @@
           "summary": "Dev Work Item Git Revert"
         }
       },
-      "/dev/work-items/{item_id}/git/sync": {
-        "post": {
-          "description": "Freshness merge (D4): merge the trunk INTO the item branch, inside its worktree \u2014 run\nduring long builds and always before the review merge, so main-merge is trivial.",
-          "operationId": "dev_work_item_git_sync_dev_work_items__item_id__git_sync_post",
-          "parameters": [
-            {
-              "in": "path",
-              "name": "item_id",
-              "required": true,
-              "schema": {
-                "title": "Item Id",
-                "type": "string"
-              }
-            }
-          ],
-          "requestBody": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SyncBody"
-                }
-              }
-            },
-            "required": true
-          },
-          "responses": {
-            "200": {
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "$ref": "#/components/schemas/GitSyncResponse"
-                  }
-                }
-              },
-              "description": "Successful Response"
-            },
-            "422": {
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "$ref": "#/components/schemas/HTTPValidationError"
-                  }
-                }
-              },
-              "description": "Validation Error"
-            }
-          },
-          "summary": "Dev Work Item Git Sync"
-        }
-      },
-      "/dev/work-items/{item_id}/plan": {
-        "post": {
-          "description": "Fire a background /plan turn for a work-item \u2014 the \"Plan it\" quick-action. Opens the run\nimmediately, then returns; the agent works in the background and the item lands at\n`awaiting_human` (the pre-main gate) when done. Poll GET /dev (`running`) for live state.",
-          "operationId": "dev_work_item_plan_dev_work_items__item_id__plan_post",
-          "parameters": [
-            {
-              "in": "path",
-              "name": "item_id",
-              "required": true,
-              "schema": {
-                "title": "Item Id",
-                "type": "string"
-              }
-            }
-          ],
-          "requestBody": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PlanBody"
-                }
-              }
-            },
-            "required": true
-          },
-          "responses": {
-            "200": {
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "$ref": "#/components/schemas/PlanResponse"
-                  }
-                }
-              },
-              "description": "Successful Response"
-            },
-            "422": {
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "$ref": "#/components/schemas/HTTPValidationError"
-                  }
-                }
-              },
-              "description": "Validation Error"
-            }
-          },
-          "summary": "Dev Work Item Plan"
-        }
-      },
       "/dev/work-items/{item_id}/pr": {
         "get": {
           "description": "The dedicated PR page (\u00a74.4) \u2014 `strict`'s review surface, and readable in any mode. Read-only\nby construction: the page's one action is the ordinary review Approve, which merges.",
@@ -12865,6 +12825,215 @@
             }
           },
           "summary": "Dev Work Item Pr Diff"
+        }
+      },
+      "/dev/work-items/{item_id}/report/{phase}": {
+        "get": {
+          "description": "One phase's user-facing report (`reports/report-<phase>.md`) for the Reports tab \u2014 the markdown\n1:1, plus the path to the full agent-facing contract behind it (\u00a74.3). 404 when that phase hasn't\nwritten one; the tab greys itself from `DrilldownResponse.reports` rather than probing.",
+          "operationId": "dev_work_item_report_dev_work_items__item_id__report__phase__get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "item_id",
+              "required": true,
+              "schema": {
+                "title": "Item Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "path",
+              "name": "phase",
+              "required": true,
+              "schema": {
+                "title": "Phase",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "default": "global",
+                "title": "Context Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/PhaseReportResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Work Item Report"
+        }
+      },
+      "/dev/work-items/{item_id}/rerun": {
+        "post": {
+          "description": "The owner's RE-RUN: throw this item's work away and start it over in place (recovery R5).\nDestructive, and the only recovery act that is \u2014 artifacts, reports, checkpoints, the deputy's\nlog and every session are DELETED, the worktree dir is removed, and the item re-enters at its\nkind's first phase with `generation` bumped.\n\nWhat it keeps is what makes it a re-run and not a new item: the id, the branch, every run and\ndev-activity row (permanent trace), the inbox row, `preliminary/`, and every graph relation.\n\nDistinct from `/resume`, which rewinds NOTHING and re-fires the run that died. Reach for this\nonly when there is no run worth re-firing. 409 when the item is terminal or has a run in\nflight \u2014 the same rule the drilldown's button reads, from the same function.",
+          "operationId": "dev_work_item_rerun_dev_work_items__item_id__rerun_post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "item_id",
+              "required": true,
+              "schema": {
+                "title": "Item Id",
+                "type": "string"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/PlanResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Work Item Rerun"
+        }
+      },
+      "/dev/work-items/{item_id}/resume": {
+        "post": {
+          "description": "The owner's RESUME on a work-item whose run STOPPED (recovery R4): re-fire the phase's own\nbackground run. Nothing is rewound \u2014 the branch, the worktree and every artifact stand; only the\nrun is new, which is what makes this cheap enough to offer as a button.\n\nDistinct from Re-run, which reads alike and does the opposite: Resume picks the run back up\nthat hit a wall it could not pass and carries the gap to review (the RUN succeeded, the work\nstopped). Resume re-runs a run that never finished (the work is fine, the RUN stopped).\n\n409 when the item isn't stopped, is terminal, has a run in flight, or sits at a phase with no\nbackground run to re-fire \u2014 the same conditions the drilldown's button reads to stay inactive,\nfrom the same function, so the tooltip can never disagree with the outcome.",
+          "operationId": "dev_work_item_resume_dev_work_items__item_id__resume_post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "item_id",
+              "required": true,
+              "schema": {
+                "title": "Item Id",
+                "type": "string"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/PlanResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Work Item Resume"
+        }
+      },
+      "/dev/work-items/{item_id}/run": {
+        "post": {
+          "description": "The owner's manual RUN \u2014 fire the current phase's own background run (owner, 2026-07-31).\n\nONE route replacing `/plan` and `/vet`, which were two doors onto the same dispatcher with\nhand-written per-phase guards that drifted from it (`/plan` refused anything outside `plan`,\n`/vet` outside `vet`, and neither could reach triage/build/investigate at all). This is the\nmanual driver for a repo that is not on autopilot; on autopilot every phase fires itself.\n\n409 when the item is terminal, stopped (that is Resume's), parked at a gate (that is Approve's),\nat a phase with no run of its own, or already running \u2014 the same rule the drilldown's `run`\nbutton reads, so a live-looking button can never 409.",
+          "operationId": "dev_work_item_run_dev_work_items__item_id__run_post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "item_id",
+              "required": true,
+              "schema": {
+                "title": "Item Id",
+                "type": "string"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/PlanResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Work Item Run"
         }
       },
       "/dev/work-items/{item_id}/runs/{run_id}/input.html": {
@@ -13074,56 +13243,6 @@
             }
           },
           "summary": "Dev Work Item Timeline"
-        }
-      },
-      "/dev/work-items/{item_id}/vet": {
-        "post": {
-          "description": "Run VET on demand and let the loop take over (build-vet-loop \u00a75): fire a background vet run\non this item's worktree. From there the daemon-side driver self-drives \u2014 passed \u2192 review \u00b7\nfailed \u2192 a build cycle handed the vet report (while the breakers allow) \u00b7\nstale \u2192 re-vet \u00b7 unverified \u2192 fail closed. This is the owner's manual \"vet what's built now\"\naction; the AUTONOMOUS loop opens build-first (gates.enter_build_loop), so vet is the loop's\nsole DECISION point, not its entry. 409 when the item isn't a runnable vet-phase item or a run\nis in flight.",
-          "operationId": "dev_work_item_vet_dev_work_items__item_id__vet_post",
-          "parameters": [
-            {
-              "in": "path",
-              "name": "item_id",
-              "required": true,
-              "schema": {
-                "title": "Item Id",
-                "type": "string"
-              }
-            }
-          ],
-          "requestBody": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PlanBody"
-                }
-              }
-            },
-            "required": true
-          },
-          "responses": {
-            "200": {
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "$ref": "#/components/schemas/PlanResponse"
-                  }
-                }
-              },
-              "description": "Successful Response"
-            },
-            "422": {
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "$ref": "#/components/schemas/HTTPValidationError"
-                  }
-                }
-              },
-              "description": "Validation Error"
-            }
-          },
-          "summary": "Dev Work Item Vet"
         }
       },
       "/dev/workgraph": {
@@ -14266,7 +14385,7 @@
       },
       "/system/attention": {
         "get": {
-          "description": "The top-of-SuperMe attention feed (Pass 2 \u00b7 Q2): every `awaiting_human` hold across ALL\nconnected repos, grouped by repo and classified (escalation \u00b7 breaker \u00b7 paged \u00b7 review \u00b7 gate)\nso the notification center can badge a count and offer the right quick actions. Only repos with\na hold appear; empty feed = nothing needs the owner.",
+          "description": "The top-of-SuperMe attention feed (Pass 2 \u00b7 Q2): every `awaiting_human` hold across ALL\nconnected repos, grouped by repo and classified (escalation \u00b7 paged \u00b7 review \u00b7 gate)\nso the notification center can badge a count and offer the right quick actions. Only repos with\na hold appear; empty feed = nothing needs the owner.",
           "operationId": "system_attention_system_attention_get",
           "responses": {
             "200": {

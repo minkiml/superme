@@ -37,17 +37,24 @@ export type StatsTile = (typeof STATS_TILES)[number]
 export const SURFACES = ['foundations', 'activity', 'config', 'internals'] as const
 export type Surface = (typeof SURFACES)[number]
 
-// The item drilldown's two extra segments (slice 4). Both are CLOSED vocabularies, which is what
-// lets `pr` share the phase slot without ambiguity: `pr` is not a phase, so `/item/:id/pr` can only
-// ever mean the PR page.
 export const PHASES = ['triage', 'plan', 'build', 'vet', 'investigate', 'review', 'close'] as const
 export type Phase = (typeof PHASES)[number]
 
-// Which sub-tabs a given phase offers is the DRILLDOWN's grammar, not the router's — the router only
-// knows the vocabulary. A sub that is real but wrong for its phase parses fine here and the modal
-// corrects the address on arrival; keeping that mapping in one place (WorkItemModal.PHASE_TABS)
-// beats duplicating it where it would silently drift.
-export const ITEM_SUBS = ['gate', 'item', 'plan', 'investigation', 'checkpoints', 'git', 'trace', 'deputy'] as const
+// The item drilldown's two extra segments. Both are CLOSED vocabularies, which is what lets `pr`
+// share the first slot without ambiguity: `pr` is not a tab, so `/item/:id/pr` can only ever mean
+// the PR page.
+//
+// These used to be `phase/sub` — the drilldown's stepper made every phase an address. §4 replaced
+// the stepper with a PROGRESS BAR that is deliberately not clickable (reading a past stage is what
+// the Reports tab is for), so the address now names the TAB you are on. A phase still appears here,
+// as the Reports tab's sub.
+export const ITEM_TABS = ['quick', 'reports', 'trace', 'git'] as const
+export type ItemTab = (typeof ITEM_TABS)[number]
+
+// Which subs a given tab offers is the DRILLDOWN's grammar, not the router's — the router only knows
+// the vocabulary. A sub that is real but wrong for its tab parses fine here and the modal corrects
+// the address on arrival; keeping that mapping in one place beats duplicating it where it drifts.
+export const ITEM_SUBS = ['now', 'deputy', 'proof', 'runs', 'timeline', ...PHASES] as const
 export type ItemSub = (typeof ITEM_SUBS)[number]
 
 export type Route =
@@ -59,10 +66,10 @@ export type Route =
   | { name: 'core'; repoId: string }
   /**
    * A work-item drilldown, open over its repo's pipeline board.
-   * `phase: null` means "the item's CURRENT phase" — a following address rather than a pinned one,
-   * so a bookmarked item keeps showing where it actually is as it advances. Naming a phase pins it.
+   * `tab: null` means the default tab (Quick View) — a bare item link stays valid as the tab set
+   * evolves, and the modal canonicalises the address to whatever it is actually showing.
    */
-  | { name: 'item'; repoId: string; itemId: string; phase: Phase | null; sub: ItemSub | null }
+  | { name: 'item'; repoId: string; itemId: string; tab: ItemTab | null; sub: ItemSub | null }
   /** The PR page — a path, but still its own document: `main.tsx` forks on it above `App` (§3.1). */
   | { name: 'pr'; repoId: string; itemId: string }
 
@@ -91,9 +98,9 @@ export function parse(pathname: string): Route {
       // Unknown tokens are DROPPED rather than 404'd, and canonicalisation then rewrites the URL to
       // what is actually being shown — a renamed phase degrades to the item's current one instead of
       // bouncing the owner to the Nexus mid-review.
-      const phase = (PHASES as readonly string[]).includes(seg[4]) ? (seg[4] as Phase) : null
-      const sub = phase && (ITEM_SUBS as readonly string[]).includes(seg[5]) ? (seg[5] as ItemSub) : null
-      return { name: 'item', repoId, itemId, phase, sub }
+      const tab = (ITEM_TABS as readonly string[]).includes(seg[4]) ? (seg[4] as ItemTab) : null
+      const sub = tab && (ITEM_SUBS as readonly string[]).includes(seg[5]) ? (seg[5] as ItemSub) : null
+      return { name: 'item', repoId, itemId, tab, sub }
     }
     if (seg.length === 2) return { name: 'repo', repoId }
   }
@@ -110,10 +117,10 @@ export function build(r: Route): string {
     case 'dev': return `/repo/${encodeURIComponent(r.repoId)}/dev${r.tab === 'pipeline' ? '' : `/${r.tab}`}`
     case 'pr': return `${itemBase(r.repoId, r.itemId)}/pr`
     case 'item': {
-      // A sub-tab cannot be addressed without its phase (`/item/x//git` is not a path), so naming a
-      // sub forces the phase segment even when it is the item's current one.
-      if (!r.phase) return itemBase(r.repoId, r.itemId)
-      return `${itemBase(r.repoId, r.itemId)}/${r.phase}${r.sub ? `/${r.sub}` : ''}`
+      // A sub cannot be addressed without its tab (`/item/x//proof` is not a path), so naming a sub
+      // forces the tab segment even when it is the default one.
+      if (!r.tab) return itemBase(r.repoId, r.itemId)
+      return `${itemBase(r.repoId, r.itemId)}/${r.tab}${r.sub ? `/${r.sub}` : ''}`
     }
   }
 }

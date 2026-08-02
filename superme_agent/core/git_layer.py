@@ -694,6 +694,51 @@ def _backup_ref(item_id: str) -> str:
     return f"refs/backup/{item_id}-{datetime.now().strftime('%Y%m%d-%H%M%S-%f')}"
 
 
+def recut_branch(repo_dir: Path, item_id: str, branch: str, base: str) -> dict:
+    """Reset an item's branch back onto its BASE — the re-run's "start clean" in GIT (owner,
+    2026-07-31). Returns {recut, backup_ref, from_sha, to_sha}.
+
+    `base` is the ref the branch was originally cut from (the item's `git_base`: the trunk for a
+    normal item, the parent's branch for a blocking child), and it is resolved to that ref's
+    CURRENT tip — not to some sha recorded weeks ago. A re-run means "do this work again, starting
+    now", so it should start where a brand-new item would; replaying from a stale point would hand
+    the fresh attempt the same trunk debt the old one carried.
+
+    Soft-deleting rows cleans what the owner SEES. This is the half that decides what the next
+    attempt BUILDS ON: without it a re-run checks out a branch that still carries the discarded
+    attempt's commits and continues from there, which is the definition of building on top of the
+    failed version.
+
+    NOTHING IS LOST. The old tip is written to `refs/backup/<item>-<ts>` FIRST — the same guardrail
+    the merge uses — so every discarded commit stays reachable by sha and by ref. The branch ref
+    itself is not deleted, only moved; the worktree must already be gone (the caller removes it),
+    because resetting a branch that is checked out somewhere would leave that tree lying about its
+    own history.
+
+    Returns `recut: False` (never raises) when there is nothing to do — no branch, no base sha, or
+    the branch is already sitting on the base. A re-run must not fail because git had nothing to
+    undo."""
+    repo_dir = Path(repo_dir)
+    if not branch:
+        return {"recut": False, "reason": "this item has no branch"}
+    if not branch_exists(repo_dir, branch):
+        return {"recut": False, "reason": f"branch {branch} does not exist"}
+    base = base or resolve_anchor(repo_dir, None)   # pre-`git_base` items fall back to the anchor
+    if _git(repo_dir, "rev-parse", "--verify", f"{base}^{{commit}}", check=False).returncode != 0:
+        # The base ref is gone (renamed trunk, a parent branch deleted). Leaving the branch where
+        # it is beats resetting it onto something we cannot name.
+        return {"recut": False, "reason": f"base `{base}` does not resolve in this repo"}
+    tip = _out(repo_dir, "rev-parse", branch).strip()
+    target = _out(repo_dir, "rev-parse", f"{base}^{{commit}}").strip()
+    if tip == target:
+        return {"recut": False, "reason": "branch is already at its base", "from_sha": tip}
+    ref = _backup_ref(item_id)
+    _git(repo_dir, "update-ref", ref, tip)          # guardrail BEFORE the move, never after
+    _git(repo_dir, "branch", "-f", branch, target)
+    return {"recut": True, "backup_ref": ref, "from_sha": tip, "base": base,
+            "to_sha": _out(repo_dir, "rev-parse", branch).strip()}
+
+
 def overlap(repo_dir: Path, branch: str, target: str) -> list[str]:
     """Pre-flight overlap detection: files dirty in the main tree AND touched by the branch —
     an auto-stash would hide a collision, so the merge refuses early on any intersection."""

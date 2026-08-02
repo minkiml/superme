@@ -43,16 +43,34 @@ these fields from the item, not from this chat.
 
 ## Step 5 — Author the brief
 
-`scaffold_artifact(item_id, "brief")`, then fill its slots: the shaped ask, the classification
-with reasons, and the context a cold session needs (pointers into `preliminary/` and the repo,
-not copies).
+`scaffold_artifact(item_id, "brief")`, then fill its slots: the PROBLEM, the classification with
+reasons, and the context a cold session needs (pointers into `preliminary/` and the repo, not
+copies).
 
-## Step 6 — Write the report, then stop
+`## Problem` states what is wrong today, never the fix. A capture usually arrives already
+solution-shaped ("add a `--date` flag") — your job is to name the symptom underneath it ("every
+expense is stamped today, so a late-entered receipt falls in the wrong month"). Writing the fix
+here spends the plan phase's whole job before it starts: a plan handed an answer implements it,
+and can never find the better one.
 
-Copy `../plan/templates/report-intake-template.md` (shared with plan) to
-`reports/report-triage.md` and fill it as the Triage variant — every line traces to brief.md; the
-template's caps are the bar. Then state your classification in one line and stop — the owner
-advances the phase; a request to change kind/scope is another round here.
+## Step 6 — Write a quick report
+
+Copy `templates/report-triage-template.md` to `reports/report-triage.md` and fill it — every line
+traces to brief.md; the template's caps are the bar. This report is for the OWNER to read and
+correct the shaping, not for the kernel — the kernel reads brief.md. The scope table is the point
+of it: in/out is what the owner accepts or sends back at this gate.
+
+**Writing tone and style**
+- Plain, easy language. Fewer words wins.
+- Keep the report short, clear, and to the point.
+- Never restate the item's kind, deliverable or id. Spend the space on the judgment behind them.
+- Prefer a table to a paragraph whenever the content is pairs or a list of comparable things.
+- Use bullets and numbered lists to organize information if there is more than one point.
+
+## Chat response style
+- Use plain and easy language.
+- Keep your response short, clear, and to the point.
+- Use bullets or numbered lists to organize information if there is more than one point.
 
 ## Pitfalls
 

@@ -29,9 +29,9 @@ from ..protocol import (
 from ..schemas.ws import TurnFrame, ApprovalResponseFrame, WatchFrame, DashboardHelloFrame
 from ..services import compaction, dashboard_stream, item_stream
 from ..services.runs import (
-    _begin_run, _end_run, _LiveTokens, _log_artifact,
+    _begin_run, _end_run, _LiveTokens,
     bank_auto_checkpoint, capture_prompt, capture_event, compacted_checkpoint,
-    compacted_session_memory, fire_auto_triage,
+    compacted_session_memory, fire_auto_triage, read_completion,
 )
 from ...core import kernel_speech, kind_profiles
 from ...core import (
@@ -39,6 +39,7 @@ from ...core import (
     PLAN_READONLY_NUDGE,
     VET_READONLY_NUDGE,
 )
+from ...core.faults import classify
 from ...core.permissions import approval_signature
 from ...gateway import contexts
 from ...harness.tools.dev_tools import make_dev_mcp_server
@@ -652,8 +653,6 @@ async def ws_agent(ws: WebSocket) -> None:
                 ):
                     if isinstance(ev, Usage) and began_run:
                         live.bump(ctx.id, work_item_id, ev)
-                    elif isinstance(ev, (Status, ToolResult)) and began_run:
-                        _log_artifact(ctx.id, work_item_id, ev)
                     # Claim the session id so it shows up in this context's picker
                     # (and stays distinct from the owner's own Claude Code sessions).
                     elif isinstance(ev, Result):
@@ -720,13 +719,10 @@ async def ws_agent(ws: WebSocket) -> None:
                 # asking, and one that declares itself finished rests back at its judged gate,
                 # where _end_run's hook re-enters the normal deputy/owner flow.
                 if began_run:
-                    report = grill_sink.get("report")
+                    # One writer for the run.report event — the same reader the background runners
+                    # use, so an interactive ending is recorded identically to a kernel-fired one.
+                    report = read_completion(ctx.id, work_item_id, grill_sink, run_id=item_run_id)
                     outcome = report.get("outcome") if report else None
-                    summary = (report or {}).get("summary", "")
-                    if report:
-                        _dev_store.log_event(
-                            ctx.id, "run.report", f"{outcome}: {summary[:160]}",
-                            item_id=work_item_id, actor="agent", meta=report)
                     # `revise` (§2.1) — the review conversation concluded the work must change.
                     # Honoured ONLY at review: it is a phase-boundary crossing, and _end_run's
                     # router flips review→plan. Reported anywhere else it is just a logged report
@@ -739,7 +735,7 @@ async def ws_agent(ws: WebSocket) -> None:
                                    and outcome != "revise" else "active")
                     _end_run(ctx, ctx.id, work_item_id, final_tokens, rest_status, final_usage,
                              final_ctx, outcome=outcome, session_id=final_session,
-                             summary=summary)
+                             summary=str((report or {}).get("summary") or ""))
                     # A REAL turn just reported fresh usage — release the defer latch so the NEXT
                     # run-start check reads this turn's fill. No compaction is evaluated here: the
                     # trigger lives at run start (above), and firing at turn end is what put a
@@ -763,9 +759,14 @@ async def ws_agent(ws: WebSocket) -> None:
                 elif chat_run_id:
                     _spine.finish_run(chat_run_id, status="aborted", usage=final_usage,
                                       session_id=final_session, model=final_model, ctx_pct=final_ctx)
-                log.exception("turn failed")
+                # R1: classify, but do NOT climb the retry ladder here. The owner is watching this
+                # stream — a chat turn that goes silent for twenty-nine minutes is worse than one
+                # that says "upstream is down, try again" and lets them decide. Background runners
+                # wait; a person is told.
+                fault = classify(exc=e)
+                log.warning("chat turn failed (%s): %s", fault.kind, fault.reason)
                 try:
-                    await send(error_frame(str(e)))
+                    await send(error_frame(fault.reason if fault.retryable else str(e)))
                 except Exception:
                     break  # socket is gone
     finally:

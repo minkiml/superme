@@ -90,30 +90,58 @@ def _reconcile_worktrees() -> None:
         log.exception("worktree reconciliation failed (non-fatal)")
 
 
-def _reconcile_orphaned_items(orphans: list[dict]) -> None:
-    """Park the work-items whose run the spine just flipped `running → aborted` (dogfood D3).
+# The run features that ARE a phase's own background work, and so can be re-fired by re-running
+# that phase (`services.resume` dispatches exactly these). Everything else that can orphan —
+# `chat` (the owner was talking), `deputy` (a judgment, re-fired by the gate seam), `resolve`,
+# `compact`, and the learning runs — is deliberately absent: re-running the PHASE would not be
+# re-running what died, so those get the label and wait for the owner's click.
+_AUTO_RESUME_FEATURES = {"triage", "plan", "build", "vet", "investigate", "review", "close"}
+# How many items may auto-resume on one boot. A restart after a long outage can strand a whole
+# cohort, and firing every one of them at once spends real tokens the owner never asked for at a
+# moment they may not even be watching. Anything over the cap keeps its `error` label and its
+# Resume button — and is LOGGED, because a silent cap reads as "everything resumed" when it didn't.
+_MAX_AUTO_RESUME = 3
 
-    `spine.reconcile()` heals the RUN row; without this, the ITEM stays `active` with no run and
+
+def _reconcile_orphaned_items(orphans: list[dict]) -> None:
+    """Heal the work-items whose run the spine just flipped `running → aborted` (dogfood D3,
+    recovery R3).
+
+    `spine.reconcile()` heals the RUN row; without this the ITEM stays `active` with no run and
     nothing that will ever start one — permanently wedged, and until the attention engine learned
     the stall rule (D2), completely silent. Restarting the daemon mid-run is routine in this
-    project, so this was a recurring way to lose an item: the one found on 2026-07-29 had been
-    sitting finished-but-unparked since a restart hours earlier, its close report written and its
-    gate green, simply never handed back.
+    project, so this was a recurring way to lose an item.
 
-    `awaiting_human` is the honest resting state for ALL of them, build/vet included. The attention
-    engine deliberately excludes those two phases from the DERIVED stall — mid-loop is not parked
-    while a daemon is alive to chain them — but an orphan has no loop left, so only the owner moves
-    it, and the drilldown already offers Continue / Run vet there. Terminal items are left alone;
-    `_reconcile_close_steps` owns those. Best-effort and idempotent — `contexts` is the
-    module-level import, same as every other reconciler in this file."""
+    **Two acts, in order** (R3). First LABEL: every orphan becomes `error` carrying "a daemon
+    restart stopped this", which is the honest state — the run stopped — and gives the owner a
+    Resume button whatever happens next. Then RESUME: if the dead run was a phase's own background
+    work, re-fire it through `services.resume`, the SAME path the owner's button uses. An automatic
+    path that resumed different phases than the manual one would drift, and the drift would only
+    show up during an outage.
+
+    This replaces parking everything at `awaiting_human`. That was honest about the run being gone
+    but wrong about what it meant: `awaiting_human` claims a DECISION is wanted, so a build stopped
+    by a restart looked identical to one waiting on the owner's judgment, and the loop that was
+    meant to be human-free needed a click to breathe again. Nothing about the work was lost — the
+    branch, worktree and artifacts all stood — only the run had to start over.
+
+    Terminal items are left alone; `_reconcile_close_steps` owns those. Best-effort and idempotent."""
     # The WHOLE body is guarded, like every reconciler here. Housekeeping must never be able to
     # stop the daemon booting — the first cut of this raised at an import and took startup down
     # with it, which is a far worse failure than the stranded item it was fixing.
+    from .services.resume import resume_item
     try:
+        # feature per (repo, item): what was actually running when the daemon died. Last writer
+        # wins on the rare item with two orphaned rows — they cannot differ in phase.
+        feature_of: dict[tuple[str, str], str] = {}
         items_by_repo: dict[str, set[str]] = {}
         for o in orphans:
             if o.get("item_id"):
-                items_by_repo.setdefault(str(o["repo_id"]), set()).add(str(o["item_id"]))
+                rid, iid = str(o["repo_id"]), str(o["item_id"])
+                items_by_repo.setdefault(rid, set()).add(iid)
+                feature_of[(rid, iid)] = str(o.get("feature") or "")
+        resumed = 0
+        deferred: list[str] = []
         for rid, ids in items_by_repo.items():
             try:
                 ctx = contexts.resolve(rid, "dev")
@@ -123,22 +151,77 @@ def _reconcile_orphaned_items(orphans: list[dict]) -> None:
                 for item_id in sorted(ids):
                     try:
                         it = app_state.dev.read_work_item(dev_root, item_id)
-                        if not it or it.get("done_at") or \
-                                str(it.get("status")) in ("done", "awaiting_human"):
+                        if not it or it.get("done_at") or str(it.get("status")) == "done":
                             continue
-                        if app_state.dev.set_work_item_status(dev_root, item_id, "awaiting_human"):
+                        phase = str(it.get("phase") or "current")
+                        feature = feature_of.get((rid, item_id), "")
+                        # LABEL first, always — even when the resume below succeeds a moment later.
+                        # It is what makes a failed resume land back on a truthful state instead of
+                        # `active` with nothing running.
+                        if app_state.dev.set_work_item_error(
+                                dev_root, item_id,
+                                f"a daemon restart stopped the {phase} run"):
                             app_state.dev_store.log_event(
                                 rid, "run.orphaned", item_id=item_id,
-                                summary=f"Run orphaned by a daemon restart — parked at the "
-                                        f"{it.get('phase') or 'current'} phase for your call")
-                            log.info("orphan reconcile [%s]: parked %s (was active, no run)",
-                                     rid, item_id)
+                                summary=f"Run orphaned by a daemon restart — the {phase} run "
+                                        f"stopped mid-flight")
+                        if feature not in _AUTO_RESUME_FEATURES:
+                            log.info("orphan reconcile [%s]: %s stopped at %s (%s) — left for "
+                                     "your Resume", rid, item_id, phase, feature or "unknown")
+                            continue
+                        if resumed >= _MAX_AUTO_RESUME:
+                            deferred.append(f"{rid}/{item_id}")
+                            continue
+                        started, why = resume_item(rid, item_id)
+                        if started:
+                            resumed += 1
+                            log.info("orphan reconcile [%s]: auto-resumed %s at %s",
+                                     rid, item_id, phase)
+                        else:
+                            log.info("orphan reconcile [%s]: %s held at error — %s",
+                                     rid, item_id, why)
                     except Exception:
                         log.exception("orphan reconcile failed for %s/%s", rid, item_id)
             except Exception:
                 log.exception("orphan reconcile failed for repo %s", rid)
+        if deferred:
+            log.warning("orphan reconcile: %d item(s) over the auto-resume cap (%d) and NOT "
+                        "resumed — they carry `error` and a Resume button: %s",
+                        len(deferred), _MAX_AUTO_RESUME, ", ".join(deferred))
     except Exception:
         log.exception("orphan reconciliation failed (non-fatal)")
+
+
+def _reconcile_stranded_proposals() -> None:
+    """Free the learning proposals a dead `write` run left mid-flight (recovery R3).
+
+    `writing` is a TRANSIENT status: the write runner sets it, then moves the proposal to `drafted`
+    or — if the agent never staged anything — puts it back to `proposed` so the owner can re-approve.
+    That second branch only runs if the runner reaches its own tail. A daemon that dies mid-write
+    never does, so the proposal sits at `writing` forever: invisible to the owner's queue (which
+    lists `proposed`), invisible to the drafted gate, and picked up by nothing. Verified 2026-07-30
+    that no reconciler existed for it — the one hole in the learning pipeline with no way out.
+
+    No run is re-fired here. A write is cheap to re-approve and the owner gates it anyway, so the
+    honest reset is back to `proposed` — where it was before the approval that started the run."""
+    try:
+        freed = 0
+        for rid in app_state.spine.repos():
+            for p in app_state.dev_store.list_memory_proposals(rid, status="writing"):
+                pid = p.get("id")
+                if pid is None:
+                    continue
+                app_state.dev_store.set_proposal_status(pid, "proposed")
+                app_state.dev_store.log_event(
+                    rid, "write.orphaned",
+                    f"Proposal #{pid} was mid-write when the daemon stopped — returned to the "
+                    f"queue for you to approve again",
+                    scope="dev", actor="daemon", meta={"proposal_id": pid})
+                freed += 1
+        if freed:
+            log.info("proposal reconcile: %d stranded `writing` proposal(s) → proposed", freed)
+    except Exception:
+        log.exception("stranded-proposal reconciliation failed (non-fatal)")
 
 
 def _reconcile_close_steps() -> None:
@@ -211,10 +294,13 @@ async def lifespan(app: FastAPI):
     _reconcile_worktrees()
     # S6 close protocol: finish any ordered close steps a dying daemon dropped mid-transition.
     _reconcile_close_steps()
-    # D3: hand back the NON-terminal items whose run died with the last daemon. Runs after the
-    # close reconcile so an item that was mid-close-transition is finished by that pass first and
-    # never parked here.
+    # D3 + R3: label the NON-terminal items whose run died with the last daemon, then auto-resume
+    # the ones whose dead run was a phase's own background work. Runs after the close reconcile so
+    # an item that was mid-close-transition is finished by that pass first and never touched here.
     _reconcile_orphaned_items(_orphans)
+    # R3: and free any learning proposal a dead `write` run left stranded at `writing` — the one
+    # hole in that pipeline with no way out.
+    _reconcile_stranded_proposals()
 
     # The dashboard push channel's ONE wiring point (routing-audit §7.6). Every state change worth
     # showing the owner already writes a dev event; this turns each into a cache-invalidation topic

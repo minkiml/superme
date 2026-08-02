@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Radar, Layers, Activity, SlidersHorizontal, Boxes } from 'lucide-react'
 import TopBar from '@/features/shell/TopBar'
-import GlobalStrip from '@/features/shell/GlobalStrip'
 import NavColumn, { type NavRow } from '@/features/shell/NavColumn'
 import StatusBar from '@/features/shell/StatusBar'
 import Nexus from '@/features/shell/Nexus'
@@ -166,7 +165,7 @@ export default function App() {
   function gotoItem(repoId: string, hold: SystemHold) {
     setBinding({ workItemId: hold.id, sessionId: hold.session_id ?? null, title: hold.title, contextId: repoId })
     setChatOpen(true)
-    navigate({ name: 'item', repoId, itemId: hold.id, phase: null, sub: null })
+    navigate({ name: 'item', repoId, itemId: hold.id, tab: null, sub: null })
   }
 
   // Which global-strip tile is drilled in — read from `?stats=`, so the surface underneath is
@@ -234,11 +233,16 @@ export default function App() {
 
   return (
     <div className="flex h-full flex-col bg-app font-sans text-fg">
-      <TopBar onGoto={gotoItem} />
-      {/* A tile's breakdown is in the URL (`?stats=tokens`), not a component flag — linkable, and
+      {/* A stat's breakdown is in the URL (`?stats=tokens`), not a component flag — linkable, and
           it survives a refresh. In the QUERY rather than a path segment because it is an overlay:
-          it belongs over whatever surface you are on, and a path would have replaced that surface. */}
-      <GlobalStrip stats={stats} onDetails={(id) => setParam('stats', id)} />
+          it belongs over whatever surface you are on, and a path would have replaced that surface.
+          `projects` has no overlay of its own — Nexus IS the projects view, so it navigates. */}
+      <TopBar
+        stats={stats}
+        onGoto={gotoItem}
+        onDetails={(id) => (id === 'projects' ? navigate({ name: 'nexus' })
+                                             : setParam('stats', id))}
+      />
 
       <div className="flex min-h-0 flex-1">
         <NavColumn

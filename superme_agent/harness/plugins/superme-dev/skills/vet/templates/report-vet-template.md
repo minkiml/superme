@@ -10,6 +10,7 @@
 |---|---|---|
 {check_rows}
 
+{diagnoses}
 **Deferred:** {deferred}
 
 **Observations:** {observations}

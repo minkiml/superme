@@ -86,8 +86,13 @@ async def dev_log(context_id: str = "global", since: str | None = None,
     """The activity log — a SELECTIVE read over the events table (PRD §4.9), never a dump.
     Filters: `item_id` (an item's own timeline), `scope` (item|dev|global), `since`/`until`
     (ISO timestamps — e.g. "what happened yesterday"). Newest first. Powers the dashboard
-    activity view and the chat "what was done…" queries."""
+    activity view and the chat "what was done…" queries.
+
+    Discarded rows (a re-run's soft-deleted attempt) follow the reader split: an ITEM read is the
+    drilldown asking "what is happening on this item", so it sees the current attempt only; a
+    REPO-WIDE read is the project's history, which includes the attempts that were thrown away."""
     events = dev_store.list_events(
         context_id, since=since, until=until, scope=scope, item_id=item_id, limit=limit,
+        include_discarded=item_id is None,
     )
     return {"context_id": context_id, "events": events, "count": len(events)}

@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Bell, GitMerge, ArrowUpRight, AlertTriangle, Hand, Inbox, MessageCircleQuestion } from 'lucide-react'
+import { Bell, GitMerge, ArrowUpRight, AlertTriangle, Inbox, MessageCircleQuestion } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { getSystemAttention, advanceWorkItem, type SystemHold, type SystemHoldKind, type SystemRepoAttention } from '@/lib/api'
 import { invalidate, useLive } from '@/lib/live'
@@ -16,7 +16,6 @@ import { K, topicRepo } from '@/lib/live/keys'
 const KIND: Record<SystemHoldKind, { icon: LucideIcon; dot: string; label: string }> = {
   question: { icon: MessageCircleQuestion, dot: 'bg-accent', label: 'Questions' },
   escalation: { icon: AlertTriangle, dot: 'bg-danger', label: 'Escalated' },
-  breaker: { icon: Hand, dot: 'bg-warn', label: 'Paused' },
   paged: { icon: Inbox, dot: 'bg-warn', label: 'Upstream' },
   review: { icon: GitMerge, dot: 'bg-accent', label: 'Review' },
   gate: { icon: Bell, dot: 'bg-muted', label: 'Gate' },

@@ -34,6 +34,7 @@ from ..harness.tools.base_tools import make_base_mcp_server
 from .context import Context
 from .events import Init, TextDelta, Status, ToolResult, Usage, Result, TurnEvent
 from .permissions import ApproveFn, build_can_use_tool, deny_all
+from .sandbox import sandbox_options
 
 log = logging.getLogger("superme-agent")
 
@@ -358,6 +359,7 @@ class AgentService:
         deny_write_tools: str | None = None,
         protected_paths: list[Path] | None = None,
         protected_nudge: str | None = None,
+        sandbox_writes: list[Path] | None = None,
     ) -> ClaudeAgentOptions:
         # Resolve the per-repo scope ONCE (the MCP server + turn plugins below reuse it), then
         # assemble the layer-2 system append through the SAME helper the input-preview endpoint
@@ -441,6 +443,10 @@ class AgentService:
             # native skills/commands (loaded via setting_sources) intact. Verified flag in CLI
             # 2.1.159; the toggle covers both read and write ("will not write or read new memories").
             env={"CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1"},
+            # OS-level sandbox for shell commands, when the caller asked for one (core.sandbox owns
+            # the policy and the "which runs" rule). Empty on an unsandboxed run, so nothing about
+            # today's turns changes except where a runner opts in.
+            **sandbox_options(sandbox_writes),
         )
 
     async def run_turn(
@@ -464,6 +470,7 @@ class AgentService:
         deny_write_tools: str | None = None,
         protected_paths: list[Path] | None = None,
         protected_nudge: str | None = None,
+        sandbox_writes: list[Path] | None = None,
     ) -> AsyncIterator[TurnEvent]:
         """Run one turn against `ctx`, yielding TurnEvents.
 
@@ -484,6 +491,7 @@ class AgentService:
             general_write_root=general_write_root, write_boundary=write_boundary,
             hooks=hooks, block_categories=block_categories, deny_write_tools=deny_write_tools,
             protected_paths=protected_paths, protected_nudge=protected_nudge,
+            sandbox_writes=sandbox_writes,
         )
         resolved_model = None
         # Context-window fill is measured from a SINGLE API call, not the turn aggregate.
@@ -511,6 +519,10 @@ class AgentService:
                             model=resolved_model,
                         )
                 elif isinstance(message, AssistantMessage):
+                    # Non-None when this message came from INSIDE a sub-agent: the tool_use id of the
+                    # Agent call that spawned it. A fan-out interleaves several children into this one
+                    # stream, so the trail needs it to say who did what (None = the parent itself).
+                    parent_tuid = getattr(message, "parent_tool_use_id", None)
                     # ONE TextDelta per assistant MESSAGE, joining its text blocks — deliberately
                     # not one per block. A surface renders each TextDelta as a chat bubble, and the
                     # session transcript replays a message's blocks joined (sessions._blocks_text),
@@ -528,7 +540,8 @@ class AgentService:
                             tuid = getattr(block, "id", None)
                             if tuid:
                                 tool_names[tuid] = block.name
-                            yield Status(block.name, block.input or {}, tool_id=tuid)
+                            yield Status(block.name, block.input or {}, tool_id=tuid,
+                                         parent_tool_id=parent_tuid)
                     # A live token snapshot for this step, so a surface can show a running
                     # counter while the turn is still in flight.
                     step_usage = getattr(message, "usage", None)
@@ -564,6 +577,9 @@ class AgentService:
                                 content=_result_text(block.content),
                                 is_error=bool(getattr(block, "is_error", False)),
                                 tool_id=tuid,
+                                # Same attribution as the call (see AssistantMessage above): a result
+                                # that came back inside a sub-agent belongs to that sub-agent's trail.
+                                parent_tool_id=getattr(message, "parent_tool_use_id", None),
                             )
                 elif isinstance(message, ResultMessage):
                     # Fill % from the last single call (true occupancy); window size from

@@ -46,6 +46,9 @@ export type WorkItem = {
   kind?: WorkKind | null // machinery selector (null on pre-workflow items = implementation)
   phase: WorkPhase
   status: WorkStatus | null // runnable axis (done = terminal); null only on pre-workflow items
+  // Why the work stopped, one owner-facing line. Present ONLY while status is `error` (R2) —
+  // cleared the moment the item leaves it, so it never describes an already-resolved stop.
+  error_reason?: string | null
   outcome?: WorkOutcome | null // set with status done: how the item ended
   after?: string[] | null // peer-sequencing edge (slice 1): ids this item may not start before
   autopilot?: boolean | null // per-item policy (slice 2): drive its gates without a click
@@ -87,7 +90,6 @@ export type WorkItem = {
   last_run?: { tokens: number; duration_ms: number | null; model?: string | null; ctx_pct?: number | null } | null
   tasks?: { done: number; total: number } | null // tasks.md checklist progress (null = no tasks.md)
   seen_at?: string | null // owner-opened read receipt (S7 attention: terminal + unseen = unread)
-  archived_at?: string | null // the item folder's files were folded into archive.zip (storage only)
 }
 
 export type InboxKind = 'note' | 'idea' | 'todo' | 'question'
@@ -483,11 +485,14 @@ export function getDev(contextId = 'global'): Promise<DevData> {
 
 // Quick-capture: add an item to the context's inbox queue (no approval gate). Title is
 // entered manually; origin defaults to 'user' (manual capture).
+//
+// Capture stays deliberately bare — kind, title, text. The per-item config (model, effort,
+// autopilot) is NOT set here: a row is born inheriting the repo's Quick-config defaults, and the
+// drilldown's Config tab is where you override one. Sending a concrete model on every capture is
+// what used to pin every item to the FE's constant instead of the repo's choice.
 export function addInbox(
   input: {
     text: string; title?: string | null; kind?: InboxKind; tag?: string | null; origin?: InboxOrigin
-    // F3: run config chosen at capture — locked into the work-item at push. null = inherit default.
-    model?: string | null; effort?: string | null
   },
   contextId = 'global',
 ): Promise<InboxEntry> {
@@ -497,16 +502,16 @@ export function addInbox(
     kind: input.kind ?? 'note',
     tag: input.tag ?? null,
     origin: input.origin ?? 'user',
-    model: input.model ?? null,
-    effort: input.effort ?? null,
     context_id: contextId,
   })
 }
 
-// Edit an inbox item: change title, text, kind, tag, status, or the locked-in model/effort (F3).
+// Edit an inbox item: title, text, kind, tag, status, or the per-item setting (model, effort,
+// autopilot) that push locks into the work-item. An absent field is left alone.
 export function updateInbox(
   id: number,
-  patch: Partial<Pick<InboxEntry, 'status' | 'kind' | 'tag' | 'text' | 'title' | 'routed_to' | 'model' | 'effort'>>,
+  patch: Partial<Pick<InboxEntry,
+    'status' | 'kind' | 'tag' | 'text' | 'title' | 'routed_to' | 'model' | 'effort' | 'autopilot'>>,
 ): Promise<InboxEntry> {
   return sendJSON(`/api/dev/inbox/${id}`, 'PATCH', patch)
 }
@@ -576,35 +581,39 @@ export function markWorkItemSeen(itemId: string, contextId = 'global'): Promise<
   return sendJSON(`/api/dev/work-items/${q(itemId)}/seen?context_id=${q(contextId)}`, 'POST')
 }
 
-// "Plan it" — fire a background /plan turn for a queued work-item. Returns immediately; the
-// agent works in the background and the item's status/artifacts update on their own. Poll
-// getDev (DevData.running) for the live planning state.
+// "Run <Phase>" — fire the CURRENT phase's own background run (owner, 2026-07-31). One call for
+// every phase, replacing `planWorkItem` + `vetWorkItem`, which were two doors onto one dispatcher.
+// Returns immediately; the agent works in the background and the item updates on its own. The
+// backend 409s a terminal / stopped / at-a-gate / already-running item — the same rule the
+// drilldown's `run` button reads, so a live-looking button can never 409.
 export type PlanResult = Schema<'PlanResponse'>
-// `model` is the per-run model choice (e.g. 'sonnet' | 'haiku' | 'opus'); omit for the
-// default (latest Sonnet).
-export function planWorkItem(itemId: string, contextId = 'global', model?: string, effort?: string): Promise<PlanResult> {
-  return sendJSON(`/api/dev/work-items/${q(itemId)}/plan`, 'POST', {
+// `model` / `effort` are the per-run picks; omit for the item's stored values.
+export function runWorkItem(itemId: string, contextId = 'global', model?: string, effort?: string): Promise<PlanResult> {
+  return sendJSON(`/api/dev/work-items/${q(itemId)}/run`, 'POST', {
     context_id: contextId,
     model: model ?? null,
     effort: effort ?? null,
   })
 }
 
-// "Run vet" — launch the build⟷vet LOOP on a vet-phase item (build-vet-loop §5). One click,
-// then the daemon-side driver self-drives: vet run → passed→review · failed→build cycle
-// (handed the vet report) → re-vet — until the review gate, a breaker, or a fail-closed stop.
-// Returns immediately; poll getDev for phase/status. Backend 409s off-phase / mid-run / no worktree.
-export function vetWorkItem(itemId: string, contextId = 'global'): Promise<PlanResult> {
-  return sendJSON(`/api/dev/work-items/${q(itemId)}/vet`, 'POST', { context_id: contextId })
+// "Resume" — the owner's restart of a work-item whose RUN stopped (recovery R4: an outage, a crash,
+// a daemon restart mid-run). Re-fires the phase's own background run; nothing is rewound, so the
+// branch, worktree and every artifact stand. Reads alike to `rerunWorkItem` and does the opposite:
+// Resume re-runs a run that never finished (the work is fine, the run stopped); Re-run DELETES the
+// work and starts the item over.
+// Backend 409s when the item isn't stopped, is terminal, or already has a run in flight.
+export function resumeWorkItem(itemId: string, contextId = 'global'): Promise<PlanResult> {
+  return sendJSON(`/api/dev/work-items/${q(itemId)}/resume`, 'POST', { context_id: contextId })
 }
 
-// "Continue" — the owner's resume of a build parked at a human gate (BV-A1). RE-enters the
-// build⟷vet loop: resumes the build thread to finalize (complete what's doable, record any wall
-// as an assumption), then the normal build→vet→review flow carries the gap to review. Distinct
-// from a chat reply to the paused build, which does not advance the loop. Backend 409s off-phase /
-// mid-run / no worktree.
-export function continueWorkItem(itemId: string, contextId = 'global'): Promise<PlanResult> {
-  return sendJSON(`/api/dev/work-items/${q(itemId)}/continue`, 'POST', { context_id: contextId })
+// "Re-run" — start the item over in place (recovery R5). DESTRUCTIVE and irreversible: artifacts,
+// reports, checkpoints, the deputy log and every session are deleted, the worktree dir is removed,
+// and the item re-enters at its first phase. The id, the branch, the run
+// history and every graph relation stay — that is what makes it a re-run and not a new item.
+// Reach for it only when there is no run worth resuming. Backend 409s on a terminal item or one
+// with a run in flight. The caller confirms first.
+export function rerunWorkItem(itemId: string, contextId = 'global'): Promise<PlanResult> {
+  return sendJSON(`/api/dev/work-items/${q(itemId)}/rerun`, 'POST', { context_id: contextId })
 }
 
 // The owner's grant/deny on a deferred authorization at the review gate (BV-A2). A grant routes
@@ -617,13 +626,6 @@ export function authorizeWorkItem(
 ): Promise<PlanResult> {
   return sendJSON(`/api/dev/work-items/${q(itemId)}/authorize`, 'POST',
     { auth_id: authId, decision, context_id: contextId })
-}
-
-// Hard-delete a pre-build work-item and erase its trace (folder + session transcript +
-// originating inbox row). Backend refuses (409) once the item leaves triage/plan.
-export type DeleteResult = Schema<'WorkItemDeleteResponse'>
-export function deleteWorkItem(itemId: string, contextId = 'global'): Promise<DeleteResult> {
-  return sendJSON(`/api/dev/work-items/${q(itemId)}?context_id=${q(contextId)}`, 'DELETE')
 }
 
 // A work-item's review payload — the structured artifact content the review popup renders:
@@ -643,7 +645,7 @@ export type WorkItemDetail = {
   plan: string | null
   prd: string | null
   tasks: TaskItem[] | null
-  execution: string | null // the archived execution trace (present once completed)
+  execution: string | null // the execution SNAPSHOT clearance writes at terminal (artifacts/execution.md)
   artifact_status?: Record<string, ArtifactStatusRow> | null
   // S7 drilldown: raw gate-doc texts (null while un-emitted) + the checkpoint continuity feed.
   docs?: Record<string, string | null> | null
@@ -657,7 +659,12 @@ export function getWorkItemDetail(itemId: string, contextId = 'global'): Promise
 // One tool / sub-agent / skill call an item's run made — the CLI-style call-trail.
 // Derived straight from the transport type — `kind` is now a backend Literal (R5).
 export type RunArtifact = Schema<'ArtifactCall'>
-export function getWorkItemArtifacts(itemId: string, contextId = 'global'): Promise<{ artifacts: RunArtifact[] }> {
+// What each run WAS — the group header's label. Without it "Run #653" opening on a shell command
+// looks like a bug rather than a chat turn.
+export type RunHeader = Schema<'RunHeader'>
+export function getWorkItemArtifacts(
+  itemId: string, contextId = 'global',
+): Promise<{ artifacts: RunArtifact[]; runs: RunHeader[] }> {
   return getJSON(`/api/dev/work-items/${q(itemId)}/artifacts?context_id=${q(contextId)}`)
 }
 
@@ -700,13 +707,6 @@ export function setWorkItemAutopilot(
     `/api/dev/work-items/${q(itemId)}/autopilot?context_id=${q(contextId)}`, 'POST', { on })
 }
 
-// Archive a DONE item's folder: its loose artifact files fold into one archive.zip. Storage only —
-// the item stays completed and its DB trace is untouched. There is no "complete" call: an item goes
-// terminal mechanically when its closing run reports.
-export type ArchiveResult = Schema<'WorkItemArchiveResponse'>
-export function archiveWorkItem(itemId: string, contextId = 'global'): Promise<ArchiveResult> {
-  return sendJSON(`/api/dev/work-items/${q(itemId)}/archive?context_id=${q(contextId)}`, 'POST')
-}
 
 // --- work-item git layer (workspace-workflow S4/D4) -------------------------------------
 // The worktree is created automatically at build entry (the advance route); these are the
@@ -716,11 +716,6 @@ export function archiveWorkItem(itemId: string, contextId = 'global'): Promise<A
 export type GitHealth = Schema<'GitHealthResponse'>
 export function getWorkItemGit(itemId: string, contextId = 'global'): Promise<GitHealth> {
   return getJSON(`/api/dev/work-items/${q(itemId)}/git?context_id=${q(contextId)}`)
-}
-
-export type GitSyncResult = Schema<'GitSyncResponse'>
-export function syncWorkItemGit(itemId: string, contextId = 'global'): Promise<GitSyncResult> {
-  return sendJSON(`/api/dev/work-items/${q(itemId)}/git/sync`, 'POST', { context_id: contextId })
 }
 
 export type GitMergeResult = Schema<'GitMergeResponse'>
@@ -757,14 +752,29 @@ export function resolveWorkItemGit(itemId: string, contextId = 'global'): Promis
   return sendJSON(`/api/dev/work-items/${q(itemId)}/git/resolve`, 'POST', { context_id: contextId })
 }
 
-// --- gates & lifecycle (workspace-workflow S6/D8/D10) ------------------------------------
-// The four human gates' decision surface: a kernel-assembled brief (continuity → delta →
-// narrative → the uniform decision block) answerable without opening code, plus the human-only
-// abandon path. UI lands in S7 — the drilldown leads with the newest brief.
+// --- the drilldown + lifecycle (renovation v2 §4) -----------------------------------------
+// ONE payload for the whole work-item surface, computed server-side: the live strip · the
+// WHAT-YOU-NEED-TO-DO card · at-a-glance · the gate's named check rows · every control's activation
+// AND its reason · the Proof rows · which phases have a report. The gate brief it replaced shipped
+// `approve_blocked_by` that no component read, so the greying rule lived here in TypeScript beside
+// the rule the backend enforces — never derive activation from this payload, read `active`.
 
-export type GateBrief = Schema<'GateBriefResponse'>
-export function getWorkItemGateBrief(itemId: string, contextId = 'global'): Promise<GateBrief> {
-  return getJSON(`/api/dev/work-items/${q(itemId)}/gate-brief?context_id=${q(contextId)}`)
+export type Drilldown = Schema<'DrilldownResponse'>
+export type DrilldownAction = Drilldown['actions'][number]
+export type GateCheck = Drilldown['checks'][number]
+export type ProofRow = Drilldown['proof'][number]
+export type AttentionCard = NonNullable<Drilldown['attention']>
+export function getWorkItemDrilldown(itemId: string, contextId = 'global'): Promise<Drilldown> {
+  return getJSON(`/api/dev/work-items/${q(itemId)}/drilldown?context_id=${q(contextId)}`)
+}
+
+// One phase's user-facing report for the Reports tab, plus the path to the full agent-facing
+// contract behind it (§4.3's "Open full contract"). Only called for phases `drilldown.reports`
+// lists — the tab greys the rest rather than probing for a 404.
+export type PhaseReport = Schema<'PhaseReportResponse'>
+export function getWorkItemReport(itemId: string, phase: string,
+                                  contextId = 'global'): Promise<PhaseReport> {
+  return getJSON(`/api/dev/work-items/${q(itemId)}/report/${q(phase)}?context_id=${q(contextId)}`)
 }
 
 // Abandon (human-only, any non-terminal phase): ends runs/session, removes the worktree (branch

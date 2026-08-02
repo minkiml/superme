@@ -25,10 +25,8 @@ commands: CommandLayer = CommandLayer(spine)
 
 
 # --- Depends providers (return the singleton; tests override these) ---
-def get_agent() -> AgentService: return agent
 def get_knowledge() -> KnowledgeService: return knowledge
 def get_dev() -> DevKnowledgeService: return dev
 def get_dev_store() -> DevStore: return dev_store
 def get_spine() -> SystemSpine: return spine
 def get_sessions() -> SessionStore: return sessions
-def get_commands() -> CommandLayer: return commands

@@ -199,7 +199,11 @@ def _fmt_run_trace(run: dict, events: list[dict]) -> str:
         if len(desc) > 300:
             desc = desc[:300] + "…"
         label = e.get("name") or e.get("kind")
-        trail.append(f"  {e.get('seq')}. [{e.get('kind')}] {label}" + (f" — {desc}" if desc else ""))
+        # A row from inside a sub-agent is indented under its spawn. Flat, a fan-out reads as one
+        # agent thrashing — and a diagnosis of "why did this run fail" turns on exactly that
+        # distinction (whose tool call was denied: the parent's, or a delegated reader's).
+        indent = "    " if e.get("parent_tool_id") else "  "
+        trail.append(f"{indent}{e.get('seq')}. [{e.get('kind')}] {label}" + (f" — {desc}" if desc else ""))
     return "\n".join(head + trail)
 
 
@@ -968,6 +972,39 @@ def _record_verification(*, store, context_id, dev_root=None, repo_dir=None,
     return record_verification
 
 
+class RecordDiagnosisArgs(TypedDict, total=False):
+    item_id: Required[Annotated[str, "the work-item id"]]
+    check: Required[Annotated[str, "the FAILING check's plan id, verbatim"]]
+    where: Required[Annotated[str, ("the narrowest located source — file:line, the failing frame, "
+                                    "the request that errored. Not 'in the parser' when you know "
+                                    "which line")]]
+    why: Required[Annotated[str, ("the mechanism, as far as the evidence supports it — what "
+                                  "actually happens, not what should have")]]
+    unknown: Annotated[str, ("what you could NOT determine, if anything. An honest gap beats a "
+                             "confident guess: it tells the next build cycle where you did not "
+                             "look")]
+
+
+def _record_diagnosis(*, store, context_id, dev_root=None, bound_item_id=None, **_):
+    async def record_diagnosis(args: dict) -> dict:
+        from ...core import artifacts as _arts
+        item_id = _s(args, "item_id")
+        if (msg := _bound_err(item_id, bound_item_id)):
+            return _err(msg)
+        d = _item_dir(dev_root, item_id)
+        if d is None:
+            return _err(f"No work-item {item_id!r} here.")
+        try:
+            r = _arts.record_diagnosis(d, check=_s(args, "check"), where=_s(args, "where"),
+                                       why=_s(args, "why"), unknown=_s(args, "unknown"))
+        except ValueError as err:
+            return _err(str(err))
+        return _ok(f"Diagnosis recorded for {r['check']} (cycle {r['cycle']}). It reaches the next "
+                   "build cycle as its work order — do not add the fix; build reasons that out "
+                   "inside the current plan.")
+    return record_diagnosis
+
+
 class RequestAuthorizationArgs(TypedDict, total=False):
     item_id: Required[Annotated[str, "the work-item id"]]
     what: Required[Annotated[str, "the contract change you can't self-authorize, one line "
@@ -1239,25 +1276,39 @@ class PlanOpArg(TypedDict, total=False):
     content: Annotated[str, ("the new text — a section BODY (no `## heading`) for section ops, the "
                              "task text (no `- [ ] t<n> —` prefix) for add_task/edit_task; omit "
                              "for remove_task")]
-    answers: Required[Annotated[str, ("the feedback point this op answers, in a few words — a "
-                                      "point with no op is a dropped point, and this is what "
-                                      "makes that visible")]]
+
+
+class PlanChangeArg(TypedDict, total=False):
+    area: Required[Annotated[str, ("what this change answers, in a few words (`caching design`, "
+                                   "`cli tasks`) — a concern with no change is a dropped concern, "
+                                   "and this is what makes that visible")]]
+    scope: Required[Annotated[Literal["resume", "targeted", "redesign"],
+                              "resume = the plan was right; run another generation against it "
+                              "unchanged (NO ops — an edit here is refused) · targeted = right in "
+                              "approach, wrong in places · redesign = the approach itself was "
+                              "wrong; rewrite it and remove the void tasks explicitly"]]
+    note: Required[Annotated[str, "one line: what changed here, or why nothing needed to"]]
+    ops: Annotated[list[PlanOpArg], ("this change's edits — required except at `resume`, where "
+                                     "they are refused")]
+    superseded: Annotated[str, ("redesign only: what prior work is void and what build must undo "
+                                "(forward, with new commits — never a reset)")]
 
 
 class RevisePlanArgs(TypedDict, total=False):
     item_id: Required[Annotated[str, "the work-item id"]]
     feedback: Required[Annotated[str, ("the feedback driving this revision, VERBATIM — the "
                                        "owner's (or deputy's) words, never your paraphrase")]]
-    scope: Required[Annotated[Literal["targeted", "redesign"],
-                              "targeted = fold the feedback into the standing plan; redesign = "
-                              "the approach itself was wrong, so the plan is rewritten in place "
-                              "and every task checkbox resets"]]
-    ops: Required[Annotated[list[PlanOpArg], "the edits — validated first; a refusal writes nothing"]]
-    superseded: Annotated[str, ("redesign only: what prior work is void and what build must undo "
-                                "(forward, with new commits — never a reset)")]
+    directive: Required[Annotated[str, ("what the next build does DIFFERENTLY because of this "
+                                        "revision — the one line it acts on")]]
+    still_in_force: Required[Annotated[str, ("what earlier revisions still bind (`nothing` on the "
+                                             "first). Build reads the newest block; this is what "
+                                             "makes that honest")]]
+    changes: Required[Annotated[list[PlanChangeArg],
+                                "one entry per concern, each with its OWN scope — validated "
+                                "first; a refusal writes nothing"]]
 
 
-def _revise_plan(*, store, context_id, dev_root=None, bound_item_id=None, **_):
+def _revise_plan(*, store, context_id, dev_root=None, bound_item_id=None, spine=None, **_):
     async def revise_plan(args: dict) -> dict:
         from ...core import plan_revision as _pr
         item_id = _s(args, "item_id")
@@ -1289,29 +1340,45 @@ def _revise_plan(*, store, context_id, dev_root=None, bound_item_id=None, **_):
         if not feedback:
             return _err("`feedback` is required — the words that drove this revision are what the "
                         "next build reads first.")
-        scope = _s(args, "scope") or "targeted"
-        ops = args.get("ops")
-        if isinstance(ops, str):   # tolerate a JSON string (older skill text / tests)
+        directive = (_s(args, "directive") or "").strip()
+        if not directive:
+            return _err("`directive` is required — one line on what the next build does "
+                        "DIFFERENTLY. Without it the block records a complaint, not an instruction.")
+        still = (_s(args, "still_in_force") or "").strip()
+        if not still:
+            return _err("`still_in_force` is required — what earlier revisions still bind (say "
+                        "`nothing` on the first). Build reads the newest block; this is what keeps "
+                        "that honest.")
+        changes = args.get("changes")
+        if isinstance(changes, str):   # tolerate a JSON string (older skill text / tests)
             try:
-                ops = json.loads(ops) if ops.strip() else None
+                changes = json.loads(changes) if changes.strip() else None
             except (ValueError, TypeError) as e:
-                return _err(f"`ops` must be a JSON array of edit ops: {e}")
-        issues = _pr.validate(path.read_text(), ops, scope)
+                return _err(f"`changes` must be a JSON array of changes: {e}")
+        issues = _pr.validate(path.read_text(), changes)
         if issues:
             return _err("Revision rejected — plan.md is unchanged. Fix and re-send:\n- "
                         + "\n- ".join(issues))
-        res = _pr.revise(d, ops=ops, scope=scope, feedback=feedback,
-                         superseded=_s(args, "superseded") or "")
+        # `concerns` and the spend boundary come from the RECORD, never from the agent (§3-bis.3/.4):
+        # the loop's typed exit + the authorization ledger say what drove this, and the meter reading
+        # at this instant is what makes the next generation's budget start at zero.
+        concerns = _pr.derive_concerns(d)
+        spend = spine.item_phase_tokens(context_id, item_id) if spine else 0
+        res = _pr.revise(d, changes=changes, feedback=feedback, directive=directive,
+                         still_in_force=still, concerns=concerns, spend=spend)
+        scopes = sorted({str(c.get("scope") or "") for c in changes})
         store.log_event(context_id, "plan.revised",
-                        f"plan.md revised ({res['revision']}, {scope}): {feedback[:160]}",
+                        f"plan.md revised ({res['revision']}, {'/'.join(scopes)}): {feedback[:160]}",
                         item_id=item_id, actor="agent",
-                        meta={"revision": res["revision"], "scope": scope,
-                              "changed": res["changed"]})
-        return _ok(f"plan.md revised as {res['revision']} ({scope}, {res['ops']} op(s)): "
+                        meta={"revision": res["revision"], "scopes": scopes,
+                              "concerns": concerns, "changed": res["changed"]})
+        return _ok(f"plan.md revised as {res['revision']} ({res['ops']} op(s)): "
                    + "; ".join(res["changed"])
-                   + ". Every other section is untouched — nothing wrote them. The revision block "
-                     "records what drove this, and the next cycle report stamps the revision it "
-                     "implements.")
+                   + f". Concerns on record: {', '.join(concerns)} (read off the loop's exit and "
+                     f"the authorization ledger — not yours to assert). Every section you didn't "
+                     f"name is untouched, `## Tasks` and `## Verification plan` stay last as the "
+                     f"live truth, and the block sits above them. This opens a new generation: the "
+                     f"loop's budget and recurrence guards restart from here.")
     return revise_plan
 
 
@@ -1334,6 +1401,13 @@ _ITEM_DEV_TOOLS: list[ToolSpec] = [
         "Record one machine-checked verification entry into the current cycle report "
         "(check + how + result + pass/fail; freshness-tracked against the repo state).",
         RecordVerificationArgs, _record_verification,
+    ),
+    ToolSpec(
+        "record_diagnosis",
+        "Record WHERE a failed check broke and WHY, plus what you could not determine. "
+        "Never the fix: build reasons that out inside the current plan. Required before the vet "
+        "report on every failing check, and it becomes the next build cycle's work order.",
+        RecordDiagnosisArgs, _record_diagnosis,
     ),
     ToolSpec(
         "request_authorization",
@@ -1371,10 +1445,11 @@ _ITEM_DEV_TOOLS: list[ToolSpec] = [
     ),
     ToolSpec(
         "revise_plan",
-        "Fold review feedback into an EXISTING plan.md through section ops — the only way a "
-        "re-plan changes it. Never rewrite the file: `## Tasks` takes task-level ops so the "
-        "`- [x]` progress build earned survives, and every untouched section is provably "
-        "untouched. Records the revision block the next build reads first.",
+        "Fold review feedback into an EXISTING plan.md — the only way a re-plan changes it. One "
+        "entry per concern, each with its own scope (resume | targeted | redesign), so redesigning "
+        "one part never resets the progress another part earned. Never rewrite the file: `## Tasks` "
+        "takes task-level ops so the `- [x]` build earned survives. Appends the revision block the "
+        "next build reads first, and opens a fresh build⟷vet generation.",
         RevisePlanArgs, _revise_plan,
     ),
 ]

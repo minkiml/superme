@@ -49,7 +49,7 @@ export function getRepos(): Promise<RepoOverview[]> {
 // across EVERY connected repo, each classified by WHY it's parked so the notification center can
 // offer the right quick action. `kind` drives the action set; `actor` says who parked it.
 // Types are inlined until the next `gen:api` picks up AttentionHold/RepoAttention from the daemon.
-export type SystemHoldKind = 'question' | 'escalation' | 'breaker' | 'paged' | 'review' | 'gate'
+export type SystemHoldKind = 'question' | 'escalation' | 'paged' | 'review' | 'gate'
 // One grill question, in the four fields report_completion enforces — the card renders them as
 // labelled rows. Only `question` is guaranteed: a report predating the typed shape carries prose.
 export type SystemHoldQuestion = { question: string; recommend?: string; why?: string; instead?: string }

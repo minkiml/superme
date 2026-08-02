@@ -25,6 +25,10 @@ class InboxRow(BaseModel):
     # F3: run config chosen at capture, locked into the work-item at push. NULL = inherit default.
     model: str | None = None
     effort: str | None = None
+    # Whether the work-item this row becomes drives its own gates. Decided here because the
+    # work-item route only accepts the flag pre-build — capture is the moment always in time.
+    # ON by default: driving itself is the normal case, and the card's toggle is the opt-out.
+    autopilot: bool = True
 
 
 class InboxPushResponse(BaseModel):

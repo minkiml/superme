@@ -33,8 +33,13 @@ from typing import Literal
 # status changes only, never deletes (never-delete standing constraint).
 WorkKind = Literal["implementation", "research"]
 WorkPhase = Literal["triage", "plan", "build", "vet", "review", "investigate", "close"]
+#    `error` (R2) is the item whose work STOPPED — a crash, an outage that outlasted the retry
+#    ladder, a daemon restart. Distinct from the run-level `system_fault` on purpose (owner,
+#    2026-07-31): a system fault is a run that COMPLETED while our machinery misbehaved (review's
+#    business, the work advanced); `error` is a run that stopped, so the item stays where it died
+#    carrying `error_reason` until the owner resumes or re-runs it. Non-terminal, always.
 WorkStatus = Literal["active", "awaiting_child", "awaiting_upstream", "awaiting_slot",
-                     "awaiting_human", "done"]
+                     "awaiting_human", "error", "done"]
 WorkOutcome = Literal["completed", "abandoned", "superseded"]
 # Branch-off relation on `spawned_from` (D3): blocking/parallel = children (auto-pushed, gate the
 # parent's completion; blocking additionally pauses it) · spawn = provenance only (owner-pushed).
@@ -66,4 +71,9 @@ EventScope = Literal["item", "dev", "global"]
 # actors so "who decided this" stays legible in the log forever — an autopilot advance and a deputy
 # approval must never read as the same hand.
 EventActor = Literal["owner", "agent", "daemon", "autopilot", "deputy"]
-ArtifactKind = Literal["tool", "subagent", "skill", "mcp", "result"]
+# One row of a run's trail. The first five are CALLS (and a call's `result`); `prompt`/`reply` are
+# the turn's text. All seven ride the same feed because the drilldown's Runs pane groups by RUN, and
+# a run whose whole trail is text (a compaction, an errored turn) must still appear as a group that
+# says so — filtering it upstream is what made 17 of one item's 34 runs vanish from that pane.
+# Renderers drop the text kinds themselves (`lib/trace.ts` → TRACE_CALL_KINDS).
+ArtifactKind = Literal["tool", "subagent", "skill", "mcp", "result", "prompt", "reply"]

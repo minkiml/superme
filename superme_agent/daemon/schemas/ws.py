@@ -87,6 +87,7 @@ class TimelineFrame(BaseModel):
     name: str | None = None
     description: str | None = None
     tool_id: str | None = None
+    parent_tool_id: str | None = None   # the sub-agent spawn this row came from (null = the parent)
 
 
 class InvalidateFrame(BaseModel):

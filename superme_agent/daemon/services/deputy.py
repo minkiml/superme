@@ -27,7 +27,9 @@ from ..app_state import agent as _agent, dev as _dev, dev_store as _dev_store, s
 from ...core import Usage, Result, Status, TextDelta, ToolResult, deny_all
 from ...core import kernel_speech, gate_briefs, deputy as deputy_core
 from ...harness.tools.run_tools import make_deputy_verdict_server
-from .runs import _begin_run, _LiveTokens, capture_prompt, capture_event, _dev_mcp
+from .runs import _begin_run, _LiveTokens, capture_prompt, capture_event, _dev_mcp, \
+    retry_notice
+from .turns import ResilientTurn
 
 log = logging.getLogger("superme-agent")
 
@@ -169,56 +171,67 @@ async def _judge(ctx, context_id: str, item_id: str, item: dict, gate: str, dev_
     # The context the deputy judges from — assembled from durable state, nothing inherited.
     all_items = _dev.read_all(dev_root)["work_items"]
     events = _dev_store.list_events(context_id, item_id=item_id, limit=100)
-    git_health = None
-    brief = gate_briefs.render_gate_brief(item, item_dir, dev_root, ctx.cwd,
-                                          all_items=all_items, events=events, git_health=git_health)
+    # ONE computation of this gate's checks (core/gate_briefs) — the owner's drilldown reads the same
+    # call, so the deputy can never judge from different numbers than the owner is shown (§2.1).
+    state = gate_briefs.gate_state(item, item_dir, dev_root, ctx.cwd,
+                                   all_items=all_items, events=events)
     dep_root = deputy_core.deputy_root(context_id)  # mandate lives in the harness cell, not knowledge
     mandate = deputy_core.read_mandate(dep_root)
     digest = deputy_core.log_digest(item_dir, gate)  # this item's prior calls AT THIS GATE (continuity)
     # On a loop RE-ENTRY (a prior send-back at this gate exists), feed a lean "since your last call"
     # delta so the deputy re-judges the DELTA, not the whole item from scratch (design §5). It is a
-    # POINTER — the full artifacts stay on demand in the brief; never a substitute for ground truth.
-    delta = _build_delta(item_dir, gate, brief.get("numbers") or {})
+    # POINTER — the full artifacts stay on demand behind the contract path; never a substitute for
+    # ground truth.
+    delta = _build_delta(item_dir, gate, state.get("numbers") or {})
     signal = _success_signal(dev_root, item) if gate == "review" else None
     # BV-A2.3: at review, surface the pending authorization requests + which scopes are delegated,
     # so the deputy can grant a delegated one (send_back + authorize) or escalate an owner-reserved one.
+    from ...core import artifacts as _arts
     auth_block = None
+    verdicts = None
     if gate == "review":
-        from ...core import artifacts as _arts
         pending = _arts.pending_authorizations(item_dir)
         if pending:
             auth_block = kernel_speech.render_authorizations_block(
                 pending, _spine.get_deputy_delegated_authority())
+        # The vet's actual per-check verdicts. Before slice 6b the review deputy got none of these:
+        # its "vet results" section had a `vet_note` parameter no caller ever filled, so it fell back
+        # to "read the ledger embedded in the brief" — and the brief carried only an entry count.
+        verdicts = _arts.verdict_rows(item_dir)
+    # The deputy reads the OWNER's document for this phase, not a re-flattening of it (§2.1).
     prompt = kernel_speech.deputy_brief_block(
-        item_id, str(item.get("title") or item_id), gate, brief.get("brief", ""),
+        item_id, str(item.get("title") or item_id), gate,
+        state=state, report=_arts.report_text(item_dir, str(state.get("phase") or "")),
         mandate=mandate, log_digest=digest, delta=delta, success_signal=signal,
-        authorizations=auth_block)
+        verdicts=verdicts, authorizations=auth_block)
     system_append = kernel_speech.deputy_preamble(strictness)
     capture_prompt(context_id, f"[deputy] judging the {gate} gate", item_id=item_id)
     final_tokens = None
     final_usage = None
     live = _LiveTokens()
     sink: dict = {}   # the deputy_verdict tool (run_tools) lands the verdict here
-    try:
-        async for ev in _agent.run_turn(
-            ctx, prompt,
-            resume=None,                       # fresh per gate — the deputy FORGETS (design §2b)
-            model=model, effort=effort,
-            approve=deny_all,                  # read-only judge: no writes, no shell side effects
-            extra_mcp_servers={**_dev_mcp(ctx, ctx.cwd, item_id),
-                               "deputy": make_deputy_verdict_server(sink)},
-            system_append=system_append,
-            deny_write_tools=_READONLY_NUDGE,  # Write/Edit die outright — it inspects, never edits
-        ):
-            if isinstance(ev, Usage):
-                live.bump(context_id, item_id, ev)
-            elif isinstance(ev, Result):
-                final_tokens = ev.tokens
-                final_usage = ev.usage
-            if isinstance(ev, (Status, TextDelta, ToolResult)):
-                capture_event(context_id, ev, item_id=item_id)
-    except Exception:
-        log.exception("deputy judge turn failed for %s", item_id)
+    turn = ResilientTurn("deputy judge", item_id=item_id,
+                         notify=retry_notice(context_id, item_id, gate))
+    async for ev in turn.stream(
+        _agent, ctx, prompt,
+        resume=None,                       # fresh per gate — the deputy FORGETS (design §2b)
+        model=model, effort=effort,
+        approve=deny_all,                  # read-only judge: no writes, no shell side effects
+        sandbox_writes=[],                 # …and sandboxed anyway: cwd only, no network
+        extra_mcp_servers={**_dev_mcp(ctx, ctx.cwd, item_id),
+                           "deputy": make_deputy_verdict_server(sink)},
+        system_append=system_append,
+        deny_write_tools=_READONLY_NUDGE,  # Write/Edit die outright — it inspects, never edits
+    ):
+        if isinstance(ev, Usage):
+            live.bump(context_id, item_id, ev)
+        elif isinstance(ev, Result):
+            final_tokens = ev.tokens
+            final_usage = ev.usage
+        if isinstance(ev, (Status, TextDelta, ToolResult)):
+            capture_event(context_id, ev, item_id=item_id)
+    # A judge that never ran returns no verdict — which the caller already treats as "no judgment",
+    # leaving the gate to the owner. The ladder above means an outage has to outlast it first.
     return sink.get("verdict"), final_tokens, final_usage
 
 

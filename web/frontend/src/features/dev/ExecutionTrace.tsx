@@ -51,18 +51,22 @@ export function TraceRows<T extends TraceRow & { id?: number | string }>({
 
 function CallRow<T extends TraceRow>({ n, pair, time }: { n: number; pair: PairedCall<T>; time?: (row: T) => string }) {
   const [open, setOpen] = useState(false)
-  const { call, result } = pair
+  const { call, result, depth } = pair
   const { icon: Icon, color } = callVisual(call)
   const output = result?.description?.trim() || ''
   const hasOutput = output.length > 0
+  // A sub-agent's call is indented behind a rail hanging off its spawn row above. Numbering stays
+  // continuous with the parent's — the rows really did happen in this order, and renumbering per
+  // agent would break the one thing the sequence is for (reading what happened when).
+  const nested = depth === 1
   return (
-    <li>
+    <li className={nested ? 'ml-4 border-l border-line pl-2' : undefined}>
       <button
         type="button"
         disabled={!hasOutput}
         onClick={() => setOpen((v) => !v)}
         title={hasOutput ? (open ? 'Hide output' : 'Show output') : undefined}
-        className={`flex w-full items-baseline gap-2 rounded px-1 py-0.5 text-left text-xs ${hasOutput ? 'hover:bg-hover' : 'cursor-default'}`}
+        className={`flex w-full items-baseline gap-2 rounded px-1 py-0.5 text-left text-[13px] ${hasOutput ? 'hover:bg-hover' : 'cursor-default'}`}
       >
         <span className="w-5 shrink-0 text-right font-mono text-[10px] text-faint">{n}</span>
         {/* The colored, per-tool icon is the row's identity — always shown. Expandable rows also get a

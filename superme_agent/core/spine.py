@@ -352,7 +352,8 @@ class SystemSpine:
                        ctx_pct INTEGER,
                        phase TEXT,
                        started_at TEXT NOT NULL,
-                       ended_at TEXT
+                       ended_at TEXT,
+                       discarded_at TEXT
                    )"""
             )
             # Token accounting (token-usage-tracking-spec): the four Anthropic usage fields kept
@@ -363,7 +364,15 @@ class SystemSpine:
             # KEPT and still populated (= input+output+cache_creation) for back-compat with existing
             # telemetry/guard UIs; pre-migration rows have zero typed columns and surface in a labeled
             # "legacy (unsplit)" bucket. Additive ALTERs below migrate an existing .system.db.
+            # `discarded_at` — the re-run SOFT delete (owner, 2026-07-31). A re-run throws the
+            # attempt away but never the rows: they are stamped, not deleted ([[never-delete-logs]]),
+            # and the readers split. ITEM-SCOPED reads (this item's trace, its card totals, its loop
+            # budget) filter to `discarded_at IS NULL` — the current attempt; AGGREGATE reads (repo
+            # and system token totals, the Activity feed, run history) count everything, because the
+            # discarded attempt really was paid for. So a repo total is legitimately larger than the
+            # sum of its cards, and that is the honest number, not a bug.
             self._ensure_columns(c, "run", {
+                "discarded_at": "TEXT",
                 "tok_input": "INTEGER NOT NULL DEFAULT 0",
                 "tok_cache_creation": "INTEGER NOT NULL DEFAULT 0",
                 "tok_cache_read": "INTEGER NOT NULL DEFAULT 0",
@@ -482,7 +491,8 @@ class SystemSpine:
                        name TEXT NOT NULL,
                        description TEXT,
                        tool_id TEXT,
-                       created_at TEXT NOT NULL
+                       created_at TEXT NOT NULL,
+                       discarded_at TEXT
                    )"""
             )
             c.execute("CREATE INDEX IF NOT EXISTS idx_artifact_item ON run_artifact(repo_id, item_id)")
@@ -506,10 +516,18 @@ class SystemSpine:
                    )"""
             )
             c.execute("CREATE INDEX IF NOT EXISTS idx_event_run ON run_event(run_id)")
+            # Stamped alongside `run.discarded_at` by a re-run — the per-item trace pane reads this
+            # table directly (it is a strict superset of run_artifact), so filtering only `run`
+            # would leave the discarded attempt's tool calls on screen.
+            self._ensure_columns(c, "run_event", {"discarded_at": "TEXT"})
             # tool_id (the SDK tool_use id) pairs a `result` row back to its CALL row — concurrent
             # tools return out of call order, so position/name can't pair them; the id can. Additive.
-            self._ensure_columns(c, "run_artifact", {"tool_id": "TEXT"})
-            self._ensure_columns(c, "run_event", {"tool_id": "TEXT"})
+            # parent_tool_id (the SDK `parent_tool_use_id`) is the tool_use id of the sub-agent SPAWN
+            # a row happened inside — NULL for the parent's own calls. A fan-out interleaves its
+            # children into one stream, so this is what lets a reader nest "which agent ran this"
+            # instead of reading three parallel readers as one confused agent. Additive.
+            self._ensure_columns(c, "run_artifact", {"tool_id": "TEXT", "parent_tool_id": "TEXT"})
+            self._ensure_columns(c, "run_event", {"tool_id": "TEXT", "parent_tool_id": "TEXT"})
             # SWEEP_WATERMARK — the capture sweep's per-session swept position (WI-8). `position`
             # is the count of chat messages already swept for a session; every sweep advances it
             # to the transcript head, so a message is NEVER swept twice (content-level idempotency).
@@ -707,7 +725,8 @@ class SystemSpine:
         `len()` is the old count, so a caller that only wanted the number still works."""
         with self._conn() as c:
             orphans = [dict(r) for r in c.execute(
-                "SELECT id AS run_id, repo_id, item_id, phase, feature FROM run WHERE status='running'"
+                "SELECT id AS run_id, repo_id, item_id, phase, feature FROM run"
+                " WHERE status='running' AND discarded_at IS NULL"
             ).fetchall()]
             c.execute(
                 "UPDATE run SET status='aborted', ended_at=? WHERE status='running'",
@@ -1084,7 +1103,7 @@ class SystemSpine:
         truncated by a repo-wide limit."""
         with self._conn() as c:
             rows = c.execute(
-                "SELECT * FROM run WHERE repo_id=? AND item_id=?"
+                "SELECT * FROM run WHERE repo_id=? AND item_id=? AND discarded_at IS NULL"
                 " ORDER BY datetime(started_at) ASC, id ASC", (repo_id, item_id),
             ).fetchall()
             return [self._run_dict(r) for r in rows]
@@ -1225,6 +1244,7 @@ class SystemSpine:
         with self._conn() as c:
             r = c.execute(
                 "SELECT * FROM run WHERE repo_id=? AND item_id=? AND status='running'"
+                " AND discarded_at IS NULL"
                 " ORDER BY datetime(started_at) DESC LIMIT 1", (repo_id, item_id),
             ).fetchone()
             return self._run_dict(r) if r else None
@@ -1232,6 +1252,37 @@ class SystemSpine:
     def is_item_running(self, repo_id: str, item_id: str) -> bool:
         """The per-item run-lock: True iff any run is in flight for this work-item."""
         return self.live_run(repo_id, item_id) is not None
+
+    def running_run_id(self, repo_id: str, item_id: str) -> int | None:
+        """The id of the item's in-flight run — the same resolution `log_run_event` does when a
+        caller passes only `item_id`. Exposed so the LIVE frame for an event can carry the run it
+        was recorded against: a frame published with `run_id: null` cannot be matched against the
+        history the browser already holds, and renders a second time on top of it."""
+        run = self.live_run(repo_id, item_id)
+        return int(run["id"]) if run and run.get("id") is not None else None
+
+    def discard_item_trace(self, repo_id: str, item_id: str, *, at: str) -> dict:
+        """SOFT-delete every run + run-event row this work-item has so far — the re-run's "start
+        clean" (owner, 2026-07-31). Returns {runs, events} counts.
+
+        NOTHING IS DELETED. The rows keep their tokens, their timings and their tool calls; they
+        are stamped `discarded_at` so the ITEM's own surfaces stop showing them while every
+        accounting read still counts them ([[never-delete-logs]]). `WHERE discarded_at IS NULL`
+        makes it idempotent and keeps each attempt's original stamp across repeated re-runs.
+
+        Call this BEFORE writing the `item.rerun` event, so that event survives unstamped and the
+        re-run itself stays on the record even though the attempt it discarded is out of view."""
+        with self._conn() as c:
+            runs = c.execute(
+                "UPDATE run SET discarded_at=? WHERE repo_id=? AND item_id=? AND discarded_at IS NULL",
+                (at, repo_id, str(item_id)),
+            ).rowcount
+            events = c.execute(
+                "UPDATE run_event SET discarded_at=? WHERE repo_id=? AND item_id=?"
+                " AND discarded_at IS NULL", (at, repo_id, str(item_id)),
+            ).rowcount
+            c.commit()
+        return {"runs": int(runs or 0), "events": int(events or 0)}
 
     def release_item_runs(self, repo_id: str, item_id: str) -> int:
         """When a work-item is hard-deleted, close out any run still in flight for it (so it can't
@@ -1247,35 +1298,20 @@ class SystemSpine:
                 (_now(), repo_id, item_id))
             return cur.rowcount
 
-    # --- run artifacts (the tool / sub-agent / skill call-trail per work-item) ---
-    def log_artifact(self, repo_id: str, item_id: str, *, kind: str, name: str,
-                     description: str | None = None, tool_id: str | None = None) -> None:
-        """Record one invocation the item's currently-running agent made. Tied to the live run
-        (so calls group by run); `seq` orders them within that run. `tool_id` (the SDK tool_use id)
-        lets a `result` row pair back to its call. Best-effort — never raises into the turn loop."""
-        with self._conn() as c:
-            run = c.execute(
-                "SELECT id FROM run WHERE repo_id=? AND item_id=? AND status='running'"
-                " ORDER BY datetime(started_at) DESC LIMIT 1", (repo_id, item_id),
-            ).fetchone()
-            run_id = run["id"] if run else None
-            seq = c.execute(
-                "SELECT COALESCE(MAX(seq),0)+1 AS n FROM run_artifact"
-                " WHERE repo_id=? AND item_id=? AND run_id IS ?", (repo_id, item_id, run_id),
-            ).fetchone()["n"]
-            c.execute(
-                "INSERT INTO run_artifact (run_id,repo_id,item_id,seq,kind,name,description,tool_id,created_at)"
-                " VALUES (?,?,?,?,?,?,?,?,?)",
-                (run_id, repo_id, item_id, seq, kind, name, description, tool_id, _now()),
-            )
+    # `log_artifact` is RETIRED (2026-07-31). It wrote a second, POORER copy of what `log_run_event`
+    # already records: no prompt/reply rows, and nothing at all from a deputy or compaction run.
+    # Every caller wrote BOTH, so the copy never carried information of its own — and the drilldown's
+    # Runs pane happened to read the poor one, showing 17 of one item's 34 runs. The `run_artifact`
+    # TABLE and its rows STAY (never-delete-logs): frozen history, no new writes.
 
     # --- run events (the per-RUN observability trail: prompt · reply · tool/skill/agent calls) ---
     def log_run_event(self, *, repo_id: str, kind: str, name: str, description: str | None = None,
                       run_id: int | None = None, item_id: str | None = None,
-                      tool_id: str | None = None) -> None:
+                      tool_id: str | None = None, parent_tool_id: str | None = None) -> None:
         """Append one event to a run's trail (`seq` orders within the run). Pass `run_id` directly
         (chat / background), or `item_id` to resolve the item's currently-running run. `tool_id` (the
-        SDK tool_use id) lets a `result` row pair back to its call. Best-effort — never raises."""
+        SDK tool_use id) lets a `result` row pair back to its call; `parent_tool_id` names the
+        sub-agent spawn the row came from (NULL = the parent). Best-effort — never raises."""
         try:
             with self._conn() as c:
                 if run_id is None and item_id is not None:
@@ -1290,9 +1326,11 @@ class SystemSpine:
                     "SELECT COALESCE(MAX(seq),0)+1 AS n FROM run_event WHERE run_id=?", (run_id,),
                 ).fetchone()["n"]
                 c.execute(
-                    "INSERT INTO run_event (run_id,repo_id,item_id,seq,kind,name,description,tool_id,created_at)"
-                    " VALUES (?,?,?,?,?,?,?,?,?)",
-                    (run_id, repo_id, item_id, seq, kind, name, description, tool_id, _now()),
+                    "INSERT INTO run_event"
+                    " (run_id,repo_id,item_id,seq,kind,name,description,tool_id,parent_tool_id,created_at)"
+                    " VALUES (?,?,?,?,?,?,?,?,?,?)",
+                    (run_id, repo_id, item_id, seq, kind, name, description, tool_id,
+                     parent_tool_id, _now()),
                 )
         except Exception:  # noqa: BLE001 — telemetry must never break a turn
             pass
@@ -1376,18 +1414,23 @@ class SystemSpine:
         """The full per-run trail (prompt · replies · calls), in order — powers the Activity trace."""
         with self._conn() as c:
             rows = c.execute(
-                "SELECT id, seq, kind, name, description, tool_id, created_at FROM run_event"
-                " WHERE run_id=? ORDER BY seq ASC", (int(run_id),),
+                "SELECT id, seq, kind, name, description, tool_id, parent_tool_id, created_at"
+                " FROM run_event WHERE run_id=? ORDER BY seq ASC", (int(run_id),),
             ).fetchall()
             return [dict(r) for r in rows]
 
-    def artifacts_for_item(self, repo_id: str, item_id: str) -> list[dict]:
-        """Every artifact a work-item's runs called, oldest-first within each run, newest run
-        first — the call-trail for the work-item detail's Artifacts tab."""
+    def events_for_item(self, repo_id: str, item_id: str) -> list[dict]:
+        """Every trail row an item's runs recorded, oldest-first within each run, newest run first —
+        the feed behind the drilldown's Runs pane and the `execution.md` snapshot.
+
+        Replaced `artifacts_for_item`, which read `run_artifact`: that table was written only by the
+        item-run path, so a deputy run (20+ real calls) or a compaction run produced no rows there
+        and the pane silently skipped it — 17 of one item's 34 runs were missing, including every
+        deputy judgment. `run_event` is a strict superset, item-tagged on every row."""
         with self._conn() as c:
             rows = c.execute(
-                "SELECT id, run_id, seq, kind, name, description, tool_id, created_at FROM run_artifact"
-                " WHERE repo_id=? AND item_id=?"
+                "SELECT id, run_id, seq, kind, name, description, tool_id, parent_tool_id, created_at"
+                " FROM run_event WHERE repo_id=? AND item_id=? AND discarded_at IS NULL"
                 " ORDER BY run_id IS NULL, run_id DESC, seq ASC", (repo_id, item_id),
             ).fetchall()
             return [dict(r) for r in rows]
@@ -1395,8 +1438,13 @@ class SystemSpine:
     def run_stats(self, repo_id: str, *, mode: str | None = None) -> dict[str, dict]:
         """Per-item accumulated telemetry over FINISHED item runs (the card totals): {item_id:
         {total_tokens, runs, last_tokens, last_duration_ms, last_model, last_ctx_pct}}.
-        Running rows are excluded (their live figures come from live_run)."""
-        where = ["repo_id=?", "status!='running'", "item_id IS NOT NULL"]
+        Running rows are excluded (their live figures come from live_run).
+
+        Discarded runs are excluded too: this is what the card and the drilldown header print, and
+        an item that reads "Σ 1.6M tok" over work it no longer contains is the exact confusion the
+        soft delete exists to end. The repo and system totals still count them — see the schema
+        note on `run.discarded_at`."""
+        where = ["repo_id=?", "status!='running'", "item_id IS NOT NULL", "discarded_at IS NULL"]
         args: list = [repo_id]
         if mode is not None:
             where.append("mode=?")
@@ -1922,15 +1970,21 @@ class SystemSpine:
 
     def item_phase_tokens(self, repo_id: str, item_id: str,
                           phases: tuple[str, ...] = ("build", "vet")) -> int:
-        """An item's accumulated 3-type token spend over the given phases (ALL its runs — live
-        and finished, interactive and background: the loop's meter reads what the item actually
-        cost in those phases, whoever spent it). Legacy pre-typed rows fall back to `tokens`."""
+        """An item's accumulated 3-type token spend over the given phases (every run — live and
+        finished, interactive and background: the loop's meter reads what the item actually cost in
+        those phases, whoever spent it). Legacy pre-typed rows fall back to `tokens`.
+
+        DISCARDED RUNS ARE EXCLUDED, and this is the reason the filter matters most: this feeds the
+        loop's BUDGET BREAKER. Counting a re-run's thrown-away attempt would hand the fresh attempt
+        a budget that is already spent, and it would die on its first vet with `budget` — the exact
+        failure the plan-revision generation window was invented to work around."""
         ph = ",".join("?" for _ in phases)
         with self._conn() as c:
             r = c.execute(
                 f"SELECT COALESCE(SUM(CASE WHEN (tok_input+tok_cache_creation+tok_cache_read+tok_output)=0"
                 f" THEN COALESCE(tokens,0) ELSE tok_input+tok_cache_creation+tok_output END),0) AS t"
-                f" FROM run WHERE repo_id=? AND item_id=? AND phase IN ({ph})",
+                f" FROM run WHERE repo_id=? AND item_id=? AND discarded_at IS NULL"
+                f" AND phase IN ({ph})",
                 (repo_id, item_id, *phases),
             ).fetchone()
             return int(r["t"] or 0)

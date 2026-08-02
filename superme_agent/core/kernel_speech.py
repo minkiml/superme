@@ -67,13 +67,26 @@ def session_checkpoint_trigger(memory_path: str) -> str:
             f"it), so what only this conversation knows survives.")
 
 
-def vet_trigger(item_id: str, title: str, deferred: list[str] | None = None) -> str:
+def vet_trigger(item_id: str, title: str, deferred: list[str] | None = None,
+                machine: list[dict] | None = None) -> str:
     """Consumer: the background vet run (loop._run_background_vet) · durable (vet forgets — each
     cycle's fresh transcript opens with this). `deferred` = vet-plan check ids the build declared
     as needs-you deferrals (BV-A2/A3): the vetter must NOT judge them — they are intentional skips
     awaiting the owner's authorization at review, so re-judging them is wasted work that never
-    converges. Naming them here is what stops the loop churning on a check only the owner can clear."""
+    converges. Naming them here is what stops the loop churning on a check only the owner can clear.
+
+    `machine` = the checks the KERNEL already executed and recorded this cycle (design §4), as
+    [{check, passed, result}]. They are settled facts, not work: naming them stops the vetter
+    spending a subagent re-running an exam whose verdict is already in the ledger — and the ledger
+    refuses a second entry anyway, so an unwarned vetter would spend the run on a tool error."""
     base = f"Run superme-dev:vet for work-item `{item_id}` (\"{title}\")."
+    if machine:
+        lines = "\n".join(f"- `{m['check']}` — {'PASS' if m.get('passed') else 'FAIL'} "
+                          f"({str(m.get('result') or '').strip()[:200]})" for m in machine)
+        base += ("\n\nThe kernel already ran these checks in the sandbox and recorded each result "
+                 "— they are DONE:\n" + lines + "\nDo not re-run or re-record them; a second entry "
+                 "is refused. Read them as findings, perform the remaining checks yourself, and "
+                 "cover all of them in your report.")
     if deferred:
         base += ("\n\nThe build DEFERRED these checks to the owner (needs-you items pending "
                  "authorization at review): " + ", ".join(f"`{c}`" for c in deferred) + ". Do NOT "
@@ -95,32 +108,42 @@ def build_first_trigger(item_id: str, title: str) -> str:
     )
 
 
-def build_loop_trigger(item_id: str, title: str, cycle: int, report_text: str) -> str:
+def build_loop_trigger(item_id: str, title: str, cycle: int, report_text: str,
+                       *, reload_skill: bool = False,
+                       diagnoses: dict[str, dict] | None = None) -> str:
     """Consumer: the loop's failure-hop build run (loop._run_background_build default) · durable
     in the item's persistent build thread. The failed cycle's report IS the payload — the work
-    order, injected once here, never per-turn."""
-    return (
-        f"Verification failed in cycle {cycle} for work-item `{item_id}` (\"{title}\"). Run "
-        f"superme-dev:build to fix what its report's `## Verification` entries describe:\n\n"
-        f"--- build-vet-{cycle}.md ---\n{report_text}\n---"
+    order, injected once here, never per-turn.
+
+    `reload_skill` when the thread was COMPACTED since its last cycle. Build REMEMBERS (one thread
+    across cycles), so cycle 1 invokes `superme-dev:build` and later cycles skip the call — the
+    procedure is already in the transcript. After a compaction that stops being true, and the same
+    "Run superme-dev:build" line the agent has already satisfied once will not make it re-read.
+    So say the thing that changed: the context was cut, invoke it again.
+
+    `diagnoses` = vet's located cause per failed check (design §5), lifted ABOVE the report because
+    it is the work order's first line: where it broke and why. The report carries the same entries
+    further down, but a build cycle that has to find them inside a wall of markdown starts by
+    re-deriving what vet already established. Vet never names the fix — that reasoning is build's,
+    and inside the same plan."""
+    head = (
+        "Your context was COMPACTED since the last cycle, so the build procedure may no longer be "
+        "in it: invoke the `superme-dev:build` skill again before you start. Then fix"
+        if reload_skill else
+        "Run superme-dev:build to fix"
     )
-
-
-def build_continue_trigger(item_id: str, title: str) -> str:
-    """Consumer: the owner's CONTINUE on a parked build (loop.start_continue_build) · durable, and
-    it RESUMES the item's build thread (the agent sees its own prior work). The owner reviewed where
-    build stopped and asked to keep going — finalize what's doable, record what isn't as an
-    assumption, and let the loop carry the gap to review (BV-A1: build never pages mid-loop)."""
+    found = ""
+    if diagnoses:
+        lines = "\n".join(
+            f"- `{c}` — **{d.get('where') or 'not located'}**: {d.get('why') or ''}"
+            + (f" (vet could not determine: {d['unknown']})" if d.get("unknown") else "")
+            for c, d in diagnoses.items())
+        found = ("\n\nWhat vet found, per failing check — the cause, not the remedy; the change "
+                 "is yours to reason out within the current plan:\n" + lines)
     return (
-        f"The owner reviewed where build stopped on work-item `{item_id}` (\"{title}\") and asked "
-        f"you to CONTINUE. Run superme-dev:build to finish the cycle: complete every task you still "
-        f"can, and for anything you genuinely cannot do yourself — a tool can't perform it, a policy "
-        f"forbids it, it needs a decision above your pay grade — record it in the cycle report's "
-        f"`## Assumptions` (what you left undone · why · your recommendation · the cost if that's "
-        f"wrong) instead of stopping. "
-        f"Then report `success` (all done) or `partial` (some done, gaps recorded) — the loop vets "
-        f"what you built and carries any recorded gap to the REVIEW gate, where the owner decides. "
-        f"Do not page, and never advance the phase yourself."
+        f"Verification failed in cycle {cycle} for work-item `{item_id}` (\"{title}\"). {head} "
+        f"what its report's `## Verification` entries describe:{found}\n\n"
+        f"--- build-vet-{cycle}.md ---\n{report_text}\n---"
     )
 
 
@@ -138,9 +161,11 @@ def phase_feedback_trigger(item_id: str, title: str, phase: str, skill: str, fee
     # (§2.1): `revise_plan`. Naming it here matters — the whole-file rewrite is the tempting move,
     # and it silently discards the `- [x]` progress build already earned.
     how = ("" if phase != "plan" else
-           " Change `plan.md` ONLY through `revise_plan` (section + task-level ops, each naming "
-           "the feedback point it answers) — never rewrite the file, and never restate what the "
-           "feedback didn't touch.")
+           " Change `plan.md` ONLY through `revise_plan` — never rewrite the file. Split the "
+           "feedback into its concerns and give each one its own scope: `resume` when the plan was "
+           "right and only needs another generation (no edit — an edit there is refused), "
+           "`targeted` when specific things must change, `redesign` when the approach itself was "
+           "wrong. Never restate what the feedback didn't touch.")
     return (
         f"Feedback has come back on work-item `{item_id}` (\"{title}\") at the **{phase}** stage. "
         f"Run superme-dev:{skill} to address it: update the docs — including the `## Tasks` track — "
@@ -443,8 +468,8 @@ def work_item_preamble(item_id: str, item: dict, item_dir, *, interactive: bool 
             "make → a `## Assumptions` note in your phase's own record; a CONTRACT change you "
             "can't self-authorize → "
             "`request_authorization` (defers it to the review gate) — either way finish what you "
-            "can. End the run by calling the `report_completion` tool; after it, say nothing "
-            "beyond one short closing line."
+            "can. End the run by calling the `report_completion` tool: that call IS your closing "
+            "statement — the owner reads it as the run's last word — so say nothing after it."
         )
     return "\n".join(lines)
 
@@ -670,7 +695,11 @@ def _cap(text: str, cap: int) -> str:
 
 _DEPUTY_MANDATE_CAP = 3_000
 _DEPUTY_LOG_CAP = 2_000
-_DEPUTY_BRIEF_CAP = 8_000
+# A RUNAWAY GUARD, not a summarizer. The phase reports are scaffold-capped by contract (§3.3: ≤1
+# screen, ≤1 page for the final) — that is the real limit, and a cap on top of a cap only ever
+# truncates mid-sentence. This exists so a malformed report can't blow the prompt, and should never
+# fire on a report written from its template.
+_DEPUTY_REPORT_CAP = 12_000
 
 
 def render_authorizations_block(pending: list[dict], delegated: list[str]) -> str:
@@ -692,18 +721,69 @@ def render_authorizations_block(pending: list[dict], delegated: list[str]) -> st
     return "\n".join(lines)
 
 
-def deputy_brief_block(item_id: str, title: str, gate: str, brief_md: str, *,
+def _deputy_check_rows(state: dict) -> str:
+    """The gate's mechanical checks as the deputy reads them — the SAME rows the owner's drilldown
+    renders, off the same `gate_state` call. Blocking ones are marked, because which failures grey
+    the owner's Approve is a fact about the gate, not a judgment the deputy should re-derive."""
+    checks = state.get("checks") or []
+    if not checks:
+        return "_(this gate has no mechanical checks.)_"
+    lines = [f"- {'✓' if c.get('ok') else '✗'} **{c.get('criterion')}** — {c.get('detail')}"
+             + ("  _[must-resolve: this one greys the owner's Approve]_"
+                if c.get("blocking") and not c.get("ok") else "")
+             for c in checks]
+    blocked = state.get("blocked_by") or []
+    lines.append("")
+    lines.append(f"Approve is currently **greyed** — {len(blocked)} must-resolve item(s) open."
+                 if blocked else "Nothing must-resolve is open — Approve is live for the owner.")
+    return "\n".join(lines)
+
+
+def _deputy_verdict_table(rows: list[dict]) -> str:
+    """The vet's per-check verdicts, latest per check. Filling a real gap: the review deputy used to
+    be told to "read the evidence ledger embedded in the brief above", where the brief carried a
+    one-line entry COUNT and no verdicts — so the gate that decides the merge saw no check results
+    at all. The `vet_note` parameter that was supposed to carry them had no call site (found
+    2026-07-30)."""
+    if not rows:
+        return ("_(no check verdicts recorded. Either the approved plan declared `depth: none` — "
+                "verify that in `## Verification plan` — or the vet never ran, which is not "
+                "something to approve past.)_")
+    out = []
+    for r in rows:
+        mark = "◌ deferred" if r.get("deferred") else ("✓ PASS" if r.get("passed") else "✗ FAIL")
+        out.append(f"- **{r.get('check')}** {mark} (cycle {r.get('cycle')}) — `{r.get('how')}`"
+                   + (f"\n    → {str(r.get('result'))[:300]}" if r.get("result") else ""))
+    return "\n".join(out)
+
+
+def deputy_brief_block(item_id: str, title: str, gate: str, *,
+                       state: dict, report: dict | None = None,
                        mandate: str | None = None, log_digest: str | None = None,
-                       delta: str | None = None,
-                       success_signal: str | None = None, vet_note: str | None = None,
+                       delta: str | None = None, success_signal: str | None = None,
+                       verdicts: list[dict] | None = None,
                        authorizations: str | None = None) -> str:
     """Consumer: a deputy dispatch's BIRTH prompt (the run's user-message body; the identity/floor
-    rides `system_append=deputy_preamble`) · one-shot. The chosen CONTEXT the deputy judges from —
-    everything else is deliberately withheld (never the build/vet transcript). Fixed order: mandate
-    → decision log (this gate's prior calls — its continuity) → on a loop RE-ENTRY, the `delta`
-    (what changed since its last call — a lean pointer, never a substitute for the artifacts) → the
-    gate brief (the SAME one the owner would read) → at review, the verbatim PRD success signal + the
-    vet results. Pure over plain strings — the daemon reads the files and passes them in."""
+    rides `system_append=deputy_preamble`) · one-shot.
+
+    **The deputy reads what the owner reads, and never the owner's decision** (§2.1, rebuilt slice
+    6b). Fixed order: mandate → its decision log at this gate (continuity) → on a loop RE-ENTRY the
+    `delta` → **the phase's own `reports/report-<phase>.md`, verbatim** → the **typed gate state's**
+    mechanical check rows incl. the must-resolve set → **the PATH to the full agent-facing
+    contract**, which it opens with Read on demand. At review, additionally: the verbatim PRD
+    success signal, the vet's per-check verdicts, and any pending authorizations.
+
+    What it deliberately no longer gets, and why:
+    - **The gate-brief markdown.** It embedded a TRUNCATED copy of the artifact (plan.md at 4k) and
+      then said "inspect the artifacts named above", naming no paths — a flattened copy competing
+      with its source, with no route to the source.
+    - **The owner's decision block** (recommendation · options · effort). That is for a human
+      choosing between buttons. A judge handed a verdict judges the verdict; it is told to form its
+      own view, so telling it the answer first is the anchoring that produces a rubber stamp.
+    - **Event-kind counts** ("since then: 3× run.report"). Nothing a judge can act on.
+
+    Pure over plain data — the daemon reads the files (`artifacts.report_text`,
+    `gate_briefs.gate_state`, `artifacts.verdict_rows`) and passes them in."""
     parts = [f"You are judging the **{gate}** gate of work-item `{item_id}` — \"{title}\".", ""]
     parts += ["### Mandate (this project's standing bar — binding)",
               _cap(mandate or "", _DEPUTY_MANDATE_CAP)
@@ -714,23 +794,32 @@ def deputy_brief_block(item_id: str, title: str, gate: str, brief_md: str, *,
               or "_(empty — this is your first recorded call at this gate.)_", ""]
     if (delta or "").strip():
         parts += [_cap(delta.strip(), _DEPUTY_LOG_CAP), ""]
-    parts += ["### The gate brief (what the owner would see)",
-              _cap(brief_md or "", _DEPUTY_BRIEF_CAP)
-              or "_(no brief could be assembled — treat as artifacts-don't-stand-alone.)_", ""]
+    phase = str(state.get("phase") or gate)
+    parts += [f"### What this phase reported — `reports/report-{phase}.md`, the document the owner "
+              f"reads",
+              _cap((report or {}).get("text") or "", _DEPUTY_REPORT_CAP)
+              or f"_(no report-{phase}.md exists. The phase owes one; a gate with nothing reported "
+                 f"is not a gate you can clear on the report's word — read the contract below.)_",
+              ""]
+    parts += ["### Mechanical checks (computed from the item's files — facts, not claims)",
+              _deputy_check_rows(state), ""]
+    contract = (report or {}).get("contract")
+    paths = [p for p in (contract, "artifacts/plan.md") if p]
+    parts += ["### The full contract (open with Read if the report leaves you a question)",
+              "\n".join(f"- `{p}`" for p in dict.fromkeys(paths))
+              + "\n\nThe report is the compact read; these are the whole thing. Open them rather "
+                "than approving on a summary you doubt.", ""]
     if gate == "review":
         parts += ["### The deliverable's success signal (the owner's own words for \"good\")",
                   (f"> {success_signal.strip()}" if success_signal and success_signal.strip()
                    else "_(no success signal is on record for this deliverable. You cannot confirm "
                         "a signal that was never written — if the review turns on one, escalate and "
                         "say so.)_"), ""]
-        parts += ["### The vet results",
-                  vet_note or "_(read the evidence ledger embedded in the brief above; open the "
-                              "item's vet report artifacts for the full checks.)_",
-                  ""]
+        parts += ["### The vet's verdicts (latest per check)",
+                  _deputy_verdict_table(verdicts or []), ""]
         if authorizations:
             parts += ["### Authorization requests awaiting a decision", authorizations, ""]
-    parts += ["Inspect the artifacts named above with Read/Grep, form your own view, then emit your "
-              "verdict."]
+    parts += ["Inspect anything above with Read/Grep, form your own view, then emit your verdict."]
     return "\n".join(parts)
 
 

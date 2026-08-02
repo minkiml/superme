@@ -1,7 +1,7 @@
-import { useEffect, useRef } from 'react'
 import { ShieldCheck, User, Sparkles, type LucideIcon } from 'lucide-react'
 import Markdown from '@/ui/Markdown'
 import ApprovalCard from './ApprovalCard'
+import { useStickyScroll } from './useStickyScroll'
 import type { Approval, Msg } from './types'
 
 // The three talkers in a work-item thread (N4): you · the work-item agent · the deputy. Each row is
@@ -77,32 +77,11 @@ export default function MessageList({
   onLoadMore?: () => void // reveal the next page of older bubbles ("See more")
   tone?: 'dev' | 'core' // colours assistant `code` by scope + **bold** consistently, matching the doc previews
 }) {
-  const scrollRef = useRef<HTMLDivElement | null>(null)
-  // When "See more" prepends older bubbles, keep the viewport anchored (don't yank to the bottom).
-  // preserveRef holds the pre-load scrollHeight; the effect restores position by the height delta.
-  const preserveRef = useRef<number | null>(null)
-  // Auto-scroll only when the owner is ALREADY reading the bottom (N3): if they scrolled up to read
-  // history, new content must not yank them back down. `stickRef` tracks "near the bottom", updated
-  // on every user scroll; the auto-scroll effect honours it. Starts true (a fresh thread opens pinned).
-  const stickRef = useRef(true)
-  function onScroll() {
-    const el = scrollRef.current
-    if (!el) return
-    stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80
-  }
-  useEffect(() => {
-    const el = scrollRef.current
-    if (!el) return
-    if (preserveRef.current != null) {
-      el.scrollTop = el.scrollHeight - preserveRef.current
-      preserveRef.current = null
-    } else if (stickRef.current) {
-      el.scrollTo(0, el.scrollHeight)
-    }
-  }, [messages, live, statusLabel, approval])
+  // N3 — stick to the bottom only while the owner is reading it; "See more" prepends without a jump.
+  const { scrollRef, onScroll, preserve } = useStickyScroll([messages, live, statusLabel, approval])
 
   function seeMore() {
-    preserveRef.current = scrollRef.current?.scrollHeight ?? null
+    preserve()
     onLoadMore?.()
   }
 

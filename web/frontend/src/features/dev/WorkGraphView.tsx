@@ -3,11 +3,10 @@ import { ReactFlow, Background, Controls, Handle, Position, type Node, type Edge
 import dagre from 'dagre'
 import { GitBranch, GitMerge, Loader2, Send } from 'lucide-react'
 import '@xyflow/react/dist/style.css'
-import ConfirmDialog from '@/ui/ConfirmDialog'
 import WorkItemModal from './WorkItemModal'
 import { PHASE_LABEL } from './common'
 import {
-  getWorkGraph, getDev, getAttention, pushInbox, planWorkItem, deleteWorkItem,
+  getWorkGraph, getDev, getAttention, pushInbox,
   type WorkGraphData, type WorkGraphNode, type DevData, type AttentionData, type WorkItem,
 } from '@/lib/api'
 
@@ -86,7 +85,6 @@ export default function WorkGraphView({
   const [attn, setAttn] = useState<AttentionData | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [reviewId, setReviewId] = useState<string | null>(null)
-  const [confirmDel, setConfirmDel] = useState<WorkItem | null>(null)
   const [pushing, setPushing] = useState<number | null>(null)
 
   const load = useCallback(() => {
@@ -117,7 +115,7 @@ export default function WorkGraphView({
 
   const bucketOf = useMemo(() => {
     const m: Record<string, string> = {}
-    for (const tier of ['needs_you', 'deputy_working', 'running', 'unread'] as const) {
+    for (const tier of ['error', 'needs_you', 'deputy_working', 'running', 'unread'] as const) {
       for (const r of attn?.buckets?.[tier] ?? []) m[r.id] = tier
     }
     return m
@@ -157,34 +155,7 @@ export default function WorkGraphView({
           it={reviewItem}
           contextId={contextId}
           onClose={() => setReviewId(null)}
-          onPlan={async (it, model, effort) => {
-            try {
-              await planWorkItem(it.id, contextId, model, effort)
-            } catch { /* surfaced on reload */ }
-            load()
-          }}
-          onDelete={(it) => setConfirmDel(it)}
           onChanged={load}
-        />
-      )}
-      {confirmDel && (
-        <ConfirmDialog
-          title="Delete this work-item?"
-          body={<>“{confirmDel.title || confirmDel.id}” will be permanently removed — work-item, session, and inbox row. This can’t be undone.</>}
-          confirmLabel="Delete"
-          z="z-50"
-          onCancel={() => setConfirmDel(null)}
-          onConfirm={async () => {
-            const it = confirmDel
-            setConfirmDel(null)
-            setReviewId(null)
-            try {
-              await deleteWorkItem(it.id, contextId)
-            } catch (e) {
-              setErr(String(e))
-            }
-            load()
-          }}
         />
       )}
       {err && (
@@ -225,6 +196,7 @@ export default function WorkGraphView({
 // --- node renderers -------------------------------------------------------------
 
 const BUCKET_RING: Record<string, string> = {
+  error: 'ring-2 ring-danger/90',
   needs_you: 'ring-2 ring-warn/80',
   deputy_working: 'ring-2 ring-deputy/70',
   running: 'ring-2 ring-success/70',

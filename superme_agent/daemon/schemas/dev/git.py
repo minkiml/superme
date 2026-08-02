@@ -24,17 +24,6 @@ class GitHealthResponse(BaseModel):
     behind: int | None = None   # trunk commits not yet in the branch (freshness debt)
 
 
-class GitSyncResponse(BaseModel):
-    """Freshness merge (trunk INTO the item branch). Conflicts: `in_tree=False` means the merge
-    was aborted and reported; True means it was deliberately left in the tree for resolution."""
-    ok: bool
-    merged: bool
-    up_to_date: bool | None = None
-    commit: str | None = None
-    conflicts: list[str] | None = None
-    in_tree: bool | None = None
-
-
 class GitMergeResponse(BaseModel):
     """The review-gate merge. `path` says which route executed: `main` (heavy, with backup ref)
     or `parent` (blocking child's light merge into its parent's branch)."""

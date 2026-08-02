@@ -113,7 +113,7 @@ class AttentionHold(BaseModel):
     session_id: str | None = None  # the item's own dev session — so Open binds the chat to it, not the general thread
     phase: str | None = None
     cohort: str | None = None
-    kind: Literal["question", "escalation", "breaker", "paged", "review", "gate"]
+    kind: Literal["question", "escalation", "paged", "review", "gate"]
     reason: str
     actor: str
     # kind "question" only — the plan agent's clarifying questions (renovation §2 grill), rendered
@@ -159,13 +159,16 @@ class RunsResponse(BaseModel):
 class RunEventRow(BaseModel):
     """One entry of a run's event trail: a prompt, an assistant reply block, a tool/skill/agent call,
     or that call's `result`. `kind` ∈ prompt | reply | tool | mcp | skill | agent | subagent | result;
-    `name` is the label, `description` the body; `tool_id` pairs a result back to its call."""
+    `name` is the label, `description` the body; `tool_id` pairs a result back to its call, and
+    `parent_tool_id` names the sub-agent spawn a row happened inside (null = the parent's own call),
+    so a fan-out reads as nested work rather than as the parent doing everything itself."""
     id: int
     seq: int
     kind: str
     name: str
     description: str | None = None
     tool_id: str | None = None
+    parent_tool_id: str | None = None
     created_at: str
 
 
@@ -230,6 +233,10 @@ class CompactionConfigResponse(BaseModel):
     # "auto" = judged against the session's reclaimable space; int % = flat manual threshold.
     min_gain_pct: int | Literal["auto"]
     floor_pct: int            # the static incompressible floor a trigger may never sit at/below
+    # …and the lowest trigger actually ACCEPTED — floor plus working room. The FE's input `min` must
+    # read THIS, not `floor_pct + 1`: that was one rule in two places, and the FE's copy allowed the
+    # exact value (26%) that re-fires every turn.
+    min_pct: int
 
 
 class RepoModelResponse(BaseModel):

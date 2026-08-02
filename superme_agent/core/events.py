@@ -8,7 +8,9 @@ them however it likes; the Core never formats for a specific surface:
   TextDelta  incremental assistant text (web streams it token-by-token; Slack, which
              posts the final reply, can ignore it and use Result.text)
   Status     the agent is about to run a tool — raw tool name + input, so any surface
-             can render its own "what it's doing now" indicator (emoji, spinner, …)
+             can render its own "what it's doing now" indicator (emoji, spinner, …). Carries
+             `parent_tool_id` when the call came from inside a sub-agent, so a trail can nest a
+             fan-out under the spawn that made it instead of flattening it into the parent's calls.
   ToolResult a tool call returned — the (truncated) output of the PRECEDING Status call, so a
              surface can persist a full execution trace (call + result). Not streamed to the live
              chat UI; consumed only by the per-run trail (Activity / diagnosis observability).
@@ -39,6 +41,10 @@ class Status:
     tool_name: str
     tool_input: dict
     tool_id: str | None = None   # the SDK tool_use id — lets the trail pair this call with its result
+    # The tool_use id of the SUB-AGENT SPAWN this call happened inside (SDK `parent_tool_use_id`),
+    # or None for the parent's own calls. A fan-out interleaves its children's calls into one
+    # stream, so without this the trail flattens three parallel readers into unattributable soup.
+    parent_tool_id: str | None = None
 
 
 @dataclass
@@ -51,6 +57,7 @@ class ToolResult:
     content: str
     is_error: bool = False
     tool_id: str | None = None   # the SDK tool_use id this result answers — pairs it back to its call
+    parent_tool_id: str | None = None   # the sub-agent spawn this result came back inside (see Status)
 
 
 @dataclass

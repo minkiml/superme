@@ -169,11 +169,19 @@ class DevStore:
                        actor TEXT NOT NULL DEFAULT 'daemon',
                        summary TEXT NOT NULL,
                        meta TEXT,
-                       created_at TEXT NOT NULL
+                       created_at TEXT NOT NULL,
+                       discarded_at TEXT
                    )"""
             )
             c.execute("CREATE INDEX IF NOT EXISTS idx_events_ctx ON events(context_id, created_at)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_events_item ON events(context_id, item_id)")
+            # `discarded_at` — the re-run soft delete (owner, 2026-07-31), the dev-event twin of
+            # `run.discarded_at`. A re-run stamps this item's rows instead of deleting them; the
+            # item's own readers (Timeline, Deputy log, why-is-this-parked, the close-retry budget)
+            # filter to the current attempt, while the repo-wide feed still shows the whole history.
+            ev_cols = {r[1] for r in c.execute("PRAGMA table_info(events)").fetchall()}
+            if "discarded_at" not in ev_cols:
+                c.execute("ALTER TABLE events ADD COLUMN discarded_at TEXT")
             # Operational-learning CANDIDATE pool (WI-8) — operational/churny, so DB not files
             # (same rationale as inbox/events). The capture sweep files a RICH row here: `signal` = the
             # operational statement (what to do), `rationale` = why it matters / the trigger,
@@ -292,6 +300,12 @@ class DevStore:
                 c.execute("ALTER TABLE inbox ADD COLUMN model TEXT")
             if "effort" not in cols:
                 c.execute("ALTER TABLE inbox ADD COLUMN effort TEXT")
+            # `autopilot` joins model/effort as the third capture-time policy: the item drives its
+            # own gates after push. It belongs HERE and not only on the work-item because the
+            # work-item route accepts it pre-build only — deciding it at capture is the one moment
+            # that is always in time. Stored 0/1, ON by default; carried into the item by inbox_flow.
+            if "autopilot" not in cols:
+                c.execute("ALTER TABLE inbox ADD COLUMN autopilot INTEGER NOT NULL DEFAULT 1")
 
     # --- inbox CRUD -------------------------------------------------------------
 
@@ -299,11 +313,14 @@ class DevStore:
                   tag: str | None = None,
                   title: str | None = None, origin="user",
                   spawned_from: dict | None = None,
-                  model: str | None = None, effort: str | None = None) -> dict:
+                  model: str | None = None, effort: str | None = None,
+                  autopilot: bool = True) -> dict:
         """`spawned_from` (D3) = the provenance edge a branch-off item carries from birth:
         {item, relation: blocking|parallel|spawn, note?}. Validated here; NULL for plain captures.
         `model`/`effort` (F3) = the run config chosen at capture, locked into the work-item at push;
-        NULL = inherit the repo/system default."""
+        NULL = inherit the repo/system default. `autopilot` = the same capture-time decision for
+        whether the item drives its own gates — ON by default (owner, 2026-08-02): driving itself is
+        the normal case, and the toggle is for the exceptions."""
         text = (text or "").strip()
         if not text:
             raise ValueError("empty inbox text")
@@ -318,11 +335,11 @@ class DevStore:
         with self._conn() as c:
             cur = c.execute(
                 "INSERT INTO inbox (context_id,kind,text,title,tag,status,origin,spawned_from,"
-                "model,effort,created_at,updated_at) VALUES (?,?,?,?,?,'open',?,?,?,?,?,?)",
+                "model,effort,autopilot,created_at,updated_at) VALUES (?,?,?,?,?,'open',?,?,?,?,?,?,?)",
                 (context_id, kind, text, (title or None), (tag or None),
                  json.dumps(origins),
                  json.dumps(spawned_from) if spawned_from else None,
-                 (model or None), (effort or None), now, now),
+                 (model or None), (effort or None), int(bool(autopilot)), now, now),
             )
             return self._get(c, cur.lastrowid)
 
@@ -367,17 +384,21 @@ class DevStore:
                 d = dict(r)
                 d["origin"] = _norm_origins(d.get("origin"))  # always a list to callers
                 d["spawned_from"] = _parse_spawned_from(d.get("spawned_from"))
+                d["autopilot"] = bool(d.get("autopilot"))
                 out.append(d)
             return out
 
     def update_inbox(self, item_id: int, **fields) -> dict | None:
         sets = {k: v for k, v in fields.items()
-                if k in {"kind", "text", "tag", "status", "routed_to", "title", "model", "effort"}
+                if k in {"kind", "text", "tag", "status", "routed_to", "title",
+                         "model", "effort", "autopilot"}
                 and v is not None}
         if sets.get("kind") not in _KINDS:
             sets.pop("kind", None)
         if sets.get("status") not in _STATUSES:
             sets.pop("status", None)
+        if "autopilot" in sets:
+            sets["autopilot"] = int(bool(sets["autopilot"]))
         with self._conn() as c:
             if sets:
                 sets["updated_at"] = _now()
@@ -408,6 +429,7 @@ class DevStore:
         d = dict(r)
         d["origin"] = _norm_origins(d.get("origin"))  # always a list to callers
         d["spawned_from"] = _parse_spawned_from(d.get("spawned_from"))
+        d["autopilot"] = bool(d.get("autopilot"))     # SQLite 0/1 → bool at the store boundary
         return d
 
     def get_inbox(self, item_id: int) -> dict | None:
@@ -446,12 +468,21 @@ class DevStore:
 
     def list_events(self, context_id: str, *, since: str | None = None,
                     until: str | None = None, scope: str | None = None,
-                    item_id: str | None = None, limit: int = 200) -> list[dict]:
+                    item_id: str | None = None, limit: int = 200,
+                    include_discarded: bool = False) -> list[dict]:
         """Selective read — never a full dump. item view = WHERE item_id=X; dev view = all the
         repo's rows (dev-native + every item's). `since`/`until` are ISO timestamps (lexical
-        compare is correct for ISO-UTC). Newest first."""
+        compare is correct for ISO-UTC). Newest first.
+
+        `include_discarded` — rows a re-run soft-deleted (`discarded_at`) are HIDDEN by default,
+        because every item-scoped caller wants the current attempt: the drilldown's Timeline and
+        Deputy panes, `classify_hold` (why is this parked), `_page_reason`, and `close_retries`
+        (a re-run must not inherit a spent retry budget). The repo-wide activity feed opts in —
+        it is the history of the project, and the discarded attempt genuinely happened."""
         where = ["context_id=?"]
         args: list = [context_id]
+        if not include_discarded:
+            where.append("discarded_at IS NULL")
         if item_id is not None:
             where.append("item_id=?")
             args.append(item_id)
@@ -469,6 +500,21 @@ class DevStore:
         args.append(int(limit))
         with self._conn() as c:
             return [self._row_event(r) for r in c.execute(sql, args).fetchall()]
+
+    def discard_item_events(self, context_id: str, item_id: str, *, at: str) -> int:
+        """SOFT-delete this item's dev events — the re-run's "start clean" (owner, 2026-07-31).
+        Stamps, never deletes ([[never-delete-logs]]); returns the row count. Idempotent via
+        `discarded_at IS NULL`, so each attempt keeps its own stamp across repeated re-runs.
+
+        Call BEFORE logging `item.rerun`, so that event survives unstamped: the re-run stays on the
+        item's own trail even though everything it discarded is out of view."""
+        with self._conn() as c:
+            n = c.execute(
+                "UPDATE events SET discarded_at=? WHERE context_id=? AND item_id=?"
+                " AND discarded_at IS NULL", (at, context_id, str(item_id)),
+            ).rowcount
+            c.commit()
+        return int(n or 0)
 
     def events_for_proposal(self, context_id: str, proposal_id: int, *, limit: int = 200) -> list[dict]:
         """The lifecycle trail for one learning proposal — dev events whose `meta.proposal_id` matches

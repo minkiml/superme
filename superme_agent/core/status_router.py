@@ -30,6 +30,13 @@ def spawned_from(item: dict) -> dict | None:
     return sf if isinstance(sf, dict) and sf.get("item") else None
 
 
+def relation_of(child: dict) -> str:
+    """The child's relation word — `blocking` · `parallel` · `spawn`, or `child` when absent.
+    Event copy hardcoded "Blocking child …" back when only a blocking child could release a
+    parent; a parallel release now happens too, and the line has to say which one it was."""
+    return str((spawned_from(child) or {}).get("relation") or "child")
+
+
 def is_terminal(item: dict) -> bool:
     """Terminal = status done (outcome completed/abandoned/superseded stamped alongside)."""
     return str(item.get("status")) == TERMINAL_STATUS or bool(item.get("done_at"))
@@ -53,9 +60,48 @@ def open_children(items: list[dict], parent_id: str) -> list[dict]:
     return [c for c in children_of(items, parent_id) if not is_terminal(c)]
 
 
+def holding_children(items: list[dict], parent: dict, *, at_close: bool | None = None) -> list[dict]:
+    """The open children that currently HOLD `parent` — the ONE answer both the close criterion and
+    the auto-resume read.
+
+    Which children hold depends on where the parent is, and that difference is the point:
+
+    - **Before its final phase**, only `blocking` children hold it. A `parallel` child is explicitly
+      allowed to run alongside; pausing on one would defeat the relation.
+    - **At its final phase**, EVERY open child holds it (D3: a parent cannot complete while a child
+      is still building on its work).
+
+    Two functions used to answer this separately and they disagreed: `children_terminal` counted
+    both relations, `parent_to_resume` released on `blocking` only. So a parent that reached close
+    with an open PARALLEL child parked at `awaiting_child` — and nothing ever released it, because
+    every release site in the daemon (the clearance cascade, the gate + work-item routes, the
+    restart reconciler) goes through `parent_to_resume`. It sat silently, since `awaiting_child`
+    does not page the owner. One rule per question: this is that rule.
+
+    `at_close` states the question directly instead of deriving it from the parent's current phase.
+    `children_terminal` passes True because it IS the close criterion — the drilldown previews that
+    criterion from earlier phases, and a preview that quietly asked the mid-pipeline question would
+    report a clean close gate while a parallel child was still open.
+    """
+    if at_close is None:
+        try:
+            from .kind_profiles import is_final_phase
+            at_close = is_final_phase(parent.get("kind"), parent.get("phase") or "triage")
+        except (KeyError, ImportError):
+            # Unknown kind / hand-edited yaml. Default to the STRICT reading — every child holds —
+            # so a bad row can never let a parent clear out from under an open child.
+            at_close = True
+    rel = CHILD_RELATIONS if at_close else ("blocking",)
+    return [c for c in children_of(items, str(parent.get("id")), relations=rel)
+            if not is_terminal(c)]
+
+
 def children_terminal(items: list[dict], parent_id: str) -> tuple[bool, list[str]]:
-    """(all children terminal?, open child ids) — the close gate's mechanical child check."""
-    opens = open_children(items, parent_id)
+    """(all children terminal?, open child ids) — the close gate's mechanical child check.
+    A thin read of `holding_children`, so the gate and the release can never diverge again."""
+    parent = next((it for it in items if str(it.get("id")) == str(parent_id)), None)
+    opens = holding_children(items, parent if parent is not None else {"id": parent_id},
+                             at_close=True)
     return (not opens, [c.get("id") for c in opens])
 
 
@@ -118,18 +164,19 @@ def items_to_release(items: list[dict], upstream_id: str) -> tuple[list[str], li
 
 
 def parent_to_resume(items: list[dict], child: dict) -> str | None:
-    """When `child` (just terminal) is a BLOCKING child, the parent id to auto-resume — exactly
-    when the parent sits at `awaiting_child` and no OTHER blocking sibling is still open.
-    None otherwise (parallel/spawn relations never pause the parent, so never resume it)."""
+    """When `child` just went terminal, the parent id to auto-resume — exactly when the parent sits
+    at `awaiting_child` and NOTHING still holds it (`holding_children`). None otherwise.
+
+    Both real relations are considered, not just `blocking`. A parallel child never PAUSES a parent
+    mid-pipeline, but at close it does HOLD one, and only the same rule that decided the hold can
+    decide the release. `spawn` items carry provenance only and never do either."""
     sf = spawned_from(child)
-    if not sf or sf.get("relation") != "blocking":
+    if not sf or sf.get("relation") not in CHILD_RELATIONS:
         return None
     pid = str(sf.get("item"))
     parent = next((it for it in items if str(it.get("id")) == pid), None)
     if parent is None or str(parent.get("status")) != "awaiting_child":
         return None
-    still_open = [
-        c for c in children_of(items, pid, relations=("blocking",))
-        if not is_terminal(c) and str(c.get("id")) != str(child.get("id"))
-    ]
+    still_open = [c for c in holding_children(items, parent)
+                  if str(c.get("id")) != str(child.get("id"))]
     return None if still_open else pid
