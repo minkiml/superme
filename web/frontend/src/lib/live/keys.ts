@@ -18,6 +18,9 @@ export const K = {
   // ── system ───────────────────────────────────────────────────────────────────────────────────
   tokens: 'sys:tokens',
   repos: 'sys:repos',
+  // One git call per repo, so it is NOT folded into `repos` (which every surface polls) — the
+  // anchor picker is the only reader and it only exists on the dev workspace header.
+  repoBranches: (repoId: string) => `sys:repo:${repoId}:branches`,
   runs: (limit: number) => `sys:runs:${limit}`,
   systemAttention: 'sys:attention',
   systemOverview: 'sys:overview',
@@ -40,6 +43,10 @@ export const K = {
   itemReport: (ctx: string, id: string, phase: string) =>
     `dev:${ctx}:item:${id}:report:${phase}`,
   itemGit: (ctx: string, id: string) => `dev:${ctx}:item:${id}:git`,
+  // The owner's own section of the triage brief. Its own key rather than a field on `itemReport`:
+  // the report is a rendered blob polled by everyone, this is an editable form only the triage
+  // sub-tab mounts, and a save invalidates one of them without re-rendering the other.
+  itemOwnerInput: (ctx: string, id: string) => `dev:${ctx}:item:${id}:from-you`,
 } as const
 
 /** The invalidation topic covering everything about one repo (board, attention, all its items). */

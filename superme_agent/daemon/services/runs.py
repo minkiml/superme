@@ -195,7 +195,17 @@ def _end_run(ctx, context_id: str, item_id: str, tokens: int | None,
     if kind != "compact" and session_id:
         from . import compaction
         compaction.note_turn_start(session_id)
-    if outcome == "revise":
+    # ONLY a review run routes from here. `revise` from anywhere else — a build cycle concluding
+    # the plan it was handed is wrong — belongs to that phase's own driver, because the driver is
+    # already going to decide where the item goes next. Routing here as well put TWO writers on one
+    # transition: on f0bda271d766 this flipped the item to `plan` and started a plan run, and the
+    # loop's build-cycle branch then logged `build → vet` on top of the running plan, saved from
+    # actually starting a vet only by the one-run-at-a-time lock. It also attributed the whole thing
+    # to the OWNER, who had done nothing. `decide_after_build` now returns klass `revise` and the
+    # loop routes it, attributed to the agent that actually concluded it.
+    # `kind` is THIS RUN's own phase, read off its spine row — not the item's phase on disk, which
+    # by now may already have been moved by whatever else is reacting to the same report.
+    if outcome == "revise" and kind == "review":
         try:
             fire_phase_feedback(context_id, item_id, phase="review",
                                 feedback=summary or "the review concluded this needs re-planning",
@@ -203,6 +213,8 @@ def _end_run(ctx, context_id: str, item_id: str, tokens: int | None,
         except Exception:
             log.exception("revise routing failed for %s (item stays at review)", item_id)
         return
+    if outcome == "revise":
+        return   # the phase's driver routes it — see loop.background_build_cycle
     if status == "awaiting_human" and outcome != "needs_user":
         try:
             from .gates import maybe_autopilot_advance
@@ -300,8 +312,30 @@ def capture_prompt(repo_id: str, prompt: str, *, run_id: int | None = None,
                          description=(prompt or "").strip()[:_PROMPT_CAP], run_id=run_id, item_id=item_id)
 
 
+def turn_surface(*, model: str | None = None, effort: str | None = None,
+                 mcp: list[str] | None = None, write_boundary: list | None = None,
+                 sandbox_writes: list | None = None, read_only: bool = False,
+                 approve: str = "denied", resumes: bool = False) -> dict:
+    """What the turn is ALLOWED to do — the half of a run's input that isn't prose.
+
+    Two runs can carry the same words and behave differently because one of them could run a shell
+    inside the worktree and the other could not. This is that difference, recorded in the same row
+    as the prompt so the inspector can show them together. Paths are stringified; nothing here is
+    read back by the runtime, so it is a faithful snapshot rather than a second source of truth.
+
+    `resumes` is the other invisible half for a REMEMBERING thread (build, intake): the model's real
+    context is this input PLUS a transcript the capture doesn't hold, and a reader who doesn't know
+    that will mis-read a short prompt as a short context."""
+    return {"model": model or "", "effort": effort or "",
+            "mcp": sorted(mcp or []),
+            "write_boundary": [str(p) for p in (write_boundary or [])],
+            "sandbox_writes": [str(p) for p in (sandbox_writes or [])],
+            "read_only": bool(read_only), "approve": approve, "resumes": bool(resumes)}
+
+
 def capture_run_input(context_id: str, item_id: str, *, ctx, system_append: str | None,
-                      prompt: str, background: bool, phase: str | None) -> None:
+                      prompt: str, background: bool, phase: str | None,
+                      surface: dict | None = None) -> None:
     """Prompt inspector "A": persist the ACTUAL input the item's live run is about to send — the
     assembled system prompt (built through the SAME `assemble_system_append` seam `_build_options`
     uses, with THIS run's exact ctx / system_append) + the prompt body. `background` is stored as
@@ -330,7 +364,9 @@ def capture_run_input(context_id: str, item_id: str, *, ctx, system_append: str 
         _spine.record_run_input(rid, repo_id=context_id, item_id=item_id, phase=phase,
                                 feature=PROMPT_EXTRACTION_FEATURE, background=background,
                                 system_prompt=system_prompt, prompt_body=prompt,
-                                system_fragments=fragments_json)
+                                system_fragments=fragments_json,
+                                turn_surface=(_json.dumps(surface, ensure_ascii=False)
+                                              if surface else None))
     except Exception:
         log.exception("capture_run_input failed for %s", item_id)
 
@@ -628,7 +664,13 @@ def fire_auto_triage(context_id: str, item_id: str, spine) -> bool:
 
 # Which skill a phase's re-run fires (the phase that OWNS the fix; deputy-live-turns-design §"New
 # model"). triage feedback re-triages, plan/review feedback re-plans (review flips review→plan first).
-_PHASE_FEEDBACK_SKILL = {"triage": "triage", "plan": "plan", "review": "plan"}
+_PHASE_FEEDBACK_SKILL = {"triage": "triage", "plan": "plan", "review": "plan", "build": "plan"}
+
+# The phases whose feedback lands on a RE-PLAN: the work must change, and `plan.md` is the only
+# document that can say how. `review` is the owner/deputy's send-back; `build` is the build cycle
+# concluding that the plan it was handed is wrong (a `revise` outcome) — a different speaker with
+# the same destination, which is why they share a path and NOT an event.
+_ROUTES_TO_PLAN = ("review", "build")
 
 
 def fire_phase_feedback(context_id: str, item_id: str, *, phase: str, feedback: str,
@@ -658,18 +700,26 @@ def fire_phase_feedback(context_id: str, item_id: str, *, phase: str, feedback: 
         # review→plan so the re-plan re-runs and forward flow (plan→build→vet→review) re-vets by
         # construction. The run + trigger then speak in plan terms; the `digest` carries the
         # review/build/vet context so the re-plan knows it's feedback from the earlier plan's results.
-        run_phase = "plan" if phase == "review" else phase
-        if phase == "review":
-            # `strict` (§2.2): a send-back spends the approval, so the PR closes with it — the diff
-            # it described is about to change. See git_ops.close_pr. No-op in `fast` repos and on
-            # any item that never had one open.
-            from .git_ops import close_pr
-            close_pr(_dev, dev_root, item_id)
+        run_phase = "plan" if phase in _ROUTES_TO_PLAN else phase
+        if phase in _ROUTES_TO_PLAN:
+            if phase == "review":
+                # `strict` (§2.2): a send-back spends the approval, so the PR closes with it — the
+                # diff it described is about to change. See git_ops.close_pr. No-op in `fast` repos
+                # and on any item that never had one open. A BUILD-originated revise has no
+                # approval to spend: nothing was ever put to the owner.
+                from .git_ops import close_pr
+                close_pr(_dev, dev_root, item_id)
             _dev.set_work_item_phase(dev_root, item_id, "plan")
-            _dev_store.log_event(context_id, "review.route",
-                                 f"Review feedback routed back to plan: {feedback[:160]}",
+            # ONE EVENT PER SPEAKER. `review.route` used to be logged for a build's `revise` too,
+            # so the permanent record said a review had concluded something when no review had run
+            # — and `gate_briefs` counts these events as REVISION ROUNDS, so a build's own
+            # conclusion inflated the owner's round count. Seen live on f0bda271d766 (2026-08-07).
+            kind, said = (("review.route", "Review feedback routed back to plan")
+                          if phase == "review" else
+                          ("revise.route", "Build concluded the plan must change — routed to plan"))
+            _dev_store.log_event(context_id, kind, f"{said}: {feedback[:160]}",
                                  item_id=item_id, actor=by,
-                                 meta={"from": "review", "to": "plan", "feedback": feedback[:400],
+                                 meta={"from": phase, "to": "plan", "feedback": feedback[:400],
                                        "by": by})
         session_id = (item.get("sessions") or {}).get("intake") or item.get("session_id") or None
         model = _spine.effective_model(context_id, item_model=item.get("model"))
@@ -843,7 +893,12 @@ async def _run_background_close(ctx, context_id: str, item_id: str, item_dir: Pa
     # Prompt inspector "A" — throwaway probes ONLY: capture matches the real send exactly.
     if _autopilot.is_prompt_extraction(item):
         capture_run_input(context_id, item_id, ctx=ctx, system_append=focus, prompt=prompt,
-                          phase="close", background=True)
+                          phase="close",
+                          surface=turn_surface(model=model, effort=effort, mcp=["dev", "run"],
+                                               write_boundary=[item_dir],
+                                               sandbox_writes=[item_dir],
+                                               resumes=bool(session_id)),
+                          background=True)
     final_tokens = final_usage = final_session = None
     run_started = time.time()
     live = _LiveTokens()
@@ -979,7 +1034,14 @@ async def _background_intake_run(ctx, context_id: str, item_id: str, item_dir: P
     # Normal items skip capture (the run_input table no longer grows per-run).
     if _autopilot.is_prompt_extraction(item):
         capture_run_input(context_id, item_id, ctx=ctx, system_append=focus, prompt=prompt,
-                          phase=skill, background=True)
+                          phase=skill,
+                          surface=turn_surface(model=model, effort=effort, mcp=["dev", "run"],
+                                               write_boundary=[item_dir],
+                                               sandbox_writes=[item_dir],
+                                               # this runner is ALWAYS a fresh pass (resume=None):
+                                               # a re-plan must not read as "already done"
+                                               resumes=False),
+                          background=True)
     final_tokens = None
     final_usage = None
     final_session = None

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Bot, Loader2, Pencil, Save, Sparkles, X } from 'lucide-react'
 import Markdown from '@/ui/Markdown'
 import Modal from '@/ui/Modal'
+import SourceEditor from '@/ui/SourceEditor'
 import { getHarnessPlugins, getHarnessFile, saveHarnessFile, type HarnessScope, type HarnessEntry, type PublishedItem } from '@/lib/api'
 import { PublishedFileModal } from './LearningGovernance'
 
@@ -201,7 +202,7 @@ function HarnessFileModal({ scope, entry, onClose }: { scope: string; entry: Har
 
   const Icon = entry.kind === 'agent' ? Bot : Sparkles
   return (
-    <Modal onClose={onClose} column maxW="max-w-3xl" dismissable={!editing}>
+    <Modal onClose={onClose} column maxW={editing ? "max-w-4xl" : "max-w-3xl"} dismissable={!editing}>
         <div className="flex shrink-0 items-center gap-2 border-b border-line px-4 py-3">
           <Icon size={15} className="text-accent-text" />
           <span className="font-mono text-sm text-fg">{entry.name}</span>
@@ -246,12 +247,7 @@ function HarnessFileModal({ scope, entry, onClose }: { scope: string; entry: Har
           {content === null ? (
             <div className="flex items-center gap-2 text-sm text-muted"><Loader2 size={14} className="animate-spin" /> Loading…</div>
           ) : editing ? (
-            <textarea
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              spellCheck={false}
-              className="h-[60vh] w-full resize-none rounded-md border border-line bg-surface p-3 font-mono text-[12.5px] leading-relaxed text-fg outline-none focus:border-accent"
-            />
+            <SourceEditor value={draft} onChange={setDraft} />
           ) : (
             <Markdown text={stripFrontmatter(content)} variant="doc" tone={SCOPE_TONE[scope]} />
           )}

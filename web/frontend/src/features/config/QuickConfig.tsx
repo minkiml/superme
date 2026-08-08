@@ -6,7 +6,7 @@ import { RepoIcon } from '@/lib/repoIcons'
 import { MODELS as MODEL_CATALOG, EFFORTS as EFFORT_CATALOG, fmtModel, toModelKey } from '@/lib/format'
 import {
   getSystem, setSystemModel, setSystemLearning, setSystemDeputy, setRepoModel, setRepoLearning, setSweepConfig,
-  setSystemEffort, setRepoEffort, setRepoGit, getAgentModels, setAgentModel, setAgentEffort,
+  setSystemEffort, setRepoEffort, getAgentModels, setAgentModel, setAgentEffort,
   getCompactionConfig, setCompactionConfig,
   type SystemOverview, type ModelAlias, type AgentModels, type CompactionConfig,
 } from '@/lib/api'
@@ -57,12 +57,10 @@ function GaugeBar({ level, onPick }: { level: string; onPick: (l: string) => voi
   )
 }
 
-// How a repo's work LANDS (workflow-renovation-v2 §2.2). One knob, one meaning: does the diff get
-// its own review gate before it lands. Every repo starts on `fast`.
-const REVIEW_MODES = [
-  { value: 'fast', label: 'Fast · approve merges' },
-  { value: 'strict', label: 'Strict · approve opens a PR' },
-]
+// Neither landing knob (`review_mode`, `anchor_branch`) is here any more. Both moved to the dev
+// workspace header, beside the repo they govern — HOW the work lands and WHERE it lands are decided
+// in the place you watch that project's work reach the review gate. What stays here is what is
+// genuinely system-shaped: which model and effort a repo inherits, and whether it learns.
 
 const MODELS = [{ value: '', label: 'System default' }, ...SYSTEM_MODELS]
 const EFFORTS = [{ value: '', label: 'System default' }, ...SYSTEM_EFFORTS]
@@ -152,8 +150,8 @@ export default function QuickConfig({ stats }: { stats: CommandStats }) {
           <div className="mb-1 text-[12px] font-semibold uppercase tracking-wider text-muted">Per-repo overrides</div>
           <p className="mb-3 text-[12px] text-faint">
             Leave the model on “System default” to inherit; auto-learning also needs the master switch on.
-            Landing governs how a repo’s work reaches its anchor branch, and applies at once — including
-            to items already sitting at review.
+            How and where a repo’s work LANDS — review mode and anchor branch — is set in that repo’s own
+            dev workspace header.
           </p>
           {stats.loading ? (
             <div className="flex items-center gap-2 text-sm text-muted">
@@ -552,9 +550,6 @@ function RepoRow({ repo, last }: { repo: OrbitRepo; last: boolean }) {
   const [model, setModel] = useState(toModelKey(repo.modelOverride))
   const [effort, setEffort] = useState(repo.effortOverride ?? '')
   const [learning, setLearning] = useState(repo.learningEnabled)
-  const [mode, setMode] = useState(repo.reviewMode)
-  const [anchor, setAnchor] = useState(repo.anchorBranch ?? '')
-  const [anchorErr, setAnchorErr] = useState(repo.anchorError)
 
   function changeModel(v: string) {
     setModel(v)
@@ -568,20 +563,6 @@ function RepoRow({ repo, last }: { repo: OrbitRepo; last: boolean }) {
     setLearning(v)
     setRepoLearning(repo.id, v).catch(() => {})
   }
-  function changeMode(v: string) {
-    setMode(v)
-    setRepoGit(repo.id, { review_mode: v }).catch(() => {})
-  }
-  // Commit the anchor on blur/Enter, not per keystroke — a half-typed branch name is a real setting
-  // the moment it's written, and every git site refuses on a branch that doesn't exist.
-  function commitAnchor() {
-    const v = anchor.trim()
-    if (v === (repo.anchorBranch ?? '')) return
-    setRepoGit(repo.id, { anchor_branch: v })
-      .then((r) => setAnchorErr(r.anchor_error ?? null))
-      .catch(() => {})
-  }
-
   return (
     <div className={`bg-surface ${last ? '' : 'border-b border-line'}`}>
       <div className="flex items-center gap-3 px-4 pb-1.5 pt-2.5">
@@ -597,26 +578,6 @@ function RepoRow({ repo, last }: { repo: OrbitRepo; last: boolean }) {
         <Dropdown value={model} options={MODELS} onChange={changeModel} align="right" width="w-36" title={`${isHub ? 'SuperMe Hub' : repo.label} model`} />
         <Dropdown value={effort} options={EFFORTS} onChange={changeEffort} align="right" width="w-32" title={`${isHub ? 'SuperMe Hub' : repo.label} reasoning effort`} />
         <Toggle on={learning} onChange={changeLearning} />
-      </div>
-      {/* How work LANDS — the two git knobs, siblings by design: the review bar, and the branch it
-          lands on. Separate line from model/effort/learning: same repo, different concern. */}
-      <div className="flex items-center gap-2 px-4 pb-2.5 pl-[31px]">
-        <span className="shrink-0 text-[12px] text-faint">Landing</span>
-        <Dropdown value={mode} options={REVIEW_MODES} onChange={changeMode} width="w-56" title={`${isHub ? 'SuperMe Hub' : repo.label} review mode`} />
-        <span className="shrink-0 pl-2 text-[12px] text-faint">Anchor</span>
-        <input
-          value={anchor}
-          onChange={(e) => setAnchor(e.target.value)}
-          onBlur={commitAnchor}
-          onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
-          placeholder={repo.resolvedAnchor ?? 'default branch'}
-          spellCheck={false}
-          title="the branch every git site targets — branch-from base, sync source, merge target"
-          className="w-40 rounded-md border border-line bg-sunken px-2 py-1 text-[13px] text-fg outline-none placeholder:text-faint focus:border-accent"
-        />
-        {/* Only the failure state gets words — when the field is empty its placeholder already
-            shows the branch being used, and repeating it would just be noise. */}
-        {anchorErr && <span className="min-w-0 truncate text-[12px] text-danger" title={anchorErr}>branch not found</span>}
       </div>
     </div>
   )

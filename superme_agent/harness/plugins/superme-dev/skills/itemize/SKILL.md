@@ -12,7 +12,7 @@ becomes real. That decision is the owner's, one proposal at a time, and this is 
 
 ## Step 1 — Read the proposals against the live board
 
-`reports/report-review.md` `## Proposed work` is the list. Before putting it to the owner, check
+`artifacts/review.md` `## Proposed work` is the list. Before putting it to the owner, check
 each proposal against what already exists — `read_dev_log`, the roadmap, open inbox items. A
 proposal that duplicates live work is presented as a duplicate, naming the item it duplicates, not
 offered as if it were new.
@@ -38,10 +38,10 @@ yet — it never launches it, and never wires an ordering it hasn't earned.
 
 ## Step 4 — Record the decision
 
-Fill `reports/report-review.md`'s **Owner's decision** line: which proposals were adopted (with
-their inbox ids) and which were declined. A declined proposal stays written in the report — it is
-trace, not a lost thought — and the close gate verifies this record against the inbox rows that
-exist.
+Fill `artifacts/review.md`'s **Owner's decision** line: which proposals were adopted (with their
+inbox ids) and which were declined. A declined proposal stays written where it is — it is trace,
+not a lost thought — and the close gate reads this line back to confirm the decision was actually
+put to them.
 
 Then say what was filed and stop.
 

@@ -70,6 +70,8 @@ intended stack, the invariants you're committing to, and what you're deliberatel
 what's still open) · `roadmap.md` (forward-only) · `capabilities.md` (**empty — nothing has shipped;
 say so in one line and do not pad it with the plan**) · `resources/index.md`. Bias forward: PRD and
 roadmap carry the weight; architecture's components and flows grow as code lands.
+`verification.md` is **not yours to write** — it holds checks this repo has actually proven, and a
+fresh project has none. It fills itself as items close.
 After drafting `architecture.md`, call `suggest_assets` with its text — it auto-adopts the confidently-relevant
 pooled assets for this repo; note which were adopted (the owner curates them later in the dashboard).
 
@@ -106,6 +108,11 @@ tool's result:
 
 If nothing was launched, hand off plainly: memory is established, Orient is valid, the board renders,
 and work begins from an inbox item whenever the owner is ready.
+
+## Chat response style
+- Use plain and easy language.
+- Keep your response short, clear, and to the point.
+- Use bullets or numbered lists to organize information if there is more than one point.
 
 ## Pitfalls
 - Launching before Step 6's approval, or without the owner's explicit launch confirm — docs first, and

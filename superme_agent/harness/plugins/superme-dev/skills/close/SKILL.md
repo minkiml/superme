@@ -14,9 +14,12 @@ exists.
 
 ## Step 1 — Read what landed
 
-`reports/report-review.md` (it names the docs this item owes), `## Design` and `## Tasks` in
-`artifacts/plan.md`, the cycle reports, and the merge commit on the item record. Then read the
-anchor sections you are about to touch, so you edit what is there rather than what you remember.
+`artifacts/review.md` — review's record of what landed: the change inventory, what it named the
+anchor docs as owing, what is settled, and what risk survived the merge. Then `## Design` and
+`## Tasks` in `artifacts/plan.md`, the cycle reports, and the merge commit on the item record.
+Then read the anchor sections you are about to touch, so you edit what is there rather than what
+you remember. (`reports/report-review.md` is the owner's, not yours — it argues a decision they
+have already made.)
 
 ## Step 2 — Update the anchor docs
 
@@ -32,22 +35,54 @@ anchor sections you are about to touch, so you edit what is there rather than wh
 
 A refusal is itemized and writes nothing — fix the named op and call again.
 
+## Step 2b — Write in whatever vet nominated for the verification library
+
+`read_verification_library(item_id)` returns this repo's library plus any check vet nominated here,
+rendered as a ready entry. Add each as one `append` op on doc `verification`, section `Available` —
+verbatim, unless it still names something item-specific, in which case restate it about the repo.
+
+Nothing nominated? Then nothing to do — most items add nothing, and an entry added to look
+productive taxes every later plan that inherits or reads it.
+Entries land as **available**; only the owner promotes one to standing.
+
 ## Step 3 — Write the close report
 
-Copy `templates/report-close-template.md` to `reports/report-close.md` and fill it:
+Write user-facing report, `reports/report-close.md`, from `templates/report-close-template.md` and fill it. The template's
+`<fill:…>` slots and its `<!-- … -->` notes are both instructions to you: replace the slots, drop
+the notes. Neither belongs in the file you write.
 
-- **What landed** — the merged change in a few lines, for someone reading the trail months later.
-- **What the docs now say** — doc, section, and what it claims after your edit.
-- **What was skipped and why** — a denied authorization, an op you judged premature, an unfinished
-  task. Silence here is how a gap becomes a surprise three items later.
+This is the last thing the owner reads about this item, and what they will find if they come back
+to it in six months. Write what is TRUE OF MAIN NOW, not what the item set out to do.
+
+- **`**Summary:**` in one line** — what is now true and what, if anything, follows. The closed card
+  shows it alone.
+- **`## What's now true`** — for a reader with no memory of this item: what main does that it
+  didn't, and who can rely on it.
+- **`## What the project now records`** — doc, section, and what it claims after your edit. When
+  nothing needed changing, say so AND why: "no document described this behaviour" is itself worth
+  the owner knowing, and is often why it drifted.
+- **`## Left undone on purpose`** — a denied authorization, an op you judged premature, an
+  unfinished task, each with whether it was filed. Silence here is how a gap becomes a surprise
+  three items later.
 
 Anything worth doing later becomes `create_inbox_item` (relation `spawn`) — never an implicit
 "someone will notice".
 
-## Step 4 — Report
+**Tone and style when writing to user-facing report only**
+- Plain, easy language. Fewer words wins.
+- Never restate the item's kind, deliverable or id. Spend the space on the judgment behind them.
+- Omit a prose field rather than filling it with "none" — an absent block reads better.
+
+
+## Step 4 — At completion
 
 Call `report_completion`. The kernel takes it from there: worktree removed, sessions retired, item
 marked done. You never advance or complete the item yourself.
+
+## Chat response style
+- Use plain and easy language.
+- Keep your response short, clear, and to the point.
+- Use bullets or numbered lists to organize information if there is more than one point.
 
 ## Pitfalls
 

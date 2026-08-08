@@ -54,7 +54,7 @@ export type ItemTab = (typeof ITEM_TABS)[number]
 // Which subs a given tab offers is the DRILLDOWN's grammar, not the router's — the router only knows
 // the vocabulary. A sub that is real but wrong for its tab parses fine here and the modal corrects
 // the address on arrival; keeping that mapping in one place beats duplicating it where it drifts.
-export const ITEM_SUBS = ['now', 'deputy', 'proof', 'runs', 'timeline', ...PHASES] as const
+export const ITEM_SUBS = ['now', 'deputy', 'proof', 'auth', 'runs', 'timeline', ...PHASES] as const
 export type ItemSub = (typeof ITEM_SUBS)[number]
 
 export type Route =

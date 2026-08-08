@@ -1,39 +1,32 @@
-<!-- Implementation review report: reports/report-review.md — the surface the merge decision is
-     made on. Keep it ≤ 1 page; tables over paragraphs. Every line traces to brief.md, plan.md or
-     a build-vet-<n>.md — no new facts, no claim the cycle reports don't carry. On a re-write
-     after a revise, overwrite in place and fill ## Changed since; delete that section on the
-     first write. -->
-# Implementation — {title}
+<!-- Review report: reports/report-review.md — the surface the merge decision is made on, and the
+     owner's document alone. Written FROM artifacts/review.md, after it.
+     Four sections, KIND-NEUTRAL: the same shape carries an implementation item, a research item,
+     and whatever kind comes later. Read it as: what · what to argue with · how much to believe ·
+     what it means for the project.
+     Nothing here restates triage — why this was worth doing is something they already read and
+     approved. No verdict word, no recommendation line: the Summary says it and the buttons do it.
+     Every line traces to artifacts/review.md or a cycle report — no new facts.
+     Rewritten in place on a re-review: this report always describes the item as it stands NOW. Its
+     history lives in artifacts/review.md `## Revision rounds`, not here. -->
+# Review User-facing Report
 
-**The ask:** <fill:1-2 lines — what this item set out to do, from brief.md>
+**Summary:** <fill:one line — what the owner is being asked to decide and how much weight it carries. This line is what the dashboard shows at the review gate, so it has to stand alone>
 
-**Delivered:** <fill:1 line — what actually shipped>
+## What you asked for
+<!-- RE-REVIEWS ONLY, and it goes FIRST — delete this whole section on a first review. Their
+     objection, what the item now does about it, and what it cost. Their words, quoted. -->
+<fill:the objection, answered — one short block>
 
-**Key decisions:**
-<fill:up to 4 bullets — owner-made and agent-made, each with its provenance, from plan.md ## Decisions & clarifications>
+## What you're approving
+<fill:the change as an outcome, not a changelog. Show it if it is showable: a fenced before/after, a small table, the actual output. On a research item this is the answer and what it rests on>
 
-**What was built:**
-<fill:up to 6 bullets, task → change, from the cycles' §Built>
+## What to push back on
+<fill:the judgment calls inside this that could have gone the other way — the one worth overruling first, and how expensive reversing it would be. If there is genuinely nothing, say what you considered and rejected; a blank version of this section is a review that didn't happen>
 
-**Verified:**
-| check | result | evidence |
-|---|---|---|
-<fill:the final cycle's §Verification verbatim — a ✗→✓ mark carries the cycle history>
+## How much to trust it
+| claim | basis |
+|---|---|
+<fill:one row per claim the decision rests on — proven and how, or **not covered** and why. The uncovered row is the one that most needs to be here; a table of only green rows is an advertisement>
 
-**Open risks & grants:**
-<fill:0..n — assumptions that still stand · authorizations requested and how they were decided · "none" only when true>
-
-**Journey:**
-| cycle | built | validation | verification | outcome |
-|---|---|---|---|---|
-<fill:one row per build⟷vet cycle>
-
-**Stats:**
-| cycles | files ±lines | commits | tokens | duration |
-|---|---|---|---|---|
-<fill:one row of counts — the diff shape read from git, never estimated>
-
-**Recommendation:** <fill:1 line — merge, or what stands in the way>
-
-## Changed since v<n>
-<fill:re-writes only — the compact delta from the previous version: what the revise changed and what it means for this decision>
+## Where this leaves the project
+<fill:what is now true beyond this item — what pattern it sets, what it left behind, what was filed separately. Say whether follow-up work was FILED, never its id>

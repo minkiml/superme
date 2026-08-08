@@ -68,7 +68,7 @@ def session_checkpoint_trigger(memory_path: str) -> str:
 
 
 def vet_trigger(item_id: str, title: str, deferred: list[str] | None = None,
-                machine: list[dict] | None = None) -> str:
+                machine: list[dict] | None = None, audit: list[dict] | None = None) -> str:
     """Consumer: the background vet run (loop._run_background_vet) · durable (vet forgets — each
     cycle's fresh transcript opens with this). `deferred` = vet-plan check ids the build declared
     as needs-you deferrals (BV-A2/A3): the vetter must NOT judge them — they are intentional skips
@@ -87,6 +87,22 @@ def vet_trigger(item_id: str, title: str, deferred: list[str] | None = None,
                  "— they are DONE:\n" + lines + "\nDo not re-run or re-record them; a second entry "
                  "is refused. Read them as findings, perform the remaining checks yourself, and "
                  "cover all of them in your report.")
+    # The audit of BUILD's own validation claims. Only DISAGREEMENTS are named: an audit that
+    # agreed is the expected case and telling the vetter about it is spent budget. A disagreement
+    # is the opposite — it says a claim the whole cycle rests on is not true, and the vetter's
+    # report has to carry it (the machine block writes it either way, so this is orientation, not
+    # the record).
+    if (bad := [a for a in (audit or []) if not a.get("agrees")]):
+        lines = "\n".join(
+            f"- `{a['command']}` — build recorded "
+            f"{'PASS' if a.get('claimed') else 'FAIL'}, the kernel just got "
+            f"{'PASS' if a.get('actual') else 'FAIL'} ({str(a.get('result') or '').strip()[:200]})"
+            for a in bad)
+        base += ("\n\nThe kernel re-ran the build's OWN validation commands and they do not agree "
+                 "with what the build recorded:\n" + lines + "\nThis is a finding about the build, "
+                 "not about the plan's checks — do not add it to the exam. Diagnose it as you "
+                 "would any failure and say so plainly in your report; the loop routes the cycle "
+                 "back to build on it.")
     if deferred:
         base += ("\n\nThe build DEFERRED these checks to the owner (needs-you items pending "
                  "authorization at review): " + ", ".join(f"`{c}`" for c in deferred) + ". Do NOT "
@@ -650,6 +666,21 @@ def deputy_preamble(strictness: str = DEPUTY_STRICTNESS_DEFAULT) -> str:
         "ambiguous call, OR a critical/testable success signal vet could not fully establish → "
         "escalate with a concrete runbook.\n"
         "4. Decide — exactly one — and record why in your verdict's `because`.\n\n"
+
+        "### Escalating — three parts, and two of them are LISTS\n"
+        "`user.escalation` is the card a paged owner reads cold, often on a phone, deciding "
+        "whether to stop what they are doing. Give it as parts, never as prose:\n"
+        "- `summary` — ONE plain line: what is going on. Not the item title again.\n"
+        "- `concerns` — a LIST, one short line per concern, each standing alone.\n"
+        "- `what_to_do` — a LIST, one short line per option or step: the exact command or "
+        "click path and what they should see, or, for a decision, each option with your "
+        "recommendation marked.\n"
+        "The kernel renders the layout; you supply the parts. A paragraph in a list field is "
+        "the one thing this shape exists to prevent.\n"
+        "**How to write the lines.** Plain words, short sentences, one idea each. Say the thing "
+        "and stop. No em dashes, no semicolons, and no colons mid-sentence to introduce a clause "
+        "- start a new sentence instead. No hedging and no throat-clearing. Write the way you "
+        "would tell a colleague who is standing next to you.\n\n"
         
         "### When you must NOT approve — the floor (holds at EVERY strictness level)\n"
         "- **Not affirmatively convinced → do not approve.** Under doubt, withhold: send back or "

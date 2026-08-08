@@ -22,7 +22,9 @@ from ....core import artifacts, git_layer, status_router
 from ....core.artifacts import _atomic_write
 from ...services import drilldown, git_ops, scheduler
 from ....gateway import contexts
-from ...schemas.dev.gates import AbandonResponse, DrilldownResponse, PhaseReportResponse
+from ...schemas.dev.gates import (
+    AbandonResponse, DrilldownResponse, OwnerInputResponse, PhaseReportResponse,
+)
 
 log = logging.getLogger("superme-agent")
 
@@ -51,6 +53,51 @@ async def dev_work_item_report(item_id: str, phase: str, context_id: str = "glob
     if report is None:
         raise HTTPException(status_code=404, detail=f"no report-{phase}.md for this item")
     return report
+
+
+class OwnerReferenceBody(BaseModel):
+    source: str = ""
+    description: str = ""
+
+
+class OwnerNoteBody(BaseModel):
+    description: str = ""
+
+
+class OwnerInputBody(BaseModel):
+    """The owner's § From you, whole. Add and delete are both a PUT of the full slot lists — the
+    owner is the section's only writer, so there is no concurrent edit for a delta to protect."""
+    context_id: str = "global"
+    references: list[OwnerReferenceBody] = []
+    notes: list[OwnerNoteBody] = []
+
+
+@router.get("/dev/work-items/{item_id}/from-you", response_model=OwnerInputResponse)
+async def dev_work_item_owner_input(item_id: str, context_id: str = "global",
+                                    dev: DevKnowledgeService = Depends(get_dev)) -> dict:
+    """`reports/report-triage.md` § From you — what the owner has written into the one section of
+    the item that is theirs. Never 404s on a missing brief: `exists: false` is the editor's cue to
+    say triage hasn't written one yet, which is a different thing from a broken read."""
+    _ctx, dev_root, _item = _load(context_id, item_id, dev)
+    return artifacts.owner_input(dev_root / "work-items" / item_id)
+
+
+@router.put("/dev/work-items/{item_id}/from-you", response_model=OwnerInputResponse)
+async def dev_work_item_set_owner_input(item_id: str, body: OwnerInputBody,
+                                        dev: DevKnowledgeService = Depends(get_dev)) -> dict:
+    """Save the owner's own section, replacing it whole and leaving the rest of the brief untouched.
+
+    HUMAN-ONLY, like abandon: there is no agent tool behind it, because the value of the section is
+    precisely that an agent did not write it. Returns what is now on disk — the editor shows what
+    the plan phase will read, not what was typed."""
+    _ctx, dev_root, _item = _load(body.context_id, item_id, dev)
+    try:
+        return artifacts.write_owner_input(
+            dev_root / "work-items" / item_id,
+            references=[r.model_dump() for r in body.references],
+            notes=[n.model_dump() for n in body.notes])
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.get("/dev/work-items/{item_id}/drilldown", response_model=DrilldownResponse)
@@ -86,9 +133,16 @@ async def dev_work_item_drilldown(item_id: str, context_id: str = "global",
         except (git_layer.GitError, git_layer.GitBusy):
             git_health = None
     all_items = dev.read_all(dev_root)["work_items"]
+    # WHO raised this — the inbox row's own `origin`, read here because the drilldown service takes
+    # no store. A row the agent filed via `create_inbox_item` carries `agent`; an owner capture
+    # carries `user`. Absent row (deleted, or an item that never came from the inbox) reads owner.
+    inbox_origin = ""
+    if item.get("inbox_id"):
+        row = dev_store.get_inbox(int(item["inbox_id"])) or {}
+        inbox_origin = "agent" if "agent" in (row.get("origin") or []) else "user"
     return drilldown.build_payload(item, dev_root / "work-items" / item_id, dev_root, ctx.cwd,
                                    all_items=all_items, events=events, git_health=git_health,
-                                   review_mode=review_mode)
+                                   review_mode=review_mode, inbox_origin=inbox_origin)
 
 
 class AbandonBody(BaseModel):

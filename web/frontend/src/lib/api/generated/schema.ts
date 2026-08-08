@@ -664,6 +664,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/repos/{repo_id}/branches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Repo Branches
+         * @description This repo's local branches — the anchor picker's option set. Read live off git rather than
+         *     stored: a branch can appear or vanish between two page loads, and the anchor REFUSES on a branch
+         *     that doesn't exist, so a stale list would offer a setting that fails at the next merge.
+         *
+         *     A non-git repo answers with an empty list and no error — nothing to pick from is a fact about
+         *     the repo, not a failure of the request.
+         */
+        get: operations["get_repo_branches_repos__repo_id__branches_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/repos/{repo_id}/meta": {
         parameters: {
             query?: never;
@@ -881,9 +906,13 @@ export interface paths {
         /**
          * Dev Log
          * @description The activity log — a SELECTIVE read over the events table (PRD §4.9), never a dump.
-         *     Filters: `item_id` (an item's own timeline), `scope` (item|dev|global), `since`/`until`
-         *     (ISO timestamps — e.g. "what happened yesterday"). Newest first. Powers the dashboard
-         *     activity view and the chat "what was done…" queries.
+         *     Filters: `item_id` (an item's own timeline), `scope`, `since`/`until` (ISO timestamps — e.g.
+         *     "what happened yesterday"). Newest first. Powers the dashboard activity view and the chat
+         *     "what was done…" queries.
+         *
+         *     `scope` takes a stored scope (`item` | `dev`) or **`repo`** — the activity view's read: every
+         *     dev-native row plus the item-scoped kinds that are milestones of the PROJECT rather than steps
+         *     inside one item (`REPO_MILESTONE_KINDS`). Per-item traces belong to that item's drilldown.
          *
          *     Discarded rows (a re-run's soft-deleted attempt) follow the reader split: an ITEM read is the
          *     drilldown asking "what is happening on this item", so it sees the current attempt only; a
@@ -1771,6 +1800,36 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/dev/work-items/{item_id}/from-you": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Dev Work Item Owner Input
+         * @description `reports/report-triage.md` § From you — what the owner has written into the one section of
+         *     the item that is theirs. Never 404s on a missing brief: `exists: false` is the editor's cue to
+         *     say triage hasn't written one yet, which is a different thing from a broken read.
+         */
+        get: operations["dev_work_item_owner_input_dev_work_items__item_id__from_you_get"];
+        /**
+         * Dev Work Item Set Owner Input
+         * @description Save the owner's own section, replacing it whole and leaving the rest of the brief untouched.
+         *
+         *     HUMAN-ONLY, like abandon: there is no agent tool behind it, because the value of the section is
+         *     precisely that an agent did not write it. Returns what is now on disk — the editor shows what
+         *     the plan phase will read, not what was typed.
+         */
+        put: operations["dev_work_item_set_owner_input_dev_work_items__item_id__from_you_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/dev/work-items/{item_id}/drilldown": {
         parameters: {
             query?: never;
@@ -2161,6 +2220,55 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/dev/verification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Dev Verification Library
+         * @description This repo's verification library (verification-model §8): the standing entries every
+         *     implementation plan inherits, and the available ones a plan cites by id. A repo with no library
+         *     reads as two empty lists — the correct starting state, never an error.
+         */
+        get: operations["dev_verification_library_dev_verification_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dev/verification/{entry_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Dev Verification Drop
+         * @description Drop an entry that turned out not to generalise. The library is knowledge, and knowledge that
+         *     proved wrong is removed rather than kept with a caveat nobody reads.
+         */
+        delete: operations["dev_verification_drop_dev_verification__entry_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Dev Verification Move
+         * @description Promote an entry to standing, or demote it back to available. The OWNER'S call and nobody
+         *     else's: a standing entry taxes every future item in this repo, which is a spending decision and
+         *     the one brake on the library accreting.
+         */
+        patch: operations["dev_verification_move_dev_verification__entry_id__patch"];
+        trace?: never;
+    };
     "/dev/roadmap": {
         parameters: {
             query?: never;
@@ -2266,6 +2374,18 @@ export interface components {
             blocking_children: string[];
             /** Parallel Children */
             parallel_children: string[];
+        };
+        /**
+         * AboutRow
+         * @description One row of `About this work-item` — what this item IS, in the owner's own framing. A LIST of
+         *     these, not an object: the order (what it is → where it came from → what it's for) is the
+         *     meaning, and an empty row is dropped server-side rather than rendered blank.
+         */
+        AboutRow: {
+            /** Label */
+            label: string;
+            /** Value */
+            value: string;
         };
         /** AgentModelBody */
         AgentModelBody: {
@@ -2915,6 +3035,17 @@ export interface components {
             /** Cwd */
             cwd: string;
         };
+        /**
+         * Criterion
+         * @description One rubric criterion, judged. The unit exists because "3 of 4" is not a finding — WHICH one
+         *     missed is.
+         */
+        Criterion: {
+            /** Text */
+            text: string;
+            /** Met */
+            met: boolean;
+        };
         /** DatabaseInfo */
         DatabaseInfo: {
             /** Name */
@@ -3119,10 +3250,8 @@ export interface components {
             terminal: boolean;
             now: components["schemas"]["NowStrip"];
             attention: components["schemas"]["AttentionCard"] | null;
-            /** Glance */
-            glance: {
-                [key: string]: string;
-            };
+            /** About */
+            about: components["schemas"]["AboutRow"][];
             /** Checks */
             checks: components["schemas"]["GateCheck"][];
             /** Blocked By */
@@ -3135,6 +3264,8 @@ export interface components {
             actions: components["schemas"]["DrilldownAction"][];
             /** Proof */
             proof: components["schemas"]["ProofRow"][];
+            /** Lenses */
+            lenses: components["schemas"]["LensRead"][];
             /** Reports */
             reports: string[];
         };
@@ -3792,6 +3923,93 @@ export interface components {
             drafted: components["schemas"]["ScopeCount"];
             learned: components["schemas"]["ScopeCount"];
         };
+        /** LensFinding */
+        LensFinding: {
+            /** Severity */
+            severity: string;
+            /** Text */
+            text: string;
+        };
+        /**
+         * LensRead
+         * @description One standing lens's read of the current cycle. `probed` carries weight even with no
+         *     findings: it is the difference between "nothing is wrong here" and "nobody looked" — so it is a
+         *     LIST, one probe per entry, and the surface renders it as one. A paragraph hides how many
+         *     distinct things were actually tried, which is the only number a reader can judge it by.
+         */
+        LensRead: {
+            /** Lens */
+            lens: string;
+            /**
+             * Probed
+             * @default []
+             */
+            probed: string[];
+            /**
+             * Findings
+             * @default []
+             */
+            findings: components["schemas"]["LensFinding"][];
+            /** Cycle */
+            cycle?: number | null;
+        };
+        /**
+         * LibraryEntry
+         * @description One proven check the repo keeps. `standing` entries are attached to every implementation
+         *     item's plan; `available` ones are cited by id. Same fields as a plan's check, because a plan
+         *     inherits the entry verbatim.
+         */
+        LibraryEntry: {
+            /** Id */
+            id: string;
+            /** Tier */
+            tier: string;
+            /**
+             * Proves
+             * @default
+             */
+            proves: string;
+            /**
+             * Traces
+             * @default
+             */
+            traces: string;
+            /**
+             * Mode
+             * @default
+             */
+            mode: string;
+            /**
+             * Scenario
+             * @default
+             */
+            scenario: string;
+            /**
+             * Run
+             * @default
+             */
+            run: string;
+            /**
+             * Expect
+             * @default
+             */
+            expect: string;
+            /**
+             * Rubric
+             * @default []
+             */
+            rubric: string[];
+        };
+        /** LibraryEntryBody */
+        LibraryEntryBody: {
+            /**
+             * Context Id
+             * @default global
+             */
+            context_id: string;
+            /** Tier */
+            tier: string;
+        };
         /**
          * LintFinding
          * @description One actionable finding over general/. Derived on read — never stored, so it can't go stale.
@@ -3873,7 +4091,12 @@ export interface components {
         };
         /**
          * NowStrip
-         * @description What is happening right now: the live phase + cycle, and the newest recorded event.
+         * @description What is happening right now: the live phase + cycle, and what that phase concluded.
+         *
+         *     It also carried `last` — the newest event's own sentence. That line was cut (owner,
+         *     2026-08-08): every version of it restated something already on the card. "Deputy escalated the
+         *     review gate to you" sat one inch above the attention card that says the same thing in full, and
+         *     the phase name and the running dot answer "where is this" without it.
          */
         NowStrip: {
             /** Phase */
@@ -3882,8 +4105,16 @@ export interface components {
             cycle: number;
             /** Running */
             running: boolean;
-            /** Last */
-            last: string;
+            /**
+             * Summary
+             * @default
+             */
+            summary: string;
+            /**
+             * Summary Phase
+             * @default
+             */
+            summary_phase: string;
         };
         /**
          * Orphan
@@ -3898,6 +4129,85 @@ export interface components {
             deliverable?: string | null;
             /** Items */
             items?: string[] | null;
+        };
+        /**
+         * OwnerInputBody
+         * @description The owner's § From you, whole. Add and delete are both a PUT of the full slot lists — the
+         *     owner is the section's only writer, so there is no concurrent edit for a delta to protect.
+         */
+        OwnerInputBody: {
+            /**
+             * Context Id
+             * @default global
+             */
+            context_id: string;
+            /**
+             * References
+             * @default []
+             */
+            references: components["schemas"]["OwnerReferenceBody"][];
+            /**
+             * Notes
+             * @default []
+             */
+            notes: components["schemas"]["OwnerNoteBody"][];
+        };
+        /**
+         * OwnerInputResponse
+         * @description `reports/report-triage.md` § From you — the one section of any report the OWNER writes, read
+         *     back from disk after every save so the surface shows what plan will actually read. `exists` is
+         *     whether the triage brief is on disk at all: before triage runs there is nothing to write into.
+         *
+         *     SLOTS, not prose: one reference and one note per entry, so each can be added and removed on its
+         *     own and the plan phase's "one note, one check" rule matches what is on disk.
+         */
+        OwnerInputResponse: {
+            /** Exists */
+            exists: boolean;
+            /** References */
+            references: components["schemas"]["OwnerReference"][];
+            /** Notes */
+            notes: components["schemas"]["OwnerNote"][];
+        };
+        /**
+         * OwnerNote
+         * @description One thing the owner wants proven. Each becomes a check in the plan's `## Verification plan`,
+         *     its `proves:` written in their words — which is why it is one slot, not a paragraph.
+         */
+        OwnerNote: {
+            /** Description */
+            description: string;
+        };
+        /** OwnerNoteBody */
+        OwnerNoteBody: {
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+        };
+        /**
+         * OwnerReference
+         * @description One imported reference the owner handed the plan phase: where it is, and what it governs.
+         */
+        OwnerReference: {
+            /** Source */
+            source: string;
+            /** Description */
+            description: string;
+        };
+        /** OwnerReferenceBody */
+        OwnerReferenceBody: {
+            /**
+             * Source
+             * @default
+             */
+            source: string;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
         };
         /**
          * PagedNotice
@@ -4346,6 +4656,11 @@ export interface components {
             task: string;
             /** Text */
             text: string;
+            /**
+             * Detail
+             * @default
+             */
+            detail: string;
             /** Done */
             done: boolean;
             /** Built */
@@ -4357,14 +4672,20 @@ export interface components {
         };
         /**
          * ProofVerdict
-         * @description One check of the plan's exam: what it will prove (`expect`, `mode`), and where it stands.
-         *     `ran` False ⇒ the loop hasn't reached it yet — the row exists from the plan gate on, so the
-         *     owner approving a plan can see the proof they are approving. `result` is the vet's captured
-         *     output, verbatim — a failing row IS the expected-vs-actual.
+         * @description One check of the plan's exam: what it will prove (`proves` in the owner's terms, `expect` in
+         *     the machine's), and where it stands. `ran` False ⇒ the loop hasn't reached it yet — the row
+         *     exists from the plan gate on, so the owner approving a plan can see the proof they are
+         *     approving. `result` is the vet's captured output, verbatim — a failing row IS the
+         *     expected-vs-actual.
          */
         ProofVerdict: {
             /** Check */
             check: string;
+            /**
+             * Proves
+             * @default
+             */
+            proves: string;
             /**
              * Expect
              * @default
@@ -4385,6 +4706,11 @@ export interface components {
              * @default agent
              */
             by: string;
+            /**
+             * Source
+             * @default
+             */
+            source: string;
             /** Passed */
             passed: boolean;
             /** Deferred */
@@ -4410,6 +4736,16 @@ export interface components {
              * @default
              */
             unknown: string;
+            /**
+             * Rubric
+             * @default []
+             */
+            rubric: string[];
+            /**
+             * Criteria
+             * @default []
+             */
+            criteria: components["schemas"]["Criterion"][];
             /**
              * History
              * @default []
@@ -4667,6 +5003,25 @@ export interface components {
             repo_id: string;
             /** Autopilot Concurrency */
             autopilot_concurrency: number;
+        };
+        /**
+         * RepoBranchesResponse
+         * @description The anchor picker's option set — this repo's local branches, most-recently-committed first,
+         *     with the work-item branches excluded. `anchor` is what the anchor resolves to right now, so the
+         *     picker can show the branch in USE even when nothing has been configured yet.
+         */
+        RepoBranchesResponse: {
+            /** Repo Id */
+            repo_id: string;
+            /**
+             * Branches
+             * @default []
+             */
+            branches: string[];
+            /** Anchor */
+            anchor?: string | null;
+            /** Anchor Error */
+            anchor_error?: string | null;
         };
         /** RepoConnectBody */
         RepoConnectBody: {
@@ -5573,6 +5928,13 @@ export interface components {
             cycle: number | null;
             /** Passed */
             passed: boolean;
+        };
+        /** VerificationLibraryResponse */
+        VerificationLibraryResponse: {
+            /** Standing */
+            standing: components["schemas"]["LibraryEntry"][];
+            /** Available */
+            available: components["schemas"]["LibraryEntry"][];
         };
         /**
          * WorkGraphEdge
@@ -6907,6 +7269,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RepoGitResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_repo_branches_repos__repo_id__branches_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                repo_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RepoBranchesResponse"];
                 };
             };
             /** @description Validation Error */
@@ -8683,6 +9076,74 @@ export interface operations {
             };
         };
     };
+    dev_work_item_owner_input_dev_work_items__item_id__from_you_get: {
+        parameters: {
+            query?: {
+                context_id?: string;
+            };
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OwnerInputResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dev_work_item_set_owner_input_dev_work_items__item_id__from_you_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OwnerInputBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OwnerInputResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     dev_work_item_drilldown_dev_work_items__item_id__drilldown_get: {
         parameters: {
             query?: {
@@ -9244,6 +9705,105 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["GeneralDocSaveBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GeneralDocSaveResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dev_verification_library_dev_verification_get: {
+        parameters: {
+            query?: {
+                context_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VerificationLibraryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dev_verification_drop_dev_verification__entry_id__delete: {
+        parameters: {
+            query?: {
+                context_id?: string;
+            };
+            header?: never;
+            path: {
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GeneralDocSaveResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dev_verification_move_dev_verification__entry_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LibraryEntryBody"];
             };
         };
         responses: {

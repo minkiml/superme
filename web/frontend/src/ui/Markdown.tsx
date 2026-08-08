@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
@@ -42,7 +43,7 @@ const CHAT =
   '[&_p]:m-0 ' +
   '[&_strong]:font-semibold [&_em]:italic ' +
   '[&_ul]:my-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-0.5 ' +
-  '[&_code]:rounded [&_code]:bg-sunken [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-[0.85em] ' +
+  '[&_code]:rounded [&_code]:bg-hover [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-[0.85em] [&_code]:text-accent-text ' +
   '[&_pre]:my-1 [&_pre]:overflow-x-auto [&_pre]:rounded [&_pre]:bg-sunken [&_pre]:p-2 ' +
   '[&_pre_code]:bg-transparent [&_pre_code]:p-0 ' +
   '[&_a]:text-accent [&_a]:underline ' +
@@ -63,7 +64,7 @@ const DOC =
   '[&_ul]:my-4 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:my-4 [&_ol]:list-decimal [&_ol]:pl-6 [&_li]:my-1.5 [&_li]:leading-7 ' +
   '[&_li>ul]:my-1.5 [&_li>ol]:my-1.5 ' +
   // inline + block code
-  '[&_code]:rounded [&_code]:bg-sunken [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:text-[0.85em] [&_code]:text-accent-text ' +
+  '[&_code]:rounded [&_code]:bg-hover [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:text-[0.85em] [&_code]:text-accent-text ' +
   '[&_pre]:my-4 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:border [&_pre]:border-line [&_pre]:bg-sunken [&_pre]:p-3.5 [&_pre]:text-[13px] [&_pre]:leading-6 ' +
   '[&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:text-fg ' +
   // links
@@ -86,7 +87,11 @@ const REPORT =
   '[&_p>strong:first-child]:text-warn [&_li>strong:first-child]:text-warn ' +
   // headings — the panel's own section vocabulary, not a document's
   '[&_h1]:text-[14px] [&_h1]:font-semibold [&_h1]:text-fg [&_h1]:mt-0 [&_h1]:mb-3 ' +
-  '[&_h2]:text-[11px] [&_h2]:font-semibold [&_h2]:uppercase [&_h2]:tracking-wide [&_h2]:text-muted [&_h2]:mt-5 [&_h2]:mb-2 ' +
+  // h2 is the report's OWN section vocabulary ("What you'll get", "How I'll confirm it worked"), and
+  // it was grey — the same colour as a de-emphasised aside, so the reader's landmarks read as the
+  // quietest thing on the page (owner, 2026-08-07). Tinted, it steps clearly above the body while
+  // staying below the amber block labels, which are the loud line by design.
+  '[&_h2]:text-[11px] [&_h2]:font-semibold [&_h2]:uppercase [&_h2]:tracking-wide [&_h2]:text-accent-text [&_h2]:mt-5 [&_h2]:mb-2 ' +
   '[&_h3]:text-[13px] [&_h3]:font-semibold [&_h3]:text-fg [&_h3]:mt-4 [&_h3]:mb-1.5 ' +
   '[&_h4]:text-[11px] [&_h4]:font-semibold [&_h4]:uppercase [&_h4]:tracking-wide [&_h4]:text-muted [&_h4]:mt-3.5 [&_h4]:mb-1.5 ' +
   // lists
@@ -96,7 +101,7 @@ const REPORT =
   // code — an ABSOLUTE 12px, never `em` (owner, 2026-08-02). Relative sizing made one `--date`
   // render 11.44px in a paragraph and 10.56px in a table cell on the same screen: the token that
   // most needs to stay legible was the one that shrank, and by a different amount per container.
-  '[&_code]:rounded [&_code]:bg-sunken [&_code]:px-1 [&_code]:py-px [&_code]:text-[12px] ' +
+  '[&_code]:rounded [&_code]:bg-hover [&_code]:px-1 [&_code]:py-px [&_code]:text-[12px] [&_code]:text-accent-text ' +
   '[&_pre]:my-2.5 [&_pre]:overflow-x-auto [&_pre]:rounded-md [&_pre]:border [&_pre]:border-line [&_pre]:bg-sunken [&_pre]:p-2.5 [&_pre]:text-[12px] [&_pre]:leading-5 ' +
   '[&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:text-fg ' +
   '[&_a]:text-accent [&_a]:underline [&_a]:underline-offset-2 ' +
@@ -149,6 +154,12 @@ export default function Markdown({
   // that matters. A report is bold-labelled top to bottom — tinting all of it makes every line the
   // loud line, which is no hierarchy at all. So `report` takes the code tint and leaves prose alone.
   const tint = tone ? ' ' + TONE[tone] + (variant === 'report' ? '' : ' ' + BOLD_TINT) : ''
+  // A comment is a comment. Every other markdown renderer hides `<!-- … -->`; ours printed it as a
+  // paragraph, so an artifact template's authoring note ("Keep it ≤ 1 page; tables over
+  // paragraphs") rendered at the top of the owner's review report and on the PR page as if it were
+  // the report (owner, 2026-08-03). The writers that instantiate templates strip these too — this
+  // is the second line of defence, for the templates an AGENT copies rather than code.
+  const body = useMemo(() => text.replace(/[ \t]*<!--[\s\S]*?-->\n?/g, ''), [text])
   return (
     <div className={`${VARIANTS[variant]}${tint}`}>
       <ReactMarkdown
@@ -179,7 +190,7 @@ export default function Markdown({
           },
         }}
       >
-        {text}
+        {body}
       </ReactMarkdown>
     </div>
   )

@@ -62,47 +62,83 @@ def build_captured_input(context_id: str, item_id: str, run_id: int) -> dict | N
                 system_fragments = parsed
         except Exception:  # noqa: BLE001 — a corrupt capture must still render (fallback card)
             system_fragments = None
+    # What the turn was ALLOWED to do (2026-08-06). Captured in the same row as the prose, because
+    # the prose alone can't explain why two runs on the same words behaved differently. None on
+    # pre-feature rows → the page simply omits the block.
+    surface = None
+    try:
+        parsed = json.loads(rec.get("turn_surface") or "null")
+        surface = parsed if isinstance(parsed, dict) else None
+    except Exception:  # noqa: BLE001 — a corrupt capture must still render the prose
+        surface = None
     return {"meta": meta, "system_prompt": rec.get("system_prompt") or "",
-            "system_fragments": system_fragments,
+            "system_fragments": system_fragments, "surface": surface,
             "prompt_body": rec.get("prompt_body") or "", "trigger": rec.get("prompt_body") or ""}
 
 
 # --------------------------------------------------------------------------- HTML rendering
 
+# ONE PALETTE, TWO THEMES, AND IT IS THE APP'S (owner, 2026-08-08). These pages open in a real
+# browser tab, outside the app's own theme toggle, so the only signal available is the OS/browser
+# preference — and they were hardcoded dark, which put a black page beside a light dashboard for
+# anyone running light. Every colour is now a variable declared twice: dark in `:root`, light under
+# `prefers-color-scheme: light`.
+#
+# The VALUES are `web/frontend/src/index.css`'s own tokens, verbatim, so a doc opened in its own tab
+# is the same document it is inside the drilldown rather than a lookalike in a second palette. Keep
+# them in step: `--c-app` → `--bg`, `--c-surface` → `--panel`, `--c-sunken` → `--surface` (the app
+# sinks code and inputs), `--c-accent-text` → `--accent`, `--c-warn` → `--warn`, `--c-success` → `--ok`.
+# Nothing below may use a literal colour — a hex here is a rule that obeys only one theme.
 _PAGE_CSS = """
-:root { color-scheme: dark light; }
+:root {
+  color-scheme: dark light;
+  --bg: #0d0e11; --panel: #16181d; --surface: #101216; --line: #262a31;
+  --fg: #e7e9ee; --body: #e7e9ee; --soft: #99a0ac; --muted: #99a0ac; --faint: #5f6572;
+  --accent: #a7c7ff; --accent-bg: #17263f; --accent-line: #6ea8fe59;
+  --warn: #e0a35a; --warn-bg: #e0a35a1f; --warn-line: #e0a35a59;
+  --ok: #5fe3b3; --ok-bg: #5fe3b31f; --ok-line: #5fe3b359;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f4f5f7; --panel: #ffffff; --surface: #eef0f3; --line: #dfe2e8;
+    --fg: #1c2024; --body: #1c2024; --soft: #5c626c; --muted: #5c626c; --faint: #9aa0ab;
+    --accent: #2563eb; --accent-bg: #e4edfd; --accent-line: #3b82f659;
+    --warn: #b4791f; --warn-bg: #b4791f1f; --warn-line: #b4791f59;
+    --ok: #128a5b; --ok-bg: #128a5b1f; --ok-line: #128a5b59;
+  }
+}
 * { box-sizing: border-box; }
 body { margin: 0; font: 14px/1.55 ui-sans-serif, system-ui, -apple-system, sans-serif;
-  background: #0e1117; color: #e6edf3; }
+  background: var(--bg); color: var(--fg); }
 .wrap { max-width: 1240px; margin: 0 auto; padding: 28px 22px 80px; }
 .hdr { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; margin-bottom: 4px; }
 .hdr h1 { font-size: 17px; margin: 0; font-weight: 650; }
-.sub { color: #8b949e; font-size: 12.5px; margin: 2px 0 18px; }
+.sub { color: var(--muted); font-size: 12.5px; margin: 2px 0 18px; }
 .chip { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px;
   font-weight: 600; letter-spacing: .02em; }
-.chip.phase { background: #1f6feb22; color: #79c0ff; border: 1px solid #1f6feb55; }
-.chip.mode-preview { background: #9e6a0322; color: #e3b341; border: 1px solid #9e6a0355; }
-.chip.mode-captured { background: #23863622; color: #7ee787; border: 1px solid #23863655; }
-.note { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 10px 13px;
-  color: #adbac7; font-size: 12.5px; margin: 0 0 22px; }
+.chip.phase { background: var(--accent-bg); color: var(--accent); border: 1px solid var(--accent-line); }
+.chip.mode-preview { background: var(--warn-bg); color: var(--warn); border: 1px solid var(--warn-line); }
+.chip.mode-captured { background: var(--ok-bg); color: var(--ok); border: 1px solid var(--ok-line); }
+.note { background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+  padding: 10px 13px; color: var(--soft); font-size: 12.5px; margin: 0 0 22px; }
 section { margin: 0 0 30px; }
 .sec-hdr { display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
-  border-bottom: 1px solid #30363d; padding-bottom: 6px; margin-bottom: 12px; }
-.sec-hdr h2 { font-size: 13.5px; margin: 0; font-weight: 650; color: #e6edf3; }
-.sec-hdr .meta { color: #6e7681; font-size: 11.5px; font-variant-numeric: tabular-nums; }
+  border-bottom: 1px solid var(--line); padding-bottom: 6px; margin-bottom: 12px; }
+.sec-hdr h2 { font-size: 13.5px; margin: 0; font-weight: 650; color: var(--fg); }
+.sec-hdr .meta { color: var(--faint); font-size: 11.5px; font-variant-numeric: tabular-nums; }
 /* One fragment = the prompt text card (keeps full reading width) + a fixed right-side info gutter
    that lives in the ADDED page width, so the text card is never squeezed to fit the metadata. */
 .frag { display: flex; gap: 16px; align-items: flex-start; margin: 0 0 12px; }
 .frag .body { flex: 1 1 auto; min-width: 0; }
 .frag .side { flex: 0 0 208px; padding-top: 2px; }
-.fname { font-size: 12px; font-weight: 650; color: #e6edf3; line-height: 1.4; }
+.fname { font-size: 12px; font-weight: 650; color: var(--fg); line-height: 1.4; }
 .floc { margin-top: 5px; font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
-  color: #6e7681; word-break: break-word; }
-.fmeta { margin-top: 9px; color: #6e7681; font-size: 11px; font-variant-numeric: tabular-nums; }
-pre { margin: 0; padding: 15px 16px; background: #161b22; border: 1px solid #30363d;
+  color: var(--faint); word-break: break-word; }
+.fmeta { margin-top: 9px; color: var(--faint); font-size: 11px; font-variant-numeric: tabular-nums; }
+pre { margin: 0; padding: 15px 16px; background: var(--surface); border: 1px solid var(--line);
   border-radius: 8px; white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere;
-  font: 12.5px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; color: #d1d9e0; }
-pre.gate { color: #8b949e; font-style: italic; }
+  font: 12.5px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--body); }
+pre.gate { color: var(--muted); font-style: italic; }
 """
 
 
@@ -179,6 +215,38 @@ def _fragment_orient(orient: str) -> list[dict]:
     return frags or [{"name": "Orientation", "location": loc, "text": orient}]
 
 
+def _render_surface(surface: dict | None) -> str:
+    """④ — what the turn was ALLOWED to do. The prompt is only half of a run's input; the other
+    half is its capability, and two runs carrying identical words behave differently when one may
+    run a shell in the worktree and the other may not. Omitted entirely for rows captured before
+    this existed, rather than rendered as a block of dashes claiming the turn had no powers."""
+    if not surface:
+        return ""
+    def _paths(key: str) -> str:
+        vals = surface.get(key) or []
+        return ", ".join(str(v) for v in vals) if vals else "— none"
+    rows = [
+        ("model · effort", f"{surface.get('model') or '—'} · {surface.get('effort') or '—'}"),
+        ("MCP servers", ", ".join(surface.get("mcp") or []) or "— none beyond the base preset"),
+        ("write boundary", _paths("write_boundary")),
+        ("shell sandbox", _paths("sandbox_writes")),
+        ("file-write tools", "DENIED — read-only turn" if surface.get("read_only")
+                             else "allowed inside the write boundary"),
+        ("permission prompts", "auto-denied (background run)" if surface.get("approve") == "denied"
+                               else str(surface.get("approve") or "—")),
+        ("resumed transcript", "YES — the model also carries this thread's earlier turns, which are "
+                               "NOT in this capture" if surface.get("resumes")
+                               else "no — this is the whole context"),
+    ]
+    # Rendered as the same plain-text fragment card every other channel uses, so the page keeps one
+    # vocabulary — this is a fourth thing the run was given, not a differently-shaped widget.
+    w = max(len(k) for k, _ in rows)
+    text = "\n".join(f"{k.ljust(w)}   {v}" for k, v in rows)
+    return _render_section("④ Turn surface — what this run was ALLOWED to do", [{
+        "name": "capability, not prose", "location": "daemon/services/runs.py · turn_surface()",
+        "text": text}])
+
+
 def render_input_page(data: dict) -> str:
     """Render one input-inspector "A" page (self-contained HTML) — the ACTUAL bytes a real run sent,
     read back from the run_input capture. Each of the three channels is broken into per-fragment
@@ -219,7 +287,7 @@ def render_input_page(data: dict) -> str:
         trig_html = _render_section(trig_title, [{
             "name": f"{m.get('phase', '?')} trigger message",
             "location": "core/kernel_speech.py · phase speech", "text": trig}])
-    body_html = f"{orient_html}{trig_html}"
+    body_html = f"{orient_html}{trig_html}{_render_surface(data.get('surface'))}"
     title = html.escape(f"{m['item_id']} — {m['title']}")
     return (
         "<!doctype html><html><head><meta charset='utf-8'>"

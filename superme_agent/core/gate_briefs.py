@@ -259,7 +259,12 @@ def gate_state(item: dict, item_dir: Path, dev_root: Path,
         # hand-edited — so which feedback drove what is unrecoverable, and the next build reads a
         # plan it cannot tell has changed. Visible and named; it does not grey Approve, because the
         # move it asks for is a conversation, not a click.
-        rounds = sum(1 for e in events if e.get("kind") == "review.route")
+        # BOTH routes owe a block: `review.route` is the owner/deputy's send-back, `revise.route`
+        # is a build cycle concluding the plan must change. They are separate events because they
+        # have separate speakers (a build's conclusion used to be logged as a review's, which put
+        # the OWNER's name on it and inflated this count), but each one re-routes the item and each
+        # one changes plan.md, so each owes a revision block.
+        rounds = sum(1 for e in events if e.get("kind") in ("review.route", "revise.route"))
         if rounds:
             revs = plan_revision.revisions(item_dir)
             checks.append({

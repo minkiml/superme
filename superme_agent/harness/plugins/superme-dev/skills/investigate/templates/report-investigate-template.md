@@ -1,26 +1,21 @@
-<!-- Investigation report: reports/report-investigate.md. Keep it ≤ 1 screen; tables over paragraphs.
-     Every line traces to the plan's Questions and your investigation notes — no new facts, and no
-     conclusion the notes can't point at. Rewrite it at each session's end, overwriting in place, so
-     the latest version stands for the whole investigation; fill ## Changed since on re-writes,
-     delete it on the first. -->
-# Investigation — {title}
+<!-- Investigation report: reports/report-investigate.md — a research item's ANSWER, for the owner.
+     Keep it ≤ 1 screen. Every line traces to the plan's questions and investigation.md — no new
+     facts, and no conclusion the evidence can't be pointed at.
+     Rewritten at each session's end, overwriting in place: it always describes what is known NOW.
+     Measured and reasoned are different things and must read differently — the one way a research
+     item does damage is a guess that reads like a measurement. -->
+# Investigation User-facing Report
 
-**Outcome:** <fill:1 line — where the investigation stands against the plan's Done criteria>
+**Summary:** <fill:one line — the answer, or how far it got. This line is what the dashboard shows while the item is investigating, so it has to stand alone>
 
-**Questions:**
-| question | where it stands | status |
-|---|---|---|
-<fill:one row per plan question — its answer so far in a line; status answered | partial | open>
+## What we found
+<fill:the findings, in the owner's terms. Numbers belong in a small fenced table or a markdown table — a bend in a curve is worth showing, not describing. Bullets for the rest, each one a thing that is true rather than a thing that was done>
 
-**Evidence base:**
-<fill:up to 4 bullets — what was read, run, or measured, each with its file:line or source pointer>
+## How we know
+<fill:what was actually run, read or measured, and how many times. Say plainly where a number came from a real run and where a conclusion came from reading. If something was inferred, it says so here>
 
-**Open threads & follow-ups:** <fill:one per line, incl. spawned item ids — delete the line if none>
+## What we didn't settle
+<fill:the questions still open, and anything the method cannot speak to. An empty version of this section is almost always a lie; write it before you write the section above>
 
-**Stats:**
-| questions answered | sources cited | items spawned |
-|---|---|---|
-<fill:one row of counts>
-
-## Changed since v<n>
-<fill:re-writes only — the compact delta from the previous version>
+## What this suggests doing
+<fill:the options, cheapest first, each with what it would buy and what it would cost. Nothing is filed from here — the owner chooses, and `itemize` files. Delete the section only when the honest answer is that nothing should change, and say that instead>

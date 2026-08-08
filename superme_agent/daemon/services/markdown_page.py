@@ -152,40 +152,54 @@ def render(md: str) -> str:
     return "\n".join(out)
 
 
-# Styling for the rendered document. Shares the palette of the input inspector's page so the two
-# standalone views read as one surface.
+# Styling for the rendered document. Every colour comes from the variables `_PAGE_CSS` declares
+# (see input_preview) — that block carries BOTH themes off `prefers-color-scheme` and takes its
+# values from the app's own tokens, and these pages always ship the two stylesheets together. No
+# literal colour here, for the same reason.
+#
+# The two INK RULES below are the app's markdown grammar (`ui/Markdown.tsx`), reproduced so a doc
+# reads the same in its own tab as it does in the drilldown:
+#   · a `code` span is TINTED accent — it is the thing the reader can type, and the one token that
+#     must stay findable when the prose around it is scanned rather than read;
+#   · bold that OPENS a paragraph or list item is the block's NAME (`**Summary:**`, `**result:**`)
+#     and takes `--warn`; bold used mid-sentence is emphasis and stays `--fg`. Tinting all of it
+#     makes every line the loud line, which is no hierarchy at all.
 DOC_CSS = """
-.doc { font: 14.5px/1.65 ui-sans-serif, system-ui, -apple-system, sans-serif; color: #d1d9e0; }
-.doc h1, .doc h2, .doc h3, .doc h4 { color: #e6edf3; font-weight: 650; line-height: 1.3;
+.doc { font: 14.5px/1.65 ui-sans-serif, system-ui, -apple-system, sans-serif; color: var(--body); }
+.doc h1, .doc h2, .doc h3, .doc h4 { color: var(--fg); font-weight: 650; line-height: 1.3;
   margin: 26px 0 10px; }
 .doc h1 { font-size: 21px; margin-top: 0; }
-.doc h2 { font-size: 16.5px; border-bottom: 1px solid #30363d; padding-bottom: 6px; }
+.doc h2 { font-size: 16.5px; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
 .doc h3 { font-size: 14.5px; }
-.doc h4 { font-size: 13.5px; color: #adbac7; }
+.doc h4 { font-size: 13.5px; color: var(--soft); }
 .doc p { margin: 0 0 12px; }
 .doc ul, .doc ol { margin: 0 0 12px; padding-left: 22px; }
 .doc li { margin: 3px 0; }
-.doc strong { color: #e6edf3; font-weight: 640; }
-.doc a { color: #79c0ff; }
-.doc hr { border: 0; border-top: 1px solid #30363d; margin: 22px 0; }
-.doc blockquote { margin: 0 0 12px; padding: 2px 0 2px 14px; border-left: 3px solid #30363d;
-  color: #8b949e; }
-.doc code { background: #161b22; border: 1px solid #30363d; border-radius: 5px; padding: .5px 5px;
-  font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; color: #b9c6d3; }
+.doc strong { color: var(--fg); font-weight: 640; }
+.doc p > strong:first-child, .doc li > strong:first-child { color: var(--warn); }
+.doc a { color: var(--accent); }
+.doc hr { border: 0; border-top: 1px solid var(--line); margin: 22px 0; }
+.doc blockquote { margin: 0 0 12px; padding: 2px 0 2px 14px; border-left: 3px solid var(--line);
+  color: var(--muted); }
+.doc code { background: var(--surface); border: 1px solid var(--line); border-radius: 5px;
+  padding: .5px 5px; font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--accent); }
 .doc .code { position: relative; margin: 0 0 14px; }
-.doc .code .lang { position: absolute; top: 7px; right: 11px; font-size: 10.5px; color: #6e7681;
+.doc .code .lang { position: absolute; top: 7px; right: 11px; font-size: 10.5px; color: var(--faint);
   letter-spacing: .04em; text-transform: uppercase; }
 .doc .code pre { margin: 0; }
-.doc pre { padding: 13px 15px; background: #161b22; border: 1px solid #30363d; border-radius: 8px;
-  overflow-x: auto; white-space: pre; font: 12.5px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
-  color: #d1d9e0; }
-.doc pre code { background: none; border: 0; padding: 0; }
-.doc pre.fm { color: #8b949e; font-size: 11.5px; margin: 0 0 22px; }
+.doc pre { padding: 13px 15px; background: var(--surface); border: 1px solid var(--line);
+  border-radius: 8px; overflow-x: auto; white-space: pre;
+  font: 12.5px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--body); }
+/* Inside a FENCE the accent tint is switched back off: it marks the one typable token in a line of
+   prose, and a whole block already reads as code. The app makes the same exception. */
+.doc pre code { background: none; border: 0; padding: 0; color: var(--body); }
+.doc pre.fm { color: var(--muted); font-size: 11.5px; margin: 0 0 22px; }
 .doc table { border-collapse: separate; border-spacing: 0; width: 100%; margin: 0 0 14px;
-  border: 1px solid #30363d; border-radius: 8px; overflow: hidden; font-size: 13.5px; }
+  border: 1px solid var(--line); border-radius: 8px; overflow: hidden; font-size: 13.5px; }
 .doc th, .doc td { text-align: left; vertical-align: top; padding: 8px 11px;
-  border-bottom: 1px solid #30363d; border-right: 1px solid #30363d; }
-.doc thead th { background: #161b22; color: #8b949e; font-size: 11.5px; font-weight: 650;
+  border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); }
+.doc thead th { background: var(--surface); color: var(--muted); font-size: 11.5px; font-weight: 650;
   text-transform: uppercase; letter-spacing: .04em; }
 .doc tr > *:last-child { border-right: 0; }
 .doc tbody tr:last-child > * { border-bottom: 0; }

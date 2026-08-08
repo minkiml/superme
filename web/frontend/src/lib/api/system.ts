@@ -216,6 +216,14 @@ export function setRepoGit(repoId: string, patch: { review_mode?: string; anchor
   return sendJSON(`/api/repos/${encodeURIComponent(repoId)}/git`, 'POST', patch)
 }
 
+// The anchor picker's option set — this repo's real local branches (work-item branches excluded),
+// read live off git. The anchor REFUSES on a branch that doesn't exist, so picking from the real
+// list is what keeps a typo from becoming a merge-time failure.
+export type RepoBranches = Schema<'RepoBranchesResponse'>
+export function getRepoBranches(repoId: string): Promise<RepoBranches> {
+  return getJSON(`/api/repos/${encodeURIComponent(repoId)}/branches`)
+}
+
 // Set a repo's VISUAL tag (owner-defined color + icon). Omit a field (undefined) to leave it as-is;
 // pass '' to clear it (back to the hashed-palette default / no icon).
 export type RepoMeta = Schema<'RepoMetaResponse'>

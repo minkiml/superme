@@ -533,7 +533,15 @@ function ShippedList({
               className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left hover:bg-hover"
             >
               <Check size={13} className="shrink-0 text-success" />
-              <span className="min-w-0 flex-1 truncate text-sm text-fg">{it.title || it.id}</span>
+              {/* The id under the title, not instead of it. Titles here are the owner's own words
+                  and several read alike ("tally count should…", "tally list should…"), so the row
+                  the owner clicked and the item they then talk about were only joinable by opening
+                  it. The id is what every other surface — branch name, worktree path, artifacts
+                  folder, the log — keys on. */}
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm text-fg">{it.title || it.id}</span>
+                <span className="block font-mono text-[10px] text-faint">{it.id}</span>
+              </span>
               <span className="shrink-0 font-mono text-[10px] text-faint">{fmtLocalDate(it.done_at)}</span>
             </button>
           ))

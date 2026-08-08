@@ -92,11 +92,29 @@ class AttentionCard(BaseModel):
 
 
 class NowStrip(BaseModel):
-    """What is happening right now: the live phase + cycle, and the newest recorded event."""
+    """What is happening right now: the live phase + cycle, and what that phase concluded.
+
+    It also carried `last` — the newest event's own sentence. That line was cut (owner,
+    2026-08-08): every version of it restated something already on the card. "Deputy escalated the
+    review gate to you" sat one inch above the attention card that says the same thing in full, and
+    the phase name and the running dot answer "where is this" without it."""
     phase: str
     cycle: int
     running: bool
-    last: str
+    # A phase's `**Summary:**` line — this phase's own once it has written one, and until then the
+    # last COMPLETED phase's, so the card is never blank while work is in flight.
+    summary: str = ""
+    #: Which phase concluded `summary`. Equal to `phase` when it is this phase's own; an earlier
+    #: phase while this one is still working, so the surface labels it instead of passing it off.
+    summary_phase: str = ""
+
+
+class AboutRow(BaseModel):
+    """One row of `About this work-item` — what this item IS, in the owner's own framing. A LIST of
+    these, not an object: the order (what it is → where it came from → what it's for) is the
+    meaning, and an empty row is dropped server-side rather than rendered blank."""
+    label: str
+    value: str
 
 
 class VerdictHistory(BaseModel):
@@ -105,18 +123,49 @@ class VerdictHistory(BaseModel):
     passed: bool
 
 
+class Criterion(BaseModel):
+    """One rubric criterion, judged. The unit exists because "3 of 4" is not a finding — WHICH one
+    missed is."""
+    text: str
+    met: bool
+
+
+class LensFinding(BaseModel):
+    severity: str           # low | medium | high — severity is what decides whether it gates
+    text: str
+
+
+class LensRead(BaseModel):
+    """One standing lens's read of the current cycle. `probed` carries weight even with no
+    findings: it is the difference between "nothing is wrong here" and "nobody looked" — so it is a
+    LIST, one probe per entry, and the surface renders it as one. A paragraph hides how many
+    distinct things were actually tried, which is the only number a reader can judge it by."""
+    lens: str               # intent | safety | robustness | performance
+    probed: list[str] = []
+    findings: list[LensFinding] = []
+    cycle: int | None = None
+
+
 class ProofVerdict(BaseModel):
-    """One check of the plan's exam: what it will prove (`expect`, `mode`), and where it stands.
-    `ran` False ⇒ the loop hasn't reached it yet — the row exists from the plan gate on, so the
-    owner approving a plan can see the proof they are approving. `result` is the vet's captured
-    output, verbatim — a failing row IS the expected-vs-actual."""
+    """One check of the plan's exam: what it will prove (`proves` in the owner's terms, `expect` in
+    the machine's), and where it stands. `ran` False ⇒ the loop hasn't reached it yet — the row
+    exists from the plan gate on, so the owner approving a plan can see the proof they are
+    approving. `result` is the vet's captured output, verbatim — a failing row IS the
+    expected-vs-actual."""
     check: str
+    # The plan's one plain sentence for what is true of the product when this passes. Empty only on
+    # a recorded check the current plan no longer declares (a revision dropped it).
+    proves: str = ""
     expect: str = ""
     mode: str = ""
     ran: bool = False
     # Provenance: `machine` = the kernel ran the check's `run:` block, `agent` = a vetter attested.
     # On a row that hasn't run it is the plan's promise of which one it will be.
     by: str = "agent"
+    # Where the check came from: "" = authored for this item, `standing`/`library` = inherited from
+    # the repo's verification library. `proof_rows` has emitted it since the library shipped; the
+    # response model dropped it on the floor until the Task tab's drawer went looking for it.
+    source: str = ""
     passed: bool
     deferred: bool
     cycle: int | None
@@ -128,6 +177,10 @@ class ProofVerdict(BaseModel):
     where: str = ""
     why: str = ""
     unknown: str = ""
+    # The criteria the PLAN set (readable at the plan gate, before anything runs) and the judgment
+    # recorded against them. Both empty on a check with no rubric.
+    rubric: list[str] = []
+    criteria: list[Criterion] = []
     history: list[VerdictHistory] = []
 
 
@@ -137,7 +190,11 @@ class ProofRow(BaseModel):
     vet-plan checks name it in `covers:`. `task: ""` is the item-wide row, where untagged content
     lands: nothing is dropped and nothing is guessed at."""
     task: str
+    #: the task's NAME — the plan's head line, what the Task tab shows at full contrast.
     text: str
+    #: the SPECIFICATION under it — the plan's indented continuation, written for whoever
+    #: implements the task. Folded away in the surface: it is evidence, not the label.
+    detail: str = ""
     done: bool
     built: list[str]
     validated: list[str]
@@ -157,12 +214,11 @@ class DrilldownResponse(BaseModel):
     terminal: bool
     now: NowStrip
     attention: AttentionCard | None
-    # The status strip — a strip, not a feed (the feed is Trace). An ORDERED label→value map, not
-    # fixed fields: the server composes both halves, so adding or dropping a row (`next` went on
-    # 2026-07-31) is a one-line change in `_glance` instead of an edit in four places that fails as
-    # a 500 if any one of them is missed. The FE renders the entries in order and reads no key by
-    # name — the labels ARE the contract's payload, not its shape.
-    glance: dict[str, str]
+    # `About this work-item` — what a reader opening a strange item needs before anything else.
+    # It replaced `glance` (Goal · Progress), which restated the title in the header above it and
+    # the tasks/checks the Task tab renders in full. Server-composed rows, rendered in order; the
+    # FE reads no label by name, so adding one is a one-line change here.
+    about: list[AboutRow]
     checks: list[GateCheck]
     blocked_by: list[str]   # empty ⇔ Approve is live
     numbers: GateNumbers
@@ -170,6 +226,7 @@ class DrilldownResponse(BaseModel):
     paged: PagedNotice | None
     actions: list[DrilldownAction]
     proof: list[ProofRow]
+    lenses: list[LensRead]
     reports: list[str]      # phases that have a report to read; the rest grey out
 
 
@@ -183,6 +240,30 @@ class PhaseReportResponse(BaseModel):
     path: str
     mtime: float
     contract: str | None    # relative path, or None where the report IS the record (review/close)
+
+
+class OwnerReference(BaseModel):
+    """One imported reference the owner handed the plan phase: where it is, and what it governs."""
+    source: str
+    description: str
+
+
+class OwnerNote(BaseModel):
+    """One thing the owner wants proven. Each becomes a check in the plan's `## Verification plan`,
+    its `proves:` written in their words — which is why it is one slot, not a paragraph."""
+    description: str
+
+
+class OwnerInputResponse(BaseModel):
+    """`reports/report-triage.md` § From you — the one section of any report the OWNER writes, read
+    back from disk after every save so the surface shows what plan will actually read. `exists` is
+    whether the triage brief is on disk at all: before triage runs there is nothing to write into.
+
+    SLOTS, not prose: one reference and one note per entry, so each can be added and removed on its
+    own and the plan phase's "one note, one check" rule matches what is on disk."""
+    exists: bool
+    references: list[OwnerReference]
+    notes: list[OwnerNote]
 
 
 class AbandonResponse(BaseModel):

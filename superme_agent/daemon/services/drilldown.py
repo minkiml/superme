@@ -20,6 +20,8 @@ item is parked. This module adds no facts; it decides what the surface shows.
 from __future__ import annotations
 
 import logging
+import re
+from datetime import datetime
 from pathlib import Path
 
 from ...core import artifacts as _arts
@@ -44,7 +46,7 @@ log = logging.getLogger("superme-agent")
 # stopped item · Run <Phase> otherwise — resolved in that order by the FE), then Drop, then Re-run.
 ACTION_HOMES = {"approve": "actions", "run": "actions", "resume": "actions",
                 "drop": "actions", "rerun": "actions",
-                "merge": "git", "pr": "git"}
+                "pr": "git"}
 
 
 def _label(phase: str | None) -> str:
@@ -149,17 +151,13 @@ def _actions(item: dict, state: dict, *, running: bool, git_health: dict | None,
                            "— readable in any mode, before or after the merge"
                            if (git_health or {}).get("branch_exists") else
                            "no branch yet — it is created when build starts"))
-    out.append(_act("merge", "Merge", active=pr_open and mode == "strict" and not merged,
-                    reason="already merged — see the merge commit" if merged else
-                           f"squash this branch onto {trunk} and advance to close"
-                           if pr_open and mode == "strict" else
-                           "this repo is `fast`, so nothing is parked here for you — merge at the "
-                           "gate with Approve" if mode == "fast" else
-                           "active once the deputy has approved and handed you the merge"
-                           if mode == "strict" else
-                           # No mode resolved (the repo is gone from config, or the read failed).
-                           # Naming a mode here would be a guess presented as a fact.
-                           "merge at the review gate with Approve"))
+    # There is NO second `merge` control (owner, 2026-08-03 — action, button and its FE branch all
+    # deleted). It was a second door onto the review gate's own Approve, and the two doors did not
+    # have the same lock: Approve is refused while an agent is running and while the mechanical
+    # must-resolve set is non-empty, and `merge` was gated only on `pr_open and strict and not
+    # merged` — so the redundant button was also the way around the gate it duplicated. One act,
+    # one control. What the strict mode actually asks of the owner — read the diff first — is said
+    # on the Approve card below, and the PR page is one line up.
     return out
 
 
@@ -185,10 +183,12 @@ def _attention_card(item: dict, state: dict, hold: dict | None, paged: dict | No
     # where is the thing this card exists to replace.
     if questions or kind == "question":
         do, click = "Answer the questions in this item's chat", "chat"
-    elif "merge" in live:
-        do, click = "Read the diff on the PR page, then Merge", "merge"
     elif "approve" in live:
-        do, click = f"Approve the gate or give me your feedback", "approve"
+        # At the review gate the diff is the thing to read before deciding, so the card routes
+        # through the PR page and lands on the SAME control every other gate lands on.
+        do = ("Read the diff on the PR page, then Approve" if phase == "review" and "pr" in live
+              else "Approve the gate or give me your feedback")
+        click = "approve"
     elif state.get("blocked_by"):
         do, click = ("Resolve what's open below — Approve activates when the must-resolve set is "
                      "empty", "")
@@ -206,43 +206,127 @@ def _attention_card(item: dict, state: dict, hold: dict | None, paged: dict | No
         basis.append("Go to Task tab → see the tasks and the checks that prove them")
     if str((paged or {}).get("next") or ""):
         basis.append(str(paged["next"]))
+    # An authorization is the one blocker that is a DECISION rather than a state to wait out, and it
+    # now has its own sub — so it gets its own route. Named before the generic must-resolve line,
+    # which would otherwise send the owner to a list whose single row just points here.
+    if (n_auth := len(state.get("authorizations") or [])):
+        basis.append(f"Go to Quick View → Authorization → grant or deny "
+                     f"{n_auth} request{'' if n_auth == 1 else 's'}")
     if state.get("blocked_by"):
-        basis.append(f"See Mechanical checks below - {len(state['blocked_by'])} must resolve")
+        basis.append(f"See Must resolve below - {len(state['blocked_by'])} to clear")
     return {"kind": kind, "why": why, "detail": detail, "do": do, "click": click,
             "basis": basis, "questions": questions}
 
 
-def _glance(item: dict, state: dict, proof: list[dict]) -> dict:
-    """The status strip — goal · progress. A strip, not a feed: the feed is Trace.
+# Every event kind that puts an item INTO a phase. Kept as one list because "when did this item
+# last enter this phase" is one question, and a reader that knows only some of the answers is
+# reading a timestamp from a phase the item has already left.
+_PHASE_ENTRY = ("phase.advance", "review.route", "revise.route")
 
-    There is no `next` row: what happens next is the primary button's job, and two places saying it
-    is two places to disagree."""
-    n = state.get("numbers") or {}
-    bits = []
-    if n.get("tasks_total"):
-        bits.append(f"Tasks {n.get('tasks_done', 0)}/{n['tasks_total']}")
-    if n.get("cycle"):
-        bits.append(f"Cycles {n['cycle']}")
-    # FAILING means a check RAN and did not pass. A planned check the loop hasn't reached is not a
-    # failure — it is the exam, sitting there. Dedup too: a check covering two tasks is one check,
-    # and it appears under both rows.
-    failed = list(dict.fromkeys(
-        v["check"] for r in proof for v in r["verified"]
-        if v.get("ran") and not v.get("passed") and not v.get("deferred")))
-    if failed:
-        bits.append(f"Failing: {', '.join(failed[:3])}")
-    elif n.get("checks_total"):
-        bits.append(f"Checks {n.get('checks_pass', 0)}/{n['checks_total']}")
-    # `bits` is a LIST — it has to be joined here. Handing the list through made `Progress` a
-    # `list[str]` against a `dict[str, str]` contract, and React renders an array of strings with no
-    # separators ("Tasks 2/2Cycles 1Checks 3/3").
-    return {"Goal": str(item.get("title") or item.get("id") or ""),
-            "Progress": " · ".join(bits) or "no recorded progress yet"}
+
+def _live_summary(item_dir: Path, phase: str, events: list[dict]) -> str:
+    """This phase's `**Summary:**` line — but ONLY when it describes the pass you are looking at.
+
+    Every report is written as its phase's CLOSING act, and several are overwritten in place
+    (`report-build.md` holds the newest cycle, not a history). Rendered unconditionally, the card
+    therefore showed the PREVIOUS pass while the current one was still working: on a re-entered
+    build it printed cycle 1's conclusion under a running cycle 2, and in autopilot — where an item
+    is running almost the whole time — that was most of what the owner ever saw. Owner-reported
+    2026-08-07.
+
+    The test is one comparison: was the report written AFTER the item last entered this phase? A
+    report older than the current phase-entry describes an earlier pass, whichever pass that was.
+    Nothing to show is the honest answer, and the card renders nothing rather than a stale claim."""
+    path = Path(item_dir) / "reports" / f"report-{phase}.md"
+    if not phase or not path.is_file():
+        return ""
+    try:
+        written = path.stat().st_mtime
+    except OSError:
+        return ""
+    # `events` arrives newest-first, so the first entry event is the most recent one. THREE kinds
+    # move an item into a phase, not one: `phase.advance` is the forward hop, and the two routes
+    # BACK to plan (`review.route` from the owner's send-back, `revise.route` from a build that
+    # concluded the plan must change) never log an advance — they set the phase directly. Anchoring
+    # on `phase.advance` alone left the re-entered plan phase measured against a stale timestamp, so
+    # the exact case this function exists for — a phase you have been in before — was the one it
+    # still got wrong. Caught on the second cycle of a live item, 2026-08-07.
+    entered = next((e.get("created_at") for e in events
+                    if e.get("kind") in _PHASE_ENTRY), None)
+    if entered:
+        try:
+            at = datetime.fromisoformat(str(entered)).timestamp()
+        except ValueError:
+            at = 0.0
+        if written < at:
+            return ""
+    return _arts.report_summary(item_dir, phase)
+
+
+def _standing_summary(item: dict, item_dir: Path, phase: str,
+                      events: list[dict]) -> tuple[str, str]:
+    """The summary the card shows, and WHICH phase concluded it → `(text, phase)`.
+
+    Preferred: this phase's own, once it has written one. While a phase is still working it has
+    written nothing, and the card used to go blank — so an item spends most of an autopilot run
+    showing a header and no content, and the owner loses the last thing anybody concluded at exactly
+    the moment they have to wait (owner, 2026-08-08).
+
+    So: hold the LAST COMPLETED phase's conclusion until the current one replaces it, and hand back
+    which phase it came from so the surface can say so. It is never passed off as the running
+    phase's own — a stale claim under a running header is the failure the strict rule above exists
+    to prevent, and labelling it is what makes holding it honest."""
+    if (own := _live_summary(item_dir, phase, events)):
+        return own, phase
+    from ...core.kind_profiles import get_profile
+    try:
+        order = list(get_profile(str(item.get("kind") or "implementation")).phases)
+    except KeyError:
+        return "", ""
+    if phase not in order:
+        return "", ""
+    for earlier in reversed(order[:order.index(phase)]):
+        if (text := _arts.report_summary(item_dir, earlier)):
+            return text, earlier
+    return "", ""
+
+
+def _about(item: dict, item_dir: Path, inbox_origin: str = "") -> list[dict]:
+    """`About this work-item` — what this item IS, in the owner's own framing, as ordered rows.
+
+    It replaced `Item at a glance`, which answered a question nothing asked: Goal restated the title
+    printed two inches above it, and Progress restated the tasks and checks the Task tab renders in
+    full. This says what a reader opening a strange item actually needs — what kind of work it is,
+    what category it was filed under, where it came from, and the problem it exists to solve.
+
+    A LIST, not a dict: order is meaning here (what it is → where it came from → what it's for), and
+    a dict's order is an implementation detail nobody should have to rely on. Empty rows are dropped
+    rather than rendered blank — `Background` is optional in the brief by design."""
+    facts = _arts.triage_facts(item_dir)
+    origin = ""
+    spawned = item.get("spawned_from") or {}
+    if isinstance(spawned, dict) and spawned.get("item"):
+        # The NOTE is the human sentence ("came out of the caching work"); the relation and the
+        # parent's id are the machine's version of the same edge and live on the graph view.
+        origin = str(spawned.get("note") or "").strip() or f"spawned from {spawned['item']}"
+    elif item.get("inbox_id"):
+        # WHO filed it, not the mechanism (owner, 2026-08-08). "Pushed from the inbox" described the
+        # plumbing every inbox item shares; the fact worth a row is whether a person raised this or
+        # an agent branched it off, because that is what tells the reader how much intent to read
+        # into the ask. The origin list is the inbox row's own, so no new field is invented here.
+        who = "agent" if inbox_origin == "agent" else "owner"
+        origin = f"Inbox ({who})"
+    rows = [("Workflow", str(item.get("kind") or "implementation")),
+            ("Category", facts["category"]),
+            ("Origin", origin),
+            ("Background", facts["background"]),
+            ("Problem", facts["problem"])]
+    return [{"label": k, "value": v} for k, v in rows if v]
 
 
 def build_payload(item: dict, item_dir: Path, dev_root: Path, main_repo_dir: Path | None, *,
                   all_items: list[dict], events: list[dict], git_health: dict | None,
-                  review_mode: str | None = None) -> dict:
+                  review_mode: str | None = None, inbox_origin: str = "") -> dict:
     """The whole drilldown, server-side. One read of the item folder feeds every tab, so the surface
     polls one route instead of four."""
     item_dir = Path(item_dir)
@@ -260,19 +344,28 @@ def build_payload(item: dict, item_dir: Path, dev_root: Path, main_repo_dir: Pat
         next_phase = None
     actions = _actions(item, state, running=running, git_health=git_health, paged=paged,
                        next_phase=next_phase, review_mode=review_mode)
+    summary_text, summary_phase = _standing_summary(item, item_dir, phase, events)
     return {
         "id": item["id"], "phase": phase, "gate": state.get("gate"),
         "gate_label": state.get("gate_label"), "at_gate": bool(state.get("at_gate")),
         "terminal": bool(state.get("terminal")),
         "now": {"phase": phase, "cycle": (state.get("numbers") or {}).get("cycle") or 0,
                 "running": running,
-                "last": str((events[0].get("summary") if events else "") or "")},
+                # This phase's own `**Summary:**` line — what it concluded, in the words the owner
+                # reads in its report, and ONLY when it describes the pass on screen.
+                "summary": summary_text,
+                # WHICH phase concluded it. Equal to `phase` when it is this phase's own; an
+                # earlier phase while this one is still working, so the card can label it.
+                "summary_phase": summary_phase},
         "attention": _attention_card(item, state, hold, paged, actions, proof),
-        "glance": _glance(item, state, proof),
+        "about": _about(item, item_dir, inbox_origin),
         "checks": state.get("checks") or [], "blocked_by": state.get("blocked_by") or [],
         "numbers": state.get("numbers") or {},
         "authorizations": state.get("authorizations") or [],
         "paged": paged, "actions": actions, "proof": proof,
+        # The standing lenses' read of this cycle (verification-model §3). Item-wide by nature —
+        # they answer questions no single task owns — so they sit beside the proof rows, not in one.
+        "lenses": [{"lens": ln, **r} for ln, r in _arts.lens_reads(item_dir).items()],
         # Which phases have a report to read — the Reports tab greys the rest rather than offering a
         # tab that opens empty.
         "reports": [p for p in kind_profiles.get_profile(item.get("kind")).phases

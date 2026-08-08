@@ -3,6 +3,7 @@ import { ScrollText, X, Pencil, Save, Loader2, Pin } from 'lucide-react'
 import Markdown from '@/ui/Markdown'
 import Modal from '@/ui/Modal'
 import Toggle from '@/ui/Toggle'
+import SourceEditor from '@/ui/SourceEditor'
 import { toggleConstitution, getConstitutionFile, saveConstitutionFile } from '@/lib/api'
 
 function stripFrontmatter(text: string): string {
@@ -85,7 +86,7 @@ export default function ConstitutionModal({
   const onColor = tint === 'core' ? 'bg-core' : tint === 'universal' ? 'bg-universal' : 'bg-dev'
   const display = savedBody ?? body
   return (
-    <Modal onClose={onClose} column maxW="max-w-3xl" dismissable={!editing}>
+    <Modal onClose={onClose} column maxW={editing ? "max-w-4xl" : "max-w-3xl"} dismissable={!editing}>
       <div className={`flex shrink-0 items-center gap-2 border-b border-line px-4 py-3 ${on ? '' : 'opacity-60'}`}>
         <ScrollText size={15} className="text-muted" />
         <span className="text-sm font-semibold text-fg">{title}</span>
@@ -132,12 +133,7 @@ export default function ConstitutionModal({
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
         {err && <div className="mb-2 text-sm text-danger">{err}</div>}
         {editing ? (
-          <textarea
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            spellCheck={false}
-            className="h-[60vh] w-full resize-none rounded-md border border-line bg-sunken p-3 font-mono text-[12.5px] leading-relaxed text-fg outline-none focus:border-accent"
-          />
+          <SourceEditor value={draft} onChange={setDraft} surface="bg-sunken" />
         ) : (
           <>
             {description && <p className="mb-3 text-[12px] italic leading-relaxed text-faint">{description}</p>}

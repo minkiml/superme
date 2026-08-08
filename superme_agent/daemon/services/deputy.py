@@ -21,14 +21,16 @@ The dispatch seam is `gates.maybe_autopilot_advance`: when the deputy is enabled
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 
 from ..app_state import agent as _agent, dev as _dev, dev_store as _dev_store, spine as _spine
 from ...core import Usage, Result, Status, TextDelta, ToolResult, deny_all
 from ...core import kernel_speech, gate_briefs, deputy as deputy_core
+from ...core import autopilot as _autopilot
 from ...harness.tools.run_tools import make_deputy_verdict_server
-from .runs import _begin_run, _LiveTokens, capture_prompt, capture_event, _dev_mcp, \
-    retry_notice
+from .runs import _begin_run, _LiveTokens, capture_prompt, capture_event, capture_run_input, \
+    _dev_mcp, retry_notice, turn_surface
 from .turns import ResilientTurn
 
 log = logging.getLogger("superme-agent")
@@ -143,8 +145,17 @@ async def run_deputy_gate(context_id: str, item_id: str) -> None:
                                                           dev_root, model, effort)
         # Close the deputy's own run row (releases the lock). NOT `_end_run` — that would re-fire the
         # seam and could loop the deputy on itself. The item's resting status is set by the action.
-        _spine.finish_item_run(context_id, item_id, fallback_tokens=final_tokens, usage=final_usage,
-                               outcome=(verdict or {}).get("decision"))
+        rid = _spine.finish_item_run(context_id, item_id, fallback_tokens=final_tokens,
+                                     usage=final_usage, outcome=(verdict or {}).get("decision"))
+        # …but it still ENDED, and it still cost. Skipping `_end_run` silently dropped the one event
+        # every other run kind writes, so the deputy was the only run whose tokens never reached the
+        # timeline — and the phase chip (which sums the whole phase, gate run included) then read
+        # 116.5k beside a trace that showed 85.6k with nothing to account for the difference. Same
+        # authoritative 3-type total off the finished row, same shape as `{kind}.end`.
+        _dev_store.log_event(context_id, "deputy.end",
+                             f"Finished deputy run · Σ {_spine.run_tokens(rid) if rid else 0} tok",
+                             item_id=item_id, actor="daemon",
+                             meta={"tokens": _spine.run_tokens(rid) if rid else 0, "gate": gate})
         _act_on_verdict(ctx, context_id, item_id, gate, verdict)
     except Exception:
         log.exception("deputy gate dispatch failed for %s (item stays for the owner)", item_id)
@@ -206,6 +217,16 @@ async def _judge(ctx, context_id: str, item_id: str, item: dict, gate: str, dev_
         verdicts=verdicts, authorizations=auth_block)
     system_append = kernel_speech.deputy_preamble(strictness)
     capture_prompt(context_id, f"[deputy] judging the {gate} gate", item_id=item_id)
+    # Prompt inspector "A" — throwaway probes ONLY. The deputy was the one run the X-ray could not
+    # see: it judges three gates, costs ~19% of an item, and had no capture site at all, so the
+    # inspector's "actual input over a lifecycle" was silently missing a whole speaker.
+    if _autopilot.is_prompt_extraction(item):
+        capture_run_input(context_id, item_id, ctx=ctx, system_append=system_append,
+                          prompt=prompt, phase=f"deputy:{gate}",
+                          surface=turn_surface(model=model, effort=effort, mcp=["dev", "deputy"],
+                                               write_boundary=[], sandbox_writes=[],
+                                               read_only=True, resumes=False),
+                          background=True)
     final_tokens = None
     final_usage = None
     live = _LiveTokens()
@@ -242,6 +263,22 @@ def _headline(text: str, cap: int = 240) -> str:
     rationale never rides the bubble; it stays in the event meta for the Deputy tab."""
     head = (text or "").strip().split("\n\n")[0].replace("\n", " ").strip()
     return head if len(head) <= cap else head[:cap].rstrip() + "…"
+
+
+_MD_LABEL = re.compile(r"^\*\*[^*]+:\*\*\s*")
+_MD_MARK = re.compile(r"[*`_]")
+
+
+def _plain(text: str, cap: int = 200) -> str:
+    """The escalation's first line as PLAIN prose, for the event LOG (owner, 2026-08-08).
+
+    The escalation is markdown now — `**Issue summary:** …` over bulleted concerns — and the event
+    summary was carrying the first 200 characters of it verbatim. Every surface that reads an event
+    summary renders it as text: the Activity row, and the Now card's one-line live strip. So the
+    owner read `**Issue summary:**` with the asterisks showing, in a line too short to have wanted
+    the markup anyway. The CARD keeps its markup (meta `escalation`, rendered); the log sentence
+    drops the label and the emphasis marks and says the thing."""
+    return _headline(_MD_MARK.sub("", _MD_LABEL.sub("", (text or "").strip())), cap)
 
 
 def _act_on_verdict(ctx, context_id: str, item_id: str, gate: str, verdict: dict | None) -> None:
@@ -393,17 +430,38 @@ def _do_send_back(ctx, context_id: str, item_id: str, gate: str, verdict: dict) 
                            f"agent automatically: {change}"))
 
 
+def _clip_card(text: str, cap: int) -> str:
+    """Bound the page card WITHOUT cutting a word in half.
+
+    A flat `[:800]` ended the owner's card on "…non-goal — s" (owner, 2026-08-08): the escalation is
+    markdown now, so a byte slice lands mid-bullet and the last thing the owner reads is a fragment.
+    Cut on a line boundary, keep whole bullets, and say so when anything was dropped. The cap is
+    generous because the shape already bounds this — one summary line and short bullets."""
+    text = (text or "").strip()
+    if len(text) <= cap:
+        return text
+    kept: list[str] = []
+    used = 0
+    for line in text.splitlines():
+        if used + len(line) + 1 > cap:
+            break
+        kept.append(line)
+        used += len(line) + 1
+    return "\n".join(kept).rstrip() + "\n\n(trimmed — the full card is in the deputy log)"
+
+
 def _do_escalate(ctx, context_id: str, item_id: str, gate: str, verdict: dict, *,
                  reason: str, override: str | None = None) -> None:
     """Page the owner (`awaiting_human`) with the deputy's instructions. The escalation text is the
-    runbook the deputy owed (situation · concern · what-to-do) — never a bare 'please review'."""
+    card the deputy owed (summary · concerns · what to do) — never a bare 'please review'."""
     dev_root = ctx.internal_root / "dev"
     escalation = override or verdict.get("escalation") or verdict.get("because") or "(no detail)"
     _dev.set_work_item_status(dev_root, item_id, "awaiting_human")
     _dev_store.log_event(context_id, "deputy.escalate",
-                         f"Deputy escalated the {gate} gate to you: {escalation[:200]}",
+                         f"Deputy escalated the {gate} gate to you: {_plain(escalation)}",
                          item_id=item_id, actor="deputy",
-                         meta={"gate": gate, "reason": reason, "escalation": escalation[:800],
+                         meta={"gate": gate, "reason": reason,
+                               "escalation": _clip_card(escalation, 1600),
                                "checked": verdict.get("checked", "")[:400],
                                # `speech` is the HEADLINE (§2.1): the chat bubble and the paged
                                # notice's lead line. The runbook rides `escalation` — one line

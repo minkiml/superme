@@ -1,6 +1,6 @@
 ---
 name: build
-description: Implement a build-phase work-item inside its git worktree — work the plan's task checklist, run internal validation, record the cycle report. Use when a work-item is in its build phase and code is to be written; not for planning (use plan), verifying finished work (use vet), or research items (use investigate).
+description: Implement a build-phase work-item inside its git worktree — work the plan's task checklist, run internal validation, record the cycle report. Use when a work-item is in its build phase and code is to be written; not for planning, verifying finished work (use vet), or research items (use investigate).
 argument-hint: "[work-item-id]"
 category: workspace
 ---
@@ -35,10 +35,9 @@ When editing existing code:
 - Don't refactor things that aren't broken.
 - Dont't add new features that are not asked for and not possible to reach (unreachable cases) or change existing behavior that is not discussed -- do not over-complicate or over-think.
 - Match existing style, even if you'd do it differently.
-- If you notice unrelated dead code, report it — don't delete it. Caution: a function or
+- If you notice dead code, report it — don't delete it. **Caution**: a function or
   API may look dead (unused anywhere in the codebase) when it is actually being used from an
-  external source (e.g., an externally-invoked API like QR code) — check the contents and logic of looking-dead
-  code before calling it dead.
+  external source (e.g., an externally-invoked API like QR code) — check the contents and logic of looking-dead code before calling it dead.
 - If you write 200 lines and it could potentially be 100 or even less, rethink and
   rewrite it. Ask yourself: "Would a professional senior engineer say this is overcomplicated?"
   If yes, simplify.
@@ -80,18 +79,20 @@ back through plan — say exactly what broke instead of silently diverging) and
 `## Verification plan` (the exam; re-pointing your own checks to dodge a wall is the self-grading
 the vetter exists to catch — defer it, don't disguise it).
 
+And two sections of the cycle report you write into are machine-owned: `## Verification` (vet's
+recording tool appends there) and `## Cycle outcome` (the loop driver appends there). You write
+`## Built` and `## Validation` — nothing below them. A hand-written line in either machine section
+is evidence nobody produced.
+
 ## Step 3 — Walls become records, never a stall
 
 The owner is not watching; nothing you ask mid-run reaches them. So decide and record:
 
 - An unknown the plan didn't settle, where your choice is expensive to reverse or changes what
   the owner receives → a `## Assumptions` entry in the cycle report (what · why · cost of
-  being wrong). Skip trivia — twenty
-  non-decisions bury the two that mattered.
+  being wrong). Skip trivia — twenty non-decisions bury the two that mattered.
 - A contract change above your pay grade (it DEFINES or alters intent: renaming/re-scoping a
-  deliverable, a direction-setting decision, deleting or editing a retired doc) →
-  `request_authorization` (what · why · doc · scope · the check it blocks). The blocked check
-  DEFERS and the request rides to review; a grant routes back to you, a denial accepts the gap.
+  deliverable, a direction-setting decision, deleting or editing a retired doc) → `request_authorization` (what · why · doc · scope · the check it blocks). The blocked check DEFERS and the request rides to review; a grant routes back to you, a denial accepts the gap.
 - Either way: finish every OTHER task and report `partial` — `blocked` is only for a run where
   nothing at all was doable.
 - Something that must be fixed first → `create_inbox_item` with relation `blocking`; worth doing
@@ -102,6 +103,12 @@ The owner is not watching; nothing you ask mid-run reaches them. So decide and r
 - Run your internal validation: the repo's tests/lint/typecheck plus whatever proves each task
   (mocks, synthetic errors). Fix what they catch — a cycle handed to vet with red basics burns a
   whole vet run to learn what an exit code already said.
+- **Call `record_validation` for each one — command, machine result, pass/fail.** Give the command
+  verbatim and re-runnable from the worktree root: vet re-executes that exact string to audit the
+  claim, and a paraphrase makes the record uncheckable. Record the reds too; a failure you then
+  fixed is a real part of the cycle, and the last recorded run for a command is the one that counts.
+  This is not a gate on you — you run what you judge is needed. It is what turns "the suite passed"
+  from a sentence only you witnessed into something verification can hold up against the machine.
 - Fill the current cycle report `artifacts/build-vet-<n>.md` (highest n — the kernel scaffolded
   it): `## Built` and `## Validation`, per its slots. The vetter reads these instead of
   re-deriving your work from a raw diff — name files, how to exercise the change, and every gap
@@ -113,13 +120,34 @@ The owner is not watching; nothing you ask mid-run reaches them. So decide and r
   owner's Proof view can say "this feature, proven this way" instead of listing check ids. Work that
   belongs to no single task (a shared refactor, a stale doc fixed in passing) leads with no id and
   reads as item-wide — say it, don't file it under whichever task was open.
-- Rewrite `reports/report-build.md` from `templates/report-build-template.md` (this skill's
-  folder), overwriting — every line traces to the cycle reports.
+- Write user-facing report, `reports/report-build.md`, from `templates/report-build-template.md` (this skill's
+  folder), overwriting — every line traces to the cycle reports. The template's `<fill:…>` slots
+  and its `<!-- … -->` notes are both instructions to you: replace the slots, drop the notes.
+  Neither belongs in the file you write. It always describes the work as it stands NOW; the round
+  history goes in the `**Summary:**` line and nowhere else ("Done, after three rounds — the
+  empty-ledger case took two tries"), because that line is what the dashboard shows on its own.
+  `## Checked as I went` is YOUR checks, in the owner's words — what you exercised and what it
+  did, never the command. The independent pass is vet's report, and the two must not read as the
+  same list.
+- **A spawn the owner cannot otherwise learn about goes in `## Work this turned up`** — build runs
+  unattended, so this is the only place a blocking spawn reaches them. Say what it is, why it
+  couldn't live here, and whether this item waits on it. Never print the new item's id. Delete the
+  whole section when nothing was filed.
 - On long builds, sync with the trunk via `sync_from_main` (commit first); resolve any conflicts
   it reports yourself. When a change makes an anchor doc wrong, note it in `## Built` — you never
   edit those docs, and the close run writes them once the merge locks what you did.
 - End of a session mid-work: bank `write_checkpoint` (what you're on · decisions · remaining ·
   tried-but-failed). The loop vets what you produce automatically — never advance the phase.
+
+**Tone and style when writing to user-facing report-build doc only**
+- Plain, easy language. Fewer words wins.
+- Never restate the item's kind, deliverable or id. Spend the space on the judgment behind them.
+- Omit a prose field rather than filling it with "none" — an absent block reads better.
+
+## Chat response style
+- Use plain and easy language.
+- Keep your response short, clear, and to the point.
+- Use bullets or numbered lists to organize information if there is more than one point.
 
 ## Pitfalls
 
@@ -129,3 +157,4 @@ The owner is not watching; nothing you ask mid-run reaches them. So decide and r
 - **Reporting a wall instead of recording it** — a wall that isn't in the assumption or
   authorization ledger is invisible at review; the run ends `partial` with the ledger entry, not
   parked on a question.
+- when writing to docs, Do not include the comments part `<!-- ... -->` in the scaffold you file — it is instructions for you.

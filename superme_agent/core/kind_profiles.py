@@ -37,8 +37,11 @@ KIND_PROFILES: dict[str, KindProfile] = {
         emits={
             "triage": ("brief",),
             "plan": ("plan",),
+            "review": ("review",),
         },
-        required_artifacts=("plan",),
+        # `review` is the phase's agent-facing record — close reads what it settled, the landing
+        # commit reads its `**Delivered:**`, and a revision cycle reads what it may not re-open.
+        required_artifacts=("plan", "review"),
         # CLOSE RE-ADJUDICATES NOTHING. Review's exit is the lock-in (§2.3): the merge lands, and
         # from that instant code + git cannot change — so every question about the WORK was already
         # answered at the last gate where the owner could act on the answer. What survives here is
@@ -72,8 +75,9 @@ KIND_PROFILES: dict[str, KindProfile] = {
             "triage": ("brief",),
             "plan": ("plan",),
             "investigate": ("investigation",),
+            "review": ("review",),
         },
-        required_artifacts=("plan", "investigation"),
+        required_artifacts=("plan", "investigation", "review"),
         close_criteria=("findings_delivered", "spawns_exist"),
     ),
 }

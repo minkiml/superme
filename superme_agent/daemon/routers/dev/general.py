@@ -7,10 +7,12 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from ...app_state import DevKnowledgeService, get_dev, get_spine, SystemSpine
 from ...deps import dev_root as _dev_root
+from ....core import verification_library as _vl
 from ....core.dev_knowledge import ANCHOR_DOCS, LEGACY_DOCS
 from ...schemas.dev.general import (
     GeneralDocsResponse, GeneralDocResponse, GeneralDocSaveBody, GeneralDocSaveResponse,
-    ProjectStatusResponse, RoadmapBoardResponse, PortraitResponse, LintResponse,
+    LibraryEntryBody, ProjectStatusResponse, RoadmapBoardResponse, PortraitResponse, LintResponse,
+    VerificationLibraryResponse,
 )
 
 router = APIRouter()
@@ -55,6 +57,37 @@ def dev_general_doc_save(name: str, body: GeneralDocSaveBody,
     if not dev.write_general_doc(_dev_root(body.context_id), name, body.content):
         raise HTTPException(status_code=404, detail="unknown anchor doc")
     return {"ok": True, "name": name}
+
+
+@router.get("/dev/verification", response_model=VerificationLibraryResponse)
+def dev_verification_library(context_id: str = "global") -> dict:
+    """This repo's verification library (verification-model §8): the standing entries every
+    implementation plan inherits, and the available ones a plan cites by id. A repo with no library
+    reads as two empty lists — the correct starting state, never an error."""
+    return _vl.read_library(_dev_root(context_id))
+
+
+@router.patch("/dev/verification/{entry_id}", response_model=GeneralDocSaveResponse)
+def dev_verification_move(entry_id: str, body: LibraryEntryBody) -> dict:
+    """Promote an entry to standing, or demote it back to available. The OWNER'S call and nobody
+    else's: a standing entry taxes every future item in this repo, which is a spending decision and
+    the one brake on the library accreting."""
+    try:
+        moved = _vl.move_entry(_dev_root(body.context_id), entry_id, body.tier)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if not moved:
+        raise HTTPException(status_code=404, detail="unknown library entry")
+    return {"ok": True, "name": entry_id}
+
+
+@router.delete("/dev/verification/{entry_id}", response_model=GeneralDocSaveResponse)
+def dev_verification_drop(entry_id: str, context_id: str = "global") -> dict:
+    """Drop an entry that turned out not to generalise. The library is knowledge, and knowledge that
+    proved wrong is removed rather than kept with a caveat nobody reads."""
+    if not _vl.drop_entry(_dev_root(context_id), entry_id):
+        raise HTTPException(status_code=404, detail="unknown library entry")
+    return {"ok": True, "name": entry_id}
 
 
 @router.get("/dev/roadmap", response_model=RoadmapBoardResponse)

@@ -3,7 +3,7 @@ import {
   X, ArrowRight, Sparkles, Check, Loader2, FileText, ScrollText, History,
   Terminal, GitBranch, FlaskConical, Ban, GitMerge, Undo2, ShieldCheck,
   AlertTriangle, MessageSquare, CornerUpLeft, Plane, ExternalLink, Gauge, ListChecks,
-  ChevronRight, CircleDot, RotateCcw, Play,
+  ChevronRight, CircleDot, RotateCcw, Play, Plus, Trash2, PenLine,
   Network, Inbox, ClipboardCheck, ClipboardList, KeyRound,
 } from 'lucide-react'
 import Markdown from '@/ui/Markdown'
@@ -16,12 +16,14 @@ import {
   getDevLog, getWorkItemDrilldown, getWorkItemReport, getWorkItemGit,
   resolveWorkItemGit, revertWorkItemGit, abandonWorkItem, markWorkItemSeen,
   resumeWorkItem, rerunWorkItem, runWorkItem, authorizeWorkItem,
+  getWorkItemOwnerInput, saveWorkItemOwnerInput,
   type WorkItem, type WorkItemDetail, type DevEvent, type RunArtifact, type RunHeader, type GitHealth,
   type Drilldown, type DrilldownAction, type ProofRow,
+  type OwnerInput, type OwnerReference, type OwnerNote,
 } from '@/lib/api'
-import { useLive } from '@/lib/live'
+import { invalidate, useLive } from '@/lib/live'
 import { K } from '@/lib/live/keys'
-import { build, navigate, useRoute, type ItemTab, type ItemSub } from '@/lib/router'
+import { build, navigate, useRoute, PHASES, type ItemTab, type ItemSub, type Phase } from '@/lib/router'
 import { fmtModel, fmtTokens, fmtLocal, toModelKey } from '@/lib/format'
 import { StatusBadge, DEFAULT_RUN_MODEL, DEFAULT_RUN_EFFORT } from './panels'
 import { PHASE_LABEL } from './common'
@@ -96,6 +98,11 @@ const QUICK_SUBS: { id: ItemSub; label: string }[] = [
   // dead-link every drilldown URL anyone saved. The pane is a per-task list, which is what the tab
   // should say; the payload keeps the name the backend gives it.
   { id: 'proof', label: 'Task' },
+  // Authorization is CONDITIONAL — appended only when the item has one (see `subs`). It was a
+  // permanent banner above the tabs, which cost a third of the modal's height on every tab of every
+  // item, most of which never have one. As a sub tab it costs nothing until it exists, and the
+  // header's blinking flag is what makes sure a pending one is still impossible to miss.
+  { id: 'auth', label: 'Authorization' },
 ]
 // Trace's two panes. They answer different questions and are different lengths — Runs is what the
 // AGENTS did (every tool call, per run), Timeline is what HAPPENED TO the item (phase advances,
@@ -156,7 +163,14 @@ export default function WorkItemModal({
   const tab: ItemTab = (route.name === 'item' && route.tab) || 'quick'
   const routeSub = route.name === 'item' ? route.sub : null
   const reportPhases = d?.reports ?? []
-  const subs: ItemSub[] = tab === 'quick' ? QUICK_SUBS.map((s) => s.id)
+  // The feed carries PENDING requests only, and only at the review gate (`gate_briefs.gate_state`) —
+  // so a non-empty list IS "something is waiting on you", with no second rule deciding that here.
+  const auths = d?.authorizations ?? []
+  // The Authorization sub exists only on an item that HAS one — a tab that opens empty on every
+  // other item teaches the owner to ignore the row it sits in.
+  const subs: ItemSub[] = tab === 'quick'
+                          ? QUICK_SUBS.filter((s) => s.id !== 'auth' || auths.length > 0)
+                                      .map((s) => s.id)
                         : tab === 'reports' ? (reportPhases as ItemSub[])
                         : tab === 'trace' ? TRACE_SUBS.map((s) => s.id)
                         : []
@@ -186,9 +200,10 @@ export default function WorkItemModal({
     // clicking something else, so it asks first — in the same bar, the same shape as Drop's confirm.
     if (id === 'rerun') { setRerunning(true); return }
     if (id === 'chat') { onOpenChat?.(); return }
+    // `merge` was a second key onto this same `advanceWorkItem` call — the identical request, with
+    // a weaker activation rule behind it. Deleted with its action (owner, 2026-08-03).
     const run: Record<string, () => Promise<unknown>> = {
       approve: () => advanceWorkItem(it.id, contextId),
-      merge: () => advanceWorkItem(it.id, contextId),
       run: () => runWorkItem(it.id, contextId),
       resume: () => resumeWorkItem(it.id, contextId),
     }
@@ -201,7 +216,7 @@ export default function WorkItemModal({
       dQ.refresh()
       // A gate decision moves the item out of this view; a launch keeps it open so the owner can
       // watch the run they just started.
-      if (['approve', 'merge'].includes(id)) onClose()
+      if (id === 'approve') onClose()
     } catch (e) {
       setMutErr(`${id} failed — ${e}`)
     } finally {
@@ -260,7 +275,6 @@ export default function WorkItemModal({
   const byId = Object.fromEntries(barActions.map((a) => [a.id, a]))
   const primaryId = d?.at_gate ? 'approve' : String(it.status) === 'error' ? 'resume' : 'run'
   const primary = byId[primaryId] ?? byId[PRIMARY_ORDER.find((k) => byId[k]?.active) ?? 'approve']
-  const auths = d?.authorizations ?? []
 
   return (
     <Modal onClose={onClose} contain column fill maxW="max-w-3xl" z="z-40">
@@ -295,14 +309,11 @@ export default function WorkItemModal({
         <ProgressBar pipeline={pipeline} phase={phase} running={running} done={completed} />
       </div>
 
-      {/* Authorization requests — an owner decision that HOLDS the merge, so it leads above the tabs
-          rather than waiting to be found under one (§2.1: the must-resolve set greys Approve). */}
-      {auths.length > 0 && (
-        <AuthorizationsBanner auths={auths} busy={authBusy} onDecide={decideAuth} />
-      )}
-
-      {/* Tabs */}
-      <div className="flex shrink-0 gap-1 border-b border-line px-4">
+      {/* Tabs. The authorization FLAG rides at the end of this row (owner, 2026-08-08): the request
+          itself lives in its own Quick View sub, and this is what makes a pending one impossible to
+          miss from any tab without spending a third of the modal on a card most items never have.
+          It is a pointer, not a second renderer — it carries no detail and takes no decision. */}
+      <div className="flex shrink-0 items-center gap-1 border-b border-line px-4">
         {TABS.map(({ id, label, icon: Icon }) => (
           <button key={id} onClick={() => go(id, null)}
                   className={`flex items-center gap-1.5 border-b-2 px-3 py-2 text-[13px] transition ${
@@ -311,6 +322,16 @@ export default function WorkItemModal({
             <Icon size={14} /> {label}
           </button>
         ))}
+        {auths.length > 0 && (
+          <button onClick={() => go('quick', 'auth')}
+                  title="A contract change is waiting on your grant or deny — it holds the merge"
+                  className="ml-auto flex animate-pulse items-center gap-1.5 rounded-full border
+                             border-warn/50 bg-warn/10 px-2.5 py-1 text-[11px] font-semibold
+                             text-warn transition hover:bg-warn/20">
+            <ShieldCheck size={12} />
+            Authorization
+          </button>
+        )}
       </div>
 
       {/* Sub-tabs — Quick View's three panes, or Reports' per-phase list. */}
@@ -337,13 +358,15 @@ export default function WorkItemModal({
       <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-4">
         {err && <div className="rounded-md border border-danger/40 bg-danger/10 px-2.5 py-1.5 text-[13px] text-danger">{err}</div>}
         {!d ? <Loading /> : tab === 'quick' ? (
-          sub === 'deputy' ? <DeputyLogPane events={events} />
-          : sub === 'proof' ? <ProofPane rows={d.proof} auths={auths} />
-          : <NowPane d={d} it={it} busy={busy} onAct={act} />
+          sub === 'deputy' ? <DeputyLogPane events={events} phase={d.now.phase} />
+          : sub === 'auth' ? <AuthorizationsPane auths={auths} busy={authBusy} onDecide={decideAuth} />
+          : sub === 'proof' ? <ProofPane rows={d.proof} auths={auths} lenses={d.lenses} />
+          : <NowPane d={d} it={it} contextId={contextId} busy={busy} onAct={act} />
         ) : tab === 'reports' ? (
           reportPhases.length === 0
             ? <Empty>No phase has written a report yet — each phase writes one as its closing act.</Empty>
-            : <ReportPane itemId={it.id} contextId={contextId} phase={String(sub ?? reportPhases[0])} />
+            : <ReportPane itemId={it.id} contextId={contextId} phase={String(sub ?? reportPhases[0])}
+                          itemPhase={d.now.phase} />
         ) : tab === 'git' ? (
           <GitPane it={it} contextId={contextId} actions={d.actions} busy={busy} onAct={act}
                    onChanged={onChanged} />
@@ -490,8 +513,9 @@ function ActionIcon({ id }: { id: string }) {
 
 // ── Quick View › Now ────────────────────────────────────────────────────────────────────────────
 
-function NowPane({ d, it, busy, onAct }: {
-  d: Drilldown; it: WorkItem; busy: string | null; onAct: (id: string) => void
+function NowPane({ d, it, contextId, busy, onAct }: {
+  d: Drilldown; it: WorkItem; contextId: string
+  busy: string | null; onAct: (id: string) => void
 }) {
   // EVERY block on this pane is a card (owner, 2026-08-01). The pane spent a while the other way —
   // one box for the decision, everything else flat text on the pane background separated by
@@ -502,6 +526,37 @@ function NowPane({ d, it, busy, onAct }: {
   // vocabulary the Proof pane already uses, so the two Quick View panes read as one surface.
   return (
     <div className="space-y-3">
+      {/* ABOUT FIRST (owner, 2026-08-08). What this item IS precedes what is happening to
+          it: a reader opening a strange item needs the subject before the verb, and the
+          Problem row is the one line that makes every card under it legible. */}
+      {/* ABOUT THIS WORK-ITEM — what it IS, for a reader who has just opened a strange item. It
+          replaced `Item at a glance`, whose two rows restated the title in the header two inches up
+          and the tasks/checks the Task tab renders in full. Rows are server-composed and rendered
+          in order; this reads no label by name, which is what kept a backend relabel from turning
+          into three blank rows. */}
+      {/* COLLAPSED by default (owner, 2026-08-08). What the item IS is read once, when you first
+          open a strange item — after that it is four rows of unchanging text standing between the
+          owner and the thing that is actually asking for them. Closed it costs one line and stays
+          first, so the subject is still named before the verb; open it is the same card as before. */}
+      {d.about.length > 0 && (
+        <details className="group rounded-md border border-line bg-sunken px-3 py-2.5">
+          <summary className="flex cursor-pointer list-none items-center gap-1.5">
+            <ChevronRight size={13} className="shrink-0 text-faint transition group-open:rotate-90" />
+            <SectionHeader className="flex items-center gap-1.5">
+              <Gauge size={13} /> About this work-item
+            </SectionHeader>
+          </summary>
+          <dl className="mt-1.5 text-[13px]">
+            {d.about.map((r) => (
+              <div key={r.label} className="flex gap-2 border-t border-line py-1.5 first:border-t-0">
+                <dt className="w-20 shrink-0 text-muted">{r.label}</dt>
+                <dd className="min-w-0 flex-1 text-fg">{codeSpans(sentence(r.value))}</dd>
+              </div>
+            ))}
+          </dl>
+        </details>
+      )}
+
       {/* The CURRENT PHASE card: the live line is its title, and the ask lives inside it. The live
           line has always been the attention card's header — "Review · cycle 1" says which phase is
           asking — and splitting them into two peer cards broke that sentence in half. The phase name
@@ -516,11 +571,36 @@ function NowPane({ d, it, busy, onAct }: {
           <SectionHeader>{PHASE_LABEL[d.now.phase] ?? d.now.phase}</SectionHeader>
           {d.now.cycle > 0 && <span className="text-[13px] text-muted">· cycle {d.now.cycle}</span>}
           {/* No telemetry here: model · ctx · Σtok is the HEADER's line (RunMeta), and printing the
-              same three numbers twice on one screen invites the reader to look for the difference. */}
-          {d.now.last && (
-            <span className="min-w-0 flex-1 truncate text-[13px] text-muted">· {d.now.last}</span>
-          )}
+              same three numbers twice on one screen invites the reader to look for the difference.
+              And no live line either (owner, 2026-08-08): the newest event's own sentence sat here,
+              truncated mid-word, restating the attention card one inch below it. The phase name,
+              the cycle and the running dot are the whole status read; the event stream is Activity's
+              job and the reason it is parked is the card's. */}
         </div>
+        {/* WHAT THIS PHASE CONCLUDED, in its own report's words — the reason every user-facing
+            report opens with `**Summary:**`. It sits directly under the phase line because it
+            finishes that sentence: "Vet · cycle 2" then what vet found. Absent while the phase is
+            still working: a phase writes its report as its closing act, so there is nothing to
+            show yet and a placeholder would read as a conclusion. */}
+        {/* LABELLED `Summary:` (owner, 2026-08-08). The sentence is a quotation from another
+            document — the phase's own report — and unlabelled it read as the pane's own narration,
+            indistinguishable from the live line above it. The reports name this block the same way
+            (`**Summary:**`), so the label is the one already in the source. */}
+        {/* HELD OVER while the phase works (owner, 2026-08-08). A phase writes its report as its
+            closing act, so a running phase has no summary and this card used to go blank — which in
+            autopilot is most of what the owner ever sees. It now holds the last completed phase's
+            conclusion, LABELLED with that phase, so nothing is passed off as the running phase's
+            own. `summary_phase` is the server's answer to "whose line is this". */}
+        {d.now.summary && (
+          <p className="mt-1.5 text-[13px] leading-snug text-fg">
+            <span className="font-semibold text-warn">
+              {d.now.summary_phase && d.now.summary_phase !== d.now.phase
+                ? `${PHASE_LABEL[d.now.summary_phase] ?? d.now.summary_phase} summary:`
+                : 'Summary:'}
+            </span>{' '}
+            {codeSpans(sentence(d.now.summary))}
+          </p>
+        )}
         {d.attention && (
           <div className="mt-2.5">
             <AttentionCardView card={d.attention} busy={busy} onAct={onAct} />
@@ -528,101 +608,51 @@ function NowPane({ d, it, busy, onAct }: {
         )}
       </section>
 
-      <section className="rounded-md border border-line bg-sunken px-3 py-2.5">
-        <SectionHeader className="mb-1.5 flex items-center gap-1.5">
-          <Gauge size={13} /> Item at a glance
-        </SectionHeader>
-        {/* Rows come from the server as an ordered label→value map — this reads no key by name.
-            A hardcoded ['goal','progress','next'] here is what turned a backend relabel into three
-            blank rows and a 500 on the response model. */}
-        <dl className="text-[13px]">
-          {Object.entries(d.glance).map(([label, value]) => (
-            <div key={label} className="flex gap-2 border-t border-line py-1.5 first:border-t-0">
-              <dt className="w-20 shrink-0 text-muted">{label}</dt>
-              <dd className="min-w-0 flex-1 text-fg">{value}</dd>
-            </div>
-          ))}
-        </dl>
-      </section>
+      {/* THE OWNER'S OWN INPUT, and only while it can still land. Second on the pane because
+          during triage it is the one thing on this screen the owner can ADD — everything below is
+          something to read. It disappears the moment plan starts, which is the honest shape: the
+          section is read once, cold, on plan's way in, and a form still offering to change it
+          afterwards would be offering nothing. */}
+      {d.now.phase === 'triage' && <FromYouCompose itemId={it.id} contextId={contextId} />}
 
-      {/* Gate checks — NAMED ROWS with the reason inline (owner rule). A failing check used to be a
-          coloured dot with its detail in a hover `title`, which made a fatal check and an advisory one
-          look identical. `blocking` is the only one that greys Approve; everything else is a fact the
-          owner may act over with their eyes open. */}
-      {d.checks.length > 0 && (
-        <section className="rounded-md border border-line bg-sunken px-3 py-2.5">
-          <SectionHeader className="mb-1.5 flex items-center gap-1.5">
-            {/* Just "Mechanical checks". The gate is already named twice above (the progress bar and
-                the attention card), and a heading that restates it pushes the actual noun out. */}
-            <ListChecks size={13} /> Mechanical checks
-            {!d.at_gate && (
-              <span className="ml-1 text-[10px] font-normal normal-case tracking-normal text-muted">
-                preview of {d.gate_label.toLowerCase()}
-              </span>
-            )}
-            {d.at_gate && d.blocked_by.length > 0 && (
-              <span className="ml-1 rounded bg-warn/15 px-1.5 py-px text-[10px] font-semibold tracking-wide text-warn">
-                {d.blocked_by.length} must resolve
-              </span>
-            )}
+      {/* WHAT MUST RESOLVE — and ONLY that (owner, 2026-08-07). The standing Mechanical-checks
+          block is gone: it rendered on every item at every moment, mostly as a list of green rows
+          and off-gate previews, and it was the largest thing on the pane while being, almost always,
+          a list of things nobody had to do. What survives is the case that actually costs the owner
+          something: Approve is greyed and the button alone can't say why.
+
+          Three conditions, all necessary. `blocked_by` non-empty is the same set that greys the
+          button — one rule, one writer. `at_gate`, because off-gate the server grades the gate
+          AHEAD, so these are things the loop is still working through, not the owner's. And
+          `!running`, because a check measured mid-write is a measurement of an unfinished file —
+          that one shipped as a red "plan.md does not exist" beside its own "Agent working…" label.
+
+          Nothing was lost: `d.checks` still ships and the Task tab reads the same gate's evidence
+          in full. This pane answers one question — is anything stopping me. */}
+      {d.blocked_by.length > 0 && d.at_gate && !d.now.running && (
+        <section className="rounded-md border border-danger/40 bg-danger/5 px-3 py-2.5">
+          <SectionHeader className="mb-1.5 flex items-center gap-1.5 text-danger">
+            <ListChecks size={13} /> Must resolve before {d.gate_label}
           </SectionHeader>
           <ul>
-            {/* Hairline rows, not cards. A FAILING row still has to be findable at a glance, so it
-                keeps a coloured left edge and a tint — the severity that used to be carried by a full
-                border now rides one edge, and a passing row carries no chrome at all.
-
-                OFF-GATE the severity vocabulary is DROPPED, not just softened. Mid-build/mid-vet the
-                server grades the gate AHEAD (gate_briefs walks forward), so a red "Blocks approve"
-                row named a button that wasn't on screen — the primary slot holds Run/Resume there —
-                and "N must resolve" read as an owner to-do while the loop was already resolving it.
-                The rows still show: what review will ask is worth previewing. They just don't shout.
-
-                ADVISORY rows get NO chrome either (owner, 2026-07-31). They were wearing the failure
-                costume — a red-family `✗`, a tinted panel, a coloured left edge — with a small chip
-                as the only thing saying "you don't have to act". The costume won: the row read as a
-                chore blocking the button right below it. An advisory is a PRICE, not a task; it
-                cannot stop anything, and there is nothing to do about it. Only a blocking failure —
-                the one thing that actually greys Approve — is allowed to look urgent. */}
-            {d.checks.map((c) => {
-              const stops = !c.ok && c.blocking && d.at_gate
+            {/* The named rows, filtered to the blocking failures. Every row here stops the button,
+                so none of them carries a severity badge — a badge that says the same thing on every
+                row is a column of ink saying nothing. The criterion is the LABEL and the detail is
+                the fact, so the sentence reads at full contrast and the slug stays quiet. */}
+            {d.checks.filter((c) => !c.ok && c.blocking).map((c) => {
               const Icon = CHECK_ICON[c.criterion] ?? ListChecks
               return (
-              <li key={c.criterion}
-                  className={`border-t border-line py-1.5 text-[13px] first:border-t-0 ${
-                    stops ? 'border-l-2 border-l-danger bg-danger/5 pl-2' : ''
-                  }`}>
-                <div className="flex items-baseline gap-2">
-                  {/* `–` for an advisory, not a dot: the dash is the same glyph the evidence
-                      ledger uses for "recorded, no pass/fail verdict", and a mid-line dot read as
-                      a bullet — punctuation, not a mark. Fixed width so the names line up. */}
-                  <span className={`w-3 shrink-0 text-center ${
-                    c.ok ? 'text-success' : stops ? 'text-danger' : 'text-faint'}`}>
-                    {c.ok ? '✓' : stops ? '✗' : '–'}
-                  </span>
-                  <Icon size={12} className="shrink-0 self-center text-faint" />
-                  {/* The criterion is the LABEL, the detail is the fact — so the detail is `fg`
-                      and the name is muted. It read the other way round: a loud slug over a dim
-                      sentence, which is the one line here anyone actually needs. */}
-                  <span className="font-mono text-[11px] font-medium text-muted">{c.criterion}</span>
-                  {/* Three states, three colours, and the third is deliberately NOT grey: red
-                      stops the gate, blue is a fact you may act over, grey is "not evaluated yet".
-                      An advisory in the same grey as an unevaluated row said nothing about which
-                      one had actually been measured. Blue reads informational without reading
-                      urgent — the one thing an advisory must never do. */}
-                  {!c.ok && (
-                    <span className={`rounded px-1.5 py-px text-[10px] font-semibold tracking-wide ${
-                      stops ? 'bg-danger/15 text-danger'
-                            : !d.at_gate ? 'bg-fg/8 text-muted'
-                            : 'bg-accent/15 text-accent-text'
-                    }`}>
-                      {stops ? 'Blocks approve' : !d.at_gate ? 'Not yet' : 'For your information'}
-                    </span>
-                  )}
-                </div>
-                {/* Indented past the mark AND the icon so the sentence hangs under the name. */}
-                <p className="mt-0.5 pl-10 leading-snug text-fg">{c.detail}</p>
-              </li>
-            )})}
+                <li key={c.criterion} className="border-t border-line py-1.5 text-[13px] first:border-t-0">
+                  <div className="flex items-baseline gap-2">
+                    <span className="w-3 shrink-0 text-center text-danger">✗</span>
+                    <Icon size={12} className="shrink-0 self-center text-faint" />
+                    <span className="font-mono text-[11px] font-medium text-muted">{c.criterion}</span>
+                  </div>
+                  {/* Indented past the mark AND the icon so the sentence hangs under the name. */}
+                  <p className="mt-0.5 pl-10 leading-snug text-fg">{c.detail}</p>
+                </li>
+              )
+            })}
           </ul>
         </section>
       )}
@@ -645,7 +675,7 @@ function AttentionCardView({ card, busy, onAct }: {
     <div className="rounded-lg border border-warn/40 bg-warn/10 px-3.5 py-3">
       <div className="flex items-start gap-2.5">
         <div className="min-w-0 flex-1 space-y-2">
-          {/* The card's TITLE, so it uses the same SectionHeader as "Item at a glance" and
+          {/* The card's TITLE, so it uses the same SectionHeader as "About this work-item" and
               "Mechanical checks" — only the colour differs. It was a bespoke 11px bold span, which
               made the loudest card on the pane carry the quietest heading. */}
           <SectionHeader className="text-warn">Need your attention</SectionHeader>
@@ -655,10 +685,23 @@ function AttentionCardView({ card, busy, onAct }: {
               look mis-set rather than enumerated. The `n label` column already carries the ordering;
               the type doesn't need to re-state it. */}
           <Row n="1" label="Why">
-            <p className="text-[13px] leading-snug text-fg">{card.why}</p>
-            {card.detail && (
-              <div className="mt-1 whitespace-pre-wrap text-[13px] leading-relaxed text-muted">{card.detail}</div>
-            )}
+            {/* MARKDOWN, not pre-wrapped text (owner, 2026-08-08). BOTH lines: the deputy writes
+                its headline as `…at the **review** gate` and its escalation as `**Issue summary:**`
+                over bulleted concerns, so raw text printed the asterisks and lost the one structure
+                that makes a page card scannable. `report` is the variant, not `chat`: it is the
+                panel's own voice (13px, matching the What/Reference rows beside it, where `chat`
+                is 14px and made the card two sizes), and it reserves its warn tint for a bold that
+                opens a paragraph — the block-label role `**Issue summary:**` and `**Concern:**`
+                play. `**review**` takes the same tint (CSS `:first-child` counts elements, so the
+                first bold in a paragraph is "first" even mid-sentence), which is right here: the
+                card is warn-framed and the deputy's chat bubble tints that word too. */}
+            {/* The variant is calibrated for a scrolling report, where a paragraph earns its
+                10px of air. Inside a card row the outer margins fight the row's own rhythm, so
+                the first and last block give theirs back. */}
+            <div className="space-y-2 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0">
+              <Markdown text={card.why} variant="report" tone="dev" />
+              {card.detail && <Markdown text={card.detail} variant="report" tone="dev" />}
+            </div>
           </Row>
           <Row n="2" label="What">
             <p className="text-[13px] leading-snug text-fg">{card.do}</p>
@@ -728,117 +771,401 @@ function Row({ n, label, children }: { n: string; label: string; children: React
 // The connected view (§4.2): one row per BUILT THING, each carrying its own validation →
 // verification. A bare grid of check ids tells the owner nothing; "this feature, proven this way"
 // does. The join is mechanical (plan task ids) — assembled server-side, never by an LLM.
-function ProofPane({ rows, auths }: { rows: ProofRow[]; auths: Drilldown['authorizations'] }) {
-  const real = rows.filter((r) => r.built.length || r.validated.length || r.verified.length || r.task)
-  if (!real.length) return <Empty>No tasks yet — the plan writes them, with the checks that prove them.</Empty>
+type Verified = ProofRow['verified'][number]
+
+/* The pane's CHROME. A CARD, in the same `rounded-md border-line bg-sunken` vocabulary every other
+   Quick View block uses, titled with the shared `SectionHeader` — because this tab has to read as
+   the same surface as Now, one click away (owner, 2026-08-01, and again 2026-08-08: "why do we have
+   to have the design of this task subtab different from others?").
+
+   I briefly rebuilt this as flat ruled sections. That is precisely the arrangement the 2026-08-01
+   ruling had already tried and discarded: "a hairline between two blocks of similar-sized text is
+   not a boundary anyone sees, and the pane read as one undifferentiated column." Cards carry the
+   separation; colour is reserved for urgency. The refinements that DID help — a progress rail, one
+   aligned glyph column, state as a pill, id chips — live inside the card, where they belong. */
+
+function ProofSection({ title, meta, children }: {
+  title: string; meta?: React.ReactNode; children: React.ReactNode
+}) {
   return (
-    <div className="space-y-2">
-      {/* One BLOCK per built thing, not a three-column table. The drilldown lives in the dashboard
-          column beside the chat rail, and at that width three columns of prose collapse to unreadable
-          slivers — the connection (this feature → validated this way → verified this way) is what
-          §4.2 asks for, and stacking preserves it where a scrolling grid destroys it. */}
-      {real.map((r) => (
-        <div key={r.task || 'item-wide'} className="rounded-md border border-line bg-sunken px-3 py-2">
-          <div className="flex items-baseline gap-2">
-            {r.task ? (
-              <span className={`shrink-0 rounded px-1.5 py-px font-mono text-[10px] ${
-                r.done ? 'bg-success/15 text-success' : 'bg-hover text-faint'
-              }`}>{r.task}</span>
-            ) : (
-              <span className="shrink-0 rounded bg-hover px-1.5 py-px text-[10px] tracking-wide text-faint">
-                Item-wide
-              </span>
-            )}
-            {r.task && <span className="min-w-0 text-[13px] font-medium leading-snug text-fg">{codeSpans(r.text)}</span>}
+    <section className="rounded-md border border-line bg-sunken px-3 py-2.5">
+      <div className="flex items-baseline justify-between gap-2">
+        <SectionHeader>{title}</SectionHeader>
+        {meta}
+      </div>
+      <div className="mt-2">{children}</div>
+    </section>
+  )
+}
+
+/* One fixed-width status column, so every glyph in the pane lands on the SAME vertical line and
+   the eye can run down it to read state without reading a word. */
+function Glyph({ tone, children }: { tone: string; children: React.ReactNode }) {
+  return <span className={`w-3.5 shrink-0 text-center text-[12px] leading-[1.45] ${tone}`}>{children}</span>
+}
+
+/* State as a PILL, not a right-floating word: the words differ in length ("not run yet" vs "✓"),
+   so a bare span left a ragged right edge down the column. A pill is fixed-shape and colour-carried,
+   which is the read the owner wants at a glance. */
+function StatePill({ v }: { v: Verified }) {
+  const [tone, label] =
+    !v.ran ? ['border-line text-faint', 'not run yet']
+    : v.deferred ? ['border-line text-muted', 'deferred']
+    : v.passed ? ['border-success/40 bg-success/10 text-success', historyGlyph(v.history, true)]
+    : ['border-danger/40 bg-danger/10 text-danger', historyGlyph(v.history, false)]
+  return (
+    <span className={`shrink-0 rounded-full border px-1.5 py-px text-[10px] font-medium ${tone}`}>
+      {label}
+    </span>
+  )
+}
+
+function ProofPane({ rows, auths, lenses }: {
+  rows: ProofRow[]; auths: Drilldown['authorizations']; lenses: Drilldown['lenses']
+}) {
+  const real = rows.filter((r) => r.built.length || r.validated.length || r.verified.length || r.task)
+  if (!real.length && !lenses.length) {
+    return <Empty>No tasks yet — the plan writes them, with the checks that prove them.</Empty>
+  }
+  const tasks = rows.filter((r) => r.task)
+  const doneCount = tasks.filter((r) => r.done).length
+  const itemWide = rows.find((r) => !r.task)
+  // THE JOIN RUNS check → tasks, so render it that way (owner: "very uglily layouted", 2026-08-08).
+  // `proof_rows` fans each check out under every task its `covers:` names, which is right for the
+  // payload and wrong for the eye: one check covering t1/t2/t4 printed its full `proves` sentence
+  // three times, and each task's title printed twice more (tracker, then block header). Four tasks
+  // and four checks rendered as ~20 blocks of mostly repeated prose. Folding the fan-out back here
+  // costs nothing — the covered ids are exactly the keys it was fanned out under.
+  const byCheck = new Map<string, { v: Verified; covers: string[] }>()
+  for (const r of rows) {
+    for (const v of r.verified) {
+      const seen = byCheck.get(v.check)
+      if (seen) { if (r.task) seen.covers.push(r.task) } else {
+        byCheck.set(v.check, { v, covers: r.task ? [r.task] : [] })
+      }
+    }
+  }
+  const checks = [...byCheck.values()]
+  return (
+    <div className="space-y-3">
+      {/* ONE CONTRAST RULE across this pane (owner, 2026-08-06): the SENTENCE reads at `text-fg`,
+          its NAME stays quiet at `text-faint`. Lens name / check id / section label are addressing —
+          you scan them to find your place — while what a check proves and what a lens probed are the
+          thing you opened the tab to read.
+
+          READING ORDER (owner, 2026-08-07): what was committed to → whether it holds → what nobody
+          had to remember to ask. THREE sections, one per question — not a block per task carrying a
+          copy of every check that touches it (owner, 2026-08-08). */}
+      {tasks.length > 0 && (
+        <ProofSection title="Tasks"
+                 meta={<span className="text-[11px] tabular-nums text-muted">{doneCount}/{tasks.length}</span>}>
+          {/* A 2px rail instead of a second sentence about progress: "how much of this is done" is
+              the question asked on the way in, and a bar answers it before any word is read. */}
+          <div className="mb-2 h-[3px] overflow-hidden rounded-full bg-hover">
+            <div className="h-full rounded-full bg-success transition-[width]"
+                 style={{ width: `${Math.round((doneCount / tasks.length) * 100)}%` }} />
           </div>
-          {/* The `built` prose is NOT rendered here (owner, 2026-08-01). It is the build report's
-              §Built bullets verbatim — a paragraph per task, already readable one tab over under
-              Reports → Build. Proof answers "was it proven", and burying that answer under three
-              lines of narration is what made the pane look like a wall. The join still USES built:
-              a task with build output but no evidence yet keeps its row. */}
-          {/* The label is a HEADING over its list, not a left column (owner, 2026-08-02). At this
-              width a label column left ~60% for the content, and a check — id, state, and a full
-              sentence of expectation — wrapped into a ragged block with no line the eye can start
-              on. Full width, one check per two lines: NAME + STATE, then what it proves under it. */}
-          {(r.validated.length > 0 || r.verified.length > 0) && (
-            <div className="mt-2 space-y-2 border-t border-line pt-2">
-              {r.validated.length > 0 && (
-                <div>
-                  {/* The ACTIVITY, not a past-tense claim: these rows exist from the plan gate on,
-                      and "Verified" above a check nobody has run yet is a lie the layout tells. */}
-                  <div className="text-[11px] uppercase tracking-wide text-faint">Validation</div>
-                  <ul className="mt-1 space-y-0.5 text-[13px] leading-snug text-muted">
-                    {r.validated.map((v, i) => <li key={i}>{codeSpans(v)}</li>)}
-                  </ul>
+          <ul className="space-y-2">
+            {tasks.map((r) => (
+              <li key={r.task} className="flex gap-2">
+                <Glyph tone={r.done ? 'text-success' : 'text-faint'}>{r.done ? '✓' : '·'}</Glyph>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[13px] leading-snug">
+                    {/* The id is ADDRESSING: it is what a check's `covers` chips point back at, so
+                        it has to be visible here or those chips resolve to nothing. Set inline and
+                        quiet, it labels the sentence without taking a column of its own. */}
+                    <span className="mr-1.5 font-mono text-[10px] text-faint">{r.task}</span>
+                    {/* A done task goes QUIET, not struck through: the ticks are a progress read,
+                        and a column of struck-out text reads as cancelled work. */}
+                    <span className={r.done ? 'text-muted' : 'text-fg'}>{codeSpans(sentence(r.text))}</span>
+                  </div>
+                  {/* The SPECIFICATION, folded — the same `▸` affordance the checks use, because it
+                      is the same kind of thing: real detail that is not the answer to the question
+                      the tab is open for. Printed inline it was 340 characters and eight code spans
+                      per row, and four of them made the pane a wall (owner, 2026-08-08). The plan
+                      writes it on the indented lines under the task's name; `parse_tasks` keeps the
+                      two apart so the name can be a name. */}
+                  {r.detail && (
+                    <details className="group mt-0.5">
+                      <summary className="cursor-pointer list-none text-[11px] text-faint
+                                          transition hover:text-muted">
+                        <span className="inline-block transition group-open:rotate-90">▸</span>{' '}
+                        what this covers
+                      </summary>
+                      <p className="mt-1 border-l border-line pl-2 text-[12px] leading-snug text-muted">
+                        {codeSpans(sentence(r.detail))}
+                      </p>
+                    </details>
+                  )}
+                  {/* Validation is the BUILD's own evidence for this task — it belongs under the
+                      task it evidences, hung off a rule so it reads as support rather than as more
+                      tasks. The `built` prose stays out (owner, 2026-08-01): it is the build
+                      report's §Built bullets verbatim, one tab over under Reports → Build. */}
+                  {/* REAL BULLETS (owner, 2026-08-08). This was a rule on the left and nothing
+                      else, so four separate observations read as one wrapped paragraph and the
+                      owner asked where the bullets were. The rule groups; the disc separates. Same
+                      `list-disc` + faint marker the report renderer uses, so a list is one object
+                      whether it arrives as markdown or as payload.
+
+                      `space-y-2`, and the same value on every evidence list in this pane (owner,
+                      2026-08-08): these entries WRAP, so the gap between two bullets has to beat
+                      the gap between two lines of one bullet or the disc is the only thing telling
+                      them apart. At `0.5` the two were within a pixel of each other. */}
+                  {r.validated.length > 0 && (
+                    <ul className="mt-1 list-disc space-y-2 border-l border-line pl-5 text-[12px]
+                                   leading-snug text-muted marker:text-faint">
+                      {r.validated.map((v, i) => <li key={i}>{codeSpans(sentence(v))}</li>)}
+                    </ul>
+                  )}
                 </div>
-              )}
-              {r.verified.length > 0 && (
-                <div>
-                  <div className="text-[11px] uppercase tracking-wide text-faint">Verification</div>
+              </li>
+            ))}
+          </ul>
+          {/* Work that named no task — a whole-suite run is not per-task and never was. It used to
+              get a card of its own titled `Item-wide`, which read as a fifth task. */}
+          {/* ONE label for the GROUP, not a tag on every row (owner, 2026-08-08). Each row wore a
+              bare `across`, which named nothing on its own — the reader had to infer that the word
+              meant "this evidence belongs to no single task". Said once, in full, above the list,
+              it is a heading instead of a riddle. */}
+          {itemWide && itemWide.validated.length > 0 && (
+            <div className="mt-2 border-l border-line pl-2">
+              <div className="text-[10px] uppercase tracking-wide text-faint">Across the whole item</div>
+              <ul className="mt-0.5 list-disc space-y-2 pl-3.5 text-[12px] leading-snug
+                             text-muted marker:text-faint">
+                {itemWide.validated.map((v, i) => <li key={i}>{codeSpans(sentence(v))}</li>)}
+              </ul>
+            </div>
+          )}
+        </ProofSection>
+      )}
+      {/* THE EXAM, once. Every check the plan declared, in plan order, each naming the tasks it
+          defends rather than being reprinted under each of them. */}
+      {/* The ACTIVITY, not a past-tense claim: these rows exist from the plan gate on, and
+          "Verified" above a check nobody has run yet is a lie the layout tells. */}
+      {checks.length > 0 && (
+        <ProofSection title="Verification"
+                 meta={<span className="text-[11px] tabular-nums text-muted">
+                   {checks.filter((c) => c.v.ran && c.v.passed).length}/{checks.length}
+                 </span>}>
+          <ul className="space-y-3">
+            {checks.map(({ v, covers }) => (
+              <li key={v.check}>
+                {/* THE ROW LEADS WITH WHAT IT PROVES (owner, 2026-08-07) — the plan's own
+                    sentence for what is true of the product when this check passes. It used
+                    to lead with the check id and `expect`, which meant the owner read a slug
+                    and a shell expectation and had to reconstruct the meaning from them.
+                    Older plans have no `proves:` (it became a field in this same phase), so
+                    the row falls back to `expect` and then to the id rather than blanking. */}
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="min-w-0 text-[13px] leading-snug text-fg">
+                    {codeSpans(sentence(v.proves || v.expect || v.check))}
+                  </span>
+                  {/* A check the loop hasn't reached is NOT a failure — it reads "not run
+                      yet" in the quiet colour. Rendering it as ✗ would tell the owner
+                      approving a plan that their exam had already failed. */}
+                  <StatePill v={v} />
+                </div>
+                {/* Which tasks this defends, as ids rather than as repetition. This is the whole
+                    reason the pane can show each check once: the connection §4.2 asks for is
+                    preserved by naming the tasks, not by reprinting the check under each. */}
+                {covers.length > 0 && (
+                  <div className="mt-1 flex flex-wrap items-center gap-1">
+                    <span className="text-[10px] text-faint">covers</span>
+                    {covers.map((id) => (
+                      <span key={id} className="rounded bg-hover px-1 py-px font-mono text-[10px] text-muted">
+                        {id}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {/* HOW it was checked, one click away. The id, the mode, the expectation and
+                    the captured output are all real evidence and none of them is the answer
+                    to "did this hold" — folded away, they stop competing with the sentence
+                    above for the reader's first pass, and a `<details>` costs one click to
+                    get back. A failure's DIAGNOSIS is deliberately NOT in here: that is the
+                    actionable finding, and it stays open below. */}
+                <details className="mt-0.5 group">
+                  <summary className="cursor-pointer list-none text-[11px] text-faint
+                                      transition hover:text-muted">
+                    <span className="inline-block transition group-open:rotate-90">▸</span>{' '}
+                    how this was checked
+                  </summary>
+                  <div className="mt-1 space-y-1 border-l border-line pl-2">
+                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[11px] text-faint">
+                      <span className="font-mono">{v.check}</span>
+                      {v.mode && <span>· {v.mode}</span>}
+                      {/* Provenance, only when it is the stronger claim: the kernel ran this
+                          one itself, so no model sits between the exit code and the verdict.
+                          Agent-attested is the norm and needs no badge — labelling both
+                          would spend a row of ink to say nothing. */}
+                      {v.by === 'machine' && (
+                        <span className="rounded bg-hover px-1 tracking-wide"
+                              title="Run by the kernel in the sandbox — no agent between the exit code and this verdict">
+                          machine-run
+                        </span>
+                      )}
+                      {v.source && <span>· {v.source}</span>}
+                    </div>
+                    {v.expect && (
+                      <p className="text-[13px] leading-snug text-muted">
+                        expects {codeSpans(v.expect)}
+                      </p>
+                    )}
+                    {v.how && (
+                      <pre className="max-h-28 overflow-auto whitespace-pre-wrap rounded bg-hover px-1.5 py-1 font-mono text-[11px] leading-relaxed text-muted">{v.how}</pre>
+                    )}
+                  </div>
+                </details>
+                {/* A rubric is judged criterion by criterion, so it is shown that way: the
+                    plan's list before anything runs, each line marked once it has been
+                    judged. A bare "2/3" would hide the only part that is actionable —
+                    WHICH one missed. */}
+                {(v.criteria.length > 0 || v.rubric.length > 0) && (
                   <ul className="mt-1 space-y-2">
-                    {r.verified.map((v) => (
-                      <li key={v.check}>
-                        <div className="flex items-baseline justify-between gap-3">
-                          <span className="flex min-w-0 items-baseline gap-1.5">
-                            <span className="min-w-0 truncate font-mono text-[11px] text-fg">{v.check}</span>
-                            {/* Provenance, only when it is the stronger claim: the kernel ran this
-                                one itself, so no model sits between the exit code and the verdict.
-                                Agent-attested is the norm and needs no badge — labelling both would
-                                spend a row of ink to say nothing. */}
-                            {v.by === 'machine' && (
-                              <span className="shrink-0 rounded bg-hover px-1 text-[10px] tracking-wide text-faint"
-                                    title="Run by the kernel in the sandbox — no agent between the exit code and this verdict">
-                                machine-run
-                              </span>
-                            )}
-                          </span>
-                          {/* A check the loop hasn't reached is NOT a failure — it reads "not run
-                              yet" in the quiet colour. Rendering it as ✗ would tell the owner
-                              approving a plan that their exam had already failed. */}
-                          <span className={`shrink-0 text-[11px] ${
-                            !v.ran ? 'text-faint'
-                            : v.deferred ? 'text-muted' : v.passed ? 'text-success' : 'text-danger'}`}>
-                            {!v.ran ? 'not run yet'
-                                    : v.deferred ? '◌ deferred' : historyGlyph(v.history, v.passed)}
-                          </span>
-                        </div>
-                        {/* What this check proves, in the plan's own words — the whole reason the
-                            row is worth reading before anything has run. */}
-                        {v.expect && (
-                          <p className="text-[13px] leading-snug text-muted">{codeSpans(v.expect)}</p>
-                        )}
-                        {/* The located cause, above the raw output: "where it broke" is the line
-                            the reader wants, and the output is the supporting evidence under it.
-                            Vet never names the fix, so there is none to render. */}
-                        {!v.passed && !v.deferred && v.why && (
-                          <p className="mt-0.5 text-[13px] leading-snug text-muted">
-                            <span className="font-medium text-fg">{codeSpans(v.where)}</span>
-                            {' — '}{codeSpans(v.why)}
-                            {v.unknown && (
-                              <span className="text-faint"> · undetermined: {codeSpans(v.unknown)}</span>
-                            )}
-                          </p>
-                        )}
-                        {/* A failing row shows the vet's captured output verbatim — the failure IS the
-                            expected-vs-actual, and hiding it behind a tooltip is what made the old
-                            check grid say nothing. */}
-                        {!v.passed && !v.deferred && v.result && (
-                          <pre className="mt-0.5 max-h-28 overflow-auto whitespace-pre-wrap rounded bg-canvas px-1.5 py-1 font-mono text-[11px] leading-relaxed text-muted">{v.result}</pre>
-                        )}
+                    {(v.criteria.length ? v.criteria
+                                        : v.rubric.map((text) => ({ text, met: null })))
+                      .map((c, i) => (
+                      <li key={i} className="flex gap-1.5 text-[13px] leading-snug">
+                        <span className={`shrink-0 ${
+                          c.met === null ? 'text-faint'
+                          : c.met ? 'text-success' : 'text-danger'}`}>
+                          {c.met === null ? '·' : c.met ? '✓' : '✗'}
+                        </span>
+                        <span className={c.met === false ? 'text-fg' : 'text-muted'}>
+                          {codeSpans(sentence(c.text))}
+                        </span>
                       </li>
                     ))}
                   </ul>
+                )}
+                {/* The located cause, above the raw output: "where it broke" is the line
+                    the reader wants, and the output is the supporting evidence under it.
+                    Vet never names the fix, so there is none to render. */}
+                {!v.passed && !v.deferred && v.why && (
+                  <p className="mt-0.5 text-[13px] leading-snug text-muted">
+                    <span className="font-medium text-fg">{codeSpans(v.where)}</span>
+                    {' — '}{codeSpans(v.why)}
+                    {v.unknown && (
+                      <span className="text-faint"> · undetermined: {codeSpans(v.unknown)}</span>
+                    )}
+                  </p>
+                )}
+                {/* A failing row shows the vet's captured output verbatim — the failure IS the
+                    expected-vs-actual, and hiding it behind a tooltip is what made the old
+                    check grid say nothing. */}
+                {!v.passed && !v.deferred && v.result && (
+                  <pre className="mt-0.5 max-h-28 overflow-auto whitespace-pre-wrap rounded bg-hover px-1.5 py-1 font-mono text-[11px] leading-relaxed text-muted">{v.result}</pre>
+                )}
+              </li>
+            ))}
+          </ul>
+        </ProofSection>
+      )}
+      {/* THE LENSES, last and under the QUESTION each one asks. They answer what nobody had to
+          remember to ask, so they belong after the plan's own exam rather than above it — the
+          reading order is: what was committed to, whether it holds, then what else was looked for.
+          The slug alone (`intent`, `robustness`) named a category without saying what was asked of
+          the work; the question says it in the words the owner would use.
+
+          A lens with nothing to report still shows what it probed — that is the difference between
+          "nothing is wrong" and "nobody looked" — and one probe per LINE, because the owner reads
+          this list to count what was actually tried. */}
+      {lenses.length > 0 && (
+        <ProofSection title="Also looked at">
+          <ul className="space-y-3">
+            {lenses.map((l) => (
+              <li key={l.lens}>
+                {/* The QUESTION is the heading here, so it takes heading treatment — medium weight
+                    at `text-fg`. Set at the same 13px muted as the probes under it, the list read
+                    as one undifferentiated paragraph of sentences.
+
+                    NAMED as well as asked (owner, 2026-08-08). The question alone said what was
+                    looked for but never which lens looked, so four questions in a row read as a
+                    list of unrelated concerns rather than as the four standing lenses — and the
+                    name is what the vet plan, the reports and the ledger all call this thing. An
+                    unmapped lens shows its name alone rather than printing the slug twice.
+
+                    The name reads at FULL contrast, not `text-faint` (owner, 2026-08-08). The
+                    pane's quiet-name rule is for addressing you scan PAST — a check id, a lens
+                    slug in a corner. This name is part of the heading itself: greyed, it read as a
+                    caption in front of the sentence rather than as the first half of it. */}
+                <div className="text-[12.5px] font-medium leading-snug text-fg">
+                  <span>{sentence(l.lens)}:</span>{' '}
+                  {LENS_QUESTION[l.lens] ?? ''}
                 </div>
-              )}
-            </div>
-          )}
-        </div>
-      ))}
-      <p className="text-[11px] text-faint">
-        authorizations: {auths.length ? `${auths.length} pending your grant/deny` : 'none pending'}
-      </p>
+                <ul className="mt-1 list-disc space-y-2 border-l border-line pl-5 text-[12px]
+                               leading-snug text-muted marker:text-faint">
+                  {l.probed.map((probe, i) => <li key={i}>{codeSpans(sentence(probe))}</li>)}
+                </ul>
+                {/* FINDINGS STAND OFF the probe list (owner, 2026-08-08). At `mt-1` the first
+                    finding sat 4px under the last probe — closer to it than two probes are to each
+                    other — so the one line in the section that reports a PROBLEM read as one more
+                    thing that was looked at. A finding is a different kind of statement from a
+                    probe, and the gap is what says so.
+
+                    `items-baseline` on the row: the label is 10px against a 12.5px sentence, and
+                    stretched from the top the two sat on different lines by a pixel or two — enough
+                    to read as misaligned rather than as a label on a sentence. */}
+                {l.findings.length > 0 && (
+                <div className="mt-3 space-y-2">
+                {l.findings.map((f, i) => (
+                  <p key={i} className="flex items-baseline gap-1.5 text-[12.5px] leading-snug">
+                    {/* A LABEL, not a chip (owner, 2026-08-08). Given `bg-hover` it wore the exact
+                        background a code span wears, so `low` sitting beside `tally rename food ""`
+                        read as another typable token. `bg-hover` belongs to code alone; severity is
+                        carried by colour and case.
+
+                        And it says WHAT it is a measure of: a bare `LOW` beside a sentence named
+                        no quantity, and the owner had to ask (2026-08-08). One extra word answers
+                        it without a legend anywhere else on the page. */}
+                    <span className={`shrink-0 text-[10px] font-semibold uppercase tracking-wide ${
+                      f.severity === 'high' ? 'text-danger'
+                      : f.severity === 'medium' ? 'text-warn' : 'text-faint'}`}>
+                      {f.severity} severity
+                    </span>
+                    <span className="min-w-0 text-fg">{codeSpans(sentence(f.text))}</span>
+                  </p>
+                ))}
+                </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        </ProofSection>
+      )}
+      {/* Only the state that ASKS something of you gets a line. "none pending" is a footer that
+          reports the absence of work on every item that never had any — it spends a permanent row
+          telling the reader nothing happened. The grant/deny surface is where a real one is acted
+          on; this line exists to point at it. */}
+      {auths.length > 0 && (
+        <p className="text-[11px] text-warn">
+          {auths.length} authorization{auths.length === 1 ? '' : 's'} pending your grant/deny
+        </p>
+      )}
     </div>
   )
+}
+
+// What each standing lens actually ASKS of the work, in the owner's words. The slug is the vet
+// tool's vocabulary; this is the question a person would ask, and it is what makes a list of probes
+// legible to someone who has never read the verification design. An unmapped lens falls back to its
+// slug rather than blanking — `performance` is recordable and the set can grow.
+const LENS_QUESTION: Record<string, string> = {
+  intent: 'Does this actually solve the problem the item was filed for?',
+  safety: 'Can this hurt anything — unsafe evaluation, destructive paths, secrets in the open?',
+  robustness: 'Which inputs were tried, and which are still unhandled?',
+  performance: 'Is it fast enough, against a budget the plan named?',
+}
+
+// Sentence-case the first character — for lines that ARE sentences but reach us lowercase: a task
+// written "add the --category flag", a validation bullet, an enum rendered as a value. Owner-flagged
+// 2026-08-07 across the About card and the Task tab.
+//
+// Only when the string starts with a LETTER. A line beginning with a backtick opens a code span
+// (`` `tally list --category groceries` prints only… ``), and capitalising into it would rewrite a
+// command the reader is meant to be able to type.
+function sentence(text: string): string {
+  return /^[a-z]/.test(text) ? text[0].toUpperCase() + text.slice(1) : text
 }
 
 // Plan lines are markdown-flavoured prose, and `code` is the only inline markup our templates use —
@@ -846,7 +1173,13 @@ function ProofPane({ rows, auths }: { rows: ProofRow[]; auths: Drilldown['author
 // Code is 12px absolute here, as in the reports: never `em`, so one token is one size app-wide.
 function codeSpans(text: string) {
   return text.split('`').map((part, i) => (i % 2
-    ? <code key={i} className="rounded bg-hover px-1 font-mono text-[12px] text-fg">{part}</code>
+    // TINTED, like every other code span the owner sees (owner, 2026-08-08). The drilldown rendered
+    // `code` as plain `text-fg` while the Reports tab one click away and the standalone .md pages
+    // rendered the same token in accent — so the one thing on the screen the reader can actually
+    // type changed colour depending on which tab it appeared in. `bg-hover` (not `bg-sunken`) is
+    // the background, because these panes ARE `bg-sunken` cards and a sunken chip inside one is
+    // invisible; hover separates from every container in both themes.
+    ? <code key={i} className="rounded bg-hover px-1 font-mono text-[12px] text-accent-text">{part}</code>
     : <span key={i}>{part}</span>))
 }
 
@@ -869,8 +1202,14 @@ function historyGlyph(history: { cycle: number | null; passed: boolean }[], pass
 // the phase, so it rendered as the same sentence three times over.
 const LEAD_H1 = /^\s*#\s+.*\n+/
 
-function ReportPane({ itemId, contextId, phase }: {
-  itemId: string; contextId: string; phase: string
+// `## From you` is rendered by the editor below, not twice. The section stays in the FILE and in
+// `report_text` — the deputy reads the owner's input there — but on this pane the markdown copy and
+// the textarea holding the same words sat one inch apart, and the owner had to work out which of
+// the two they were supposed to edit.
+const FROM_YOU_SECTION = /\n##\s+From you\s*\n[\s\S]*?(?=\n##\s|$)/
+
+function ReportPane({ itemId, contextId, phase, itemPhase }: {
+  itemId: string; contextId: string; phase: string; itemPhase: string
 }) {
   const q = useLive(K.itemReport(contextId, itemId, phase),
                     () => getWorkItemReport(itemId, phase, contextId), 15000)
@@ -893,7 +1232,217 @@ function ReportPane({ itemId, contextId, phase }: {
           </a>
         )}
       </div>
-      <Markdown text={r.text.replace(LEAD_H1, '')} variant="report" tone="dev" />
+      <Markdown text={r.text.replace(LEAD_H1, '').replace(FROM_YOU_SECTION, '')}
+                variant="report" tone="dev" />
+      {phase === 'triage' && (
+        <FromYouSlots itemId={itemId} contextId={contextId} editable={itemPhase === 'triage'} />
+      )}
+    </div>
+  )
+}
+
+// ── `## From you` — the owner's own section ─────────────────────────────────────────────────────
+//
+// The ONE section of any report the owner writes, and the only place their own words reach the plan
+// phase as instruction rather than as chat. Two surfaces, split by what they are for (owner,
+// 2026-08-08):
+//
+//   COMPOSE lives on Quick View › Now, and only while the item is in TRIAGE. That is the whole
+//   window in which writing here changes anything — plan reads the section once, cold, on its way
+//   in — and on autopilot it may never be open at all. Putting the only thing the owner CAN add
+//   beside the only phase where adding it lands is what makes the window legible.
+//
+//   THE SLOTS themselves live under Reports › Triage, with the report they belong to, where each
+//   can be removed. Deleting is writing, so it obeys the same triage-only window; afterwards the
+//   list stays visible as part of the record.
+//
+// Both talk to one endpoint and PUT the whole pair of lists — the owner is the section's only
+// writer, so there is no concurrent edit for a delta to protect.
+const FROM_YOU_HINT = 'Whatever is here when plan starts is authority it follows, not input it weighs.'
+
+function useOwnerInput(itemId: string, contextId: string) {
+  const q = useLive(K.itemOwnerInput(contextId, itemId),
+                    () => getWorkItemOwnerInput(itemId, contextId), 30000)
+  async function save(next: { references: OwnerReference[]; notes: OwnerNote[] }) {
+    await saveWorkItemOwnerInput(itemId, next.references, next.notes, contextId)
+    invalidate(K.itemOwnerInput(contextId, itemId), K.itemReport(contextId, itemId, 'triage'))
+  }
+  return { saved: q.data as OwnerInput | undefined, save }
+}
+
+const FY_BOX = 'w-full rounded border border-line bg-panel px-2 py-1 text-[13px] text-fg '
+             + 'outline-none transition placeholder:text-faint focus:border-accent'
+
+// Add · Clear, the pair every block on this card carries. Add stays inert until every field it
+// needs is filled — a half-typed reference is not a reference, and an empty slot on disk would read
+// to the plan phase as an instruction with nothing in it.
+function AddClear({ ready, busy, onAdd, onClear }: {
+  ready: boolean; busy: boolean; onAdd: () => void; onClear: () => void
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <button onClick={onAdd} disabled={!ready || busy}
+              className="inline-flex items-center gap-1 rounded bg-accent px-2.5 py-1 text-[11px]
+                         font-medium text-on-accent transition hover:opacity-90 disabled:opacity-40">
+        {busy ? <Loader2 size={11} className="animate-spin" /> : <Plus size={11} />} Add
+      </button>
+      <button onClick={onClear} disabled={busy}
+              className="rounded border border-line px-2.5 py-1 text-[11px] text-muted transition
+                         hover:text-fg disabled:opacity-40">
+        Clear
+      </button>
+    </div>
+  )
+}
+
+function FromYouCompose({ itemId, contextId }: { itemId: string; contextId: string }) {
+  const { saved, save } = useOwnerInput(itemId, contextId)
+  const [ref, setRef] = useState({ source: '', description: '' })
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  if (!saved) return null
+
+  async function add(next: { references: OwnerReference[]; notes: OwnerNote[] }, reset: () => void) {
+    setBusy(true); setErr('')
+    try { await save(next); reset() } catch (e) { setErr(String(e)) } finally { setBusy(false) }
+  }
+  const refReady = !!ref.source.trim() && !!ref.description.trim()
+  const noteReady = !!note.trim()
+
+  return (
+    <section className="rounded-md border border-line bg-sunken px-3 py-2.5">
+      <SectionHeader className="mb-0.5 flex items-center gap-1.5">
+        <PenLine size={13} /> From you
+      </SectionHeader>
+      <p className="mb-2 text-[11px] leading-snug text-faint">
+        {saved.exists ? FROM_YOU_HINT
+                      : 'Triage hasn’t written the brief yet — there is nothing to write into.'}
+      </p>
+      {saved.exists && (
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <div className="text-[11px] font-medium text-muted">Useful imported references</div>
+            <input className={FY_BOX} value={ref.source} disabled={busy}
+                   placeholder="Source — a doc, URL or path"
+                   onChange={(e) => setRef({ ...ref, source: e.target.value })} />
+            <input className={FY_BOX} value={ref.description} disabled={busy}
+                   placeholder="Description — what it governs"
+                   onChange={(e) => setRef({ ...ref, description: e.target.value })} />
+            <AddClear ready={refReady} busy={busy}
+                      onClear={() => setRef({ source: '', description: '' })}
+                      onAdd={() => add({ references: [...saved.references, ref], notes: saved.notes },
+                                       () => setRef({ source: '', description: '' }))} />
+          </div>
+          {/* The hairline is the only separator: two labelled blocks in one card, not two cards —
+              they are the same act (handing plan something it can't derive) at two grains. */}
+          <div className="space-y-1.5 border-t border-line pt-2.5">
+            <div className="text-[11px] font-medium text-muted">Verification notes</div>
+            <input className={FY_BOX} value={note} disabled={busy}
+                   placeholder="Description — something you want proven; each becomes one check"
+                   onChange={(e) => setNote(e.target.value)} />
+            <AddClear ready={noteReady} busy={busy} onClear={() => setNote('')}
+                      onAdd={() => add({ references: saved.references,
+                                         notes: [...saved.notes, { description: note }] },
+                                       () => setNote(''))} />
+          </div>
+          {/* What is already in — a count, not the list. The slots live under Reports › Triage
+              with the report they belong to, and duplicating them here would give the owner two
+              places to reconcile for one short list. */}
+          {(saved.references.length > 0 || saved.notes.length > 0) && (
+            <p className="border-t border-line pt-2 text-[11px] text-faint">
+              {saved.references.length} reference{saved.references.length === 1 ? '' : 's'} ·{' '}
+              {saved.notes.length} note{saved.notes.length === 1 ? '' : 's'} in — see them under
+              Reports → Triage, where they can be removed.
+            </p>
+          )}
+          {err && <p className="text-[11px] text-danger-text">{err}</p>}
+        </div>
+      )}
+    </section>
+  )
+}
+
+// The slots as they stand, under the triage report. Removal is the only act here: composing belongs
+// beside the phase that reads it. `editable` is the triage window — afterwards this is the record of
+// what the plan phase was handed, and a record you can still edit is not one.
+function FromYouSlots({ itemId, contextId, editable }: {
+  itemId: string; contextId: string; editable: boolean
+}) {
+  const { saved, save } = useOwnerInput(itemId, contextId)
+  const [busy, setBusy] = useState('')
+  const [err, setErr] = useState('')
+  if (!saved?.exists) return null
+  const empty = !saved.references.length && !saved.notes.length
+
+  async function drop(key: string, next: { references: OwnerReference[]; notes: OwnerNote[] }) {
+    setBusy(key); setErr('')
+    try { await save(next) } catch (e) { setErr(String(e)) } finally { setBusy('') }
+  }
+
+  const row = 'flex items-start gap-2 border-t border-line py-1.5 text-[13px] first:border-t-0'
+  const del = 'shrink-0 rounded p-0.5 text-faint transition hover:bg-hover hover:text-danger '
+            + 'disabled:opacity-40'
+  return (
+    <div className="mt-4 rounded border border-line bg-sunken px-3 py-2.5">
+      <SectionHeader className="mb-0.5 flex items-center gap-1.5">
+        <PenLine size={13} /> From you
+      </SectionHeader>
+      <p className="mb-2 text-[11px] leading-snug text-faint">
+        {empty
+          ? (editable
+              ? 'Nothing yet. Add references and verification notes from Quick View → Now.'
+              : 'You added nothing here — plan designed from the brief alone.')
+          : editable ? FROM_YOU_HINT
+                     : 'What the plan phase was handed. Read-only now that triage has passed.'}
+      </p>
+      {saved.references.length > 0 && (
+        <div className="mb-2">
+          <div className="text-[11px] font-medium text-muted">Useful imported references</div>
+          <ul>
+            {saved.references.map((r, i) => (
+              <li key={`r${i}`} className={row}>
+                <span className="min-w-0 flex-1 leading-snug text-fg">
+                  <span className="font-medium">{r.source}</span>
+                  {r.source && r.description ? ' — ' : ''}
+                  <span className="text-muted">{r.description}</span>
+                </span>
+                {editable && (
+                  <button className={del} title="Remove this reference" disabled={!!busy}
+                          onClick={() => drop(`r${i}`, {
+                            references: saved.references.filter((_, j) => j !== i),
+                            notes: saved.notes })}>
+                    {busy === `r${i}` ? <Loader2 size={12} className="animate-spin" />
+                                      : <Trash2 size={12} />}
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {saved.notes.length > 0 && (
+        <div>
+          <div className="text-[11px] font-medium text-muted">Verification notes</div>
+          <ul>
+            {saved.notes.map((n, i) => (
+              <li key={`n${i}`} className={row}>
+                <span className="min-w-0 flex-1 leading-snug text-fg">{n.description}</span>
+                {editable && (
+                  <button className={del} title="Remove this note" disabled={!!busy}
+                          onClick={() => drop(`n${i}`, {
+                            references: saved.references,
+                            notes: saved.notes.filter((_, j) => j !== i) })}>
+                    {busy === `n${i}` ? <Loader2 size={12} className="animate-spin" />
+                                      : <Trash2 size={12} />}
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {err && <p className="mt-1 text-[11px] text-danger-text">{err}</p>}
     </div>
   )
 }
@@ -919,50 +1468,55 @@ function TraceTab({ it, contextId, rate, events, pane }: {
 
 type AuthRow = Drilldown['authorizations'][number]
 
-function AuthorizationsBanner({ auths, busy, onDecide }: {
+// Quick View › Authorization. It was a permanent banner above the tabs; it is a sub now (owner,
+// 2026-08-08), reached from the blinking flag in the tab row. Same card, same two buttons — what
+// changed is that it costs nothing on the items that have no request, which is nearly all of them.
+//
+// The feed carries PENDING requests only, so every row here is a decision the owner still owes.
+function AuthorizationsPane({ auths, busy, onDecide }: {
   auths: AuthRow[]
   busy: string | null
   onDecide: (id: string, decision: 'granted' | 'denied') => void
 }) {
+  if (!auths.length) {
+    return <Empty>Nothing is waiting on your authorization — this item asked for no contract change.</Empty>
+  }
   return (
-    <div className="mx-4 mt-3 rounded-lg border border-accent/40 bg-accent/10 px-3.5 py-3">
-      <div className="flex items-start gap-2.5">
-        <ShieldCheck size={16} className="mt-0.5 shrink-0 text-accent-text" />
-        <div className="min-w-0 flex-1">
-          <SectionHeader className="text-accent-text">
-            Authorization {auths.length > 1 ? `requests (${auths.length})` : 'request'} — your call
-          </SectionHeader>
-          <p className="mt-1 text-[11px] leading-snug text-muted">
-            The build deferred {auths.length > 1 ? 'these contract changes' : 'this contract change'} rather than self-authorizing.
-            Grant to have it performed + re-vetted; deny to close with the gap on record.
-          </p>
-          <div className="mt-2.5 space-y-2.5">
-            {auths.map((a) => (
-              <div key={a.id} className="rounded-md border border-line bg-sunken px-2.5 py-2">
-                <p className="text-[13px] font-medium leading-snug text-fg">{a.what}</p>
-                <p className="mt-0.5 text-[11px] leading-snug text-muted">{a.why}</p>
-                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-faint">
-                  {a.doc && <span>doc: <code className="text-muted">{a.doc}</code></span>}
-                  <span>scope: <code className="text-muted">{a.scope}</code></span>
-                  <span className={a.delegable ? 'text-muted' : 'font-medium text-warn'}>
-                    {a.delegable ? 'sync-to-reality' : 'owner-reserved — escalated to you'}
-                  </span>
-                </div>
-                <div className="mt-2 flex items-center gap-2">
-                  <button onClick={() => onDecide(a.id, 'granted')} disabled={!!busy}
-                          className="inline-flex items-center gap-1.5 rounded-md bg-accent px-2.5 py-1 text-[13px] font-semibold text-on-accent transition hover:opacity-90 disabled:opacity-50">
-                    {busy === a.id ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />} Grant
-                  </button>
-                  <button onClick={() => onDecide(a.id, 'denied')} disabled={!!busy}
-                          className="inline-flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1 text-[13px] text-muted transition hover:text-danger disabled:opacity-50">
-                    <Ban size={13} /> Deny
-                  </button>
-                </div>
-              </div>
-            ))}
+    <div className="space-y-2">
+      <section className="rounded-md border border-warn/40 bg-warn/5 px-3 py-2.5">
+        <SectionHeader className="flex items-center gap-1.5 text-warn">
+          <ShieldCheck size={13} /> Your call — {auths.length > 1 ? `${auths.length} requests` : '1 request'}
+        </SectionHeader>
+        <p className="mt-1 text-[13px] leading-snug text-muted">
+          The build found that finishing this work would change what the project PROMISES, and
+          deferred rather than deciding for you. Nothing is written either way until you approve the
+          item: <span className="text-fg">grant</span> and close performs the change when it merges;{' '}
+          <span className="text-fg">deny</span> and the code ships with the gap on record.
+        </p>
+      </section>
+      {auths.map((a) => (
+        <div key={a.id} className="rounded-md border border-line bg-sunken px-3 py-2.5">
+          <p className="text-[13px] font-medium leading-snug text-fg">{sentence(a.what)}</p>
+          <p className="mt-1 text-[13px] leading-snug text-muted">{sentence(a.why)}</p>
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-faint">
+            {a.doc && <span>doc: <code className="text-muted">{a.doc}</code></span>}
+            <span>scope: <code className="text-muted">{a.scope}</code></span>
+            <span className={a.delegable ? 'text-muted' : 'font-medium text-warn'}>
+              {a.delegable ? 'sync-to-reality' : 'owner-reserved — escalated to you'}
+            </span>
+          </div>
+          <div className="mt-2.5 flex items-center gap-2">
+            <button onClick={() => onDecide(a.id, 'granted')} disabled={!!busy}
+                    className="inline-flex items-center gap-1.5 rounded-md bg-accent px-2.5 py-1 text-[13px] font-semibold text-on-accent transition hover:opacity-90 disabled:opacity-50">
+              {busy === a.id ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />} Grant
+            </button>
+            <button onClick={() => onDecide(a.id, 'denied')} disabled={!!busy}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1 text-[13px] text-muted transition hover:text-danger disabled:opacity-50">
+              <Ban size={13} /> Deny
+            </button>
           </div>
         </div>
-      </div>
+      ))}
     </div>
   )
 }
@@ -1019,7 +1573,18 @@ const DEPUTY_ROW: Record<string, { icon: typeof ShieldCheck; label: string; tint
   'deputy.query': { icon: MessageSquare, label: 'Sent feedback to the agent', tint: 'text-accent-text' },
   'deputy.send_back': { icon: CornerUpLeft, label: 'Sent back', tint: 'text-warn' },
 }
-function DeputyLogPane({ events }: { events: DevEvent[] }) {
+// An escalation is RESOLVED once the item leaves the gate it was raised at — the owner answered by
+// advancing (or by sending it back), and nothing about that decision is recorded on the escalation
+// event itself. Unmarked, a log of past pages reads as a queue of things still owed (owner,
+// 2026-08-08): "why do we keep having this previously escalated to you?" So the row is marked, and
+// only the one still standing keeps the alarm colour.
+function isSettled(gate: string | undefined, phase: string): boolean {
+  const at = PHASES.indexOf(gate as Phase)
+  const now = PHASES.indexOf(phase as Phase)
+  return at >= 0 && now >= 0 && now > at
+}
+
+function DeputyLogPane({ events, phase }: { events: DevEvent[]; phase: string }) {
   const rows = events
     .filter((e) => String(e.kind).startsWith('deputy') && !e.kind.endsWith('.start') && !e.kind.endsWith('.end'))
     // NEWEST FIRST — every log surface in this app reads that way (the event feed arrives DESC and
@@ -1031,9 +1596,14 @@ function DeputyLogPane({ events }: { events: DevEvent[] }) {
       <ol className="space-y-2">
         {rows.map((e) => {
           const m = (e.meta ?? {}) as Record<string, unknown>
-          const row = DEPUTY_ROW[e.kind] ?? { icon: ShieldCheck, label: e.kind, tint: 'text-muted' }
-          const Icon = row.icon
+          let row = DEPUTY_ROW[e.kind] ?? { icon: ShieldCheck, label: e.kind, tint: 'text-muted' }
           const gate = (m.gate ?? m.phase ?? m.origin_gate) as string | undefined
+          // A page the owner has already answered goes QUIET and says so. It stays in the log —
+          // it is real history — but it stops competing with the one that still needs them.
+          const settled = e.kind === 'deputy.escalate' && isSettled(gate, phase)
+          if (settled) row = { ...row, icon: Check, label: 'Escalated to you · resolved',
+                               tint: 'text-muted' }
+          const Icon = row.icon
           const str = (k: string) => (typeof m[k] === 'string' ? String(m[k]).trim() : '')
           // `because` is the headline the owner read in the chat; the rest expands. Two levels,
           // because the tool caps `because` at 200 chars and puts the detail in `checked`.
@@ -1048,7 +1618,9 @@ function DeputyLogPane({ events }: { events: DevEvent[] }) {
                 {gate && <span className="rounded bg-hover px-1.5 py-px text-[10px] font-medium text-muted">{gate}</span>}
                 <span className="ml-auto shrink-0 font-mono text-[10px] tabular-nums text-faint">{fmtLocal(e.created_at)}</span>
               </div>
-              {because && <div className="mt-1 text-[13px] leading-snug text-muted"><Markdown text={because} tone="dev" /></div>}
+              {/* Body copy reads at full contrast. The dim tier is for CHROME — labels, keys,
+                  timestamps — and the deputy's reasoning is the thing you came here to read. */}
+              {because && <div className="mt-1 text-[13px] leading-snug text-fg"><Markdown text={because} tone="dev" /></div>}
               {more.length > 0 && (
                 <details className="mt-1">
                   <summary className="cursor-pointer select-none text-[10px] font-medium tracking-wide text-faint hover:text-fg">
@@ -1058,7 +1630,7 @@ function DeputyLogPane({ events }: { events: DevEvent[] }) {
                     {more.map(([k, v]) => (
                       <div key={k} className="flex gap-2">
                         <dt className="w-20 shrink-0 text-faint">{k}</dt>
-                        <dd className="min-w-0 flex-1 text-muted">{v}</dd>
+                        <dd className="min-w-0 flex-1 text-fg">{v}</dd>
                       </div>
                     ))}
                   </dl>
@@ -1171,10 +1743,10 @@ function GitPane({ it, contextId, actions, busy, onAct, onChanged }: {
           <GitBtn icon={ExternalLink} label={pr.label} busy={false} disabled={!pr.active}
                   href={build({ name: 'pr', repoId: contextId, itemId: it.id })} title={pr.reason} />
         )}
-        {gitActions.filter((a) => a.id === 'merge').map((a) => (
-          <GitBtn key={a.id} icon={GitMerge} label={a.label} accent busy={busy === a.id}
-                  disabled={!a.active} onClick={() => onAct(a.id)} title={a.reason} />
-        ))}
+        {/* No Merge button here. It fired the SAME request as the review gate's Approve while
+            skipping Approve's two locks (an agent still running; a non-empty must-resolve set) —
+            a duplicate control that was also the way around the gate it duplicated. This tab shows
+            git STATE and repairs git PROBLEMS; landing the work is the gate's act. */}
         {it.git_backup_ref && (
           <GitBtn icon={Undo2} label="Revert merge" busy={localBusy === 'revert'}
                   onClick={() => local('revert', () => revertWorkItemGit(it.id, contextId))}

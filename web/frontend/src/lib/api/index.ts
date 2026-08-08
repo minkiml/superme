@@ -133,6 +133,11 @@ export {
   type ProofRow,
   type AttentionCard,
   type PhaseReport,
+  getWorkItemOwnerInput,
+  saveWorkItemOwnerInput,
+  type OwnerInput,
+  type OwnerReference,
+  type OwnerNote,
   type AbandonResult,
   type GitHealth,
   type GitMergeResult,
@@ -145,6 +150,11 @@ export {
   type AttentionRow,
   type AttentionBadge,
   type CheckpointStub,
+  getVerificationLibrary,
+  moveLibraryEntry,
+  dropLibraryEntry,
+  type LibraryEntry,
+  type VerificationLibrary,
 } from './dev'
 export { agentSocketUrl } from './agent'
 export {

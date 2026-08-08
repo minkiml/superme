@@ -25,6 +25,8 @@ general/
 ├─ capabilities.md   what it can do RIGHT NOW — present tense only, never the plan
 ├─ decisions.md      what we chose and why — the append-only D-NNN ledger (history, never edited)
 ├─ roadmap.md        the within-project index of SuperMe-tracked dev work (deliverable → wave → items)
+├─ verification.md   the checks this repo has PROVEN — standing (every plan inherits) + available
+│                    (a plan cites by name). Machine-maintained: you never hand-author this one
 └─ resources/        if any, external refs + an index .md (optional)
 ```
 
@@ -36,6 +38,10 @@ them silently stops being updated.
 `capabilities.md` are mutable current-state (edit in place); `decisions.md` is append-only history
 (never edit a past entry's body — reverse by appending and marking the old one superseded);
 `roadmap.md` is forward-only (no history). Putting a fact in the wrong lifecycle is how these docs rot.
+
+`verification.md` has a lifecycle of its own — **earned**. Nothing enters it by being written down:
+vet nominates a check only after it has actually passed, close writes it in, and only the owner
+promotes one to standing. A fresh repo's is empty and that is correct; onboarding does not author it.
 
 **The tense rule:** `capabilities.md` is present tense only — what works today. `roadmap.md` is future
 tense. A capability that hasn't shipped belongs in the roadmap; the moment the two mix, neither can be

@@ -309,6 +309,20 @@ export function getRoadmap(contextId = 'global'): Promise<RoadmapBoard> {
   return getJSON(`/api/dev/roadmap?context_id=${q(contextId)}`)
 }
 
+// The VERIFICATION LIBRARY — this repo's proven checks. `standing` entries are attached to every
+// implementation plan; `available` ones are cited by id. Promoting is the owner's call only.
+export type LibraryEntry = Schema<'LibraryEntry'>
+export type VerificationLibrary = Schema<'VerificationLibraryResponse'>
+export function getVerificationLibrary(contextId = 'global'): Promise<VerificationLibrary> {
+  return getJSON(`/api/dev/verification?context_id=${q(contextId)}`)
+}
+export function moveLibraryEntry(entryId: string, tier: 'standing' | 'available', contextId = 'global'): Promise<{ ok: boolean; name: string }> {
+  return sendJSON(`/api/dev/verification/${q(entryId)}`, 'PATCH', { tier, context_id: contextId })
+}
+export function dropLibraryEntry(entryId: string, contextId = 'global'): Promise<{ ok: boolean; name: string }> {
+  return sendJSON(`/api/dev/verification/${q(entryId)}?context_id=${q(contextId)}`, 'DELETE', undefined)
+}
+
 // The PORTRAIT — what this project IS, in six bands assembled from the anchor docs. Read-only:
 // the docs are the store, so nothing here is edited in place.
 export type Portrait = Schema<'PortraitResponse'>
@@ -754,7 +768,7 @@ export function resolveWorkItemGit(itemId: string, contextId = 'global'): Promis
 
 // --- the drilldown + lifecycle (renovation v2 §4) -----------------------------------------
 // ONE payload for the whole work-item surface, computed server-side: the live strip · the
-// WHAT-YOU-NEED-TO-DO card · at-a-glance · the gate's named check rows · every control's activation
+// WHAT-YOU-NEED-TO-DO card · what this item IS · what must resolve · every control's activation
 // AND its reason · the Proof rows · which phases have a report. The gate brief it replaced shipped
 // `approve_blocked_by` that no component read, so the greying rule lived here in TypeScript beside
 // the rule the backend enforces — never derive activation from this payload, read `active`.
@@ -775,6 +789,24 @@ export type PhaseReport = Schema<'PhaseReportResponse'>
 export function getWorkItemReport(itemId: string, phase: string,
                                   contextId = 'global'): Promise<PhaseReport> {
   return getJSON(`/api/dev/work-items/${q(itemId)}/report/${q(phase)}?context_id=${q(contextId)}`)
+}
+
+// `reports/report-triage.md` § From you — the one section of any report the OWNER writes, and the
+// only place their own words reach the plan phase as instruction rather than as chat. HUMAN-ONLY:
+// there is no agent tool behind the write, because an agent-written authority is not one.
+// Slots, not prose: adding and deleting both PUT the WHOLE pair of lists, because the owner is the
+// section's only writer and there is no concurrent edit for a delta to protect.
+export type OwnerInput = Schema<'OwnerInputResponse'>
+export type OwnerReference = Schema<'OwnerReference'>
+export type OwnerNote = Schema<'OwnerNote'>
+export function getWorkItemOwnerInput(itemId: string, contextId = 'global'): Promise<OwnerInput> {
+  return getJSON(`/api/dev/work-items/${q(itemId)}/from-you?context_id=${q(contextId)}`)
+}
+export function saveWorkItemOwnerInput(itemId: string, references: OwnerReference[],
+                                       notes: OwnerNote[],
+                                       contextId = 'global'): Promise<OwnerInput> {
+  return sendJSON(`/api/dev/work-items/${q(itemId)}/from-you`, 'PUT',
+                  { context_id: contextId, references, notes })
 }
 
 // Abandon (human-only, any non-terminal phase): ends runs/session, removes the worktree (branch

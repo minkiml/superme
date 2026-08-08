@@ -101,6 +101,16 @@ _MEM_PROP_STATUSES = {"proposed", "writing", "drafted", "published", "rejected",
 _LINE = re.compile(r"^- \[( |x)\]\s*(\d{4}-\d{2}-\d{2})?\s*(\w+)?:?\s*(.*)$")
 
 
+# The item-scoped kinds the REPO activity view carries (owner, 2026-08-06). The test each one
+# passes: it is a fact about the project — work entered it, a branch was cut, a diff landed, a
+# deliverable finished. Everything else an item emits (`*.start`/`*.end`, `run.report`,
+# `loop.decision`, `phase.advance`, the deputy's own steps) is a step INSIDE one item's run: it
+# belongs to that item's drilldown, where there is exactly one item to follow. In the repo feed,
+# several items running at once interleave those steps into noise — and by volume they push the
+# dev-native rows (inbox, harness, memory, sweeps) straight out of the window.
+REPO_MILESTONE_KINDS = ("git.pr", "git.merge", "git.worktree", "inbox.push", "item.complete")
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
@@ -474,6 +484,12 @@ class DevStore:
         repo's rows (dev-native + every item's). `since`/`until` are ISO timestamps (lexical
         compare is correct for ISO-UTC). Newest first.
 
+        `scope="repo"` is the ACTIVITY view (owner, 2026-08-06): dev-native rows plus the handful
+        of item-scoped kinds that are facts about the PROJECT rather than steps inside one item —
+        `REPO_MILESTONE_KINDS`. The rest of an item's trail (every phase start/end, run report,
+        loop decision) belongs to that item's own drilldown; interleaved across several running
+        items it reads as noise, and it drowns the dev-native rows out of the window entirely.
+
         `include_discarded` — rows a re-run soft-deleted (`discarded_at`) are HIDDEN by default,
         because every item-scoped caller wants the current attempt: the drilldown's Timeline and
         Deputy panes, `classify_hold` (why is this parked), `_page_reason`, and `close_retries`
@@ -486,7 +502,11 @@ class DevStore:
         if item_id is not None:
             where.append("item_id=?")
             args.append(item_id)
-        if scope is not None:
+        if scope == "repo":
+            marks = ",".join("?" * len(REPO_MILESTONE_KINDS))
+            where.append(f"(scope='dev' OR kind IN ({marks}))")
+            args.extend(REPO_MILESTONE_KINDS)
+        elif scope is not None:
             where.append("scope=?")
             args.append(scope)
         if since is not None:

@@ -97,6 +97,11 @@ _GIT_READONLY = frozenset({
 _GIT_MUTATING_ARGS = ("-d", "-D", "-m", "-M", "--delete", "--move", "--add", "--set", "--unset",
                       "--remove", "-f", "--force", "add", "set", "rename", "prune", "set-url",
                       "set-head", "push", "pop", "apply", "drop", "clear", "create")
+# git global options that take a SEPARATE value (`git -C <dir> diff`). Skipped in pairs so the
+# value is never read as the subcommand. `--git-dir=…`-style options carry their own value and are
+# skipped singly, like any other flag.
+_GIT_GLOBAL_WITH_VALUE = frozenset({"-C", "-c", "--git-dir", "--work-tree", "--namespace",
+                                    "--exec-path", "--config-env"})
 _BASH_SEPARATORS = frozenset({";", "&&", "||", "|", "&"})
 
 
@@ -109,10 +114,21 @@ def _segment_read_only(seg: list[str]) -> bool:
     if "=" in head and not head.startswith("-"):
         return False
     if head == "git":
-        sub = seg[1] if len(seg) > 1 else ""
+        # Skip git's GLOBAL options before reading the subcommand. `git -C <dir> diff` is the same
+        # read as `git diff`, and it is the idiom review and close are told to use — they run with
+        # the main repo as cwd and scope themselves into the worktree. Reading the subcommand as
+        # `seg[1]` saw `-C`, refused to prove the command read-only, and the run fell through to an
+        # approval no background session can answer: a live review reported "diff size — not
+        # covered, blocked by this run's permission layer" (2026-08-07), on the one artifact a
+        # review exists to show. Option VALUES are skipped with the option, so a path can never be
+        # mistaken for a subcommand.
+        i = 1
+        while i < len(seg) and seg[i].startswith("-"):
+            i += 2 if seg[i] in _GIT_GLOBAL_WITH_VALUE else 1
+        sub = seg[i] if i < len(seg) else ""
         if sub not in _GIT_READONLY:
             return False
-        return not any(a in _GIT_MUTATING_ARGS for a in seg[2:])
+        return not any(a in _GIT_MUTATING_ARGS for a in seg[i + 1:])
     if head == "find":
         return not any(tok in _FIND_MUTATORS for tok in seg)
     if head in ("sed", "awk", "gawk"):

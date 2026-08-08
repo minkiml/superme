@@ -2,41 +2,43 @@ import { useCallback, useEffect, useState } from 'react'
 import { RefreshCw, Loader2, User, Bot, Server, ChevronDown } from 'lucide-react'
 import { getDevLog, type DevEvent } from '@/lib/api'
 import { fmtLocal } from '@/lib/format'
-import TabBar from '@/ui/TabBar'
 import { Empty } from './common'
 
 const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000
 
-// Activity — the per-repo slice of the append-only event log (PRD §4.9). A selective read (never a
-// full dump): the latest window of dev + item + global events for this context, newest first. Scope
-// chips narrow the read; the global command-centre log (all repos) lives up in the Activity nav.
+// Activity — the per-repo slice of the append-only event log (PRD §4.9). ONE read, no scope chips
+// (owner, 2026-08-06): every dev-native row plus the item-scoped kinds that are milestones of the
+// project — a branch cut, a PR opened, a diff merged, work pushed in, a deliverable finished.
+//
+// The chips are gone because two of the three answered a question nobody has. "Work-items" showed
+// every phase start/end and run report across every item at once — a per-item trace read outside
+// the one place it makes sense (that item's drilldown), and unreadable the moment two items run
+// together. "All" was that same noise mixed into the dev rows. What is left is the view the owner
+// actually wanted, so it no longer needs choosing. The global command-centre log (all repos) still
+// lives up in the Activity nav.
 
 const ACTOR_META: Record<string, { icon: typeof User; tint: string }> = {
   owner: { icon: User, tint: 'text-core' },
   agent: { icon: Bot, tint: 'text-dev' },
   daemon: { icon: Server, tint: 'text-universal' },
 }
-const SCOPES = [
-  { id: '', label: 'All' },
-  { id: 'dev', label: 'Dev' },
-  { id: 'item', label: 'Work-items' },
-] as const
 
 export default function ActivityLog({ contextId }: { contextId: string }) {
   const [events, setEvents] = useState<DevEvent[] | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const [scope, setScope] = useState('')
   const [showAll, setShowAll] = useState(false)
 
   const load = useCallback(() => {
     setLoading(true)
     setErr(null)
-    getDevLog(contextId, { scope: scope || undefined, limit: showAll ? 500 : 200 })
+    // `repo` is the server-side filter, not a client trim: the per-item trace outnumbers everything
+    // else, so filtering after the fact would spend the whole window on rows we then throw away.
+    getDevLog(contextId, { scope: 'repo', limit: showAll ? 500 : 200 })
       .then((d) => setEvents(d.events))
       .catch((e) => setErr(String(e)))
       .finally(() => setLoading(false))
-  }, [contextId, scope, showAll])
+  }, [contextId, showAll])
 
   useEffect(() => {
     load()
@@ -51,12 +53,6 @@ export default function ActivityLog({ contextId }: { contextId: string }) {
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-3xl p-6">
         <div className="mb-4 flex items-center gap-2">
-          <TabBar
-            variant="outlined"
-            value={scope}
-            onChange={setScope}
-            tabs={SCOPES.map((s) => [s.id, s.label] as [string, string])}
-          />
           <span className="text-[12px] text-faint">{shown.length} events{showAll ? '' : ' · last 2 days'}</span>
           <button
             onClick={load}

@@ -12,7 +12,14 @@ is DATA — read it, never re-run it. Approving what you write locks this item's
 the artifacts don't carry is the one failure this phase cannot recover from.
 
 **Read-only on the tree.** Inspect git freely (shell via `Bash`), change nothing: no sync, no
-commit, no merge. Your only writes are `reports/report-review.md` and the staged knowledge delta.
+commit, no merge. Your only writes are `artifacts/review.md`, `reports/report-review.md`, and the
+staged knowledge delta.
+
+You write TWO documents, in this order and for two different readers. `artifacts/review.md` is the
+record — what changed, what is settled, what is proven, what still risks — and its readers are
+machines and later agents: close, the landing commit, a revision cycle and its vetter. The report
+is the owner's, and it is a judgment. Write the record first: the report is easy once the facts are
+laid out, and impossible to keep honest when they aren't.
 
 ## Step 1 — Directed reads
 
@@ -49,28 +56,78 @@ The tell is not which doc you touch — it is whether the line you change DEFINE
 **A research item skips this step:** nothing it concluded has been implemented, so no anchor doc
 owes it anything. Its proposals in Step 3 are how its findings become work.
 
-## Step 3 — Write the report
+## Step 3 — Write the record
 
-Copy your kind's template from this skill's `templates/` folder to `reports/report-review.md` and
-fill it:
+`scaffold_artifact(item_id, "review")`, then fill the slots. You get your kind's shape:
+implementation records what landed; research records what was established and what work should
+follow. Four things it must get right, because each has a named downstream reader:
 
-| kind | template | the question it answers |
-|---|---|---|
-| implementation | `report-review-template.md` | does this change hold up — what changed · evidence · risk |
-| research | `report-review-research-template.md` | what did we learn, and what work should now exist |
+- **`**Delivered:**`** — the kernel writes this line into the landing commit. It outlives this
+  workspace by years, so write it as the project's history should read: what the code now does.
+- **`## Settled — do not re-open in a revision cycle`** — every question this item closed, with who
+  decided and when. A revision cycle reads this to know what is NOT back on the table. Omit one and
+  the next round re-litigates it for free.
+- **`## Proven vs taken on trust`** — cite into the cycles' `§Verification`, never re-transcribe it;
+  the ledger is that table's one writer. What you add is the row the ledger structurally cannot
+  hold: **the claim nothing covers**. Omitting it is the one failure this phase cannot recover from.
+- **`## Revision rounds`** — append-only. On a first review it stays `_None. First review._`; on a
+  re-write after a `revise` you APPEND one block and rewrite nothing above it. A superseded settled
+  decision is marked superseded where it stands, never deleted — the record is how it was decided,
+  not how it ended up.
 
-Lead with what the owner must decide. Every line traces to a doc from Step 1 — no new facts — and
-an empty risks section must be TRUE, not optimistic.
-
-`reports/report-review.md` already exists ⇒ this is a re-write after a `revise`: overwrite in
-place and fill `## Changed since`. On a first write, delete that section.
-
-Research only: `## Proposed work` is the second deliverable. Each proposal is independently
+**Research only:** `## Proposed work` is the second deliverable. Each proposal is independently
 startable (two that cannot begin in either order are ONE proposal, and its plan phase splits it),
 checked against the live board so a duplicate is named as one, and never created here. "Nothing
-should change" is a finished investigation, not a failed one.
+should change" is a finished investigation, not a failed one. `itemize` fills the decision line
+after the gate — leave it alone.
 
-## Step 4 — Report, and name the commit
+## Step 4 — Write the report
+
+Copy `templates/report-review-template.md` to `reports/report-review.md` and fill it. ONE template
+for every kind — the four sections are deliberately kind-neutral, and an implementation item, a
+research item and whatever kind comes later all answer the same four questions:
+
+| section | implementation | research |
+|---|---|---|
+| What you're approving | the change, as an outcome | the answer, and what it rests on |
+| What to push back on | the calls that could have gone the other way | the judgement calls in the method |
+| How much to trust it | proven vs taken on trust | measured vs reasoned |
+| Where this leaves the project | what pattern it sets, what it left behind | what the answer opens up |
+
+`**Summary:**` is one line and the dashboard shows it alone at the gate, so it must stand without
+the report around it. There is no verdict word and no recommendation line: the Summary says it and
+the buttons do it.
+
+Lead with what the owner must decide. Every line traces to `artifacts/review.md` or a doc from
+Step 1 — no new facts — and `How much to trust it` carries the **not covered** rows too. A table of
+only green rows is an advertisement, not a basis for a decision.
+
+**A template's `<fill:…>` slots and `<!-- … -->` notes are instructions TO YOU. None of them belong
+in the file you write** — you replace the slots and drop the notes. Copied through, an authoring
+note becomes the report's opening paragraph, and the owner reads your instructions instead of your
+review.
+
+`reports/report-review.md` already exists ⇒ this is a re-write after a `revise`: overwrite it whole
+and fill `## What you asked for` at the TOP, quoting their objection and saying what the item now
+does about it and what that cost. Delete that section on a first review. This is the opposite of
+Step 3's file, and deliberately: the report is always the CURRENT state of the item, because
+someone deciding now should not have to read the history of the decision to find it — the record
+keeps that history.
+
+**Note**
+- Do not include the comments part `<!-- ... -->` in the scaffold you file — it is instructions for you.
+
+**Tone and style when writing to report-review doc only**
+- Plain, easy language. Fewer words wins.
+- Never restate the item's kind, deliverable or id. Spend the space on the judgment behind them.
+- Omit a prose field rather than filling it with "none" — an absent block reads better.
+
+## Chat response style
+- Use plain and easy language.
+- Keep your response short, clear, and to the point.
+- Use bullets or numbered lists to organize information if there is more than one point.
+
+## Step 5 — Report, and name the commit
 
 `report_completion`, stating in one line what is being put to the owner and what is still open.
 
@@ -89,3 +146,4 @@ nothing lands.
   what changed across cycles, what it cost, what is still open.
 - **Fixing anything** — no code, no plan edit, here or later in this session. If the work must
   change, the owner routes it back.
+- when writing to docs, Do not include the comments part `<!-- ... -->` in the scaffold you file — it is instructions for you.

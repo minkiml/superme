@@ -143,18 +143,27 @@ export default function TimelineView({
       .filter(Boolean),
     [logEvents],
   )
-  const deputySays = useMemo(() => {
-    const says: string[] = []
-    for (const e of logEvents) {            // newest-first; stop at the current phase's start
-      const kind = String(e.kind)
-      if (kind === 'phase.advance') break
-      if (kind === 'deputy.approve' || kind === 'deputy.escalate') {
-        const speech = String(e.meta?.speech ?? '').trim()
-        if (speech) says.unshift(speech)
-      }
-    }
-    return says
-  }, [logEvents])
+  // Every decision the deputy made on this item, each carrying the gate it decided and the moment
+  // it decided — so the timeline can put it WHERE IT HAPPENED. It is a real event with a real time
+  // and a real subject, and the two things that were wrong both followed from pretending otherwise
+  // (owner, 2026-08-03):
+  //   · it was labelled with the item's CURRENT phase, so the triage approval read "Deputy · Plan";
+  //   · it was appended after everything else, so it pinned itself to the bottom and each new turn
+  //     slid in above it — the thread ran backwards around that one bubble.
+  // Windowing it to "the current gate" was the third mistake: three approvals happened, and the
+  // owner saw one. A decision is history, and history does not expire.
+  const deputyDecisions = useMemo(
+    () => logEvents
+      .filter((e) => String(e.kind) === 'deputy.approve' || String(e.kind) === 'deputy.escalate')
+      .map((e) => ({
+        ts: String(e.created_at ?? ''),
+        phase: (e.meta?.gate ? String(e.meta.gate) : null),  // the gate it judged, not where we are now
+        text: String(e.meta?.speech ?? '').trim(),
+      }))
+      .filter((d) => d.text)
+      .reverse(),                            // the log is newest-first; the timeline reads oldest-first
+    [logEvents],
+  )
   // Every phase run's closing card, oldest-first, from the `run.report` event's `user` payload.
   // `meta` IS the report_completion payload (runs.read_completion / ws stores it whole) plus the
   // kernel's `run_id` stamp, so the card reads `user` straight off it — no parsing, no reshaping.
@@ -281,31 +290,29 @@ export default function TimelineView({
     liveBubbles.push({ key: 'interactive-live', speaker: 'agent', phase: currentPhase, text: interactiveLive, live: true })
   }
 
-  // The deputy always judges the item's CURRENT state, so its call is the newest thing said about
-  // it — and it holds no position inside the thread, because it was never a turn on one.
-  const decisionBubbles: Bubble[] = deputySays.map((text, i) => ({
-    key: `deputy-say-${i}`, speaker: 'deputy' as const, phase: currentPhase, text,
-  }))
+  // Everything the dev-event log contributes to the thread: each run's closing card, and each
+  // deputy decision. Neither is a turn in the run trail, so `created_at` is the only thing that
+  // relates them to the turns — one sorted list, then one stable merge below. A report is the LAST
+  // thing its run said, so it lands after that run's turns; a decision lands at the gate it closed.
+  const timed: Bubble[] = [
+    ...reports.map((r, i) => ({ key: `rep-${i}`, speaker: 'agent' as const, phase: null,
+                                run: r.run, text: '', ts: r.ts, report: r.report })),
+    ...deputyDecisions.map((d, i) => ({ key: `dep-${i}`, speaker: 'deputy' as const,
+                                        phase: d.phase, text: d.text, ts: d.ts })),
+  ].sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0))
 
-  // Interleave each run's closing card by time: a report is the LAST thing its run said, so it
-  // belongs after that run's turns and before the next phase's. Reports and turns come from
-  // different tables (dev events vs run_event), so the timestamp is the only thing that relates
-  // them — a stable merge on `created_at`, not an append at the end.
+  // A report carries no phase of its own — it inherits the lane it closes. A decision names its own
+  // gate and keeps it.
   const settled: Bubble[] = []
+  const place = (b: Bubble) => settled.push(
+    b.phase ? b : { ...b, phase: settled[settled.length - 1]?.phase ?? null })
   let ri = 0
   for (const b of bubbles) {
-    while (ri < reports.length && reports[ri].ts && b.ts && reports[ri].ts <= b.ts) {
-      settled.push({ key: `rep-${ri}`, speaker: 'agent', phase: settled[settled.length - 1]?.phase ?? null,
-                     run: reports[ri].run, text: '', ts: reports[ri].ts, report: reports[ri].report })
-      ri += 1
-    }
+    while (ri < timed.length && timed[ri].ts && b.ts && timed[ri].ts! <= b.ts) place(timed[ri++])
     settled.push(b)
   }
-  for (; ri < reports.length; ri++) {
-    settled.push({ key: `rep-${ri}`, speaker: 'agent', phase: settled[settled.length - 1]?.phase ?? null,
-                   text: '', ts: reports[ri].ts, report: reports[ri].report })
-  }
-  const all = [...settled, ...liveBubbles, ...decisionBubbles]
+  for (; ri < timed.length; ri++) place(timed[ri])
+  const all = [...settled, ...liveBubbles]
 
   // Same scroll rule as the chat rail: follow the newest only while the owner is reading the bottom.
   const { scrollRef, onScroll } = useStickyScroll([all.length, interactiveLive])
@@ -313,8 +320,16 @@ export default function TimelineView({
   return (
     <div ref={scrollRef} onScroll={onScroll} className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-3 py-3">
       {err && !data && <div className="px-1 text-[12px] text-danger">Couldn’t load the timeline — {err}</div>}
+      {/* Two different emptinesses, and saying the wrong one contradicts the spinner directly
+          below this line. A run IS in flight → the first turn simply hasn't landed yet (a run's
+          opening frames are a prompt and a skill launch, neither of which is a bubble). Only a
+          genuinely idle item has "agents haven't run". Caught by the owner, 2026-08-03: the rail
+          read "this item's agents haven't run" while the card beside it said TRIAGING…. */}
       {data && all.length === 0 && (
-        <div className="px-1 pt-4 text-center text-[12px] text-faint">No turns yet — this item’s agents haven’t run.</div>
+        <div className="px-1 pt-4 text-center text-[12px] text-faint">
+          {running ? 'Starting — the first turn will appear here.'
+                   : 'No turns yet — this item’s agents haven’t run.'}
+        </div>
       )}
       {all.map((b, i) => {
         const prev = i > 0 ? all[i - 1] : null

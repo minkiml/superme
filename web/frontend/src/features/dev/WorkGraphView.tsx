@@ -149,7 +149,7 @@ export default function WorkGraphView({
   return (
     // The explicit height when embedded matters: React Flow's zoom/pan transform needs a sized
     // container — an auto-height parent is exactly the old zoom-mismatch bug.
-    <div className={embedded ? 'relative h-[540px] overflow-hidden rounded-lg border border-line bg-canvas' : 'relative h-full'}>
+    <div className={embedded ? 'relative h-[540px] overflow-hidden rounded-lg border border-line bg-app' : 'relative h-full'}>
       {reviewItem && (
         <WorkItemModal
           it={reviewItem}

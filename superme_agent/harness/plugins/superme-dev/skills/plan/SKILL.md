@@ -1,6 +1,6 @@
 ---
 name: plan
-description: Plan a work-item — turn its brief into a design, a task checklist, and the verification plan the build and vet phases run against. Use when a work-item is in its plan phase or the owner asks to plan or design an item; not for classifying a fresh item (use triage) or for implementing an approved plan (use build).
+description: Plan a work-item — turn its brief into a design, a task checklist, and the verification plan the build and vet phases run against. Use when a work-item is in its plan phase or the owner asks to plan or design an item; not for classifying a fresh item or for implementing an approved plan.
 argument-hint: "[work-item-id]"
 category: workspace
 ---
@@ -17,6 +17,23 @@ Read `artifacts/brief.md` (the problem this item exists to solve — your starti
 when one exists (data from a previous session — verify against the repo before trusting), and the
 code the brief points at. For prior activity, call `read_dev_log` with this `item_id`. If the
 item is not in `plan`, stop and say so.
+
+Then read `reports/report-triage.md` § **From you**. It is the owner's own section, typed by them
+and by nobody else, and it is the only place their words arrive as instruction rather than as chat —
+so it outranks your judgment on the two things it carries:
+
+Each block holds one bullet per entry — a reference is its source and what it governs; a note is
+one thing to prove.
+
+- **Useful imported references** are AUTHORITY. Open each one and design to it. Where it and your
+  preferred approach disagree, the reference wins and the design says so; if following it is
+  impossible or would break something, that is a question for step 3, not a call you make silently.
+- **Verification notes** each become a check in `## Verification plan` — one note, one check, its
+  `proves:` written in the owner's own terms. A note you cannot turn into a falsifiable check is a
+  question for them, not a note to drop.
+
+Empty is the common case and needs no comment. Never write into this section: the editor is its
+only writer, and a line you add there would come back to you next cycle as the owner's instruction.
 
 ## Step 2 — Recon before design
 
@@ -36,7 +53,7 @@ Never ask what you can look up: a question the codebase, the anchor docs, or a r
 answer is yours to answer. What remains are the design tree's genuine forks — competing designs
 with different costs, intent the brief cannot settle, scope calls — where guessing wrong is
 expensive (a call you can make and simply record is not a question). For every
-question you do carry, form a **recommended answer** first; a question without a recommendation
+question you do carry, form a **recommended answer** first with a good concise reasoning; a question without a recommendation
 is research you haven't finished.
 
 Either way the shape is the same four fields — the question alone, your recommendation, its
@@ -80,20 +97,77 @@ kind; read the one you were handed before filling. Judgment bars the reference c
 
 - `## Design` is what build implements verbatim — if it outgrows a section, propose splitting
   the item instead of writing a design document.
+
+- **A task is a NAME on its head line, and its SPECIFICATION on the indented lines under it.** The
+  spec goes underneath and can be as long as build needs; the head line is what the owner's board
+  shows.
+
+  **Name the CHANGE, not the code.** The owner reads this list to see what the item is doing to
+  their product, so a task is named the way they would say it: `Rename a category across the
+  ledger`, not `storage.rename_category(old, new)`; `Wire the search subcommand into the CLI`, not
+  `commands.search(args)`. A function signature is addressing — it belongs in the spec below, where
+  build needs it. A few words, under ~60 characters, no closing period.
+
+  Two ways to get it wrong, both seen live: letting the head line run into the spec's first clause
+  (it lands on the Task tab as "…positional `text`, `--month`, `--from`," and names nothing), and
+  naming the symbol you are about to write instead of the change you are making. The test: read the
+  head line alone and ask whether the OWNER learns what this task does.
+
+- Each check's `proves:` is the one line written for the OWNER — what is true of the product when
+  that check passes, in the product's own words. Test it by covering the rest of the block: if the
+  sentence still says something, it is one. "With `--quiet`, `count` prints nothing at all" passes
+  that test; "exit code is 0", "the suite passes", "the flag is honoured correctly" do not. A
+  whole-item check earns the same sentence — "nothing that worked before stopped working". This
+  line leads the owner's reports and the Proof view, and it is what tells a vetter whether a green
+  actually demonstrates the intent; nobody downstream can recover it from `run:`.
+
 - Every `## Verification plan` `expect` must be falsifiable: if you can't picture the output
   that FAILS it, rewrite it. The bar for `depth: none` is high — "only a rename" or "only
   frontend" doesn't clear it; `none` is for items with no observable surface at all.
+
 - Give a check a `run:` line whenever one command can decide it — the kernel runs it in the sandbox
   before vet opens, so it costs nothing, re-runs free on every cycle, and lands as machine evidence.
   Write it as one command whose **exit code is the verdict** (`&&` chains steps; a grep that must
-  match is `... | grep -q thing`). Omit `run:` when the pass condition needs a person or a subagent
+  match is `... | grep -q thing`). **It already runs in THIS item's worktree — never `cd` and never
+  write an absolute path into it.** Both leave the worktree for the repo's primary checkout, which
+  is a different git worktree sitting on the anchor branch without this item's commits, so the
+  command grades code the item did not write. Every path is relative to the repo root. Omit `run:` when the pass condition needs a person or a subagent
   to judge it — a UI that must look right, a message that must read well, a design bar. Never bend a
   judgment call into a command to earn the label; a wrong green is worse than an honest attestation.
+
+- Give a check a `rubric:` when one pass/fail line can't hold the bar — the criteria are judged and
+  recorded one by one, so a failure names WHICH one missed instead of "it didn't look right". Every
+  criterion must be able to come back missed; "the code is clean" cannot. **No quotas** — never
+  write "find at least two problems": a criterion that demands findings manufactures them. State
+  what must be true, and let a clean pass be a clean pass. A check may carry both `expect` and a
+  rubric (an exit code AND a judgment about what it printed), and one of the two is required.
+
+- **Before authoring a check, call `read_verification_library`.** The standing entries are already
+  in your scaffold — leave them exactly as they are, they are what this repo always owes. If an
+  available entry already covers what you were about to write, paste its block instead and mark it
+  `- source: library`: an entry there has run and passed, which is more than a check you invent
+  here can claim. Cite only what genuinely fits; a near-miss entry is a check that will fail for a
+  reason nobody cares about.
+
+- **Never make the project's test suite a check.** `pytest`, `npm test`, `python -m unittest
+  discover` — running the whole suite is BUILD's validation: it does it every cycle, and the kernel
+  re-runs what it recorded to audit the claim. As a check it runs the suite twice and files a
+  validation result as this item's own proof. It is REFUSED at the gate. A single test that drives
+  the one behaviour this item promises is a different thing and perfectly good — narrow the command
+  (`-k`, a node id, one file) and say in `proves:` what its green means for the owner.
+
+- **Then call `dry_run_checks` and read the exit codes.** It runs only the `run:` blocks you just
+  wrote and records nothing. A failing assertion is EXPECTED — the work does not exist yet. What
+  you are looking for is a command that could not run at all: a usage error, an import error, a
+  path that is not there. That one will never come back green however well build does its job, and
+  finding it now costs a second instead of a whole build⟷vet cycle.
+
 - Each check's `covers:` names the task id(s) it proves. This is what lets the owner's Proof view
   read "this feature, proven this way" instead of a bare grid of check ids — the task id is the
   join key across the plan, the cycle reports, and the ledger. A genuinely whole-item check (the
   suite, a lint pass) leaves it blank; do not invent a task for it. A check covering a task no
   `## Tasks` line declares is a check for work nobody planned — fix one or the other.
+
 - Hand build only tasks it can complete itself: it can edit code in its worktree and stage
   contract-doc changes, but not perform owner decisions or reach outside its boundary. A KNOWN
   wall is settled here (decide + record the assumption), never left as a mid-build surprise.
@@ -129,17 +203,34 @@ authorization ledger. Your revision opens a fresh build⟷vet generation.
 
 Then continue at step 5: the report is written from the revised plan, not from the feedback.
 
-## Step 5 — Write the quick report 
+## Step 5 — File the quick user-facing report
 
-Copy `templates/report-plan-template.md` (this skill's folder) to `reports/report-plan.md` and
-fill it — every line traces to plan.md; the template's caps are the bar.
+`file_plan_report` writes `reports/report-plan.md` — the owner's read of the plan, in their words,
+and the last thing between this plan and the gate. The **confirmation table** is DERIVED: one row
+per check, its `proves:` line verbatim beside how it will be run. Nothing you write reproduces it.
+
+You supply the prose: `summary` (one line, and the dashboard shows it alone, so it must stand
+without the rest), `approach`, `confirm`, and `decisions` / `assumptions` when there is something
+real for them. On an implementation item `confirm` is **what the checks will not tell you** — the
+paragraph under the table; on a research item it is *how we'll look, and what we won't*, since
+there is no table.
+
+The tool tells you how many tasks have **no check**, and the report names them. That is the plan
+gate's first question, so answer it before it is asked: add the missing check, or be ready to say
+why that task needs no proof. Never write a check you don't believe in just to clear the count.
+
+**On a revision this report is still about the PRODUCT.** It describes the plan as it now stands —
+what is being built and what will prove it — exactly as a first plan does. What CHANGED, and why,
+is the record's job (`## Revision r<n>`), not the owner's. Never narrate the workflow here: no
+cycles, no phases, no "no plan change needed", no "the loop skipped vet". A live one read
+*"No plan change needed — this cycle routes through vet to record them"*, and its reader learned
+nothing about the feature they were about to approve. If a revision genuinely changed nothing, the
+report is the same report; that is the honest answer, not a paragraph explaining why it is.
 
 **Writing tone and style**
 - Plain, easy language. Fewer words wins.
-- Keep the report short, clear, and to the point.
 - Never restate the item's kind, deliverable or id. Spend the space on the judgment behind them.
-- Prefer a table to a paragraph whenever the content is pairs or a list of comparable things.
-- Use bullets and numbered lists to organize information if there is more than one point.
+- Omit a prose field rather than filling it with "none" — an absent block reads better.
 
 ## Chat response style
 - Use plain and easy language.
@@ -151,3 +242,4 @@ fill it — every line traces to plan.md; the template's caps are the bar.
 - **A checklist outside `## Tasks`** — progress is derived from that section's checkboxes only.
 - **A vague `expect`** — "works correctly" gives the vet agent nothing to falsify.
 - **Interrogating an easy task** — recon fan-out and long deliberation are for genuine forks.
+- when writing to docs, Do not include the comments part `<!-- ... -->` in the scaffold you file — it is instructions for you.

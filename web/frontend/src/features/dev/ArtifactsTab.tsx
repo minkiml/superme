@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react'
-import { ScrollText, Loader2, Bot, Sparkles, Pencil, Save, X, Plus, Trash2, Check, ShieldCheck } from 'lucide-react'
+import { ScrollText, Loader2, Bot, Sparkles, Pencil, Save, X, Plus, Trash2, Check, ShieldCheck, ClipboardCheck, ArrowUp, ArrowDown } from 'lucide-react'
 import Markdown from '@/ui/Markdown'
 import Modal from '@/ui/Modal'
 import Toggle from '@/ui/Toggle'
 import ArtifactTabs from '@/ui/ArtifactTabs'
+import SourceEditor from '@/ui/SourceEditor'
 import {
   getConstitutions, toggleConstitution, getLocalPlugins, getHarnessFile, saveHarnessFile,
   getAssets, assetAction, getDeputyMandate, saveDeputyMandate, type AssetItem, type AssetAction,
+  getVerificationLibrary, moveLibraryEntry, dropLibraryEntry, type LibraryEntry,
   type ManagedConstitution, type HarnessEntry,
 } from '@/lib/api'
 import ConstitutionModal from './ConstitutionModal'
@@ -24,7 +26,7 @@ function stripFrontmatter(text: string): string {
   return m ? text.slice(m[0].length) : text
 }
 
-type Sub = 'constitution' | 'skills' | 'agents' | 'deputy'
+type Sub = 'constitution' | 'skills' | 'agents' | 'verification' | 'deputy'
 
 export default function ArtifactsTab({ contextId }: { contextId: string }) {
   const [sub, setSub] = useState<Sub>('constitution')
@@ -35,8 +37,12 @@ export default function ArtifactsTab({ contextId }: { contextId: string }) {
   const [err, setErr] = useState<string | null>(null)
   const [openConst, setOpenConst] = useState<ManagedConstitution | null>(null)
   const [openPlugin, setOpenPlugin] = useState<HarnessEntry | null>(null)
+  const [library, setLibrary] = useState<LibraryEntry[] | null>(null)
 
   function load() {
+    getVerificationLibrary(contextId)
+      .then((r) => setLibrary([...r.standing, ...r.available]))
+      .catch((e) => setErr(String(e)))
     getConstitutions(contextId)
       .then((d) => setConsts(d.constitutions.filter((c) => c.origin === 'repo')))
       .catch((e) => setErr(String(e)))
@@ -69,6 +75,7 @@ export default function ArtifactsTab({ contextId }: { contextId: string }) {
             { key: 'constitution', label: 'Constitution', icon: ScrollText, count: consts?.length ?? null },
             { key: 'skills', label: 'Skills', icon: Sparkles, count: skills?.length ?? null },
             { key: 'agents', label: 'Agents', icon: Bot, count: agents?.length ?? null },
+            { key: 'verification', label: 'Verification', icon: ClipboardCheck, count: library?.length ?? null },
             { key: 'deputy', label: 'Deputy', icon: ShieldCheck, count: null },
           ]}
         />
@@ -120,6 +127,34 @@ export default function ArtifactsTab({ contextId }: { contextId: string }) {
           <ListOrState list={agents} empty="No local agents for this host yet.">
             {(items) => <PluginRows entries={items} onOpen={setOpenPlugin} />}
           </ListOrState>
+        )}
+        {sub === 'verification' && (
+          <div className="space-y-6">
+            <p className="text-[12px] text-faint">
+              Checks this repo has proven. <b className="text-muted">Standing</b> entries are attached to every plan;
+              the rest are cited by name when they fit. Vet nominates, close writes — promoting is yours.
+            </p>
+            {(['standing', 'available'] as const).map((tier) => (
+              <section key={tier}>
+                <SectionLabel
+                  title={tier === 'standing' ? 'Standing' : 'Available'}
+                  hint={tier === 'standing' ? 'attached to every plan in this repo' : 'cited by name when it fits'}
+                />
+                <ListOrState
+                  list={library ? library.filter((e) => e.tier === tier) : null}
+                  empty={tier === 'standing'
+                    ? 'Nothing standing — no check is charged to every item here yet.'
+                    : 'Nothing yet — entries land here when close writes in what vet nominated.'}
+                >
+                  {(items) => (
+                    <div className="space-y-2">
+                      {items.map((e) => <LibraryRow key={e.id} e={e} contextId={contextId} onChanged={load} />)}
+                    </div>
+                  )}
+                </ListOrState>
+              </section>
+            ))}
+          </div>
         )}
         {sub === 'deputy' && <DeputyPanel contextId={contextId} />}
       </div>
@@ -283,6 +318,45 @@ function ConstitutionRow({ c, contextId, onToggled, onOpen }: { c: ManagedConsti
   )
 }
 
+// One verification-library entry. Promote/demote is the owner's only lever over what every future
+// plan inherits, so it sits on the row itself rather than behind a popup.
+function LibraryRow({ e, contextId, onChanged }: { e: LibraryEntry; contextId: string; onChanged: () => void }) {
+  const [busy, setBusy] = useState(false)
+  const standing = e.tier === 'standing'
+  async function act(fn: () => Promise<unknown>) {
+    setBusy(true)
+    try { await fn(); onChanged() } finally { setBusy(false) }
+  }
+  const Move = standing ? ArrowDown : ArrowUp
+  return (
+    <div className="rounded-lg border border-line bg-surface px-3.5 py-2.5">
+      <div className="flex items-center gap-2">
+        <span className="shrink-0 font-mono text-[13px] text-fg">{e.id}</span>
+        {e.mode && <span className="shrink-0 rounded bg-dev/10 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-dev">{e.mode}</span>}
+        <span className="min-w-0 flex-1 truncate text-[12px] text-faint">{e.scenario || e.traces}</span>
+        <button
+          onClick={() => act(() => moveLibraryEntry(e.id, standing ? 'available' : 'standing', contextId))}
+          disabled={busy}
+          title={standing ? 'Demote to available' : 'Promote to standing — every later plan will carry it'}
+          className="flex shrink-0 items-center gap-1 rounded-md border border-line px-2 py-1 text-[11px] text-muted hover:bg-hover hover:text-fg disabled:opacity-50"
+        >
+          {busy ? <Loader2 size={11} className="animate-spin" /> : <Move size={11} />}
+          {standing ? 'Demote' : 'Promote'}
+        </button>
+        <button
+          onClick={() => act(() => dropLibraryEntry(e.id, contextId))}
+          disabled={busy}
+          title="Drop — it didn't generalise"
+          className="shrink-0 rounded-md border border-line p-1 text-faint hover:border-danger hover:text-danger disabled:opacity-50"
+        >
+          <Trash2 size={12} />
+        </button>
+      </div>
+      {e.run && <div className="mt-1.5 truncate font-mono text-[11px] text-faint">$ {e.run}</div>}
+    </div>
+  )
+}
+
 function PluginRows({ entries, onOpen }: { entries: HarnessEntry[]; onOpen: (e: HarnessEntry) => void }) {
   return (
     <div className="space-y-2">
@@ -378,12 +452,7 @@ function LocalFileModal({ contextId, entry, onClose }: { contextId: string; entr
         {content === null ? (
           <Loading />
         ) : editing ? (
-          <textarea
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            spellCheck={false}
-            className="h-[60vh] w-full resize-none rounded-md border border-line bg-surface p-3 font-mono text-[12.5px] leading-relaxed text-fg outline-none focus:border-accent"
-          />
+          <SourceEditor value={draft} onChange={setDraft} />
         ) : (
           <Markdown text={stripFrontmatter(content)} variant="doc" tone="dev" />
         )}
@@ -462,12 +531,7 @@ function DeputyPanel({ contextId }: { contextId: string }) {
       {content === null ? (
         <Loading />
       ) : editing ? (
-        <textarea
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          spellCheck={false}
-          className="h-[60vh] w-full resize-none rounded-lg border border-line bg-surface p-3 font-mono text-[12.5px] leading-relaxed text-fg outline-none focus:border-dev"
-        />
+        <SourceEditor value={draft} onChange={setDraft} tone="dev" className="rounded-lg" />
       ) : (
         <div className="rounded-lg border border-line bg-surface px-4 py-3">
           <Markdown text={stripFrontmatter(content)} variant="doc" tone="dev" />

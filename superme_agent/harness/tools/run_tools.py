@@ -224,12 +224,46 @@ class VerdictMachine(TypedDict, total=False):
                               "and refuses a grant the owner has not delegated"]
 
 
+def _lines(raw) -> list[str]:
+    """A list field → its non-empty lines, one point each. A single string is accepted and read as
+    one point rather than refused: the shape is the contract, but a deputy that writes one line
+    instead of a one-item list has still said the thing."""
+    if isinstance(raw, str):
+        return [raw.strip()] if raw.strip() else []
+    if not isinstance(raw, (list, tuple)):
+        return []
+    return [" ".join(str(x).split()) for x in raw if str(x).strip()]
+
+
+def _escalation_md(esc: dict) -> str:
+    """The page card, assembled HERE so every escalation reads the same (owner, 2026-08-08).
+
+    The deputy supplies the parts; the kernel supplies the shape. Letting each run format its own
+    produced one prose blob per escalation, and the owner reading it cold had to find the summary,
+    the worry and the ask inside a wall. Bold labels + bullets, because the surfaces that render
+    this already colour markdown — the structure is what makes the colour mean something."""
+    out = [f"**Issue summary:** {' '.join(str(esc.get('summary') or '').split())}"]
+    for label, key in (("Concern", "concerns"), ("What to do", "what_to_do")):
+        if (points := _lines(esc.get(key))):
+            out += ["", f"**{label}:**", *(f"- {p}" for p in points)]
+    return "\n".join(out)
+
+
 class VerdictEscalation(TypedDict, total=False):
-    situation: Required[Annotated[str, "what is going on, in one or two lines"]]
-    concern: Required[Annotated[str, "your concern — why this genuinely needs the owner"]]
-    runbook: Required[Annotated[str, "what to do: the exact command or click path to exercise, "
-                                     "what they should see, and the PRD success signal verbatim; "
-                                     "or, for a decision, the options and your recommendation"]]
+    """The owner's page card. THREE PARTS, and the middle two are LISTS — one point per entry.
+
+    A paged owner reads this cold, usually on a phone, deciding whether to stop what they are doing.
+    Prose ran the situation, the worry and the ask together into one block they had to parse; the
+    parts are what they actually scan. The kernel renders the markdown (see `_escalation_md`), so
+    the shape cannot drift between deputies."""
+    summary: Required[Annotated[str, "ONE line, plain and concrete: what is going on. No preamble, "
+                                     "no restating the item title"]]
+    concerns: Required[Annotated[list[str], "why this genuinely needs the owner — one short, plain "
+                                            "line per concern, each standing on its own"]]
+    what_to_do: Required[Annotated[list[str], "the owner's options or steps — one short, plain line "
+                                              "each: the exact command or click path and what they "
+                                              "should see, or, for a decision, each option with "
+                                              "your recommendation marked"]]
 
 
 class VerdictUser(TypedDict, total=False):
@@ -288,16 +322,16 @@ def _deputy_verdict(*, verdict_sink: dict | None = None, **_):
             return _err("machine.authorize rides only with decision send_back (a grant is a "
                         "send_back variant).")
         if decision == "escalate":
-            if not all(str(esc.get(k) or "").strip() for k in ("situation", "concern", "runbook")):
-                return _err("escalate requires user.escalation with situation, concern and "
-                            "runbook all filled.")
+            if not str(esc.get("summary") or "").strip():
+                return _err("escalate requires user.escalation.summary — ONE plain line saying "
+                            "what is going on.")
+            for key in ("concerns", "what_to_do"):
+                if not _lines(esc.get(key)):
+                    return _err(f"escalate requires user.escalation.{key} — a LIST, one short "
+                                "plain line per point. A paragraph is not a list.")
         elif esc:
             return _err("user.escalation rides only with decision escalate.")
-        escalation_text = ""
-        if decision == "escalate":
-            escalation_text = (f"{str(esc['situation']).strip()}\n\n"
-                               f"Concern: {str(esc['concern']).strip()}\n\n"
-                               f"What to do: {str(esc['runbook']).strip()}")
+        escalation_text = _escalation_md(esc) if decision == "escalate" else ""
         if verdict_sink is not None:
             verdict_sink["verdict"] = {
                 "decision": decision, "gate": gate, "checked": checked, "because": because,

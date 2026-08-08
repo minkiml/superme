@@ -27,6 +27,7 @@ import re
 from datetime import date, datetime
 from pathlib import Path
 
+from . import verification_library as _vl
 from .artifacts import FILL, _atomic_write
 from .dev_knowledge import ANCHOR_DOCS, DevKnowledgeService, _parse_deliverables
 
@@ -108,6 +109,12 @@ def validate_ops(ops: list, dev_root: Path, repo_dir: Path | None) -> list[str]:
         for slug in _SLUG_REF.findall(content):
             if slug not in prd_slugs:
                 issues.append(f"{tag}: deliverable {slug!r} is not defined in the project PRD")
+        # The verification library is the one anchor doc whose content is a CONTRACT rather than
+        # prose: a later plan inherits its entries verbatim, so a malformed or item-shaped entry
+        # doesn't misinform a reader — it costs the next item a cycle. Judged at the write, because
+        # that is the last moment anyone is looking.
+        if doc == _vl.LIBRARY_DOC and kind != "rename_section":
+            issues.extend(f"{tag}: {i}" for i in _vl.entry_issues(content))
     return issues
 
 

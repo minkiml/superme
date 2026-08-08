@@ -31,6 +31,7 @@ repos:
     extra_mcp: []
     onboarding: project-init
     review_mode: strict
+    anchor_branch: main
   dummy9:
     label: dummy9
     cwd: /Users/cooma/Developer/my_docs/dummy9

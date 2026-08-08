@@ -87,9 +87,15 @@ def slugify(title: str, cap: int = 24) -> str:
     return s[:cap].rstrip("-")
 
 
+# Every work-item branch lives under this prefix. Named once so the readers that need to tell a
+# work branch from a real one (`list_branches`) can't drift from the writer.
+BRANCH_PREFIX = "item"
+
+
 def branch_name(item_id: str, title: str = "") -> str:
     slug = slugify(title)
-    return f"item/{item_id}-{slug}" if slug else f"item/{item_id}"
+    stem = f"{BRANCH_PREFIX}/{item_id}"
+    return f"{stem}-{slug}" if slug else stem
 
 
 DEFAULT_WORKTREES_HOME = Path.home() / ".superme" / "worktrees"
@@ -150,6 +156,22 @@ def resolve_anchor(repo_dir: Path, configured: str | None = None) -> str:
 
 def branch_exists(repo_dir: Path, branch: str) -> bool:
     return _git(repo_dir, "show-ref", "--verify", f"refs/heads/{branch}", check=False).returncode == 0
+
+
+def list_branches(repo_dir: Path) -> list[str]:
+    """This repo's local branches, sorted by most recent commit. The anchor picker's option set:
+    the anchor names a branch that must exist (`resolve_anchor` REFUSES rather than falling back),
+    so offering the real list is what stops a typo becoming a merge-time failure.
+
+    SuperMe's own per-item worktree branches are excluded — they are transient, one per work-item,
+    and a repo mid-cohort would bury its trunk under a dozen of them. Never raises: a non-repo or a
+    broken git returns [], and the caller shows no picker rather than an error."""
+    p = _git(repo_dir, "for-each-ref", "--sort=-committerdate", "--format=%(refname:short)",
+             "refs/heads/", check=False)
+    if p.returncode != 0:
+        return []
+    return [b for b in (ln.strip() for ln in p.stdout.splitlines())
+            if b and not b.startswith(f"{BRANCH_PREFIX}/")]
 
 
 def commit_exists(repo_dir: Path, sha: str) -> bool:

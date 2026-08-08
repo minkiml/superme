@@ -23,6 +23,8 @@ from pathlib import Path
 
 import yaml
 
+from .titles import check_title, normalize_title
+
 
 def _iso_epoch(iso: str | None) -> float | None:
     """Spine ISO start stamp → epoch seconds, for the card's live elapsed-time timer."""
@@ -158,7 +160,12 @@ def _parse_md(text: str) -> tuple[dict, str]:
 # twice — as a Stack bullet and as a decision record — so changing one meant remembering the other).
 # It stays readable via LEGACY_DOCS so existing repos keep their content until it's folded in.
 ANCHOR_DOCS = ("project-prd", "architecture", "capabilities",
-               "decisions", "roadmap")            # + resources/index.md
+               "decisions", "roadmap", "verification")   # + resources/index.md
+# `verification` — the repo's VERIFICATION LIBRARY (verification-model §8): proven checks later
+# items inherit. An anchor doc so the owner reads and edits it exactly where they read the others;
+# exempt from the lint's missing/stale rules because an empty library is the correct starting state
+# and a settled one is not decaying (see core/verification_library.py).
+_LIBRARY_DOC = "verification"
 LEGACY_DOCS = ("spec",)                            # readable, lint-flagged, never re-created
 _DELIVERABLE_RE = re.compile(r"^-\s+\*\*(?P<id>[^*]+?)\*\*\s*[—–-]\s*(?P<title>.+?)\s*$", re.M)
 _WAVE_RE = re.compile(r"\*\*(?P<id>[^*]+?)\*\*\s*[—–-]\s*(?P<title>.+?)\s*$")
@@ -460,12 +467,22 @@ class DevKnowledgeService:
         missing = [a for a in after_ids if not (wi / a / "item.md").exists()]
         if missing:
             raise ValueError(f"after references unknown work-item(s): {', '.join(missing)}")
-        title = (title or "").strip()
+        # The FLOOR under every mint point (core/titles): a title that already reads as a label is
+        # untouched; one that is really the ask — the owner pushing an inbox row with no title
+        # typed, where the whole body became the title — degrades to its first sentence. Agents are
+        # bounced instead, at their own tool, so they learn; a human cannot be.
+        title = normalize_title(title, description=description)
         wid = secrets.token_hex(6)                       # opaque 12-hex id == folder name (~2^48)
         while (wi / wid).exists():                       # vanishingly rare live clash → re-roll
             wid = secrets.token_hex(6)
         folder = wi / wid
-        (folder / "artifacts").mkdir(parents=True, exist_ok=True)
+        # BOTH homes exist from birth. `reports/` used to be created by whoever wrote the first
+        # report — which made triage reach for `mkdir -p`, a mutation the boundary check does not
+        # auto-allow (it keys on the session's cwd, and triage sits at the repo), so the phase was
+        # denied a directory inside its own item and had to work around it (live, 2026-08-07).
+        # An item's own folders are the kernel's to make, not an agent's.
+        for sub in ("artifacts", "reports"):
+            (folder / sub).mkdir(parents=True, exist_ok=True)
 
         today = date.today().isoformat()
         # Optional provenance lines — written only when set (absent = null on read; no dead fields).
@@ -543,8 +560,11 @@ class DevKnowledgeService:
             title = str(it.get("title") or "").strip()
             if not key:
                 raise ValueError(f"item #{i} is missing a `key` (its batch-local edge handle)")
-            if not title:
-                raise ValueError(f"item {key!r} is missing a title")
+            # Itemization is the one mint point where a whole cohort is named in a single act, so
+            # it is where naming discipline is worth enforcing rather than repairing: the caller is
+            # an agent, and the complaint lands in its turn as a retry it can act on.
+            if (bad := check_title(title, description=str(it.get("description") or ""))):
+                raise ValueError(f"item {key!r}: {bad}")
             if key in seen:
                 raise ValueError(f"duplicate item key {key!r}")
             seen.add(key)
@@ -672,6 +692,34 @@ class DevKnowledgeService:
         if not m:
             return False
         fm = re.sub(r"(?m)^phase:.*$", f"phase: {phase}", m.group(1))
+        fm = re.sub(r"(?m)^updated_at:.*$", f"updated_at: {date.today().isoformat()}", fm)
+        item.write_text(f"---\n{fm}\n---\n{body}")
+        return True
+
+    def set_work_item_title(self, dev_root: Path, item_id: str, title: str) -> bool:
+        """Rename a work-item — triage's naming act (the phase that has read the whole ask).
+
+        Safe by construction: the id is an opaque token, the folder name IS the id, and the
+        work-graph's parent/root edges derive from folder paths, so no reader anywhere keys on the
+        title — it is a label and nothing else. Past log events keep the title they were written
+        with, which is correct: they record what the board said at the time.
+
+        Raises ValueError on a title that fails `check_title`, so a bad rename never lands. Returns
+        True if the file changed (passing the existing title back is a no-op)."""
+        if (bad := check_title(title)):
+            raise ValueError(bad)
+        title = normalize_title(title)
+        item = Path(dev_root) / "work-items" / item_id / "item.md"
+        if not item.exists():
+            return False
+        text = item.read_text()
+        meta, body = _parse_md(text)
+        if str(meta.get("title") or "") == title:
+            return False
+        m = _FRONTMATTER.match(text)
+        if not m:
+            return False
+        fm = re.sub(r"(?m)^title:.*$", f"title: {json.dumps(title)}", m.group(1))
         fm = re.sub(r"(?m)^updated_at:.*$", f"updated_at: {date.today().isoformat()}", fm)
         item.write_text(f"---\n{fm}\n---\n{body}")
         return True
@@ -1169,6 +1217,8 @@ class DevKnowledgeService:
             find.append({"severity": sev, "kind": kind, "detail": detail, "ref": ref})
 
         for name in (*ANCHOR_DOCS, "resources"):
+            if name == _LIBRARY_DOC:
+                continue                       # an empty verification library is a correct state
             if not (self.read_general_doc(root, name) or "").strip():
                 add("warn", "missing-doc", f"{name}.md is empty or absent", name)
 
@@ -1206,6 +1256,8 @@ class DevKnowledgeService:
 
         cutoff = datetime.now().timestamp() - stale_days * 86400
         for name in ANCHOR_DOCS:
+            if name == _LIBRARY_DOC:
+                continue                       # a settled library is proven, not decaying
             p = self._general_path(root, name)
             if p and p.exists() and p.stat().st_mtime < cutoff:
                 add("info", "stale-doc", f"{name}.md hasn't changed in over {stale_days} days", name)

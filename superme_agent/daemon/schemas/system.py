@@ -291,6 +291,16 @@ class RepoGitResponse(BaseModel):
     anchor_error: str | None = None
 
 
+class RepoBranchesResponse(BaseModel):
+    """The anchor picker's option set — this repo's local branches, most-recently-committed first,
+    with the work-item branches excluded. `anchor` is what the anchor resolves to right now, so the
+    picker can show the branch in USE even when nothing has been configured yet."""
+    repo_id: str
+    branches: list[str] = []
+    anchor: str | None = None
+    anchor_error: str | None = None
+
+
 class RepoMetaResponse(BaseModel):
     ok: bool
     repo_id: str

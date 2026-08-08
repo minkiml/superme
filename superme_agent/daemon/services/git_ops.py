@@ -82,9 +82,10 @@ def open_pr(ctx, context_id: str, item_id: str, *, dev, dev_store) -> dict:
                               git_pr_opened_at=datetime.now().isoformat(timespec="seconds"))
     dev.set_work_item_status(dev_root, item_id, "awaiting_human")
     if first:
-        dev_store.log_event(context_id, "git.pr",
-                            "PR opened — this repo is `strict`, so the merge is yours: read the "
-                            "diff on the PR page and approve there",
+        # Just the fact. This message is the Now line's tail ("Review · cycle 1 · <this>"), and the
+        # attention card directly beneath it already says what to do about it — spelling out the
+        # mode and the instruction here printed the same sentence twice on one screen.
+        dev_store.log_event(context_id, "git.pr", "PR opened",
                             item_id=item_id, actor="daemon",
                             meta={"branch": item.get("git_branch"), "review_mode": "strict"})
     return {"ok": True, "id": item_id, "phase": "review", "from": "review", "pr_open": True}
@@ -94,16 +95,19 @@ _DEFAULT_COMMIT_TYPE = "feat"
 
 
 def _delivered_line(item_dir: Path) -> str:
-    """The review report's **Delivered** field — what actually shipped, which is the right body for
-    the landing commit. (§2.3 named an "Outcome" line; the 4a report has no such field, and
+    """The **Delivered** field of `artifacts/review.md` — what actually shipped, which is the right
+    body for the landing commit. (§2.3 named an "Outcome" line; the 4a report had no such field, and
     `Recommendation` would put the literal word "merge" in the project's history.)
 
-    Reads the whole PARAGRAPH, not the first physical line: report-review.md is hand-written prose
-    wrapped for reading, so a two-sentence Delivered routinely spans three lines. Taking only the
-    first cut the commit body off mid-sentence — in the one artifact of this item that outlives the
-    workspace. Joined into one line here; `compose_commit` re-wraps it at 72."""
+    It reads the AGENT-facing review record, not the owner's report: the owner's report is prose
+    written to be read once at a gate, and the commit body outlives the workspace by years. A field
+    a machine parses belongs in the doc written for machines.
+
+    Reads the whole PARAGRAPH, not the first physical line: the file is hand-written prose wrapped
+    for reading, so a two-sentence Delivered routinely spans three lines. Taking only the first cut
+    the commit body off mid-sentence. Joined into one line here; `compose_commit` re-wraps at 72."""
     try:
-        report = item_dir / "reports" / "report-review.md"
+        report = item_dir / "artifacts" / "review.md"
         if not report.is_file():
             return ""
         parts: list[str] = []
@@ -172,20 +176,24 @@ def squash_message(item: dict, item_id: str, item_dir: Path, declared: dict | No
 
 def build_downstream_digest(item_dir: Path, *, char_cap: int = 2400) -> str | None:
     """Assemble the 'what happened downstream' context a review→plan re-plan needs (deputy-live-turns
-    Q1-B): the readiness snapshot (built + validated + warnings, authored at review entry) + the
-    latest vet report's findings. This is what lets the plan phase know it's feedback from the earlier
-    plan's BUILD results, not re-plan blind. Read-only; None when there's genuinely nothing to report
-    (a review reached with no readiness and no vet — the feedback then stands alone)."""
+    Q1-B): review's own record of what landed and what it settled, plus the latest cycle report's
+    findings. This is what lets the plan phase know it's feedback from the earlier plan's BUILD
+    results, not re-plan blind. Read-only; None when there's genuinely nothing to report (a review
+    reached with no record and no vet — the feedback then stands alone).
+
+    It reads `artifacts/review.md`, the AGENT-facing record, not the owner's report. A re-plan needs
+    the change inventory, the settled decisions it may not silently re-open, and the surviving risks
+    — none of which the owner's report carries, because none of them are written for a human."""
     parts: list[str] = []
     try:
-        review_report = item_dir / "reports" / "report-review.md"
-        if review_report.is_file():
-            body = review_report.read_text().strip()
+        review_record = item_dir / "artifacts" / artifacts.artifact_file("review")
+        if review_record.is_file():
+            body = review_record.read_text().strip()
             if body:
-                parts.append("Readiness snapshot (built + validated at review entry):\n"
+                parts.append("Review's record of the last pass (artifacts/review.md):\n"
                              + body[:char_cap])
     except Exception:
-        log.exception("digest: review-report read failed for %s", item_dir)
+        log.exception("digest: review record read failed for %s", item_dir)
     try:
         vr = artifacts.latest_cycle_report(item_dir, char_cap=char_cap)
         if vr and (vr.get("text") or "").strip():

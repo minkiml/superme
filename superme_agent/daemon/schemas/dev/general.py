@@ -46,6 +46,33 @@ class GeneralDocSaveResponse(BaseModel):
     name: str
 
 
+# --- the verification library (verification-model §8) ---------------------------
+
+class LibraryEntry(BaseModel):
+    """One proven check the repo keeps. `standing` entries are attached to every implementation
+    item's plan; `available` ones are cited by id. Same fields as a plan's check, because a plan
+    inherits the entry verbatim."""
+    id: str
+    tier: str
+    proves: str = ""
+    traces: str = ""
+    mode: str = ""
+    scenario: str = ""
+    run: str = ""
+    expect: str = ""
+    rubric: list[str] = []
+
+
+class VerificationLibraryResponse(BaseModel):
+    standing: list[LibraryEntry]
+    available: list[LibraryEntry]
+
+
+class LibraryEntryBody(BaseModel):
+    context_id: str = "global"
+    tier: str          # standing | available — promoting is the owner's call and nobody else's
+
+
 # --- roadmap board (deliverable → wave → item join) -----------------------------
 
 class Rollup(BaseModel):

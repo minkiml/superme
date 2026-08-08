@@ -8,6 +8,7 @@ import Modal from '@/ui/Modal'
 import Toggle from '@/ui/Toggle'
 import ArtifactTabs from '@/ui/ArtifactTabs'
 import SectionHeader from '@/ui/SectionHeader'
+import SourceEditor from '@/ui/SourceEditor'
 import {
   getProposals, approveProposal, updateStagedArtifact, publishProposal, rejectProposal, dropProposal,
   getMemoryStats, runDistill, getProposalExecution,
@@ -205,7 +206,7 @@ export function PublishedFileModal({ item, contextId, onClose, onSaved, onGovern
   }
 
   return (
-    <Modal onClose={onClose} column maxW="max-w-3xl" dismissable={!editing}>
+    <Modal onClose={onClose} column maxW={editing ? "max-w-4xl" : "max-w-3xl"} dismissable={!editing}>
         <div className="flex shrink-0 items-center gap-2 border-b border-line px-4 py-3">
           <Icon size={15} className="text-muted" />
           <span className="text-sm font-semibold text-fg">{item.title}</span>
@@ -254,8 +255,7 @@ export function PublishedFileModal({ item, contextId, onClose, onSaved, onGovern
           {content === null ? (
             <div className="flex items-center gap-2 text-sm text-muted"><Loader2 size={14} className="animate-spin" /> Loading…</div>
           ) : editing ? (
-            <textarea value={draft} onChange={(e) => setDraft(e.target.value)} spellCheck={false}
-              className="h-[60vh] w-full resize-none rounded-md border border-line bg-surface p-3 font-mono text-[12.5px] leading-relaxed text-fg outline-none focus:border-accent" />
+            <SourceEditor value={draft} onChange={setDraft} />
           ) : (
             <Markdown text={body} variant="doc" tone="dev" />
           )}

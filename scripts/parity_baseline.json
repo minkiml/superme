@@ -2,6 +2,7 @@
   "inventory": [
     "DELETE /dev/harness/published/{proposal_id}",
     "DELETE /dev/inbox/{item_id}",
+    "DELETE /dev/verification/{entry_id}",
     "DELETE /repos/{repo_id}",
     "DELETE /sessions/{session_id}",
     "GET /contexts",
@@ -30,10 +31,12 @@
     "GET /dev/project-status",
     "GET /dev/prompt-extraction/status",
     "GET /dev/roadmap",
+    "GET /dev/verification",
     "GET /dev/work-items/{item_id}/artifacts",
     "GET /dev/work-items/{item_id}/detail",
     "GET /dev/work-items/{item_id}/doc.html",
     "GET /dev/work-items/{item_id}/drilldown",
+    "GET /dev/work-items/{item_id}/from-you",
     "GET /dev/work-items/{item_id}/git",
     "GET /dev/work-items/{item_id}/pr",
     "GET /dev/work-items/{item_id}/pr/diff",
@@ -48,6 +51,7 @@
     "GET /knowledge/file",
     "GET /knowledge/tree",
     "GET /repos",
+    "GET /repos/{repo_id}/branches",
     "GET /runs",
     "GET /runs/{run_id}/trace",
     "GET /sessions",
@@ -64,6 +68,7 @@
     "PATCH /dev/harness/published/{proposal_id}",
     "PATCH /dev/inbox/{item_id}",
     "PATCH /dev/memory/proposals/{proposal_id}/artifact",
+    "PATCH /dev/verification/{entry_id}",
     "PATCH /sessions/{session_id}",
     "POST /dev/inbox",
     "POST /dev/inbox/{item_id}/push",
@@ -109,6 +114,7 @@
     "PUT /dev/harness/foundation",
     "PUT /dev/harness/plugin-file",
     "PUT /dev/harness/published/{proposal_id}/file",
+    "PUT /dev/work-items/{item_id}/from-you",
     "PUT /knowledge/file",
     "WS /ws/agent",
     "WS /ws/dashboard"
@@ -202,6 +208,25 @@
             "parallel_children"
           ],
           "title": "AbandonResponse",
+          "type": "object"
+        },
+        "AboutRow": {
+          "description": "One row of `About this work-item` \u2014 what this item IS, in the owner's own framing. A LIST of\nthese, not an object: the order (what it is \u2192 where it came from \u2192 what it's for) is the\nmeaning, and an empty row is dropped server-side rather than rendered blank.",
+          "properties": {
+            "label": {
+              "title": "Label",
+              "type": "string"
+            },
+            "value": {
+              "title": "Value",
+              "type": "string"
+            }
+          },
+          "required": [
+            "label",
+            "value"
+          ],
+          "title": "AboutRow",
           "type": "object"
         },
         "AgentModelBody": {
@@ -1792,6 +1817,25 @@
           "title": "ContextResponse",
           "type": "object"
         },
+        "Criterion": {
+          "description": "One rubric criterion, judged. The unit exists because \"3 of 4\" is not a finding \u2014 WHICH one\nmissed is.",
+          "properties": {
+            "met": {
+              "title": "Met",
+              "type": "boolean"
+            },
+            "text": {
+              "title": "Text",
+              "type": "string"
+            }
+          },
+          "required": [
+            "text",
+            "met"
+          ],
+          "title": "Criterion",
+          "type": "object"
+        },
         "DatabaseInfo": {
           "properties": {
             "name": {
@@ -2223,6 +2267,13 @@
         "DrilldownResponse": {
           "description": "Everything the work-item drilldown renders, computed once per poll. One route instead of four,\nbecause every tab reads the same item folder \u2014 and one computation of the gate's checks, shared\nwith the deputy's prompt, because two summaries of one gate is how the owner loses the ability to\ncheck the deputy's call.",
           "properties": {
+            "about": {
+              "items": {
+                "$ref": "#/components/schemas/AboutRow"
+              },
+              "title": "About",
+              "type": "array"
+            },
             "actions": {
               "items": {
                 "$ref": "#/components/schemas/DrilldownAction"
@@ -2273,16 +2324,16 @@
               "title": "Gate Label",
               "type": "string"
             },
-            "glance": {
-              "additionalProperties": {
-                "type": "string"
-              },
-              "title": "Glance",
-              "type": "object"
-            },
             "id": {
               "title": "Id",
               "type": "string"
+            },
+            "lenses": {
+              "items": {
+                "$ref": "#/components/schemas/LensRead"
+              },
+              "title": "Lenses",
+              "type": "array"
             },
             "now": {
               "$ref": "#/components/schemas/NowStrip"
@@ -2332,7 +2383,7 @@
             "terminal",
             "now",
             "attention",
-            "glance",
+            "about",
             "checks",
             "blocked_by",
             "numbers",
@@ -2340,6 +2391,7 @@
             "paged",
             "actions",
             "proof",
+            "lenses",
             "reports"
           ],
           "title": "DrilldownResponse",
@@ -4201,6 +4253,140 @@
           "title": "LearningRollupResponse",
           "type": "object"
         },
+        "LensFinding": {
+          "properties": {
+            "severity": {
+              "title": "Severity",
+              "type": "string"
+            },
+            "text": {
+              "title": "Text",
+              "type": "string"
+            }
+          },
+          "required": [
+            "severity",
+            "text"
+          ],
+          "title": "LensFinding",
+          "type": "object"
+        },
+        "LensRead": {
+          "description": "One standing lens's read of the current cycle. `probed` carries weight even with no\nfindings: it is the difference between \"nothing is wrong here\" and \"nobody looked\" \u2014 so it is a\nLIST, one probe per entry, and the surface renders it as one. A paragraph hides how many\ndistinct things were actually tried, which is the only number a reader can judge it by.",
+          "properties": {
+            "cycle": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cycle"
+            },
+            "findings": {
+              "default": [],
+              "items": {
+                "$ref": "#/components/schemas/LensFinding"
+              },
+              "title": "Findings",
+              "type": "array"
+            },
+            "lens": {
+              "title": "Lens",
+              "type": "string"
+            },
+            "probed": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Probed",
+              "type": "array"
+            }
+          },
+          "required": [
+            "lens"
+          ],
+          "title": "LensRead",
+          "type": "object"
+        },
+        "LibraryEntry": {
+          "description": "One proven check the repo keeps. `standing` entries are attached to every implementation\nitem's plan; `available` ones are cited by id. Same fields as a plan's check, because a plan\ninherits the entry verbatim.",
+          "properties": {
+            "expect": {
+              "default": "",
+              "title": "Expect",
+              "type": "string"
+            },
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "mode": {
+              "default": "",
+              "title": "Mode",
+              "type": "string"
+            },
+            "proves": {
+              "default": "",
+              "title": "Proves",
+              "type": "string"
+            },
+            "rubric": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Rubric",
+              "type": "array"
+            },
+            "run": {
+              "default": "",
+              "title": "Run",
+              "type": "string"
+            },
+            "scenario": {
+              "default": "",
+              "title": "Scenario",
+              "type": "string"
+            },
+            "tier": {
+              "title": "Tier",
+              "type": "string"
+            },
+            "traces": {
+              "default": "",
+              "title": "Traces",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "tier"
+          ],
+          "title": "LibraryEntry",
+          "type": "object"
+        },
+        "LibraryEntryBody": {
+          "properties": {
+            "context_id": {
+              "default": "global",
+              "title": "Context Id",
+              "type": "string"
+            },
+            "tier": {
+              "title": "Tier",
+              "type": "string"
+            }
+          },
+          "required": [
+            "tier"
+          ],
+          "title": "LibraryEntryBody",
+          "type": "object"
+        },
         "LintFinding": {
           "description": "One actionable finding over general/. Derived on read \u2014 never stored, so it can't go stale.",
           "properties": {
@@ -4410,15 +4596,11 @@
           "type": "object"
         },
         "NowStrip": {
-          "description": "What is happening right now: the live phase + cycle, and the newest recorded event.",
+          "description": "What is happening right now: the live phase + cycle, and what that phase concluded.\n\nIt also carried `last` \u2014 the newest event's own sentence. That line was cut (owner,\n2026-08-08): every version of it restated something already on the card. \"Deputy escalated the\nreview gate to you\" sat one inch above the attention card that says the same thing in full, and\nthe phase name and the running dot answer \"where is this\" without it.",
           "properties": {
             "cycle": {
               "title": "Cycle",
               "type": "integer"
-            },
-            "last": {
-              "title": "Last",
-              "type": "string"
             },
             "phase": {
               "title": "Phase",
@@ -4427,13 +4609,22 @@
             "running": {
               "title": "Running",
               "type": "boolean"
+            },
+            "summary": {
+              "default": "",
+              "title": "Summary",
+              "type": "string"
+            },
+            "summary_phase": {
+              "default": "",
+              "title": "Summary Phase",
+              "type": "string"
             }
           },
           "required": [
             "phase",
             "cycle",
-            "running",
-            "last"
+            "running"
           ],
           "title": "NowStrip",
           "type": "object"
@@ -4486,6 +4677,124 @@
             "reason"
           ],
           "title": "Orphan",
+          "type": "object"
+        },
+        "OwnerInputBody": {
+          "description": "The owner's \u00a7 From you, whole. Add and delete are both a PUT of the full slot lists \u2014 the\nowner is the section's only writer, so there is no concurrent edit for a delta to protect.",
+          "properties": {
+            "context_id": {
+              "default": "global",
+              "title": "Context Id",
+              "type": "string"
+            },
+            "notes": {
+              "default": [],
+              "items": {
+                "$ref": "#/components/schemas/OwnerNoteBody"
+              },
+              "title": "Notes",
+              "type": "array"
+            },
+            "references": {
+              "default": [],
+              "items": {
+                "$ref": "#/components/schemas/OwnerReferenceBody"
+              },
+              "title": "References",
+              "type": "array"
+            }
+          },
+          "title": "OwnerInputBody",
+          "type": "object"
+        },
+        "OwnerInputResponse": {
+          "description": "`reports/report-triage.md` \u00a7 From you \u2014 the one section of any report the OWNER writes, read\nback from disk after every save so the surface shows what plan will actually read. `exists` is\nwhether the triage brief is on disk at all: before triage runs there is nothing to write into.\n\nSLOTS, not prose: one reference and one note per entry, so each can be added and removed on its\nown and the plan phase's \"one note, one check\" rule matches what is on disk.",
+          "properties": {
+            "exists": {
+              "title": "Exists",
+              "type": "boolean"
+            },
+            "notes": {
+              "items": {
+                "$ref": "#/components/schemas/OwnerNote"
+              },
+              "title": "Notes",
+              "type": "array"
+            },
+            "references": {
+              "items": {
+                "$ref": "#/components/schemas/OwnerReference"
+              },
+              "title": "References",
+              "type": "array"
+            }
+          },
+          "required": [
+            "exists",
+            "references",
+            "notes"
+          ],
+          "title": "OwnerInputResponse",
+          "type": "object"
+        },
+        "OwnerNote": {
+          "description": "One thing the owner wants proven. Each becomes a check in the plan's `## Verification plan`,\nits `proves:` written in their words \u2014 which is why it is one slot, not a paragraph.",
+          "properties": {
+            "description": {
+              "title": "Description",
+              "type": "string"
+            }
+          },
+          "required": [
+            "description"
+          ],
+          "title": "OwnerNote",
+          "type": "object"
+        },
+        "OwnerNoteBody": {
+          "properties": {
+            "description": {
+              "default": "",
+              "title": "Description",
+              "type": "string"
+            }
+          },
+          "title": "OwnerNoteBody",
+          "type": "object"
+        },
+        "OwnerReference": {
+          "description": "One imported reference the owner handed the plan phase: where it is, and what it governs.",
+          "properties": {
+            "description": {
+              "title": "Description",
+              "type": "string"
+            },
+            "source": {
+              "title": "Source",
+              "type": "string"
+            }
+          },
+          "required": [
+            "source",
+            "description"
+          ],
+          "title": "OwnerReference",
+          "type": "object"
+        },
+        "OwnerReferenceBody": {
+          "properties": {
+            "description": {
+              "default": "",
+              "title": "Description",
+              "type": "string"
+            },
+            "source": {
+              "default": "",
+              "title": "Source",
+              "type": "string"
+            }
+          },
+          "title": "OwnerReferenceBody",
           "type": "object"
         },
         "PagedNotice": {
@@ -5598,6 +5907,11 @@
               "title": "Built",
               "type": "array"
             },
+            "detail": {
+              "default": "",
+              "title": "Detail",
+              "type": "string"
+            },
             "done": {
               "title": "Done",
               "type": "boolean"
@@ -5637,7 +5951,7 @@
           "type": "object"
         },
         "ProofVerdict": {
-          "description": "One check of the plan's exam: what it will prove (`expect`, `mode`), and where it stands.\n`ran` False \u21d2 the loop hasn't reached it yet \u2014 the row exists from the plan gate on, so the\nowner approving a plan can see the proof they are approving. `result` is the vet's captured\noutput, verbatim \u2014 a failing row IS the expected-vs-actual.",
+          "description": "One check of the plan's exam: what it will prove (`proves` in the owner's terms, `expect` in\nthe machine's), and where it stands. `ran` False \u21d2 the loop hasn't reached it yet \u2014 the row\nexists from the plan gate on, so the owner approving a plan can see the proof they are\napproving. `result` is the vet's captured output, verbatim \u2014 a failing row IS the\nexpected-vs-actual.",
           "properties": {
             "by": {
               "default": "agent",
@@ -5647,6 +5961,14 @@
             "check": {
               "title": "Check",
               "type": "string"
+            },
+            "criteria": {
+              "default": [],
+              "items": {
+                "$ref": "#/components/schemas/Criterion"
+              },
+              "title": "Criteria",
+              "type": "array"
             },
             "cycle": {
               "anyOf": [
@@ -5689,6 +6011,11 @@
               "title": "Passed",
               "type": "boolean"
             },
+            "proves": {
+              "default": "",
+              "title": "Proves",
+              "type": "string"
+            },
             "ran": {
               "default": false,
               "title": "Ran",
@@ -5696,6 +6023,19 @@
             },
             "result": {
               "title": "Result",
+              "type": "string"
+            },
+            "rubric": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Rubric",
+              "type": "array"
+            },
+            "source": {
+              "default": "",
+              "title": "Source",
               "type": "string"
             },
             "unknown": {
@@ -6499,6 +6839,50 @@
             "autopilot_concurrency"
           ],
           "title": "RepoAutopilotResponse",
+          "type": "object"
+        },
+        "RepoBranchesResponse": {
+          "description": "The anchor picker's option set \u2014 this repo's local branches, most-recently-committed first,\nwith the work-item branches excluded. `anchor` is what the anchor resolves to right now, so the\npicker can show the branch in USE even when nothing has been configured yet.",
+          "properties": {
+            "anchor": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Anchor"
+            },
+            "anchor_error": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Anchor Error"
+            },
+            "branches": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Branches",
+              "type": "array"
+            },
+            "repo_id": {
+              "title": "Repo Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "repo_id"
+          ],
+          "title": "RepoBranchesResponse",
           "type": "object"
         },
         "RepoConnectBody": {
@@ -8694,6 +9078,30 @@
             "passed"
           ],
           "title": "VerdictHistory",
+          "type": "object"
+        },
+        "VerificationLibraryResponse": {
+          "properties": {
+            "available": {
+              "items": {
+                "$ref": "#/components/schemas/LibraryEntry"
+              },
+              "title": "Available",
+              "type": "array"
+            },
+            "standing": {
+              "items": {
+                "$ref": "#/components/schemas/LibraryEntry"
+              },
+              "title": "Standing",
+              "type": "array"
+            }
+          },
+          "required": [
+            "standing",
+            "available"
+          ],
+          "title": "VerificationLibraryResponse",
           "type": "object"
         },
         "WorkGraphEdge": {
@@ -11099,7 +11507,7 @@
       },
       "/dev/log": {
         "get": {
-          "description": "The activity log \u2014 a SELECTIVE read over the events table (PRD \u00a74.9), never a dump.\nFilters: `item_id` (an item's own timeline), `scope` (item|dev|global), `since`/`until`\n(ISO timestamps \u2014 e.g. \"what happened yesterday\"). Newest first. Powers the dashboard\nactivity view and the chat \"what was done\u2026\" queries.\n\nDiscarded rows (a re-run's soft-deleted attempt) follow the reader split: an ITEM read is the\ndrilldown asking \"what is happening on this item\", so it sees the current attempt only; a\nREPO-WIDE read is the project's history, which includes the attempts that were thrown away.",
+          "description": "The activity log \u2014 a SELECTIVE read over the events table (PRD \u00a74.9), never a dump.\nFilters: `item_id` (an item's own timeline), `scope`, `since`/`until` (ISO timestamps \u2014 e.g.\n\"what happened yesterday\"). Newest first. Powers the dashboard activity view and the chat\n\"what was done\u2026\" queries.\n\n`scope` takes a stored scope (`item` | `dev`) or **`repo`** \u2014 the activity view's read: every\ndev-native row plus the item-scoped kinds that are milestones of the PROJECT rather than steps\ninside one item (`REPO_MILESTONE_KINDS`). Per-item traces belong to that item's drilldown.\n\nDiscarded rows (a re-run's soft-deleted attempt) follow the reader split: an ITEM read is the\ndrilldown asking \"what is happening on this item\", so it sees the current attempt only; a\nREPO-WIDE read is the project's history, which includes the attempts that were thrown away.",
           "operationId": "dev_log_dev_log_get",
           "parameters": [
             {
@@ -12033,6 +12441,145 @@
           "summary": "Dev Sweep Idle Scan"
         }
       },
+      "/dev/verification": {
+        "get": {
+          "description": "This repo's verification library (verification-model \u00a78): the standing entries every\nimplementation plan inherits, and the available ones a plan cites by id. A repo with no library\nreads as two empty lists \u2014 the correct starting state, never an error.",
+          "operationId": "dev_verification_library_dev_verification_get",
+          "parameters": [
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "default": "global",
+                "title": "Context Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/VerificationLibraryResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Verification Library"
+        }
+      },
+      "/dev/verification/{entry_id}": {
+        "delete": {
+          "description": "Drop an entry that turned out not to generalise. The library is knowledge, and knowledge that\nproved wrong is removed rather than kept with a caveat nobody reads.",
+          "operationId": "dev_verification_drop_dev_verification__entry_id__delete",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "entry_id",
+              "required": true,
+              "schema": {
+                "title": "Entry Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "default": "global",
+                "title": "Context Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/GeneralDocSaveResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Verification Drop"
+        },
+        "patch": {
+          "description": "Promote an entry to standing, or demote it back to available. The OWNER'S call and nobody\nelse's: a standing entry taxes every future item in this repo, which is a spending decision and\nthe one brake on the library accreting.",
+          "operationId": "dev_verification_move_dev_verification__entry_id__patch",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "entry_id",
+              "required": true,
+              "schema": {
+                "title": "Entry Id",
+                "type": "string"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LibraryEntryBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/GeneralDocSaveResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Verification Move"
+        }
+      },
       "/dev/work-items/{item_id}/abandon": {
         "post": {
           "description": "Abandon a work-item \u2014 HUMAN-ONLY (no agent-tool counterpart), legal from any non-terminal\nphase (D8). Ordered, each step idempotent: end live runs/sessions \u00b7 remove the worktree\n(branch kept \u2014 near-free trace) \u00b7 abandon note into reports/report-close.md \u00b7 terminal status change\n(`abandoned`, or `superseded` when `superseded_by` names the replacement) \u00b7 resume a paused\nparent whose last open blocking child this was. Dev-knowledge untouched \u2014 write-at-merge\nmeans a pre-merge abandon wrote nothing, ever. The response is the abandon brief: blocking\nchildren listed for YOUR disposal (they existed only for this parent); parallel children\ncontinue untouched.",
@@ -12500,6 +13047,104 @@
             }
           },
           "summary": "Dev Work Item Drilldown"
+        }
+      },
+      "/dev/work-items/{item_id}/from-you": {
+        "get": {
+          "description": "`reports/report-triage.md` \u00a7 From you \u2014 what the owner has written into the one section of\nthe item that is theirs. Never 404s on a missing brief: `exists: false` is the editor's cue to\nsay triage hasn't written one yet, which is a different thing from a broken read.",
+          "operationId": "dev_work_item_owner_input_dev_work_items__item_id__from_you_get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "item_id",
+              "required": true,
+              "schema": {
+                "title": "Item Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "default": "global",
+                "title": "Context Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/OwnerInputResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Work Item Owner Input"
+        },
+        "put": {
+          "description": "Save the owner's own section, replacing it whole and leaving the rest of the brief untouched.\n\nHUMAN-ONLY, like abandon: there is no agent tool behind it, because the value of the section is\nprecisely that an agent did not write it. Returns what is now on disk \u2014 the editor shows what\nthe plan phase will read, not what was typed.",
+          "operationId": "dev_work_item_set_owner_input_dev_work_items__item_id__from_you_put",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "item_id",
+              "required": true,
+              "schema": {
+                "title": "Item Id",
+                "type": "string"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnerInputBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/OwnerInputResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Work Item Set Owner Input"
         }
       },
       "/dev/work-items/{item_id}/git": {
@@ -13729,6 +14374,46 @@
             }
           },
           "summary": "Set Repo Autopilot"
+        }
+      },
+      "/repos/{repo_id}/branches": {
+        "get": {
+          "description": "This repo's local branches \u2014 the anchor picker's option set. Read live off git rather than\nstored: a branch can appear or vanish between two page loads, and the anchor REFUSES on a branch\nthat doesn't exist, so a stale list would offer a setting that fails at the next merge.\n\nA non-git repo answers with an empty list and no error \u2014 nothing to pick from is a fact about\nthe repo, not a failure of the request.",
+          "operationId": "get_repo_branches_repos__repo_id__branches_get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "repo_id",
+              "required": true,
+              "schema": {
+                "title": "Repo Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/RepoBranchesResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Get Repo Branches"
         }
       },
       "/repos/{repo_id}/effort": {

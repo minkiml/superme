@@ -34,6 +34,12 @@ SAFE_TOOLS = {
     # Read-only run inspector (2026-07-12): one run's trace (calls + outcome) or the recent-run list,
     # scoped to this repo — the "what did activity #N do / why did it fail?" read + diagnose substrate.
     "mcp__dev__read_run",
+    # The repo's verification library (verification-model §8) — read-only on `general/verification.md`
+    # plus this item's own nominations. Plan calls it before authoring a check and close calls it to
+    # write nominations in, so a prompt here denies BOTH in a background run: caught live on
+    # 2026-08-03, where close reported "read_verification_library was unavailable this run (denied)"
+    # and the library could never have been written to even if vet had nominated.
+    "mcp__dev__read_verification_library",
     # The SANCTIONED itemize writes (work-item-session-recognition-prd): create one inbox item from a
     # discussion, or APPEND new discussion onto an existing item (the dedup path). Auto-allowed so a
     # general session can ticket work without a prompt; the one exemption to the general-session
@@ -69,10 +75,26 @@ SAFE_TOOLS = {
     "mcp__dev__set_triage_classification",
     "mcp__dev__scaffold_artifact",
     "mcp__dev__record_verification",
+    # Build's own validation runs, recorded as data (same append-only item-scoped pen). It fires
+    # several times a cycle inside a human-free loop, and a prompt here would park the loop on the
+    # record that vet's audit depends on.
+    "mcp__dev__record_validation",
+    # Plan's smoke test of the `run:` blocks it just wrote. It executes ONLY strings already in
+    # plan.md, through the same sandbox as every kernel check, and records nothing — the narrow
+    # capability the plan phase was reaching for when it tried (and was denied) a raw shell.
+    "mcp__dev__dry_run_checks",
     # Vet's reading of a failure (verification-model §5) — the same append-only, item-scoped pen as
     # the verdict above, and the vet report refuses without it, so a prompt here would park the loop
     # on a human at the exact moment it has something useful to hand back.
     "mcp__dev__record_diagnosis",
+    # The standing lenses (verification-model §3) — same item-scoped append-only pen, owed on every
+    # cycle including a `depth: none` one, so a prompt here would park the loop on the one record
+    # that is never optional.
+    "mcp__dev__record_lens",
+    # A library nomination (verification-model §8) writes nothing outside the item's own ledger —
+    # close is what puts an entry in `general/`, behind the owner's review gate. Prompting here
+    # would stall a background vet cycle on a record that changes nothing yet.
+    "mcp__dev__nominate_check",
     # The wall-handling ledgers (BV-A1/A2): append-only, item-scoped, pre-gate records. These
     # exist precisely so an autonomous run NEVER stalls on a person — a prompt here recreates the
     # stall they replace (and a background run's deny_all silently swallows the record).
@@ -82,6 +104,10 @@ SAFE_TOOLS = {
     # session's file-write tools are denied outright, so this pen is its ONLY way to produce the
     # handoff. A prompt here would park every background vet cycle on a human.
     "mcp__dev__file_vet_report",
+    # Plan's report pen — same shape: writes only the item's own report-plan.md, and everything
+    # factual in it is derived from plan.md rather than asserted. A background plan run would
+    # otherwise stall on the last step of its own work.
+    "mcp__dev__file_plan_report",
     "mcp__dev__write_checkpoint",
     # Agent-run freshness sync (D9): merges trunk INTO the item's own worktree only — trunk itself
     # is never written; conflicts abort-and-report by default.

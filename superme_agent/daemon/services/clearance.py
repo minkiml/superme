@@ -19,6 +19,7 @@ import logging
 
 from ..app_state import dev as _dev, dev_store as _dev_store, \
     spine as _spine, sessions as _sessions
+from ...core import autopilot as _autopilot
 from ...core import gate_briefs, git_layer, kind_profiles, status_router
 from ...gateway import contexts
 
@@ -137,6 +138,15 @@ def clear_item(context_id: str, item_id: str, *, actor: str = "daemon",
                          item_id=item_id, actor=actor,
                          meta={"runs_freed": runs_freed,
                                **({"knowledge_gap": knowledge_gap} if knowledge_gap else {})})
+    # A throwaway X-ray probe tears itself down HERE, at the item's terminal moment — not only when
+    # it parks at the close gate. The gates hook fires on `close` + `awaiting_human`; a probe whose
+    # close run completes cleanly never rests in that state, so it sailed past teardown and left its
+    # folder, worktree, branch and a permanently-"running" probe state behind — which then blocked
+    # every later probe, because the launcher refuses to mint a second while one is in flight.
+    # Clearance is the one moment every finished item passes through, probe or not.
+    if _autopilot.is_prompt_extraction(item):
+        from . import prompt_extraction as px
+        px.teardown(context_id, item_id, reason="probe completed")
     out = {"ok": True, "id": item_id, "execution_snapshot": "artifacts/execution.md",
            "session_cleared": bool(session_ids), "runs_freed": runs_freed}
     if worktree_removed is not None:

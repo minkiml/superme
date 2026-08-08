@@ -1,19 +1,26 @@
-<!-- Close report: reports/report-close.md — the last thing the owner reads about this item.
-     Keep it ≤ 1 screen; tables over paragraphs. Every fact is checked against the repo and the
-     item record — a claim that doesn't hold bounces with an itemized rejection. -->
-# Close — <fill:item title>
+<!-- Close report: reports/report-close.md — the last thing the owner reads about this item, and
+     what they will find if they come back to it in six months. Keep it ≤ 1 screen.
+     Every fact is checked against the repo and the item record — a claim that doesn't hold bounces
+     with an itemized rejection. Write what is TRUE OF MAIN NOW, not what the item set out to do. -->
+# Close User-facing Report
 
-**What landed:** <fill:the merged change in 1–3 lines, for someone reading the trail months later — what is now true of main that wasn't before>
+**Summary:** <fill:one line — what is now true and what, if anything, follows. This line is what the dashboard shows on the closed card, so it has to stand alone>
 
-**Facts:**
+## What's now true
+<fill:1–3 lines for someone reading the trail months from now, with no memory of this item: what main does that it didn't, and who can rely on it>
+
+## Facts
 | | |
 |---|---|
-| merge commit | <fill:the recorded merge commit, or `none — never merged`> |
-| files changed | <fill:count + the real list from `git diff --name-only <base>..<branch>`, or `none`> |
-| tests run | <fill:what actually ran and its result, or `none`> |
+| merged as | <fill:the recorded merge commit, or `none — never merged`> |
+| changed | <fill:count + shape from `git diff --name-only <base>..<branch>`, or `none`> |
+| proven by | <fill:what actually ran and its result, or `none`> |
 
-**Knowledge:** <fill:which anchor docs this item updated and what they now say — or `none needed` with the reason>
+## Left undone on purpose
+<fill:one bullet each — denied authorizations, dropped tasks, deliberate gaps, each with the reason it was left and whether it was filed. Write `nothing skipped` only when that is true>
 
-**Skipped, and why:** <fill:denied authorizations, dropped tasks, deliberate gaps — each with the reason it was left. Write `nothing skipped` only if that is true.>
+## What the project now records
+<fill:which anchor docs this item changed and what they now say — or, when nothing needed changing, say so AND say why, because "no document described this" is itself worth the owner knowing>
 
-**Loose ends:** <fill:spawned items, follow-ups filed to the inbox, open children — with ids. `none` if clean.>
+## Loose ends
+<fill:follow-ups filed, open children, anything still waiting. Say whether each was FILED; never print an id. `Nothing else open.` when clean>

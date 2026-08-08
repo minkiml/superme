@@ -50,10 +50,28 @@ anyone chose it.
 
 - Bank a checkpoint (`write_checkpoint`): which questions are answered vs open, what the evidence
 leans toward, where to pick up.
-- Rewrite `reports/report-investigate.md` from `templates/report-investigate-template.md` (this
-skill's folder), overwriting in place — the standing answer to "where has this got to". It reports
-the state of the search; the conclusions belong to the review-entry report.
+- Write user-facing report, `reports/report-investigate.md`, from `templates/report-investigate-template.md` (this
+skill's folder), overwriting in place — the owner's standing answer to "what do we know". The
+template's `<fill:…>` slots and its `<!-- … -->` notes are both instructions to you: replace the
+slots, drop the notes. Neither belongs in the file you write.
+  - **`**Summary:**` is the finding in one line**, and the dashboard shows it alone: "every command
+    re-reads the whole ledger, so the wait grows with the file". Not "the investigation is
+    progressing".
+  - **`## How we know` separates measured from reasoned.** A number that came from a real run and a
+    conclusion that came from reading the code must not read the same way — a guess wearing the
+    clothes of a measurement is the one way a research item does damage.
+  - **`## What we didn't settle` is almost never empty.** Write it before you write the findings.
 - When every question is answered (or its Done criterion met), say so in one line and stop.
+
+**Tone and style when writing to user-facing report-investigate.md**
+- Plain, easy language. Fewer words wins.
+- Never restate the item's kind, deliverable or id. Spend the space on the judgment behind them.
+- Omit a prose field rather than filling it with "none" — an absent block reads better.
+
+## Chat response style
+- Use plain and easy language.
+- Keep your response short, clear, and to the point.
+- Use bullets or numbered lists to organize information if there is more than one point.
 
 ## Pitfalls
 
@@ -63,3 +81,4 @@ the state of the search; the conclusions belong to the review-entry report.
   reputation; park it as an open thread.
 - **Recording a conclusion instead of what you saw** — this doc holds evidence; the verdicts are
   drawn later, from it.
+- when writing to docs, Do not include the comments part `<!-- ... -->` in the scaffold you file — it is instructions for you.

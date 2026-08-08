@@ -17,7 +17,7 @@ from ..schemas.system import (
     SystemResponse, RepoOverview, RepoConnectResponse, RepoDisconnectResponse,
     RunsResponse, RunTraceResponse,
     SystemModelResponse, LearningResponse, RepoModelResponse, RepoLearningResponse,
-    RepoMetaResponse, RepoGitResponse, RepoAutopilotResponse, TokenUsageResponse, TokenTimeseriesResponse, SweepConfigBody, SweepConfigResponse,
+    RepoMetaResponse, RepoGitResponse, RepoBranchesResponse, RepoAutopilotResponse, TokenUsageResponse, TokenTimeseriesResponse, SweepConfigBody, SweepConfigResponse,
     CompactionConfigBody, CompactionConfigResponse, DeputyConfigResponse,
     SystemEffortResponse, RepoEffortResponse, AgentModelsResponse, RepoAttention,
 )
@@ -523,6 +523,24 @@ async def set_repo_git(repo_id: str, body: RepoGitBody,
         raise HTTPException(status_code=404, detail=f"unknown repo '{repo_id}'")
     return {"ok": True, "repo_id": repo_id, "review_mode": rc.review_mode,
             "anchor_branch": rc.anchor_branch, **_anchor_state(rc)}
+
+
+@router.get("/repos/{repo_id}/branches", response_model=RepoBranchesResponse)
+async def get_repo_branches(repo_id: str, spine: SystemSpine = Depends(get_spine)) -> dict:
+    """This repo's local branches — the anchor picker's option set. Read live off git rather than
+    stored: a branch can appear or vanish between two page loads, and the anchor REFUSES on a branch
+    that doesn't exist, so a stale list would offer a setting that fails at the next merge.
+
+    A non-git repo answers with an empty list and no error — nothing to pick from is a fact about
+    the repo, not a failure of the request."""
+    rc = spine.repo(repo_id)
+    if rc is None:
+        raise HTTPException(status_code=404, detail=f"unknown repo '{repo_id}'")
+    if not git_layer.is_git_repo(rc.cwd):
+        return {"repo_id": repo_id, "branches": [], "anchor": None, "anchor_error": None}
+    st = _anchor_state(rc)
+    return {"repo_id": repo_id, "branches": git_layer.list_branches(rc.cwd),
+            "anchor": st["resolved_anchor"], "anchor_error": st["anchor_error"]}
 
 
 @router.post("/repos/{repo_id}/meta", response_model=RepoMetaResponse)

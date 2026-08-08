@@ -62,7 +62,9 @@ invariants the code actually holds to, and what it conspicuously refuses to do)*
 `[TBC — what you observed and why you're unsure]` rather than guessing**) · `project-prd.md` (inferred,
 then clarified) · `decisions.md` (only choices you can actually ground — a retrofit reconstructs few;
 an empty ledger is honest, an invented one is not) · `roadmap.md` (**forward-only — no history**) ·
-`resources/index.md`. After drafting `architecture.md`, call
+`resources/index.md`. `verification.md` is **not yours to write** — it holds checks SuperMe has
+actually run and seen pass here, and a repo being retrofitted has none yet however good its existing
+test suite is; note the suite in `architecture.md` instead. After drafting `architecture.md`, call
 `suggest_assets` with its text — it auto-adopts the confidently-relevant pooled assets for this repo;
 note which were adopted (the owner curates them later in the dashboard).
 
@@ -90,6 +92,11 @@ State what is now **in motion**, **when the owner is next needed**, and the **on
 (Pipeline) — read it off the tool's result. If nothing was launched, hand off plainly: memory is
 established, Orient is valid, the board renders, and work begins from an inbox item when the owner is
 ready.
+
+## Chat response style
+- Use plain and easy language.
+- Keep your response short, clear, and to the point.
+- Use bullets or numbered lists to organize information if there is more than one point.
 
 ## Pitfalls
 - Serial reading — comprehend with parallel subagents scoped per subsystem, not one linear crawl.

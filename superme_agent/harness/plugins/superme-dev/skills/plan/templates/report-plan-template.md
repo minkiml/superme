@@ -1,21 +1,20 @@
-<!-- Plan report — copy to reports/report-plan.md. Keep it ≤ half a screen.
-     Every line traces to plan.md — no new facts here.
-     Delete any block you have nothing real to put under; an absent section reads better than
-     "none". On a re-run, overwrite in place and fill ## Changed since; on a first run, delete
-     that section entirely.
-     KEEP THE BLANK LINE BETWEEN EVERY **Label:** BLOCK — without it markdown folds them into
-     one paragraph and the labels render mid-sentence. -->
-# Plan — {title}
+<!-- Plan report: reports/report-plan.md — written by plan's report tool. Code fills the
+     confirmation table from the verification plan's own checks (their `proves:` lines, verbatim)
+     plus the depth call and the stats; the planner supplies only the prose. Every line traces to
+     plan.md — no new facts. An empty block is dropped, not printed.
+     The table's left column is each check's `proves:` — the plan already said what a green MEANS,
+     and re-deriving it here would be a second, drifting account of the same exam. -->
+# Plan User-facing Report
 
-**Outcome:** <fill:1 line — what will be built>
+**Summary:** {summary}
 
-**Key points:** <fill:up to 4 bullets — the approach spine>
+## Approach
+{approach}
 
-**Decisions (owner-made):** <fill:up to 3, from plan.md ## Decisions & clarifications — delete this block if none>
+## How I'll confirm it worked
 
-**Needs your attention:** <fill:only real asks, one per line — delete this block if none>
+| what must be true | how I'll know |
+|---|---|
+{coverage}{gaps}{confirm}
 
-**Stats:** <fill:tasks planned · checks planned, or questions for a research plan>
-
-## Changed since v<n>
-<fill:re-runs only — the compact delta from the previous version>
+{blocks}

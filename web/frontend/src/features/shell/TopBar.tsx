@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Coins, FolderKanban, Cpu, GraduationCap } from 'lucide-react'
+import { Coins, FolderKanban, Bot, GraduationCap } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import AttentionCenter from './AttentionCenter'
 import { fmtTokens } from '@/lib/format'
@@ -38,7 +38,10 @@ const CHIPS: Chip[] = [
     value: (s) => fmtTokens(s.tokensTotal) },
   { id: 'projects', label: 'Connected projects', icon: FolderKanban,
     value: (s) => String(s.projects) },
-  { id: 'ops', label: 'Agents running / live', icon: Cpu, drill: true,
+  // `Bot` is the app's agent glyph EVERYWHERE — the chat rail's speaker, the activity log, the
+  // artifact author, the harness list. This chip counts agents, so it wears the same face; `Cpu`
+  // read as machine load and was the only place an agent looked like something else.
+  { id: 'ops', label: 'Agents running / live', icon: Bot, drill: true,
     value: (s) => `${s.opsRunning}/${s.opsLive}` },
   { id: 'learning', label: 'Learning · candidate / pending / drafted / learned',
     icon: GraduationCap, drill: true,
