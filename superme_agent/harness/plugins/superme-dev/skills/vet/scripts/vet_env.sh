@@ -47,6 +47,7 @@ REPO_ID="${2:-$(basename "$(dirname "$WT")")}"
 # The state file is a convenience; this is the truth.
 daemons_here() {
     local p cwd
+    : "${MATCH:=$(cfg cmd | tr ' ' '\n' | grep -v '^{' | tail -1)}"
     for p in $(lsof -nP -iTCP -sTCP:LISTEN -t 2>/dev/null | sort -u); do
         cwd="$(lsof -a -p "$p" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | tail -1)"
         # NEVER the host. A process sitting in the MAIN checkout is the daemon every run is a child
@@ -56,7 +57,12 @@ daemons_here() {
         # reported adopting "what appears to be the actual running SuperMe host daemon", and a rule
         # that lives only at the entrance is one call site away from being bypassed.
         [ "$cwd" = "$MAIN" ] && continue
-        [ "$cwd" = "$WT" ] && echo "$p"
+        [ "$cwd" = "$WT" ] || continue
+        # …AND it must be the thing we boot. cwd alone matched anything listening from this
+        # directory — including the agent's own process tree, which is how a `stop` ended a build
+        # run with exit 143 (SIGTERM to the agent, read as a crash). Two facts, not one.
+        [ -z "$MATCH" ] && { echo "$p"; continue; }
+        ps -o command= -p "$p" 2>/dev/null | grep -qF -- "$MATCH" && echo "$p"
     done
 }
 
@@ -166,7 +172,7 @@ cmd_start() {
 
     say "✗ '$cmd' did not answer on $port — last 20 log lines:"
     tail -20 "$LOG" >&2 2>/dev/null
-    alive "$pid" && kill -9 -- -"$pid" 2>/dev/null
+    alive "$pid" && kill -9 "$pid" 2>/dev/null
     exit 1
 }
 
@@ -180,10 +186,10 @@ cmd_stop() {
     fi
     # Signal the GROUP: a server may run its worker in a child, and killing only the leader leaves
     # that child holding the port.
-    for p in $pids; do kill -- -"$p" 2>/dev/null || kill "$p" 2>/dev/null; done
+    for p in $pids; do kill "$p" 2>/dev/null; done
     local i=0
     while [ -n "$(daemons_here)" ] && [ $i -lt $STOP_TRIES ]; do sleep 0.25; i=$((i + 1)); done
-    for p in $(daemons_here); do say "▸ pid $p did not exit — SIGKILL"; kill -9 -- -"$p" 2>/dev/null; done
+    for p in $(daemons_here); do say "▸ pid $p did not exit — SIGKILL"; kill -9 "$p" 2>/dev/null; done
     sleep 0.5
     local left; left="$(daemons_here)"
     [ -z "$left" ] || die "still listening for this worktree after SIGKILL: $left"
