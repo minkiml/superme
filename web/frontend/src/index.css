@@ -138,3 +138,30 @@ select.bare {
   50%      { transform: scale(1.14); opacity: 0.12; }
 }
 .animate-heartbeat { animation: heartbeat 1.5s ease-in-out infinite; }
+
+/* ── Syntax highlighting (highlight.js token classes) ───────────────────────
+   A canned hljs theme is a second, fixed palette that would sit inside our themed surfaces and
+   ignore the light/dark switch entirely. So the token classes map onto OUR tokens instead — the
+   diff and any highlighted code re-theme with everything else, and there is still exactly one
+   place colour is defined.
+
+   Deliberately few colours: a diff is already carrying red/green line tints, and a rainbow on top
+   of that competes with the signal the reader actually came for (what changed). Keywords, strings,
+   comments and names — everything else inherits. */
+.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-type, .hljs-selector-tag {
+  color: rgb(var(--c-universal));
+}
+.hljs-string, .hljs-regexp, .hljs-char.escape_, .hljs-meta .hljs-string {
+  color: rgb(var(--c-core));
+}
+.hljs-comment, .hljs-quote { color: rgb(var(--c-faint)); font-style: italic; }
+.hljs-number, .hljs-symbol { color: rgb(var(--c-warn)); }
+.hljs-title, .hljs-title.class_, .hljs-title.function_, .hljs-section {
+  color: rgb(var(--c-accent-text));
+}
+.hljs-attr, .hljs-attribute, .hljs-property, .hljs-variable, .hljs-template-variable {
+  color: rgb(var(--c-fg));
+}
+.hljs-meta, .hljs-doctag, .hljs-params { color: rgb(var(--c-muted)); }
+.hljs-emphasis { font-style: italic; }
+.hljs-strong { font-weight: 600; }

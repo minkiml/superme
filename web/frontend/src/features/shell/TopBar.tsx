@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import { Coins, FolderKanban, Bot, GraduationCap } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import AttentionCenter from './AttentionCenter'
@@ -16,9 +17,13 @@ import { getTokenTimeseries, type SystemHold, type TokenTimeseries } from '@/lib
 // cost nothing and stay legible.
 //
 // Hover is a real POPOVER, not the browser's `title=` (owner, 2026-08-01): the native tooltip waits
-// about a second, renders in the OS chrome rather than the app's, and can only say text. It borrows
-// the pattern the token drill-in's over-time bars already use — `group` + an absolutely positioned
-// `group-hover:block` panel — so hovering a stat feels the same wherever you do it.
+// about a second, renders in the OS chrome rather than the app's, and can only say text.
+//
+// It is CENTRED on its chip and clamped to the window (owner, 2026-08-09). The first version was a
+// CSS-only `group-hover:block` panel pinned `right-0`, which put every popover to the LEFT of the
+// stat it described — readable, but it never pointed at anything. Centring alone is not enough
+// either: these chips sit at the far right of the bar, so a wide label would have run off-screen.
+// Pure CSS cannot ask how wide the window is, so this measures — one layout pass, one correction.
 //
 // Only stats that HAVE a drill-in are clickable. Projects had none and briefly navigated to Nexus
 // instead, which reads as a misfire: a control that answers a different question than the one you
@@ -83,6 +88,38 @@ function TokenSpark({ ts }: { ts: TokenTimeseries | null }) {
   )
 }
 
+// Distance kept from the window edge when a popover would otherwise overhang it.
+const EDGE = 8
+
+/** The popover itself: `fixed`, centred on `anchor`, then nudged back inside the window.
+ *
+ *  Fixed rather than absolute so the panel is never clipped by the bar's own box, and measured
+ *  rather than guessed so a long label near the right edge slides left by exactly as much as it
+ *  overhangs — no more, so the popover stays as close to centred as the window allows. The shift
+ *  ACCUMULATES because the measurement already includes whatever shift is applied; adding the new
+ *  overhang to it converges in one pass and stays correct when the anchor changes chips. */
+function Pop({ anchor, children }: { anchor: DOMRect; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [shift, setShift] = useState(0)
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const r = el.getBoundingClientRect()
+    let d = 0
+    if (r.right > window.innerWidth - EDGE) d = window.innerWidth - EDGE - r.right
+    if (r.left + d < EDGE) d = EDGE - r.left
+    if (Math.abs(d) >= 0.5) setShift((s) => s + d)
+  }, [anchor])
+  return (
+    <div ref={ref}
+         className="pointer-events-none fixed z-50 w-max rounded-md border border-line bg-surface px-2.5 py-1.5 shadow-lg"
+         style={{ left: anchor.left + anchor.width / 2, top: anchor.bottom + 6,
+                  transform: `translateX(calc(-50% + ${shift}px))` }}>
+      {children}
+    </div>
+  )
+}
+
 export default function TopBar({ stats, onDetails, onGoto }: {
   stats: CommandStats
   onDetails: (id: string) => void
@@ -92,6 +129,18 @@ export default function TopBar({ stats, onDetails, onGoto }: {
   // a per-day series has nothing to gain from the board's polling cadence.
   const [ts, setTs] = useState<TokenTimeseries | null>(null)
   useEffect(() => { getTokenTimeseries().then(setTs).catch(() => {}) }, [])
+
+  // Which chip is hovered, and where it was when the pointer arrived. The rect is captured rather
+  // than re-read on every frame: the bar does not scroll and the chips do not move, so one reading
+  // is the whole truth for as long as the popover is up. A resize invalidates that, so it closes.
+  const [hot, setHot] = useState<{ id: string; rect: DOMRect } | null>(null)
+  useEffect(() => {
+    const drop = () => setHot(null)
+    window.addEventListener('resize', drop)
+    return () => window.removeEventListener('resize', drop)
+  }, [])
+  const enter = (id: string) => (e: { currentTarget: HTMLElement }) =>
+    setHot({ id, rect: e.currentTarget.getBoundingClientRect() })
 
   return (
     <header className="flex h-14 shrink-0 items-center gap-4 border-b border-line bg-sidebar px-4">
@@ -110,20 +159,23 @@ export default function TopBar({ stats, onDetails, onGoto }: {
               </span>
             </>
           )
-          const pop = (
-            <div className="pointer-events-none absolute right-0 top-full z-30 mt-1.5 hidden w-max rounded-md border border-line bg-surface px-2.5 py-1.5 shadow-lg group-hover:block">
+          const pop = hot?.id === c.id ? (
+            <Pop anchor={hot.rect}>
               <div className="text-[11px] text-muted">{c.label}</div>
               {c.id === 'tokens' && <div className="mt-1.5"><TokenSpark ts={ts} /></div>}
-            </div>
-          )
+            </Pop>
+          ) : null
+          // Focus opens it too, so the two drillable chips explain themselves to a keyboard.
+          const hover = { onMouseEnter: enter(c.id), onMouseLeave: () => setHot(null) }
           return c.drill ? (
-            <button key={c.id} onClick={() => onDetails(c.id)}
-                    className="group relative flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-muted transition-colors hover:bg-hover hover:text-fg">
+            <button key={c.id} onClick={() => onDetails(c.id)} {...hover}
+                    onFocus={enter(c.id)} onBlur={() => setHot(null)}
+                    className="relative flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-muted transition-colors hover:bg-hover hover:text-fg">
               {body}{pop}
             </button>
           ) : (
-            <span key={c.id}
-                  className="group relative flex cursor-default items-center gap-1.5 rounded-lg px-2 py-1.5 text-muted">
+            <span key={c.id} {...hover}
+                  className="relative flex cursor-default items-center gap-1.5 rounded-lg px-2 py-1.5 text-muted">
               {body}{pop}
             </span>
           )
