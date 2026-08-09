@@ -2,6 +2,7 @@ import { ShieldCheck, User, Sparkles, type LucideIcon } from 'lucide-react'
 import Markdown from '@/ui/Markdown'
 import ApprovalCard from './ApprovalCard'
 import { useStickyScroll } from './useStickyScroll'
+import { fmtElapsed } from '@/lib/format'
 import type { Approval, Msg } from './types'
 
 // The three talkers in a work-item thread (N4): you · the work-item agent · the deputy. Each row is
@@ -112,7 +113,7 @@ export default function MessageList({
             <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--chat-accent)]" />
           </span>
           <span>{statusLabel ? `${statusLabel}…` : live ? 'responding…' : 'thinking…'}</span>
-          <span className="tabular-nums text-muted">{elapsed.toFixed(1)}s</span>
+          <span className="tabular-nums text-muted">{fmtElapsed(elapsed)}</span>
         </div>
       )}
 

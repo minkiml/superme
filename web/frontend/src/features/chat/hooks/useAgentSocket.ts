@@ -41,6 +41,20 @@ export function useAgentSocket(contextId: string, mode: 'core' | 'dev', handlers
   const liveRef = useRef('')
   const handlersRef = useRef(handlers)
   handlersRef.current = handlers
+  // `busy` as a ref too: the socket handlers are installed once (the WS effect is `[]`), so they
+  // close over the FIRST `busy` and can never read the current one. Anything inside them that has
+  // to know whether a turn is in flight reads this.
+  const busyRef = useRef(false)
+  const markBusy = useCallback((v: boolean) => {
+    busyRef.current = v
+    setBusy(v)
+  }, [])
+  // What `flush` most recently turned into a permanent bubble — see the dedupe in `text_delta`.
+  const committedRef = useRef('')
+  // Set while WE are the ones closing the socket (effect teardown: unmount, context switch). Only
+  // an UNEXPECTED close means the turn was cut; a deliberate one must stay silent, or every repo
+  // switch mid-turn would accuse the connection of dropping.
+  const closingRef = useRef(false)
 
   // The "/" palette is computed server-side per (context, mode): mode-correct, fresh from disk
   // (publish/disable/delete reflect at once), internal skills filtered out. Restore the localStorage
@@ -76,14 +90,30 @@ export function useAgentSocket(contextId: string, mode: 'core' | 'dev', handlers
     const text = liveRef.current
     liveRef.current = ''
     setLive('')
-    if (text.trim() || opts?.force) handlersRef.current.onResult(text, sessionId)
+    if (text.trim() || opts?.force) {
+      committedRef.current = text.trim()
+      handlersRef.current.onResult(text, sessionId)
+    }
   }, [])
 
   useEffect(() => {
     const ws = new WebSocket(agentSocketUrl())
     wsRef.current = ws
     ws.onopen = () => setReady(true)
-    ws.onclose = () => setReady(false)
+    ws.onclose = () => {
+      setReady(false)
+      // A socket that dies mid-turn ENDS the turn — nothing more can arrive on it, and the daemon
+      // has already aborted the run on its side. Clearing `ready` alone left `busy` set forever:
+      // the rail sat at "thinking… 3m 0s" against a run that had been dead for half an hour, with
+      // no way to tell working from gone but a page refresh. Commit what the agent already said
+      // (same rule as `error` — it spoke, the words stay), stop the clock, and say what happened.
+      if (closingRef.current || !busyRef.current) return
+      flush(null)
+      markBusy(false)
+      setStatusLabel(null)
+      setApproval(null)   // a request nobody can answer any more
+      handlersRef.current.onError('The connection dropped mid-turn — this run was cut short.')
+    }
     ws.onmessage = (ev) => {
       const f = JSON.parse(ev.data) as OutboundFrame
       switch (f.type) {
@@ -99,6 +129,10 @@ export function useAgentSocket(contextId: string, mode: 'core' | 'dev', handlers
           // is finished: commit it as its own bubble right now rather than gluing the turn's
           // speeches into one blob and splitting them retroactively at `result`.
           flush(null)
+          // …unless this delta IS the message we just committed. A re-emitted message would open a
+          // live buffer holding text that is already a bubble, and the rail draws both — the same
+          // sentence twice, one permanent and one live. Committed once is the honest render.
+          if (f.text.trim() && f.text.trim() === committedRef.current) break
           liveRef.current = f.text
           setLive(f.text)
           setStatusLabel(null)
@@ -117,7 +151,7 @@ export function useAgentSocket(contextId: string, mode: 'core' | 'dev', handlers
           // The session claim rides this final flush: one claim per turn.
           flush(f.session_id ?? null, { force: true })
           setStatusLabel(null)
-          setBusy(false)
+          markBusy(false)
           // Don't wipe the model/context readout on a command reply (no run metadata).
           if (f.model || f.ctx_pct != null) {
             setMeta({ model: f.model ?? null, pct: f.ctx_pct ?? null, window: f.context_window ?? null })
@@ -130,7 +164,7 @@ export function useAgentSocket(contextId: string, mode: 'core' | 'dev', handlers
           // same "it said it, then it vanished" defect through a different door.
           flush(null)
           setStatusLabel(null)
-          setBusy(false)
+          markBusy(false)
           handlersRef.current.onError(f.message)
           break
         case 'timeline':
@@ -140,7 +174,10 @@ export function useAgentSocket(contextId: string, mode: 'core' | 'dev', handlers
           break
       }
     }
-    return () => ws.close()
+    return () => {
+      closingRef.current = true
+      ws.close()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -185,7 +222,7 @@ export function useAgentSocket(contextId: string, mode: 'core' | 'dev', handlers
       subject_run_id: opts?.subjectRunId ?? null,
     }
     ws.send(JSON.stringify(frame))
-    setBusy(true)
+    markBusy(true)
     // Commit any orphan from a turn that ended without a result/error frame (a socket hiccup)
     // rather than clearing it — clearing loses it, and carrying it forward would attach the last
     // turn's words to this one.

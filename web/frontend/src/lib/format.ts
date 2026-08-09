@@ -97,6 +97,15 @@ export function fmtModel(id?: string | null): string {
   return MODEL_LABEL[id.toLowerCase()] ?? id.charAt(0).toUpperCase() + id.slice(1)
 }
 
+/** A live ticker's elapsed SECONDS: tenths while it still reads as a moment ("8.4s"), minutes once
+ *  it doesn't ("1m 49s", "2h 3m"). A bare "108.6s" makes the reader do the division. */
+export function fmtElapsed(seconds: number): string {
+  const total = Math.max(0, seconds)
+  if (total < 60) return `${total.toFixed(1)}s`
+  if (total < 3600) return `${Math.floor(total / 60)}m ${Math.floor(total % 60)}s`
+  return `${Math.floor(total / 3600)}h ${Math.floor((total % 3600) / 60)}m`
+}
+
 /** A duration in ms as "m:ss" (or "h:mm:ss" past an hour), e.g. 83000 → "1:23". */
 export function fmtDuration(ms?: number | null): string {
   const total = Math.max(0, Math.floor((ms ?? 0) / 1000))
