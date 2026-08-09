@@ -16,8 +16,7 @@ repos:
     layer: global
     persona_append: ""
     extra_mcp: []
-    anchor_branch: test/e2e-hub   # TEMPORARY — live E2E isolation, revert to unset when done
-    vet_env:                        # how to boot a server running an ITEM WORKTREE's code
+    vet_env:                      # how to boot a server running an ITEM WORKTREE's code
       cmd: "{py} -m superme_agent.daemon"
       port_env: SUPERME_DAEMON_PORT
       ready: /openapi.json
