@@ -16,6 +16,7 @@ repos:
     layer: global
     persona_append: ""
     extra_mcp: []
+    anchor_branch: test/e2e-hub   # TEMPORARY — live E2E isolation, revert to unset when done
 
   dummy:
     label: Dummy Project
