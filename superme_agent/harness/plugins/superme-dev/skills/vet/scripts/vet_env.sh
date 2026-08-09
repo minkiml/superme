@@ -115,9 +115,6 @@ write_state() {  # write_state <pid> <port>
 }
 
 cmd_start() {
-    [ "$WT" != "$MAIN" ] || die "this is the main checkout — its server is the host, and killing or
-   restarting it would kill the run asking for this. Run from an item's worktree."
-
     local url_env cmd port_env ready pid port
     url_env="$(cfg url_env)"; cmd="$(cfg cmd)"
     port_env="$(cfg port_env)"; ready="$(cfg ready)"
@@ -193,6 +190,14 @@ cmd_status() {
     if [ -z "$pids" ]; then say "▸ down"; return 0; fi
     for p in $pids; do say "▸ up — pid $p, port $(port_of "$p"), log $LOG"; done
 }
+
+# EVERY subcommand refuses here, not just `start`. `stop` sweeps by cwd, and the host daemon's cwd
+# IS the main checkout — so a `stop` run from the repo root killed the daemon every run is a child
+# of (three times on 2026-08-10, until the shell reported the SIGTERM plainly: `zsh: terminated`).
+# A guard on the dangerous verb only is not a guard; the whole script belongs to worktrees.
+[ "$WT" != "$MAIN" ] || die "this is the main checkout, not an item worktree. The server running
+   here is the HOST — every run is its child, so starting, stopping or sweeping it would kill the
+   run asking. Run this from an item's worktree; there is no vet env to manage here."
 
 case "${1:-}" in
     start)  cmd_start ;;
