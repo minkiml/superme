@@ -103,28 +103,11 @@ def _delivered_line(item_dir: Path) -> str:
     written to be read once at a gate, and the commit body outlives the workspace by years. A field
     a machine parses belongs in the doc written for machines.
 
-    Reads the whole PARAGRAPH, not the first physical line: the file is hand-written prose wrapped
-    for reading, so a two-sentence Delivered routinely spans three lines. Taking only the first cut
-    the commit body off mid-sentence. Joined into one line here; `compose_commit` re-wraps at 72."""
-    try:
-        report = item_dir / "artifacts" / "review.md"
-        if not report.is_file():
-            return ""
-        parts: list[str] = []
-        for line in report.read_text().splitlines():
-            if not parts:
-                if line.strip().startswith("**Delivered:**"):
-                    parts.append(line.split("**Delivered:**", 1)[1].strip())
-                continue
-            # The field ends where its paragraph does — a blank line, or the next bold field for a
-            # report whose author forgot the blank.
-            if not line.strip() or line.strip().startswith("**"):
-                break
-            parts.append(line.strip())
-        return " ".join(p for p in parts if p).strip()
-    except OSError:
-        log.warning("commit message: could not read report-review.md in %s", item_dir)
-    return ""
+    ONE parse, shared with the PR guide's claim (`artifacts.delivered_line`): the project's
+    permanent history and the document the merge was decided on read the same bytes, so they cannot
+    come to say different things about what landed. Joined into one line there; `compose_commit`
+    re-wraps at 72."""
+    return artifacts.delivered_line(item_dir)
 
 
 def item_trailers(item: dict, item_id: str) -> dict:

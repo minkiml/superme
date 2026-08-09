@@ -27,7 +27,7 @@ from ...schemas.dev.work_items import (
     PlanResponse, WorkItemDetailResponse, WorkItemArtifactsResponse,
     WorkItemAdvanceResponse,
     WorkItemScaffoldResponse, WorkItemSeenResponse, WorkItemAutopilotResponse,
-    WorkItemTimelineResponse, PromptExtractionStatusResponse,
+    WorkItemTimelineResponse, PromptExtractionStatusResponse, WorkItemDocEditResponse,
 )
 
 log = logging.getLogger("superme-agent")
@@ -324,16 +324,81 @@ async def dev_work_item_run_input(item_id: str, run_id: int,
 
 
 @router.get("/dev/work-items/{item_id}/doc.html", response_class=HTMLResponse)
-async def dev_work_item_doc(item_id: str, path: str, context_id: str = "global") -> HTMLResponse:
+async def dev_work_item_doc(item_id: str, path: str, context_id: str = "global",
+                            dev: DevKnowledgeService = Depends(get_dev)) -> HTMLResponse:
     """One of the item's AGENT-FACING artifacts (brief.md · plan.md · build-vet-<n>.md) as a
     standalone page — what a report's "full contract" link opens. `path` is the report's own
     relative pointer; anything outside the item's `artifacts/` folder is refused as missing."""
-    from ...services.doc_preview import render_doc_page, render_missing_doc_page, resolve_doc
+    from ...services.doc_preview import (editable_artifact, render_doc_page,
+                                         render_missing_doc_page, resolve_doc)
     item_dir = _dev_root(context_id) / "work-items" / item_id
     target = resolve_doc(item_dir, path)
     if target is None:
         return HTMLResponse(render_missing_doc_page(item_id, path), status_code=404)
-    return HTMLResponse(render_doc_page(item_id, path, target.read_text()))
+    # The edit bar appears only for the two INTENT artifacts, and only while the item can still act
+    # on a change. A terminal item's plan is a record of what was done — offering a button the PUT
+    # route would then refuse is worse than not offering it.
+    item = dev.read_work_item(_dev_root(context_id), item_id) or {}
+    editable = (editable_artifact(item_dir, path) is not None
+                and not status_router.is_terminal(item))
+    return HTMLResponse(render_doc_page(item_id, path, target.read_text(),
+                                        context_id=context_id, editable=editable))
+
+
+class DocEditBody(BaseModel):
+    context_id: str = "global"
+    path: str            # the report's own relative pointer, e.g. "artifacts/plan.md"
+    text: str
+
+
+@router.put("/dev/work-items/{item_id}/doc", response_model=WorkItemDocEditResponse)
+async def dev_work_item_doc_edit(item_id: str, body: DocEditBody,
+                                 dev: DevKnowledgeService = Depends(get_dev),
+                                 dev_store: DevStore = Depends(get_dev_store),
+                                 spine: SystemSpine = Depends(get_spine)) -> dict:
+    """The owner hand-edits `brief.md` or `plan.md` — the item's two statements of INTENT, and the
+    only artifacts they may write (`artifacts.OWNER_EDITABLE`). Everything else under `artifacts/`
+    is a record of what a run did; the edit mode never offers it and this route refuses it.
+
+    Refused, each for its own reason: a LIVE run (a phase agent may be writing the same file — the
+    last writer would silently win) · a TERMINAL item (its work is merged and closed; editing the
+    plan now rewrites history rather than steering anything) · text that fails the artifact's own
+    self-check (returned as `issues` with nothing written, so a save can never leave the item in a
+    state the gate refuses and the owner can't see).
+
+    A successful save stamps `edited_by_owner` into the frontmatter. That stamp is the point: an
+    agent re-reading this plan next cycle is reading the OWNER's words, not its own."""
+    dev_root = _dev_root(body.context_id)
+    item = dev.read_work_item(dev_root, item_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="work-item not found")
+    if status_router.is_terminal(item):
+        raise HTTPException(status_code=409,
+                            detail="this item is finished — its plan records what was done, and "
+                                   "editing it now would change the record, not the work")
+    if spine.is_item_running(body.context_id, item_id):
+        raise HTTPException(status_code=409,
+                            detail="a run is in progress for this item — it may be writing this "
+                                   "same file; wait for it to finish")
+    item_dir = dev_root / "work-items" / item_id
+    from ...services.doc_preview import editable_artifact
+    artifact = editable_artifact(item_dir, body.path)
+    if artifact is None:
+        raise HTTPException(status_code=400,
+                            detail=f"{body.path} is not owner-editable — only "
+                                   f"{', '.join(artifacts.artifact_file(a) for a in artifacts.OWNER_EDITABLE)} "
+                                   "state intent; the rest record what a run did")
+    issues = artifacts.owner_edit(item_dir, artifact, body.text, item_kind=item.get("kind"))
+    if issues:
+        return {"ok": True, "id": item_id, "path": body.path, "saved": False, "issues": issues}
+    text = (item_dir / "artifacts" / artifacts.artifact_file(artifact)).read_text()
+    dev_store.log_event(body.context_id, "artifact.owner_edit",
+                        f"You edited {artifacts.artifact_file(artifact)} by hand",
+                        item_id=item_id, actor="owner",
+                        meta={"artifact": artifact, "path": body.path})
+    log.info("owner edited %s on %s", artifact, item_id)
+    return {"ok": True, "id": item_id, "path": body.path, "saved": True, "issues": [],
+            "edited_by_owner": artifacts.owner_edited_at(text)}
 
 
 @router.post("/dev/prompt-extraction/run", response_model=PromptExtractionStatusResponse)

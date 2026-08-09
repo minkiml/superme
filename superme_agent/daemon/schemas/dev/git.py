@@ -71,14 +71,32 @@ class PrFile(BaseModel):
     minus: int
 
 
+class PrCheck(BaseModel):
+    """One check whose `covers:` names this task, with its recorded verdict joined on."""
+    id: str
+    ran: bool
+    passed: bool
+    deferred: bool = False
+    how: str = ""
+
+
 class PrGroup(BaseModel):
     """One task's slice of the branch. `task` is null for commits that carry no `SuperMe-Task`
-    trailer — they are shown last rather than hidden."""
+    trailer — they are shown last rather than hidden.
+
+    The four fields below the diff are the REVIEW NOTES (owner, 2026-08-09): what this task had to
+    make true, what build says to look at, where it left the plan, and what proves it. They sit here
+    rather than in a document of their own because a note is only useful beside the commits it
+    describes — and per TASK, not per file, so two tasks touching one module get two notes."""
     task: str | None = None
     title: str | None = None    # the plan's `## Tasks` line for this id, when the plan still has it
     done: bool | None = None
     commits: list[PrCommit]
     files: list[PrFile]
+    needed: str = ""            # the covering check's `proves:` — the requirement, as an outcome
+    look: str = ""              # build's pointer at what the diff does not show
+    deviated: str = ""          # plan said → built instead, from the cycle that did it
+    checks: list[PrCheck] = []
 
 
 class PrStat(BaseModel):

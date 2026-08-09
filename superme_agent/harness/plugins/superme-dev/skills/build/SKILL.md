@@ -110,12 +110,19 @@ The owner is not watching; nothing you ask mid-run reaches them. So decide and r
   This is not a gate on you — you run what you judge is needed. It is what turns "the suite passed"
   from a sentence only you witnessed into something verification can hold up against the machine.
 - Fill the current cycle report `artifacts/build-vet-<n>.md` (highest n — the kernel scaffolded
-  it): `## Built` and `## Validation`, per its slots. The vetter reads these instead of
+  it): `## Built`, `## For the reviewer` and `## Validation`, per its slots. The vetter reads these instead of
   re-deriving your work from a raw diff — name files, how to exercise the change, and every gap
   honestly. **A cycle with nothing to build still fills them** — "nothing: r3 was a plan-text fix,
   no design or task changed" is an answer; a leftover `<fill:…>` slot is indistinguishable from a
   build that gave up, and the vetter and the owner both read it that way.
-- **Every per-task bullet in both sections LEADS with its task id** (`- t2 — …`), the same id as the
+- **`## For the reviewer` is the only thing you write that a person reads while looking at your
+  diff.** It shows on the PR page beside this task's own commits, so one line per task, and say the
+  thing the diff cannot: the case you chose not to handle, the value nobody specified, the call that
+  could have gone the other way. Not a summary of the change — they can see the change. `look: none`
+  is a real answer for a task where nothing needs pointing at, and most tasks are that. Say
+  `deviated:` whenever you built something other than what `plan.md` specified, and why; a reviewer
+  can reconstruct what you did from the diff, never what you were supposed to do instead.
+- **Every per-task bullet in all three sections LEADS with its task id** (`- t2 — …`), the same id as the
   commit trailer. That id is what joins your work to its validation and to the vet's verdict, so the
   owner's Proof view can say "this feature, proven this way" instead of listing check ids. Work that
   belongs to no single task (a shared refactor, a stale doc fixed in passing) leads with no id and

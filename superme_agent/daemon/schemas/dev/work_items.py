@@ -292,6 +292,18 @@ class WorkItemSeenResponse(BaseModel):
     changed: bool
 
 
+class WorkItemDocEditResponse(BaseModel):
+    """Owner edit of `brief.md` / `plan.md`. `saved` False means the text broke the artifact's
+    contract and NOTHING was written — `issues` are the same lines the gate would refuse on, so the
+    owner fixes them here rather than discovering them at a gate."""
+    ok: bool
+    id: str
+    path: str
+    saved: bool
+    issues: list[str] = []
+    edited_by_owner: str | None = None
+
+
 class WorkItemAutopilotResponse(BaseModel):
     """Autopilot-toggle result. `changed` False = the flag was already in the requested state."""
     ok: bool

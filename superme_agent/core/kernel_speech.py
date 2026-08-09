@@ -388,7 +388,15 @@ def work_item_preamble(item_id: str, item: dict, item_dir, *, interactive: bool 
         "This is an interactive chat — the user is present. Their interactions primarily "
         "center on this item unless they point elsewhere."
         if interactive else
-        "This run is kernel-fired for this item — it is your sole subject this run."
+        # Says FRESH out loud (owner, 2026-08-09). A background phase opens its own session, so this
+        # thread holds nothing from the phases before it. The old wording named the item and left
+        # the rest to inference — and an agent that assumes it was here for triage will reason from
+        # a discussion it never had. Better to state the actual epistemic position: the artifacts
+        # are not a reference you may consult, they are the only thing you know.
+        "This run is kernel-fired for this item — it is your sole subject this run. This thread is "
+        "FRESH: earlier phases ran in their own sessions and none of their conversation is here. "
+        "Everything you know about this item is written down — if you cannot point to where you "
+        "read something, you have not read it."
     )
     lines = [
         "## Current focus",
@@ -401,6 +409,13 @@ def work_item_preamble(item_id: str, item: dict, item_dir, *, interactive: bool 
             f"\n**This phase:** {c['what']}. The procedure lives in the `superme-dev:{c['skill']}` "
             f"skill — invoke it when doing this phase's work."
         )
+    # The owner's standing input, on EVERY turn of every phase. Each intake phase runs in its own
+    # session, so anything they said in an earlier one is gone from this thread; the durable copy
+    # lives in the artifacts, and until now reached a phase only if that phase's skill happened to
+    # tell it to look. Placed high on purpose — right after what this phase is for, before the
+    # boundaries — because it can change what the phase should do.
+    if carried := artifacts.carry_owner_input(item_dir):
+        lines.append(carried)
     # Edit boundary: worktree during build+ (S4 freeze), item folder otherwise. Vet is the
     # exception (build-vet-loop §4): read-only on files by construction — the write tools are
     # denied at the permission layer, so the preamble states the contract that matches.

@@ -102,6 +102,12 @@ Lead with what the owner must decide. Every line traces to `artifacts/review.md`
 Step 1 — no new facts — and `How much to trust it` carries the **not covered** rows too. A table of
 only green rows is an advertisement, not a basis for a decision.
 
+**Do not restate what the cycles' `## For the reviewer` already says.** Those lines are shown on the
+PR page beside each task's own commits, so the owner has already read them next to the code they
+describe. This report answers a different question — whether the item should land at all — and an
+owner who meets the same sentence in both panes learns to skim both. Write about a per-task note
+only when the DECISION turns on it, and then say what it means for the merge, not what it says.
+
 **A template's `<fill:…>` slots and `<!-- … -->` notes are instructions TO YOU. None of them belong
 in the file you write** — you replace the slots and drop the notes. Copied through, an authoring
 note becomes the report's opening paragraph, and the owner reads your instructions instead of your

@@ -1551,6 +1551,37 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/dev/work-items/{item_id}/doc": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Dev Work Item Doc Edit
+         * @description The owner hand-edits `brief.md` or `plan.md` — the item's two statements of INTENT, and the
+         *     only artifacts they may write (`artifacts.OWNER_EDITABLE`). Everything else under `artifacts/`
+         *     is a record of what a run did; the edit mode never offers it and this route refuses it.
+         *
+         *     Refused, each for its own reason: a LIVE run (a phase agent may be writing the same file — the
+         *     last writer would silently win) · a TERMINAL item (its work is merged and closed; editing the
+         *     plan now rewrites history rather than steering anything) · text that fails the artifact's own
+         *     self-check (returned as `issues` with nothing written, so a save can never leave the item in a
+         *     state the gate refuses and the owner can't see).
+         *
+         *     A successful save stamps `edited_by_owner` into the frontmatter. That stamp is the point: an
+         *     agent re-reading this plan next cycle is reading the OWNER's words, not its own.
+         */
+        put: operations["dev_work_item_doc_edit_dev_work_items__item_id__doc_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/dev/prompt-extraction/run": {
         parameters: {
             query?: never;
@@ -2662,6 +2693,11 @@ export interface components {
             basis: string[];
             /** Questions */
             questions: components["schemas"]["AskQuestion"][];
+            /**
+             * Children
+             * @default []
+             */
+            children: components["schemas"]["BlockingChild"][];
         };
         /**
          * AttentionHold
@@ -2769,6 +2805,22 @@ export interface components {
         AutopilotConcurrencyBody: {
             /** Concurrency */
             concurrency: number;
+        };
+        /**
+         * BlockingChild
+         * @description One open sub-item the parent is waiting on — resolved to something the owner can read and go
+         *     to. `close_readiness` reports these as a comma-joined string of ids, which names a thing without
+         *     saying what it is or how far along it got (owner, 2026-08-09).
+         */
+        BlockingChild: {
+            /** Id */
+            id: string;
+            /** Title */
+            title: string;
+            /** Phase */
+            phase: string;
+            /** Status */
+            status: string;
         };
         /** BoardDeliverable */
         BoardDeliverable: {
@@ -3179,6 +3231,18 @@ export interface components {
             context_id: string;
             /** Candidates */
             candidates?: number | null;
+        };
+        /** DocEditBody */
+        DocEditBody: {
+            /**
+             * Context Id
+             * @default global
+             */
+            context_id: string;
+            /** Path */
+            path: string;
+            /** Text */
+            text: string;
         };
         /**
          * DocResponse
@@ -4471,6 +4535,28 @@ export interface components {
             resources: components["schemas"]["StackRow"][];
         };
         /**
+         * PrCheck
+         * @description One check whose `covers:` names this task, with its recorded verdict joined on.
+         */
+        PrCheck: {
+            /** Id */
+            id: string;
+            /** Ran */
+            ran: boolean;
+            /** Passed */
+            passed: boolean;
+            /**
+             * Deferred
+             * @default false
+             */
+            deferred: boolean;
+            /**
+             * How
+             * @default
+             */
+            how: string;
+        };
+        /**
          * PrCommit
          * @description One commit as the walkthrough shows it. `body` has the SuperMe trailer block stripped —
          *     that block is what put the commit in this group, so repeating it inside would be noise.
@@ -4518,6 +4604,11 @@ export interface components {
          * PrGroup
          * @description One task's slice of the branch. `task` is null for commits that carry no `SuperMe-Task`
          *     trailer — they are shown last rather than hidden.
+         *
+         *     The four fields below the diff are the REVIEW NOTES (owner, 2026-08-09): what this task had to
+         *     make true, what build says to look at, where it left the plan, and what proves it. They sit here
+         *     rather than in a document of their own because a note is only useful beside the commits it
+         *     describes — and per TASK, not per file, so two tasks touching one module get two notes.
          */
         PrGroup: {
             /** Task */
@@ -4530,6 +4621,26 @@ export interface components {
             commits: components["schemas"]["PrCommit"][];
             /** Files */
             files: components["schemas"]["PrFile"][];
+            /**
+             * Needed
+             * @default
+             */
+            needed: string;
+            /**
+             * Look
+             * @default
+             */
+            look: string;
+            /**
+             * Deviated
+             * @default
+             */
+            deviated: string;
+            /**
+             * Checks
+             * @default []
+             */
+            checks: components["schemas"]["PrCheck"][];
         };
         /** PrPatch */
         PrPatch: {
@@ -6143,6 +6254,29 @@ export interface components {
             } | null;
             /** Checkpoints */
             checkpoints?: components["schemas"]["CheckpointStub"][] | null;
+        };
+        /**
+         * WorkItemDocEditResponse
+         * @description Owner edit of `brief.md` / `plan.md`. `saved` False means the text broke the artifact's
+         *     contract and NOTHING was written — `issues` are the same lines the gate would refuse on, so the
+         *     owner fixes them here rather than discovering them at a gate.
+         */
+        WorkItemDocEditResponse: {
+            /** Ok */
+            ok: boolean;
+            /** Id */
+            id: string;
+            /** Path */
+            path: string;
+            /** Saved */
+            saved: boolean;
+            /**
+             * Issues
+             * @default []
+             */
+            issues: string[];
+            /** Edited By Owner */
+            edited_by_owner?: string | null;
         };
         /**
          * WorkItemGitRecord
@@ -8691,6 +8825,41 @@ export interface operations {
                 };
                 content: {
                     "text/html": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dev_work_item_doc_edit_dev_work_items__item_id__doc_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DocEditBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkItemDocEditResponse"];
                 };
             };
             /** @description Validation Error */

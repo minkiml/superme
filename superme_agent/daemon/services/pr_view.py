@@ -131,6 +131,12 @@ def pr_view(ctx, context_id: str, item_id: str, *, dev, spine) -> dict:
     commits = git_layer.branch_commits(ctx.cwd, branch, base)
     tasks = artifacts.parse_tasks(_read(item_dir / "artifacts" / "plan.md"))
     stat = git_layer.branch_stat(ctx.cwd, branch, base)
+    # The review notes, joined onto their own task's group. Derived at read time like everything
+    # else here: the requirement from the plan's checks, the pointer and the deviation from the
+    # cycle that built it, the verdicts from the ledger.
+    guide = artifacts.pr_task_guide(item_dir)
+    groups = [{**g, **{k: v for k, v in (guide.get(g["task"]) or {}).items() if k != "cycle"}}
+              for g in _group_commits(commits, tasks)]
     return {
         "ok": True,
         "id": item_id,
@@ -146,7 +152,7 @@ def pr_view(ctx, context_id: str, item_id: str, *, dev, spine) -> dict:
         "report": _read(item_dir / "reports" / "report-review.md") or None,
         "stat": {"commits": len(commits), "files": stat["files"],
                  "insertions": stat["insertions"], "deletions": stat["deletions"]},
-        "groups": _group_commits(commits, tasks),
+        "groups": groups,
     }
 
 
