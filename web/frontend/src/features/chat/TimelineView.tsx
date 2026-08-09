@@ -74,8 +74,19 @@ const OUTCOME_TONE: Record<string, { dot: string; text: string; label: string }>
   stagnated: { dot: 'bg-danger', text: 'text-danger', label: 'no progress' },
 }
 
-function ReportCard({ r }: { r: Report }) {
-  const t = OUTCOME_TONE[r.outcome] ?? { dot: 'bg-line', text: 'text-muted', label: r.outcome }
+// The CLOSE phase's card is the last word the owner reads on a work-item, so it is labelled for the
+// ITEM, not for the run. `clean_noop` there is a true statement about close's own job — no anchor
+// doc needed writing — but printed as "nothing to do" under a finished item it reads as the verdict
+// on the work, which had plenty to do. Same token, different sentence, because the reader is asking
+// a different question at the end than in the middle.
+const CLOSE_TONE: Record<string, { dot: string; text: string; label: string }> = {
+  success: { dot: 'bg-success', text: 'text-success', label: 'work completed' },
+  clean_noop: { dot: 'bg-success', text: 'text-success', label: 'work completed · nothing to update' },
+}
+
+function ReportCard({ r, phase }: { r: Report; phase: string | null }) {
+  const t = (phase === 'close' ? CLOSE_TONE[r.outcome] : undefined)
+    ?? OUTCOME_TONE[r.outcome] ?? { dot: 'bg-line', text: 'text-muted', label: r.outcome }
   return (
     <div className="rounded-lg border border-line bg-surface px-2.5 py-2">
       <div className="flex items-center gap-1.5">
@@ -363,7 +374,7 @@ export default function TimelineView({
                   </div>
                 )}
                 {b.report
-                  ? <ReportCard r={b.report} />
+                  ? <ReportCard r={b.report} phase={b.phase} />
                   : (
                     <div className={`rounded-lg border px-2.5 py-1.5 text-[12.5px] text-fg ${sm.bubble}`}>
                       <Markdown text={b.text} variant="chat" tone="dev" />
