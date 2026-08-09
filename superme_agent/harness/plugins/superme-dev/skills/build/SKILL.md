@@ -105,7 +105,11 @@ The owner is not watching; nothing you ask mid-run reaches them. So decide and r
   whole vet run to learn what an exit code already said.
 - **Call `record_validation` for each one — command, machine result, pass/fail.** Give the command
   verbatim and re-runnable from the worktree root: vet re-executes that exact string to audit the
-  claim, and a paraphrase makes the record uncheckable. Record the reds too; a failure you then
+  claim, and a paraphrase makes the record uncheckable. **Re-runnable means it carries everything it
+  needs** — a command that reads a variable an EARLIER command exported passes for you and fails for
+  the vetter, who runs it alone. If it needs a running server, boot one inside the same command
+  (`eval "$(bash …/skills/vet/scripts/vet_env.sh start)" && <your check>`), and stop it when the
+  cycle ends — a server you leave running holds its port long after this worktree is deleted. Record the reds too; a failure you then
   fixed is a real part of the cycle, and the last recorded run for a command is the one that counts.
   This is not a gate on you — you run what you judge is needed. It is what turns "the suite passed"
   from a sentence only you witnessed into something verification can hold up against the machine.

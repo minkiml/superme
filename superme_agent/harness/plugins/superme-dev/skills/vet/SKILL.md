@@ -59,11 +59,13 @@ evidence with no run behind it. The tool call IS the record.
 - **A check that queries a running server must query one YOU started from this worktree.** An
   instance already listening was started from a different checkout and serves the code it loaded
   then — so a new endpoint reads as missing and a DELETED one still reads as present, which is a
-  pass for a surface you never saw. If the repo carries `scripts/vet_env.sh`, that is the
-  mechanism: `eval "$(bash scripts/vet_env.sh start)"` before the checks, `bash scripts/vet_env.sh
-  stop` after — always, including when a check fails, or the process outlives the worktree. Where
-  the repo offers no such script and a check needs a live instance, start one yourself on a port
-  nothing else holds; if you cannot, that check FAILS as unrunnable — never silently retarget it at
+  pass for a surface you never saw. When this repo can boot one, **your trigger names the exact
+  `vet_env.sh start` / `stop` pair** — use it verbatim; the path is absolute because the script
+  lives in the install, not in the repo you are vetting.
+
+  `stop` runs even when a check fails, or the server outlives the worktree and holds its port for
+  the rest of the session. When the trigger names no such command, this repo has no vet env and a
+  check needing one FAILS as unrunnable — say that in the report; never silently retarget it at
   whatever is already up.
 - Judge strictly against the `expect` line: met exactly → pass; anything else — including a check
   that cannot run at all (environment won't start, command crashes, timeout) → FAIL. "Mostly

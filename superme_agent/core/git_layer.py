@@ -406,35 +406,68 @@ def create_worktree(repo_dir: Path, repo_id: str, item_id: str, title: str = "",
                 "commit_hook": hook}
 
 
-def stop_vet_env(wt: Path) -> int:
-    """Kill a daemon `scripts/vet_env.sh` started inside this worktree. Returns the pid it signalled,
-    or 0.
+def servers_in(wt: Path) -> list[int]:
+    """Every LISTENING process whose working directory is `wt` — the vet-env servers this worktree
+    owns, identified by the one fact that survives everything else.
+
+    Not by a remembered pid: a live run showed a worktree accumulating TWO servers (build started
+    one and never stopped it; vet's `start` could not see it, took the next free port, and stacked a
+    second), while the state file named only the last. Both outlived the deleted worktree. cwd is
+    unforgeable and needs no bookkeeping to stay true."""
+    try:
+        out = subprocess.run(["lsof", "-nP", "-iTCP", "-sTCP:LISTEN", "-t"],
+                             capture_output=True, text=True, timeout=15)
+        pids = sorted({int(x) for x in out.stdout.split() if x.isdigit()})
+    except Exception:  # noqa: BLE001 — no lsof, or it failed; the caller falls back
+        return []
+    target = Path(wt).resolve()
+    here: list[int] = []
+    for pid in pids:
+        try:
+            r = subprocess.run(["lsof", "-a", "-p", str(pid), "-d", "cwd", "-Fn"],
+                               capture_output=True, text=True, timeout=10)
+            cwds = [ln[1:] for ln in r.stdout.splitlines() if ln.startswith("n")]
+            if cwds and Path(cwds[-1]).resolve() == target:
+                here.append(pid)
+        except Exception:  # noqa: BLE001 — the process died mid-scan, or is not ours to inspect
+            continue
+    return here
+
+
+def stop_vet_env(wt: Path) -> list[int]:
+    """Kill every vet-env server running in this worktree. Returns the pids signalled.
 
     Removing the dir takes the DB, the log and the `.env` symlink with it — untracked files and all.
-    It does NOT take the PROCESS: a daemon left listening keeps its port and an open fd on a file
-    that no longer has a name, and nothing else will ever reap it. So the worktree's own state file
-    is read BEFORE the dir goes; afterwards the pid is unknowable.
+    It does NOT take the PROCESS: a server left listening keeps its port and an open fd on a file
+    that no longer has a name, and nothing else will ever reap it. This is the last line of defence,
+    so it must run BEFORE the dir goes: afterwards, cwd no longer resolves and the servers become
+    unfindable.
 
-    Best-effort and never fatal — an unreadable state file or an already-dead pid must not be able
-    to block a terminal item from closing."""
-    state = Path(wt) / ".vet-env.json"
-    try:
-        pid = int(json.loads(state.read_text()).get("pid") or 0)
-    except (OSError, ValueError, TypeError, json.JSONDecodeError):
-        return 0
-    if pid <= 0:
-        return 0
-    # The GROUP, not the pid: `vet_env.sh` spawns with start_new_session, and uvicorn runs its
-    # server in a child — signalling the leader alone leaves that child holding the port.
-    try:
-        os.killpg(pid, signal.SIGTERM)
-    except OSError:
+    Signals the process GROUP — `vet_env.sh` spawns with start_new_session, and a server that runs
+    its worker in a child would otherwise keep the port. The state file is only a fallback for a
+    host without `lsof`.
+
+    Best-effort and never fatal: cleanup must not be able to block a terminal item from closing."""
+    pids = servers_in(wt)
+    if not pids:
         try:
-            os.kill(pid, signal.SIGTERM)
+            pid = int(json.loads((Path(wt) / ".vet-env.json").read_text()).get("pid") or 0)
+            pids = [pid] if pid > 0 else []
+        except (OSError, ValueError, TypeError, json.JSONDecodeError):
+            return []
+    stopped: list[int] = []
+    for pid in pids:
+        try:
+            os.killpg(pid, signal.SIGTERM)
         except OSError:
-            return 0      # already gone
-    log.info("stopped the vet-env daemon (pid %s) in %s", pid, wt)
-    return pid
+            try:
+                os.kill(pid, signal.SIGTERM)
+            except OSError:
+                continue      # already gone
+        stopped.append(pid)
+    if stopped:
+        log.info("stopped vet-env server(s) %s in %s", stopped, wt)
+    return stopped
 
 
 def remove_worktree(repo_dir: Path, repo_id: str, item_id: str) -> dict:

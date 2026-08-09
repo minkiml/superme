@@ -67,8 +67,37 @@ def session_checkpoint_trigger(memory_path: str) -> str:
             f"it), so what only this conversation knows survives.")
 
 
+def vet_env_script() -> str:
+    """Absolute path to the vet skill's `vet_env.sh`, or "" if it isn't there.
+
+    Named here rather than left to the skill's prose because a Bash line has to be a REAL path: the
+    script lives in the install, not in the repo being vetted, so nothing relative resolves from the
+    worktree, and `${CLAUDE_PLUGIN_ROOT}` is a substitution we have never proved fires in a run.
+    A path the kernel resolved is a fact; a placeholder is a hope."""
+    from ..runtime.config import DEV_PLUGIN_DIR
+    p = DEV_PLUGIN_DIR / "skills" / "vet" / "scripts" / "vet_env.sh"
+    return str(p) if p.is_file() else ""
+
+
+def vet_env_note(script: str) -> str:
+    """The two lines every phase that runs checks needs, with a REAL path in them. Shared so build
+    and vet are told the same thing: build's recorded validation commands are re-executed by vet,
+    so a command that boots the server differently from vet's is a disagreement about nothing."""
+    return (f"\n\nThis repo can run its own server from THIS worktree — anything that queries one "
+            f"must query that, never an instance already listening (it serves a different checkout, "
+            f"where a deleted endpoint still answers):\n"
+            f"    eval \"$(bash {script} start)\"\n"
+            f"    …commands…\n"
+            f"    bash {script} stop\n"
+            f"Run `stop` even after a failure: a server you leave holds its port long after this "
+            f"worktree is deleted. A recorded validation command that needs the server must BOOT IT "
+            f"ITSELF — one that inherits the variable from an earlier command passes for you and "
+            f"fails for the vetter, who runs it alone.")
+
+
 def vet_trigger(item_id: str, title: str, deferred: list[str] | None = None,
-                machine: list[dict] | None = None, audit: list[dict] | None = None) -> str:
+                machine: list[dict] | None = None, audit: list[dict] | None = None,
+                vet_env: bool = False) -> str:
     """Consumer: the background vet run (loop._run_background_vet) · durable (vet forgets — each
     cycle's fresh transcript opens with this). `deferred` = vet-plan check ids the build declared
     as needs-you deferrals (BV-A2/A3): the vetter must NOT judge them — they are intentional skips
@@ -108,10 +137,12 @@ def vet_trigger(item_id: str, title: str, deferred: list[str] | None = None,
                  "authorization at review): " + ", ".join(f"`{c}`" for c in deferred) + ". Do NOT "
                  "run or judge them — record each as `deferred` (not fail, not pass) and move on. "
                  "Judge only the remaining checks.")
+    if vet_env and (script := vet_env_script()):
+        base += vet_env_note(script)
     return base
 
 
-def build_first_trigger(item_id: str, title: str) -> str:
+def build_first_trigger(item_id: str, title: str, vet_env: bool = False) -> str:
     """Consumer: the loop's ENTRY build run (loop.start_first_build) · durable in the item's
     fresh build thread. Build-first: the loop opens with an implementation cycle from the plan,
     not a vet against an empty tree (a vet with nothing built is a wasted look). The plan IS the
@@ -121,6 +152,7 @@ def build_first_trigger(item_id: str, title: str) -> str:
         f"the loop's opening cycle, nothing is built yet. Run superme-dev:build to implement the "
         f"plan: work `artifacts/plan.md`'s `## Tasks` checklist and commit in the worktree. The "
         f"loop vets what you produce automatically — never advance the phase."
+        + (vet_env_note(script) if vet_env and (script := vet_env_script()) else "")
     )
 
 

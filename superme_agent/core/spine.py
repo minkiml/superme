@@ -120,6 +120,14 @@ class RepoConfig:
     anchor_branch: str | None = None  # the branch every git site targets (branch-from base · sync
     # source · merge target). None = derive the repo's own default branch; set it when direct-to-main
     # is forbidden and a sanctioned intermediate (e.g. `develop`) is the furthest SuperMe may go.
+    vet_env: dict | None = None  # how to boot a server that runs an ITEM WORKTREE's code, so a
+    # check that queries one is not answered by whatever instance happens to be listening (which
+    # serves a different checkout — a deleted endpoint still reads as present there). Keys:
+    # `cmd` (required; `{port}` is substituted), `port_env` (env var carrying the port, when the
+    # command reads one instead), `ready` (path that answers 200 once up), `url_env` (the variable
+    # the checks read). None = this repo has no vet env, and a check needing one is UNRUNNABLE here
+    # rather than silently retargeted. Read by the vet skill's scripts/vet_env.sh, which owns the
+    # lifecycle; this owns only what to start.
 
     def __post_init__(self):
         if not self.label:
@@ -130,6 +138,14 @@ class RepoConfig:
                         self.id, self.review_mode, REVIEW_MODE_DEFAULT)
             self.review_mode = REVIEW_MODE_DEFAULT
         self.anchor_branch = (self.anchor_branch or "").strip() or None
+        # A block without a `cmd` names nothing to start — treat it as absent rather than let a
+        # half-filled entry read as "this repo has a vet env" at the one moment that matters.
+        if isinstance(self.vet_env, dict) and not str(self.vet_env.get("cmd") or "").strip():
+            log.warning("repo %r: vet_env has no `cmd`; ignoring it", self.id)
+            self.vet_env = None
+        elif self.vet_env is not None and not isinstance(self.vet_env, dict):
+            log.warning("repo %r: vet_env must be a mapping; ignoring it", self.id)
+            self.vet_env = None
 
     # --- home conventions (the relocation pass edits THESE, not the YAML) -----------
     def _knowledge_base(self) -> Path:
@@ -170,6 +186,8 @@ class RepoConfig:
             d["review_mode"] = self.review_mode
         if self.anchor_branch:
             d["anchor_branch"] = self.anchor_branch
+        if self.vet_env:
+            d["vet_env"] = dict(self.vet_env)
         return d
 
 
@@ -214,6 +232,7 @@ def load_repos(path: Path = REPOS_CONFIG_FILE) -> dict[str, RepoConfig]:
             onboarding=spec.get("onboarding") or None,
             review_mode=(spec.get("review_mode") or REVIEW_MODE_DEFAULT),
             anchor_branch=spec.get("anchor_branch") or None,
+            vet_env=spec.get("vet_env") or None,
         )
     return out
 

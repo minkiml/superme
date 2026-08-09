@@ -436,8 +436,12 @@ async def _run_background_vet(ctx, context_id: str, item_id: str,
     except Exception:
         log.exception("validation audit failed for %s — vet proceeds without it", item_id)
         audit = []
+    # Whether this repo can boot a server from the worktree — the trigger carries the exact
+    # command when it can, so a check needing one never falls back to whatever is already up.
+    has_vet_env = bool(getattr(_spine.repos().get(context_id), "vet_env", None))
     trigger = kernel_speech.vet_trigger(item_id, title, deferred=deferred or None,
-                                        machine=machine or None, audit=audit or None)
+                                        machine=machine or None, audit=audit or None,
+                                        vet_env=has_vet_env)
     prompt = trigger   # orientation is on-demand — the vet skill's directed reads (renovation §1)
     capture_prompt(context_id, trigger, item_id=item_id)
     # Prompt inspector "A" — throwaway probes ONLY: vet passes work_item_preamble as system_append at
@@ -623,7 +627,9 @@ def start_first_build(ctx, context_id: str, item_id: str) -> tuple[bool, str]:
     if _loop_ctx(ctx, item) is None:
         return False, "item has no live worktree"
     title = item.get("title") or item_id
-    trigger = kernel_speech.build_first_trigger(item_id, title)
+    trigger = kernel_speech.build_first_trigger(
+        item_id, title,
+        vet_env=bool(getattr(_spine.repos().get(context_id), "vet_env", None)))
     model, effort = _resolve_run_params(context_id, item)
     if not _begin_run(ctx, context_id, item_id, "build", model, phase="build"):
         return False, "a run is already in progress for this item"
