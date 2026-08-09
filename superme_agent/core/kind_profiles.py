@@ -58,9 +58,14 @@ KIND_PROFILES: dict[str, KindProfile] = {
         #                              output cannot also be its entry condition.
         # Nor a merge check: review's EXIT is the merge (`advance_item` runs `review_merge` and 409s
         # on conflict), so an item cannot reach close unmerged.
-        close_criteria=(
-            "children_terminal",
-        ),
+        # `children_terminal` LEFT TOO (owner, 2026-08-09) — it is a REVIEW-gate check now. A child
+        # is spawned from this item and is part of its work, so the parent must still be re-workable
+        # when the child lands: re-checked, revised, re-vetted. At close it is none of those, the
+        # branch being merged and the sessions closed. Close was also the ONLY gate that ever asked,
+        # so a parent could pass review, land, and first meet its open child where nothing can act.
+        # Close is left asking one thing — do the files exist. It wraps up finished work; it does
+        # not decide whether the work finished.
+        close_criteria=(),
     ),
     # The spine (triage · plan · review · close) is shared by every kind; only ‹WORK› differs —
     # `investigate` here, `build ⟷ vet` above. The old `report` PHASE is retired: it sat where
@@ -78,7 +83,13 @@ KIND_PROFILES: dict[str, KindProfile] = {
             "review": ("review",),
         },
         required_artifacts=("plan", "investigation", "review"),
-        close_criteria=("findings_delivered", "spawns_exist"),
+        # NO close criteria (owner's standing rule, 2026-08-09). `findings_delivered` and
+        # `spawns_exist` lived here and both asked at the wrong phase: the first re-judged the
+        # owner's report after the item was locked, and the second told the owner to "run itemize"
+        # at a phase whose sessions are closed. Both read review-phase output, so both are review-
+        # gate checks now (`gate_briefs.research_readiness`) — refusable where a person can answer.
+        # Close wraps up finished work; it does not decide whether the work finished.
+        close_criteria=(),
     ),
 }
 
@@ -92,11 +103,28 @@ ALL_PHASES: tuple[str, ...] = tuple(dict.fromkeys(
 
 
 # --- session roles (build-vet-loop §1.3) -------------------------------------------------------
-# A work-item's turns run in ROLE-keyed sessions — the boundary sits where a fresh PERSPECTIVE is
-# required, not where a phase label changes: `intake` narrates (one thread per item, repo cwd),
-# `build` remembers (persists across build⟷vet cycles, worktree cwd), `vet` forgets (fresh per
-# cycle — step-4 mechanics; worktree cwd). The map is explicit CODE (§4.5.1), replacing the old
-# implicit rotate-on-cwd-change accident that made build+vet+review+close share one session.
+# A work-item's turns run in ROLE-keyed sessions: `intake` (repo cwd), `build` (persists across
+# build⟷vet cycles, worktree cwd), `vet` (fresh per cycle — step-4 mechanics; worktree cwd). The
+# map is explicit CODE (§4.5.1), replacing the old implicit rotate-on-cwd-change accident that
+# made build+vet+review+close share one session.
+#
+# WHAT `intake` IS, PRECISELY (owner, 2026-08-09). It is the SLOT four phases write to, not one
+# continuous thread they share. Each background intake phase opens a fresh CLI session
+# (`services/runs.py` passes `resume=None`), stores it in `session_intake`, and retires the one it
+# replaced — so triage, plan and review each get their own thread, and only the newest survives.
+# The docs here used to say "one thread per item", which was never true and quietly promised a
+# continuity nothing delivered.
+#
+# THAT SEPARATION IS THE DESIGN, not a defect to fix. Every phase reads its inputs from ARTIFACTS,
+# never from transcript memory: plan gets triage's conclusions from `brief.md` — the reviewed,
+# structured version — which beats recall. A shared thread would also carry triage's wrong turns
+# into plan, and anchoring is a real cost (it is exactly why `vet` forgets). A useful side effect:
+# fill never accumulates, so an item's threads rarely approach the compaction trigger.
+#
+# THE ONE THING IT COSTS is the OWNER's words. Anything they said mid-phase dies with that thread;
+# it reaches the next phase only because the phase agent wrote it into the artifact. That is why
+# `## From you` (brief) and `## Decisions & clarifications` (plan) are carried forward MECHANICALLY
+# rather than left to an agent to remember — see `artifacts.carry_owner_input`.
 SESSION_ROLES: tuple[str, ...] = ("intake", "build", "vet")
 
 # The durable `session.kind` values (spine column) — the stampable superset: the item ROLES above
@@ -123,17 +151,20 @@ def is_conversation(kind: str | None) -> bool:
     return (kind or "") not in AGENT_THREAD_KINDS
 
 _ROLE_FOR_PHASE: dict[str, str] = {
+    # These four share the intake SLOT, not a thread — each opens its own and retires the last.
     "triage": "intake", "plan": "intake", "review": "intake", "close": "intake",
     "build": "build",
     "vet": "vet",
-    # research: no fresh-perspective boundary anywhere — one intake thread end to end.
     "investigate": "intake",
 }
 
 
 def session_role(phase: str | None) -> str:
-    """The session ROLE a phase's turns run in. Unknown phases fail LOUD (mirrors get_profile —
-    a typo must not silently land a turn in the wrong session)."""
+    """The session-slot ROLE a phase's turns are stored under. Unknown phases fail LOUD (mirrors
+    get_profile — a typo must not silently land a turn in the wrong slot).
+
+    NOT a promise of shared context: two phases with the same role hold the slot in turn. See the
+    block above for why that is deliberate and what it costs."""
     p = phase or "triage"
     if p not in _ROLE_FOR_PHASE:
         raise KeyError(f"phase {p!r} has no session role — known: {sorted(_ROLE_FOR_PHASE)}")

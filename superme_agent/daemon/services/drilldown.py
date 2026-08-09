@@ -25,7 +25,7 @@ from datetime import datetime
 from pathlib import Path
 
 from ...core import artifacts as _arts
-from ...core import gate_briefs, kind_profiles
+from ...core import gate_briefs, kind_profiles, status_router
 from . import attention as _attention
 from .rerun import rerun_reason as _rerun_reason
 from .resume import resume_reason as _resume_reason, RESUMABLE_PHASES
@@ -161,8 +161,27 @@ def _actions(item: dict, state: dict, *, running: bool, git_health: dict | None,
     return out
 
 
+def _blocking_children(item: dict, all_items: list[dict]) -> list[dict]:
+    """The open children this item is actually waiting on, as ROWS the owner can act on — id,
+    title, where each one is (owner, 2026-08-09).
+
+    `close_readiness` reports them as a comma-joined string of ids, which is right for a mechanical
+    check and useless as an answer: "open children: 7f2a1c9b4e02" names a thing without saying what
+    it is or how far along it got. The ids are the join key; this resolves them."""
+    _ok, open_ids = status_router.children_terminal(all_items, item.get("id"))
+    by_id = {str(i.get("id")): i for i in all_items}
+    rows = []
+    for cid in open_ids:
+        child = by_id.get(str(cid)) or {}
+        rows.append({"id": str(cid), "title": str(child.get("title") or ""),
+                     "phase": str(child.get("phase") or ""),
+                     "status": str(child.get("status") or "")})
+    return rows
+
+
 def _attention_card(item: dict, state: dict, hold: dict | None, paged: dict | None,
-                    actions: list[dict], proof: list[dict]) -> dict | None:
+                    actions: list[dict], proof: list[dict],
+                    all_items: list[dict] | None = None) -> dict | None:
     """§4.2's WHAT-YOU-NEED-TO-DO card: WHY (the back story) · DO (the exact act + the one click) ·
     BASIS (what to check to decide) — plus the grill's questions when that's the hold.
 
@@ -170,7 +189,26 @@ def _attention_card(item: dict, state: dict, hold: dict | None, paged: dict | No
     rather than rendering an empty shell. Composed from the two existing readers — `classify_hold`
     (kind · reason · actor · questions) and `_page_reason` (headline · detail · next). No third
     walker over the event log."""
-    if str(item.get("status")) != "awaiting_human" or state.get("terminal"):
+    status = str(item.get("status"))
+    if state.get("terminal"):
+        return None
+    # WAITING ON A CHILD IS ALSO SOMETHING TO SAY (owner, 2026-08-09). This card used to render for
+    # `awaiting_human` alone, so an item parked behind a sub-item showed only a status pill and a
+    # must-resolve line quoting bare ids — the owner could see it was stuck and not what on. It asks
+    # nothing of them (the last child terminating releases it automatically), so it carries no
+    # click; it names the children and where each one is, and lets the reader go there.
+    if status == "awaiting_child":
+        kids = _blocking_children(item, all_items or [])
+        n = len(kids)
+        return {"kind": "awaiting_child",
+                "why": (f"Waiting on {n} open sub-item{'' if n == 1 else 's'}. This item resumes on "
+                        "its own as soon as the last one finishes." if n else
+                        "Waiting on a sub-item, but none is open — nothing will release this "
+                        "automatically, so it needs you."),
+                "detail": "", "do": ("Nothing to do here — open a sub-item below to follow it"
+                                     if n else "Clear it at this gate or drop it"),
+                "click": "", "basis": [], "questions": [], "children": kids}
+    if status != "awaiting_human":
         return None
     kind = str((hold or {}).get("kind") or "gate")
     why = str((paged or {}).get("headline") or (hold or {}).get("reason") or "")
@@ -215,7 +253,7 @@ def _attention_card(item: dict, state: dict, hold: dict | None, paged: dict | No
     if state.get("blocked_by"):
         basis.append(f"See Must resolve below - {len(state['blocked_by'])} to clear")
     return {"kind": kind, "why": why, "detail": detail, "do": do, "click": click,
-            "basis": basis, "questions": questions}
+            "basis": basis, "questions": questions, "children": []}
 
 
 # Every event kind that puts an item INTO a phase. Kept as one list because "when did this item
@@ -357,7 +395,7 @@ def build_payload(item: dict, item_dir: Path, dev_root: Path, main_repo_dir: Pat
                 # WHICH phase concluded it. Equal to `phase` when it is this phase's own; an
                 # earlier phase while this one is still working, so the card can label it.
                 "summary_phase": summary_phase},
-        "attention": _attention_card(item, state, hold, paged, actions, proof),
+        "attention": _attention_card(item, state, hold, paged, actions, proof, all_items),
         "about": _about(item, item_dir, inbox_origin),
         "checks": state.get("checks") or [], "blocked_by": state.get("blocked_by") or [],
         "numbers": state.get("numbers") or {},

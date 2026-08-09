@@ -26,7 +26,7 @@ import { K } from '@/lib/live/keys'
 import { build, navigate, useRoute, PHASES, type ItemTab, type ItemSub, type Phase } from '@/lib/router'
 import { fmtModel, fmtTokens, fmtLocal, toModelKey } from '@/lib/format'
 import { StatusBadge, DEFAULT_RUN_MODEL, DEFAULT_RUN_EFFORT } from './panels'
-import { PHASE_LABEL } from './common'
+import { PHASE_LABEL, STATUS_LABEL } from './common'
 
 // The work-item drilldown (renovation v2 §4) — "what is needed from me, and what has this produced".
 //
@@ -603,7 +603,8 @@ function NowPane({ d, it, contextId, busy, onAct }: {
         )}
         {d.attention && (
           <div className="mt-2.5">
-            <AttentionCardView card={d.attention} busy={busy} onAct={onAct} />
+            <AttentionCardView card={d.attention} busy={busy} onAct={onAct}
+                               contextId={contextId} />
           </div>
         )}
       </section>
@@ -668,17 +669,26 @@ function NowPane({ d, it, contextId, busy, onAct }: {
 // §4.2's attention card: WHY (back story) · WHAT (the act) · REFERENCE (where to look). Every field
 // is server-composed — this only lays it out. No leading icon: the card is already the only tinted
 // block on the pane, so an alert glyph next to the word "attention" is the third thing saying it.
-function AttentionCardView({ card, busy, onAct }: {
-  card: NonNullable<Drilldown['attention']>; busy: string | null; onAct: (id: string) => void
+function AttentionCardView({ card, busy, onAct, contextId }: {
+  card: NonNullable<Drilldown['attention']>; busy: string | null
+  onAct: (id: string) => void; contextId: string
 }) {
+  const waiting = card.kind === 'awaiting_child'
   return (
-    <div className="rounded-lg border border-warn/40 bg-warn/10 px-3.5 py-3">
+    // WAITING IS NOT NEEDING (owner, 2026-08-09). An `awaiting_child` card asks nothing of the
+    // owner — the last child terminating releases it automatically — so it must not wear the warn
+    // frame that means "you are the blocker". Same card, quieter clothes and an honest heading.
+    <div className={waiting
+      ? 'rounded-lg border border-line bg-sunken px-3.5 py-3'
+      : 'rounded-lg border border-warn/40 bg-warn/10 px-3.5 py-3'}>
       <div className="flex items-start gap-2.5">
         <div className="min-w-0 flex-1 space-y-2">
           {/* The card's TITLE, so it uses the same SectionHeader as "About this work-item" and
               "Mechanical checks" — only the colour differs. It was a bespoke 11px bold span, which
               made the loudest card on the pane carry the quietest heading. */}
-          <SectionHeader className="text-warn">Need your attention</SectionHeader>
+          <SectionHeader className={waiting ? 'text-muted' : 'text-warn'}>
+            {waiting ? 'Waiting on a sub-item' : 'Need your attention'}
+          </SectionHeader>
           {/* Why / What / Reference are PEERS — a numbered list with parallel labels — so they are
               one size and one weight (owner, 2026-08-01). They were 14px/medium, 12.5px/normal and
               12px/normal, which read as a heading followed by two footnotes and made the three rows
@@ -720,6 +730,32 @@ function AttentionCardView({ card, busy, onAct }: {
               </button>
             )}
           </Row>
+          {/* THE SUB-ITEMS THEMSELVES (owner, 2026-08-09) — id AND title AND where each one is,
+              because "open children: 7f2a1c9b4e02" is a join key, not an answer. Each row navigates
+              to that item, so following the chain is a click rather than a search of the board. */}
+          {card.children.length > 0 && (
+            <Row n="2" label="Blocked on">
+              <ul className="space-y-1">
+                {card.children.map((c) => (
+                  <li key={c.id}>
+                    <button
+                      onClick={() => navigate({ name: 'item', repoId: contextId, itemId: c.id,
+                                                tab: null, sub: null })}
+                      className="group flex w-full items-baseline gap-2 rounded px-1 py-0.5 text-left
+                                 transition hover:bg-hover">
+                      <span className="shrink-0 font-mono text-[10px] text-faint">{c.id.slice(0, 8)}</span>
+                      <span className="min-w-0 flex-1 truncate text-[13px] text-fg
+                                       group-hover:text-accent-text">{c.title || '(untitled)'}</span>
+                      <span className="shrink-0 text-[11px] text-muted">
+                        {PHASE_LABEL[c.phase] ?? c.phase}
+                        {c.status ? ` · ${STATUS_LABEL[c.status] ?? c.status}` : ''}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </Row>
+          )}
           {card.basis.length > 0 && (
             <Row n="3" label="Reference">
               {/* No bullet glyph: the label column already separates these from the row above,

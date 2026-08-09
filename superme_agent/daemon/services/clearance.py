@@ -64,8 +64,19 @@ def clear_item(context_id: str, item_id: str, *, actor: str = "daemon",
     all_items = _dev.read_all(dev_root)["work_items"]
     cr = gate_briefs.close_readiness(item, dev_root / "work-items" / item_id, all_items)
     if not cr["ok"]:
-        fails = "; ".join(f"{c['criterion']}: {c['detail']}" for c in cr["checks"] if not c["ok"])
-        _dev.set_work_item_status(dev_root, item_id, "awaiting_child")
+        failed = [c for c in cr["checks"] if not c["ok"]]
+        fails = "; ".join(f"{c['criterion']}: {c['detail']}" for c in failed)
+        # THE STATUS MUST NAME WHAT WILL RELEASE IT (owner, 2026-08-09). Every failing criterion
+        # parked the item at `awaiting_child`, but that status is a promise with a mechanism behind
+        # it: `parent_to_resume` releases it when the last open BLOCKING CHILD terminates. An item
+        # that fails `required_artifacts` has no children, so nothing could ever fire — a merged
+        # item sat at close forever, badged "blocked on sub-item", waiting on a sub-item that did
+        # not exist. Only a genuine children failure keeps the auto-resuming status; everything
+        # else is `awaiting_human`, the one status that pages the owner, because a person is now
+        # the only thing that can move it.
+        waits_on_child = any(str(c["criterion"]) == "children_terminal" for c in failed)
+        _dev.set_work_item_status(dev_root, item_id,
+                                  "awaiting_child" if waits_on_child else "awaiting_human")
         _dev_store.log_event(context_id, "close.waiting",
                              f"Clearance waiting — {fails}",
                              item_id=item_id, actor="daemon", meta={"refused": fails})

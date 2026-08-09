@@ -77,18 +77,31 @@ class AskQuestion(BaseModel):
     instead: str = ""
 
 
+class BlockingChild(BaseModel):
+    """One open sub-item the parent is waiting on — resolved to something the owner can read and go
+    to. `close_readiness` reports these as a comma-joined string of ids, which names a thing without
+    saying what it is or how far along it got (owner, 2026-08-09)."""
+    id: str
+    title: str
+    phase: str
+    status: str
+
+
 class AttentionCard(BaseModel):
     """§4.2's WHAT-YOU-NEED-TO-DO card — the drilldown's single most important element, and the answer
     to "I opened this and don't know what's needed from me". Three connected parts: WHY (the back
     story) · DO (the exact act + the one control that performs it) · BASIS (pointers to what decides
     it). None when nothing needs the owner — the card is hidden entirely, never an empty shell."""
-    kind: str              # question | escalation | paged | review | gate
+    kind: str              # question | escalation | paged | review | gate | awaiting_child
     why: str
     detail: str
     do: str
     click: str             # the action id that performs it ('chat' = the item's chat rail)
     basis: list[str]
     questions: list[AskQuestion]
+    #: The open sub-items holding this one — non-empty only on an `awaiting_child` card, where the
+    #: card asks nothing of the owner and exists purely to say what it is waiting on.
+    children: list[BlockingChild] = []
 
 
 class NowStrip(BaseModel):

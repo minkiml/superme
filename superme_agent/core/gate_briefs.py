@@ -47,7 +47,8 @@ _ALL = "*"
 _BLOCKING: dict[str, tuple[str, ...] | str] = {
     "triage-exit": (),
     "pre-main": ("plan_complete",),
-    "review": ("no_pending_authorizations", "evidence_fresh"),
+    "review": ("no_pending_authorizations", "evidence_fresh", "artifacts_complete",
+               "findings_delivered", "spawns_exist", "children_terminal"),
     "close": _ALL,
 }
 
@@ -57,9 +58,13 @@ _BLOCKING: dict[str, tuple[str, ...] | str] = {
 
 def close_readiness(item: dict, item_dir: Path, all_items: list[dict]) -> dict:
     """Evaluate the kind's close criteria mechanically → {ok, checks:[{criterion, ok, detail}]}.
-    Universal first check: every required artifact exists and passes its self-check.
+    Universal first check: every required artifact EXISTS (not that it is good — see below).
 
-    NOTHING HERE RE-JUDGES THE WORK. Review's exit locked code + git (§2.3), so a close criterion
+    NOTHING HERE RE-JUDGES THE WORK. An item must not arrive at close unready, because close is the
+    one phase that can fix nothing: the merge has landed, the phase sessions are closed, and there
+    is no surface on which the owner could repair an artifact. So every question about readiness is
+    asked at a gate that still has recourse, and what is left here can only be a fact that BECAME
+    true after review (a child still running) or a file that was never written at all. Review's exit locked code + git (§2.3), so a close criterion
     can only ask about things close can still act on. `evidence_fresh` and `knowledge_row_resolved`
     were retired from every profile for that reason (see kind_profiles) — and with them went this
     function's read of the evidence ledger and the knowledge delta, hence the two parameters that
@@ -69,41 +74,52 @@ def close_readiness(item: dict, item_dir: Path, all_items: list[dict]) -> dict:
     item_dir = Path(item_dir)
     checks: list[dict] = []
 
-    missing = []
-    for kind in profile.required_artifacts:
-        issues = A.self_check(item_dir, kind, item_kind=profile.kind)
-        if issues:
-            missing.append(f"{kind}: {issues[0]}" + (f" (+{len(issues) - 1} more)"
-                                                     if len(issues) > 1 else ""))
+    # EXISTENCE ONLY (owner's standing rule, 2026-08-09: an item must not reach close unready,
+    # because close cannot fix anything — the merge has landed and the phase sessions are closed).
+    # This ran the full `self_check` and so could refuse a merged item over artifact QUALITY, with
+    # no way for anyone to answer: `plan_complete` at pre-main and `artifacts_complete` at review
+    # already ask that question at gates with recourse. It also made every contract tightening a
+    # trap for items already in flight — a plan written under the old rules was judged by the new
+    # ones at the one phase that could not amend it, and deadlocked there.
+    missing = [k for k in profile.required_artifacts
+               if not (Path(item_dir) / "artifacts" / A.artifact_file(k)).exists()]
     checks.append({"criterion": "required_artifacts",
                    "ok": not missing,
-                   "detail": "; ".join(missing) or
-                             f"all present + clean: {', '.join(profile.required_artifacts)}"})
+                   "detail": ("never written: " + ", ".join(missing)) if missing else
+                             f"all present: {', '.join(profile.required_artifacts)}"})
 
+    # No profile declares a close criterion any more — every one of them moved to the review gate,
+    # where a refusal can still be answered. The loop stays because the FIELD stays: a future
+    # criterion that is genuinely close-time (something that becomes true only after review, that
+    # close itself can act on) belongs here, and an unknown slug must fail visibly rather than pass.
     for crit in profile.close_criteria:
-        if crit == "children_terminal":
-            ok, open_ids = status_router.children_terminal(all_items, item["id"])
-            checks.append({"criterion": crit, "ok": ok,
-                           "detail": f"open children: {', '.join(open_ids)}" if not ok
-                                     else "no open children"})
-        elif crit == "findings_delivered":
-            # The research deliverable is the report the owner decided on, not an artifact:
-            # The `review` entry run writes reports/report-review.md (findings.md retired).
-            issues = A.report_issues(item_dir, "report-review")
-            checks.append({"criterion": crit, "ok": not issues,
-                           "detail": "; ".join(issues) or "report-review.md complete"})
-        elif crit == "spawns_exist":
-            # What must not happen is a research item closing with its proposals silently dropped.
-            # `itemize` records the owner's call (adopted, with inbox ids, vs declined) into the
-            # report's decision line; an unrecorded decision is one that was never put to them.
-            decision = A.owner_decision(item_dir)
-            checks.append({"criterion": crit, "ok": bool(decision),
-                           "detail": decision or "the report's proposals were never put to you — "
-                                                 "run itemize, or record that none were adopted"})
-        else:  # an unknown slug fails LOUD-ish: visible, never silently green
-            checks.append({"criterion": crit, "ok": False,
-                           "detail": "no evaluator for this criterion (kernel gap)"})
+        checks.append({"criterion": crit, "ok": False,
+                       "detail": "no evaluator for this criterion (kernel gap)"})
     return {"ok": all(c["ok"] for c in checks), "checks": checks}
+
+
+def research_readiness(item_dir: Path) -> list[dict]:
+    """A RESEARCH item's two deliverable checks, evaluated at its REVIEW gate (owner's standing
+    rule, 2026-08-09: close wraps up finished work, it does not judge it).
+
+    Both were close criteria and both broke the rule. `findings_delivered` re-read the owner's
+    report and could refuse a merged item over its prose. `spawns_exist` was worse: its own message
+    told the owner to "run itemize" — work, demanded at the one phase where the sessions are closed
+    and no surface exists to do it. Both read REVIEW-phase output (`reports/report-review.md` and
+    the decision line `itemize` writes into `artifacts/review.md`), so review is where they belong
+    and where a failure is still answerable."""
+    issues = A.report_issues(item_dir, "report-review")
+    decision = A.owner_decision(item_dir)
+    return [
+        {"criterion": "findings_delivered", "ok": not issues,
+         "detail": "; ".join(issues) or "report-review.md complete"},
+        # What must not happen is a research item closing with its proposals silently dropped.
+        # `itemize` records the owner's call (adopted, with inbox ids, vs declined); an unrecorded
+        # decision is one that was never actually put to them.
+        {"criterion": "spawns_exist", "ok": bool(decision),
+         "detail": decision or "the report's proposals were never put to you — run itemize, or "
+                               "record that none were adopted"},
+    ]
 
 
 # --------------------------------------------------------------------------- brief assembly
@@ -149,13 +165,24 @@ def _page_reason(item: dict, events: list[dict]) -> dict | None:
     phase). None ⇒ a plain gate wait, render as before. Pure — {source, gate, headline, detail, next}."""
     if str(item.get("status")) != "awaiting_human":
         return None
+    # THIS PHASE ONLY. Events arrive newest-first, and everything at or past the last
+    # `phase.advance` belongs to a phase that is over — its halts were resolved by the advance
+    # itself. The scan below already stopped there; the blocked-run lookup did NOT, so it swept the
+    # item's whole history and found the first failure ever recorded. A clean review gate with the
+    # deputy's approval and an open PR was reporting "the review run stopped without finishing",
+    # quoting a blocked vet report from seven days and four advances earlier (owner, 2026-08-09).
+    window: list[dict] = []
+    for e in events:
+        if str(e.get("kind")) == "phase.advance":
+            break
+        window.append(e)
     # The blocked/failed run report that explains a halt sits OLDER than the halt marker — grab it up
     # front so the loop branch below can quote its summary + owner-facing `next`.
-    blocked = next(({**(e.get("meta") or {})} for e in events
+    blocked = next(({**(e.get("meta") or {})} for e in window
                     if str(e.get("kind")) == "run.report"
                     and str((e.get("meta") or {}).get("outcome")) in ("blocked", "failed", "unverified")),
                    None)
-    for e in events:  # newest-first
+    for e in window:  # newest-first, this phase only
         kind = str(e.get("kind") or "")
         meta = e.get("meta") or {}
         summary = str(e.get("summary") or "")
@@ -166,8 +193,6 @@ def _page_reason(item: dict, events: list[dict]) -> dict | None:
                                     or f"Your deputy paged you at the {gate or 'gate'}."),
                     "detail": str(meta.get("escalation") or summary or ""),
                     "next": None}
-        if kind == "phase.advance":
-            break
     if blocked:  # a blocked run with no explicit halt marker (defensive)
         return {"source": "agent", "gate": None,
                 "headline": f"The {item.get('phase')} run stopped without finishing.",
@@ -274,6 +299,42 @@ def gate_state(item: dict, item_dir: Path, dev_root: Path,
                           (f"{rounds} feedback round(s) but only {len(revs)} revision block(s) — "
                            f"fold the feedback in with `revise_plan`, never by rewriting plan.md")})
     elif gate == "review":
+        # ARTIFACT COMPLETENESS IS JUDGED HERE, NOT AT CLOSE (owner's standing rule, 2026-08-09).
+        # Close used to re-run this same self-check, which meant an artifact could be refused at the
+        # one phase where nothing can act on the refusal: the merge has landed, the phase sessions
+        # are closed, and the owner has no surface to repair a work-item artifact. Review is the
+        # last gate with recourse — send back, revise, or fix and re-approve — so the question is
+        # asked here, where an answer is still possible, and close only asks that the file exist.
+        #
+        # It re-checks `plan` too, though `pre-main` already did: a revision round rewrites plan.md
+        # AFTER that gate, so the copy close would have judged is not the copy pre-main approved.
+        arts = []
+        for kind in profile.required_artifacts:
+            issues = A.self_check(item_dir, kind, item_kind=profile.kind)
+            if issues:
+                arts.append(f"{kind}: {issues[0]}"
+                            + (f" (+{len(issues) - 1} more)" if len(issues) > 1 else ""))
+        checks.append({"criterion": "artifacts_complete", "ok": not arts,
+                       "detail": "; ".join(arts) or
+                                 f"clean: {', '.join(profile.required_artifacts) or 'none required'}"})
+        if profile.kind == "research":
+            checks.extend(research_readiness(item_dir))
+        # CHILDREN HOLD THE PARENT HERE, NOT AT CLOSE (owner, 2026-08-09). A child is spawned FROM
+        # this item and is part of its work, so when the child lands the parent has to still be
+        # re-workable against it — re-checked, revised, re-vetted. At close it is none of those: the
+        # branch is merged and the sessions are gone. Close was the ONLY place this was ever asked,
+        # which meant a parent could pass review, land, and first learn about its open child at the
+        # phase that can do nothing about it.
+        #
+        # BOTH relations hold (`children_terminal` reads every open child, not just `blocking`).
+        # That is what the three relations mean once they are stated in terms of the parent's
+        # WORK rather than its bookkeeping: `blocking` stops the parent now, `parallel` lets it keep
+        # working but lands with it, `spawn` is uncoupled follow-up. A `parallel` child that should
+        # not hold the merge was never part of this item — that is what `spawn` is for.
+        kids_done, open_kids = status_router.children_terminal(all_items or [], str(item.get("id")))
+        checks.append({"criterion": "children_terminal", "ok": kids_done,
+                       "detail": f"open sub-item(s): {', '.join(open_kids)}" if not kids_done
+                                 else "no open sub-items"})
         wt = item.get("git_worktree")
         ev_repo = Path(str(wt)) if wt and Path(str(wt)).is_dir() else main_repo_dir
         ev = A.evidence_status(item_dir, ev_repo)
