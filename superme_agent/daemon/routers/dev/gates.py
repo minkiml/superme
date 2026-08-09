@@ -215,6 +215,12 @@ async def dev_work_item_abandon(item_id: str, body: AbandonBody,
                                    superseded_by=body.superseded_by)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    # 4b. THE OWNER'S OWN ENDING IS ITS OWN READ RECEIPT. `unread` (S7) exists to push a closeout
+    #     the owner has not seen; abandon is human-only, so the notice would be addressed to its
+    #     author. Without this the strip filled with items the owner had just dropped and could
+    #     only clear by re-opening each one (owner, 2026-08-09). A COMPLETED close still pages —
+    #     that one is genuinely news, and an autopilot item can land overnight unwatched.
+    dev.set_work_item_seen(dev_root, item_id)
     # 5. a paused parent whose last open BLOCKING child this was resumes (typed-awaiting router).
     for it in all_items:
         if it.get("id") == item_id:

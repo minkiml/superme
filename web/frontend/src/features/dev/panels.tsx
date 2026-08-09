@@ -10,7 +10,7 @@ import { addInbox, updateInbox, deleteInbox, pushInbox, getRepos, type WorkItem,
 import { useLive } from '@/lib/live'
 import { K } from '@/lib/live/keys'
 import { fmtLocal, fmtTokens, fmtDuration, fmtModel, toModelKey, MODELS as MODEL_CATALOG, DEFAULT_MODEL, EFFORTS as EFFORT_CATALOG, DEFAULT_EFFORT } from '@/lib/format'
-import { PHASE_LABEL, PHASE_VERB, STATUS_COLOR, STATUS_LABEL, STATUS_STRIPE, primaryStatus, Empty } from './common'
+import { PHASE_LABEL, PHASE_VERB, STATUS_COLOR, STATUS_LABEL, STATUS_STRIPE, primaryStatus } from './common'
 
 // Phase accent → literal dot class (Tailwind needs the full string present in source).
 // (the per-lane dot colour map lived here until 2026-07-31 — see KANBAN_GROUPS for why it went)
@@ -119,7 +119,11 @@ const KANBAN_GROUPS: { key: string; label: string; phases: string[] }[] = [
 
 export function WorkspaceKanban({ items, onOpen, onResume, running, boundItemId, buckets }: { items: WorkItem[]; buckets?: Record<string, string> } & WorkActions) {
   const visible = items.filter(isActive)
-  if (visible.length === 0) return <Empty>No active work-items.</Empty>
+  // NO whole-board empty state (owner, 2026-08-09). An empty board used to collapse to one line of
+  // prose, so the four columns — the shape of the pipeline itself — vanished exactly when the owner
+  // had the most room to learn them, and the board appeared to be a different component each time
+  // work drained. Every column already renders its own `—`, and the header above already says
+  // `0 active`, so the lanes ARE the empty state and the layout never moves.
   const inGroup = (phases: string[]) => visible.filter((it) => phases.includes(it.phase ?? 'triage'))
   return (
     // Four fixed columns floored at a readable width; they fit without scroll at normal widths and

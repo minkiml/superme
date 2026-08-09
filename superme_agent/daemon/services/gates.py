@@ -394,7 +394,7 @@ def advance_item(ctx, context_id: str, item_id: str, *, dev, dev_store, spine,
     # research fired a parallel `research-report`. One skill, one hook, per-kind templates inside.
     auto_skill = {"plan": "plan", "investigate": "investigate"}.get(nxt)
     if str(item.get("kind")) == "research" and nxt == "close":
-        # A research item's review APPROVE fires `itemize` — putting `report-review.md`'s
+        # A research item's review APPROVE fires `itemize` — putting `artifacts/review.md`'s
         # `## Proposed work` to the owner and filing the subset they adopt as INBOX items (never
         # auto-pushed). Approving research IS the itemization decision, so without this the approval
         # means nothing and the close gate's `spawns_exist` can never be satisfied. This is the ONE
