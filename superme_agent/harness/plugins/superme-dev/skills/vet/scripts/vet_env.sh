@@ -49,6 +49,13 @@ daemons_here() {
     local p cwd
     for p in $(lsof -nP -iTCP -sTCP:LISTEN -t 2>/dev/null | sort -u); do
         cwd="$(lsof -a -p "$p" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | tail -1)"
+        # NEVER the host. A process sitting in the MAIN checkout is the daemon every run is a child
+        # of, and no path through this script may adopt it, stop it, or count it as ours — not even
+        # if `$WT` somehow resolved there. The subcommand guard already refuses the main checkout;
+        # this is the same rule stated where the pids are chosen, because a build agent's run
+        # reported adopting "what appears to be the actual running SuperMe host daemon", and a rule
+        # that lives only at the entrance is one call site away from being bypassed.
+        [ "$cwd" = "$MAIN" ] && continue
         [ "$cwd" = "$WT" ] && echo "$p"
     done
 }
