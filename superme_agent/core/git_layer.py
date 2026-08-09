@@ -15,9 +15,11 @@ than corrupting state (nimbalyst punch-list). Fail-loud: any unexpected git fail
 GitError with the command + stderr, so a half-truth never reads as success.
 """
 
+import json
 import logging
 import os
 import re
+import signal
 import subprocess
 import threading
 from datetime import datetime
@@ -404,6 +406,37 @@ def create_worktree(repo_dir: Path, repo_id: str, item_id: str, title: str = "",
                 "commit_hook": hook}
 
 
+def stop_vet_env(wt: Path) -> int:
+    """Kill a daemon `scripts/vet_env.sh` started inside this worktree. Returns the pid it signalled,
+    or 0.
+
+    Removing the dir takes the DB, the log and the `.env` symlink with it — untracked files and all.
+    It does NOT take the PROCESS: a daemon left listening keeps its port and an open fd on a file
+    that no longer has a name, and nothing else will ever reap it. So the worktree's own state file
+    is read BEFORE the dir goes; afterwards the pid is unknowable.
+
+    Best-effort and never fatal — an unreadable state file or an already-dead pid must not be able
+    to block a terminal item from closing."""
+    state = Path(wt) / ".vet-env.json"
+    try:
+        pid = int(json.loads(state.read_text()).get("pid") or 0)
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        return 0
+    if pid <= 0:
+        return 0
+    # The GROUP, not the pid: `vet_env.sh` spawns with start_new_session, and uvicorn runs its
+    # server in a child — signalling the leader alone leaves that child holding the port.
+    try:
+        os.killpg(pid, signal.SIGTERM)
+    except OSError:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except OSError:
+            return 0      # already gone
+    log.info("stopped the vet-env daemon (pid %s) in %s", pid, wt)
+    return pid
+
+
 def remove_worktree(repo_dir: Path, repo_id: str, item_id: str) -> dict:
     """Terminal cleanup: remove the worktree DIR, KEEP the branch ref (near-free, is trace —
     never-delete holds). Force-removes (a terminal item's stray uncommitted junk must not block
@@ -414,6 +447,7 @@ def remove_worktree(repo_dir: Path, repo_id: str, item_id: str) -> dict:
     removed = False
     with repo_lock(repo_dir):
         if wt.exists():
+            stop_vet_env(wt)          # the dir takes the files; only this takes the process
             _git(repo_dir, "worktree", "remove", "--force", str(wt))
             removed = True
         _git(repo_dir, "worktree", "prune", check=False)

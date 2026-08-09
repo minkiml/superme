@@ -56,6 +56,15 @@ evidence with no run behind it. The tool call IS the record.
   IS the job). Checks are independent: when several are expensive, fan them out to parallel
   subagents (model: haiku — the work is mechanical execution, not judgment), one check per
   agent, each returning the verbatim result — you record and judge.
+- **A check that queries a running server must query one YOU started from this worktree.** An
+  instance already listening was started from a different checkout and serves the code it loaded
+  then — so a new endpoint reads as missing and a DELETED one still reads as present, which is a
+  pass for a surface you never saw. If the repo carries `scripts/vet_env.sh`, that is the
+  mechanism: `eval "$(bash scripts/vet_env.sh start)"` before the checks, `bash scripts/vet_env.sh
+  stop` after — always, including when a check fails, or the process outlives the worktree. Where
+  the repo offers no such script and a check needs a live instance, start one yourself on a port
+  nothing else holds; if you cannot, that check FAILS as unrunnable — never silently retarget it at
+  whatever is already up.
 - Judge strictly against the `expect` line: met exactly → pass; anything else — including a check
   that cannot run at all (environment won't start, command crashes, timeout) → FAIL. "Mostly
   works" is a fail with the gap named.
