@@ -1,4 +1,4 @@
-import { ShieldCheck, User, Sparkles, type LucideIcon } from 'lucide-react'
+import { ShieldCheck, TriangleAlert, User, Sparkles, type LucideIcon } from 'lucide-react'
 import Markdown from '@/ui/Markdown'
 import ApprovalCard from './ApprovalCard'
 import { useStickyScroll } from './useStickyScroll'
@@ -25,6 +25,16 @@ const TALKER: Record<string, { icon: LucideIcon; label: string; right: boolean; 
 }
 
 function Row({ m, tone }: { m: Msg; tone?: 'dev' | 'core' }) {
+  // A system notice is not a talker: no avatar, no bubble, centred and quiet. The shape itself is
+  // the signal — nothing about it can be mistaken for something the agent said.
+  if (m.role === 'system') {
+    return (
+      <div className="flex items-center justify-center gap-1.5 py-0.5 text-xs text-muted">
+        <TriangleAlert size={12} className="shrink-0" />
+        <span>{m.text}</span>
+      </div>
+    )
+  }
   const t = TALKER[m.role] ?? TALKER.superme
   const Icon = t.icon
   return (

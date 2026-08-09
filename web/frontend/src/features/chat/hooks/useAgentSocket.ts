@@ -97,6 +97,10 @@ export function useAgentSocket(contextId: string, mode: 'core' | 'dev', handlers
   }, [])
 
   useEffect(() => {
+    // Reset per socket. The ref outlives the effect (React keeps refs across a hot update), so a
+    // teardown that set it would otherwise latch it ON for the socket that replaces it — and every
+    // later drop would be read as deliberate and pass in silence.
+    closingRef.current = false
     const ws = new WebSocket(agentSocketUrl())
     wsRef.current = ws
     ws.onopen = () => setReady(true)

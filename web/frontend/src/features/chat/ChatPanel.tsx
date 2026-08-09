@@ -101,7 +101,7 @@ export default function ChatPanel({
       // An interactive intake turn just finished — reload the timeline so its settled events land.
       if (binding) setTimelineKey((k) => k + 1)
     },
-    onError: (message) => sessions.appendMessage({ role: 'superme', text: '⚠ ' + message }),
+    onError: (message) => sessions.appendMessage({ role: 'system', text: message }),
     // F2: a watched item's live background run event → buffer it for the timeline view.
     onTimeline: (f) => setLiveFrames((prev) => [...prev, f]),
   })
