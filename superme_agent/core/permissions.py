@@ -12,6 +12,7 @@ that callback to the SDK's `can_use_tool` interface, applying the safe-tool poli
 """
 
 import logging
+import re
 import shlex
 from pathlib import Path
 from typing import Awaitable, Callable
@@ -427,6 +428,49 @@ _HOOK_RUNNING_SUBCOMMANDS = {"commit", "merge", "rebase", "cherry-pick", "revert
 _SHELL_BREAKS = {"&&", "||", ";", "|", "&"}
 
 
+# Stopping the host is denied for every session, in every phase. An agent working ON SuperMe reads
+# this project's own restart procedure and follows it — which is correct advice for a human at a
+# keyboard and fatal from inside a run: runs are the daemon's children, so the command kills the
+# agent that issued it, every sibling item mid-flight, and the replacement daemon it just started
+# (observed live, 2026-08-10: one hub build agent took down three items across two repos). Prose
+# cannot hold this line — the procedure is written down in the very repo being worked on — so the
+# command is taken away.
+_KILL_VERBS = {"kill", "pkill", "killall"}
+_HOST_MARKERS = ("superme_agent.daemon", "web.bff")
+_KILL_HOST_NUDGE = (
+    "Stopping or restarting the SuperMe daemon is not available here. Your run is a CHILD of that "
+    "process: killing it kills you, every other work-item running right now, and anything you "
+    "start to replace it.\n\n"
+    "If you need a server to check something against YOUR code, do not reach for the running one — "
+    "it serves a different checkout. Boot your own from this worktree with the `vet_env.sh start` "
+    "command your trigger names; it takes a free port and leaves the host alone.\n\n"
+    "If the work genuinely requires the host to restart, that is the owner's call and not a step "
+    "you can take: end your run with report_completion(machine.outcome='needs_user'), saying what "
+    "needs the restart and why."
+)
+
+
+def kills_the_host(command: str) -> bool:
+    """True if this shell command would stop the daemon (or BFF) serving the dashboard.
+
+    Matched by a kill verb plus a HOST reference — one of the host ports, or the module name a
+    `pkill -f` would sweep. The port test is deliberately narrow: `kill $(lsof -ti:8801)` is a
+    vet-env teardown and must stay allowed, so only the host's own ports count."""
+    from ..runtime.config import DAEMON_PORT
+    toks = [t.strip("'\"") for t in shlex_split_safe(command)]
+    if not any(Path(t).name in _KILL_VERBS for t in toks):
+        return False
+    ports = {str(DAEMON_PORT), "8000"}   # the BFF's port is fixed in web/bff/__main__.py
+    for t in toks:
+        if any(m in t for m in _HOST_MARKERS):
+            return True
+        # `:8787`, `8787`, `-ti:8787` — a port token anywhere in the pipeline, digits-delimited so
+        # `18787` and `87870` do not match.
+        if any(re.search(rf"(?<!\d){p}(?!\d)", t) for p in ports):
+            return True
+    return False
+
+
 def bypasses_commit_hooks(command: str) -> bool:
     """True if this shell command runs a hook-firing git subcommand with hooks turned off."""
     toks = [t.strip("'\"") for t in shlex_split_safe(command)]
@@ -600,6 +644,10 @@ def build_can_use_tool(approve: ApproveFn, *, blocked_skills: dict[str, str] | N
             if bypasses_commit_hooks(command):
                 log.info("hook bypass denied: %s", command)
                 return PermissionResultDeny(message=_NO_VERIFY_NUDGE)
+            # Same standing: no session, in any phase, gets to stop the process it is running in.
+            if kills_the_host(command):
+                log.warning("host-kill denied: %s", command)
+                return PermissionResultDeny(message=_KILL_HOST_NUDGE)
             if is_read_only_bash(command):
                 return PermissionResultAllow()
             if gate_general_mutations:
