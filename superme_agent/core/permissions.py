@@ -551,9 +551,12 @@ def build_can_use_tool(approve: ApproveFn, *, blocked_skills: dict[str, str] | N
     the guard (e.g. a hermetic background run that governs paths its own way).
 
     `gate_general_mutations` enables the **general-session guardrail** (work-item-session-recognition-
-    prd): in a GENERAL (non-work-item) dev session, mutating tools are denied WITH FEEDBACK and NO
-    user prompt — the agent gets a nudge to itemize instead and re-thinks. The sanctioned itemize tool
-    is not in the blocked set, so it stays allowed. `general_write_root` carves the one exception:
+    prd): in a GENERAL (non-work-item) dev session, the file-WRITE tools are denied WITH FEEDBACK and
+    NO user prompt — the agent gets a nudge to itemize instead and re-thinks. Those tools name their
+    target, so "this is a mutation" is a fact and refusing it teaches something true. `Bash` is NOT
+    covered: a command is not path-checkable, so refusing what cannot be proven read-only refused
+    reading too — it fell through to `approve` instead (see the Bash branch). The sanctioned itemize
+    tool is not in the blocked set, so it stays allowed. `general_write_root` carves the one exception:
     writes whose target is inside it (the project's `general/` memory home) are AUTO-allowed, so
     onboarding (project-init/retrofit authoring the anchor docs) and routine anchor-doc maintenance
     work in a general session while real-code writes stay denied.
@@ -635,8 +638,8 @@ def build_can_use_tool(approve: ApproveFn, *, blocked_skills: dict[str, str] | N
             return PermissionResultDeny(message=_GENERAL_SESSION_NUDGE if general_write_root
                                         is not None else _READONLY_SESSION_NUDGE)
         # Shell: read-only commands are the same access as Read/Grep/Glob → auto-allow (no prompt).
-        # A mutating shell command in a general session is denied+nudged (same rule as the write
-        # tools — "no code mutation, including via shell"); elsewhere it defers to approval as before.
+        # Anything the classifier cannot PROVE read-only defers to approval — in every session,
+        # general ones included.
         if tool_name == "Bash":
             command = input_data.get("command", "")
             # Before everything else, including the read-only fast path: no session, in any phase,
@@ -650,10 +653,15 @@ def build_can_use_tool(approve: ApproveFn, *, blocked_skills: dict[str, str] | N
                 return PermissionResultDeny(message=_KILL_HOST_NUDGE)
             if is_read_only_bash(command):
                 return PermissionResultAllow()
-            if gate_general_mutations:
-                log.info("general-session guardrail denied mutating Bash (nudge to itemize)")
-                return PermissionResultDeny(message=_GENERAL_SESSION_NUDGE if general_write_root
-                                            is not None else _READONLY_SESSION_NUDGE)
+            # A general session's shell ASKS rather than refuses. The classifier proves read-only or
+            # it proves nothing — `sqlite3 db "SELECT …"` is unprovable for the same reason
+            # `sqlite3 db "DROP …"` is, so refusing the unprovable refused reading the project's own
+            # data while `cat` on the very same file sailed through. Denying also broke the premise
+            # the OS sandbox is skipped on: `core.sandbox` leaves interactive turns unsandboxed
+            # BECAUSE "a person is approving each command there" — which was false here, so neither
+            # the kernel nor the owner was in the loop and the command just died. Falling through to
+            # `approve` makes that premise true. The write TOOLS above still hard-deny: those are
+            # provably mutations, and the itemize nudge belongs to them.
             # Freeze boundary (S4): a phase agent working inside its own worktree owns its shell.
             # Running tests, installing deps and committing are the agent's job — the same autonomy
             # the boundary already grants its writes, and the precondition for the build⟷vet

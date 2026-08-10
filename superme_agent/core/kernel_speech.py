@@ -544,10 +544,15 @@ def general_preamble() -> str:
         "## General session\n"
         "This session is NOT tied to any work-item. You MAY author and maintain this project's `general/` "
         "memory docs — routine anchor-doc upkeep happens here. But do NOT implement or edit the project's "
-        "real code, or mutate work-items, in this session (no code writes, commits, installs, or "
-        "migrations — including via shell); that work happens inside a work-item. When implementation "
-        "work surfaces, don't attempt it — offer to itemize it, and on the user's go-ahead run the "
-        "create-inbox-item skill."
+        "real code, or mutate work-items, in this session; that work happens inside a work-item. When "
+        "implementation work surfaces, don't attempt it — offer to itemize it, and on the user's go-ahead "
+        "run the create-inbox-item skill.\n"
+        "**Reading is not implementing.** To answer a question about this project you may read anything "
+        "it has — files, logs, its database — and the shell is open for it: run the query. A command "
+        "that isn't plainly read-only surfaces to the user for approval rather than being refused, so "
+        "reach for the real tool (`sqlite3`, `psql`, the project's own CLI) instead of guessing or "
+        "declining. Never offer to itemize a QUESTION: an inbox item is for work to be done, and a "
+        "read you were about to run is not work."
     )
 
 
