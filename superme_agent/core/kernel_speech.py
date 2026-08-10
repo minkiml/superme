@@ -454,9 +454,11 @@ def work_item_preamble(item_id: str, item: dict, item_dir, *, interactive: bool 
     if kind_profiles.item_scale(item) == "small":
         lines.append(
             "\n**This item is scaled `small`.** Read narrow: this item's own folder, and the files "
-            "the change actually touches. Leave the project's anchor docs (PRD, architecture, "
-            "roadmap) and other items' artifacts closed. Write short: every section you owe still "
-            "gets written — none becomes optional — but one to three sentences each, and no "
+            "the change actually touches. Don't go browsing the project's anchor docs (PRD, "
+            "architecture, roadmap) or other items' artifacts for background — but this bounds "
+            "what you read for CONTEXT, never the work your phase owes: if your own contract names "
+            "an anchor doc, that is your job and you do it. Write short: every section you owe "
+            "still gets written — none becomes optional — but one to three sentences each, and no "
             "section repeats what another already says.\n"
             "If you find you need a source outside that boundary, or a section that genuinely "
             "cannot be said in three sentences, do not pad and do not quietly go wider: say so in "
