@@ -2,6 +2,43 @@ import type { Approval } from './types'
 
 // The inline tool-approval prompt (interactive permissions). Allow/Deny answer back over
 // the WebSocket via `onAnswer`.
+//
+// This card is now the ONLY human check on a general session's shell (permissions.py: a command
+// that can't be PROVEN read-only asks instead of refusing), so what it shows has to be what you'd
+// judge on. It used to render `JSON.stringify(tool_input)` inside a non-wrapping, height-capped
+// `<pre>` — you read braces and escaped quotes, and a long command ran off to the right behind a
+// scrollbar. The dangerous half of a command is usually its end.
+//
+// So: the command renders as itself, wrapped, whole. Both buttons carry colour at equal weight —
+// either answer is normal here, and a red block shouting at a `SELECT` teaches you to stop reading.
+
+// What the tool will actually do, in the owner's words, plus the one word that tells them most
+// (the program / the file). An unknown tool keeps the honest generic phrasing.
+function headline(tool: string, input: Record<string, any>): { ask: string; subject: string } {
+  const cmd = String(input?.command ?? '')
+  switch (tool) {
+    case 'Bash':
+      return { ask: 'Run a shell command?', subject: cmd.trim().split(/\s+/)[0] ?? '' }
+    case 'Write':
+    case 'Edit':
+    case 'MultiEdit':
+    case 'NotebookEdit':
+      return { ask: 'Write to a file?', subject: String(input?.file_path ?? '').split('/').pop() ?? '' }
+    case 'WebFetch':
+      return { ask: 'Fetch a web page?', subject: String(input?.url ?? '') }
+    default:
+      return { ask: `Run ${tool}?`, subject: '' }
+  }
+}
+
+// The body a person reads. For a shell command that IS the command — never the JSON wrapper around
+// it. Anything else falls back to the pretty-printed input, which is at least honest about being
+// raw; a per-tool view earns its keep once a tool other than Bash actually reaches this card.
+function body(tool: string, input: Record<string, any>): string {
+  if (tool === 'Bash' && input?.command) return String(input.command)
+  return JSON.stringify(input, null, 2)
+}
+
 export default function ApprovalCard({
   approval,
   onAnswer,
@@ -9,19 +46,40 @@ export default function ApprovalCard({
   approval: Approval
   onAnswer: (approved: boolean) => void
 }) {
+  const input = (approval.tool_input ?? {}) as Record<string, any>
+  const { ask, subject } = headline(approval.tool_name, input)
+  // The agent's own one-line account of what it's for. A CLAIM, not a fact — which is why it sits
+  // above the command in muted type rather than replacing it: you read the intent, then check it
+  // against what will actually run.
+  const why = String(input?.description ?? '').trim()
   return (
-    <div className="rounded-lg border border-warn bg-surface p-3 text-sm">
-      <div className="mb-2 text-warn">
-        Approve <span className="font-semibold">{approval.tool_name}</span>?
+    <div className="rounded-lg border border-line border-l-2 border-l-warn bg-surface p-3">
+      <div className="mb-1.5 text-[13px] text-warn">
+        {ask}
+        {subject && <span className="ml-1 text-xs text-muted">· {subject}</span>}
       </div>
-      <pre className="mb-2 max-h-32 overflow-auto rounded bg-sunken p-2 text-xs text-fg">
-        {JSON.stringify(approval.tool_input, null, 2)}
-      </pre>
+      {why && <div className="mb-1.5 text-xs text-muted">{why}</div>}
+      {/* `whitespace-pre-wrap` + `break-words`: no horizontal scroll, no height cap — the whole
+          command is on screen or the card is lying about what you approved. */}
+      <div className="mb-2.5 rounded bg-sunken px-2.5 py-2 font-mono text-xs leading-relaxed
+                      whitespace-pre-wrap [overflow-wrap:anywhere] text-fg">
+        {body(approval.tool_name, input)}
+      </div>
       <div className="flex gap-2">
-        <button className="rounded bg-success px-3 py-1 text-on-accent" onClick={() => onAnswer(true)}>
+        <button
+          className="rounded-md border border-accent px-3 py-1 text-xs font-medium text-accent
+                     hover:bg-accent/10 focus-visible:outline focus-visible:outline-2
+                     focus-visible:outline-offset-2 focus-visible:outline-accent"
+          onClick={() => onAnswer(true)}
+        >
           Allow
         </button>
-        <button className="rounded bg-danger px-3 py-1 text-on-accent" onClick={() => onAnswer(false)}>
+        <button
+          className="rounded-md border border-danger px-3 py-1 text-xs font-medium text-danger
+                     hover:bg-danger/10 focus-visible:outline focus-visible:outline-2
+                     focus-visible:outline-offset-2 focus-visible:outline-danger"
+          onClick={() => onAnswer(false)}
+        >
           Deny
         </button>
       </div>
