@@ -15,7 +15,7 @@ import uuid
 import asyncio
 import logging
 
-from ..core.permissions import ApproveFn
+from ..core.permissions import APPROVAL_UNANSWERED, ApproveFn
 
 log = logging.getLogger("superme-agent")
 
@@ -75,10 +75,11 @@ class PermissionManager:
         """Build an ApproveFn bound to this thread and requester.
 
         Only ever called by the Core for tools that aren't auto-allowed, so it always
-        posts a card and waits. Returns True=allow / False=deny (timeout → deny).
+        posts a card and waits. True = allow, False = the owner denied, and an unanswered
+        card returns the "nobody refused this" wording instead of masquerading as a refusal.
         """
 
-        async def approve(tool_name: str, input_data: dict) -> bool:
+        async def approve(tool_name: str, input_data: dict) -> bool | str:
             approval_id = uuid.uuid4().hex
             fut: asyncio.Future = asyncio.get_running_loop().create_future()
 
@@ -113,7 +114,9 @@ class PermissionManager:
             try:
                 return await asyncio.wait_for(fut, timeout=APPROVAL_TIMEOUT)
             except asyncio.TimeoutError:
-                return False
+                # Nobody reacted to the card. That is silence, not a refusal, and the agent has to
+                # be told the difference (core.permissions.APPROVAL_UNANSWERED).
+                return APPROVAL_UNANSWERED
             finally:
                 rec = self._pending.pop(approval_id, None)
                 if rec and rec.get("ts"):

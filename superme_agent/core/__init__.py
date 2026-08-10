@@ -7,7 +7,7 @@ services and a neutral vocabulary that every surface (adapter) speaks:
   - AgentService   — run a conversational turn, yielding surface-neutral TurnEvents
   - KnowledgeService (Stage C) — read/write/list/inject knowledge files
   - TurnEvent      — TextDelta | Status | Result
-  - ApproveFn      — async (tool_name, tool_input) -> bool, supplied by the surface
+  - ApproveFn      — async (tool_name, tool_input) -> True | False | "why denied", per surface
 
 Surfaces translate their native I/O (Slack events, HTTP/WebSocket) into these calls.
 """

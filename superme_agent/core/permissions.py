@@ -3,12 +3,17 @@
 The Core never contains any asking-UI. When a tool needs human approval, it calls an
 `ApproveFn` the *surface* supplied:
 
-    approve(tool_name, tool_input) -> bool      # async; True=allow, False=deny
+    approve(tool_name, tool_input) -> bool | str    # async; True = allow, False = deny,
+                                                    # a STRING = deny, and that is the reason
 
 Each surface plugs in its own implementation (Slack = ✅/❌ reactions; web = an
 Allow/Deny button over WebSocket; CLI = a y/n prompt). `build_can_use_tool` bridges
 that callback to the SDK's `can_use_tool` interface, applying the safe-tool policy
 (which auto-runs read-only tools without ever asking).
+
+The string return exists because a bare `False` had to stand for three different facts — the
+owner refused, nobody answered, nobody was there — and the agent reads whatever we say and
+reasons from it. A surface that knows which one happened returns the matching message below.
 """
 
 import logging
@@ -27,8 +32,45 @@ from ..harness.policy import is_safe
 
 log = logging.getLogger("superme-agent")
 
-# (tool_name, tool_input) -> allow?  Supplied by each surface.
-ApproveFn = Callable[[str, dict], Awaitable[bool]]
+# (tool_name, tool_input) -> True | False | "why it was denied".  Supplied by each surface.
+ApproveFn = Callable[[str, dict], Awaitable[bool | str]]
+
+# --- what a denial SAYS ---------------------------------------------------------------------------
+# The deny message is the agent's ONLY account of what just happened, and it reasons onward from it,
+# so each path has to state the fact that actually occurred. These three used to share one string,
+# "Denied by the owner." — which made a timed-out request report a refusal by a person who never saw
+# it. Told that a human had rejected something no human had touched, the agent did the reasonable
+# thing with a false premise: it invented a cause (a `settings.json` deny rule, a PreToolUse hook)
+# and sent the owner off to find it. A message that names the wrong actor is worse than a vague one.
+#
+# Each also says how MUCH to say back. The same session answered every bare denial with a menu of
+# alternatives, a confident theory, and a re-pitch of unrelated pending work — three times over. A
+# denial is a one-line event. That instruction lives here, arriving exactly when it applies, rather
+# than in a per-turn preamble that every turn would pay for.
+_DENIED_BY_OWNER = (
+    "The owner saw this exact call and denied it. Don't retry it, and don't reshape it into a "
+    "near-identical call to get around the refusal — if you believe it's needed, say so and ask. "
+    "Acknowledge in ONE line and carry on with what you can still do: no list of other things you "
+    "could try instead, no theory about what blocked you, and don't re-raise unrelated pending work "
+    "in the same breath."
+)
+APPROVAL_UNANSWERED = (
+    "Nothing came back — the approval request went unanswered (the owner is away from it, or the "
+    "connection dropped). NOBODY refused this. Don't conclude that a rule, a setting or a hook "
+    "blocked you, and don't go looking for one. Say in one line that the request wasn't answered, "
+    "then stop and wait — don't try another way in."
+)
+NO_HUMAN_TO_ASK = (
+    "This is a background run with nobody at the keyboard, so every tool that needs approval is "
+    "unavailable for the whole run — this is not a judgment on this particular call. Don't retry it "
+    "and don't route around it: do what you can with the tools you have, and record what you "
+    "couldn't do in your report."
+)
+_LEARNING_SCOPE_DENIED = (
+    "This run may only use Bash and write inside its own scratch workspace. That target is outside "
+    "it, so the call is out of the run's scope rather than refused by anyone — draft into the "
+    "workspace instead."
+)
 
 # Tools that write to the filesystem (reads are covered by the safe-tool policy).
 _WRITE_TOOLS = {"Write", "Edit", "MultiEdit", "NotebookEdit"}
@@ -216,9 +258,11 @@ def path_in_scope(target: str, cwd: Path, roots: list[Path]) -> bool:
     return False
 
 
-async def deny_all(tool_name: str, tool_input: dict) -> bool:
-    """An ApproveFn that denies everything — the fallback for a background run (nothing to ask)."""
-    return False
+async def deny_all(tool_name: str, tool_input: dict) -> bool | str:
+    """An ApproveFn that denies everything — the fallback for a background run (nothing to ask).
+    Says so: a background agent told only "denied" has no way to know the whole run is like this,
+    and will keep spending turns re-attempting a gate that will never open."""
+    return NO_HUMAN_TO_ASK
 
 
 def scoped_writes_approve(allowed_dir: Path, fallback: ApproveFn) -> ApproveFn:
@@ -242,7 +286,7 @@ def scoped_writes_approve(allowed_dir: Path, fallback: ApproveFn) -> ApproveFn:
     a read-only phase must not do to the real tree."""
     allowed = allowed_dir.resolve()
 
-    async def approve(tool_name: str, tool_input: dict) -> bool:
+    async def approve(tool_name: str, tool_input: dict) -> bool | str:
         if tool_name in _WRITE_TOOLS:
             path = tool_input.get("file_path") or tool_input.get("path")
             if path:
@@ -274,7 +318,7 @@ def learning_write_approve(workspace: Path) -> ApproveFn:
     is removed afterwards. The actual disk publish stays owner-gated downstream (gate 2)."""
     ws = workspace.resolve()
 
-    async def approve(tool_name: str, tool_input: dict) -> bool:
+    async def approve(tool_name: str, tool_input: dict) -> bool | str:
         if tool_name == "Bash":
             return True
         if tool_name in _WRITE_TOOLS:
@@ -286,7 +330,7 @@ def learning_write_approve(workspace: Path) -> ApproveFn:
                         return True
                 except (OSError, ValueError):
                     pass
-        return False
+        return _LEARNING_SCOPE_DENIED
 
     return approve
 
@@ -685,12 +729,13 @@ def build_can_use_tool(approve: ApproveFn, *, blocked_skills: dict[str, str] | N
                             "knowledge tree, and the SuperMe harness. That path is outside its scope.")
         if is_safe(tool_name, input_data):
             return PermissionResultAllow()
-        approved = await approve(tool_name, input_data)
-        log.info("approval: %s -> %s", tool_name, "ALLOW" if approved else "DENY")
-        return (
-            PermissionResultAllow()
-            if approved
-            else PermissionResultDeny(message="Denied by the owner.")
-        )
+        verdict = await approve(tool_name, input_data)
+        log.info("approval: %s -> %s", tool_name, "ALLOW" if verdict is True else "DENY")
+        if verdict is True:
+            return PermissionResultAllow()
+        # A surface that KNOWS why hands back the sentence; one that only knows "no" gets the
+        # owner-refusal wording, which is what a plain False has always meant at this seam.
+        return PermissionResultDeny(
+            message=verdict if isinstance(verdict, str) and verdict.strip() else _DENIED_BY_OWNER)
 
     return can_use_tool

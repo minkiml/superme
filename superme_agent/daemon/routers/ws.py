@@ -40,7 +40,7 @@ from ...core import (
     VET_READONLY_NUDGE,
 )
 from ...core.faults import classify
-from ...core.permissions import approval_signature
+from ...core.permissions import APPROVAL_UNANSWERED, approval_signature
 from ...gateway import contexts
 from ...harness.tools.dev_tools import make_dev_mcp_server
 from ...core.kernel_speech import (
@@ -217,7 +217,7 @@ async def ws_agent(ws: WebSocket) -> None:
     approved_sigs: set[str] = set()   # P4: 'remember approval within a session' — once the owner
     #                                   OK's a KIND of call, later calls of that kind don't re-ask.
 
-    async def approve(tool_name: str, tool_input: dict) -> bool:
+    async def approve(tool_name: str, tool_input: dict) -> bool | str:
         """The daemon's ApproveFn — round-trip the decision to this client, but only ONCE per kind
         of call: a previously-approved signature (see permissions.approval_signature) auto-allows
         without prompting again this connection. Kills the rubber-stamp storm the owner watched (the
@@ -234,7 +234,10 @@ async def ws_agent(ws: WebSocket) -> None:
             granted = await asyncio.wait_for(fut, timeout=DAEMON_APPROVAL_TIMEOUT)
         except asyncio.TimeoutError:
             log.warning("approval %s for %s timed out -> deny", aid[:8], tool_name)
-            return False
+            # Denied, but by nobody. Say which — an agent told "the owner denied this" about a card
+            # the owner never saw reasons from a false premise and goes hunting for the rule that
+            # "must have" blocked it (permissions.APPROVAL_UNANSWERED).
+            return APPROVAL_UNANSWERED
         finally:
             pending.pop(aid, None)
         if granted:
