@@ -27,6 +27,13 @@ function headline(tool: string, input: Record<string, any>): { ask: string; subj
     case 'WebFetch':
       return { ask: 'Fetch a web page?', subject: String(input?.url ?? '') }
     default:
+      // SuperMe's own in-process tools arrive as `mcp__<server>__<name>`. Asking "Run
+      // mcp__dev__push_inbox_item?" makes the app's own controls read like foreign machinery, and
+      // the wire name is the least useful half of the string. Name the act, keep the tool as the
+      // subject — the arguments below say which item.
+      if (tool.startsWith('mcp__')) {
+        return { ask: 'Run a SuperMe action?', subject: tool.split('__').slice(2).join('__') || tool }
+      }
       return { ask: `Run ${tool}?`, subject: '' }
   }
 }

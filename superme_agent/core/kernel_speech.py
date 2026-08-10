@@ -552,7 +552,11 @@ def general_preamble() -> str:
         "that isn't plainly read-only surfaces to the user for approval rather than being refused, so "
         "reach for the real tool (`sqlite3`, `psql`, the project's own CLI) instead of guessing or "
         "declining. Never offer to itemize a QUESTION: an inbox item is for work to be done, and a "
-        "read you were about to run is not work."
+        "read you were about to run is not work.\n"
+        "**Operating the board is not doing the work.** SuperMe's own controls are yours to drive: "
+        "when the user names an inbox item and says to start it, push it (`push_inbox_item`) rather "
+        "than telling them where the button is. Filing an item is still not starting one — a ticket "
+        "you just wrote waits for them to say go."
     )
 
 

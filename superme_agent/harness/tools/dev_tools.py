@@ -741,6 +741,76 @@ def _create_inbox_item(*, store, context_id, dev_root=None, fire_triage=None, **
     return create_inbox_item
 
 
+# --------------------------------------------------------------------------- inbox (push — operate)
+# The general session's second sanctioned act: START an item the owner points at. Filing a ticket and
+# starting one are different decisions — this tool exists precisely so the agent can do the second
+# without being able to do the work itself. It touches no project code; it operates the board, which
+# is the line the general-session guardrail actually draws (mutate the machine, never the product).
+#
+# NOT folded into `create_inbox_item` as an `action` param, though the tool-design guidance leans
+# toward consolidation: the two calls share no arguments (create synthesizes a whole ticket; push
+# names an existing id), have opposite preconditions, and one is routine while the other starts an
+# autonomous run. An `action` switch would put the loud act one keystroke from the quiet one.
+#
+# Description note: the registry's house style is one-liners, on the grounds that the WHEN/HOW lives
+# in the owning skill. This tool has no skill — the owner says "start #12" in open conversation — so
+# its description has to carry its own when/when-not/returns or nothing will.
+
+class PushInboxItemArgs(TypedDict, total=False):
+    item_id: Required[Annotated[int, ("the OPEN inbox item's numeric id — the number in the "
+                                      "`inbox:<id>` that read_inbox prints, without the prefix")]]
+
+
+def _push_inbox_item(*, store, context_id, dev_root=None, fire_triage=None,
+                     bound_item_id=None, **_):
+    async def push_inbox_item(args: dict) -> dict:
+        from pathlib import Path
+        from ...core import inbox_flow as _flow
+        from ...core.dev_knowledge import DevKnowledgeService
+        # A phase session operates its OWN item, never the board. Its sanctioned way to spin work
+        # off is the branch-off (create_inbox_item + spawned_from_item/relation), which auto-pushes
+        # blocking/parallel children with the provenance edge this tool would silently omit.
+        if bound_item_id:
+            return _err(
+                "push_inbox_item is not available inside a work-item session — a phase session works "
+                "its own item, it doesn't start others. To spin off work from here, file a branch-off "
+                "(`create_inbox_item` with `spawned_from_item` + `relation`): blocking/parallel "
+                "children auto-push with the dependency edge recorded.")
+        if not dev_root:
+            return _err("This context has no dev-knowledge home, so there is no workspace to push into.")
+        try:
+            item_id = int(args["item_id"])
+        except (KeyError, TypeError, ValueError):
+            return _err("`item_id` must be the inbox item's numeric id (12 for `inbox:12`).")
+        row = store.get_inbox(item_id)
+        if row is None or row.get("context_id") != context_id:
+            return _err(f"No {_qid('inbox', item_id)} in this project's inbox — `read_inbox` lists "
+                        "what's actually there.")
+        if row.get("status") == "pushed":
+            routed = row.get("routed_to")
+            return _err(f"{_qid('inbox', item_id)} was already pushed"
+                        + (f" → {_qid('item', routed)}" if routed else "")
+                        + ". A pushed row is trace; it can't be pushed twice.")
+        try:
+            wi = _flow.push_inbox_item(store, DevKnowledgeService(), Path(dev_root), row,
+                                       context_id=context_id, actor="agent")
+        except Exception as e:
+            return _err(f"Could not push {_qid('inbox', item_id)}: {e}")
+        # The same first kick the owner's Push button fires. Without it the item lands at
+        # triage/active with no run behind it and never moves. Absent in a bare/test server.
+        triaged = False
+        if fire_triage:
+            try:
+                triaged = bool(fire_triage(wi["id"]))
+            except Exception:
+                triaged = False
+        title = (row.get("title") or row.get("text") or "")[:80]
+        kick = ("Triage is running on it now." if triaged else
+                "It rests at triage until a triage run starts.")
+        return _ok(f"Pushed {_qid('inbox', item_id)} → {_qid('item', wi['id'])} — \"{title}\". {kick}")
+    return push_inbox_item
+
+
 # --------------------------------------------------------------------------- itemize + launch (4c)
 # The onboarding LAUNCH step: turn a settled plan into a cohort of autopilot work-items in one call.
 # Unlike create_inbox_item (one ticket, owner triages later), this mints work-items DIRECTLY on
@@ -1820,6 +1890,17 @@ _MAIN_DEV_TOOLS: list[ToolSpec] = [
         "append_inbox_item",
         "Append new discussion content onto an EXISTING inbox item (never edits it) — the dedup path.",
         AppendInboxItemArgs, _append_inbox_item,
+    ),
+    ToolSpec(
+        "push_inbox_item",
+        "Push an OPEN inbox item into the workspace: mints its work-item and starts the autonomous "
+        "triage→plan→build⟷vet→review flow on it — the same act as the Push button on the inbox "
+        "card. Use it when the owner has named a specific item and told you to start it; never on "
+        "your own initiative, and never as a follow-on to create_inbox_item (a freshly filed item is "
+        "theirs to review first). Takes the item's numeric id from read_inbox and returns the new "
+        "work-item id plus whether its first triage run started. Refused inside a work-item session — "
+        "there, a branch-off via create_inbox_item is the way to spin work off.",
+        PushInboxItemArgs, _push_inbox_item,
     ),
     ToolSpec(
         "itemize_and_launch",
