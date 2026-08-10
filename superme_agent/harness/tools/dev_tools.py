@@ -975,6 +975,20 @@ class SetTriageClassificationArgs(TypedDict, total=False):
                                  "from the project PRD, or omit/'none' for a standalone chore. "
                                  "NEVER invent a new slug here — a NEW deliverable is proposed in "
                                  "prose for the owner to confirm first")]
+    scale: Required[Annotated[Literal["small", "standard"],
+                              ("how much CONTENT this item's work is worth. `small` = you can "
+                               "already name the change and where it goes, and a reader would take "
+                               "it in at a glance: every later phase then writes short and reads "
+                               "narrow. `standard` = anything you'd have to investigate, anything "
+                               "touching more than one area, anything where the approach is a real "
+                               "choice. Scale never changes the PIPELINE — a small item still gets "
+                               "its branch, its numbered tasks, a commit per task and a merge. Size "
+                               "of the DIFF is not the test, and neither is the task count: a "
+                               "one-line change to something load-bearing is standard")]]
+    scale_reason: Required[Annotated[str, ("one line, in your own words, for why that scale — what "
+                                           "you saw that settled it. Required for BOTH values: this "
+                                           "is what the owner reads at the gate to disagree with, "
+                                           "and a bare label cannot be argued with")]]
 
 
 def _set_triage_classification(*, store, context_id, dev_root=None, bound_item_id=None, **_):
@@ -1024,13 +1038,21 @@ def _set_triage_classification(*, store, context_id, dev_root=None, bound_item_i
                             "unconfirmed slug.")
             dev.set_work_item_scaffold(root, item_id, deliverable=deliverable)
             d_note = f" · deliverable `{deliverable}`"
+        # Scale + its reason (kind_profiles.ITEM_SCALES) — recorded in the SAME act as the kind
+        # because it is the same judgment by the same reader: triage is the one phase that has read
+        # the whole ask before anyone has spent anything on it.
+        try:
+            dev.set_work_item_scale(root, item_id, _s(args, "scale") or "",
+                                    _s(args, "scale_reason") or "")
+        except ValueError as e:
+            return _err(str(e))
         # F1: the triage-exit gate's `triage_ran` reads this stamp — recording a classification
         # IS triage having run; a bare inbox push (kind default + body copied) never stamps it.
         dev.set_work_item_triaged(root, item_id)
         t_note = f" · renamed to \"{title}\"" if renamed else ""
-        return _ok(f"Recorded triage classification: kind `{kind}`{d_note}{t_note}. The owner "
-                   "confirms at the triage-exit gate (Approve → plan); until then it stays a "
-                   "proposal on the item's own fields.")
+        return _ok(f"Recorded triage classification: kind `{kind}` · scale "
+                   f"`{_s(args, 'scale')}`{d_note}{t_note}. The owner confirms at the triage-exit "
+                   "gate (Approve → plan); until then it stays a proposal on the item's own fields.")
     return set_triage_classification
 
 

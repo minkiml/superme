@@ -29,7 +29,7 @@ Pure functions over plain data — no daemon imports.
 import json
 from pathlib import Path
 
-from . import artifacts
+from . import artifacts, kind_profiles
 
 
 # =============================================================================================
@@ -440,6 +440,28 @@ def work_item_preamble(item_id: str, item: dict, item_dir, *, interactive: bool 
         lines.append(
             f"\n**This phase:** {c['what']}. The procedure lives in the `superme-dev:{c['skill']}` "
             f"skill — invoke it when doing this phase's work."
+        )
+    # SCALE (kind_profiles.ITEM_SCALES): triage's judgment, riding every later phase's turn. Only
+    # `small` says anything — `standard` IS the behaviour every skill already describes, so a line
+    # for it would be floor paid on every turn to change nothing.
+    #
+    # Written as two boundaries rather than "be concise", which is the instruction that produces no
+    # change. And the overflow clause matters more than either: the structure stays whole at small
+    # (owner, 2026-08-10 — thinner contents, never fewer sections), so an agent with nothing to say
+    # in a section it must still write will pad it. Naming overflow as EVIDENCE gives it somewhere
+    # to put that pressure other than filler, and hands the misjudgment back to the owner, who is
+    # the one who can act on it.
+    if kind_profiles.item_scale(item) == "small":
+        lines.append(
+            "\n**This item is scaled `small`.** Read narrow: this item's own folder, and the files "
+            "the change actually touches. Leave the project's anchor docs (PRD, architecture, "
+            "roadmap) and other items' artifacts closed. Write short: every section you owe still "
+            "gets written — none becomes optional — but one to three sentences each, and no "
+            "section repeats what another already says.\n"
+            "If you find you need a source outside that boundary, or a section that genuinely "
+            "cannot be said in three sentences, do not pad and do not quietly go wider: say so in "
+            "your report and name what you needed. That is evidence this item was misjudged as "
+            "small, and it is the owner's call to make, not yours to absorb."
         )
     # The owner's standing input, on EVERY turn of every phase. Each intake phase runs in its own
     # session, so anything they said in an earlier one is gone from this thread; the durable copy

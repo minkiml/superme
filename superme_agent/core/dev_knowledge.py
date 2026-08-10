@@ -452,7 +452,7 @@ class DevKnowledgeService:
         NEVER adopt its orphaned (permanent, never-delete-logs) runs/dev-events — the 305k-token
         ghost post-mortem, 2026-07-13. Returns {id, folder}.
         """
-        from .kind_profiles import get_profile
+        from .kind_profiles import DEFAULT_SCALE, get_profile
         profile = get_profile(kind)  # loud KeyError on unknown kind, before any disk write
         if spawned_from is not None:
             if not isinstance(spawned_from, dict) or not spawned_from.get("item"):
@@ -524,6 +524,9 @@ class DevKnowledgeService:
         fm = (
             f"---\nid: {wid}\nroot_id: {wid}\nparent_id: null\n"
             f"title: {json.dumps(title)}\nkind: {profile.kind}\n"
+            # Born `standard` — the shape everything already has. Triage judges it (with a reason)
+            # before the item leaves the first phase; see kind_profiles.ITEM_SCALES.
+            f"scale: {DEFAULT_SCALE}\nscale_reason: null\n"
             f"phase: {profile.phases[0]}\nstatus: {status}\n"
             f"done_at: null\nartifacts: []\n{extra}"
             f"session_id: {json.dumps(session_id) if session_id else 'null'}\n"
@@ -742,6 +745,45 @@ class DevKnowledgeService:
         if not m:
             return False
         fm = re.sub(r"(?m)^kind:.*$", f"kind: {kind}", m.group(1))
+        fm = re.sub(r"(?m)^updated_at:.*$", f"updated_at: {date.today().isoformat()}", fm)
+        item.write_text(f"---\n{fm}\n---\n{body}")
+        return True
+
+    def set_work_item_scale(self, dev_root: Path, item_id: str, scale: str,
+                            reason: str) -> bool:
+        """Set a work-item's `scale` + the one-line `scale_reason` behind it (kind_profiles.
+        ITEM_SCALES). Triage's judgment, recorded the way the vet plan's `depth` is: the reason is
+        REQUIRED even for `standard`, because it is what the owner reads to disagree with at the
+        gate — a bare label is unarguable.
+
+        Items minted before this field existed have no `scale:` line, so the write INSERTS after
+        `kind:` rather than assuming a slot. Reading them still works without this (readers default
+        via `item_scale`); the insert only matters when triage actually judges one."""
+        from .kind_profiles import ITEM_SCALES
+        if scale not in ITEM_SCALES:
+            raise ValueError(f"scale must be one of {'/'.join(ITEM_SCALES)} (got {scale!r})")
+        if not (reason or "").strip():
+            raise ValueError("scale needs a one-line reason — it is what the owner argues with")
+        one_line = " ".join(str(reason).split())
+        item = Path(dev_root) / "work-items" / item_id / "item.md"
+        if not item.exists():
+            return False
+        text = item.read_text()
+        m = _FRONTMATTER.match(text)
+        if not m:
+            return False
+        _, body = _parse_md(text)
+        fm = m.group(1)
+        pair = f"scale: {scale}\nscale_reason: {json.dumps(one_line)}"
+        if re.search(r"(?m)^scale:", fm):
+            fm = re.sub(r"(?m)^scale:.*$", f"scale: {scale}", fm)
+            if re.search(r"(?m)^scale_reason:", fm):
+                fm = re.sub(r"(?m)^scale_reason:.*$",
+                            f"scale_reason: {json.dumps(one_line)}", fm)
+            else:
+                fm = re.sub(r"(?m)^scale:.*$", pair, fm)
+        else:
+            fm = re.sub(r"(?m)^kind:(.*)$", lambda mm: f"kind:{mm.group(1)}\n{pair}", fm, count=1)
         fm = re.sub(r"(?m)^updated_at:.*$", f"updated_at: {date.today().isoformat()}", fm)
         item.write_text(f"---\n{fm}\n---\n{body}")
         return True

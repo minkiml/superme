@@ -354,7 +354,13 @@ def _about(item: dict, item_dir: Path, inbox_origin: str = "") -> list[dict]:
         # into the ask. The origin list is the inbox row's own, so no new field is invented here.
         who = "agent" if inbox_origin == "agent" else "owner"
         origin = f"Inbox ({who})"
+    # Scale + the one line triage gave for it. This IS the veto surface: the owner sees the judgment
+    # and its reason at the triage gate, where saying "no, that's not small" still costs nothing.
+    # Reason and label ride together — a bare "small" is a label nobody can argue with.
+    scale = kind_profiles.item_scale(item)
+    scale_why = str(item.get("scale_reason") or "").strip()
     rows = [("Workflow", str(item.get("kind") or "implementation")),
+            ("Scale", f"{scale} — {scale_why}" if scale_why else scale),
             ("Category", facts["category"]),
             ("Origin", origin),
             ("Background", facts["background"]),

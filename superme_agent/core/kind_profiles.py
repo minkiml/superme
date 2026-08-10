@@ -95,6 +95,33 @@ KIND_PROFILES: dict[str, KindProfile] = {
 
 DEFAULT_KIND = "implementation"
 
+# --- item SCALE: how much ceremony this item's work is worth --------------------------------------
+# Kind decides the MACHINERY; scale decides how much CONTENT that machinery moves. They are
+# deliberately different axes, and scale is not a kind: a small item still gets the full pipeline,
+# its own branch, numbered tasks, a commit per task and a merge (owner, 2026-08-10). Nothing about
+# the STRUCTURE moves — every phase runs, every document keeps every section. What changes is how
+# much each phase reads before writing and how much it writes.
+#
+# Measured baseline that makes this worth having (2026-08-10, five playground items through the
+# full loop): triage 70k tokens over ~12 tool calls, plan 61k over ~14, review 52k over ~16 — so the
+# intake phases together cost MORE than build+vet, and they run about twice per item. The cost
+# tracks tool calls, not the launch prompt (that is ~2k chars). A one-line fix pays all of it.
+#
+# TWO VALUES ON PURPOSE. `standard` is exactly today's behaviour, so nothing in flight changes
+# meaning. A third tier would only give an agent a middle to reach for.
+ITEM_SCALES: tuple[str, ...] = ("small", "standard")
+DEFAULT_SCALE = "standard"
+
+
+def item_scale(item: dict | None) -> str:
+    """This item's declared scale, defaulting to `standard`. Deliberately FORGIVING where
+    `get_profile` is loud: an unknown kind means the item would run through the wrong machinery, but
+    an unknown or absent scale only means nobody judged it — and every item minted before the field
+    existed is in exactly that position. Defaulting them to today's behaviour is the correct
+    reading, not a swallowed error."""
+    scale = str((item or {}).get("scale") or "").strip()
+    return scale if scale in ITEM_SCALES else DEFAULT_SCALE
+
 # Every phase any kind can be in (schema Literal mirrors this — keep in sync with
 # daemon/schemas/common.py WorkPhase).
 ALL_PHASES: tuple[str, ...] = tuple(dict.fromkeys(
