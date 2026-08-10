@@ -53,7 +53,11 @@ export default function ApprovalCard({
   // against what will actually run.
   const why = String(input?.description ?? '').trim()
   return (
-    <div className="rounded-lg border border-line border-l-2 border-l-warn bg-surface p-3">
+    // A FULL warn border, not a left edge. The left edge is already the owner's own bubble
+    // (TALKER.you in MessageList), so an accent rail here read as "another message" rather than
+    // "the app is stopping to ask you". Enclosing the card is what says it is a different kind of
+    // thing, and it's the one place in the rail that interrupts.
+    <div className="rounded-lg border border-warn bg-surface p-3">
       <div className="mb-1.5 text-[13px] text-warn">
         {ask}
         {subject && <span className="ml-1 text-xs text-muted">· {subject}</span>}
