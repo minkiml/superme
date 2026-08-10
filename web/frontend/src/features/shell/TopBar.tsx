@@ -59,7 +59,6 @@ const SPARK_TYPES = [
   { key: 'input', color: '#6ea8fe' },
   { key: 'cache_creation', color: '#e0a35a' },
   { key: 'output', color: '#5fe3b3' },
-  { key: 'legacy', color: '#4b5563' },
 ]
 
 // The token chip's popover body: the drill-in's Over time → By type chart, stripped to the bars.

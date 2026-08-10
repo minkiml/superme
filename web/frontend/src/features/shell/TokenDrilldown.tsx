@@ -18,14 +18,13 @@ import type { CommandStats } from './useCommandStats'
 // per-repo, per-operation, per-day, and the type split — is computed w.r.t. the active mode. In
 // 3-type mode the cache_read row/layer simply isn't shown.
 
-// The token-type palette. `cache_read` only appears in 4-type mode; `legacy` (pre-split rows) is a
-// 3-type historical bucket, shown in both.
+// The token-type palette. `cache_read` only appears in 4-type mode. There is no fifth bucket: a run
+// with no typed usage (aborted, killed, errored) contributes nothing — see spine.token_timeseries.
 const TYPE_META: { key: string; label: string; color: string }[] = [
   { key: 'input', label: 'Input', color: '#6ea8fe' },
   { key: 'cache_creation', label: 'Cache write', color: '#e0a35a' },
   { key: 'cache_read', label: 'Cache read', color: '#8b93a7' },
   { key: 'output', label: 'Output', color: '#5fe3b3' },
-  { key: 'legacy', label: 'Legacy (unsplit)', color: '#4b5563' },
 ]
 // Types visible in the active mode: cache_read is 4-type-only.
 const typesFor = (full: boolean) => TYPE_META.filter((t) => full || t.key !== 'cache_read')

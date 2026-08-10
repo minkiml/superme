@@ -310,13 +310,13 @@ class RepoMetaResponse(BaseModel):
 
 # --- token observability (token-usage-tracking-spec) ----------------------------
 class TokenTypeSplit(BaseModel):
-    """Breakdown 2 — the systematic (per token-type) split. `legacy` holds pre-migration rows that
-    only carry the old collapsed scalar. The five sum to the bucket total (reconciliation)."""
+    """Breakdown 2 — the systematic (per token-type) split. A run that never returned a final usage
+    (aborted, killed, errored) has no typed split and contributes nothing here — measured usage only.
+    The four sum to the bucket total (reconciliation)."""
     input: int = 0
     cache_creation: int = 0
     cache_read: int = 0
     output: int = 0
-    legacy: int = 0
 
 
 class CategoryNode(BaseModel):
@@ -373,14 +373,13 @@ class TokenUsageResponse(BaseModel):
 
 
 class TokenDay(BaseModel):
-    """One local-day bucket of the usage time-series: the four token types (+ legacy), the day
-    total, and the running `cumulative` total across days."""
+    """One local-day bucket of the usage time-series: the four token types, the day total, and the
+    running `cumulative` total across days."""
     day: str
     input: int = 0
     cache_creation: int = 0
     cache_read: int = 0
     output: int = 0
-    legacy: int = 0
     total: int = 0
     cumulative: int = 0
     runs: int = 0

@@ -381,8 +381,10 @@ class SystemSpine:
             # dropped. `raw_usage` preserves the complete SDK usage dict (forward-compat: a new usage
             # field is retained even before it earns a typed column). The legacy `tokens` scalar is
             # KEPT and still populated (= input+output+cache_creation) for back-compat with existing
-            # telemetry/guard UIs; pre-migration rows have zero typed columns and surface in a labeled
-            # "legacy (unsplit)" bucket. Additive ALTERs below migrate an existing .system.db.
+            # telemetry/guard UIs, and it is what the LIVE in-flight counter bumps — so a run that
+            # never returns a final usage carries it with four zero typed columns. The usage tables
+            # simply skip those rows (measured only); the loop's budget breaker still counts them,
+            # because a spend that happened is a spend. Additive ALTERs migrate an existing .system.db.
             # `discarded_at` — the re-run SOFT delete (owner, 2026-07-31). A re-run throws the
             # attempt away but never the rows: they are stamped, not deleted ([[never-delete-logs]]),
             # and the readers split. ITEM-SCOPED reads (this item's trace, its card totals, its loop
@@ -1528,28 +1530,27 @@ class SystemSpine:
         Every token is attributable along TWO axes that reconcile to the same total by construction
         (same rows, same columns, summed two ways):
           • Breakdown 1 — SEMANTIC (`by_category` → features): what tokens were spent on.
-          • Breakdown 2 — SYSTEMATIC (`by_type`): input / cache_creation / cache_read / output,
-            plus a `legacy` bucket for pre-migration rows that only have the old collapsed scalar.
+          • Breakdown 2 — SYSTEMATIC (`by_type`): input / cache_creation / cache_read / output.
 
-        Per row, the accounted amount = input + cache_creation + output (3-type, EXCLUDES cache_read)
-        if the typed columns are present, else the legacy `tokens` scalar (pre-split rows, already
-        3-type). `total` and every by_* bucket sum this 3-type amount — cache_read is kept in `by_type`
+        Per row, the accounted amount = input + cache_creation + output (3-type, EXCLUDES cache_read).
+        A row whose four typed columns are all zero contributes NOTHING: it never returned a final
+        usage (aborted, killed, errored), so its `tokens` scalar is the live in-flight estimate rather
+        than a measurement, and this table carries measured usage only (2026-08-11 — the `legacy`
+        bucket that used to fold it in is gone). `total` and every by_* bucket sum this 3-type amount — cache_read is kept in `by_type`
         (never lost) so the full 4-type volume = `total + by_type["cache_read"]` (the dashboard toggle).
         Sums EVERY run row, so in-flight spend is included. SuperMe-context only. Back-compat:
         `total`/`by_scope`/`by_feature` are retained. (v1 caveat: forge-eval spend isn't in the spine.)"""
         from .token_taxonomy import category_for, CATEGORY_ORDER
-        typed = "tok_input+tok_cache_creation+tok_cache_read+tok_output"
         with self._conn() as c:
             rows = c.execute(
-                f"SELECT repo_id, mode, feature, COUNT(*) AS n,"
-                f" COALESCE(SUM(tok_input),0) AS ti, COALESCE(SUM(tok_cache_creation),0) AS tcc,"
-                f" COALESCE(SUM(tok_cache_read),0) AS tcr, COALESCE(SUM(tok_output),0) AS to_,"
-                f" COALESCE(SUM(CASE WHEN ({typed})=0 THEN tokens ELSE 0 END),0) AS legacy"
+                "SELECT repo_id, mode, feature, COUNT(*) AS n,"
+                " COALESCE(SUM(tok_input),0) AS ti, COALESCE(SUM(tok_cache_creation),0) AS tcc,"
+                " COALESCE(SUM(tok_cache_read),0) AS tcr, COALESCE(SUM(tok_output),0) AS to_"
                 " FROM run GROUP BY repo_id, mode, feature"
             ).fetchall()
 
         def _blank_type() -> dict:
-            return {"input": 0, "cache_creation": 0, "cache_read": 0, "output": 0, "legacy": 0}
+            return {"input": 0, "cache_creation": 0, "cache_read": 0, "output": 0}
 
         def _add_type(d: dict, r) -> int:
             # by_type accumulates ALL four components (cache_read included, so it stays inspectable);
@@ -1557,8 +1558,8 @@ class SystemSpine:
             # every by_* bucket sum, so the dashboard default + activity + work-item all read 3-type.
             # The full 4-type volume = total + by_type["cache_read"] (the dashboard toggle adds it).
             d["input"] += r["ti"]; d["cache_creation"] += r["tcc"]
-            d["cache_read"] += r["tcr"]; d["output"] += r["to_"]; d["legacy"] += r["legacy"]
-            return r["ti"] + r["tcc"] + r["to_"] + r["legacy"]
+            d["cache_read"] += r["tcr"]; d["output"] += r["to_"]
+            return r["ti"] + r["tcc"] + r["to_"]
 
         total = 0
         by_scope: dict[str, int] = {}
@@ -1568,7 +1569,7 @@ class SystemSpine:
         by_category: dict[str, dict] = {}
         by_repo: dict[str, dict] = {}
         for r in rows:
-            amt = _add_type(by_type, r)  # the row-group's accounted amount (typed or legacy)
+            amt = _add_type(by_type, r)  # the row-group's accounted (3-type) amount
             total += amt
             by_scope[r["mode"]] = by_scope.get(r["mode"], 0) + amt
             by_feature[r["feature"]] = by_feature.get(r["feature"], 0) + amt
@@ -1631,18 +1632,16 @@ class SystemSpine:
 
         Buckets by LOCAL day: `started_at` is stored UTC, and `tz_offset` (minutes to ADD to UTC to
         reach the owner's local time, e.g. +540 for JST — the FE sends `-getTimezoneOffset()`) shifts
-        it so "which day" matches the owner's day, not UTC. Each day carries the four token types (+
-        the legacy bucket) and a `total`; `cumulative` is the running total of daily totals, so the
+        it so "which day" matches the owner's day, not UTC. Each day carries the four token types and a
+        `total`; `cumulative` is the running total of daily totals, so the
         same series renders as per-day bars, a cumulative line, or a stacked breakdown. Derived on the
         fly from the durable run rows — no materialized rollup."""
         modifier = f"{int(tz_offset):+d} minutes"
-        typed = "tok_input+tok_cache_creation+tok_cache_read+tok_output"
         with self._conn() as c:
             rows = c.execute(
                 "SELECT date(started_at, ?) AS day, COUNT(*) AS n,"
                 " COALESCE(SUM(tok_input),0) AS ti, COALESCE(SUM(tok_cache_creation),0) AS tcc,"
-                " COALESCE(SUM(tok_cache_read),0) AS tcr, COALESCE(SUM(tok_output),0) AS to_,"
-                f" COALESCE(SUM(CASE WHEN ({typed})=0 THEN tokens ELSE 0 END),0) AS legacy"
+                " COALESCE(SUM(tok_cache_read),0) AS tcr, COALESCE(SUM(tok_output),0) AS to_"
                 " FROM run WHERE started_at IS NOT NULL GROUP BY day ORDER BY day",
                 (modifier,),
             ).fetchall()
@@ -1658,18 +1657,26 @@ class SystemSpine:
             while d <= end:
                 key = d.isoformat()
                 r = by_day.get(key)
-                ti, tcc, tcr, to_, legacy, n = (
-                    (r["ti"], r["tcc"], r["tcr"], r["to_"], r["legacy"], r["n"] or 0)
-                    if r else (0, 0, 0, 0, 0, 0)
+                ti, tcc, tcr, to_, n = (
+                    (r["ti"], r["tcc"], r["tcr"], r["to_"], r["n"] or 0) if r else (0, 0, 0, 0, 0)
                 )
                 # `total` is 3-type (EXCLUDES cache_read) to match the dashboard default; cache_read is
                 # still carried as its own field so the stacked/toggle view can show the full volume.
-                total = ti + tcc + to_ + legacy
+                #
+                # A run whose four typed columns are all zero contributes NOTHING here, by design
+                # (2026-08-11). Those are runs that never returned a final usage — aborted, killed or
+                # errored — and the `tokens` scalar they carry is the live in-flight estimate, not a
+                # measurement. There used to be a fifth `legacy` series folding that estimate in; it
+                # broke the one rule this table has (measured usage only, unmeasured is 0, never
+                # another metric filed into the same column) and it read as unmigrated debt when it
+                # was really "the daemon restarted mid-run". The rows themselves are untouched — the
+                # trail keeps them, the budget breaker still counts them; they are simply not a
+                # token TYPE and so have no place on a token-type axis.
+                total = ti + tcc + to_
                 cumulative += total
                 days.append({
                     "day": key,
-                    "input": ti, "cache_creation": tcc, "cache_read": tcr,
-                    "output": to_, "legacy": legacy,
+                    "input": ti, "cache_creation": tcc, "cache_read": tcr, "output": to_,
                     "total": total, "cumulative": cumulative, "runs": n,
                 })
                 d += timedelta(days=1)

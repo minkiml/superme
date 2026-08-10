@@ -5362,8 +5362,7 @@ export interface components {
              *       "input": 0,
              *       "cache_creation": 0,
              *       "cache_read": 0,
-             *       "output": 0,
-             *       "legacy": 0
+             *       "output": 0
              *     }
              */
             by_type: components["schemas"]["TokenTypeSplit"];
@@ -5866,8 +5865,7 @@ export interface components {
              *       "input": 0,
              *       "cache_creation": 0,
              *       "cache_read": 0,
-             *       "output": 0,
-             *       "legacy": 0
+             *       "output": 0
              *     }
              */
             by_type: components["schemas"]["TokenTypeSplit"];
@@ -5881,8 +5879,8 @@ export interface components {
         };
         /**
          * TokenDay
-         * @description One local-day bucket of the usage time-series: the four token types (+ legacy), the day
-         *     total, and the running `cumulative` total across days.
+         * @description One local-day bucket of the usage time-series: the four token types, the day total, and the
+         *     running `cumulative` total across days.
          */
         TokenDay: {
             /** Day */
@@ -5907,11 +5905,6 @@ export interface components {
              * @default 0
              */
             output: number;
-            /**
-             * Legacy
-             * @default 0
-             */
-            legacy: number;
             /**
              * Total
              * @default 0
@@ -5946,8 +5939,9 @@ export interface components {
         };
         /**
          * TokenTypeSplit
-         * @description Breakdown 2 — the systematic (per token-type) split. `legacy` holds pre-migration rows that
-         *     only carry the old collapsed scalar. The five sum to the bucket total (reconciliation).
+         * @description Breakdown 2 — the systematic (per token-type) split. A run that never returned a final usage
+         *     (aborted, killed, errored) has no typed split and contributes nothing here — measured usage only.
+         *     The four sum to the bucket total (reconciliation).
          */
         TokenTypeSplit: {
             /**
@@ -5970,11 +5964,6 @@ export interface components {
              * @default 0
              */
             output: number;
-            /**
-             * Legacy
-             * @default 0
-             */
-            legacy: number;
         };
         /**
          * TokenUsageResponse
