@@ -142,6 +142,24 @@ def vet_trigger(item_id: str, title: str, deferred: list[str] | None = None,
     return base
 
 
+# EXPERIMENT (2026-08-10). Every build run breaks its prompt cache exactly once — `cache_read`
+# drops to ZERO at the first `record_validation` call, right after the ToolSearch that materialises
+# it, and the whole prefix is re-written: 37.6–41.9k, 3 runs of 3, ~9% of an item. vet and review
+# never break, though they ToolSearch the same way mid-run, so the cause is not "ToolSearch", not
+# "loading a tool mid-run", not TTL (the gap is 4s), and not the mount (build and vet pass identical
+# arguments to `make_dev_mcp_server`). `record_validation` is build's pen alone, so tool and phase
+# are perfectly confounded and no amount of reading separates them.
+#
+# So: move the materialisation to the agent's FIRST act, when the prefix being invalidated is at its
+# smallest. If the break follows it forward, the cause is mid-run materialisation and this is the
+# cheap general fix; if it stays at message 11, it belongs to the tool and this line comes out.
+PENS_FIRST = (
+    "\n\nBefore anything else, load the pens you will need at the end — one call: "
+    "`ToolSearch` with `select:mcp__dev__record_validation,mcp__dev__write_checkpoint,"
+    "mcp__run__report_completion`. Do it now rather than when you first reach for one."
+)
+
+
 def build_first_trigger(item_id: str, title: str, vet_env: bool = False) -> str:
     """Consumer: the loop's ENTRY build run (loop.start_first_build) · durable in the item's
     fresh build thread. Build-first: the loop opens with an implementation cycle from the plan,
@@ -152,6 +170,7 @@ def build_first_trigger(item_id: str, title: str, vet_env: bool = False) -> str:
         f"the loop's opening cycle, nothing is built yet. Run superme-dev:build to implement the "
         f"plan: work `artifacts/plan.md`'s `## Tasks` checklist and commit in the worktree. The "
         f"loop vets what you produce automatically — never advance the phase."
+        + PENS_FIRST
         + (vet_env_note(script) if vet_env and (script := vet_env_script()) else "")
     )
 
