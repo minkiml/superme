@@ -722,7 +722,10 @@ class DevKnowledgeService:
         m = _FRONTMATTER.match(text)
         if not m:
             return False
-        fm = re.sub(r"(?m)^title:.*$", f"title: {json.dumps(title)}", m.group(1))
+        # LAMBDA, not an f-string: `re.sub` interprets backslashes in a replacement STRING, and
+        # `json.dumps` emits `\uXXXX` for any non-ASCII — so a title with a curly quote raised
+        # "bad escape \u" and the rename died. A function replacement is passed through verbatim.
+        fm = re.sub(r"(?m)^title:.*$", lambda _m: f"title: {json.dumps(title)}", m.group(1))
         fm = re.sub(r"(?m)^updated_at:.*$", f"updated_at: {date.today().isoformat()}", fm)
         item.write_text(f"---\n{fm}\n---\n{body}")
         return True
@@ -774,14 +777,18 @@ class DevKnowledgeService:
             return False
         _, body = _parse_md(text)
         fm = m.group(1)
+        # Every replacement below is a LAMBDA. `re.sub` parses backslash escapes in a replacement
+        # STRING, and `json.dumps` writes non-ASCII as `\uXXXX` — so the first live small item died
+        # on "bad escape \u" the moment triage wrote a reason containing a typographic quote, and
+        # only survived because the agent retried with different wording (run 1084, 2026-08-10).
         pair = f"scale: {scale}\nscale_reason: {json.dumps(one_line)}"
         if re.search(r"(?m)^scale:", fm):
-            fm = re.sub(r"(?m)^scale:.*$", f"scale: {scale}", fm)
+            fm = re.sub(r"(?m)^scale:.*$", lambda _m: f"scale: {scale}", fm)
             if re.search(r"(?m)^scale_reason:", fm):
                 fm = re.sub(r"(?m)^scale_reason:.*$",
-                            f"scale_reason: {json.dumps(one_line)}", fm)
+                            lambda _m: f"scale_reason: {json.dumps(one_line)}", fm)
             else:
-                fm = re.sub(r"(?m)^scale:.*$", pair, fm)
+                fm = re.sub(r"(?m)^scale:.*$", lambda _m: pair, fm)
         else:
             fm = re.sub(r"(?m)^kind:(.*)$", lambda mm: f"kind:{mm.group(1)}\n{pair}", fm, count=1)
         fm = re.sub(r"(?m)^updated_at:.*$", f"updated_at: {date.today().isoformat()}", fm)
