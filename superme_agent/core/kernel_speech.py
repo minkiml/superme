@@ -556,7 +556,20 @@ def work_item_preamble(item_id: str, item: dict, item_dir, *, interactive: bool 
             "can't self-authorize → "
             "`request_authorization` (defers it to the review gate) — either way finish what you "
             "can. End the run by calling the `report_completion` tool: that call IS your closing "
-            "statement — the owner reads it as the run's last word — so say nothing after it."
+            "statement — the owner reads it as the run's last word — so say nothing after it.\n"
+            # Measured, not assumed (2026-08-10, item 3f3aa01a16e8): a background phase run costs
+            # roughly the SUM of its growing transcript, not the sum of its payloads — 4.89M
+            # cache-read tokens across one one-line fix. So a result of size S read at step i is
+            # re-sent (N−i) times, and the single largest cost in that item was plan reading a
+            # 46 KB test file WHOLE to add one test, after it had already grepped to the exact
+            # class. Breadth rules ("read narrow") don't catch this: the file WAS the right file.
+            # Depth is the missing half, it belongs to every run rather than to a scale or a
+            # phase, and the mechanism is stated so the rule generalizes past the tools named.
+            "\n**Read the span, not the file.** Everything you read stays in this run's context "
+            "and is re-sent on every step after it, so a large file read early is paid many times "
+            "over. Once you have a line number or a symbol — from a grep, a glob, or the plan — "
+            "take that span (`Read` with `offset`/`limit`, `sed -n 'A,Bp'`); read a file whole "
+            "only when you genuinely need the whole of it."
         )
     return "\n".join(lines)
 
