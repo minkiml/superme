@@ -71,8 +71,18 @@ def build_captured_input(context_id: str, item_id: str, run_id: int) -> dict | N
         surface = parsed if isinstance(parsed, dict) else None
     except Exception:  # noqa: BLE001 — a corrupt capture must still render the prose
         surface = None
+    # The OTHER authored channels (2026-08-10): the phase skill this run was told to invoke, and the
+    # mounted tools' own descriptions. Both are prompt text SuperMe wrote; a page that shows only the
+    # append reads as if the append were all we author, which understated it by ~2x.
+    extras: dict = {}
+    try:
+        parsed = json.loads(rec.get("authored_extras") or "null")
+        extras = parsed if isinstance(parsed, dict) else {}
+    except Exception:  # noqa: BLE001 — a corrupt capture must still render the prose
+        extras = {}
     return {"meta": meta, "system_prompt": rec.get("system_prompt") or "",
             "system_fragments": system_fragments, "surface": surface,
+            "skills": extras.get("skills") or [], "tools": extras.get("tools") or [],
             "prompt_body": rec.get("prompt_body") or "", "trigger": rec.get("prompt_body") or ""}
 
 
@@ -242,7 +252,7 @@ def _render_surface(surface: dict | None) -> str:
     # vocabulary — this is a fourth thing the run was given, not a differently-shaped widget.
     w = max(len(k) for k, _ in rows)
     text = "\n".join(f"{k.ljust(w)}   {v}" for k, v in rows)
-    return _render_section("④ Turn surface — what this run was ALLOWED to do", [{
+    return _render_section("⑥ Turn surface — what this run was ALLOWED to do", [{
         "name": "capability, not prose", "location": "daemon/services/runs.py · turn_surface()",
         "text": text}])
 
@@ -287,7 +297,22 @@ def render_input_page(data: dict) -> str:
         trig_html = _render_section(trig_title, [{
             "name": f"{m.get('phase', '?')} trigger message",
             "location": "core/kernel_speech.py · phase speech", "text": trig}])
-    body_html = f"{orient_html}{trig_html}{_render_surface(data.get('surface'))}"
+    # ④/⑤ — the authored channels that don't arrive as a message. The skill is loaded when the run
+    # invokes it (so it enters the transcript, not the system prompt) and the tool docs ride in every
+    # request; both are SuperMe's own words, and leaving them off made the append look like the whole
+    # of what we write.
+    skills, tools = data.get("skills") or [], data.get("tools") or []
+    skill_html = _render_section(
+        "④ Phase skill — the procedure this run was told to invoke", skills) if skills else \
+        _gate_section("④ Phase skill — the procedure this run was told to invoke",
+                      name="no skill for this phase",
+                      note="This phase's contract names no skill (or its SKILL.md was missing at "
+                           "capture time). The `references/` guides a skill cites are pulled on "
+                           "demand and never appear here — they cost nothing unless read.")
+    tools_html = _render_section(
+        "⑤ Tool docs — descriptions + parameter docs, sent with every request", tools) if tools else ""
+    body_html = (f"{orient_html}{trig_html}{skill_html}{tools_html}"
+                 f"{_render_surface(data.get('surface'))}")
     title = html.escape(f"{m['item_id']} — {m['title']}")
     return (
         "<!doctype html><html><head><meta charset='utf-8'>"
@@ -300,9 +325,12 @@ def render_input_page(data: dict) -> str:
         f"<code>{html.escape(m['session_role'])}</code> · model <code>{html.escape(str(m['model']))}</code>"
         f" · effort <code>{html.escape(str(m['effort']))}</code>"
         f"{' · background run' if m.get('background') else ''}</div>"
-        f"<div class='note'>{banner}<br>The SDK prepends the Claude Code preset base system prompt "
-        "(not authored by SuperMe); everything below is SuperMe's own system append plus the prompt "
-        "body written into the transcript.</div>"
+        f"<div class='note'>{banner}<br>Everything below is authored by SuperMe: the system append, "
+        "the prompt body written into the transcript, the phase skill the run invokes, and the "
+        "mounted tools' own docs. Not shown, and not sized here: the Claude Code preset base system "
+        "prompt and its built-in tool descriptions, which the SDK expands inside the CLI and never "
+        "hands back — measured externally at roughly two-thirds of a cold start, so treat these "
+        "sizes as SuperMe's share, not the whole prefix.</div>"
         f"{sys_html}{body_html}"
         "</div></body></html>"
     )

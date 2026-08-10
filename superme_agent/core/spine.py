@@ -584,8 +584,15 @@ class SystemSpine:
             # it may write, which tools are dead, whether the shell is sandboxed, and on which model
             # at which effort. A capture showing prose alone can't explain why two runs on the same
             # words behaved differently. Older rows are NULL → the inspector omits the block.
+            # `authored_extras` (JSON) added 2026-08-10: the system append is not the whole of what
+            # SuperMe authors. Two more channels ride in every request and were invisible here —
+            # the phase SKILL.md the trigger tells the run to invoke (the single largest authored
+            # artifact), and the description + parameter docs of the MCP tools the turn mounts.
+            # A page showing only the append understates our own share of the prefix. Older rows
+            # are NULL → the inspector omits both sections.
             self._ensure_columns(c, "run_input",
-                                 {"system_fragments": "TEXT", "turn_surface": "TEXT"})
+                                 {"system_fragments": "TEXT", "turn_surface": "TEXT",
+                                  "authored_extras": "TEXT"})
 
     # --- static config (loaded fresh; cheap + always current) -------------------
     def system_config(self) -> SystemConfig:
@@ -1363,21 +1370,25 @@ class SystemSpine:
     def record_run_input(self, run_id: int, *, repo_id: str, item_id: str | None, phase: str | None,
                          feature: str | None, background: bool, system_prompt: str,
                          prompt_body: str, system_fragments: str | None = None,
-                         turn_surface: str | None = None) -> None:
+                         turn_surface: str | None = None,
+                         authored_extras: str | None = None) -> None:
         """Persist the ACTUAL full input a run sent (prompt inspector "A"), keyed by run_id. One row
         per run (INSERT OR REPLACE — a re-run under the same id overwrites). `system_fragments` is the
         JSON provenance breakdown of `system_prompt` (ordered [{name,location,text}]); `turn_surface`
         is the JSON record of what the turn was ALLOWED to do (tools, write boundary, sandbox, model,
-        effort). Both optional. Best-effort telemetry — never breaks a turn."""
+        effort); `authored_extras` is the JSON {skills, tools} of the OTHER prompt text SuperMe wrote
+        into this run (the phase skill body + the mounted tools' own docs). All optional.
+        Best-effort telemetry — never breaks a turn."""
         try:
             with self._conn() as c:
                 c.execute(
                     "INSERT OR REPLACE INTO run_input"
                     " (run_id,repo_id,item_id,phase,feature,background,system_prompt,prompt_body,"
-                    "system_fragments,turn_surface,created_at)"
-                    " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                    "system_fragments,turn_surface,authored_extras,created_at)"
+                    " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                     (int(run_id), repo_id, item_id, phase, feature, 1 if background else 0,
-                     system_prompt, prompt_body, system_fragments, turn_surface, _now()),
+                     system_prompt, prompt_body, system_fragments, turn_surface, authored_extras,
+                     _now()),
                 )
         except Exception:  # noqa: BLE001 — telemetry must never break a turn
             pass

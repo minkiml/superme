@@ -346,6 +346,49 @@ def turn_surface(*, model: str | None = None, effort: str | None = None,
             "read_only": bool(read_only), "approve": approve, "resumes": bool(resumes)}
 
 
+def _authored_extras(ctx, item: dict, phase: str | None, mcp: list[str]) -> dict:
+    """The prompt text SuperMe authors OUTSIDE the system append — the two channels a capture of the
+    append alone silently omits, each as ready-to-render fragments.
+
+    1. The phase SKILL.md the trigger tells this run to invoke. It is the largest single artifact we
+       write, and it is the one the model actually follows; a prompt page without it is a page about
+       the smaller half. (Its `references/` guides are pulled on demand and are NOT included — they
+       cost nothing unless read.)
+    2. The mounted MCP tools' own descriptions + parameter docs. Every byte rides in every request
+       of the turn, so they belong on the same page as the prose, measured the same way.
+
+    Best-effort by construction: a missing skill file or an unknown server name drops that fragment
+    rather than the capture."""
+    from ...harness.tools.base_tools import BASE_TOOLS
+    from ...harness.tools.dev_tools import dev_tool_specs
+    from ...harness.tools.registry import describe_specs
+    from ...harness.tools.run_tools import DEPUTY_VERDICT_TOOL, REPORT_COMPLETION_TOOL
+    from ...runtime.config import DEV_PLUGIN_DIR
+
+    skills: list[dict] = []
+    contract = kernel_speech.phase_contract(item.get("kind"), str(phase or ""))
+    name = contract.get("skill")
+    if name:
+        path = DEV_PLUGIN_DIR / "skills" / name / "SKILL.md"
+        if path.is_file():
+            skills.append({"name": f"superme-dev:{name} — SKILL.md",
+                           "location": f"plugins/superme-dev/skills/{name}/SKILL.md",
+                           "text": path.read_text()})
+    # Server → the spec list that server mounts. `superme` is always present (agent_service builds
+    # it); the rest come from the run's own `extra_mcp_servers`, recorded in the turn surface.
+    by_server = {"superme": BASE_TOOLS, "dev": dev_tool_specs(),
+                 "run": [REPORT_COMPLETION_TOOL], "deputy": [DEPUTY_VERDICT_TOOL]}
+    tools: list[dict] = []
+    for server in sorted(set(mcp) | {"superme"}):
+        specs = by_server.get(server)
+        if not specs:
+            continue
+        tools.append({"name": f"mcp__{server}__* — {len(specs)} tools",
+                      "location": f"harness/tools · the `{server}` MCP server",
+                      "text": describe_specs(specs)})
+    return {"skills": skills, "tools": tools}
+
+
 def capture_run_input(context_id: str, item_id: str, *, ctx, system_append: str | None,
                       prompt: str, background: bool, phase: str | None,
                       surface: dict | None = None) -> None:
@@ -374,10 +417,20 @@ def capture_run_input(context_id: str, item_id: str, *, ctx, system_append: str 
             fragments_json = _json.dumps(frags, ensure_ascii=False)
         except Exception:  # noqa: BLE001
             fragments_json = None
+        # The other authored channels (phase skill + mounted tool docs) — same guard: losing the
+        # skill body must never cost us the prose.
+        try:
+            item = (_dev.read_work_item(ctx.internal_root / "dev", item_id) or {}) \
+                if getattr(ctx, "internal_root", None) else {}
+            extras_json = _json.dumps(
+                _authored_extras(ctx, item, phase, list((surface or {}).get("mcp") or [])),
+                ensure_ascii=False)
+        except Exception:  # noqa: BLE001
+            extras_json = None
         _spine.record_run_input(rid, repo_id=context_id, item_id=item_id, phase=phase,
                                 feature=PROMPT_EXTRACTION_FEATURE, background=background,
                                 system_prompt=system_prompt, prompt_body=prompt,
-                                system_fragments=fragments_json,
+                                system_fragments=fragments_json, authored_extras=extras_json,
                                 turn_surface=(_json.dumps(surface, ensure_ascii=False)
                                               if surface else None))
     except Exception:

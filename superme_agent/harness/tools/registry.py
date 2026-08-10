@@ -110,6 +110,30 @@ class ToolSpec:
     build: Callable[..., Handler]          # (**deps) -> async handler
 
 
+def describe_specs(specs: list[ToolSpec]) -> str:
+    """The authored tool surface as readable text: each tool's name, its description, and each
+    argument's own doc, in mount order.
+
+    This is PROMPT TEXT. A tool's description and its parameter docs ride in every request the turn
+    makes, exactly like the system append does — so the prompt inspector renders them beside the
+    prose they compete with, and a bloated description is visible as the cost it is.
+    """
+    blocks: list[str] = []
+    for s in specs:
+        schema = _render_schema(s.schema)
+        props: dict = schema.get("properties") or {}
+        required = set(schema.get("required") or [])
+        lines = [s.name, f"    {s.description}"]
+        for key, prop in props.items():
+            kind = "|".join(str(v) for v in prop["enum"]) if prop.get("enum") else \
+                str(prop.get("type") or "any")
+            doc = prop.get("description") or ""
+            opt = "" if key in required else ", optional"
+            lines.append(f"    · {key} ({kind}{opt})" + (f" — {doc}" if doc else ""))
+        blocks.append("\n".join(lines))
+    return "\n\n".join(blocks)
+
+
 def build_mcp_server(name: str, specs: list[ToolSpec], *, version: str = "1.0.0", **deps):
     """Render `specs` → an SDK MCP server, binding each handler to the shared `deps`.
 

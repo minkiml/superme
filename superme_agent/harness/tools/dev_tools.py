@@ -1978,5 +1978,11 @@ def make_dev_mcp_server(store, context_id: str, *, learning: bool = False, **dep
     Optional deps thread per-turn state to specific learning tools (ignored by the rest):
     `origin_session_id` + `capture_source` (provenance bound onto `file_candidate` during a sweep),
     `proposal_id` + `staged_path` (bound onto `stage_artifact` during a write run)."""
-    tools = _MAIN_DEV_TOOLS + _ITEM_DEV_TOOLS + (_LEARNING_DEV_TOOLS if learning else [])
-    return build_mcp_server("dev", tools, store=store, context_id=context_id, **deps)
+    return build_mcp_server("dev", dev_tool_specs(learning=learning),
+                            store=store, context_id=context_id, **deps)
+
+
+def dev_tool_specs(*, learning: bool = False) -> list[ToolSpec]:
+    """The EXACT spec list `make_dev_mcp_server` mounts. One source, so the prompt inspector's
+    tool-surface capture can never claim a turn carried tools it didn't."""
+    return _MAIN_DEV_TOOLS + _ITEM_DEV_TOOLS + (_LEARNING_DEV_TOOLS if learning else [])

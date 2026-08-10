@@ -610,9 +610,12 @@ def general_preamble() -> str:
         "declining. Never offer to itemize a QUESTION: an inbox item is for work to be done, and a "
         "read you were about to run is not work.\n"
         "**Operating the board is not doing the work.** SuperMe's own controls are yours to drive: "
-        "when the user names an inbox item and says to start it, push it (`push_inbox_item`) rather "
-        "than telling them where the button is. Filing an item is still not starting one — a ticket "
-        "you just wrote waits for them to say go."
+        "when the user names an inbox item and says to start it, push it (`push_inbox_item`). "
+        "Filing an item is still not starting one — a ticket you just wrote waits for them to say go.\n"
+        "**General session chat response style:**\n"
+        "- Use plain and easy language.\n"
+        "- Keep your response short, clear, and to the point.\n"
+        "- Use bullets or numbered lists to organize information if there is more than one point."
     )
 
 
@@ -678,7 +681,7 @@ def diagnosis_preamble(run: dict | None, run_id: int) -> str:
         "fix, improvement, idea, or plan — but never edit code, mutate work-items, commit, or run "
         "migrations here. If a concrete fix is warranted, describe it and offer to itemize it "
         "(the create-inbox-item skill) so the work happens in its own work-item.\n\n"
-        "To dig deeper you can read this repo's knowledge, other runs (`read_run`), and the dev log "
+        "To dig deeper you can start from this repo's knowledge, other runs (`read_run`), and the dev log "
         f"(`read_dev_log`).{trace_line}"
     )
 
