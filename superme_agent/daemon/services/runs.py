@@ -266,7 +266,20 @@ def _artifact_desc(tool_name: str, ti: dict) -> tuple[str, str, str]:
         parts = tool_name.split("__")
         return "mcp", "mcp", parts[-1] if parts else tool_name
     if tool_name in ("Read", "Write", "Edit", "MultiEdit", "NotebookEdit"):
-        return "tool", tool_name, base(ti.get("file_path") or ti.get("notebook_path"))
+        path = base(ti.get("file_path") or ti.get("notebook_path"))
+        # A READ's SPAN, when it named one. The row used to carry the path alone, which makes the
+        # trail unable to distinguish "read 20 lines of a 46 KB file" from "read the whole 46 KB
+        # file" — and that difference is most of what a phase run costs, because everything read
+        # early is re-sent on every later step. The run-protocol rule that asks for spans was
+        # therefore unobservable by the very trace meant to check it (2026-08-10).
+        if tool_name == "Read":
+            off, lim = ti.get("offset"), ti.get("limit")
+            if off is not None or lim is not None:
+                start = int(off or 0)
+                span = f"{start}-{start + int(lim)}" if lim is not None else f"{start}+"
+                return "tool", tool_name, f"{path} [{span}]"
+            return "tool", tool_name, f"{path} [whole]"
+        return "tool", tool_name, path
     if tool_name == "Bash":
         return "tool", "Bash", (ti.get("description") or str(ti.get("command", "")))[:60]
     if tool_name in ("Grep", "Glob"):
