@@ -7624,7 +7624,6 @@
                 "cache_creation": 0,
                 "cache_read": 0,
                 "input": 0,
-                "legacy": 0,
                 "output": 0
               }
             },
@@ -8933,7 +8932,6 @@
                 "cache_creation": 0,
                 "cache_read": 0,
                 "input": 0,
-                "legacy": 0,
                 "output": 0
               }
             },
@@ -8949,7 +8947,7 @@
           "type": "object"
         },
         "TokenDay": {
-          "description": "One local-day bucket of the usage time-series: the four token types (+ legacy), the day\ntotal, and the running `cumulative` total across days.",
+          "description": "One local-day bucket of the usage time-series: the four token types, the day total, and the\nrunning `cumulative` total across days.",
           "properties": {
             "cache_creation": {
               "default": 0,
@@ -8973,11 +8971,6 @@
             "input": {
               "default": 0,
               "title": "Input",
-              "type": "integer"
-            },
-            "legacy": {
-              "default": 0,
-              "title": "Legacy",
               "type": "integer"
             },
             "output": {
@@ -9023,7 +9016,7 @@
           "type": "object"
         },
         "TokenTypeSplit": {
-          "description": "Breakdown 2 \u2014 the systematic (per token-type) split. `legacy` holds pre-migration rows that\nonly carry the old collapsed scalar. The five sum to the bucket total (reconciliation).",
+          "description": "Breakdown 2 \u2014 the systematic (per token-type) split. A run that never returned a final usage\n(aborted, killed, errored) has no typed split and contributes nothing here \u2014 measured usage only.\nThe four sum to the bucket total (reconciliation).",
           "properties": {
             "cache_creation": {
               "default": 0,
@@ -9038,11 +9031,6 @@
             "input": {
               "default": 0,
               "title": "Input",
-              "type": "integer"
-            },
-            "legacy": {
-              "default": 0,
-              "title": "Legacy",
               "type": "integer"
             },
             "output": {

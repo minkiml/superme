@@ -9,85 +9,99 @@ category: workspace
 
 The code is locked — review's approval merged it, and nothing downstream can change it. So this run
 is not about the work; it is about what the project now KNOWS. You are the only writer of the
-general dev-knowledge docs. Skip a line here and they quietly describe a codebase that no longer
-exists.
+general dev-knowledge docs, and a line skipped here leaves them quietly describing a codebase that
+no longer exists.
+
+**Close re-adjudicates nothing.** Every question about the work was answered at the last gate where
+the owner could still act on the answer.
 
 ## Step 1 — Read what landed
 
-`artifacts/review.md` — review's record of what landed: the change inventory, what it named the
-anchor docs as owing, what is settled, and what risk survived the merge. Then `## Design` and
-`## Tasks` in `artifacts/plan.md`, the cycle reports, and the merge commit on the item record.
-Then read the anchor sections you are about to touch, so you edit what is there rather than what
-you remember. (`reports/report-review.md` is the owner's, not yours — it argues a decision they
-have already made.)
+- **`artifacts/review.md`** — the change inventory, which anchor docs it named as owing, what is
+  settled, what risk survived the merge.
+- **`artifacts/plan.md`** `## Design` and `## Tasks`, the cycle reports, and the merge commit on the
+  item record. **A research item has none of these** — it has no plan phase, no build cycles and no
+  merge. Read `artifacts/investigation.md` instead: the questions, what answered them, and what was
+  left open.
+- **The anchor sections you are about to touch** — so you edit what is there, not what you remember.
 
-## Step 2 — Update the anchor docs
+`reports/report-review.md` is the owner's, not yours: it argues a decision they have already made.
 
-`apply_knowledge_delta(item_id, ops)` — one call, all ops, validated then written.
+## Step 2 — Update what the project records
 
-- **Write what is TRUE OF MAIN NOW**, not what the item intended. A section you touch should read
-  as if its reader has never heard of this work-item.
+**A research item skips this step entirely.** Nothing it concluded has been implemented, so the
+anchor docs — which describe what is IN the main tree — owe it nothing; the tool refuses outright.
+Its conclusions already live in its own report, and they reach the docs later through the work that
+acts on them. Go to step 3.
+
+`apply_knowledge_delta(item_id, ops)` — one call, all ops, validated then written. A refusal is
+itemized and writes nothing; fix the named op and call again.
+
+- **Write what is TRUE OF MAIN NOW**, not what the item intended. A section you touch should read as
+  if its reader has never heard of this work-item.
 - **One op per section.** `update` replaces a body · `append` adds to it · `supersede` replaces text
   a decision has overtaken · `rename_section` fixes a stale heading.
-- **A granted authorization's ops are yours to apply** — the owner said yes at review, and here is
-  where that becomes a doc change. A DENIED one leaves a known gap: skip it, and name it in Step 3.
-- **Nothing doc-worthy? Call nothing.** A no-op close is a real outcome; Step 3 says so.
+- **A granted authorization's ops are yours to apply** — the owner said yes at review, and this is
+  where that becomes a doc change. A DENIED one leaves a known gap: skip it, and name it in step 3.
+- **Nothing doc-worthy? Call nothing.** A no-op close is a real outcome, and step 3 says so.
 
-A refusal is itemized and writes nothing — fix the named op and call again.
-
-## Step 2b — Write in whatever vet nominated for the verification library
-
-`read_verification_library(item_id)` returns this repo's library plus any check vet nominated here,
-rendered as a ready entry. Add each as one `append` op on doc `verification`, section `Available` —
+**Whatever vet nominated for the verification library** goes in the same call.
+`read_verification_library(item_id)` returns this repo's library plus any nomination from this item,
+rendered as a ready entry: add each as one `append` op on doc `verification`, section `Available` —
 verbatim, unless it still names something item-specific, in which case restate it about the repo.
+Entries land as available; only the owner promotes one to standing. Most items nominate nothing, and
+an entry added to look productive taxes every later plan that reads it.
 
-Nothing nominated? Then nothing to do — most items add nothing, and an entry added to look
-productive taxes every later plan that inherits or reads it.
-Entries land as **available**; only the owner promotes one to standing.
+## Step 3 — Write the user-facing report
 
-## Step 3 — Write the close report
+Copy `templates/report-close-template.md` to `reports/report-close.md` and fill its slots. This is
+the last thing the owner reads about this item, and what they will find if they come back to it in
+six months.
 
-Write user-facing report, `reports/report-close.md`, from `templates/report-close-template.md` and fill it. The template's
-`<fill:…>` slots and its `<!-- … -->` notes are both instructions to you: replace the slots, drop
-the notes. Neither belongs in the file you write.
+- **Write what is TRUE OF MAIN NOW**, not what the item set out to do.
+- **Nothing checks this report.** The close gate asks only whether the artifacts exist, so the
+  `## Facts` rows have to come from the commands and the item record — never from memory of what the
+  cycles said.
+- **`## Left undone on purpose` is the one section silence ruins.** A denied authorization, an op
+  you judged premature, an unfinished task — each with whether it was filed. Left out, a gap becomes
+  a surprise three items later.
+- **On a research item this report IS the close.** `## What the project now records` says the honest
+  thing — that a research item writes no anchor docs, and what would have to happen for its findings
+  to reach them.
+- **Anything worth doing later becomes `create_inbox_item`** (relation `spawn`), never an implicit
+  "someone will notice".
 
-This is the last thing the owner reads about this item, and what they will find if they come back
-to it in six months. Write what is TRUE OF MAIN NOW, not what the item set out to do.
-
-- **`**Summary:**` in one line** — what is now true and what, if anything, follows. The closed card
-  shows it alone.
-- **`## What's now true`** — for a reader with no memory of this item: what main does that it
-  didn't, and who can rely on it.
-- **`## What the project now records`** — doc, section, and what it claims after your edit. When
-  nothing needed changing, say so AND why: "no document described this behaviour" is itself worth
-  the owner knowing, and is often why it drifted.
-- **`## Left undone on purpose`** — a denied authorization, an op you judged premature, an
-  unfinished task, each with whether it was filed. Silence here is how a gap becomes a surprise
-  three items later.
-
-Anything worth doing later becomes `create_inbox_item` (relation `spawn`) — never an implicit
-"someone will notice".
-
-**Tone and style when writing to user-facing report only**
+**Tone and style when writing to user-facing report**
 - Plain, easy language. Fewer words wins.
 - Never restate the item's kind, deliverable or id. Spend the space on the judgment behind them.
 - Omit a prose field rather than filling it with "none" — an absent block reads better.
-
-
-## Step 4 — At completion
-
-Call `report_completion`. The kernel takes it from there: worktree removed, sessions retired, item
-marked done. You never advance or complete the item yourself.
 
 ## Chat response style
 - Use plain and easy language.
 - Keep your response short, clear, and to the point.
 - Use bullets or numbered lists to organize information if there is more than one point.
 
+## Reporting the run
+
+`report_completion` is what releases the item: the kernel then removes the worktree, retires the
+sessions, and marks it done. You never advance or complete the item yourself.
+
+- **`success` · `clean_noop`** — the knowledge writes landed, or there were genuinely none to make.
+- **Any other outcome still clears the item**, and is recorded on its permanent trail as a knowledge
+  gap. Close has no authority to change anything, so there is no wall here worth holding for — say
+  what did not get written and let it go.
+- **No report at all is the one costly ending.** The kernel re-fires this run twice, then clears the
+  item anyway and stamps it "the closing run ended without a report — the anchor docs were not
+  updated". That sentence outlives the item.
+
+**Output style to report_completion.**
+- Plain, concise, easy language. Fewer words wins. No verbosity.
+- Keep your response short, clear, and to the point.
+
 ## Pitfalls
 
-- **Writing intent instead of outcome** — these docs describe main as it stands. "Will support X"
-  is always wrong here.
+- **Writing intent instead of outcome** — these docs describe main as it stands. "Will support X" is
+  always wrong here.
 - **Editing an anchor doc directly** — refused at the write boundary, and it would skip the
   validation that stops a doc acquiring a dead file reference.
 - **Applying a denied authorization** — the owner's no is a decision, not an obstacle. Record the

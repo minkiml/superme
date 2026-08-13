@@ -63,33 +63,47 @@ def _norm_cwd(p) -> str:
 
 
 def resolve_item_session(item: dict, *, worktree, repo_dir, get_session, adopt) -> tuple[str, str | None]:
-    """The explicit phase→session map (build-vet-loop §1.3): which session a bound turn runs in.
+    """The explicit phase→session map: which session a bound turn runs in.
 
-    Returns `(role, session_id-or-None)` — the item's current phase's ROLE and that role's slot
-    (None ⇒ this turn MINTS the role's session). Server-authoritative: the caller redirects any
-    client-passed resume here, and off-role threads are left alone — never retired.
+    Returns `(slot, session_id-or-None)` — the item's current phase's SLOT and that slot's session
+    (None ⇒ this turn MINTS one). Server-authoritative: the caller redirects any client-passed
+    resume here, and other phases' threads are left alone — never retired.
 
-    Legacy adoption (one-time, self-migrating): a pre-roles item carries a single bare
-    `session_id` — file it under the role its recorded cwd implies (repo cwd ⇒ intake, worktree
-    cwd ⇒ build) via `adopt(sid, role)`, which NULLs the legacy key so this runs once. A legacy
-    sid whose cwd matches neither (e.g. its worktree is gone) is left unadopted — minting fresh
-    beats resuming a thread the CLI would refuse ("No conversation found" on a cwd mismatch).
+    TWO LEGACY ADOPTIONS, both one-time and self-migrating:
+    - the retired shared `intake` slot — an item in flight when sessions went per-phase. Adopted
+      into the CURRENT phase's slot, which is what that thread actually was.
+    - a pre-roles item's single bare `session_id` — filed under the slot its recorded cwd implies
+      (repo cwd ⇒ this phase, worktree cwd ⇒ build). A legacy sid whose cwd matches neither (its
+      worktree is gone, say) is left unadopted: minting fresh beats resuming a thread the CLI would
+      refuse ("No conversation found" on a cwd mismatch).
 
-    `get_session(sid) -> row|None` and `adopt(sid, role)` are injected so this stays a pure
+    `get_session(sid) -> row|None` and `adopt(sid, slot)` are injected so this stays a pure
     decision function (testable without a daemon)."""
-    role = kind_profiles.session_role(str(item.get("phase") or "triage"))
+    phase = str(item.get("phase") or "triage")
+    slot = kind_profiles.session_slot(phase)
     slots = item.get("sessions") or {}
-    sid = slots.get(role)
+    sid = slots.get(slot)
+    if not sid and phase in kind_profiles.INTAKE_PHASES:
+        shared = slots.get(kind_profiles.LEGACY_INTAKE_SLOT)
+        if shared:
+            adopt(str(shared), slot)
+            sid = str(shared)
     if not sid and not slots and item.get("session_id"):
         legacy_sid = str(item["session_id"])
         lcwd = _norm_cwd((get_session(legacy_sid) or {}).get("cwd"))
-        legacy_role = ("build" if worktree and lcwd == _norm_cwd(worktree)
-                       else "intake" if lcwd == _norm_cwd(repo_dir) else None)
-        if legacy_role:
-            adopt(legacy_sid, legacy_role)
-            if legacy_role == role:
+        # The cwd names a FAMILY, not a phase: worktree ⇒ build, repo ⇒ some intake phase. Which
+        # intake phase is unknowable from a pre-roles item, so it is filed under the current one —
+        # and only when the item is actually AT an intake phase. Filing a repo-cwd thread under
+        # `build` would hand the CLI a session it refuses ("No conversation found" on a cwd
+        # mismatch); leaving it unadopted just mints, which is the safe half of the trade.
+        legacy_slot = ("build" if worktree and lcwd == _norm_cwd(worktree)
+                       else slot if (lcwd == _norm_cwd(repo_dir)
+                                     and phase in kind_profiles.INTAKE_PHASES) else None)
+        if legacy_slot:
+            adopt(legacy_sid, legacy_slot)
+            if legacy_slot == slot:
                 sid = legacy_sid
-    return role, sid
+    return slot, sid
 
 
 def _live_resume(msg_resume: str | None, resumed: dict | None) -> str | None:
@@ -412,7 +426,7 @@ async def ws_agent(ws: WebSocket) -> None:
                     item, worktree=item_worktree, repo_dir=main_repo_dir,
                     get_session=_spine.get_session,
                     adopt=lambda sid, r: _dev.set_work_item_session(
-                        ctx.internal_root / "dev", work_item_id, sid, role=r),
+                        ctx.internal_root / "dev", work_item_id, sid, slot=r),
                 )
                 # Server-authoritative session choice: the bound turn runs in the CURRENT role's
                 # slot — mint fresh when empty. msg.resume
@@ -598,9 +612,17 @@ async def ws_agent(ws: WebSocket) -> None:
             # pool) + the inbox itemize writes. The learning WRITE pens stay learning-run-only. Capture is
             # fully automatic — there is no chat-side capture tool; the idle + phase-advance sweeps own it.
             # Folder-as-scope: absent in core mode. PRD §4.9.
+            # Which dev tools this turn may see (dev_tools.TOOL_SCOPES). A bound work-item chat gets
+            # its item's CURRENT phase set — the same tools the background run of that phase gets, so
+            # a phase's surface never depends on who is driving it. Everything else is its session
+            # kind: diagnosis is read-only by design, onboarding shapes the inbox, general advises.
+            tool_scope = ("diagnosis" if session_kind == "diagnosis"
+                          else "onboarding" if is_onboarding
+                          else str(item.get("phase") or "triage") if work_item_id
+                          else "general")
             turn_mcp = (
                 {"dev": make_dev_mcp_server(
-                    _dev_store, ctx.id, spine=_spine,
+                    _dev_store, ctx.id, spine=_spine, scope=tool_scope,
                     # S2 artifact tools: the item folders + the repo tree for git-state / evidence
                     # freshness fingerprints. With a live worktree, ctx.cwd IS the worktree (the
                     # S4 swap above) — evidence fingerprints the tree actually being validated.
@@ -645,6 +667,10 @@ async def ws_agent(ws: WebSocket) -> None:
                     enforce_silent=True,   # user-facing chat: hide+block internal `access: silent` skills
                     scope_reads=True,      # L2 read-guard: keep reads inside the host's scope
                     system_append=session_append,       # Focus (work-item) / Guard (general) block
+                    # A bound chat already has its subject named in the Focus block, so it skips the
+                    # board-wide in-progress list. An unbound session keeps it — that list IS its
+                    # orientation.
+                    item_bound=bool(work_item_id),
                     gate_general_mutations=gate_general, # hard-gate mutations in a general dev session
                     general_write_root=general_write_root,  # …except writing this project's general/ memory
                     write_boundary=write_boundary,  # S4 freeze: build writes stay in worktree+item dir
@@ -669,7 +695,7 @@ async def ws_agent(ws: WebSocket) -> None:
                             try:
                                 _dev.set_work_item_session(
                                     ctx.internal_root / "dev", work_item_id, ev.session_id,
-                                    role=session_role or "intake",
+                                    slot=session_role or "triage",
                                 )
                                 # Reverse stamp: the session now durably KNOWS its work-item
                                 # (work-item-session-recognition-prd). Write-once/immutable — this is

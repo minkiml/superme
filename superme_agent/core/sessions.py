@@ -36,8 +36,21 @@ _NOISE_PREFIXES = (
     "<command-args>",
     "<local-command-stdout>",
     "<local-command-caveat>",
+    # `kernel_speech.intake_trigger` — ONE PER INTAKE SKILL, and the list must cover every skill
+    # `_background_intake_run` can be fired with. It carried only plan + triage for months, because
+    # those were the only background intake runners when it was written; `investigate`, `review`,
+    # `close` and `itemize` grew their own runners later and nobody came back here. The result was
+    # visible to the owner: opening one of those sessions showed the kernel's order to itself as
+    # THEIR first message (measured 2026-08-13 on 9a78970264d1 — the triage thread opened clean and
+    # the investigate thread opened with "Run superme-dev:investigate for work-item …" attributed
+    # to "you"). Prefix match, so the re-entry delta block appended after this sentence is dropped
+    # with it.
     "Run superme-dev:plan for work-item",
     "Run superme-dev:triage for work-item",
+    "Run superme-dev:investigate for work-item",
+    "Run superme-dev:review for work-item",
+    "Run superme-dev:close for work-item",
+    "Run superme-dev:itemize for work-item",
     # The pre-compaction handoff trigger (compaction.run_handoff_turn) — kernel plumbing on the
     # item's own thread, and the turn right before the transcript is replaced. Replaying it would
     # show the owner a machine asking for a checkpoint in the middle of their conversation.

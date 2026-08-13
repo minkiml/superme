@@ -359,8 +359,14 @@ def _about(item: dict, item_dir: Path, inbox_origin: str = "") -> list[dict]:
     # Reason and label ride together — a bare "small" is a label nobody can argue with.
     scale = kind_profiles.item_scale(item)
     scale_why = str(item.get("scale_reason") or "").strip()
+    # The investigation family, on the same terms as scale: label + the line triage gave for it, so
+    # the owner can veto at the gate. Absent on implementation items, and on a research item nobody
+    # judged — an empty value drops the row rather than printing a fabricated default.
+    fam = kind_profiles.research_kind(item)
+    fam_why = str(item.get("research_kind_reason") or "").strip()
     rows = [("Workflow", str(item.get("kind") or "implementation")),
             ("Scale", f"{scale} — {scale_why}" if scale_why else scale),
+            ("Research kind", (f"{fam} — {fam_why}" if fam_why else fam) if fam else ""),
             ("Category", facts["category"]),
             ("Origin", origin),
             ("Background", facts["background"]),
@@ -370,12 +376,19 @@ def _about(item: dict, item_dir: Path, inbox_origin: str = "") -> list[dict]:
 
 def build_payload(item: dict, item_dir: Path, dev_root: Path, main_repo_dir: Path | None, *,
                   all_items: list[dict], events: list[dict], git_health: dict | None,
-                  review_mode: str | None = None, inbox_origin: str = "") -> dict:
+                  review_mode: str | None = None, inbox_origin: str = "",
+                  subagents: int | None = None, guide_reads: int | None = None) -> dict:
     """The whole drilldown, server-side. One read of the item folder feeds every tab, so the surface
-    polls one route instead of four."""
+    polls one route instead of four.
+
+    `subagents` = how many the investigate phase actually spawned; `guide_reads` = how many times it
+    opened its family's `references/<family>.md`. Both spine-counted by the ROUTE. They arrive as
+    parameters for the same reason `events` and `git_health` do: this function stays pure over the
+    item folder, so it can be unit-tested without a daemon."""
     item_dir = Path(item_dir)
     state = gate_briefs.gate_state(item, item_dir, dev_root, main_repo_dir,
-                                   all_items=all_items, events=events)
+                                   all_items=all_items, events=events, subagents=subagents,
+                                   guide_reads=guide_reads)
     paged = state.get("paged")
     hold = (_attention.classify_hold(item, events)
             if str(item.get("status")) == "awaiting_human" else None)

@@ -52,6 +52,10 @@ from .kind_profiles import get_profile
 log = logging.getLogger(__name__)
 
 FILL = re.compile(r"<fill:[^>]*>")
+# An artifact's own leading frontmatter, and the investigation-family stamp inside it. Read by
+# `self_check` so a file is judged against the template that produced it.
+_FM_BLOCK = re.compile(r"\A---\n(.*?)\n---\n", re.DOTALL)
+_FM_RESEARCH_KIND = re.compile(r"(?m)^research_kind:\s*(\S+)\s*$")
 
 
 # --------------------------------------------------------------------------- templates
@@ -66,7 +70,20 @@ _TEMPLATE_HOMES = {
     "plan":          ("plan", "plan-template.md"),
     "plan-research": ("plan", "plan-research-template.md"),
     "build-vet":     ("build", "build-vet-template.md"),
+    # The UNJUDGED shape — a research item whose family nobody named (every item minted before the
+    # field existed is in that position). Deliberately family-neutral, and deliberately left alone:
+    # `self_check` judges a base-shaped file against this spec, so adding a section here would
+    # retro-fail records already written correctly.
     "investigation": ("investigate", "investigation-template.md"),
+    # One shape per family (kind_profiles.RESEARCH_KINDS). They are NOT variations on a theme —
+    # each family is dedicated to a different question, so each owes a different record: an audit
+    # owes the surface it enumerated, housekeeping owes proof that nothing reaches what it wants to
+    # delete, security owes the path an attacker walks, refactoring owes the cost of the move,
+    # study owes the source pinned, deep-diagnosis owes what it ruled out. What they share is
+    # `## Follow-up work` — a research item's job is the investigation AND the work it implies.
+    **{f"investigation-{fam}": ("investigate", f"investigation-{fam}-template.md")
+       for fam in ("audit", "refactoring", "housekeeping", "security", "study",
+                   "deep-diagnosis")},
     "review":          ("review", "review-template.md"),
     "review-research": ("review", "review-research-template.md"),
     "report-plan":          ("plan", "report-plan-template.md"),
@@ -157,33 +174,45 @@ _PLAN_REQUIRED_RESEARCH_V1 = ("Questions", "Method", "Boundaries", "Done criteri
 ARTIFACT_KINDS = tuple(_SPECS)
 
 
-def _template_name(artifact: str, item_kind: str | None) -> str | None:
-    """The skill-template name for a template-file-backed artifact kind, else None (embedded)."""
+def _template_name(artifact: str, item_kind: str | None,
+                   research_kind: str | None = None) -> str | None:
+    """The skill-template name for a template-file-backed artifact kind, else None (embedded).
+
+    `research_kind` is the investigation family (kind_profiles.RESEARCH_KINDS) and EVERY family has
+    its own shape — the mapping is the slug itself, so adding a family is adding a template file and
+    an enum entry, never a branch here. An unjudged item passes None and gets the base, which is the
+    honest fallback: nobody picked a family, so nobody picked a shape either."""
     if artifact == "plan":
         return "plan-research" if item_kind == "research" else "plan"
     if artifact == "review":
         return "review-research" if item_kind == "research" else "review"
-    return artifact if artifact in ("brief", "investigation") else None
+    if artifact == "investigation":
+        from .kind_profiles import RESEARCH_KINDS
+        return (f"investigation-{research_kind}" if research_kind in RESEARCH_KINDS
+                else "investigation")
+    return artifact if artifact == "brief" else None
 
 
-def _template(artifact: str, item_kind: str | None) -> str:
-    name = _template_name(artifact, item_kind)
+def _template(artifact: str, item_kind: str | None, research_kind: str | None = None) -> str:
+    name = _template_name(artifact, item_kind, research_kind)
     if name:
         return skill_template(name)
     return {"handoff-brief": _HANDOFF}[artifact]
 
 
-def section_spec(artifact: str, item_kind: str | None) -> list[tuple[str, bool]]:
+def section_spec(artifact: str, item_kind: str | None,
+                 research_kind: str | None = None) -> list[tuple[str, bool]]:
     """[(heading, must_be_filled)] the self-check enforces. Template-file kinds derive it from
     their template; embedded legacy kinds require-and-fill their `required` tuple."""
-    name = _template_name(artifact, item_kind)
+    name = _template_name(artifact, item_kind, research_kind)
     if name:
         return template_section_spec(name)
     return [(h, True) for h in _SPECS[artifact]["required"]]
 
 
-def required_sections(artifact: str, item_kind: str | None) -> tuple[str, ...]:
-    return tuple(h for h, _fill in section_spec(artifact, item_kind))
+def required_sections(artifact: str, item_kind: str | None,
+                      research_kind: str | None = None) -> tuple[str, ...]:
+    return tuple(h for h, _fill in section_spec(artifact, item_kind, research_kind))
 
 
 def artifact_file(artifact: str) -> str:
@@ -225,7 +254,8 @@ def _inject_checks(body: str, blocks: list[str]) -> str:
 
 
 def scaffold(item_dir: Path, artifact: str, *, title: str = "", item_kind: str | None = None,
-             item_id: str | None = None, standing: list[str] | None = None) -> dict:
+             item_id: str | None = None, standing: list[str] | None = None,
+             research_kind: str | None = None) -> dict:
     """Deterministically scaffold one artifact skeleton into `item_dir/artifacts/`. Code owns
     frontmatter + section order; the agent fills the `<fill:…>` slots only. NEVER overwrites —
     an existing file returns {created: False} (fill happens by editing, re-scaffold is a no-op).
@@ -238,16 +268,26 @@ def scaffold(item_dir: Path, artifact: str, *, title: str = "", item_kind: str |
     if artifact not in _SPECS:
         raise KeyError(f"unknown artifact kind {artifact!r} — known: {sorted(_SPECS)}")
     item_kind = get_profile(item_kind).kind  # validates + resolves null → implementation
+    from .kind_profiles import RESEARCH_KINDS
+    if research_kind not in RESEARCH_KINDS:
+        research_kind = None  # forgiving, like kind_profiles.research_kind — unjudged is a state
     adir = Path(item_dir) / "artifacts"
     path = adir / artifact_file(artifact)
-    sections = list(required_sections(artifact, item_kind))
+    sections = list(required_sections(artifact, item_kind, research_kind))
     if path.exists():
         return {"path": str(path), "created": False, "sections": sections, "inherited": 0}
+    # `research_kind:` is stamped so the file carries the shape it was authored under. `self_check`
+    # reads it back from HERE, not from the item — an artifact is judged against the template that
+    # produced it (same rule as the legacy plan shapes below), so re-classifying an item mid-flight
+    # can never turn its already-written investigation red.
     fm = (f"---\nartifact: {artifact}\n"
           + (f"item: {item_id}\n" if item_id else "")
-          + f"item_kind: {item_kind}\nreader: {_SPECS[artifact]['reader']}\n"
+          + f"item_kind: {item_kind}\n"
+          + (f"research_kind: {research_kind}\n" if research_kind else "")
+          + f"reader: {_SPECS[artifact]['reader']}\n"
           + f"created_at: {date.today().isoformat()}\n---\n")
-    body = _template(artifact, item_kind).format(title=title or (item_id or "work-item"))
+    body = _template(artifact, item_kind, research_kind).format(
+        title=title or (item_id or "work-item"))
     if artifact == "plan" and standing:
         body = _inject_checks(body, standing)
     _atomic_write(path, fm + body)
@@ -885,6 +925,35 @@ def _drop_dead_blocks(text: str) -> str:
     return "\n".join(out).rstrip() + "\n"
 
 
+def changed_since(item_dir: Path, since: str | None) -> list[str]:
+    """The item's records written since `since` (ISO-8601 UTC), newest first, as paths relative to
+    the item folder. Empty when `since` is None/unparseable or nothing moved.
+
+    Reads mtimes, not a change log, and that is deliberate: every writer of these files — the
+    agents' `Write`, the scaffolder, `revise_plan` — moves an mtime, and none of them can be
+    persuaded to keep a ledger honest. It is the same reasoning as `subagent_count`: ask the
+    filesystem, not the author.
+
+    Scope is the two folders a phase FORMS A JUDGMENT FROM — `artifacts/` (the agent-facing
+    records) and `reports/` (the owner-facing projections). Not `checkpoints/` (continuity, written
+    by every run including the asking one) and not `preliminary/` (the frozen inbox folder)."""
+    try:
+        cutoff = datetime.fromisoformat(str(since)).timestamp()
+    except (TypeError, ValueError):
+        return []
+    root = Path(item_dir)
+    hits: list[tuple[float, str]] = []
+    for sub in ("artifacts", "reports"):
+        for p in sorted((root / sub).glob("*.md")):
+            try:
+                mtime = p.stat().st_mtime
+            except OSError:
+                continue
+            if mtime > cutoff:
+                hits.append((mtime, f"{sub}/{p.name}"))
+    return [name for _, name in sorted(hits, key=lambda h: -h[0])]
+
+
 def report_text(item_dir: Path, phase: str) -> dict | None:
     """A phase's user-facing report, for the two surfaces that read it: the drilldown's Reports tab
     and the deputy's prompt (§2.1 — the deputy reads what the owner reads). Returns
@@ -988,10 +1057,15 @@ _OWNER_DECISION = re.compile(r"^\*\*Owner's decision:\*\*[^\S\n]*(.+?)\s*$", re.
 
 
 def owner_decision(item_dir: Path) -> str:
-    """The owner's itemization call recorded into `artifacts/review.md` by `itemize` — the adopted
-    proposals (with their inbox ids) or an explicit decline. Empty string when the line is absent,
-    still an unfilled slot, or still the template's comment: in every one of those cases the
-    decision was never actually put to them.
+    """The itemization outcome recorded into `artifacts/review.md` by `itemize` — what it filed
+    (with inbox ids), what it skipped as a duplicate, or that there was nothing to file. Empty
+    string when the line is absent or still an unfilled slot: in either case itemization never ran,
+    and a research item's proposals went nowhere.
+
+    The line does NOT mean the owner was asked. Itemize files without asking, because a `spawn`
+    only sits in the inbox until they push it — the inbox is the decision surface, and a background
+    run has no other one. (The heading still reads "Owner's decision" for the four suites and the
+    template that name it; the field means the itemization outcome.)
 
     It lives in the AGENT-facing record, not the owner's report: the owner's report is prose they
     read once and the line is a machine field the close gate reads back."""
@@ -1004,6 +1078,26 @@ def owner_decision(item_dir: Path) -> str:
         return ""
     value = m.group(1).strip()
     return "" if FILL.search(value) else value
+
+
+def proposed_work(item_dir: Path) -> str:
+    """A research review record's `## Proposed work` body — the work its findings imply, which is
+    half of what a research item owes. Empty string when the section is missing, unfilled, or says
+    nothing.
+
+    This is what the REVIEW gate can actually ask. `itemize` — which turns these into inbox items —
+    fires on review APPROVE, so at the moment the gate is read it has not run yet and its record is
+    always empty. Asking there whether the proposals were filed is a question no first approval can
+    answer; asking whether they were STATED is answerable, and it is answerable while the owner can
+    still send the item back."""
+    path = Path(item_dir) / "artifacts" / artifact_file("review")
+    if not path.is_file():
+        return ""
+    text = re.sub(r"<!--.*?-->", "", path.read_text(), flags=re.DOTALL)
+    body = _split_sections(text).get("Proposed work", "")
+    if FILL.search(body) or not _live_body(body.splitlines()):
+        return ""
+    return " ".join(body.split())
 
 
 # --------------------------------------------------------------- `## From you` (the owner's input)
@@ -1208,7 +1302,13 @@ def self_check(item_dir: Path, artifact: str, *, item_kind: str | None = None,
     if fills and artifact != "handoff-brief":
         issues.append(f"{len(fills)} unfilled <fill:…> slot(s) remain — fill or remove them")
     sections = _split_sections(text)
-    spec = section_spec(artifact, item_kind)
+    # The shape the file was AUTHORED under, read from its own frontmatter — never from the item's
+    # current field. A family re-classified after the artifact was written must not retro-fail the
+    # text already on disk (same principle as the legacy plan shapes below); and it keeps this
+    # signature free of a parameter every one of the five call sites would otherwise have to thread.
+    head = _FM_BLOCK.match(text)
+    fam = _FM_RESEARCH_KIND.search(head.group(1)) if head else None
+    spec = section_spec(artifact, item_kind, fam.group(1) if fam else None)
     is_impl_plan = (artifact == "plan"
                     and get_profile(item_kind).kind == "implementation")
     is_new_plan = artifact == "plan" and any(
@@ -1257,7 +1357,6 @@ def self_check(item_dir: Path, artifact: str, *, item_kind: str | None = None,
 # changing the evidence — and the verification model is worth exactly what that evidence is worth.
 OWNER_EDITABLE: tuple[str, ...] = ("brief", "plan")
 
-_FM_BLOCK = re.compile(r"\A---\n(.*?)\n---\n", re.DOTALL)
 _EDITED_LINE = re.compile(r"(?m)^edited_by_owner:.*\n?")
 
 
@@ -3096,9 +3195,18 @@ def latest_checkpoint(item_dir: Path, *, char_cap: int = 6000,
     if not files:
         return None
     if role:
-        want = f"\nrole: {role}\n"
+        # `role` is now a per-phase SLOT. Two stamps still match besides the exact one: an UNSTAMPED
+        # checkpoint (written before the stamp existed — role-agnostic by definition), and a legacy
+        # `intake` stamp from before sessions went per-phase, which any intake phase may claim. Both
+        # are widenings, never a narrowing: dropping them would blind an in-flight item to the
+        # continuity it actually banked.
+        from .kind_profiles import INTAKE_PHASES, LEGACY_INTAKE_SLOT
+        wants = [f"\nrole: {role}\n"]
+        if role in INTAKE_PHASES:
+            wants.append(f"\nrole: {LEGACY_INTAKE_SLOT}\n")
         files = [p for p in files
-                 if (t := p.read_text()) and (want in t or "\nrole: " not in t)]
+                 if (t := p.read_text())
+                 and (any(w in t for w in wants) or "\nrole: " not in t)]
         if not files:
             return None
     text = files[-1].read_text()

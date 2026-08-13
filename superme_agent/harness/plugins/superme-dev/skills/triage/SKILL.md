@@ -1,65 +1,148 @@
 ---
 name: triage
-description: Triage a fresh work-item — confirm its kind (implementation vs research), right-size its scope, propose its deliverable, and author the brief the plan phase starts from. Use when a work-item is in its triage phase or the owner asks to triage or classify a new item; not for planning the approach or for capturing a brand-new idea.
+description: Triage a fresh work-item — confirm its kind (implementation vs research), right-size its scope and scale, propose its deliverable, and author the brief the plan phase starts from. Use when a work-item is in its triage phase or the owner asks to triage or classify a new item; not for planning the approach or for capturing a brand-new idea.
 argument-hint: "[work-item-id]"
 category: workspace
 ---
 
 # Triage a work-item
 
-Decide WHAT this item is — kind, scope, deliverable — and author `artifacts/brief.md`, the doc a cold plan session starts from. The kind it was created with is a proposal until the triage-exit gate confirms it.
+Decide WHAT this item is — its kind, how much of the ask belongs here, how much it is worth, and
+which deliverable it serves. `artifacts/brief.md` is where that decision is written down, so a cold
+plan session can start from it alone; the phase is the judgment, and the brief is its record.
+
+Nothing here decides HOW. The approach is plan's job, and plan can only find a better answer than
+yours if you leave it one.
 
 ## Step 1 — Read what exists
 
-Read `item.md` and everything in `preliminary/` (the handoff brief is why this item exists — the title alone loses the discussion that shaped it). Skim the project's `general/project-prd.md` deliverables list. Done when you can say in one sentence what this item wants.
+- **`item.md`, and everything in `preliminary/`** — the handoff brief is why this item exists; the
+  title alone lost the discussion that shaped it.
+- **`general/project-prd.md`** — skim the deliverables list. You name one in step 4.
+
+Done when you can say in one sentence what this item wants. If the item is not in `triage`, stop and
+say so.
 
 ## Step 2 — Classify the kind
 
-- Propose `implementation` (changes code works; e.g., bug fix, new feature, improvements, so on) or `research` ( dedicated deep investigation & exploration works on a request topic; e.g., deep audit (security, broken features, optimizations, so on), learning from other codebases, bug findings, etc.). 
-- If the intent mixes both, propose
-research FIRST with a spawn follow-up for the build — a mixed item stalls at whichever pipeline it isn't. 
-- If genuinely torn in a kernel-fired run, pick the safer kind (research over a mixed item) and say why in the brief.
+| kind | what it is | typical |
+|---|---|---|
+| `implementation` | changes code | bug fix, new feature, an improvement |
+| `research` | a dedicated deep investigation into a question | audit (security, broken behaviour, optimization) · learning from another codebase · finding what causes a bug |
 
-## Step 3 — Right-size the scope
+- **Mixed intent** → propose `research` FIRST, and branch the build off as a `spawn` follow-up. A
+  mixed item stalls at whichever pipeline it isn't.
+- **Genuinely torn** → pick the safer kind (research over a mixed item) and say why in the brief.
+  You make the call; the gate is where the owner disagrees with it.
 
-If the item is really several independent deliveries, keep the core here and branch the rest off via `create_inbox_item` (relation `spawn`). Don't split what one session can plausibly deliver — the tax of extra items is real.
+**A research item also needs its FAMILY**, with its own one-line reason. It decides what counts as
+an answer — the method the investigation follows and the shape of the record it writes — so an item
+that reaches investigate without one arrives with neither:
+
+| family | the question it answers |
+|---|---|
+| `audit` | is this surface sound? coverage, performance, logic, features, bugs |
+| `refactoring` | this code is hard to work in — what shape should it be? |
+| `housekeeping` | what has gone stale? comments, dead code, unused declarations, anything that shouldn't be there |
+| `security` | what is exposed? risks, unsafe smells, unsanitized or junk data |
+| `study` | how does someone else do this, and what should we take? |
+| `deep-diagnosis` | what is the mechanism behind a behaviour we cannot explain? |
+
+Pick by the QUESTION, not the subject: reading another project to find OUR bug is `deep-diagnosis`,
+not `study`, and a sweep that happens to turn up a bug is still an `audit`.
+
+## Step 3 — Size it
+
+Two judgments, on different axes:
+
+- **Scope — what belongs in THIS item.** Several independent deliveries → keep the core here, branch
+  the rest off with `create_inbox_item` (relation `spawn`). Don't split what one session can
+  deliver; an extra item costs real tax.
+- **Scale — how much content the work is worth.** `small` or `standard`, with the one-line reason
+  the owner argues with. It rides every later phase: `small` makes plan, build, vet and review read
+  narrow and write short. The pipeline never changes — a small item still gets its branch, its
+  tasks and its merge.
 
 ## Step 4 — Name it, and record the classification
 
-Deliverable — exactly one of: the parent's (a branched-off child usually inherits it) · an existing PRD deliverable · a NEW one named in prose for the owner to confirm (never append it to the PRD yourself) · none (standalone chore).
+- **Title** — the board's line. A few words naming the change, under 60 characters, no period:
+  "Add dark mode support", not "I keep working at night and the white background hurts…". You are
+  the first reader of the whole ask, so fix a weak one here — a hurried capture often pastes the
+  request itself. Pass a good title back unchanged.
+- **Deliverable** — exactly one of: the parent's (a branched-off child usually inherits it) · an
+  existing PRD deliverable · a NEW one named in prose for the owner to confirm (never append it to
+  the PRD yourself) · none (standalone chore).
 
-Title — the line the board shows. A few words naming the change, under 60 characters, no closing period: "Add dark mode support", not "I keep working at night and the white background hurts…". You are the first reader who has seen the whole ask, so this is where a weak name gets fixed — an owner capturing a ticket in a hurry often pastes the request itself, and the item was born holding its first sentence. Pass the existing title back when it already reads well.
+Then call `set_triage_classification` with all of it — kind (plus the family and its reason, on a
+research item) from step 2, scale and its reason from step 3, and the deliverable only when it is an
+EXISTING PRD slug.
 
-Call `set_triage_classification(item_id, title, kind, deliverable)` — kind from step 2, deliverable only when it's an EXISTING PRD slug. Prose alone is not a record: the gate and every later phase read these fields from the item, not from this chat.
+**Prose alone is not a record.** Every later phase reads these fields off the item, not out of this
+chat, and the gate's red row does not stop the item advancing — nothing downstream recovers what
+you only said.
 
 ## Step 5 — Author the brief
 
-`scaffold_artifact(item_id, "brief")`, then fill its slots: the PROBLEM, the classification with reasons, and the context a cold session needs (pointers into `preliminary/` and the repo, not copies).
+`scaffold_artifact(item_id, "brief")`, then fill its slots: the PROBLEM, the classification with its
+reasons, and the context a cold session needs (pointers into `preliminary/` and the repo, not
+copies).
 
-`## Problem` states what is wrong today, never the fix. A capture usually arrives already solution-shaped ("add a `--date` flag") — your job is to name the symptom underneath it ("every expense is stamped today, so a late-entered receipt falls in the wrong month"). Writing the fix here spends the plan phase's whole job before it starts: a plan handed an answer implements it, and can never find the better one.
+`## Problem` states what is wrong today, never the fix. A capture usually arrives solution-shaped
+("add a `--date` flag"); name the symptom underneath it ("every expense is stamped today, so a
+late-entered receipt falls in the wrong month"). The fix written here spends plan's whole job before
+it starts — a plan handed an answer implements it, and never finds the better one.
 
-## Step 6 — Write a quick user-facing report
+## Step 6 — Write the user-facing report
 
-- Copy `templates/report-triage-template.md` to `reports/report-triage.md` and fill it — every line traces to brief.md; the template's caps are the bar. Its `<fill:…>` slots and its `<!-- … -->` notes are both instructions to you: replace the slots, drop the notes. Neither belongs in the file you write. 
-- This report is for the OWNER to read and correct the shaping, not for the kernel — the kernel reads brief.md. The scope table is the point of it: in/out is what the owner accepts or sends back at this gate.
-- `**Workflow:**` must name the SAME kind you recorded in step 4. The drilldown reads the kind off the item (it is what selects the machinery); this line is for whoever reads the brief on its own. A line that disagrees with the record is the one thing this field can get wrong.
-- `## From you` is theirs, not yours. Copy the heading and its two empty labels through exactly as they stand and write nothing under them — the drilldown's editor is the section's only writer, and the plan phase treats whatever the owner puts there as authority. Filling it for them would hand plan an instruction nobody gave.
+Copy `templates/report-triage-template.md` to `reports/report-triage.md` and fill its slots. It is
+the OWNER's — they accept or re-shape what you decided; the kernel and the plan phase read
+`brief.md`. A re-run overwrites it: the report always describes the item as it stands NOW.
 
-**Writing tone and style**
-- Plain, easy language. Fewer words wins.
+- **Every line traces to `brief.md`** — a projection of it, never a place for a new fact.
+- **The scope table is the point of it** — in/out is what the owner accepts or sends back.
+- **`**Workflow:**` names the SAME kind you recorded in step 4.** The drilldown reads the kind off
+  the item; this line is for whoever reads the brief on its own, and disagreeing with the record is
+  the one thing it can get wrong.
+- **`## From you` is theirs.** Copy the heading and its two empty labels through; write nothing
+  under them. The owner's editor is that section's only writer, and plan treats whatever lands
+  there as authority — filling it would hand plan an instruction nobody gave.
+- **Keep the blank line between `**Label:**` blocks** — without it markdown folds them into one
+  paragraph and the labels render mid-sentence.
+
+**Tone and style when writing to user-facing report**
+- Plain, concise, easy language. Fewer words wins. No verbosity.
 - Keep the report short, clear, and to the point.
+- This is where the item is explained, not where it is defended.
 - Never restate the item's kind, deliverable or id. Spend the space on the judgment behind them.
 - Prefer a table to a paragraph whenever the content is pairs or a list of comparable things.
 - Use bullets and numbered lists to organize information if there is more than one point.
+- Delete a block you have nothing real for — an absent section reads better than "none".
 
 ## Chat response style
 - Use plain and easy language.
 - Keep your response short, clear, and to the point.
 - Use bullets or numbered lists to organize information if there is more than one point.
 
+## Reporting the run
+
+`report_completion` says why THIS RUN stopped. A run is one invocation of you — it is not the phase.
+
+- **`success`** — classification recorded, brief authored, report filed. Not "accepted": that is
+  the owner's call at the triage-exit gate.
+- **`partial` · `blocked` · `clean_noop`** — when one of those is the truer word.
+- **`needs_user`** — rare. A torn call is made and recorded (step 2), never paged out; use this
+  only when there is nothing to classify at all.
+
+**The outcome is all the kernel reads**, so a kernel-fired run always declares one; a run that
+skips it is recorded as undeclared. **A conversation does not** — a chat turn owes no report.
+Report again only when the item's state changes.
+
+**Output style to report_completion.**
+- Plain, concise, easy language. Fewer words wins. No verbosity.
+- Keep your response short, clear, and to the point.
+
 ## Pitfalls
 
 - **Starting the plan** — triage decides WHAT this item is, not HOW to do it.
-- **Presenting without recording** — the `triaged_at` stamp from `set_triage_classification` is
-  what lifts the gate; a run that only writes prose leaves the item stuck.
-- when writing to docs, Do not include the comments part `<!-- ... -->` in the scaffold you file — it is instructions for you.
+- **Over-triaging a small ask** — a one-line fix does not earn a three-paragraph problem statement,
+  a split into three items, or a scope table padded to fill its rows.

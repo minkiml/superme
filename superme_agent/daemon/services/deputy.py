@@ -184,8 +184,13 @@ async def _judge(ctx, context_id: str, item_id: str, item: dict, gate: str, dev_
     events = _dev_store.list_events(context_id, item_id=item_id, limit=100)
     # ONE computation of this gate's checks (core/gate_briefs) — the owner's drilldown reads the same
     # call, so the deputy can never judge from different numbers than the owner is shown (§2.1).
+    # Did investigate fan out? Spine-counted here because core has no spine access — the same
+    # reason `events` is passed in. `None` when the item is not research: nobody looked, and the
+    # check must not read that as zero.
+    subagents = (_spine.subagent_count(context_id, item_id, phase="investigate")
+                 if str(item.get("kind")) == "research" else None)
     state = gate_briefs.gate_state(item, item_dir, dev_root, ctx.cwd,
-                                   all_items=all_items, events=events)
+                                   all_items=all_items, events=events, subagents=subagents)
     dep_root = deputy_core.deputy_root(context_id)  # mandate lives in the harness cell, not knowledge
     mandate = deputy_core.read_mandate(dep_root)
     digest = deputy_core.log_digest(item_dir, gate)  # this item's prior calls AT THIS GATE (continuity)
@@ -239,9 +244,10 @@ async def _judge(ctx, context_id: str, item_id: str, item: dict, gate: str, dev_
         model=model, effort=effort,
         approve=deny_all,                  # read-only judge: no writes, no shell side effects
         sandbox_writes=[],                 # …and sandboxed anyway: cwd only, no network
-        extra_mcp_servers={**_dev_mcp(ctx, ctx.cwd, item_id),
+        extra_mcp_servers={**_dev_mcp(ctx, ctx.cwd, item_id, scope="deputy"),
                            "deputy": make_deputy_verdict_server(sink)},
         system_append=system_append,
+        item_bound=True,                   # judging one item — no board-wide in-progress list
         deny_write_tools=_READONLY_NUDGE,  # Write/Edit die outright — it inspects, never edits
     ):
         if isinstance(ev, Usage):

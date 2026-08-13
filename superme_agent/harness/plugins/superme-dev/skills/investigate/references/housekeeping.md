@@ -1,0 +1,88 @@
+# Housekeeping — what has gone stale
+
+Read before a housekeeping sweep: the plan asks what should not be here any more — comments that
+describe code that changed, dead functions, unused variables and declarations, abandoned config,
+anything that looks suspicious or unaccounted for.
+
+The question is not "is this good code". It is **"does anything still reach this"**, and that is a
+question with a provable answer.
+
+## Contents
+
+- **The bar: proof, not absence of evidence**
+- **What to sweep** — the four kinds of stale
+- **What looks dead and isn't** — the section that pays for itself
+- **Suspicious ≠ malicious**
+- **Fan-out**
+- **The follow-up is the deliverable**
+- **What housekeeping does NOT do**
+
+## The bar: proof, not absence of evidence
+
+`grep` returning nothing is where this work STARTS, not where it ends. Before anything is called
+dead, check the ways a caller can hide from a text search:
+
+- **Reached by string** — a name in config, a route table, a plugin registry, a task or agent name,
+  a template.
+- **Reached from outside this repo** — a public API, a CLI entry point, an import by a sibling
+  project, a script someone runs by hand.
+- **Reached by convention** — a hook, an override, a fixture the test runner collects by naming
+  rule, a subclass method the base class calls.
+- **Reached indirectly** — reflection, dynamic dispatch, a decorator that registers on import.
+
+Each item in `## What can go` carries how you searched and which of these you ruled out. Anything
+you cannot prove either way is an OPEN THREAD, never a deletion — this family's one catastrophic
+failure is removing something that was reachable, and it is always cheaper to leave it.
+
+## What to sweep
+
+| kind | what makes it stale | the recurring miss |
+|---|---|---|
+| comments and docstrings | it describes behaviour the code no longer has | deleting a comment that is merely terse; wrong is the bar, not brief |
+| dead code | nothing reaches it (see above) | a symbol that is only reached in an error path nobody hits in normal use — it is reachable |
+| unused declarations | imported, assigned, or declared and never read | a side-effecting import: removing it changes behaviour, and the file rarely says so |
+| abandoned config and flags | the branch it selects no longer exists, or has one live value | a flag some environment sets that this repo never mentions |
+
+**Stale is not the same as ugly.** Naming you dislike, a long function, an awkward abstraction —
+those are `refactoring`, a different family with a different bar. Say so and leave them.
+
+## What looks dead and isn't
+
+Write `## What must stay` as you go, not at the end. Every candidate you investigate and reject
+belongs there with what reaches it. It is the highest-value section this family produces: it stops
+the next sweep proposing the same deletion, and it is the record that this sweep looked properly.
+
+A sweep that reports twenty removals and nothing rejected read one way and did not check.
+
+## Suspicious ≠ malicious
+
+Code that surprises you is worth recording plainly: what it does, where it is, why it looked wrong.
+Do not soften it into a style note, and do not escalate it into an accusation — most of the time it
+is old, or clever, or a workaround whose reason has been lost. **Never remove or disable it as part
+of the sweep**: if something genuinely looks unsafe, that is a `security` question and it goes to the
+owner as one, at their gate.
+
+## Fan-out
+
+Split by AREA, one subagent per directory or module, each returning candidates with `file:line` and
+the searches it ran. You keep the reachability judgment: a subagent that has only read one directory
+cannot know what the rest of the repo reaches into it, and that is exactly the mistake that deletes
+something live.
+
+## The follow-up is the deliverable
+
+Nobody reads a housekeeping report for its findings; they read it to do the removals. So
+`## Follow-up work` is ordered for action:
+
+- **Group by safety**, not by directory. Everything provably unreachable in one item; everything
+  needing a person's eye in another.
+- **Say which are mechanical.** "Delete these 14 unused imports" is one item somebody can approve in
+  a minute. Mixing it with a judgment call turns both into a judgment call.
+- **Order by landing risk**, so the safe bulk goes first and nothing is blocked behind an argument.
+
+## What housekeeping does NOT do
+
+- **It does not delete.** A research item cannot change code, and that boundary is what makes this
+  safe: the sweep proposes, the owner approves, an implementation item removes.
+- **It does not tidy.** Renaming, reformatting and restructuring are not this family.
+- **It does not guess.** Unprovable reachability is an open thread. Every time.

@@ -193,17 +193,19 @@ class AgentService:
                  key, tokens, window, tokens / window * 100)
         return self._floor_by_key[key]
 
-    def _context_preamble(self, ctx: Context) -> str:
-        """A short note telling the agent which context it's operating in."""
-        if ctx.layer == "global":
-            where = ("the **SuperMe hub** — the owner's home host: their cross-domain "
-                     "self, and SuperMe's own codebase")
-        else:
-            where = f"a **project host** (`{ctx.id}`)"
+    def _context_preamble(self, ctx: Context, *, item_bound: bool = False) -> str:
+        """Where this turn is operating: host, cwd, the knowledge roots, and (unbound sessions only)
+        the project orientation digest.
+
+        Written as a lookup table, not prose — every line here rides EVERY turn, and the reader
+        needs to find a path, not read a paragraph. Each root is stated ONCE at full length and its
+        children hang off it relatively; spelling the 60-char prefix again per child was three
+        copies of one fact (00-superme-context-practice §4d/§4f)."""
+        where = ("the **SuperMe hub** (the owner's home host: their cross-domain self, and "
+                 "SuperMe's own codebase)" if ctx.layer == "global" else f"project host `{ctx.id}`")
         text = (
             f"\n\n## Operating context\n"
-            f"You are operating in {where}. "
-            f"Context: `{ctx.label}` · working directory: `{ctx.cwd}`."
+            f"Host: {where} · context `{ctx.label}` · cwd `{ctx.cwd}`."
         )
         # Anchor the host's knowledge trees with ABSOLUTE paths — they live under
         # `superme-knowledge/<id>-knowledge/`, NOT under the cwd, so relative paths silently miss.
@@ -216,26 +218,25 @@ class AgentService:
             if ctx.mode == "dev":
                 dev_root = ctx.internal_root / "dev"
                 text += (
-                    f"\n\nYour **dev-knowledge root** is `{dev_root}` (NOT under the working "
-                    f"directory above): the `general/` anchor docs are at `{dev_root}/general/` and "
-                    f"work-items at `{dev_root}/work-items/`. Use these absolute paths to read or write "
-                    f"dev-knowledge. This host's **core knowledge** is at `{core_root}` (read-only in "
-                    f"dev — see the charter)."
+                    f"\nDev-knowledge root — NOT under the cwd — `{dev_root}`\n"
+                    f"  · anchor docs `general/` · work-items `work-items/`\n"
+                    f"Core knowledge `{core_root}` (read-only in dev)."
                 )
                 # ORIENT (S3): a thin always-on digest of THIS project — what it is + active waves +
                 # in-progress items — regenerated from the anchor docs each turn so a cold session is
                 # oriented without reading. Guarded: a parse hiccup must never break a turn.
+                #
+                # An item-bound turn gets the digest WITHOUT its in-progress list (owner, 2026-08-11):
+                # that list is other items' titles, and this turn's focus block states the item is its
+                # sole subject. Orientation across the board is for a session that has no subject yet.
                 try:
-                    digest = _DEV.orient_digest(dev_root)
+                    digest = _DEV.orient_digest(dev_root, in_progress=not item_bound)
                 except Exception:  # noqa: BLE001 — orientation is best-effort, never fatal
                     digest = None
                 if digest:
-                    text += f"\n\n## This project (orientation)\n{digest}"
+                    text += f"\n\n## This project\n{digest}"
             else:
-                text += (
-                    f"\n\nYour **core-knowledge home** is `{core_root}` (NOT under the working "
-                    f"directory above). Use this absolute path to read or grow core knowledge."
-                )
+                text += f"\nCore-knowledge home — NOT under the cwd — `{core_root}`."
         return text
 
     # Deny messages for a blocked Skill call. Each is the agent's ONLY feedback about the block, so
@@ -264,7 +265,8 @@ class AgentService:
         return op_home, const_universal, const_repo, activated_assets
 
     def _fragment_parts(self, ctx: Context, *, op_home, const_universal, const_repo,
-                        activated_assets, system_append: str | None = None) -> list[dict]:
+                        activated_assets, system_append: str | None = None,
+                        item_bound: bool = False) -> list[dict]:
         """The layer-2 system append as ORDERED provenance fragments: persona (WHO) · mode charter
         (WHAT MODE) · per-repo local charter · constitution CATALOG · operating-context preamble
         (WHERE) · per-project persona_append · the per-turn session-kind block (which, on
@@ -305,7 +307,7 @@ class AgentService:
                        f"harness/constitution/{ctx.mode}/ + repo asset pool", catalog)
         # Operating context: appended with NO added separator — its own text opens with "\n\n".
         add("Operating context (where) + orientation", "agent_service._context_preamble()",
-            self._context_preamble(ctx), sep="")
+            self._context_preamble(ctx, item_bound=item_bound), sep="")
         if ctx.persona_append:
             add("Project persona append", "Context.persona_append (per-project)",
                 ctx.persona_append, sep="\n\n")
@@ -323,23 +325,27 @@ class AgentService:
         return "".join(f["sep"] + f["text"] for f in frags)
 
     def _assemble_append(self, ctx: Context, *, op_home, const_universal, const_repo,
-                         activated_assets, system_append: str | None = None) -> str:
+                         activated_assets, system_append: str | None = None,
+                         item_bound: bool = False) -> str:
         """Assemble the layer-2 system append (system_prompt.append) by joining `_fragment_parts`.
         THE single assembler — `_build_options` and the input-preview endpoint both call it, so what
         a preview shows is byte-for-byte what a real turn sends."""
         return self._join_fragments(self._fragment_parts(
             ctx, op_home=op_home, const_universal=const_universal, const_repo=const_repo,
-            activated_assets=activated_assets, system_append=system_append))
+            activated_assets=activated_assets, system_append=system_append, item_bound=item_bound))
 
-    def assemble_system_append(self, ctx: Context, *, system_append: str | None = None) -> str:
+    def assemble_system_append(self, ctx: Context, *, system_append: str | None = None,
+                               item_bound: bool = False) -> str:
         """Public seam for the prompt inspector: resolve scope + assemble the exact system append a
-        turn with this (ctx, session_append) would send. No side effects."""
+        turn with this (ctx, session_append) would send. No side effects. `item_bound` must match
+        what the real turn passes, or a preview drifts from the run it claims to show."""
         op_home, const_universal, const_repo, activated_assets = self._resolve_scope(ctx)
         return self._assemble_append(
             ctx, op_home=op_home, const_universal=const_universal, const_repo=const_repo,
-            activated_assets=activated_assets, system_append=system_append)
+            activated_assets=activated_assets, system_append=system_append, item_bound=item_bound)
 
-    def assemble_system_fragments(self, ctx: Context, *, system_append: str | None = None) -> list[dict]:
+    def assemble_system_fragments(self, ctx: Context, *, system_append: str | None = None,
+                                  item_bound: bool = False) -> list[dict]:
         """Public seam for the prompt inspector's per-fragment view: the SAME append as
         `assemble_system_append`, but as ordered provenance fragments [{name, location, text}] (the
         internal `sep` is dropped — it's for reconstruction, not display). Same builder → the
@@ -347,7 +353,7 @@ class AgentService:
         op_home, const_universal, const_repo, activated_assets = self._resolve_scope(ctx)
         frags = self._fragment_parts(
             ctx, op_home=op_home, const_universal=const_universal, const_repo=const_repo,
-            activated_assets=activated_assets, system_append=system_append)
+            activated_assets=activated_assets, system_append=system_append, item_bound=item_bound)
         return [{"name": f["name"], "location": f["location"], "text": f["text"]} for f in frags]
 
     def _build_options(
@@ -360,6 +366,7 @@ class AgentService:
         protected_paths: list[Path] | None = None,
         protected_nudge: str | None = None,
         sandbox_writes: list[Path] | None = None,
+        item_bound: bool = False,
     ) -> ClaudeAgentOptions:
         # Resolve the per-repo scope ONCE (the MCP server + turn plugins below reuse it), then
         # assemble the layer-2 system append through the SAME helper the input-preview endpoint
@@ -367,7 +374,7 @@ class AgentService:
         op_home, const_universal, const_repo, activated_assets = self._resolve_scope(ctx)
         append = self._assemble_append(
             ctx, op_home=op_home, const_universal=const_universal, const_repo=const_repo,
-            activated_assets=activated_assets, system_append=system_append)
+            activated_assets=activated_assets, system_append=system_append, item_bound=item_bound)
         # User-facing turns may not invoke `access: silent` skills (forge-* — internal pipeline
         # machinery); the owning sub-run leaves enforce_silent False so it still can. Computed from
         # the same plugin set the turn loads.
@@ -471,6 +478,7 @@ class AgentService:
         protected_paths: list[Path] | None = None,
         protected_nudge: str | None = None,
         sandbox_writes: list[Path] | None = None,
+        item_bound: bool = False,
     ) -> AsyncIterator[TurnEvent]:
         """Run one turn against `ctx`, yielding TurnEvents.
 
@@ -491,7 +499,7 @@ class AgentService:
             general_write_root=general_write_root, write_boundary=write_boundary,
             hooks=hooks, block_categories=block_categories, deny_write_tools=deny_write_tools,
             protected_paths=protected_paths, protected_nudge=protected_nudge,
-            sandbox_writes=sandbox_writes,
+            sandbox_writes=sandbox_writes, item_bound=item_bound,
         )
         resolved_model = None
         # Context-window fill is measured from a SINGLE API call, not the turn aggregate.

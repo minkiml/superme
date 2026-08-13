@@ -36,12 +36,61 @@ from . import artifacts, kind_profiles
 # triggers (durable user-messages — each opens one background run's transcript)
 # =============================================================================================
 
-def intake_trigger(skill: str, item_id: str, title: str) -> str:
+def intake_trigger(skill: str, item_id: str, title: str,
+                   changed: list[str] | None = None) -> str:
     """Consumer: the background plan/triage run (runs._background_intake_run) · durable. The task
     delta is just WHICH skill for WHICH item — the procedure lives in the skill, the run protocol
     in the Current-focus background variant (work_item_preamble). On replay,
-    sessions._NOISE_PREFIXES drops this phrase (one entry per intake skill — keep in sync)."""
-    return f"Run superme-dev:{skill} for work-item `{item_id}` (\"{title}\")."
+    sessions._NOISE_PREFIXES drops this phrase (one entry per intake skill — keep in sync).
+
+    `changed` = the records rewritten since THIS PHASE's own last run, and it is the whole reason
+    this trigger takes an argument at all. Per-phase sessions made re-entry cheap (a review after a
+    revise round resumes the reviewer that already read the item) and in doing so created one
+    failure the old mint-every-time model could not have: measured live 2026-08-13 on
+    `20687ac32d63`, investigate rewrote both of its records, review resumed, answered "nothing has
+    changed since" from memory, and filed `clean_noop` over a report describing a superseded
+    investigation. The thread was not lying — nothing in the turn told it the disk had moved, and a
+    resumed agent's own transcript is the most convincing thing in its context.
+
+    So the rule: an advance into a phase that ALREADY HOLDS A THREAD must name what changed since
+    that thread last ran. Named files, not "things may have changed" — a re-read is checkable and
+    an exhortation to be careful is not. Silent when nothing moved (a genuine no-op deserves one)
+    and silent on a phase's first entry (nothing to have missed)."""
+    base = f"Run superme-dev:{skill} for work-item `{item_id}` (\"{title}\")."
+    if not changed:
+        return base
+    files = "\n".join(f"- `{f}`" for f in changed[:12])
+    more = f"\n- …and {len(changed) - 12} more" if len(changed) > 12 else ""
+    return (
+        f"{base}\n\n"
+        f"You have run this phase before, and this is the SAME thread — but the item has been "
+        f"written to since your last pass. These records changed on disk:\n{files}{more}\n\n"
+        f"Re-read every one of them before you judge anything. What you remember about them is "
+        f"stale by definition; your earlier reading described the previous version. If your own "
+        f"record is one of the files above, someone else revised it — read it too, and do not "
+        f"conclude that nothing changed."
+    )
+
+
+def completion_nudge(skill: str) -> str:
+    """Consumer: the kernel's completion BACKSTOP (runs.ensure_completion) · fired only when a run
+    ended without calling `report_completion`. Not a reminder to be polite about — the run is over
+    and the kernel is holding the row open for one thing.
+
+    Measured 2026-08-11: 99 of 544 runs ended undeclared, and the miss tracks whether anything
+    downstream breaks — 4% on build/vet (the loop routes on `outcome`) against 18-36% on the
+    phases that park at a gate either way. The cause is a real ambiguity, not laziness: for
+    triage/plan/review the PHASE ends when someone approves, so declaring "completion" reads as a
+    claim the agent knows it cannot make. Hence the wording: it asks about THIS RUN, says the phase
+    is not being advanced, and names the one call that ends it."""
+    return (
+        f"Your {skill} run is over, but it never called `report_completion`, so the kernel has no "
+        f"outcome for it. Call it now and nothing else.\n"
+        f"Judge THIS RUN, not the phase: `success` means the run did the work it was fired to do — "
+        f"it does NOT claim the phase is finished or approved, and the item advances only when "
+        f"someone approves it. If the run fell short, say so with the outcome that fits "
+        f"(`partial`, `blocked`, `needs_user`, `clean_noop`)."
+    )
 
 
 def checkpoint_trigger(item_id: str) -> str:
@@ -416,31 +465,36 @@ def work_item_preamble(item_id: str, item: dict, item_dir, *, interactive: bool 
     phase = str(item.get("phase") or "triage")
     kind = str(item.get("kind") or "implementation")
     c = phase_contract(kind, phase)
+    # The "FRESH thread" sentence was cut 2026-08-11 (owner). It EXPLAINED why the artifacts are all
+    # you know; the trace rule below is the same idea as a test you can apply, and an explanation
+    # whose test is stated beside it is the redundancy §4d is about. "Kernel-fired" went with it —
+    # the Run protocol's own opening ("no reply from a person arrives mid-run") is that fact stated
+    # where it is used. What SURVIVES is "sole subject": nothing else in the context stops a run
+    # wandering into a second item, and a background run has nobody to stop it.
     presence = (
         "This is an interactive chat — the user is present. Their interactions primarily "
         "center on this item unless they point elsewhere."
         if interactive else
-        # Says FRESH out loud (owner, 2026-08-09). A background phase opens its own session, so this
-        # thread holds nothing from the phases before it. The old wording named the item and left
-        # the rest to inference — and an agent that assumes it was here for triage will reason from
-        # a discussion it never had. Better to state the actual epistemic position: the artifacts
-        # are not a reference you may consult, they are the only thing you know.
-        "This run is kernel-fired for this item — it is your sole subject this run. This thread is "
-        "FRESH: earlier phases ran in their own sessions and none of their conversation is here. "
-        "Everything you know about this item is written down — if you cannot point to where you "
-        "read something, you have not read it."
+        "This item is your sole subject this run."
     )
     lines = [
         "## Current focus",
-        f"This session is dedicated to work-item **{item_id} — \"{title}\"** "
-        f"(kind `{kind}`, current phase `{phase}`). {presence} "
-        f"Its materials live at `{item_dir}/` — read on demand, NEVER guess.",
+        f"- work-item: **{item_id}** — \"{title}\"\n"
+        f"- kind: `{kind}`\n"
+        f"- phase: `{phase}`\n"
+        f"- materials: `{item_dir}/`",
+        f"\n{presence}",
+        "Every claim you make about this item must trace to a file you read — if you cannot name "
+        "the file, you have not read it.",
     ]
     if c:
-        lines.append(
-            f"\n**This phase:** {c['what']}. The procedure lives in the `superme-dev:{c['skill']}` "
-            f"skill — invoke it when doing this phase's work."
-        )
+        # The skill name rides EVERY turn on purpose, even though every trigger already names it
+        # (kernel_speech's six `Run superme-dev:<skill>` lines). A trigger is one message; a
+        # compaction mid-cycle can replace it with a summary that drops it, and the next trigger
+        # (with its `reload_skill` nudge) is a cycle away — that gap IS bug #241. `c['what']` is
+        # not in the triggers at all.
+        lines.append(f"\n**This phase:** {c['what']} — procedure in the `superme-dev:{c['skill']}` "
+                     f"skill.")
     # SCALE (kind_profiles.ITEM_SCALES): triage's judgment, riding every later phase's turn. Only
     # `small` says anything — `standard` IS the behaviour every skill already describes, so a line
     # for it would be floor paid on every turn to change nothing.
@@ -465,6 +519,16 @@ def work_item_preamble(item_id: str, item: dict, item_dir, *, interactive: bool 
             "your report and name what you needed. That is evidence this item was misjudged as "
             "small, and it is the owner's call to make, not yours to absorb."
         )
+    # RESEARCH KIND (kind_profiles.RESEARCH_KINDS): which family of investigation this is. Stated
+    # for every phase of a research item, not just investigate — plan writes the method the family
+    # implies, and review reads the findings against that family's bar. A bare label is enough here
+    # on purpose: what each family owes lives in the phase skills, and repeating it per turn would
+    # be the same words in two carriers.
+    if (fam := kind_profiles.research_kind(item)):
+        why = str(item.get("research_kind_reason") or "").strip()
+        lines.append(f"\n**Investigation family: `{fam}`.**"
+                     + (f" Triage's reason: {why}" if why else "")
+                     + " Your phase's contract says what that family owes.")
     # The owner's standing input, on EVERY turn of every phase. Each intake phase runs in its own
     # session, so anything they said in an earlier one is gone from this thread; the durable copy
     # lives in the artifacts, and until now reached a phase only if that phase's skill happened to
@@ -513,10 +577,19 @@ def work_item_preamble(item_id: str, item: dict, item_dir, *, interactive: bool 
             "\n**Edit boundary:** this phase touches no real code — writes belong in the item's "
             "own folder (artifacts, checkpoints); " + code_line
         )
+    # Two ENDINGS in one block was the defect here (owner, 2026-08-11): this said "say so and stop"
+    # while the run protocol below says the `report_completion` call IS the closing statement and
+    # nothing follows it. Both are true — of different sessions. So the ending belongs to whichever
+    # branch owns it, and what stays shared is the half that is about neither: don't run ahead.
+    # `write_checkpoint` goes with the interactive branch too — a background run has no "long
+    # session" to wrap up, and build/SKILL.md already tells the one phase that resumes to bank one.
     lines.append(
         "\n**Gates:** the user advances phases and closes items — never you. When this phase's "
         "work is done, say so and stop; don't start the next phase's work. Bank a checkpoint "
         "(`write_checkpoint`) before wrapping up a long session."
+        if interactive else
+        "\n**Gates:** the user advances phases and closes items — never you. Don't start the next "
+        "phase's work."
     )
     # Continuity: owed only while this thread's newest finished run is the compaction itself, so it
     # disappears by itself once a real turn has run (spine.session_compacted_pending).
@@ -550,13 +623,11 @@ def work_item_preamble(item_id: str, item: dict, item_dir, *, interactive: bool 
         # the counterpart + the never-page rule + the tool ending. The payload contract itself
         # lives in the report_completion tool's schema (run_tools.py), never restated as prose.
         lines.append(
-            "\n**Run protocol:** the SuperMe kernel fired this run and processes its ending — no "
-            "reply from a person arrives mid-run. Never stop to page: a judgment call you can't "
-            "make → a `## Assumptions` note in your phase's own record; a CONTRACT change you "
-            "can't self-authorize → "
-            "`request_authorization` (defers it to the review gate) — either way finish what you "
-            "can. End the run by calling the `report_completion` tool: that call IS your closing "
-            "statement — the owner reads it as the run's last word — so say nothing after it.\n"
+            "\n**Run protocol:** no reply from a person arrives mid-run, so never stop to page: a "
+            "judgment call you can't make → a `## Assumptions` note in your phase's own record; a "
+            "CONTRACT change you can't self-authorize → `request_authorization` (defers it to the "
+            "review gate). Either way, finish what you can. End the run by calling "
+            "`report_completion` — that call IS your closing statement, so say nothing after it.\n"
             # Measured, not assumed (2026-08-10, item 3f3aa01a16e8): a background phase run costs
             # roughly the SUM of its growing transcript, not the sum of its payloads — 4.89M
             # cache-read tokens across one one-line fix. So a result of size S read at step i is
@@ -565,11 +636,11 @@ def work_item_preamble(item_id: str, item: dict, item_dir, *, interactive: bool 
             # class. Breadth rules ("read narrow") don't catch this: the file WAS the right file.
             # Depth is the missing half, it belongs to every run rather than to a scale or a
             # phase, and the mechanism is stated so the rule generalizes past the tools named.
-            "\n**Read the span, not the file.** Everything you read stays in this run's context "
-            "and is re-sent on every step after it, so a large file read early is paid many times "
-            "over. Once you have a line number or a symbol — from a grep, a glob, or the plan — "
-            "take that span (`Read` with `offset`/`limit`, `sed -n 'A,Bp'`); read a file whole "
-            "only when you genuinely need the whole of it."
+            "\n**Read the span, not the file.** What you read stays in this run's context and is "
+            "re-sent on every step after it, so a big file read early is paid many times over. "
+            "Once you have a line or a symbol — from a grep, a glob, or the plan — take that span "
+            "(`Read` with `offset`/`limit`, `sed -n 'A,Bp'`); read a file whole only when you need "
+            "the whole of it."
         )
     return "\n".join(lines)
 

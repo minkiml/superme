@@ -7,61 +7,58 @@ category: workspace
 
 # Plan a work-item
 
-Produce `artifacts/plan.md` — the contract build implements and vet verifies. It is read twice
-and both readings must hold: build executes the design and tasks; a fresh vet agent with zero
-context executes the verification plan.
+Decide HOW this item's request gets built — the approach, the order, and what would show it worked.
+`artifacts/plan.md` is where that decision is written down so build can execute it and a vet agent
+with zero context can check it; the phase is the thinking, and the document is its record. Size both
+to the request: a one-line fix earns a one-line design.
+
+**Arriving from review with feedback?** This is a REVISION: read `references/revising-a-plan.md`
+before touching anything, then rejoin at step 5. Never rewrite `plan.md` by hand.
 
 ## Step 1 — Directed reads
 
-Read `artifacts/brief.md` (the problem this item exists to solve — your starting point), the latest `checkpoints/` entry
-when one exists (data from a previous session — verify against the repo before trusting), and the
-code the brief points at. For prior activity, call `read_dev_log` with this `item_id`. If the
-item is not in `plan`, stop and say so.
+- **`artifacts/brief.md`** — the problem this item exists to solve. Your starting point.
+- **The latest `checkpoints/` entry**, when one exists — data from a previous session; verify it
+  against the repo before trusting it.
+- **The code the brief points at.**
+- **`read_dev_log`** with this `item_id`, for prior activity.
 
-Then read `reports/report-triage.md` § **From you**. It is the owner's own section, typed by them
-and by nobody else, and it is the only place their words arrive as instruction rather than as chat —
-so it outranks your judgment on the two things it carries:
+If the item is not in `plan`, stop and say so.
 
-Each block holds one bullet per entry — a reference is its source and what it governs; a note is
-one thing to prove.
+Then read `reports/report-triage.md` § **From you**. It is the owner's own section, typed by them and
+by nobody else, and the only place their words arrive as instruction rather than as chat — so it
+outranks your judgment on the two things it carries:
 
-- **Useful imported references** are AUTHORITY. Open each one and design to it. Where it and your
-  preferred approach disagree, the reference wins and the design says so; if following it is
+- **Useful imported references are AUTHORITY.** Open each one and design to it. Where it and your
+  preferred approach disagree, the reference wins and the design says so. If following it is
   impossible or would break something, that is a question for step 3, not a call you make silently.
-- **Verification notes** each become a check in `## Verification plan` — one note, one check, its
-  `proves:` written in the owner's own terms. A note you cannot turn into a falsifiable check is a
-  question for them, not a note to drop.
+- **Verification notes** each become one check, its `proves:` written in the owner's own terms. A
+  note you cannot turn into a falsifiable check is a question for them, not a note to drop.
 
-Empty is the common case and needs no comment. Never write into this section: the editor is its
-only writer, and a line you add there would come back to you next cycle as the owner's instruction.
+Empty is the common case and needs no comment. Never write into this section: the editor is its only
+writer, and a line you add would come back next cycle as the owner's instruction.
 
-## Step 2 — Recon before design
+## Step 2 — Recon relevant information before design
 
 - **Straightforward** (clear intent, contained change, one obvious design) → design directly.
-- **Complex / ambiguous** (broad blast radius, several viable designs) → fan out parallel
-  Explore subagents first (model: sonnet), one per "map how X works today" question — the
-  `## Design` section's modules/interfaces come from these answers, not from guesses.
+- **Complex or ambiguous** (broad blast radius, several viable designs) → fan out parallel Explore
+  subagents first (model: sonnet), one per "map how X works today" question. The `## Design`
+  section's modules and interfaces come from those answers, not from guesses.
 
-Interactive sessions: iterate the design with the owner until sound before recording. A call the
-owner didn't make that would be expensive to reverse → record it in `plan.md`'s
-`## Decisions & clarifications` (what · why · cost of being wrong);
-it reaches them at the next gate.
+Interactive sessions: iterate the design with the owner until it is sound before recording. A call
+the owner didn't make that would be expensive to reverse goes in `## Decisions & clarifications`
+(what · why · cost of being wrong); it reaches them at the next gate.
 
 ## Step 3 — Grill the owner when a decision is genuinely theirs
 
-Never ask what you can look up: a question the codebase, the anchor docs, or a recon subagent can
-answer is yours to answer. What remains are the design tree's genuine forks — competing designs
-with different costs, intent the brief cannot settle, scope calls — where guessing wrong is
-expensive (a call you can make and simply record is not a question). For every
-question you do carry, form a **recommended answer** first with a good concise reasoning; a question without a recommendation
-is research you haven't finished.
+- Never ask what you can look up: a question the codebase, the anchor docs, or a recon subagent can
+answer is yours to answer. What remains are the design tree's genuine forks — competing designs with
+different costs, intent the brief cannot settle, scope calls — where guessing wrong is expensive. 
+- A call you can make and simply record is not a question. 
+- Form your recommended answer before you ask; a question without one is research you haven't finished.
 
-Either way the shape is the same four fields — the question alone, your recommendation, its
-one-line ground, and the alternative with the condition that would select it. Keep the question
-free of the reasoning that produced it: the owner is deciding, not reading your derivation.
-
-**Interactive session:** grill one question at a time, walking the design tree in dependency
-order — an answer often reshapes the next question. For a consequential fork:
+**Interactive:** grill question(s) at a time, in dependency order — an answer often reshapes the
+next question. For a consequential fork:
 
 ```markdown
 ### <the question, as a question>
@@ -70,14 +67,12 @@ order — an answer often reshapes the next question. For a consequential fork:
 - Instead — <alternative>, if <when you'd pick it>
 ```
 
-**Background run:** you cannot converse — end the run instead of guessing. `report_completion`
-with `machine.outcome: needs_user` and one `user.questions` entry per open question; the tool
-carries the four fields, so your final message says only what is being asked and stops (the card
-already renders them — restating them there is a second copy the owner has to reconcile). One
-call carries all questions; each round costs the owner a visit.
+**Background:** you cannot converse, so end the run rather than guess. `report_completion` with
+`machine.outcome: needs_user` and one `user.questions` entry per open question. One call carries all
+of them; each round costs the owner a visit.
 
 Answers arrive later as chat in this same session. Before touching the rest of the plan, record
-every settled question into `## Decisions & clarifications` — one entry per question:
+every settled question in `## Decisions & clarifications` — one entry each:
 
 ```
 ### <ts> — <the question, one line>
@@ -85,161 +80,152 @@ every settled question into `## Decisions & clarifications` — one entry per qu
 - changed: <what it changed in the plan, or "nothing">
 ```
 
-Then update the affected sections and close the round with `report_completion` again — `success`
-when the plan is finished, or `needs_user` with what remains open.
+The tool comes back into it only when the questions are settled and the plan is finished
+(`success`), or when this round left something still open (`needs_user`). Answering a question is
+not itself a reportable event.
 
 ## Step 4 — Author the plan
 
-`scaffold_artifact(item_id, "plan")`, then fill the slots — the scaffold arrives in the shape of
-the item's kind. The section contract — what each must achieve, field grammar, and the hard rules
-the gate enforces — is `../../references/artifacts.md` § "plan.md — the section contract", one per
-kind; read the one you were handed before filling. Judgment bars the reference can't check for you:
+`scaffold_artifact(item_id, "plan")` hands you the shape of this item's kind. What each section must
+achieve, every field's grammar, and the hard rules the gate enforces are in
+`../../references/artifacts.md` § "plan.md — the section contract" — read the entry for the kind you
+were handed. The bars below are the judgment that contract cannot check.
 
-- `## Design` is what build implements verbatim — if it outgrows a section, propose splitting
-  the item instead of writing a design document.
+### 4a — Decide how much proof this item owes
 
-- **A task is a NAME on its head line, and its SPECIFICATION on the indented lines under it.** The
-  spec goes underneath and can be as long as build needs; the head line is what the owner's board
-  shows.
+**Verification is not compulsory.** `depth:` is your call, and the `reason:` line beside it is what
+the owner accepts or vetoes at the gate:
 
-  **Name the CHANGE, not the code.** The owner reads this list to see what the item is doing to
-  their product, so a task is named the way they would say it: `Rename a category across the
-  ledger`, not `storage.rename_category(old, new)`; `Wire the search subcommand into the CLI`, not
-  `commands.search(args)`. A function signature is addressing — it belongs in the spec below, where
-  build needs it. A few words, under ~60 characters, no closing period.
+- **`none`** — nothing this item does is observable: a rename, a comment, a dependency bump. Vet
+  still runs and still reads the diff through its three standing lenses; it just has nothing to
+  execute, and files the report saying so. The gate REFUSES a `none` plan that lists checks.
+- **`checks` / `scenarios`** — there is a behaviour someone could watch change.
 
-  Two ways to get it wrong, both seen live: letting the head line run into the spec's first clause
-  (it lands on the Task tab as "…positional `text`, `--month`, `--from`," and names nothing), and
-  naming the symbol you are about to write instead of the change you are making. The test: read the
-  head line alone and ask whether the OWNER learns what this task does.
+The bar cuts both ways, and both failures are real: do not manufacture checks so a trivial item
+looks thorough, and do not call a behaviour change unobservable to skip the work. "Only a rename"
+earns `none`; "only frontend" does not.
 
-- Each check's `proves:` is the one line written for the OWNER — what is true of the product when
-  that check passes, in the product's own words. Test it by covering the rest of the block: if the
-  sentence still says something, it is one. "With `--quiet`, `count` prints nothing at all" passes
-  that test; "exit code is 0", "the suite passes", "the flag is honoured correctly" do not. A
-  whole-item check earns the same sentence — "nothing that worked before stopped working". This
-  line leads the owner's reports and the Proof view, and it is what tells a vetter whether a green
-  actually demonstrates the intent; nobody downstream can recover it from `run:`.
+### 4b — Reuse a library check before inventing one
 
-- Every `## Verification plan` `expect` must be falsifiable: if you can't picture the output
-  that FAILS it, rewrite it. The bar for `depth: none` is high — "only a rename" or "only
-  frontend" doesn't clear it; `none` is for items with no observable surface at all.
+Call `read_verification_library`. Standing entries are already in your scaffold — leave them exactly
+as they are; they are what this repo always owes. If an available entry covers what you were about to
+write, paste its block and mark it `- source: library`: an entry there has run and passed here, which
+is more than a check you invent now can claim. Cite only what genuinely fits — a near-miss entry
+fails for a reason nobody cares about.
 
-- Give a check a `run:` line whenever one command can decide it — the kernel runs it in the sandbox
-  before vet opens, so it costs nothing, re-runs free on every cycle, and lands as machine evidence.
-  Write it as one command whose **exit code is the verdict** (`&&` chains steps; a grep that must
-  match is `... | grep -q thing`). **It already runs in THIS item's worktree — never `cd` and never
-  write an absolute path into it.** Both leave the worktree for the repo's primary checkout, which
-  is a different git worktree sitting on the anchor branch without this item's commits, so the
-  command grades code the item did not write. Every path is relative to the repo root. Omit `run:` when the pass condition needs a person or a subagent
-  to judge it — a UI that must look right, a message that must read well, a design bar. Never bend a
-  judgment call into a command to earn the label; a wrong green is worse than an honest attestation.
+### 4c — Write the design, the tasks, and the checks
 
-- Give a check a `rubric:` when one pass/fail line can't hold the bar — the criteria are judged and
-  recorded one by one, so a failure names WHICH one missed instead of "it didn't look right". Every
-  criterion must be able to come back missed; "the code is clean" cannot. **No quotas** — never
-  write "find at least two problems": a criterion that demands findings manufactures them. State
-  what must be true, and let a clean pass be a clean pass. A check may carry both `expect` and a
-  rubric (an exit code AND a judgment about what it printed), and one of the two is required.
+**A task is a NAME on its head line and its SPECIFICATION on the indented lines under it.**
 
-- **Before authoring a check, call `read_verification_library`.** The standing entries are already
-  in your scaffold — leave them exactly as they are, they are what this repo always owes. If an
-  available entry already covers what you were about to write, paste its block instead and mark it
-  `- source: library`: an entry there has run and passed, which is more than a check you invent
-  here can claim. Cite only what genuinely fits; a near-miss entry is a check that will fail for a
-  reason nobody cares about.
+- The spec can be as long as build needs; the head line is what the owner's board shows.
+- **Name the CHANGE, not the code** — `Rename a category across the ledger`, not
+  `storage.rename_category(old, new)`. A signature is addressing; it belongs in the spec below.
+- A few words, under ~60 characters, no closing period.
+- Seen live: a head line that runs into the spec's first clause lands on the board as
+  "…positional `text`, `--month`, `--from`," and names nothing.
+- The test: read the head line alone and ask whether the OWNER learns what this task does.
 
+Then the checks. Each field's bar:
+
+| field | the bar | the test |
+|---|---|---|
+| `proves:` | one line for the OWNER — what is true of the product when this passes, in the product's words | cover the rest of the block: does the sentence still say something? "With `--quiet`, `count` prints nothing at all" passes; "exit code is 0", "the suite passes", "the flag is honoured correctly" do not |
+| `expect:` | falsifiable | can you picture the output that FAILS it? If not, rewrite |
+| `run:` | one command whose exit code is the verdict (`&&` chains steps; a grep that must match is `… \| grep -q thing`) | give it one whenever a command can decide the check — the kernel runs it in the sandbox before vet opens, so it costs nothing and re-runs free every cycle |
+| `rubric:` | for when one pass/fail line can't hold the bar — criteria judged and recorded one by one, so a failure names WHICH one missed | can every criterion come back missed? "The code is clean" cannot. **No quotas** — "find at least two problems" manufactures findings |
+| `covers:` | the task id(s) this check proves — the join key across the plan, the cycle reports and the ledger | a genuinely whole-item check (the suite, a lint pass) leaves it blank; a check covering a task no `## Tasks` line declares is a check for work nobody planned |
+
+A check needs `expect`, a rubric, or both. It may carry both — an exit code AND a judgment about what
+it printed.
+
+Three rules that override the table:
+
+- **A `run:` block already runs in THIS item's worktree — never `cd`, never an absolute path.** Both
+  leave for the repo's primary checkout, a different worktree sitting on the anchor branch without
+  this item's commits, so the command grades code the item did not write. Every path is relative to
+  the repo root.
+- **Omit `run:` when the pass condition needs a person or a subagent to judge it** — a UI that must
+  look right, a message that must read well, a design bar. Never bend a judgment call into a command
+  to earn machine evidence; a wrong green is worse than an honest attestation.
 - **Never make the project's test suite a check.** `pytest`, `npm test`, `python -m unittest
-  discover` — running the whole suite is BUILD's validation: it does it every cycle, and the kernel
-  re-runs what it recorded to audit the claim. As a check it runs the suite twice and files a
-  validation result as this item's own proof. It is REFUSED at the gate. A single test that drives
-  the one behaviour this item promises is a different thing and perfectly good — narrow the command
-  (`-k`, a node id, one file) and say in `proves:` what its green means for the owner.
+  discover` — the whole suite is BUILD's validation: it runs it every cycle, and the kernel re-runs
+  what it recorded to audit the claim. As a check it runs the suite twice and files build's own work
+  as this item's proof, so the gate REFUSES it. One test that drives the behaviour this item promises
+  is a different thing and perfectly good — narrow the command (`-k`, a node id, one file) and say in
+  `proves:` what its green means for the owner.
 
-- **Then call `dry_run_checks` and read the exit codes.** It runs only the `run:` blocks you just
-  wrote and records nothing. A failing assertion is EXPECTED — the work does not exist yet. What
-  you are looking for is a command that could not run at all: a usage error, an import error, a
-  path that is not there. That one will never come back green however well build does its job, and
-  finding it now costs a second instead of a whole build⟷vet cycle.
+Finally: **hand build only tasks it can complete itself.** It edits code in its worktree and stages
+contract-doc changes; it cannot make an owner's decision or reach outside its boundary. A KNOWN wall
+is settled here — decide and record the assumption — never left as a mid-build surprise.
 
-- Each check's `covers:` names the task id(s) it proves. This is what lets the owner's Proof view
-  read "this feature, proven this way" instead of a bare grid of check ids — the task id is the
-  join key across the plan, the cycle reports, and the ledger. A genuinely whole-item check (the
-  suite, a lint pass) leaves it blank; do not invent a task for it. A check covering a task no
-  `## Tasks` line declares is a check for work nobody planned — fix one or the other.
+### 4d — Dry-run the `run:` blocks
 
-- Hand build only tasks it can complete itself: it can edit code in its worktree and stage
-  contract-doc changes, but not perform owner decisions or reach outside its boundary. A KNOWN
-  wall is settled here (decide + record the assumption), never left as a mid-build surprise.
+`dry_run_checks` runs only the blocks you just wrote and records nothing. A failing assertion is
+EXPECTED — the work does not exist yet. What you are looking for is a command that could not run AT
+ALL: a usage error, an import error, a path that is not there. That one will never come back green
+however well build does its job, and finding it now costs a second instead of a whole build⟷vet
+cycle.
 
-## Step 4b — When this is a REVISION, not a first plan
+## Step 5 — File the user-facing report
 
-An item arriving here from review carries feedback and an existing `plan.md` that build already
-worked against. Change it **only** through `revise_plan` — never rewrite the file.
+`file_plan_report` writes `reports/report-plan.md` — the owner's read of the plan, and the last thing
+between it and the gate. The **confirmation table is DERIVED**: one row per check, its `proves:` line
+beside how it will be run. Nothing you write reproduces it.
 
-**Split the feedback into concerns first.** One review conversation usually carries several: the
-loop hit its budget AND two checks failed AND the caching approach was wrong. Each concern becomes
-one entry in `changes` with its **own** scope — so redesigning one part never resets the progress
-another part earned:
+You supply the prose:
 
-- **resume** — the plan was right; run another generation against it unchanged. No ops, and an edit
-  here is refused. This is the honest answer to *"looks close, try more"*.
-- **targeted** — right in approach, wrong in places. Section ops for prose, task-level ops for
-  `## Tasks` (a checkbox is progress build earned).
-- **redesign** — the approach itself was wrong. Rewrite the section, name what is void in
-  `superseded`, and remove the dead tasks EXPLICITLY (`remove_task` + `add_task`) — nothing resets
-  for you, because a guess is worse than the exact list.
-
-**The proportionality rule is a refusal, not advice.** If a concern needs no plan change, its scope
-is `resume` — do not manufacture an edit to have something to show, and do not re-instruct build on
-parts nobody complained about. Over-modification is the failure this grammar exists to prevent.
-
-Two fields carry the instruction: `directive` (what the next build does DIFFERENTLY — the one line
-it acts on) and `still_in_force` (what earlier revisions still bind; `nothing` on the first). Build
-reads only the newest block, so `still_in_force` is what keeps that honest.
-
-You do not tag the concern types or the budget — code reads those off the loop's exit and the
-authorization ledger. Your revision opens a fresh build⟷vet generation.
-
-Then continue at step 5: the report is written from the revised plan, not from the feedback.
-
-## Step 5 — File the quick user-facing report
-
-`file_plan_report` writes `reports/report-plan.md` — the owner's read of the plan, in their words,
-and the last thing between this plan and the gate. The **confirmation table** is DERIVED: one row
-per check, its `proves:` line verbatim beside how it will be run. Nothing you write reproduces it.
-
-You supply the prose: `summary` (one line, and the dashboard shows it alone, so it must stand
-without the rest), `approach`, `confirm`, and `decisions` / `assumptions` when there is something
-real for them. On an implementation item `confirm` is **what the checks will not tell you** — the
-paragraph under the table; on a research item it is *how we'll look, and what we won't*, since
-there is no table.
+- **`summary`** — one line. The dashboard shows it alone, so it must stand without the rest.
+- **`approach`** — the plan in the owner's terms.
+- **`confirm`** — **what the checks will not tell you**, the paragraph under the table.
+- **`decisions` / `assumptions`** — only when there is something real for them.
 
 The tool tells you how many tasks have **no check**, and the report names them. That is the plan
-gate's first question, so answer it before it is asked: add the missing check, or be ready to say
-why that task needs no proof. Never write a check you don't believe in just to clear the count.
+gate's first question, so answer it before it is asked: add the missing check, or be ready to say why
+that task needs no proof. Never write a check you don't believe in to clear the count.
 
-**On a revision this report is still about the PRODUCT.** It describes the plan as it now stands —
-what is being built and what will prove it — exactly as a first plan does. What CHANGED, and why,
-is the record's job (`## Revision r<n>`), not the owner's. Never narrate the workflow here: no
-cycles, no phases, no "no plan change needed", no "the loop skipped vet". A live one read
-*"No plan change needed — this cycle routes through vet to record them"*, and its reader learned
-nothing about the feature they were about to approve. If a revision genuinely changed nothing, the
-report is the same report; that is the honest answer, not a paragraph explaining why it is.
+**On a revision this report is still about the PRODUCT** — what is being built and what will prove
+it, exactly as a first plan reads. What changed, and why, is the record's job. Never narrate the
+workflow here: no cycles, no phases, no "no plan change needed". A live one read *"No plan change
+needed — this cycle routes through vet to record them"*, and its reader learned nothing about the
+feature they were about to approve. If a revision genuinely changed nothing, the report is the same
+report.
 
-**Writing tone and style**
-- Plain, easy language. Fewer words wins.
+**Tone and style when writing user-facing report**
+- Plain, concise, easy language. Fewer words wins. No verbosity.
 - Never restate the item's kind, deliverable or id. Spend the space on the judgment behind them.
 - Omit a prose field rather than filling it with "none" — an absent block reads better.
 
 ## Chat response style
-- Use plain and easy language.
+- Plain, concise, easy language. Fewer words wins. No verbosity.
 - Keep your response short, clear, and to the point.
 - Use bullets or numbered lists to organize information if there is more than one point.
+
+## Reporting the run
+
+`report_completion` says why THIS RUN stopped. A run is one invocation of you — it is not the phase,
+and it is not always the end of the work. The outcome word is what separates them:
+
+- **`success`** — you stopped with the plan authored and its report filed. It still does not mean
+  the phase is approved or the item advanced; that stays the owner's call at the gate.
+- **`needs_user`** — you stopped at step 3 with questions open. The RUN is over (nobody is there to
+  answer); the WORK is not. The kernel parks the item and shows your questions.
+- **`partial` · `blocked` · `clean_noop`** — when one of those is the truer word for why you stopped.
+
+**A run the kernel fired always declares one.** It is the only thing the kernel reads to learn what
+happened, and a run that skips it is recorded as undeclared.
+
+**A conversation does not.** When the owner is answering in the thread, each reply is an ordinary
+chat turn and owes no report — not per question, not per round. Report again only when the item's
+state actually changes: `success` once the plan is finished. Reporting every round re-parks an item
+that is already parked, and a premature `success` un-parks one whose questions are still open.
+
+**Output style to report_completion.**
+- Plain, concise, easy language. Fewer words wins. No verbosity.
+- Keep your response short, clear, and to the point.
 
 ## Pitfalls
 
 - **A checklist outside `## Tasks`** — progress is derived from that section's checkboxes only.
 - **A vague `expect`** — "works correctly" gives the vet agent nothing to falsify.
 - **Interrogating an easy task** — recon fan-out and long deliberation are for genuine forks.
-- when writing to docs, Do not include the comments part `<!-- ... -->` in the scaffold you file — it is instructions for you.
+- **Over-complicating and over-engineering the plan** — If the goal of this work item is simple and straightforward, do not overthink it, do not over-plan, and do not over-state in the docs.

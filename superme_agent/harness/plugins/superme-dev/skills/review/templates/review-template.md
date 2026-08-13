@@ -1,9 +1,3 @@
-<!-- Agent-facing review record: artifacts/review.md — written at review, BEFORE the owner's report.
-     Its readers are machines and later agents: a revision build cycle, that cycle's vetter, close,
-     the landing commit, and whoever touches this code months from now. State the record; the
-     persuasion belongs in reports/report-review.md. Every line traces to plan.md or a
-     build-vet-<n>.md — no new facts. Overwrite in place on a re-write, except `## Revision rounds`,
-     which only ever gains a block. -->
 # Review Agent-facing Report
 
 **Delivered:** <fill:1 line — what actually shipped. The kernel writes this into the landing commit, so say it the way the project's permanent history should read: what the code now does, never what the item was called>

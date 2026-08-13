@@ -946,7 +946,11 @@ def _scaffold_artifact(*, store, context_id, dev_root=None, bound_item_id=None, 
         try:
             r = _arts.scaffold(d, _s(args, "artifact"), title=str(meta.get("title") or item_id),
                                item_kind=meta.get("kind"), item_id=item_id,
-                               standing=_vl.standing_blocks(Path(dev_root)))
+                               standing=_vl.standing_blocks(Path(dev_root)),
+                               # The investigation family picks the artifact SHAPE, and it is
+                               # triage's judgment on the item — never an argument the scaffolding
+                               # agent gets to pass, or the shape would be a per-call opinion.
+                               research_kind=meta.get("research_kind"))
         except KeyError as e:
             return _err(str(e))
         state = "scaffolded" if r["created"] else "already exists (re-scaffold is a no-op)"
@@ -989,6 +993,25 @@ class SetTriageClassificationArgs(TypedDict, total=False):
                                            "you saw that settled it. Required for BOTH values: this "
                                            "is what the owner reads at the gate to disagree with, "
                                            "and a bare label cannot be argued with")]]
+    research_kind: Annotated[Literal["audit", "refactoring", "housekeeping", "security",
+                                     "study", "deep-diagnosis"],
+                             ("REQUIRED when kind is `research`, rejected otherwise — which family "
+                              "of investigation this is, which decides what counts as an answer. "
+                              "`audit`: is this surface sound — coverage, performance, logic, "
+                              "features, bugs. `refactoring`: this code is hard to work in, what "
+                              "shape should it be. `housekeeping`: what has gone stale — comments, "
+                              "dead code, unused declarations, anything that shouldn't be there. "
+                              "`security`: what is exposed — risks, unsafe smells, unsanitized or "
+                              "junk data. `study`: how does someone else do this, and what should "
+                              "we take. `deep-diagnosis`: what is the mechanism behind a behaviour "
+                              "we cannot explain. Pick by the QUESTION, not the subject — reading "
+                              "another project to find OUR bug is deep-diagnosis, not study, and a "
+                              "sweep that happens to find a bug is still an audit")]
+    research_kind_reason: Annotated[str, ("one line for why that family — required alongside "
+                                          "`research_kind`, same reason as scale_reason: this is "
+                                          "what the owner argues with at the gate, and this label "
+                                          "picks both the method the investigation follows and the "
+                                          "shape of the record it writes")]
 
 
 def _set_triage_classification(*, store, context_id, dev_root=None, bound_item_id=None, **_):
@@ -1016,6 +1039,20 @@ def _set_triage_classification(*, store, context_id, dev_root=None, bound_item_i
             return _err("Kind/deliverable are fixed after the triage-exit gate — this item is "
                         f"already in `{item.get('phase')}`. A post-triage need is a branch-off "
                         "(create_inbox_item), never a re-kind.")
+        # The kind/family PAIRING is checked before anything is written. Every other validation
+        # here can afford to run in place because it guards its own field; this one spans two, and
+        # a refusal raised halfway would leave the item holding a new title, kind and scale under a
+        # message telling the agent nothing was recorded.
+        fam = _s(args, "research_kind")
+        if _s(args, "kind") == "research" and not fam:
+            return _err("A research item needs `research_kind` (audit | study | measurement | "
+                        "diagnosis) + `research_kind_reason` — it decides what counts as an "
+                        "answer, which guide the investigation follows, and the shape of the "
+                        "record it writes. Nothing was recorded; call again with both.")
+        if _s(args, "kind") != "research" and fam:
+            return _err(f"`research_kind` ({fam!r}) belongs to a research item — this one is "
+                        f"`{_s(args, 'kind')}`, and its phases have no investigation step. Nothing "
+                        "was recorded; drop the argument or fix the kind.")
         title = _s(args, "title")
         try:
             renamed = dev.set_work_item_title(root, item_id, title)
@@ -1046,12 +1083,26 @@ def _set_triage_classification(*, store, context_id, dev_root=None, bound_item_i
                                     _s(args, "scale_reason") or "")
         except ValueError as e:
             return _err(str(e))
+        # The investigation family — the third axis, and the only one that applies to a single kind
+        # (kind_profiles.RESEARCH_KINDS). Its pairing with `kind` was validated up top; what is
+        # left here is the write. Required-when-research cannot live in the arg schema, which has
+        # no way to express a conditional — and a research item whose family nobody named would
+        # reach investigate with neither a method nor an artifact shape chosen for it.
+        fam_note = ""
+        if fam:
+            try:
+                dev.set_work_item_research_kind(root, item_id, fam,
+                                                _s(args, "research_kind_reason") or "")
+            except ValueError as e:
+                return _err(str(e))
+            fam_note = f" · research kind `{fam}`"
         # F1: the triage-exit gate's `triage_ran` reads this stamp — recording a classification
         # IS triage having run; a bare inbox push (kind default + body copied) never stamps it.
         dev.set_work_item_triaged(root, item_id)
         t_note = f" · renamed to \"{title}\"" if renamed else ""
         return _ok(f"Recorded triage classification: kind `{kind}` · scale "
-                   f"`{_s(args, 'scale')}`{d_note}{t_note}. The owner confirms at the triage-exit "
+                   f"`{_s(args, 'scale')}`{fam_note}{d_note}{t_note}. The owner confirms at the "
+                   "triage-exit "
                    "gate (Approve → plan); until then it stays a proposal on the item's own fields.")
     return set_triage_classification
 
@@ -1479,7 +1530,7 @@ def _write_checkpoint(*, store, context_id, dev_root=None, repo_dir=None, bound_
             from ...core import kind_profiles as _kp, dev_knowledge as _dk  # noqa: F401
             from ...daemon import app_state as _app
             it = _app.dev.read_work_item(dev_root, item_id) or {}
-            role = _kp.session_role(str(it.get("phase") or "triage"))
+            role = _kp.session_slot(str(it.get("phase") or "triage"))
         except Exception:
             pass
         try:
@@ -1860,11 +1911,11 @@ _ITEM_DEV_TOOLS: list[ToolSpec] = [
 
 
 # --------------------------------------------------------------------------- the registry
-# Two tiers. The MAIN set is what a normal dev chat turn gets: read activity, read the inbox, and the
-# two SANCTIONED itemize writes. The LEARNING set is the pipeline sub-agents' pens (capture / distill
-# / forge) — they must NOT reach the main chat agent, or it will short-circuit the automatic
-# capture→distill→forge flow by filing candidates/proposals itself (there is no chat-side learning
-# surface by design). Those tools are added only for the disposable background runs (`learning=True`).
+# Three groups, kept apart for READING the file. What any given session actually MOUNTS is decided
+# further down by TOOL_SCOPES, one line per session kind — these lists are the catalogue, not the
+# surface. The grouping still carries one hard rule: the LEARNING pens (capture / distill / forge)
+# must never reach the main chat agent, or it will short-circuit the automatic capture→distill→forge
+# flow by filing candidates/proposals itself (there is no chat-side learning surface by design).
 
 # Read-only tools available to EVERY dev turn (main chat + learning runs). Naming: every read is
 # `read_*` so the tool surface is scannable. The learning-pool reads (`read_candidates`/`read_proposals`)
@@ -1967,22 +2018,74 @@ _LEARNING_DEV_TOOLS: list[ToolSpec] = [
 
 DEV_TOOLS: list[ToolSpec] = _MAIN_DEV_TOOLS + _ITEM_DEV_TOOLS + _LEARNING_DEV_TOOLS   # full set (for reference/tests)
 
+_BY_NAME: dict[str, ToolSpec] = {t.name: t for t in DEV_TOOLS}
 
-def make_dev_mcp_server(store, context_id: str, *, learning: bool = False, **deps):
-    """Build the `dev` MCP server bound to one context's event store. By default it exposes only the
-    MAIN dev tools (the `read_*` reads over the event log · inbox · learning pool, plus the sanctioned
-    inbox itemize writes) — a normal chat turn. The disposable learning runs (capture/distill/forge)
-    pass `learning=True` to also get the WRITE pens; those must never reach the main chat agent (it
-    would bypass automatic capture).
+# One in-code table: SESSION SCOPE → the dev tools that session may see. Same pattern as
+# `core.kind_profiles.KIND_PROFILES` — declarative, one home, and an unknown key fails loud.
+#
+# WHY visibility and not just refusal: a session that cannot do another phase's job should not be
+# holding its pen. Before this, every dev run mounted all 30 tools and the separation lived in skill
+# prose ("Fixes belong to the build session, never here") — which is exactly the self-grading vet
+# exists to catch, and a diagnosis session (read-only by design) still carried `apply_knowledge_delta`.
+#
+# The rule for membership is deliberately narrow: a tool is in a scope when that scope's SKILL names
+# it, or when the surface plainly needs it (the owner's own chat). Widening a scope is a one-line
+# change here; nothing else moves.
+TOOL_SCOPES: dict[str, tuple[str, ...]] = {
+    # --- chat surfaces (ws.py), by session kind ---
+    "general": ("read_dev_log", "read_inbox", "read_run", "read_candidates", "read_proposals",
+                "create_inbox_item", "append_inbox_item", "push_inbox_item", "itemize_and_launch"),
+    "onboarding": ("read_dev_log", "read_inbox", "create_inbox_item", "append_inbox_item",
+                   "itemize_and_launch"),
+    "diagnosis": ("read_dev_log", "read_run"),          # strictly read-only, by design
+    # --- the item phases: scope name == the skill the run fires ---
+    "triage": ("scaffold_artifact", "set_triage_classification", "create_inbox_item"),
+    "plan": ("scaffold_artifact", "dry_run_checks", "read_verification_library",
+             "file_plan_report", "revise_plan", "read_dev_log"),
+    "build": ("record_validation", "request_authorization", "sync_from_main", "write_checkpoint",
+              "create_inbox_item"),
+    "vet": ("record_verification", "record_diagnosis", "record_lens", "nominate_check",
+            "read_verification_library", "file_vet_report"),
+    "review": ("scaffold_artifact", "request_authorization"),
+    "close": ("apply_knowledge_delta", "read_verification_library", "create_inbox_item"),
+    "investigate": ("scaffold_artifact", "write_checkpoint"),
+    "itemize": ("itemize_and_launch", "read_inbox", "read_dev_log", "create_inbox_item"),
+    # --- kernel-fired turns that are not a phase ---
+    "deputy": ("read_dev_log", "read_run"),             # it judges a report; it writes a verdict
+    "handoff": ("write_checkpoint",),                   # the pre-compaction turn, item-bound branch
+    "resolve": ("read_dev_log",),                       # merge-conflict resolution: git work, no pens
+    # --- the disposable learning runs (learning.py), one scope each ---
+    "capture": ("file_candidate", "read_dev_log"),
+    "distill": ("read_candidates", "read_proposals", "propose_memory", "merge_into_proposal",
+                "drop_candidates"),
+    "write": ("stage_artifact",),
+}
+
+# Import-time guard: a scope naming a tool that doesn't exist is a typo, and it should never get as
+# far as a live run. Same reasoning as KIND_PROFILES' loud unknown-kind failure.
+for _scope, _names in TOOL_SCOPES.items():
+    if (_missing := [n for n in _names if n not in _BY_NAME]):
+        raise KeyError(f"TOOL_SCOPES[{_scope!r}] names unknown dev tool(s): {', '.join(_missing)}")
+
+
+def make_dev_mcp_server(store, context_id: str, *, scope: str, **deps):
+    """Build the `dev` MCP server bound to one context's event store, carrying only the tools
+    `scope` may see (TOOL_SCOPES). `scope` is required and unknown values raise — a session with the
+    wrong toolset is a bug we want in a test, not in production.
 
     Optional deps thread per-turn state to specific learning tools (ignored by the rest):
     `origin_session_id` + `capture_source` (provenance bound onto `file_candidate` during a sweep),
     `proposal_id` + `staged_path` (bound onto `stage_artifact` during a write run)."""
-    return build_mcp_server("dev", dev_tool_specs(learning=learning),
+    return build_mcp_server("dev", dev_tool_specs(scope),
                             store=store, context_id=context_id, **deps)
 
 
-def dev_tool_specs(*, learning: bool = False) -> list[ToolSpec]:
-    """The EXACT spec list `make_dev_mcp_server` mounts. One source, so the prompt inspector's
-    tool-surface capture can never claim a turn carried tools it didn't."""
-    return _MAIN_DEV_TOOLS + _ITEM_DEV_TOOLS + (_LEARNING_DEV_TOOLS if learning else [])
+def dev_tool_specs(scope: str) -> list[ToolSpec]:
+    """The EXACT spec list `make_dev_mcp_server` mounts for a scope. One source, so the prompt
+    inspector's tool-surface capture can never claim a turn carried tools it didn't."""
+    try:
+        names = TOOL_SCOPES[scope]
+    except KeyError:
+        raise KeyError(f"unknown dev tool scope {scope!r} — known scopes: "
+                       f"{', '.join(sorted(TOOL_SCOPES))}") from None
+    return [_BY_NAME[n] for n in names]

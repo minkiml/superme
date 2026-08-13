@@ -73,16 +73,24 @@ KIND_PROFILES: dict[str, KindProfile] = {
     # every kind, with a per-kind report template inside it (renovation §2.2).
     "research": KindProfile(
         kind="research",
-        phases=("triage", "plan", "investigate", "review", "close"),
+        # NO PLAN PHASE (research-sweep-model-design §3, 2026-08-13). Plan's real product on the
+        # implementation path is the VET-PLAN — the Done criteria build is measured against. Research
+        # has no vet, and subtracting that leaves only "decide the approach", which the family guide
+        # (`investigate/references/<family>.md`) already owns in far more detail than a plan session
+        # would write. The split also cost real continuity: the plan session's UNDERSTANDING never
+        # transferred to investigate, only its document did — a price implementation pays willingly
+        # because build must be measured against something written first, and research got nothing
+        # for. Research's phases were originally implementation's minus build+vet and nobody asked
+        # whether plan survived the subtraction; this is that question, answered.
+        phases=("triage", "investigate", "review", "close"),
         worktree=False,
         knowledge_writes=False,
         emits={
             "triage": ("brief",),
-            "plan": ("plan",),
             "investigate": ("investigation",),
             "review": ("review",),
         },
-        required_artifacts=("plan", "investigation", "review"),
+        required_artifacts=("investigation", "review"),
         # NO close criteria (owner's standing rule, 2026-08-09). `findings_delivered` and
         # `spawns_exist` lived here and both asked at the wrong phase: the first re-judged the
         # owner's report after the item was locked, and the second told the owner to "run itemize"
@@ -122,6 +130,56 @@ def item_scale(item: dict | None) -> str:
     scale = str((item or {}).get("scale") or "").strip()
     return scale if scale in ITEM_SCALES else DEFAULT_SCALE
 
+
+# --- RESEARCH KIND: which family of investigation a research item is ------------------------------
+# A third axis, and it applies to ONE kind. `kind` decides the machinery, `scale` decides how much
+# content moves through it, and this decides what counts as an answer — which is why it routes two
+# real things rather than being a label: the guide the investigate phase reads, and the artifact
+# shape it scaffolds (`study` has its own; see artifacts._TEMPLATE_HOMES).
+#
+# NO DEFAULT, on purpose, and this is where it differs from `scale`. `standard` is a real behaviour
+# every skill already describes, so an unjudged item has somewhere honest to sit. There is no
+# equivalent family — an unjudged research item has not been told what counts as an answer, and
+# inventing one for it would silently pick a bar and an artifact. Unset reads None, the skill falls
+# back to naming the family in prose, and the base artifact shape (which is the audit shape, the one
+# the phase was originally written for) is what gets scaffolded.
+# The six (owner, 2026-08-13). Four are audit-shaped and differ in what they LOOK for and what
+# severity means in each; `study` and `refactoring` both end in a proposal; `deep-diagnosis` ends in
+# a mechanism.
+#
+# `deep-diagnosis` is NOT `diagnosis` on purpose. A `diagnosis` SESSION already exists — the quick
+# read of one run's trace, launched from an Activity row (sessions.kind, session_kinds.py). Reusing
+# that word for a work-item family would put two meanings on one token, which is how the wrong-field
+# bugs start. This one is the dedicated version: a planned investigation with a gate, not a look.
+#
+# `measurement` was here and is NOT: performance belongs inside the general audit, and a number
+# without a re-runnable recipe is a bad receipt in every family, not a family of its own.
+RESEARCH_KINDS: tuple[str, ...] = ("audit", "refactoring", "housekeeping", "security",
+                                   "study", "deep-diagnosis")
+
+# The families whose guide PRESCRIBES fan-out — each `references/<family>.md` carries a `## Fan-out`
+# section telling investigate to split the surface across subagents (by area, or by boundary for
+# security). These four are the whole-codebase families: their subject is large by definition.
+#
+# WHY THIS TUPLE EXISTS AT ALL (measured, 2026-08-13). Across seven live items — including a
+# whole-repo refactoring study that burned 127k tokens and an audit of every reporting command —
+# **not one subagent was ever spawned.** The instruction was in all four guides, phrased clearly, and
+# complied with 0% of the time. That is the prompt-quality pass's own law restated: compliance tracks
+# ENFORCEMENT, not emphasis — `<fill:…>` slots are gate-checked and leak 0%, a thrice-stated prose
+# note leaked 100%. `## Fan-out` was prose nothing checked, so nothing did it.
+#
+# `study` and `deep-diagnosis` are absent deliberately: both follow ONE thread of enquiry to its end,
+# and splitting a diagnosis across agents is how a causal chain gets lost.
+FANOUT_FAMILIES: tuple[str, ...] = ("audit", "refactoring", "housekeeping", "security")
+
+
+def research_kind(item: dict | None) -> str | None:
+    """This item's investigation family, or None when nobody has judged one. Forgiving for the same
+    reason `item_scale` is: every research item minted before this field existed has no line, and an
+    unknown value means the judgment is missing, not that the item is broken."""
+    fam = str((item or {}).get("research_kind") or "").strip()
+    return fam if fam in RESEARCH_KINDS else None
+
 # Every phase any kind can be in (schema Literal mirrors this — keep in sync with
 # daemon/schemas/common.py WorkPhase).
 ALL_PHASES: tuple[str, ...] = tuple(dict.fromkeys(
@@ -129,29 +187,46 @@ ALL_PHASES: tuple[str, ...] = tuple(dict.fromkeys(
 ))
 
 
-# --- session roles (build-vet-loop §1.3) -------------------------------------------------------
-# A work-item's turns run in ROLE-keyed sessions: `intake` (repo cwd), `build` (persists across
-# build⟷vet cycles, worktree cwd), `vet` (fresh per cycle — step-4 mechanics; worktree cwd). The
-# map is explicit CODE (§4.5.1), replacing the old implicit rotate-on-cwd-change accident that
-# made build+vet+review+close share one session.
+# --- session slots and roles (build-vet-loop §1.3; per-phase sessions 2026-08-13) --------------
+# A work-item's turns are stored in SLOTS on its own frontmatter (`session_<slot>`). There is one
+# slot PER PHASE, plus `build` and `vet`:
 #
-# WHAT `intake` IS, PRECISELY (owner, 2026-08-09). It is the SLOT four phases write to, not one
-# continuous thread they share. Each background intake phase opens a fresh CLI session
-# (`services/runs.py` passes `resume=None`), stores it in `session_intake`, and retires the one it
-# replaced — so triage, plan and review each get their own thread, and only the newest survives.
-# The docs here used to say "one thread per item", which was never true and quietly promised a
-# continuity nothing delivered.
+#     THE RULE — a session belongs to a PHASE.
+#     Entering the SAME phase again RESUMES its thread. Moving to a DIFFERENT phase MINTS a fresh one.
 #
-# THAT SEPARATION IS THE DESIGN, not a defect to fix. Every phase reads its inputs from ARTIFACTS,
-# never from transcript memory: plan gets triage's conclusions from `brief.md` — the reviewed,
-# structured version — which beats recall. A shared thread would also carry triage's wrong turns
-# into plan, and anchoring is a real cost (it is exactly why `vet` forgets). A useful side effect:
-# fill never accumulates, so an item's threads rarely approach the compaction trigger.
+# WHAT THIS REPLACED, and why (owner, 2026-08-13). Until now the five non-build phases shared ONE
+# `intake` slot: each entry minted a fresh session, stored it, and RETIRED the one it replaced. So
+# review, which is the phase most often entered more than once, forgot its own previous review every
+# revise round — and a send-back that resumed "the item's thread" resumed whichever phase happened to
+# hold the slot, not the phase being sent back to.
 #
-# THE ONE THING IT COSTS is the OWNER's words. Anything they said mid-phase dies with that thread;
-# it reaches the next phase only because the phase agent wrote it into the artifact. That is why
-# `## From you` (brief) and `## Decisions & clarifications` (plan) are carried forward MECHANICALLY
-# rather than left to an agent to remember — see `artifacts.carry_owner_input`.
+# THE OLD REASONING STILL HOLDS, BUT ONLY WHERE IT APPLIED. Every phase reads its inputs from
+# ARTIFACTS, never from transcript memory: plan gets triage's conclusions from `brief.md` — the
+# reviewed, structured version — which beats recall. A shared thread would also carry triage's wrong
+# turns into plan, and anchoring is a real cost (it is exactly why `vet` forgets). That is an argument
+# about handing off between DIFFERENT phases, and mint-on-phase-change keeps all of it. It was never
+# an argument about re-entering the SAME phase, which is one agent looking at a changed tree — the
+# slot model simply could not tell the two cases apart.
+#
+# WHAT IT COSTS, KNOWINGLY: threads now accumulate across revise rounds instead of being purged, so a
+# heavily-revised item carries more fill. Compaction exists for exactly that.
+#
+# THE ONE THING THE SEPARATION STILL COSTS is the OWNER's words: anything they said mid-phase reaches
+# the NEXT phase only because the phase agent wrote it into the artifact. That is why `## From you`
+# (brief) and `## Decisions & clarifications` (plan) are carried forward MECHANICALLY rather than left
+# to an agent to remember — see `artifacts.carry_owner_input`.
+#
+# `intake` IS RETAINED AS A LEGACY READ SLOT and is never written again. Items in flight when this
+# landed carry `session_intake`; `dev_knowledge._session_fields` falls back to it for any intake-family
+# phase, so those items keep their thread and self-migrate on the next turn that writes a slot.
+INTAKE_PHASES: tuple[str, ...] = ("triage", "plan", "investigate", "review", "close")
+SESSION_SLOTS: tuple[str, ...] = (*INTAKE_PHASES, "build", "vet")
+LEGACY_INTAKE_SLOT = "intake"
+
+# The spine's `session.kind` grouping — UNCHANGED by the per-phase split. A slot answers "which
+# thread"; a kind answers "what sort of thread", and all five intake phases are still the same sort:
+# the owner's own item-facing conversation. Splitting the kind too would widen the spine enum, the
+# token taxonomy, the session picker's categories and every FE label for no question anyone asks.
 SESSION_ROLES: tuple[str, ...] = ("intake", "build", "vet")
 
 # The durable `session.kind` values (spine column) — the stampable superset: the item ROLES above
@@ -178,20 +253,36 @@ def is_conversation(kind: str | None) -> bool:
     return (kind or "") not in AGENT_THREAD_KINDS
 
 _ROLE_FOR_PHASE: dict[str, str] = {
-    # These four share the intake SLOT, not a thread — each opens its own and retires the last.
+    # The spine KIND grouping, not the slot: all five intake phases are the same SORT of thread.
     "triage": "intake", "plan": "intake", "review": "intake", "close": "intake",
     "build": "build",
     "vet": "vet",
     "investigate": "intake",
 }
 
+# Slot per phase — identity for the intake family, so `sessions[phase]` IS that phase's thread.
+_SLOT_FOR_PHASE: dict[str, str] = {**{p: p for p in INTAKE_PHASES}, "build": "build", "vet": "vet"}
+
+
+def session_slot(phase: str | None) -> str:
+    """The SLOT a phase's turns are stored in (`session_<slot>` on the item). Unknown phases fail
+    LOUD (mirrors get_profile — a typo must not silently land a turn in the wrong thread).
+
+    This is the answer to "WHICH thread": one per phase, so re-entering a phase resumes its own and
+    moving to another phase mints. For "what SORT of thread" — the spine's `session.kind` — use
+    `session_role`. See the block above for why the two are separate."""
+    p = phase or "triage"
+    if p not in _SLOT_FOR_PHASE:
+        raise KeyError(f"phase {p!r} has no session slot — known: {sorted(_SLOT_FOR_PHASE)}")
+    return _SLOT_FOR_PHASE[p]
+
 
 def session_role(phase: str | None) -> str:
-    """The session-slot ROLE a phase's turns are stored under. Unknown phases fail LOUD (mirrors
-    get_profile — a typo must not silently land a turn in the wrong slot).
+    """The spine session KIND a phase's turns are stamped with (`intake` | `build` | `vet`).
+    Unknown phases fail LOUD.
 
-    NOT a promise of shared context: two phases with the same role hold the slot in turn. See the
-    block above for why that is deliberate and what it costs."""
+    NOT the storage slot — five phases share the `intake` KIND while each keeps its OWN thread.
+    Use `session_slot` whenever the question is which session to resume or write."""
     p = phase or "triage"
     if p not in _ROLE_FOR_PHASE:
         raise KeyError(f"phase {p!r} has no session role — known: {sorted(_ROLE_FOR_PHASE)}")
@@ -199,9 +290,11 @@ def session_role(phase: str | None) -> str:
 
 
 def role_uses_worktree(role: str) -> bool:
-    """Whether a role's turns run at the item's WORKTREE cwd (build/vet) vs the repo (intake).
-    intake stays repo-level even while a worktree exists — close merges into main, and the CLI's
-    per-cwd transcript storage means the intake thread must never change cwd mid-life."""
+    """Whether turns run at the item's WORKTREE cwd (build/vet) vs the repo (every intake phase).
+    Accepts either a role or a slot — `build`/`vet` name the same thing in both vocabularies, and
+    every other slot is an intake phase, which stays repo-level even while a worktree exists: close
+    merges into main, and the CLI's per-cwd transcript storage means an intake thread must never
+    change cwd mid-life."""
     return role in ("build", "vet")
 
 

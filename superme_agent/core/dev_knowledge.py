@@ -39,21 +39,29 @@ _FRONTMATTER = re.compile(r"^---\s*\n(.*?)\n---\s*\n?(.*)$", re.DOTALL)
 
 
 def _session_fields(meta: dict) -> tuple[dict, str | None]:
-    """A work-item's session slots (build-vet-loop §1.3): frontmatter keys `session_<role>` →
-    `{role: sid}`, plus the COMPUTED `session_id` — the session for the item's CURRENT phase's
-    role, so every single-session consumer (FE binding, compaction, phase-close sweep) keeps
-    reading "the item's thread" and it now follows the phase. Falls back to the legacy single
-    `session_id` key while no slot covers the role (pre-roles items; ws.py adopts it into its
-    cwd-implied slot on the next turn)."""
-    from .kind_profiles import SESSION_ROLES, session_role
-    sessions = {r: str(meta[f"session_{r}"])
-                for r in SESSION_ROLES if meta.get(f"session_{r}")}
+    """A work-item's session slots (per-phase sessions): frontmatter keys `session_<slot>` →
+    `{slot: sid}`, plus the COMPUTED `session_id` — the session for the item's CURRENT phase, so
+    every single-session consumer (FE binding, compaction, phase-close sweep) keeps reading "the
+    item's thread" and it follows the phase.
+
+    TWO LEGACY FALLBACKS, in order, both self-healing on the next slot write:
+    1. `session_intake` — the shared slot the five intake phases used before the per-phase split.
+       An item in flight at the cutover keeps its thread instead of silently minting a fresh one.
+    2. the bare `session_id` key — pre-roles items (ws.py adopts it into a real slot on the next
+       turn).
+    Neither is ever written again."""
+    from .kind_profiles import (INTAKE_PHASES, LEGACY_INTAKE_SLOT, SESSION_SLOTS, session_slot)
+    keys = (*SESSION_SLOTS, LEGACY_INTAKE_SLOT)
+    sessions = {s: str(meta[f"session_{s}"]) for s in keys if meta.get(f"session_{s}")}
+    phase = str(meta.get("phase") or "triage")
     try:
-        role = session_role(str(meta.get("phase") or "triage"))
+        slot = session_slot(phase)
     except KeyError:
-        role = "intake"  # unknown/legacy phase label — never blow up a read
-    legacy = meta.get("session_id")
-    computed = sessions.get(role) or (str(legacy) if legacy else None)
+        slot = "triage"  # unknown/legacy phase label — never blow up a read
+    legacy_intake = sessions.get(LEGACY_INTAKE_SLOT) if slot in INTAKE_PHASES else None
+    legacy_id = meta.get("session_id")
+    computed = (sessions.get(slot) or legacy_intake
+                or (str(legacy_id) if legacy_id else None))
     return sessions, computed
 
 
@@ -527,6 +535,9 @@ class DevKnowledgeService:
             # Born `standard` — the shape everything already has. Triage judges it (with a reason)
             # before the item leaves the first phase; see kind_profiles.ITEM_SCALES.
             f"scale: {DEFAULT_SCALE}\nscale_reason: null\n"
+            # Born unjudged — there is no default family (kind_profiles.RESEARCH_KINDS). Triage
+            # names one on a research item; on an implementation item it stays null forever.
+            f"research_kind: null\nresearch_kind_reason: null\n"
             f"phase: {profile.phases[0]}\nstatus: {status}\n"
             f"done_at: null\nartifacts: []\n{extra}"
             f"session_id: {json.dumps(session_id) if session_id else 'null'}\n"
@@ -795,6 +806,60 @@ class DevKnowledgeService:
         item.write_text(f"---\n{fm}\n---\n{body}")
         return True
 
+    def set_work_item_research_kind(self, dev_root: Path, item_id: str, research_kind: str,
+                                    reason: str) -> bool:
+        """Set a research item's investigation family + the one line behind it
+        (kind_profiles.RESEARCH_KINDS). Same contract as `set_work_item_scale` — the reason is
+        required because the label alone is unarguable, and this label decides more than scale's
+        does: which guide investigate reads, and which artifact shape gets scaffolded.
+
+        LOUD where scale's writer is forgiving. Reading an absent family is fine (nobody judged it);
+        WRITING one onto an implementation item is not — it is a field that would never be read
+        again, on an item whose phases don't have an investigate step at all.
+
+        Items minted before this field existed have no line, so the write INSERTS after
+        `scale_reason:` (or `kind:`) rather than assuming a slot."""
+        from .kind_profiles import RESEARCH_KINDS
+        if research_kind not in RESEARCH_KINDS:
+            raise ValueError(
+                f"research_kind must be one of {'/'.join(RESEARCH_KINDS)} (got {research_kind!r})")
+        if not (reason or "").strip():
+            raise ValueError("research_kind needs a one-line reason — it is what the owner "
+                             "argues with")
+        one_line = " ".join(str(reason).split())
+        item = Path(dev_root) / "work-items" / item_id / "item.md"
+        if not item.exists():
+            return False
+        text = item.read_text()
+        m = _FRONTMATTER.match(text)
+        if not m:
+            return False
+        _, body = _parse_md(text)
+        fm = m.group(1)
+        if not re.search(r"(?m)^kind:\s*research\s*$", fm):
+            raise ValueError("only a research item has an investigation family — this item's kind "
+                             "is not `research`")
+        # Lambda replacements throughout: `json.dumps` emits \uXXXX for non-ASCII and `re.sub`
+        # parses escapes in a replacement STRING (see set_work_item_scale).
+        pair = (f"research_kind: {research_kind}\n"
+                f"research_kind_reason: {json.dumps(one_line)}")
+        if re.search(r"(?m)^research_kind:", fm):
+            fm = re.sub(r"(?m)^research_kind:.*$",
+                        lambda _m: f"research_kind: {research_kind}", fm)
+            if re.search(r"(?m)^research_kind_reason:", fm):
+                fm = re.sub(r"(?m)^research_kind_reason:.*$",
+                            lambda _m: f"research_kind_reason: {json.dumps(one_line)}", fm)
+            else:
+                fm = re.sub(r"(?m)^research_kind:.*$", lambda _m: pair, fm)
+        elif re.search(r"(?m)^scale_reason:", fm):
+            fm = re.sub(r"(?m)^scale_reason:(.*)$",
+                        lambda mm: f"scale_reason:{mm.group(1)}\n{pair}", fm, count=1)
+        else:
+            fm = re.sub(r"(?m)^kind:(.*)$", lambda mm: f"kind:{mm.group(1)}\n{pair}", fm, count=1)
+        fm = re.sub(r"(?m)^updated_at:.*$", f"updated_at: {date.today().isoformat()}", fm)
+        item.write_text(f"---\n{fm}\n---\n{body}")
+        return True
+
     def set_work_item_triaged(self, dev_root: Path, item_id: str) -> bool:
         """Stamp `triaged_at` (F1, playground-e2e-blockers): the triage-exit gate's `triage_ran`
         check reads THIS stamp — written only by triage's recording surface
@@ -926,23 +991,26 @@ class DevKnowledgeService:
         return True
 
     def set_work_item_session(self, dev_root: Path, item_id: str, session_id: str | None,
-                              role: str = "intake") -> bool:
-        """Persist a session id onto a work-item's ROLE slot (`session_<role>` frontmatter key —
-        build-vet-loop §1.3: intake narrates · build remembers · vet forgets). The item is the
-        durable home of its dev threads; the read layer computes `session_id` (current phase's
-        role) from these slots. Writing any slot NULLs the legacy single `session_id` key — the
-        slot now owns that thread, and a stale legacy value must not shadow other roles' slots.
+                              slot: str = "triage") -> bool:
+        """Persist a session id onto a work-item's SLOT (`session_<slot>` frontmatter key). One slot
+        per phase, plus `build` (remembers across cycles) and `vet` (forgets, minted per cycle). The
+        item is the durable home of its dev threads; the read layer computes `session_id` (the
+        current phase's slot) from these. Writing any slot NULLs the legacy single `session_id` key
+        — the slot now owns that thread, and a stale legacy value must not shadow other slots.
         Line-based rewrite preserving frontmatter shape; bumps `updated_at`. Returns True if
-        the file changed."""
-        from .kind_profiles import SESSION_ROLES
-        if role not in SESSION_ROLES:
-            raise ValueError(f"unknown session role {role!r} — known: {SESSION_ROLES}")
+        the file changed.
+
+        `slot` is validated against SESSION_SLOTS, so the retired `intake` slot can still be READ
+        (see `_session_fields`) but can never be written again."""
+        from .kind_profiles import SESSION_SLOTS
+        if slot not in SESSION_SLOTS:
+            raise ValueError(f"unknown session slot {slot!r} — known: {SESSION_SLOTS}")
         item = Path(dev_root) / "work-items" / item_id / "item.md"
         if not item.exists():
             return False
         text = item.read_text()
         meta, body = _parse_md(text)
-        key = f"session_{role}"
+        key = f"session_{slot}"
         if str(meta.get(key)) == str(session_id) and not meta.get("session_id"):
             return False  # unchanged (and no legacy key left to clear) — skip the write
         m = _FRONTMATTER.match(text)
@@ -956,6 +1024,8 @@ class DevKnowledgeService:
         else:  # insert the slot next to its siblings — right before created_at (always present)
             fm = re.sub(r"(?m)^created_at:", f"{key}: {sid}\ncreated_at:", fm, count=1)
         fm = re.sub(r"(?m)^session_id:.*$", "session_id: null", fm)  # slot owns the thread now
+        if key != "session_intake":   # …and so does the retired pre-split shared slot,
+            fm = re.sub(r"(?m)^session_intake:.*$", "session_intake: null", fm)  # adopted once
         fm = re.sub(r"(?m)^updated_at:.*$", f"updated_at: {today}", fm)
         item.write_text(f"---\n{fm}\n---\n{body}")
         return True
@@ -1418,10 +1488,15 @@ class DevKnowledgeService:
             result.append({**d, "rollup": _rollup(all_views)})
         return {"deliverables": result, "orphans": orphans}
 
-    def orient_digest(self, dev_root: Path, items: list[dict] | None = None) -> str | None:
+    def orient_digest(self, dev_root: Path, items: list[dict] | None = None, *,
+                      in_progress: bool = True) -> str | None:
         """The thin always-on ORIENT line for the dev preamble — what this project is, which waves are
         active, and what's in progress — generated from the anchor docs + live work-items. Kept tiny
-        (it's a permanent per-turn cost); None when there's nothing yet (no general/ docs)."""
+        (it's a permanent per-turn cost); None when there's nothing yet (no general/ docs).
+
+        `in_progress=False` drops the other-items line for a turn already bound to one item — see
+        `agent_service._context_preamble`. The project line and active waves still ride: those
+        describe the project, not the queue."""
         prd = self.read_general_doc(dev_root, "project-prd")
         line = _first_para(prd) if prd else None
         board = self.roadmap_board(dev_root, items)
@@ -1445,7 +1520,7 @@ class DevKnowledgeService:
             out.append(line)
         if active:
             out.append("Active: " + " · ".join(f"{t} ({d})" for t, d in active))
-        if inprog:
+        if inprog and in_progress:
             out.append("In progress: " + " · ".join(
                 f"{it.get('title') or it.get('id')} [{it.get('phase')}]" for it in inprog[:6]))
         return "\n".join(out)

@@ -119,15 +119,20 @@ def maybe_autopilot_advance(context_id: str, item_id: str) -> None:
         # direct-advance baseline, which the suites exercise without a deputy.
         if spine.get_deputy_enabled():
             from . import deputy as deputy_svc
-            if deputy_svc.deputy_gate_for(item) is None:
-                return
-            try:
-                asyncio.get_running_loop().create_task(
-                    deputy_svc.run_deputy_gate(context_id, item_id))
-                return
-            except RuntimeError:
-                pass  # no loop — offline; use the direct baseline below
-        # No-deputy baseline (or offline): the mechanical auto-advance (excludes review).
+            # Not one of the three gates → nothing to JUDGE, so fall through to the mechanical
+            # advance rather than returning. Returning stranded every autopilot research item at
+            # `investigate` (live, 2026-08-13): investigate-exit is not a gate and has no
+            # self-driver either — build's exit is carried by the build⟷vet loop, this one by
+            # nobody — so the item rested at `awaiting_human` forever with the deputy on (the
+            # default), while the no-deputy baseline below advanced it correctly.
+            if deputy_svc.deputy_gate_for(item) is not None:
+                try:
+                    asyncio.get_running_loop().create_task(
+                        deputy_svc.run_deputy_gate(context_id, item_id))
+                    return
+                except RuntimeError:
+                    pass  # no loop — offline; use the direct baseline below
+        # No-deputy baseline, a non-gate phase, or offline: the mechanical advance (excludes review).
         if autopilot_core.auto_advance_target(item, kind_profiles.next_phase) is None:
             return
         autopilot_advance(ctx, context_id, item_id, actor="autopilot")
@@ -263,9 +268,19 @@ def advance_item(ctx, context_id: str, item_id: str, *, dev, dev_store, spine,
         raise HTTPException(status_code=409, detail=f"phase {cur} has no next phase")
     # Entering the working phase CONSUMES plan.md (D6 validation-at-consumption): a gate-unready
     # plan means approving a plan that doesn't exist.
+    #
+    # ONLY A KIND THAT PLANS IS ASKED FOR ITS PLAN (live, 2026-08-13). Research lost its plan phase
+    # (research-sweep-model-design §3), so `investigate` is now entered straight from triage and
+    # there is no plan.md to consume — nor will there ever be. Unguarded, this refused EVERY research
+    # item at triage-exit with "plan.md does not exist — scaffold it first", an instruction pointing
+    # at a phase the kind no longer has. Caught on dbf1c5c7efa8, the first research item after the
+    # change, which is exactly what the live E2E was for.
+    #
+    # Same fault as `evidence_fresh` and `spawns_exist` before it: a question asked where its
+    # answerer does not exist. The condition is the kind's own pipeline, never the phase name.
     git_record = None
     profile = kind_profiles.get_profile(item.get("kind"))
-    if nxt in ("build", "investigate"):
+    if nxt in ("build", "investigate") and "plan" in profile.phases:
         item_dir = dev_root / "work-items" / item_id
         plan_issues = artifacts.self_check(item_dir, "plan", item_kind=item.get("kind"))
         if plan_issues:

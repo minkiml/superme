@@ -1142,6 +1142,69 @@ class SystemSpine:
             ).fetchall()
             return [self._run_dict(r) for r in rows]
 
+    def subagent_count(self, repo_id: str, item_id: str, *, phase: str) -> int:
+        """How many SUBAGENTS this item's runs at `phase` actually spawned.
+
+        The one unfakeable answer to "did this phase fan out". It counts `run_event` rows the kernel
+        writes when the SDK reports an Agent call — the agent cannot write, omit or embellish them,
+        which is the whole point: an artifact section saying "I split by module" is a claim, and this
+        is the receipt. Discarded runs are excluded so a re-run's history doesn't inflate the count.
+
+        Reads across EVERY run at that phase, not just the newest: a send-back means investigate ran
+        twice, and fanning out on either pass is fanning out."""
+        with self._conn() as c:
+            row = c.execute(
+                "SELECT COUNT(*) AS n FROM run_event e JOIN run r ON r.id = e.run_id"
+                " WHERE r.repo_id=? AND r.item_id=? AND r.phase=?"
+                "   AND e.kind='subagent' AND e.discarded_at IS NULL AND r.discarded_at IS NULL",
+                (repo_id, item_id, phase),
+            ).fetchone()
+            return int(row["n"] if row else 0)
+
+    def read_hits(self, repo_id: str, item_id: str, *, phase: str, needle: str) -> int:
+        """How many times this item's runs at `phase` READ a path containing `needle`.
+
+        The receipt for a directed read, and the sibling of `subagent_count`: the kernel logs a
+        `run_event` per tool call, so "did it open the file the skill told it to open" is a count,
+        not a claim the record makes about itself. Measured 2026-08-13: five of nine investigate
+        runs never opened their family guide, and nothing anywhere said so — the record still came
+        out in the right SHAPE, because the scaffolder stamps that from the template whether or not
+        the method was ever read.
+
+        Matched against the trace's own short-path description (last four segments), so the needle
+        should be a tail like `investigate/references/audit.md`. Across every run at the phase: a
+        send-back means investigate ran twice, and reading the guide on either pass counts."""
+        with self._conn() as c:
+            row = c.execute(
+                "SELECT COUNT(*) AS n FROM run_event e JOIN run r ON r.id = e.run_id"
+                " WHERE r.repo_id=? AND r.item_id=? AND r.phase=?"
+                "   AND e.kind='tool' AND e.name='Read' AND e.description LIKE ?"
+                "   AND e.discarded_at IS NULL AND r.discarded_at IS NULL",
+                (repo_id, item_id, phase, f"%{needle}%"),
+            ).fetchone()
+            return int(row["n"] if row else 0)
+
+    def last_phase_run_end(self, repo_id: str, item_id: str, *, phase: str) -> str | None:
+        """When this item's most recent FINISHED run at `phase` ended (ISO-8601 UTC), or None if
+        the phase has never completed a run.
+
+        The cutoff for "what changed since this thread last ran". Per-phase sessions mean a phase
+        re-entered after a revise round resumes an agent that already formed a judgment — and an
+        agent with a memory of the item will trust it over the disk unless told otherwise. This is
+        the only honest clock for that: the phase's own last run, not the item's.
+
+        `ended_at IS NOT NULL` excludes the run that is asking (the runner's row is already open by
+        the time it computes its trigger) and any run that died mid-flight — a run that never
+        finished never formed the judgment we are correcting for."""
+        with self._conn() as c:
+            row = c.execute(
+                "SELECT MAX(ended_at) AS t FROM run"
+                " WHERE repo_id=? AND item_id=? AND phase=?"
+                "   AND ended_at IS NOT NULL AND discarded_at IS NULL",
+                (repo_id, item_id, phase),
+            ).fetchone()
+            return (row["t"] or None) if row else None
+
     def run_history(self, repo_id: str, *, mode: str | None = None,
                     limit: int = 100) -> list[dict]:
         """Recent runs for a repo (newest first), live + finished."""

@@ -272,7 +272,7 @@ async def run_handoff_turn(ctx: Context, context_id: str, item_id: str | None, s
         prompt = kernel_speech.checkpoint_trigger(item_id)
         write_dir = (ctx.internal_root / "dev" / "work-items" / item_id
                      if ctx.internal_root else None)
-        mcp = _dev_mcp(ctx, ctx.cwd, item_id)
+        mcp = _dev_mcp(ctx, ctx.cwd, item_id, scope="handoff")
     else:
         root = session_memory_root(ctx)
         if not root:

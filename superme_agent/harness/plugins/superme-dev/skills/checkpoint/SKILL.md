@@ -36,15 +36,20 @@ Five things, because they live only in the conversation:
    explicitly, so nobody finishes it out of momentum.
 3. **Dead ends.** An approach that is out, and why. Usually something you tried and abandoned —
    but a direction the two of you talked through and ruled out counts just as much, even if no
-   code was ever written. Without this the next stretch re-runs it.
+   code was ever written. Mark that second kind `Settled — do not re-open`: nothing in the tree
+   shows that a path was weighed, so without the line the next stretch proposes it again.
 4. **What is now stale.** Anything earlier in this thread that a later turn made untrue — a
    measurement that has since changed, a file that moved, a conclusion you revised.
 5. **Answered questions not yet written down.** If the user settled something in conversation and
-   it never reached the place decisions of record live, record it here **and name where it
-   belongs**: `plan.md`'s `## Decisions & clarifications` on a work-item; a `general/` anchor doc
-   for a project-wide decision; a new inbox item when it is really work rather than a decision.
-   Naming the destination is the point — "this was never written down" without one is a dead end
-   for whoever reads it.
+   it never reached the place decisions of record live, record it here **and route it** — a
+   destination, not a flag:
+
+   - On a work-item → `plan.md`'s `## Decisions & clarifications`.
+   - Project-wide → **Name what the anchor docs will owe**: which of
+     `project-prd / architecture / capabilities` this decision changes, and how.
+   - Really work rather than a decision → file it with `create_inbox_item` and say you did.
+
+   "This was never written down" without a destination is a dead end for whoever reads it.
 
 ## How to write it
 
@@ -130,11 +135,11 @@ which any artifact holds.
 
 # decisions:
   No new flags for the output format — ruled out, so any change has to fit the existing ones.
-  This is project-wide and belongs in a general/ anchor doc; it is not written down anywhere yet.
+  Project-wide and unwritten: capabilities owes a line that the flag set is closed.
 
 # notes:
-  Ruled out (discussed, never attempted): a separate `--format` subcommand — it duplicates
-  what the existing flags already cover.
+  Settled — do not re-open (discussed, never attempted): a separate `--format` subcommand; it
+  duplicates what the existing flags already cover.
   STALE: the "43 tests pass" figure they quoted predates the refactor.
 ```
 

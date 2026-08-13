@@ -1,7 +1,3 @@
-<!-- Close report: reports/report-close.md — the last thing the owner reads about this item, and
-     what they will find if they come back to it in six months. Keep it ≤ 1 screen.
-     Every fact is checked against the repo and the item record — a claim that doesn't hold bounces
-     with an itemized rejection. Write what is TRUE OF MAIN NOW, not what the item set out to do. -->
 # Close User-facing Report
 
 **Summary:** <fill:one line — what is now true and what, if anything, follows. This line is what the dashboard shows on the closed card, so it has to stand alone>

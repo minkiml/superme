@@ -75,9 +75,11 @@ class CompletionMachine(TypedDict, total=False):
         "do · blocked = NOTHING was doable at all (reserve it for that — a wall on SOME tasks is "
         "partial, not blocked) · needs_user = the run must pause for the owner's answers (pair "
         "with user.questions) · split = this item should split into sub-items (plan phase only — "
-        "machine.pointers names the child briefs + execution schedule) · revise = the review "
-        "conversation concluded the WORK must change, so the item goes back to plan (review "
-        "phase only; carry the owner's words verbatim in user.summary) · exhausted / stagnated "
+        "machine.pointers names the child briefs + execution schedule) · revise = the PLAN "
+        "must change, so the item goes back to plan. Two phases reach it: review, when the "
+        "conversation concludes the work must change (carry the owner's words verbatim in "
+        "user.summary), and build, when the plan cannot be built as written — build is guarded "
+        "out of amending it, so this is the only way back · exhausted / stagnated "
         "= out of budget or no progress"]]
     counts: Annotated[dict, "small numeric facts about the run (e.g. tasks done / checks passed) "
                             "— numbers only, never prose"]

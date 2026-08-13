@@ -1,54 +1,77 @@
 ---
 name: itemize
-description: Turn an approved research report's proposed work into inbox items — put the proposals to the owner, file the ones they choose, and record the decision. Use when a research work-item's review gate is approved; not for capturing an idea mid-conversation (use create-inbox-item) or for launching an onboarding cohort (that is project-init and retrofit's itemize_and_launch).
+description: Turn an approved research report's proposed work into inbox items — file each non-duplicate proposal as a spawn the owner can push or drop, and record what was filed. Use when a research work-item's review gate is approved; not for capturing an idea mid-conversation (use create-inbox-item) or for launching an onboarding cohort (that is project-init and retrofit's itemize_and_launch).
 argument-hint: "[work-item-id]"
 category: workspace
 ---
 
 # Itemize an approved research report
 
-Approving a research item is not a merge — it is the decision about which of its `## Proposed work`
-becomes real. That decision is the owner's, one proposal at a time, and this is where it happens.
+A research item's findings are half of what it owes; the work they imply is the other half. This run
+is where that work stops being a paragraph in a report and becomes something the owner can act on.
+
+**Filing is not launching.** Every item you file is a `spawn`, and a spawn sits in the inbox until
+the owner deliberately pushes it. The inbox IS their decision surface — push it, edit it, delete it —
+and triage plus its gate still stand between any item and a line of code. So you do not need
+permission to file, and this run has no interactive surface to ask on: a proposal left unfiled here
+is a proposal lost.
 
 ## Step 1 — Read the proposals against the live board
 
-`artifacts/review.md` `## Proposed work` is the list. Before putting it to the owner, check
-each proposal against what already exists — `read_dev_log`, the roadmap, open inbox items. A
-proposal that duplicates live work is presented as a duplicate, naming the item it duplicates, not
-offered as if it were new.
+`artifacts/review.md` `## Proposed work` is the list. Check each one against what already exists —
+`read_dev_log`, the roadmap, open inbox items.
 
-## Step 2 — Put them to the owner
+A proposal that duplicates live work is **not filed**. Name the item it duplicates in step 3; a
+second ticket for work already on the board is noise the owner has to clean up.
 
-Present the proposals as a numbered list — title, kind, one line of why now — and ask which to
-file. Keep your own view to one line per proposal at most: they have the report, and this is their
-call, not a case to argue.
+## Step 2 — File what survives
 
-**Declining is a complete answer.** All of them, some of them, or none — "none" ends this step and
-the item closes normally with its findings intact. Nothing here is a failure path.
+For each non-duplicate proposal, `create_inbox_item` with `spawned_from_item` = this item and
+`relation: "spawn"`, and a brief carrying what a cold triage session needs: what was found, why this
+work follows, and where the evidence lives.
 
-## Step 3 — File what they chose
+- **File what the report proposed** — you are not re-scoping it. A proposal too vague to file is
+  filed as it stands with its vagueness visible, not sharpened by you into something the report
+  never said.
+- **`spawn` is the only legal relation here.** Never `itemize_and_launch` — that is onboarding's
+  direct-mint path, and from here it would start building a conclusion nobody approved.
+- **More than a handful is itself a finding.** If the report proposed eight things, file them and
+  say so in step 3: a research item that fans out that wide usually needed consolidating, and the
+  owner should see that in one line rather than in eight tickets.
 
-For each accepted proposal, `create_inbox_item` with `spawned_from_item` = this item and
-`relation: "spawn"`, and a brief carrying the research context the future triage session will
-cold-start from: what was found, why this work follows, and where the evidence lives.
+## Step 3 — Record what happened
 
-`spawn` is the only legal relation here, and it is the reason nothing runs on its own: a spawn
-waits in the inbox for the owner's deliberate push. Research proposes work that does not exist
-yet — it never launches it, and never wires an ordering it hasn't earned.
+Fill `artifacts/review.md`'s **Owner's decision** line: what you filed, with inbox ids, and what you
+skipped as a duplicate and of what. The gate reads this line back, and a research item whose
+proposals vanished without a trace is the failure this line exists to catch.
 
-## Step 4 — Record the decision
+A proposal you did not file for any other reason is recorded here too, with why. Then say what was
+filed and stop.
 
-Fill `artifacts/review.md`'s **Owner's decision** line: which proposals were adopted (with their
-inbox ids) and which were declined. A declined proposal stays written where it is — it is trace,
-not a lost thought — and the close gate reads this line back to confirm the decision was actually
-put to them.
+## Chat response style
+- Use plain and easy language.
+- Keep your response short, clear, and to the point.
+- Use bullets or numbered lists to organize information if there is more than one point.
 
-Then say what was filed and stop.
+## Reporting the run
+
+`report_completion` says why THIS RUN stopped.
+
+- **`success`** — every non-duplicate proposal is filed and the line records it.
+- **`clean_noop`** — the report proposed nothing, or every proposal duplicated live work. Both are
+  real outcomes; say which in the line.
+- **`needs_user`** is not for filing decisions. Filing is yours. Reserve it for a proposal you
+  cannot file at all — one whose brief you cannot write because the report does not say what the
+  work is.
+
+**Output style to report_completion.**
+- Plain, concise, easy language. Fewer words wins.
+- Keep your response short, clear, and to the point.
 
 ## Pitfalls
 
-- **Filing what wasn't chosen** — silence is not consent; an unanswered proposal is declined.
-- **Reaching for `itemize_and_launch`** — that is onboarding's direct-mint path and puts work
-  straight onto autopilot; from here it would start building a conclusion nobody approved.
-- **Rewriting the proposals** — you file what the report proposed; a proposal that needs reshaping
-  goes back to the owner as a question, not an edit.
+- **Waiting for permission that is not coming.** This run has no human on the other end; the inbox
+  is where the owner decides, and it is one push away.
+- **Rewriting the proposals** — you file what the report proposed. A proposal that needs reshaping
+  is filed as written, and reshaped at its own triage.
+- **Filing a duplicate anyway** — checking and then filing regardless makes step 1 ceremony.

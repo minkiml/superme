@@ -64,7 +64,7 @@ from ...core.permissions import VET_READONLY_NUDGE
 from ...harness.tools.dev_tools import make_dev_mcp_server
 from .runs import (_LiveTokens, _begin_run, _end_run, turn_surface,
                    bank_auto_checkpoint, capture_event, capture_prompt, capture_run_input,
-                   compacted_checkpoint, fire_auto_triage, mark_item_error, read_completion,
+                   compacted_checkpoint, ensure_completion, fire_auto_triage, mark_item_error, read_completion,
                    reset_vet_thread, retry_notice)
 
 log = logging.getLogger("superme-agent")
@@ -267,12 +267,15 @@ def _resolve_run_params(context_id: str, item: dict) -> tuple[str, str]:
             _spine.effective_effort(context_id, item_effort=item.get("effort")))
 
 
-def _dev_mcp(ctx, wt: Path, main_repo_dir: Path, item_id: str) -> dict:
+def _dev_mcp(ctx, wt: Path, main_repo_dir: Path, item_id: str, *, scope: str) -> dict:
     """The dev MCP server for a background loop run — same mount as an interactive bound turn
     (evidence + report pens scoped to THIS item; repo_dir = the worktree so evidence fingerprints
-    the tree actually being vetted)."""
+    the tree actually being vetted).
+
+    `scope` is the phase this run IS (dev_tools.TOOL_SCOPES): build carries its own recorder and
+    never vet's, which is the separation the skills used to assert in prose alone."""
     return {"dev": make_dev_mcp_server(
-        _dev_store, ctx.id, spine=_spine,
+        _dev_store, ctx.id, spine=_spine, scope=scope,
         dev_root=ctx.internal_root / "dev",
         repo_dir=wt, main_repo_dir=main_repo_dir,
         bound_item_id=item_id,
@@ -470,9 +473,10 @@ async def _run_background_vet(ctx, context_id: str, item_id: str,
         resume=None,                     # vet FORGETS — fresh eyes, prior reports are data
         model=model, effort=effort,
         approve=deny_all,                # background: nothing outside the boundary runs
-        extra_mcp_servers={**_dev_mcp(ctx, wt, ctx.cwd, item_id),
+        extra_mcp_servers={**_dev_mcp(ctx, wt, ctx.cwd, item_id, scope="vet"),
                            "run": make_run_report_server(sink)},
         system_append=kernel_speech.work_item_preamble(item_id, item, str(item_dir), interactive=False),
+        item_bound=True,                 # one item is the subject — no board-wide in-progress list
         write_boundary=boundary,         # boundary Bash autonomy (running checks IS the job)
         sandbox_writes=boundary,         # …and the kernel holds that same boundary (sandbox.py)
         deny_write_tools=VET_READONLY_NUDGE,   # …but file-write tools die outright (§4)
@@ -486,7 +490,7 @@ async def _run_background_vet(ctx, context_id: str, item_id: str,
             _sessions.record(wt_ctx, ev.session_id)
             if ev.session_id:
                 try:
-                    _dev.set_work_item_session(dev_root, item_id, ev.session_id, role="vet")
+                    _dev.set_work_item_session(dev_root, item_id, ev.session_id, slot="vet")
                     _spine.stamp_session_item(ev.session_id, item_id)
                     _spine.stamp_session_kind(ev.session_id, "vet")
                 except Exception:
@@ -496,7 +500,8 @@ async def _run_background_vet(ctx, context_id: str, item_id: str,
     turn_error = turn.fault.failed
     # Record the vet run's own report (trail honesty); the DRIVER below decides off the LEDGER,
     # never off this payload — vet's claims don't route the loop.
-    read_completion(context_id, item_id, sink)
+    await ensure_completion(ctx, context_id, item_id, sink, skill="vet",
+                            session_id=final_session, model=model, effort=effort)
     # ---- THE DRIVER (§5.1): decide off the ledger, close the run, apply, fire the next hop.
     item = _dev.read_work_item(dev_root, item_id) or {}
     evidence = _arts.evidence_status(item_dir, wt)
@@ -738,13 +743,14 @@ async def _run_background_build(ctx, context_id: str, item_id: str,
         resume=prev_build,               # build REMEMBERS — same thread every cycle
         model=model, effort=effort,
         approve=deny_all,
-        extra_mcp_servers={**_dev_mcp(ctx, wt, ctx.cwd, item_id),
+        extra_mcp_servers={**_dev_mcp(ctx, wt, ctx.cwd, item_id, scope="build"),
                            "run": make_run_report_server(sink)},
         # Build REMEMBERS, so it is the other thread compaction can hit — carry the
         # post-compaction pointer when its newest finished run was the compaction itself.
         system_append=kernel_speech.work_item_preamble(
             item_id, item, str(item_dir), interactive=False,
             compacted_checkpoint=compacted),
+        item_bound=True,                 # one item is the subject — no board-wide in-progress list
         write_boundary=boundary,         # S4 freeze: writes stay in worktree + item dir
         sandbox_writes=boundary,         # …enforced for shell commands by the OS (sandbox.py)
     ):
@@ -757,7 +763,7 @@ async def _run_background_build(ctx, context_id: str, item_id: str,
             _sessions.record(wt_ctx, ev.session_id)
             if ev.session_id:
                 try:
-                    _dev.set_work_item_session(dev_root, item_id, ev.session_id, role="build")
+                    _dev.set_work_item_session(dev_root, item_id, ev.session_id, slot="build")
                     _spine.stamp_session_item(ev.session_id, item_id)
                     _spine.stamp_session_kind(ev.session_id, "build")
                 except Exception:
@@ -765,7 +771,8 @@ async def _run_background_build(ctx, context_id: str, item_id: str,
         if isinstance(ev, (Status, TextDelta, ToolResult)):
             capture_event(context_id, ev, item_id=item_id)
     turn_error = turn.fault.failed
-    report_out = read_completion(context_id, item_id, sink)
+    report_out = await ensure_completion(ctx, context_id, item_id, sink, skill="build",
+                                         session_id=final_session, model=model, effort=effort)
     item = _dev.read_work_item(dev_root, item_id) or {}
     outcome = (report_out or {}).get("outcome")
     d = decide_after_build(item, outcome=outcome, turn_error=turn_error)

@@ -30,7 +30,7 @@ from pathlib import Path
 from . import artifacts as A
 from . import plan_revision
 from . import status_router
-from .kind_profiles import get_profile
+from .kind_profiles import get_profile, research_kind
 
 # The four briefed human gates, keyed by the phase whose EXIT they guard (D2/D10).
 GATE_FOR_PHASE = {"triage": "triage-exit", "plan": "pre-main", "review": "review",
@@ -47,8 +47,10 @@ _ALL = "*"
 _BLOCKING: dict[str, tuple[str, ...] | str] = {
     "triage-exit": (),
     "pre-main": ("plan_complete",),
+    # `method_read` blocks (see guide_check): the others in its neighbourhood describe judgment
+    # calls a small item can honestly fail, this one describes an instruction that was not followed.
     "review": ("no_pending_authorizations", "evidence_fresh", "artifacts_complete",
-               "findings_delivered", "spawns_exist", "children_terminal"),
+               "findings_delivered", "spawns_exist", "children_terminal", "method_read"),
     "close": _ALL,
 }
 
@@ -98,6 +100,111 @@ def close_readiness(item: dict, item_dir: Path, all_items: list[dict]) -> dict:
     return {"ok": all(c["ok"] for c in checks), "checks": checks}
 
 
+def fanout_check(family: str | None, subagents: int | None) -> dict | None:
+    """The `fanned_out` row, or None when the question doesn't apply to this item.
+
+    ASKED ONLY WHERE ITS ANSWERER EXISTS — the rule three separate defects taught this codebase in
+    one day (`evidence_fresh` of a kind with no vet, `spawns_exist` at a gate its filler runs after,
+    `plan.md` demanded of a kind with no plan phase). Here that means two conditions, both required:
+    the family's guide must actually PRESCRIBE fan-out (`kind_profiles.FANOUT_FAMILIES` — a study
+    follows one thread and splitting it loses the thread), and the caller must have been able to
+    COUNT (a `None` count means nobody looked, which is not the same as zero and must never render
+    as a failure).
+
+    VISIBLE, NOT BLOCKING — the owner's slice-6 rule. Whether a surface was large enough to deserve
+    splitting is a judgment: a two-file area honestly does not need it. So this states the fact and
+    lets the deputy (review strictness `high`) and the owner judge it, rather than hard-refusing an
+    Approve on a heuristic. What it removes is the SILENCE: a whole-repo sweep that ran single-
+    threaded used to be indistinguishable, on every surface, from one that split properly."""
+    from .kind_profiles import FANOUT_FAMILIES
+    if family not in FANOUT_FAMILIES or subagents is None:
+        return None
+    return {
+        "criterion": "fanned_out",
+        "ok": subagents > 0,
+        "detail": (f"investigate spawned {subagents} subagent(s) — the surface was split"
+                   if subagents > 0 else
+                   f"investigate ran SINGLE-THREADED (0 subagents). `{family}` sweeps the whole "
+                   f"codebase and its guide splits the surface across subagents; a whole-repo pass "
+                   f"in one thread either narrowed the surface without saying so, or read less of "
+                   f"it than the record implies. Say which."),
+    }
+
+
+def guide_check(family: str | None, reads: int | None) -> dict | None:
+    """The `method_read` row: did investigate actually open `references/<family>.md`?
+
+    Asked of EVERY research family — unlike `fanned_out`, which only applies where the guide
+    prescribes splitting, this asks whether the guide was consulted at all, and every family has
+    one. None when the item has no family (nothing to have read) or nobody counted.
+
+    Measured 2026-08-13 across nine investigate runs: five never opened their guide, and three of
+    the four that did opened it early and still ignored its method. The skill says, in bold, "read
+    `references/<your family>.md` before you start" — so this is not a missing instruction, it is an
+    unchecked one, which on this owner's own law is the same as absent. What made it invisible is
+    that the artifact still comes out in the right SHAPE regardless: the scaffolder stamps the
+    family's sections from the template, so a record written without ever reading the family's
+    method is indistinguishable, on the page, from one written with it.
+
+    BLOCKING, unlike its neighbours. `fanned_out` and `judgment_current` describe judgment calls a
+    small surface can honestly fail; this one describes an instruction that was simply not followed,
+    and there is no item so small that its family's method did not apply."""
+    if not family or reads is None:
+        return None
+    return {
+        "criterion": "method_read",
+        "ok": reads > 0,
+        "detail": (f"investigate read `references/{family}.md` ({reads}×)" if reads > 0 else
+                   f"investigate NEVER opened `references/{family}.md`. That file is what defines "
+                   f"what counts as an answer for a `{family}` — the bar the findings are read "
+                   f"against, and the enumeration the record claims to have done. The artifact is "
+                   f"in the right shape because the scaffolder put it there, not because the "
+                   f"method was followed. Re-run investigate against the guide."),
+    }
+
+
+def judgment_current(item_dir: Path, kind: str | None) -> dict | None:
+    """The `judgment_current` row: is `artifacts/review.md` at least as new as the record it
+    judges? None when either file is missing — the question has no answerer then.
+
+    The enforcement half of the re-entry fix. The trigger (`kernel_speech.intake_trigger`) TELLS a
+    resumed review thread what changed since it last ran; this catches the case where it was told
+    and shrugged, because on this owner's own measured law compliance tracks enforcement, not
+    emphasis. A judgment older than its subject is not a matter of opinion — it is two mtimes — and
+    the failure it catches is the one that is otherwise invisible on every surface: run 1296 on
+    `20687ac32d63` re-entered review for 18 seconds, said "nothing has changed since", and left a
+    verdict describing an investigation that had been rewritten under it.
+
+    Both kinds have a subject. Research's is the investigation; an implementation item's is its
+    newest build⟷vet cycle report, and a review predating that cycle is stale for the same reason.
+
+    VISIBLE, NOT BLOCKING (the slice-6 rule): a review that re-read everything and honestly changed
+    nothing writes no file, and would fail this. Stating the fact is what was missing."""
+    review = Path(item_dir) / "artifacts" / "review.md"
+    if not review.is_file():
+        return None
+    if str(kind) == "research":
+        subject = Path(item_dir) / "artifacts" / "investigation.md"
+    else:
+        cycles = sorted((Path(item_dir) / "artifacts").glob("build-vet-*.md"))
+        subject = cycles[-1] if cycles else Path(item_dir) / "artifacts" / "_absent"
+    if not subject.is_file():
+        return None
+    try:
+        behind = subject.stat().st_mtime - review.stat().st_mtime
+    except OSError:
+        return None
+    return {
+        "criterion": "judgment_current",
+        "ok": behind <= 0,
+        "detail": (f"review.md is current with `artifacts/{subject.name}`" if behind <= 0 else
+                   f"review.md is OLDER than `artifacts/{subject.name}` by {int(behind // 60)}m — "
+                   f"the record it judges was rewritten after the verdict was written. Either the "
+                   f"review ran again and re-read nothing, or it re-read and never updated its own "
+                   f"record. Say which, and make review.md describe the current version."),
+    }
+
+
 def research_readiness(item_dir: Path) -> list[dict]:
     """A RESEARCH item's two deliverable checks, evaluated at its REVIEW gate (owner's standing
     rule, 2026-08-09: close wraps up finished work, it does not judge it).
@@ -109,16 +216,28 @@ def research_readiness(item_dir: Path) -> list[dict]:
     the decision line `itemize` writes into `artifacts/review.md`), so review is where they belong
     and where a failure is still answerable."""
     issues = A.report_issues(item_dir, "report-review")
+    proposals = A.proposed_work(item_dir)
     decision = A.owner_decision(item_dir)
     return [
         {"criterion": "findings_delivered", "ok": not issues,
          "detail": "; ".join(issues) or "report-review.md complete"},
-        # What must not happen is a research item closing with its proposals silently dropped.
-        # `itemize` records the owner's call (adopted, with inbox ids, vs declined); an unrecorded
-        # decision is one that was never actually put to them.
-        {"criterion": "spawns_exist", "ok": bool(decision),
-         "detail": decision or "the report's proposals were never put to you — run itemize, or "
-                               "record that none were adopted"},
+        # What must not happen is a research item reaching its last gate with nothing said about the
+        # work its findings imply — the investigation is half the deliverable, the work it implies
+        # is the other half.
+        #
+        # THIS ASKS WHETHER THE PROPOSALS ARE STATED, NOT WHETHER THEY ARE FILED, and the difference
+        # is the whole reason the check used to be dead. `itemize` files them, and it fires on this
+        # gate's APPROVE — so when the gate is read it has not run, and a filed-or-not question is
+        # one no first approval can ever answer green. Review is the last gate there is (there is no
+        # close gate), so a question it cannot answer is a red row nobody can clear. Stated IS
+        # answerable here, and answerable while a send-back still costs nothing.
+        #
+        # `decision` rides along once itemize has written it — informational, never the pass bar.
+        {"criterion": "spawns_exist", "ok": bool(proposals),
+         "detail": (f"{proposals[:160]}" + (f" · itemized: {decision}" if decision else ""))
+                   if proposals else
+                   "`## Proposed work` in review.md is empty — say what work these findings imply, "
+                   "or say plainly that none follows; itemize files it from there"},
     ]
 
 
@@ -214,6 +333,8 @@ def _mark_blocking(gate: str, checks: list[dict]) -> list[str]:
 def gate_state(item: dict, item_dir: Path, dev_root: Path,
                main_repo_dir: Path | None, *, all_items: list[dict] | None = None,
                events: list[dict] | None = None,
+               subagents: int | None = None,
+               guide_reads: int | None = None,
                ) -> dict:
     """One gate's MECHANICAL state, typed — no prose, no recommendation, no embedded artifact.
 
@@ -317,8 +438,21 @@ def gate_state(item: dict, item_dir: Path, dev_root: Path,
         checks.append({"criterion": "artifacts_complete", "ok": not arts,
                        "detail": "; ".join(arts) or
                                  f"clean: {', '.join(profile.required_artifacts) or 'none required'}"})
+        # Is the verdict newer than what it judges? Asked for BOTH kinds — a review that predates
+        # the last build cycle is as stale as one that predates a rewritten investigation.
+        fresh = judgment_current(item_dir, profile.kind)
+        if fresh is not None:
+            checks.append(fresh)
         if profile.kind == "research":
             checks.extend(research_readiness(item_dir))
+            # Did investigate read its family's method, and did it fan out? Both spine-counted by
+            # the caller — core has no spine access, the same reason `events` is passed in rather
+            # than read here. `method_read` comes first: whether the guide was followed decides how
+            # much the rest of the record is worth.
+            for row in (guide_check(research_kind(item), guide_reads),
+                        fanout_check(research_kind(item), subagents)):
+                if row is not None:
+                    checks.append(row)
         # CHILDREN HOLD THE PARENT HERE, NOT AT CLOSE (owner, 2026-08-09). A child is spawned FROM
         # this item and is part of its work, so when the child lands the parent has to still be
         # re-workable against it — re-checked, revised, re-vetted. At close it is none of those: the
@@ -335,24 +469,32 @@ def gate_state(item: dict, item_dir: Path, dev_root: Path,
         checks.append({"criterion": "children_terminal", "ok": kids_done,
                        "detail": f"open sub-item(s): {', '.join(open_kids)}" if not kids_done
                                  else "no open sub-items"})
-        wt = item.get("git_worktree")
-        ev_repo = Path(str(wt)) if wt and Path(str(wt)).is_dir() else main_repo_dir
-        ev = A.evidence_status(item_dir, ev_repo)
+        # ONLY A KIND THAT VETS IS ASKED ABOUT ITS EVIDENCE (live, 2026-08-13). This row reads a
+        # ledger that only a vet run writes, and a research item has no vet phase — so it sat at
+        # "nothing recorded yet — vet writes the ledger" forever and blocked the one gate research
+        # has, with nothing anyone could do to clear it. Same fault `spawns_exist` had: a question
+        # asked where its answerer does not exist.
+        if "vet" in profile.phases:
+            wt = item.get("git_worktree")
+            ev_repo = Path(str(wt)) if wt and Path(str(wt)).is_dir() else main_repo_dir
+            ev = A.evidence_status(item_dir, ev_repo)
         # The STATUS WORD alone ("stale") answered nothing anyone asked: it named a state without
         # naming its cause or its exit, so a gate that went red the instant the owner pressed Sync
         # read as a malfunction. Each status now says what happened and what clears it.
-        n = ev.get("entries", 0)
-        detail = {
-            "passed": f"all {n} recorded checks pass, and the code hasn't moved since they ran",
-            "stale": (f"{n} recorded checks pass, but the code moved after they ran (a sync or a "
-                      f"commit) — one vet cycle re-runs them against the current tree"),
-            "failed": f"a recorded check is failing ({n} entries) — build fixes it, then vet re-runs",
-            "deferred": f"a check is waiting on an authorization you haven't granted ({n} entries)",
-            "unverified": "nothing recorded yet — vet writes the ledger",
-        }.get(str(ev.get("status")), f"evidence ledger: {ev.get('status')} ({n} entries)")
-        checks.append({"criterion": "evidence_fresh", "ok": ev["status"] == "passed",
-                       "detail": "no checks were owed — the approved plan declares `depth: none`"
-                                 if ev.get("not_required") else detail})
+            n = ev.get("entries", 0)
+            detail = {
+                "passed": f"all {n} recorded checks pass, and the code hasn't moved since they ran",
+                "stale": (f"{n} recorded checks pass, but the code moved after they ran (a sync or "
+                          f"a commit) — one vet cycle re-runs them against the current tree"),
+                "failed": f"a recorded check is failing ({n} entries) — build fixes it, then vet "
+                          f"re-runs",
+                "deferred": f"a check is waiting on an authorization you haven't granted "
+                            f"({n} entries)",
+                "unverified": "nothing recorded yet — vet writes the ledger",
+            }.get(str(ev.get("status")), f"evidence ledger: {ev.get('status')} ({n} entries)")
+            checks.append({"criterion": "evidence_fresh", "ok": ev["status"] == "passed",
+                           "detail": "no checks were owed — the approved plan declares `depth: none`"
+                                     if ev.get("not_required") else detail})
         # NO `git_fresh` row (owner, 2026-08-01 — removed with the manual Sync button). It was the
         # only check that could neither block nor be acted on: behind-trunk is a FACT, the merge act
         # syncs and re-measures at the instant that matters, and the same number already reads

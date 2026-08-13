@@ -1,20 +1,8 @@
-<!-- Review report: reports/report-review.md — the surface the merge decision is made on, and the
-     owner's document alone. Written FROM artifacts/review.md, after it.
-     Four sections, KIND-NEUTRAL: the same shape carries an implementation item, a research item,
-     and whatever kind comes later. Read it as: what · what to argue with · how much to believe ·
-     what it means for the project.
-     Nothing here restates triage — why this was worth doing is something they already read and
-     approved. No verdict word, no recommendation line: the Summary says it and the buttons do it.
-     Every line traces to artifacts/review.md or a cycle report — no new facts.
-     Rewritten in place on a re-review: this report always describes the item as it stands NOW. Its
-     history lives in artifacts/review.md `## Revision rounds`, not here. -->
 # Review User-facing Report
 
 **Summary:** <fill:one line — what the owner is being asked to decide and how much weight it carries. This line is what the dashboard shows at the review gate, so it has to stand alone>
 
 ## What you asked for
-<!-- RE-REVIEWS ONLY, and it goes FIRST — delete this whole section on a first review. Their
-     objection, what the item now does about it, and what it cost. Their words, quoted. -->
 <fill:the objection, answered — one short block>
 
 ## What you're approving

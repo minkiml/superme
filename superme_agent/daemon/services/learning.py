@@ -52,7 +52,7 @@ async def _run_background_distill(ctx, context_id: str, run_id: int) -> None:
     props_before = len(_dev_store.list_memory_proposals(context_id, status="proposed"))
     _dev_store.log_event(context_id, "distill.start", f"Started distill · {cands_before} candidate(s)",
                          scope="dev", actor="daemon", meta={"candidates": cands_before})
-    turn_mcp = {"dev": make_dev_mcp_server(_dev_store, ctx.id, learning=True)}
+    turn_mcp = {"dev": make_dev_mcp_server(_dev_store, ctx.id, scope="distill")}
     run_status = "done"
     session_id = None
     run_model = None
@@ -176,7 +176,7 @@ async def _run_background_write(ctx, context_id: str, proposal_id: int, run_id: 
                          f"Started write · proposal #{proposal_id} ({prop['output_form']}/{prop['target_scope']})",
                          scope="dev", actor="daemon",
                          meta={"proposal_id": proposal_id, "staged_path": staged_path})
-    turn_mcp = {"dev": make_dev_mcp_server(_dev_store, ctx.id, learning=True,
+    turn_mcp = {"dev": make_dev_mcp_server(_dev_store, ctx.id, scope="write",
                                            proposal_id=proposal_id, staged_path=staged_path)}
     run_status = "done"
     session_id = None
@@ -299,7 +299,7 @@ async def run_sweep(ctx, session_id: str, focus: str | None = None) -> dict:
     prompt = kernel_speech.capture_trigger(_render_slice(slice_msgs), focus)
     capture_prompt(context_id, prompt, run_id=run_id)  # trail head (capped; the slice is trimmed)
     # Bind provenance server-side: the agent supplies substance, we stamp which session it came from.
-    turn_mcp = {"dev": make_dev_mcp_server(_dev_store, context_id, learning=True,
+    turn_mcp = {"dev": make_dev_mcp_server(_dev_store, context_id, scope="capture",
                                            origin_session_id=session_id)}
     run_status = "done"
     sub_session = None

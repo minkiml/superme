@@ -18,7 +18,7 @@ from ...app_state import (
     DevKnowledgeService, DevStore, SessionStore, SystemSpine,
     get_dev, get_dev_store, get_sessions, get_spine,
 )
-from ....core import artifacts, git_layer, status_router
+from ....core import artifacts, git_layer, kind_profiles, status_router
 from ....core.artifacts import _atomic_write
 from ...services import drilldown, git_ops, scheduler
 from ....gateway import contexts
@@ -142,7 +142,19 @@ async def dev_work_item_drilldown(item_id: str, context_id: str = "global",
         inbox_origin = "agent" if "agent" in (row.get("origin") or []) else "user"
     return drilldown.build_payload(item, dev_root / "work-items" / item_id, dev_root, ctx.cwd,
                                    all_items=all_items, events=events, git_health=git_health,
-                                   review_mode=review_mode, inbox_origin=inbox_origin)
+                                   review_mode=review_mode, inbox_origin=inbox_origin,
+                                   # Did investigate fan out, and did it read its family's method?
+                                   # Both counted from the spine's own run_event rows — unfakeable.
+                                   # None for a non-research item (or an unjudged one): nobody
+                                   # looked, which is not the same as zero.
+                                   subagents=(spine.subagent_count(
+                                       context_id, item_id, phase="investigate")
+                                       if str(item.get("kind")) == "research" else None),
+                                   guide_reads=(spine.read_hits(
+                                       context_id, item_id, phase="investigate",
+                                       needle=f"investigate/references/{fam}.md")
+                                       if str(item.get("kind")) == "research"
+                                       and (fam := kind_profiles.research_kind(item)) else None))
 
 
 class AbandonBody(BaseModel):

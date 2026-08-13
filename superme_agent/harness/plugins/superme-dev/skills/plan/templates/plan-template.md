@@ -7,20 +7,8 @@
 <fill:the approach and why this way over the alternatives · modules/files touched · interfaces and data shapes (signatures, schemas, routes) · constraints and gotchas discovered in directed reads · explicitly out of scope. Build implements this section verbatim and may not amend it>
 
 ## Decisions & clarifications
-<!-- owner Q&A conclusions land here, append-only — starts empty. One entry per answered question:
-### <ts> — <the question, one line>
-- answer: <the owner's answer, in substance>
-- changed: <what it changed in the plan, or "nothing">
--->
-
-<!-- A revision appends `## Revision log` + a `## Revision r<n>` block HERE, above the two live
-     sections below — everything above is the record, everything below is the current truth. Code
-     writes those; never hand-author them. -->
 
 ## Tasks
-<!-- Each task is a NAME on the head line and its SPECIFICATION on the indented lines under it. The
-     head line is what the owner's board shows, so it is a few words naming the change — not the
-     spec's first clause. The spec is what build reads; put every file, flag and rule there. -->
 - [ ] t1 — <fill:the task's NAME — a few words, under ~60 chars, no closing period>
       <fill:the specification — files, functions, flags, rules, edge cases. Wrap freely; every
       indented line under the head belongs to this task.>

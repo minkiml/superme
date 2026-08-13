@@ -1,9 +1,3 @@
-<!-- Investigation report: reports/report-investigate.md — a research item's ANSWER, for the owner.
-     Keep it ≤ 1 screen. Every line traces to the plan's questions and investigation.md — no new
-     facts, and no conclusion the evidence can't be pointed at.
-     Rewritten at each session's end, overwriting in place: it always describes what is known NOW.
-     Measured and reasoned are different things and must read differently — the one way a research
-     item does damage is a guess that reads like a measurement. -->
 # Investigation User-facing Report
 
 **Summary:** <fill:one line — the answer, or how far it got. This line is what the dashboard shows while the item is investigating, so it has to stand alone>
@@ -18,4 +12,4 @@
 <fill:the questions still open, and anything the method cannot speak to. An empty version of this section is almost always a lie; write it before you write the section above>
 
 ## What this suggests doing
-<fill:the options, cheapest first, each with what it would buy and what it would cost. Nothing is filed from here — the owner chooses, and `itemize` files. Delete the section only when the honest answer is that nothing should change, and say that instead>
+<fill:the options (how to fix), cheapest first, each with what it would buy and what it would cost. Nothing is filed from here — the owner chooses, and `itemize` files. Delete the section only when the honest answer is that nothing should change, and say that instead>

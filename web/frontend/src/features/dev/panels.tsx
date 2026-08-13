@@ -190,7 +190,13 @@ function WorkCard({
   const hasTokens = (tokens ?? 0) > 0
   const settledTime = it.last_run?.duration_ms != null ? fmtDuration(it.last_run.duration_ms) : null
   const showMeter = running || hasTokens || !!settledTime
-  const stripe = STATUS_STRIPE[primaryStatus(it, bucket)] ?? 'border-l-line'
+  // A LIVE RUN WINS OVER THE STATUS WORD — the same rule StatusBadge and attnRing already follow.
+  // Without this the stripe was the one element that didn't know an agent was on the card: the badge
+  // read green ("triaging…"), the attention ring read green, and the left edge stayed `active`-blue.
+  // Three colours for one fact, and the odd one out was the fastest scan cue on the board.
+  const liveNow = running && primaryStatus(it, bucket) !== 'done'
+  const stripe = liveNow ? 'border-l-success'
+    : STATUS_STRIPE[primaryStatus(it, bucket)] ?? 'border-l-line'
   const stopped = primaryStatus(it, bucket) === 'error'
   // Attention tint (S7): the card carries its bucket color as a soft ring — orange pages, purple =
   // the deputy is covering it, green = a phase agent is on it. (Unread applies to terminal items,
