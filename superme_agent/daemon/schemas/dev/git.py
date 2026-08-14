@@ -122,6 +122,10 @@ class PrViewResponse(BaseModel):
     pr_open: bool
     merged: bool
     merge_commit: str | None = None
+    # The item's own lifecycle, distinct from the branch's. `terminal` with `merged: False` is the
+    # abandoned/superseded case: the page shows how it ended instead of offering a Merge.
+    terminal: bool = False
+    outcome: str | None = None
     report: str | None = None   # reports/report-review.md, rendered by the FE
     stat: PrStat
     groups: list[PrGroup]

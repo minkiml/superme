@@ -150,6 +150,14 @@ export default function PrPage({ itemId, contextId }: {
           <span className="inline-flex items-center gap-1.5 text-xs text-success">
             <Check size={14} /> merged {pr.merge_commit?.slice(0, 10)}
           </span>
+        ) : pr?.terminal ? (
+          // Finished WITHOUT landing — abandoned or superseded. The branch is still there and the
+          // diff is still worth reading, but the decision has been taken and it was "no". Offering
+          // Merge here contradicts it; the daemon refuses the call anyway (409), so a button would
+          // only be a way to be told no.
+          <span className="inline-flex items-center gap-1.5 text-xs text-muted">
+            <Check size={14} /> {pr.outcome ?? 'finished'} — never merged, branch left in place
+          </span>
         ) : (
           <button
             onClick={merge}

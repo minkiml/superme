@@ -49,6 +49,48 @@ def _backfill_session_stamps() -> None:
         log.exception("session-stamp backfill failed (non-fatal)")
 
 
+def _reconcile_orphaned_sessions() -> None:
+    """Retire sessions whose work-item no longer exists on disk.
+
+    Every product path that disposes an item already takes its sessions with it — clearance at
+    close, abandon, re-run, the Prompt X-ray teardown. What none of them covers is a folder that
+    leaves OUT OF BAND: a playground reset, a hand-deleted directory, a restored backup. The
+    session row survives, so the chat picker keeps offering a live composer over a thread whose
+    item is gone — and it is offered under a title that falls back to the raw id twice over,
+    because there is no item left to name it. Found live 2026-08-14 on `41c0bf90d16a`.
+
+    Retired, not deleted-by-the-owner: the item ended, nobody chose to discard the conversation.
+    `sessions.delete` preserves the run trace and stamps it `session_fate=retired` (never-delete-logs).
+
+    THE READ MUST SUCCEED BEFORE ANYTHING IS DROPPED. A repo whose dev tree fails to read yields
+    no live-id set, and treating that emptiness as "no items exist" would retire every session the
+    repo has. On any read failure this skips the repo entirely."""
+    try:
+        for rid in app_state.spine.repos():
+            ctx = contexts.resolve(rid, "dev")
+            if not ctx.internal_root:
+                continue
+            try:
+                data = app_state.dev.read_all(ctx.internal_root / "dev")
+            except Exception:
+                continue          # unreadable tree — say nothing about this repo's sessions
+            live = {str(it.get("id")) for it in (data.get("work_items") or []) if it.get("id")}
+            if not live:
+                continue          # a repo with no items at all: nothing to reconcile against
+            for s in app_state.spine.sessions_for_repo(rid):
+                iid = str(s.get("item_id") or "")
+                if not iid or iid in live:
+                    continue
+                try:
+                    app_state.sessions.delete(ctx, str(s.get("id")), cause="retired")
+                    log.info("retired session %s — its work-item %s no longer exists",
+                             str(s.get("id"))[:8], iid)
+                except Exception:
+                    log.exception("orphan session retire failed %s", s.get("id"))
+    except Exception:
+        log.exception("orphaned-session reconciliation failed (non-fatal)")
+
+
 def _reconcile_worktrees() -> None:
     """Startup reconciliation (workspace-workflow S4/D4, nimbalyst punch-list): recorded
     worktrees vs disk vs branches, per repo. Heals a kill-mid-create (branch exists, dir missing
@@ -289,6 +331,10 @@ async def lifespan(app: FastAPI):
     app_state.spine.reconcile_model_overrides()
     # One-time: stamp durable work-item identity onto pre-existing sessions (idempotent).
     _backfill_session_stamps()
+    # …then the other direction: sessions pointing at an item that is no longer on disk. Runs after
+    # the backfill so a session that was merely UNSTAMPED is claimed by its item first, and never
+    # mistaken for an orphan.
+    _reconcile_orphaned_sessions()
     # S4 git layer: heal recorded-worktree drift (kill-mid-create, deleted dirs, dropped terminal
     # cleanups) before any run can touch a tree.
     _reconcile_worktrees()

@@ -3,7 +3,7 @@ import { Hammer, ArrowLeft, ArrowRight, Boxes, Inbox, Circle, Clock, Check, Bot,
 import PageHeader from '@/ui/PageHeader'
 import Modal from '@/ui/Modal'
 import ConfirmDialog from '@/ui/ConfirmDialog'
-import { getDev, getAttention, resumeWorkItem, markWorkItemSeen, type AttentionData, type DevData, type DevGlance, type InboxEntry, type WorkItem } from '@/lib/api'
+import { getDev, getAttention, resumeWorkItem, markWorkItemSeen, isShipped, type AttentionData, type DevData, type DevGlance, type InboxEntry, type WorkItem } from '@/lib/api'
 import { invalidate, useLive } from '@/lib/live'
 import { K, topicRepo } from '@/lib/live/keys'
 import { navigate, useRoute } from '@/lib/router'
@@ -139,7 +139,7 @@ export default function DevDashboard({
       )}
       {showShipped && data && (
         <ShippedList
-          items={data.work_items.filter((w) => w.done_at)}
+          items={data.work_items.filter(isShipped)}
           contextId={contextId}
           onSeen={load}
           onOpen={(id) => {
@@ -204,7 +204,7 @@ export default function DevDashboard({
                 </div>
                 <DeputyStrip items={data.work_items} buckets={bucketOf} />
                 <WorkspaceStats items={data.work_items} buckets={bucketOf}
-                                shipped={data.glance.by_status.done ?? 0}
+                                shipped={data.glance.shipped ?? 0}
                                 onShowShipped={() => setShowShipped(true)} />
                 {board === 'graph' ? (
                   <WorkGraphView contextId={contextId} onBindItem={onBindItem} embedded />

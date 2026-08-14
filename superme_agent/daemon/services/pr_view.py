@@ -149,6 +149,11 @@ def pr_view(ctx, context_id: str, item_id: str, *, dev, spine) -> dict:
         "pr_open": git_ops.pr_open(item),
         "merged": bool(item.get("git_merge_commit")),
         "merge_commit": item.get("git_merge_commit"),
+        # Finished ≠ merged. An item can end terminal with its branch never landed — abandoned,
+        # superseded — and the page has to say which, because `merged: False` alone reads as
+        # "not merged YET" and puts a live Merge in front of a decision already taken.
+        "terminal": bool(item.get("done_at")) or str(item.get("status")) == "done",
+        "outcome": item.get("outcome"),
         "report": _read(item_dir / "reports" / "report-review.md") or None,
         "stat": {"commits": len(commits), "files": stat["files"],
                  "insertions": stat["insertions"], "deletions": stat["deletions"]},

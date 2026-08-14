@@ -18,6 +18,9 @@ class Glance(BaseModel):
     attention bucket (D10: the only status that pages the owner)."""
     model_config = ConfigDict(extra="allow")
     by_status: dict[str, int]
+    # Ended AND landed. `by_status["done"]` counts every item that ended, abandoned ones included;
+    # this is the number the Shipped tile shows, so the two are deliberately not the same.
+    shipped: int = 0
     by_phase: dict[str, int]
     active: list[GlanceItem]
     awaiting_human: list[GlanceItem]

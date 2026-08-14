@@ -23,7 +23,7 @@ async def sessions_list(context_id: str = "global", mode: str | None = None,
     rows = sessions.list(ctx, mode=mode)
     # Resolve each work-item session's title once (cache by id — the list is small, localhost).
     if ctx.internal_root:
-        dev_root, titles = ctx.internal_root / "dev", {}
+        dev_root, titles, gone = ctx.internal_root / "dev", {}, {}
         for r in rows:
             iid = r.get("item_id")
             if not iid:
@@ -31,7 +31,14 @@ async def sessions_list(context_id: str = "global", mode: str | None = None,
             if iid not in titles:
                 item = dev.read_work_item(dev_root, iid) or {}
                 titles[iid] = item.get("title") or iid
+                gone[iid] = not item
             r["item_title"] = titles[iid]
+            # A session can outlive its item when the folder leaves out of band (a reset, a hand
+            # delete). The startup reconciler retires those, but a folder can vanish while the
+            # daemon is up — so the surface says so rather than offering a live composer over a
+            # thread with nothing behind it. Stated as a FIELD, not inferred from the title
+            # falling back to the id, because that fallback is also what a title-less item shows.
+            r["item_gone"] = gone[iid]
             # Upgrade the preset to the item's TITLE + its short id (keeps same-titled items apart) —
             # but never over an owner rename.
             if not r.get("has_override"):

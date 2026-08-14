@@ -83,7 +83,28 @@ def maybe_autopilot_advance(context_id: str, item_id: str) -> None:
         dev = app_state.dev
         dev_root = ctx.internal_root / "dev"
         item = dev.read_work_item(dev_root, item_id)
-        if item is None or not autopilot_core.is_autopilot(item):
+        if item is None:
+            return
+        # A DRIVERLESS NON-GATE PHASE ADVANCES ITSELF, autopilot or not.
+        #
+        # Autopilot removes the WAITING at a gate — so it is the right condition for everything
+        # below. It is the WRONG condition here, because a phase that is not a gate has nothing to
+        # wait for: nobody is being asked anything. `investigate` is the only such phase without a
+        # driver of its own (build and vet are carried by the build⟷vet loop; the rest are gates),
+        # so it is the only one named.
+        #
+        # Live, 2026-08-14: a sweep launched from the button is born AT `investigate`, and a
+        # button-launched item is not on autopilot — so it finished its investigation, rested
+        # `awaiting_human`, and offered the owner no Approve at all (investigate is not a gate, so
+        # there was no gate to approve). Drop, re-run, or run investigate a second time were the
+        # only live controls. The autopilot half of this same strand was fixed on 2026-08-13 in the
+        # deputy branch below; this is the half that skipped everyone who never enrolled.
+        if (str(item.get("phase") or "") == "investigate"
+                and str(item.get("status") or "") == "awaiting_human"
+                and not autopilot_core.is_autopilot(item)):
+            autopilot_advance(ctx, context_id, item_id, actor="daemon")
+            return
+        if not autopilot_core.is_autopilot(item):
             return
         # Throwaway prompt-extraction probe (Prompt X-ray): NO deputy, NO judgment — it sails through
         # every gate (incl. review, via review_merge's synthetic skip) so each phase's prompt is

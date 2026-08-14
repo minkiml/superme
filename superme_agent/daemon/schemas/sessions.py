@@ -21,6 +21,11 @@ class SessionSummary(BaseModel):
     message_count: int
     item_id: str | None = None
     item_title: str | None = None
+    # True when `item_id` names a work-item whose folder is no longer on disk. The thread is still
+    # readable — it happened — but there is nothing left to talk TO, so the composer closes rather
+    # than resuming a conversation about work that no longer exists. Always False for a session
+    # with no `item_id`: a general chat answers to nobody and is always resumable.
+    item_gone: bool = False
     # Durable session KIND (session-kinds-diagnose): 'diagnosis' | 'onboarding' | 'work_item' |
     # 'general' | null. The chat picker derives the category chip from this (+ item_id).
     kind: str | None = None

@@ -94,13 +94,19 @@ def _actions(item: dict, state: dict, *, running: bool, git_health: dict | None,
         approve_label = "Approve"
         approve_does = (f"advances to {_label(next_phase)}"
                         if next_phase else "advances to the next phase")
+    # ORDER MATTERS. `not at_gate` is tested BEFORE `blocked`, because between gates `blocked_by`
+    # holds the NEXT gate's failures — and those are a PREVIEW of what will be asked, not something
+    # the owner can act on now. Tested the other way round (as it was until 2026-08-14), a research
+    # item finishing `investigate` explained its dead Approve with "review.md does not exist —
+    # scaffold it first": a file that cannot exist until the phase it belongs to has been entered.
     out.append(_act("approve", approve_label,
                     active=at_gate and not terminal and not running and not blocked,
-                    reason="; ".join(blocked) if blocked else
-                           "an agent is working — the gate waits for it" if running else
-                           "nothing to decide: this item is terminal" if terminal else
+                    reason="nothing to decide: this item is terminal" if terminal else
                            f"the item is mid-`{phase}`; this gate opens when the phase ends"
-                           if not at_gate else approve_does))
+                           if not at_gate else
+                           "; ".join(blocked) if blocked else
+                           "an agent is working — the gate waits for it" if running else
+                           approve_does))
     # Drop — always available while the item lives (§2.1's table).
     out.append(_act("drop", "Drop", active=not terminal,
                     reason="already terminal" if terminal else
@@ -227,6 +233,11 @@ def _attention_card(item: dict, state: dict, hold: dict | None, paged: dict | No
         do = ("Read the diff on the PR page, then Approve" if phase == "review" and "pr" in live
               else "Approve the gate or give me your feedback")
         click = "approve"
+    elif not state.get("at_gate"):
+        # Between gates, `blocked_by` is the NEXT gate's preview — nothing here is the owner's to
+        # clear, so the card must not send them at a list they cannot act on.
+        do, click = (f"Nothing to clear here — `{phase}` is still the item's phase. Run it, or "
+                     "tell me in chat what should change", "chat")
     elif state.get("blocked_by"):
         do, click = ("Resolve what's open below — Approve activates when the must-resolve set is "
                      "empty", "")
@@ -250,7 +261,7 @@ def _attention_card(item: dict, state: dict, hold: dict | None, paged: dict | No
     if (n_auth := len(state.get("authorizations") or [])):
         basis.append(f"Go to Quick View → Authorization → grant or deny "
                      f"{n_auth} request{'' if n_auth == 1 else 's'}")
-    if state.get("blocked_by"):
+    if state.get("blocked_by") and state.get("at_gate"):
         basis.append(f"See Must resolve below - {len(state['blocked_by'])} to clear")
     return {"kind": kind, "why": why, "detail": detail, "do": do, "click": click,
             "basis": basis, "questions": questions, "children": []}

@@ -81,6 +81,9 @@ export default function ChatPanel({
   const [timelineKey, setTimelineKey] = useState(0)   // parent bumps → TimelineView re-fetches history
   const [boundPhase, setBoundPhase] = useState<string | null>(null)
   const [boundRunning, setBoundRunning] = useState(false)
+  // Terminal = the item is finished (done / abandoned / superseded). Its phase threads were
+  // reclaimed at clearance, so there is no conversation left to continue — see the composer lock.
+  const [boundTerminal, setBoundTerminal] = useState(false)
   const [runFeature, setRunFeature] = useState<string | null>(null) // the live run's role → the chat verb (Building… / Deputy reviewing…)
   // Edge-detector for the bound item's detail feed (phase moved / run ended / heartbeat).
   const prevBound = useRef<{ running: boolean; phase: string | null; ticks: number }>({
@@ -150,7 +153,7 @@ export default function ChatPanel({
 
   useEffect(() => {
     if (!boundId) {
-      setBoundPhase(null); setBoundRunning(false); setRunFeature(null)
+      setBoundPhase(null); setBoundRunning(false); setRunFeature(null); setBoundTerminal(false)
       return
     }
     if (!boundDetail) return
@@ -158,6 +161,7 @@ export default function ChatPanel({
     const phase = boundDetail.item.phase ?? null
     setBoundPhase(phase)
     setBoundRunning(running)
+    setBoundTerminal(boundDetail.item.status === 'done' || !!boundDetail.item.done_at)
     setRunFeature(running ? boundDetail.item.run_feature ?? null : null)
     // Re-pull the authoritative trail on any STRUCTURAL change (phase moved, or a run just ended)
     // AND on a slow heartbeat while running. The timeline endpoint includes in-progress runs, so
@@ -438,8 +442,22 @@ export default function ChatPanel({
         effortOverride={sessionEffort}
         // F2: grey the input while the item is in an autonomous phase (build/vet) — no live intake
         // worker to receive it; the owner watches the stream and speaks again at review.
+        // A session outlives its work-item only when the folder left out of band (a reset, a hand
+        // delete) — the startup reconciler retires those, but one can vanish while the daemon is
+        // up. The transcript still reads: it happened. Sending does not, because a resumed thread
+        // would answer about work that no longer exists, and the box being live is the whole
+        // reason that reads as confusion rather than as history.
+        // A TERMINAL item's transcript is worth opening — it is how the work went — but there is
+        // nothing left to send INTO. Clearance reclaimed its phase threads at close, so binding a
+        // shipped item lands on `newChat` (see the binding effect): the box looks live, and typing
+        // in it would mint a brand-new thread against finished work, carrying none of the history
+        // shown directly above it. Read-only is the honest state.
         locked={
-          chipItem && boundPhase && AUTONOMOUS_PHASES.has(boundPhase)
+          boundTerminal
+            ? { reason: 'This work-item and its sessions are closed — the transcript is history.' }
+            : activeSess?.item_gone
+            ? { reason: 'This work-item no longer exists — the conversation is history now.' }
+            : chipItem && boundPhase && AUTONOMOUS_PHASES.has(boundPhase)
             ? { reason: `The ${boundPhase} agent is working — it'll report at review.` }
             : null
         }

@@ -196,6 +196,17 @@ def review_merge(ctx, context_id: str, item_id: str, *, dev, dev_store, spine) -
     item = dev.read_work_item(dev_root, item_id)
     if item is None:
         raise HTTPException(status_code=404, detail="work-item not found")
+    # TERMINAL FIRST, before the phase test. A DROPPED item keeps the phase it died in — abandon
+    # writes `status`/`done_at`/`outcome` and leaves `phase` alone — so an item abandoned AT review
+    # still reads `phase == "review"` and sailed straight through the guard below. Live, 2026-08-14:
+    # `f045c70a1aee` was abandoned with its PR open and its branch unmerged, and its PR page still
+    # offered a live Merge that would have landed the work on main. Deciding is what a gate does;
+    # a terminal item has already been decided, and "abandoned" is precisely the decision NOT to land it.
+    if bool(item.get("done_at")) or str(item.get("status")) == "done":
+        raise HTTPException(
+            status_code=409,
+            detail=f"this item is finished ({item.get('outcome') or 'done'}) — there is nothing "
+                   f"left to decide. Its branch stays unmerged by that decision.")
     # merge is the REVIEW gate's action — the owner's decision IS the merge (decide=execute).
     # Pre-review the vet bar hasn't been met, so an ungated merge would land unvetted work on main.
     if str(item.get("phase")) != "review":

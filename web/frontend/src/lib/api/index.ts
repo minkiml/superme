@@ -126,6 +126,7 @@ export {
   getWorkGraph,
   getAttention,
   markWorkItemSeen,
+  isShipped,
   compactWorkItem,
   type Drilldown,
   type DrilldownAction,

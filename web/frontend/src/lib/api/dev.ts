@@ -100,8 +100,16 @@ export type InboxOrigin = 'user' | 'agent' // who created it (user-made vs agent
 // Derived straight from the transport type — kind/status/origin are now backend Literals (R5).
 export type InboxEntry = Schema<'InboxRow'>
 
+// SHIPPED is the one predicate for "this got delivered", and the daemon owns the COUNT
+// (`glance.shipped`). This mirror exists for the list, so the tile's number and the list's rows can
+// never disagree — an item that ended without landing (abandoned · superseded) is not shipped.
+export function isShipped(w: { done_at?: string | null; outcome?: WorkOutcome | null }): boolean {
+  return !!w.done_at && (w.outcome ?? 'completed') === 'completed'
+}
+
 export type DevGlance = {
-  by_status: Record<string, number> // active/awaiting_*/done counts
+  by_status: Record<string, number> // active/awaiting_*/done counts — `done` is EVERY ended item
+  shipped: number                   // ended AND landed; abandoned/superseded are excluded
   by_phase: Record<string, number>
   active: { id: string; title?: string }[]
   awaiting_human: { id: string; title?: string }[] // the attention bucket (pages the owner)

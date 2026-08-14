@@ -416,13 +416,22 @@ export default function WorkItemModal({
               </span>
             )}
             {/* THREE slots: primary · Drop · Re-run. The primary is the first of approve/resume/run
-                that applies to this state, greyed with its own reason when it isn't workable. */}
-            {primary && (
+                that applies to this state, greyed with its own reason when it isn't workable.
+                A TERMINAL item gets NONE of them — every one is inactive by definition (finished ·
+                already terminal · finished), so the row was three dead controls saying the same
+                thing three ways. A greyed button is information while an action is still POSSIBLE
+                and merely blocked; once the item is over, it is just clutter on top of a record. */}
+            {!d?.terminal && primary && (
               <ActionButton a={primary} busy={busy === primary.id} primary
                             onClick={() => act(primary.id)} />
             )}
+            {d?.terminal && (
+              <span className="text-[13px] text-faint">
+                This item is closed. Its record stays readable.
+              </span>
+            )}
             <span className="ml-auto flex items-center gap-1">
-              {barActions.filter((a) => a.id === 'drop' || a.id === 'rerun').map((a) => (
+              {!d?.terminal && barActions.filter((a) => a.id === 'drop' || a.id === 'rerun').map((a) => (
                 <ActionButton key={a.id} a={a} busy={busy === a.id} quiet
                               onClick={() => act(a.id)} />
               ))}
@@ -487,7 +496,13 @@ function ActionButton({ a, busy, primary, quiet, onClick }: {
   a: DrilldownAction; busy: boolean; primary?: boolean; quiet?: boolean; onClick: () => void
 }) {
   // `active` and `reason` both come from the server. Never re-decide either here.
-  const cls = primary
+  //
+  // An INACTIVE primary drops the accent fill. `disabled:opacity-40` alone left a filled accent
+  // button on a dark ground still reading as "do this" — on a shipped item, `Run Review` looked
+  // live while being unclickable, which is worse than either state on its own: the owner tries it,
+  // nothing happens, and nothing says why (the reason is in a `title`, which needs a hover to
+  // find). Greyed has to LOOK greyed for the disabled state to be information.
+  const cls = primary && a.active
     ? 'bg-accent font-medium text-on-accent hover:opacity-90 px-3'
     : quiet
       ? 'text-faint hover:text-fg px-2.5'

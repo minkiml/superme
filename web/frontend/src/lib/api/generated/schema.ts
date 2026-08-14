@@ -3715,6 +3715,11 @@ export interface components {
             by_status: {
                 [key: string]: number;
             };
+            /**
+             * Shipped
+             * @default 0
+             */
+            shipped: number;
             /** By Phase */
             by_phase: {
                 [key: string]: number;
@@ -4745,6 +4750,13 @@ export interface components {
             merged: boolean;
             /** Merge Commit */
             merge_commit?: string | null;
+            /**
+             * Terminal
+             * @default false
+             */
+            terminal: boolean;
+            /** Outcome */
+            outcome?: string | null;
             /** Report */
             report?: string | null;
             stat: components["schemas"]["PrStat"];
@@ -5665,6 +5677,11 @@ export interface components {
             item_id?: string | null;
             /** Item Title */
             item_title?: string | null;
+            /**
+             * Item Gone
+             * @default false
+             */
+            item_gone: boolean;
             /** Kind */
             kind?: string | null;
         };

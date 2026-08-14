@@ -1703,6 +1703,14 @@ class DevKnowledgeService:
         return {
             "by_status": by_status,
             "by_phase": by_phase,
+            # SHIPPED ≠ TERMINAL. `by_status["done"]` counts everything that ended, which includes
+            # the work that was abandoned or superseded — thrown away, never landed. Counting those
+            # as shipped inflates the one number that is supposed to mean "this got delivered"
+            # (owner, 2026-08-14). Outcome is the discriminator; a pre-outcome item that ended is
+            # counted as shipped, because before the field existed ending meant completing.
+            "shipped": sum(1 for it in items
+                           if it.get("done_at")
+                           and str(it.get("outcome") or "completed") == "completed"),
             "active": active,
             "awaiting_human": awaiting_human,
             "inbox_open": sum(1 for e in inbox if e.get("status", "open") == "open"),
