@@ -288,8 +288,19 @@ def scaffold(item_dir: Path, artifact: str, *, title: str = "", item_kind: str |
           + (f"research_kind: {research_kind}\n" if research_kind else "")
           + f"reader: {_SPECS[artifact]['reader']}\n"
           + f"created_at: {date.today().isoformat()}\n---\n")
-    body = _template(artifact, item_kind, research_kind).format(
-        title=title or (item_id or "work-item"))
+    tmpl = _template(artifact, item_kind, research_kind)
+    heading = title or (item_id or "work-item")
+    # The family is named ONCE in the heading. A research template opens `# Audit — {title}`, and a
+    # sweep-launched item's TITLE also opens with the family because the board card needs it there
+    # ("Audit — coverage in the whole repo") — rendered naively that gives
+    # `# Audit — Audit — coverage in the whole repo`. The prefix is read off the template itself
+    # rather than a table here, so a family added later gets this for free, and a COMMISSIONED item
+    # whose title doesn't name its family (`# Deep diagnosis — Sum shows the wrong total`) keeps the
+    # prefix that makes it readable.
+    m = re.match(r"#[ \t]+(.+?)[ \t]+—[ \t]+\{title\}", tmpl)
+    if m and heading.lower().startswith(m.group(1).lower() + " — "):
+        heading = heading[len(m.group(1)) + 3:].lstrip()
+    body = tmpl.format(title=heading)
     if artifact == "plan" and standing:
         body = _inject_checks(body, standing)
     _atomic_write(path, fm + body)
@@ -1524,10 +1535,37 @@ def record_validation(item_dir: Path, repo_dir: Path | None, *, command: str, re
 
     The prose bullets in `## Validation` are unaffected — they are the per-task narrative a vetter
     reads. This is the machine lane beside them, same grammar as `## Verification`'s ```checks."""
-    command, result = " ".join((command or "").split()), " ".join((result or "").split())
-    if not command:
+    result = " ".join((result or "").split())
+    raw = (command or "").strip()
+    if not raw:
         raise ValueError("record_validation needs the COMMAND you ran — a claim with no command "
                          "is the prose this record exists to replace")
+    # A newline INSIDE A QUOTE is refused, not silently flattened. This ledger stores the command on
+    # its `###` heading line and vet's audit re-runs THE STORED TEXT verbatim, so every newline
+    # becomes a space. Between shell words that is harmless — a wrapped `pytest -q\n tests/` is the
+    # same command. Inside a quoted string it is not: the newlines are the program's statement
+    # separators, so `python3 -c "import os\nprint(1)"` flattens into an IndentationError, the audit
+    # reports "claim did not reproduce", and the loop spends a whole build⟷vet cycle on a storage
+    # round-trip while the code was always correct (observed live 2026-08-14, 223k tokens).
+    # Refusing costs one tool call instead. Quote tracking is deliberately naive — it answers "was a
+    # quote open at this newline", which is the question, and over-refusing a pathological quoting
+    # style is cheaper than shipping a command that no longer runs.
+    quote = ""
+    for ch in raw:
+        if quote:
+            if ch == quote:
+                quote = ""
+            elif ch == "\n":
+                raise ValueError(
+                    "this command has a newline INSIDE a quoted string, and the record stores the "
+                    "command on ONE line — vet re-runs the stored text verbatim, so that newline "
+                    "becomes a space and the quoted program changes meaning (an indented block "
+                    "turns into a syntax error). Re-run it in single-line form and record that: "
+                    "join the statements with `; `, or put the script in a file and record the "
+                    "command that runs the file.")
+        elif ch in "'\"":
+            quote = ch
+    command = " ".join(raw.split())
     reports = cycle_reports(item_dir)
     cy = ({"cycle": reports[-1]["cycle"], "path": reports[-1]["path"]}
           if reports else scaffold_cycle(item_dir))
