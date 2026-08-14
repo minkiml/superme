@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from ...app_state import DevStore, get_dev_store
-from ...deps import load_slash_cache, published_ident
+from ...deps import load_slash_cache, local_harness_root, published_ident
 from ...schemas.dev.harness import (
     FoundationResponse, FoundationFileSaveResponse, HarnessPluginsResponse, PaletteResponse,
     PluginFileResponse, PluginFileSaveResponse, PublishedResponse, PublishedToggleResponse,
@@ -49,7 +49,7 @@ async def dev_harness_local_plugins(context_id: str = "global") -> dict:
     per-repo Artifacts tab. Flat: the dev workspace is already dev-scoped, so no scope split."""
     from ....core.operational import _read_plugin
     from ....runtime.config import LOCAL_HARNESS_DIR
-    plug = _read_plugin(LOCAL_HARNESS_DIR / context_id / "dev")
+    plug = _read_plugin(local_harness_root(context_id))
     return {"context_id": context_id, "skills": plug["skills"], "agents": plug["agents"]}
 
 
@@ -58,7 +58,7 @@ def _resolve_plugin_file(scope: str, kind: str, name: str, context_id: str = "gl
     from ....runtime.config import DEV_PLUGIN_DIR, CORE_PLUGIN_DIR, SHARED_PLUGIN_DIR, LOCAL_HARNESS_DIR
     p = resolve_plugin_file(scope, kind, name, dev_dir=DEV_PLUGIN_DIR,
                             core_dir=CORE_PLUGIN_DIR, shared_dir=SHARED_PLUGIN_DIR,
-                            local_dir=LOCAL_HARNESS_DIR / context_id / "dev")
+                            local_dir=local_harness_root(context_id))
     if p is None or not p.is_file():
         raise HTTPException(status_code=404, detail="skill/agent not found")
     return p
@@ -200,7 +200,7 @@ async def dev_palette(context_id: str = "global", mode: str = "dev") -> dict:
     cached external/native commands."""
     from ....core.operational import list_palette_skills
     from ....runtime.config import plugins_for, LOCAL_HARNESS_DIR
-    op_home = (LOCAL_HARNESS_DIR / context_id / mode) if context_id else None
+    op_home = local_harness_root(context_id, mode) if context_id else None
     skills = list_palette_skills([Path(p) for p in plugins_for(mode, op_home)])
     visible = [s["command"] for s in skills
                if (s.get("category") or "").strip().lower() not in _HIDE_CATEGORIES]
@@ -292,7 +292,7 @@ async def dev_harness_constitutions(context_id: str = "global") -> dict:
             })
 
     collect(read_constitution_dir(CONSTITUTION_DIR / "dev", origin="universal"), "universal_dev", "dev")
-    collect(read_constitution_dir(LOCAL_HARNESS_DIR / context_id / "dev" / "constitution",
+    collect(read_constitution_dir(local_harness_root(context_id) / "constitution",
                                   origin="repo"), "repo_dev", "dev")
     return {"context_id": context_id, "constitutions": out}
 
@@ -349,7 +349,7 @@ def _resolve_constitution_file(scope: str, slug: str, context_id: str) -> Path:
         home, origin = CONSTITUTION_DIR / mode, "universal"
     elif scope.startswith("repo_"):
         mode = scope.split("_", 1)[1]
-        home, origin = LOCAL_HARNESS_DIR / context_id / mode / "constitution", "repo"
+        home, origin = local_harness_root(context_id, mode) / "constitution", "repo"
     else:
         raise HTTPException(status_code=400, detail=f"scope '{scope}' is not editable")
     for it in read_constitution_dir(home, origin=origin):
@@ -399,7 +399,7 @@ async def dev_harness_assets(context_id: str = "global") -> dict:
     copy). Onboarding auto-adopts the confidently-relevant ones; the owner curates from here."""
     from ....core.operational import read_asset_pool, repo_asset_states
     from ....runtime.config import LOCAL_HARNESS_DIR
-    states = repo_asset_states(LOCAL_HARNESS_DIR / context_id / "dev" / "constitution")
+    states = repo_asset_states(local_harness_root(context_id) / "constitution")
     out = [{
         "slug": it["slug"], "title": it["slug"].replace("-", " "),
         "description": it.get("description"), "body": it["body"],
@@ -422,7 +422,7 @@ async def dev_harness_asset_action(slug: str, body: AssetActionBody,
     from ....runtime.config import LOCAL_HARNESS_DIR
     if slug not in {it["slug"] for it in read_asset_pool()}:
         raise HTTPException(status_code=404, detail="asset not found in the pool")
-    home = LOCAL_HARNESS_DIR / body.context_id / "dev" / "constitution"
+    home = local_harness_root(body.context_id) / "constitution"
     if body.action == "drop":
         states = drop_repo_asset(home, slug)
     elif body.action in ("adopt", "enable"):

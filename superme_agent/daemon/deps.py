@@ -10,7 +10,7 @@ import logging
 from fastapi import HTTPException
 
 from ..gateway import contexts
-from ..runtime.config import SLASH_COMMANDS_FILE
+from ..runtime.config import LOCAL_HARNESS_DIR, SLASH_COMMANDS_FILE
 
 log = logging.getLogger("superme-agent")
 
@@ -23,6 +23,22 @@ def knowledge_root(context_id: str):
     if not ctx.knowledge_root:
         raise HTTPException(status_code=400, detail="context has no knowledge root")
     return ctx.knowledge_root
+
+
+def local_harness_root(context_id: str | None, mode: str = "dev"):
+    """A context's own operational cell: `local-harness/<id>/<mode>`.
+
+    RESOLVES THE ID THROUGH THE REGISTRY rather than joining the caller's string onto a path. A
+    `context_id` arrives off a query string, and `Path / "../../.."` walks out of the tree quite
+    happily — `contexts.resolve` maps anything unregistered to `global` (it already did, for every
+    other purpose), so the returned id can only ever be one this daemon knows.
+
+    Found by SuperMe's own security sweep on 2026-08-14 and reproduced: routes that built this path
+    inline resolved `context_id='../../../../tmp/decoy'` to a directory outside `local-harness/`
+    entirely. `resolve_plugin_file` was not the hole — it validates `name` and then checks the result
+    sits under `base`, but `base` was already outside, so the check passed on a compromised premise.
+    A containment test is only worth the root it is given."""
+    return LOCAL_HARNESS_DIR / contexts.resolve(context_id).id / mode
 
 
 def dev_root(context_id: str):

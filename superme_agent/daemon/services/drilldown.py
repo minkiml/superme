@@ -83,7 +83,16 @@ def _actions(item: dict, state: dict, *, running: bool, git_health: dict | None,
     # `actor != "owner"` (gates.py) because the owner IS the second pair of eyes that mode buys.
     # Do not condition this on `review_mode`: that was done on 2026-07-29 and a live approve merged
     # the branch under a button reading "Approve & open PR".
-    if phase == "review":
+    # A RESEARCH item has no branch and no worktree — nothing was built, so nothing can land. Its
+    # review-approve fires `itemize` instead (gates.py), putting `## Proposed work` into the inbox.
+    # A button reading "Approve & merge" over an item with no diff promises an act the system will
+    # not perform, and the same sentence in the reverse direction merged a branch once already (see
+    # the note below): the label must name the act, and here the act is different.
+    if phase == "review" and str(item.get("kind")) == "research":
+        approve_label, approve_does = "Approve", (
+            "accepts the findings and files `## Proposed work` as inbox items you can triage. "
+            "Nothing merges — a research item changes what we know, not what ships.")
+    elif phase == "review":
         approve_label, approve_does = "Approve & merge", (
             f"the review decision IS the merge: lands the branch on {trunk} (applies the staged "
             "knowledge delta, backup ref first), then advances to close. On conflicts it holds here "
