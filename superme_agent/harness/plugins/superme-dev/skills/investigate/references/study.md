@@ -1,6 +1,6 @@
 # Studying something built outside this repo for improving this codebase
 
-Read before a study. The plan names something (a codebase(s), web resources, so on) outside this repo — a project that solved the problem
+Read before a study. The item names something (a codebase(s), web resources, so on) outside this repo — a project that solved the problem
 we have, a library we might depend on, a product whose design we want, a published method — and asks
 what we should take from it.
 
@@ -58,6 +58,11 @@ mechanism in your own words and there is nothing to settle.
 One subagent per source, or per subsystem inside a large one. Each returns what that source does with
 a pointer — never whether we should take it. The comparison stays yours: a subagent that has read
 only them cannot know what transfers, because it has not read us.
+
+**In the brief:** what pins a source (a commit, an exact version, a URL and the date read) and the
+split between what they SAY they do and what their code does. Ask for that split by name — it is
+where the interesting line usually is, and a subagent reading a README will otherwise hand you the
+intent and call it the thing.
 
 ## Where to start
 

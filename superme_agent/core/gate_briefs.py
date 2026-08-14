@@ -131,6 +131,105 @@ def fanout_check(family: str | None, subagents: int | None) -> dict | None:
     }
 
 
+# The size below which a brief cannot have carried a bar. Deliberately generous: the shortest family
+# bar on its own (security's X→Y→Z) runs ~300 characters, and the contract asks for the bar plus the
+# plan's boundaries plus the return shape. So this is a floor for IMPOSSIBILITY, not a target — it
+# fires on "audit the auth module", and stays quiet on anything that made a real attempt.
+BRIEF_FLOOR = 600
+
+
+def brief_check(sizes: list[int] | None) -> dict | None:
+    """The `brief_carried` row: did the fan-out send its workers out with anything to work with?
+
+    A subagent inherits nothing — not the skill, not the family guide, not the plan — so whatever the
+    brief does not carry, the work is done without, and the findings come back looking exactly like
+    findings written to a bar. The instruction to split shipped weeks before any instruction about
+    what to put IN a brief (fixed 2026-08-14); this is the enforcement half of that fix.
+
+    ASKED ONLY WHERE ITS ANSWERER EXISTS, the sixth instance of that rule in this file. `None` means
+    nobody spawned anything, or the spawns predate the size being recorded — neither is a thin brief,
+    and scoring either as one would fail an item for the kernel's own gap.
+
+    VISIBLE, NOT BLOCKING. Size is a proxy for content: it can prove a brief too short to have
+    carried a bar, never that a long one carried the RIGHT bar. A proxy states its fact and lets the
+    deputy and the owner judge it — `method_read` blocks because it reads a fact directly."""
+    if not sizes:
+        return None
+    thin = [n for n in sizes if n < BRIEF_FLOOR]
+    if not thin:
+        return {"criterion": "brief_carried", "ok": True,
+                "detail": (f"{len(sizes)} subagent brief(s), smallest {min(sizes)} chars — each had "
+                           f"room for the family's bar")}
+    return {
+        "criterion": "brief_carried", "ok": False,
+        "detail": (f"{len(thin)} of {len(sizes)} subagent brief(s) were under {BRIEF_FLOOR} chars "
+                   f"(smallest {min(thin)}). A brief that short cannot have carried the family's "
+                   f"bar, the plan's boundaries and a return shape — so those workers read to no "
+                   f"standard, and what they returned reads like evidence gathered against one. "
+                   f"Treat their findings as leads, not receipts."),
+    }
+
+
+def standards_check(reads: int | None) -> dict | None:
+    """The `standards_read` row: did review read what the project had already settled?
+
+    TWO BARS, NOT ONE. The plan says what this item owed; `decisions.md` and `architecture.md` say
+    what the project decided before it. Work can satisfy the plan exactly and still cut across a
+    settled decision, and a plan-only reading cannot see that by construction — the review reads as
+    clean because against the bar it consulted, it is. Nothing in this loop asked the second question
+    until 2026-08-14.
+
+    Counted the same way as `method_read`: the kernel logs a Read per tool call, so this is a receipt
+    rather than a claim the report makes about itself.
+
+    `None` when the project records no standards yet (a young repo has no `decisions.md`) or nobody
+    counted — the rule this file keeps relearning. A repo with nothing settled cannot fail to read it.
+
+    VISIBLE, NOT BLOCKING. It says the second bar was consulted, never that the work clears it — that
+    judgment is the owner's, from the `## Against our own decisions` section the read produces."""
+    if reads is None:
+        return None
+    return {
+        "criterion": "standards_read",
+        "ok": reads > 0,
+        "detail": ("review read the project's recorded decisions "
+                   f"({reads}× across `decisions.md` / `architecture.md`)" if reads > 0 else
+                   "review never opened `decisions.md` or `architecture.md`. Those hold what this "
+                   "project already settled — the second bar, separate from the plan. A verdict "
+                   "written against the plan alone cannot report a departure from a decision it "
+                   "never read, and the departure lands as a silent precedent."),
+    }
+
+
+def instrumentation_check(tags: list[dict] | None) -> dict | None:
+    """The `debug_clean` row: did any tagged probe survive into the branch?
+
+    The cheapest honest check in this file. Temporary instrumentation is invisible by the time the
+    build is three tasks further on, so the build skill tags every probe `[DEBUG-<4 hex>]` and the
+    kernel greps the branch's ADDED lines for it — asking git, not the author.
+
+    `None` when the branch could not be read (no worktree, no base, git refused): nobody looked, and
+    a gate must not read that as clean. An empty list IS an answer — the grep ran and found nothing.
+
+    VISIBLE, NOT BLOCKING. A surviving probe is usually a slip worth one line of the owner's
+    attention, not grounds to refuse an Approve — and unlike a missing method, it is repaired in the
+    time it takes to read the row. What it removes is the silence: instrumentation used to reach the
+    trunk with nothing anywhere saying so."""
+    if tags is None:
+        return None
+    if not tags:
+        return {"criterion": "debug_clean", "ok": True,
+                "detail": "no tagged debug instrumentation survives in the branch"}
+    where = "; ".join(f"`{t.get('path')}` {t.get('tag')}" for t in tags[:4])
+    more = f" …and {len(tags) - 4} more" if len(tags) > 4 else ""
+    return {
+        "criterion": "debug_clean", "ok": False,
+        "detail": (f"{len(tags)} tagged debug probe(s) still in the branch: {where}{more}. Build "
+                   f"tags its instrumentation so removal is one grep; these were written and not "
+                   f"swept. Delete them before this lands — they ship to the trunk otherwise."),
+    }
+
+
 def guide_check(family: str | None, reads: int | None) -> dict | None:
     """The `method_read` row: did investigate actually open `references/<family>.md`?
 
@@ -335,6 +434,9 @@ def gate_state(item: dict, item_dir: Path, dev_root: Path,
                events: list[dict] | None = None,
                subagents: int | None = None,
                guide_reads: int | None = None,
+               brief_sizes: list[int] | None = None,
+               debug_tags: list[dict] | None = None,
+               standards_reads: int | None = None,
                ) -> dict:
     """One gate's MECHANICAL state, typed — no prose, no recommendation, no embedded artifact.
 
@@ -443,14 +545,29 @@ def gate_state(item: dict, item_dir: Path, dev_root: Path,
         fresh = judgment_current(item_dir, profile.kind)
         if fresh is not None:
             checks.append(fresh)
+        # Did any tagged probe survive the build? Asked of whatever HAS a branch — a research item
+        # has no worktree, so the caller passes None and the row never appears.
+        probes = instrumentation_check(debug_tags)
+        if probes is not None:
+            checks.append(probes)
+        # The SECOND bar. Everything above measures this item against its own plan; this asks
+        # whether the phase that judges it also read what the project settled before it.
+        second_bar = standards_check(standards_reads)
+        if second_bar is not None:
+            checks.append(second_bar)
         if profile.kind == "research":
             checks.extend(research_readiness(item_dir))
             # Did investigate read its family's method, and did it fan out? Both spine-counted by
             # the caller — core has no spine access, the same reason `events` is passed in rather
             # than read here. `method_read` comes first: whether the guide was followed decides how
             # much the rest of the record is worth.
+            # `brief_carried` sits beside `fanned_out` and reads the other half of the same act:
+            # one says the surface was split, the other says the workers were given a bar to split
+            # it against. A green `fanned_out` over thin briefs is the shape of the defect that
+            # existed before either row — motion that looks like method.
             for row in (guide_check(research_kind(item), guide_reads),
-                        fanout_check(research_kind(item), subagents)):
+                        fanout_check(research_kind(item), subagents),
+                        brief_check(brief_sizes)):
                 if row is not None:
                     checks.append(row)
         # CHILDREN HOLD THE PARENT HERE, NOT AT CLOSE (owner, 2026-08-09). A child is spawned FROM

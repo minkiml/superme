@@ -33,6 +33,11 @@ honest when they aren't.
   what vet found, how it ended. The ARC across them is what the report carries.
 - **Research:** `artifacts/investigation.md` and `reports/report-investigate.md`.
 - **`artifacts/authorizations.md`** if present, and `checkpoints/` (newest first).
+- **The project's own standards — `decisions.md` and `architecture.md`.** The plan says what this
+  item owed; these say what the project had already settled, and they are a separate bar. Work can
+  do exactly what the plan asked and still cut across a decision nobody revisited, which is the one
+  failure a plan-only reading cannot see. Implementation items only: a research item concluded
+  nothing into the code.
 
 Numbers come from their source, never an estimate: the diff shape from one
 `git diff --stat <base>...HEAD` run in the worktree — `<base>` is the branch base named in your
@@ -62,7 +67,14 @@ owes it anything. Its proposals in step 3 are how its findings become work.
 ## Step 3 — Write the record
 
 `scaffold_artifact(item_id, "review")`, then fill the slots — you get your kind's shape.
-Four things it must get right, because each has a named downstream reader:
+Five things it must get right, because each has a named downstream reader:
+
+- **`## Against our own decisions`** — **two bars, judged separately.** The plan says what this item
+  owed; `decisions.md` and `architecture.md` say what the project had already settled. Work can pass
+  one and fail the other, and each masks the other when they are scored as one verdict: code that
+  does exactly what the plan asked while cutting across a settled decision reads as a clean item
+  everywhere except here. Name the departure, say what the code does instead, and leave the ruling
+  to the owner — a recorded decision can be outgrown, but not silently.
 
 - **`**Delivered:**`** — the kernel writes this line into the landing commit. It outlives this
   workspace by years, so write it as the project's history should read: what the code now does.
@@ -101,6 +113,9 @@ same four questions.
 - **Every line traces** to `artifacts/review.md` or a doc from step 1 — no new facts. `How much to
   trust it` carries the **not covered** rows too; a table of only green rows is an advertisement,
   not a basis for a decision.
+- **A departure from a recorded decision gets its own line under `What to push back on`**, named as
+  what it departs from — never folded into the plan verdict. Ranking the two bars against each other
+  is what lets the stronger one hide the weaker.
 - **Nothing here restates triage.** Why this was worth doing is something they already read and
   approved.
 - **Don't restate the cycles' `## For the reviewer`.** The owner already read those beside the code

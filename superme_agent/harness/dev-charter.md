@@ -13,6 +13,11 @@ when a task needs it; don't modify it unless asked.
 - **dev-log** — this host's cross-run activity record: agent runs, inbox & work-item changes,
   learning steps, constitution/asset edits (`read_dev_log`).
 
+**Writing a skill, a template, an artifact or a report?** The workspace's full vocabulary — record vs
+report, run vs session, receipt, check, bar, and the word-pairs that have already caused bugs — is
+`plugins/superme-dev/references/glossary.md`. Use its words exactly; a synonym is how two phases end
+up describing one act as if it were two.
+
 ## Think before designing and coding
 **Don't assume. Don't hide confusion. Surface tradeoffs.**
 - State your assumptions and core facts you made decisions based on rather than burying them.

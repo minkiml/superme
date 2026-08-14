@@ -140,21 +140,14 @@ async def dev_work_item_drilldown(item_id: str, context_id: str = "global",
     if item.get("inbox_id"):
         row = dev_store.get_inbox(int(item["inbox_id"])) or {}
         inbox_origin = "agent" if "agent" in (row.get("origin") or []) else "user"
+    # Every check the item folder cannot answer — fan-out, the family method, the briefs, surviving
+    # probes, the recorded standards — read in ONE place that the deputy shares, so the two sides of
+    # a gate can never be shown different rows (see `gate_counters`).
     return drilldown.build_payload(item, dev_root / "work-items" / item_id, dev_root, ctx.cwd,
                                    all_items=all_items, events=events, git_health=git_health,
                                    review_mode=review_mode, inbox_origin=inbox_origin,
-                                   # Did investigate fan out, and did it read its family's method?
-                                   # Both counted from the spine's own run_event rows — unfakeable.
-                                   # None for a non-research item (or an unjudged one): nobody
-                                   # looked, which is not the same as zero.
-                                   subagents=(spine.subagent_count(
-                                       context_id, item_id, phase="investigate")
-                                       if str(item.get("kind")) == "research" else None),
-                                   guide_reads=(spine.read_hits(
-                                       context_id, item_id, phase="investigate",
-                                       needle=f"investigate/references/{fam}.md")
-                                       if str(item.get("kind")) == "research"
-                                       and (fam := kind_profiles.research_kind(item)) else None))
+                                   **drilldown.gate_counters(spine, context_id, item, dev_root,
+                                                             git_ops.repo_anchor(ctx, spine)))
 
 
 class AbandonBody(BaseModel):

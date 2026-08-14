@@ -1,6 +1,6 @@
 # Housekeeping — what has gone stale
 
-Read before a housekeeping sweep: the plan asks what should not be here any more — comments that
+Read before a housekeeping sweep: the item asks what should not be here any more — comments that
 describe code that changed, dead functions, unused variables and declarations, abandoned config,
 anything that looks suspicious or unaccounted for.
 
@@ -9,6 +9,7 @@ question with a provable answer.
 
 ## Contents
 
+- **Two breadths** — sweep by kind, or sweep an area exhaustively
 - **The bar: proof, not absence of evidence**
 - **What to sweep** — the four kinds of stale
 - **What looks dead and isn't** — the section that pays for itself
@@ -16,6 +17,18 @@ question with a provable answer.
 - **Fan-out**
 - **The follow-up is the deliverable**
 - **What housekeeping does NOT do**
+
+## Two breadths
+
+The item says whether this is **the whole repo** or **one area**. Same bar, different sweep.
+
+| breadth | how you sweep |
+|---|---|
+| **whole repo** | by KIND — one of the four kinds below at a time, all the way across the tree, then the next. Directory-by-directory looks tidier and is worse: the fourth kind gets attention in the first two directories and is quietly dropped everywhere after |
+| **one area** | all four kinds inside it, exhaustively. This is the breadth where a deletion list can be complete, and the record should say so |
+
+**Open `## Surface & sample` with the breadth** — "whole repo, by kind" or the area named — and the
+sizes. A later sweep starts from that line.
 
 ## The bar: proof, not absence of evidence
 
@@ -49,10 +62,22 @@ those are `refactoring`, a different family with a different bar. Say so and lea
 ## What looks dead and isn't
 
 Write `## What must stay` as you go, not at the end. Every candidate you investigate and reject
-belongs there with what reaches it. It is the highest-value section this family produces: it stops
-the next sweep proposing the same deletion, and it is the record that this sweep looked properly.
+belongs there with what reaches it.
 
-A sweep that reports twenty removals and nothing rejected read one way and did not check.
+**It earns its place for THIS sweep, not the next one.** Sweeps deliberately start fresh — inheriting
+a judgment means inheriting a stale one, and reachability is exactly the fact most likely to have
+changed since. What this section does here and now is three things:
+
+1. **It is the proof the sweep looked.** Twenty removals and nothing rejected is the signature of a
+   pass that greped once and stopped; the rejections are where the reachability work is visible.
+2. **It stops the removals being trusted too far.** A reader deciding whether to approve a bulk
+   deletion needs to know which neighbours were examined and kept, not just what is going.
+3. **It names the reaching mechanism**, which is the durable part — "reached by the plugin registry",
+   "reached by a naming-rule fixture". A later sweep re-derives the reachability itself, but knowing
+   THAT a repo reaches things this way is worth reading.
+
+Write it for a reader deciding today. Anything you would only write to save a future sweep effort
+belongs in `## Open threads` instead.
 
 ## Suspicious ≠ malicious
 
@@ -68,6 +93,10 @@ Split by AREA, one subagent per directory or module, each returning candidates w
 the searches it ran. You keep the reachability judgment: a subagent that has only read one directory
 cannot know what the rest of the repo reaches into it, and that is exactly the mistake that deletes
 something live.
+
+**In the brief:** the four ways a caller hides from a text search, pasted in full, and the ask —
+candidates with the searches that were run, never a deletion list. A subagent given only "find dead
+code in `x/`" greps once and returns exactly the list this family exists to not produce.
 
 ## The follow-up is the deliverable
 

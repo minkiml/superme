@@ -59,6 +59,42 @@ def diff_numstat(worktree: Path, base: str) -> dict:
     return _parse_numstat(proc.stdout if proc.returncode == 0 else "")
 
 
+# Temporary instrumentation carries a tag so its removal is one grep rather than a memory. The
+# build skill asks for `[DEBUG-<4 hex>]` on every probe and a clean grep before the cycle ends;
+# this is the reader that checks, at the review gate, whether any survived into the branch.
+DEBUG_TAG = re.compile(r"\[DEBUG-[0-9a-fA-F]{4,}\]")
+
+
+def debug_tags(worktree: Path, base: str) -> list[dict]:
+    """Tagged debug instrumentation still present in the branch's ADDED lines.
+
+    → [{path, tag, line}], one row per surviving probe, deduped by (path, tag).
+
+    Reads `git diff base...HEAD` and scans only `+` lines, because what matters is what THIS branch
+    adds: a tag that already lived on the trunk is not this item's to clean up, and flagging it would
+    make the row fire forever on a repo that has one. Best-effort — a bad base or a non-repo returns
+    an empty list, the same contract as `diff_numstat`, so the gate row goes quiet rather than red
+    when git cannot answer."""
+    proc = _git(worktree, "diff", f"{base}...HEAD", check=False)
+    if proc.returncode != 0:
+        return []
+    hits: list[dict] = []
+    seen: set[tuple[str, str]] = set()
+    path = ""
+    for line in proc.stdout.splitlines():
+        if line.startswith("+++ b/"):
+            path = line[6:]
+            continue
+        if not line.startswith("+") or line.startswith("+++"):
+            continue
+        for tag in DEBUG_TAG.findall(line):
+            key = (path, tag)
+            if key not in seen:
+                seen.add(key)
+                hits.append({"path": path, "tag": tag, "line": line[1:].strip()[:120]})
+    return hits
+
+
 def _parse_numstat(text: str) -> dict:
     """`git --numstat` output → {files, insertions, deletions, by_file}. Binary files report '-'
     for both counts — read as 0 rather than dropped, so the file still appears in `by_file`."""

@@ -47,6 +47,7 @@ from pathlib import Path
 
 import yaml
 
+from . import kind_profiles as _kp
 from .kind_profiles import get_profile
 
 log = logging.getLogger(__name__)
@@ -81,9 +82,11 @@ _TEMPLATE_HOMES = {
     # delete, security owes the path an attacker walks, refactoring owes the cost of the move,
     # study owes the source pinned, deep-diagnosis owes what it ruled out. What they share is
     # `## Follow-up work` — a research item's job is the investigation AND the work it implies.
-    **{f"investigation-{fam}": ("investigate", f"investigation-{fam}-template.md")
-       for fam in ("audit", "refactoring", "housekeeping", "security", "study",
-                   "deep-diagnosis")},
+    # Read from the family REGISTRY, not from a literal list — the registry is the one place a
+    # family is declared, and a second copy here is a family that scaffolds the base shape because
+    # somebody added a row and did not know this line existed.
+    **{_kp.family_template(f.slug): ("investigate", f"{_kp.family_template(f.slug)}-template.md")
+       for f in _kp.RESEARCH_FAMILIES},
     "review":          ("review", "review-template.md"),
     "review-research": ("review", "review-research-template.md"),
     "report-plan":          ("plan", "report-plan-template.md"),
@@ -187,8 +190,7 @@ def _template_name(artifact: str, item_kind: str | None,
     if artifact == "review":
         return "review-research" if item_kind == "research" else "review"
     if artifact == "investigation":
-        from .kind_profiles import RESEARCH_KINDS
-        return (f"investigation-{research_kind}" if research_kind in RESEARCH_KINDS
+        return (_kp.family_template(research_kind) if research_kind in _kp.RESEARCH_KINDS
                 else "investigation")
     return artifact if artifact == "brief" else None
 

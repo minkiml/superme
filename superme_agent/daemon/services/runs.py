@@ -272,7 +272,17 @@ def _artifact_desc(tool_name: str, ti: dict) -> tuple[str, str, str]:
         # skill instruction — without this the trail cannot show whether that instruction was
         # actually followed, which is the whole question a delegation review asks.
         model = ti.get("model") or ti.get("modelName")
-        inner = " · ".join(x for x in (str(who).strip(), str(model).strip() if model else "") if x)
+        # The BRIEF's size, because a subagent inherits nothing: it cannot see the skill, the family
+        # guide or the plan, so whatever the brief does not carry, the work is done without. The
+        # prompt itself is far too long for a trace row (and would put a whole pasted bar on screen),
+        # so what is kept is the one fact a row can hold and a gate can read — how much was sent.
+        # Size is a PROXY for content and is treated as one: it can only prove a brief too short to
+        # have carried a bar, never that a long one carried the right bar. Added 2026-08-14, after
+        # the fan-out instruction shipped for weeks with no contract for what a brief must contain.
+        brief = str(ti.get("prompt") or "")
+        parts = [str(who).strip(), str(model).strip() if model else "",
+                 f"brief {len(brief)}" if brief else ""]
+        inner = " · ".join(x for x in parts if x)
         return "subagent", "Agent", (f"Subagent ({inner[:48]})" if inner else "Subagent")
     if tool_name == "Skill":
         # The skill identity may arrive under any of several keys depending on the SDK build.
@@ -767,6 +777,40 @@ def fire_review_entry(context_id: str, item_id: str, spine) -> bool:
             _dev.set_work_item_status(ctx.internal_root / "dev", item_id, "awaiting_human")
         except Exception:
             pass
+        return False
+
+
+def fire_first_investigate(context_id: str, item_id: str, spine) -> bool:
+    """Kick a BUTTON-LAUNCHED sweep into its first investigate run.
+
+    The sibling of `fire_auto_triage`, and for the same reason: an item the owner just created by
+    pressing a button should not sit waiting for a second click. It differs only in where the item
+    was born — a standing sweep enters at `investigate` already classified (the button IS the
+    classification), so there is no ticket for triage to read and no triage run to fire.
+
+    Fires ONLY for an `active` item at `investigate` whose phase run isn't already in flight. Best
+    effort: returns True iff a run started, and a failure leaves the sweep resting at investigate
+    for a chat-driven pass rather than raising into the owner's click."""
+    from ...gateway import contexts   # lazy: avoid an import cycle at module load
+    try:
+        ctx = contexts.resolve(context_id, "dev")
+        if not ctx.internal_root:
+            return False
+        dev_root = ctx.internal_root / "dev"
+        item = _dev.read_work_item(dev_root, item_id) or {}
+        if str(item.get("status")) != "active" or str(item.get("phase")) != "investigate":
+            return False
+        model = spine.effective_model(context_id, item_model=item.get("model"))
+        effort = spine.effective_effort(context_id, item_effort=item.get("effort"))
+        if _begin_run(ctx, context_id, item_id, "investigate", model, phase="investigate") is None:
+            return False   # a run is already in flight — don't double-fire
+        asyncio.create_task(
+            _run_background_item_skill(ctx, context_id, item_id,
+                                       dev_root / "work-items" / item_id,
+                                       "investigate", model, effort))
+        return True
+    except Exception:
+        log.exception("first investigate run failed to start for %s", item_id)
         return False
 
 

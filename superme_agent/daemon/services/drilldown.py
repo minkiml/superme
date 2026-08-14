@@ -374,21 +374,74 @@ def _about(item: dict, item_dir: Path, inbox_origin: str = "") -> list[dict]:
     return [{"label": k, "value": v} for k, v in rows if v]
 
 
+def gate_counters(spine, context_id: str, item: dict, dev_root: Path,
+                  anchor: str | None) -> dict:
+    """Every gate check the item folder cannot answer, read once → the kwargs `gate_state` wants.
+
+    ONE READER, TWO CALLERS. The owner's drilldown and the deputy both compute this, and for a day
+    they computed DIFFERENT SUBSETS: only `subagents` was threaded to the deputy, so the blocking
+    `method_read` row was invisible to the side that can approve unattended. Adding a counter to one
+    call site and not the other is a silent divergence at a gate — so there is now one place to add
+    it, and both callers spread the result.
+
+    Every value is `None` where nobody could look (wrong kind, no branch, no standards recorded yet),
+    never a zero standing in for an answer — the checks read `None` as "not asked" and stay silent.
+    """
+    from ...core import git_layer as _git
+    is_research = str(item.get("kind")) == "research"
+    fam = kind_profiles.research_kind(item) if is_research else None
+
+    debug_tags = None
+    if item.get("git_worktree") and anchor:
+        try:
+            debug_tags = _git.debug_tags(Path(item["git_worktree"]), anchor)
+        except (_git.GitError, _git.GitBusy, OSError):
+            debug_tags = None
+
+    # The project's recorded standards, counted only where the project HAS some: a young repo with
+    # no `decisions.md` cannot fail to have read it. Both docs count toward the one row — reading
+    # either is reading the second bar.
+    standards_reads = None
+    if not is_research:
+        docs = [d for d in ("decisions", "architecture")
+                if (Path(dev_root) / "general" / f"{d}.md").is_file()]
+        if docs:
+            standards_reads = sum(spine.read_hits(context_id, str(item.get("id")), phase="review",
+                                                  needle=f"general/{d}.md") for d in docs)
+
+    return {
+        "subagents": (spine.subagent_count(context_id, str(item.get("id")), phase="investigate")
+                      if is_research else None),
+        "guide_reads": (spine.read_hits(context_id, str(item.get("id")), phase="investigate",
+                                        needle=f"investigate/{kind_profiles.family_guide(fam)}")
+                        if fam else None),
+        "brief_sizes": (spine.brief_sizes(context_id, str(item.get("id")), phase="investigate")
+                        if is_research else None),
+        "debug_tags": debug_tags,
+        "standards_reads": standards_reads,
+    }
+
+
 def build_payload(item: dict, item_dir: Path, dev_root: Path, main_repo_dir: Path | None, *,
                   all_items: list[dict], events: list[dict], git_health: dict | None,
                   review_mode: str | None = None, inbox_origin: str = "",
-                  subagents: int | None = None, guide_reads: int | None = None) -> dict:
+                  subagents: int | None = None, guide_reads: int | None = None,
+                  brief_sizes: list[int] | None = None,
+                  debug_tags: list[dict] | None = None,
+                  standards_reads: int | None = None) -> dict:
     """The whole drilldown, server-side. One read of the item folder feeds every tab, so the surface
     polls one route instead of four.
 
     `subagents` = how many the investigate phase actually spawned; `guide_reads` = how many times it
-    opened its family's `references/<family>.md`. Both spine-counted by the ROUTE. They arrive as
-    parameters for the same reason `events` and `git_health` do: this function stays pure over the
-    item folder, so it can be unit-tested without a daemon."""
+    opened its family's `references/<family>.md`; `brief_sizes` = how big each of those spawns' briefs
+    was. All three spine-counted by the ROUTE. They arrive as parameters for the same reason `events`
+    and `git_health` do: this function stays pure over the item folder, so it can be unit-tested
+    without a daemon."""
     item_dir = Path(item_dir)
     state = gate_briefs.gate_state(item, item_dir, dev_root, main_repo_dir,
                                    all_items=all_items, events=events, subagents=subagents,
-                                   guide_reads=guide_reads)
+                                   guide_reads=guide_reads, brief_sizes=brief_sizes,
+                                   debug_tags=debug_tags, standards_reads=standards_reads)
     paged = state.get("paged")
     hold = (_attention.classify_hold(item, events)
             if str(item.get("status")) == "awaiting_human" else None)

@@ -1161,6 +1161,38 @@ class SystemSpine:
             ).fetchone()
             return int(row["n"] if row else 0)
 
+    def brief_sizes(self, repo_id: str, item_id: str, *, phase: str) -> list[int]:
+        """How big each subagent BRIEF was, for every spawn this item's runs made at `phase`.
+
+        The companion to `subagent_count`, which answers "did it fan out" and cannot answer "did the
+        workers get anything to work with". A subagent inherits nothing — not this skill, not the
+        family guide, not the plan — so a two-line brief sends a reader out with no bar, and its
+        findings come back looking exactly like findings written to one.
+
+        Size is a PROXY and is read as one: it can prove a brief too short to have carried a bar,
+        never that a long one carried the right bar. The trace row records `brief <n>` (written by
+        `runs._artifact_desc`); spawns from before that landed carry no size and are skipped, so an
+        older item reports fewer sizes than spawns rather than a pile of fake zeros.
+
+        Returns one size per spawn that recorded one, newest run last. Empty list = no spawn ever
+        recorded a size, which is not the same as a thin brief and must not be scored as one."""
+        with self._conn() as c:
+            rows = c.execute(
+                "SELECT e.description AS d FROM run_event e JOIN run r ON r.id = e.run_id"
+                " WHERE r.repo_id=? AND r.item_id=? AND r.phase=?"
+                "   AND e.kind='subagent' AND e.description LIKE '%brief %'"
+                "   AND e.discarded_at IS NULL AND r.discarded_at IS NULL"
+                " ORDER BY e.id ASC",
+                (repo_id, item_id, phase),
+            ).fetchall()
+        sizes: list[int] = []
+        for row in rows:
+            tail = str(row["d"] or "").rsplit("brief ", 1)[-1]
+            digits = "".join(ch for ch in tail if ch.isdigit())
+            if digits:
+                sizes.append(int(digits))
+        return sizes
+
     def read_hits(self, repo_id: str, item_id: str, *, phase: str, needle: str) -> int:
         """How many times this item's runs at `phase` READ a path containing `needle`.
 

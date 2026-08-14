@@ -30,6 +30,7 @@
     "GET /dev/portrait",
     "GET /dev/project-status",
     "GET /dev/prompt-extraction/status",
+    "GET /dev/research/sweeps/families",
     "GET /dev/roadmap",
     "GET /dev/verification",
     "GET /dev/work-items/{item_id}/artifacts",
@@ -78,6 +79,7 @@
     "POST /dev/memory/proposals/{proposal_id}/publish",
     "POST /dev/memory/proposals/{proposal_id}/reject",
     "POST /dev/prompt-extraction/run",
+    "POST /dev/research/sweeps",
     "POST /dev/sweep",
     "POST /dev/sweep/idle-scan",
     "POST /dev/work-items/{item_id}/abandon",
@@ -8399,6 +8401,104 @@
           "title": "SweepConfigResponse",
           "type": "object"
         },
+        "SweepFamiliesResponse": {
+          "properties": {
+            "families": {
+              "default": [],
+              "items": {
+                "$ref": "#/components/schemas/SweepFamily"
+              },
+              "title": "Families",
+              "type": "array"
+            }
+          },
+          "title": "SweepFamiliesResponse",
+          "type": "object"
+        },
+        "SweepFamily": {
+          "description": "One launch button \u2014 a projection of `kind_profiles.ResearchFamily`. Only STANDING families\nappear: a commissioned one is raised as a ticket about a named subject, so it has no button.",
+          "properties": {
+            "asks_interest": {
+              "title": "Asks Interest",
+              "type": "boolean"
+            },
+            "blurb": {
+              "title": "Blurb",
+              "type": "string"
+            },
+            "family": {
+              "title": "Family",
+              "type": "string"
+            },
+            "icon": {
+              "title": "Icon",
+              "type": "string"
+            }
+          },
+          "required": [
+            "family",
+            "icon",
+            "blurb",
+            "asks_interest"
+          ],
+          "title": "SweepFamily",
+          "type": "object"
+        },
+        "SweepLaunchBody": {
+          "properties": {
+            "area": {
+              "default": "",
+              "title": "Area",
+              "type": "string"
+            },
+            "context_id": {
+              "default": "global",
+              "title": "Context Id",
+              "type": "string"
+            },
+            "family": {
+              "title": "Family",
+              "type": "string"
+            },
+            "interest": {
+              "default": "",
+              "title": "Interest",
+              "type": "string"
+            }
+          },
+          "required": [
+            "family"
+          ],
+          "title": "SweepLaunchBody",
+          "type": "object"
+        },
+        "SweepLaunchResponse": {
+          "properties": {
+            "family": {
+              "title": "Family",
+              "type": "string"
+            },
+            "ok": {
+              "title": "Ok",
+              "type": "boolean"
+            },
+            "started": {
+              "title": "Started",
+              "type": "boolean"
+            },
+            "work_item": {
+              "$ref": "#/components/schemas/WorkItem"
+            }
+          },
+          "required": [
+            "ok",
+            "work_item",
+            "family",
+            "started"
+          ],
+          "title": "SweepLaunchResponse",
+          "type": "object"
+        },
         "SweepResponse": {
           "properties": {
             "filed": {
@@ -12445,6 +12545,64 @@
             }
           },
           "summary": "Dev Prompt Extraction Status"
+        }
+      },
+      "/dev/research/sweeps": {
+        "post": {
+          "description": "Launch a standing sweep: mint the item at `investigate`, then fire its first run.\n\nCosts real money, so the surface confirms before calling this \u2014 but the refusal that matters is\nhere: an unknown family, or one that is not standing, is a 400 rather than a research item with\nno button behind it.",
+          "operationId": "dev_sweep_launch_dev_research_sweeps_post",
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SweepLaunchBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/SweepLaunchResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Sweep Launch"
+        }
+      },
+      "/dev/research/sweeps/families": {
+        "get": {
+          "description": "The launch bar's buttons \u2014 a projection of `kind_profiles.RESEARCH_FAMILIES`.\n\nRead-only and repo-independent: which sweeps EXIST is a property of this harness, not of the\nproject. Adding a family is a row in that registry; this route grows a button with no edit.",
+          "operationId": "dev_sweep_families_dev_research_sweeps_families_get",
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/SweepFamiliesResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            }
+          },
+          "summary": "Dev Sweep Families"
         }
       },
       "/dev/roadmap": {

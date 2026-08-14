@@ -15,6 +15,7 @@ import { MemoryGovernance, PublishedInventory } from './LearningGovernance'
 import ArtifactsTab from './ArtifactsTab'
 import ActivityLog from './ActivityLog'
 import PromptXrayTab from './PromptXrayTab'
+import SweepBar from './SweepBar'
 import OnboardingLanding, { type OnboardMode } from './OnboardingLanding'
 
 // The Dev workspace — the per-repo Tier-2 detail surface, reached from an orbit node's inspector
@@ -207,7 +208,10 @@ export default function DevWorkspace({
           </div>
         </div>
 
-        {/* the work tabs appear only once memory is established — the gate hides them otherwise */}
+        {/* the work tabs appear only once memory is established — the gate hides them otherwise.
+            The sweep bar rides the same row, right-aligned: the tabs are places you GO, a sweep is
+            something you START, and it is gated on the same "is this repo onboarded" question —
+            there is nothing to sweep before the project has a memory. */}
         {established === true && (
           <div className="mt-3 flex gap-1">
             {TABS.map((t) => {
@@ -219,7 +223,7 @@ export default function DevWorkspace({
                   key={t.id}
                   onClick={() => onTabChange(t.id)}
                   style={on ? { color: c, borderColor: c } : undefined}
-                  className={`flex items-center gap-1.5 border-b-2 px-3 py-2 text-[13px] font-medium transition ${
+                  className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2 text-[13px] font-medium transition ${
                     on ? '' : 'border-transparent text-muted hover:text-fg'
                   }`}
                 >
@@ -227,6 +231,7 @@ export default function DevWorkspace({
                 </button>
               )
             })}
+            <SweepBar contextId={repo.id} />
           </div>
         )}
         {established !== true && <div className="h-3" />}

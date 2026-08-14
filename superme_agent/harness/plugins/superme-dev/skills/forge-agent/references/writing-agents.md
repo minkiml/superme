@@ -4,6 +4,9 @@ A subagent is an **isolated-context autonomous worker**: it runs in its own cont
 job unguided, and **returns only its conclusion** to the caller — it sees the brief you write plus the
 prompt it's handed, never the conversation that spawned it. So the brief must stand alone.
 
+
+**Write in the workspace's own words.** `../../references/glossary.md` holds the vocabulary every skill, template and report shares — record vs report, run vs session, receipt, check, bar — with an `Avoid` line on each naming the synonym that will be read as something else. A new artifact that invents its own word for an existing thing is the drift this file exists to stop.
+
 ## The self-contained skeleton (the heart of it)
 The worker has no ambient context, so the prompt must stand alone. The recurring skeleton:
 1. **Role line** — "You are a specialized X agent that …".

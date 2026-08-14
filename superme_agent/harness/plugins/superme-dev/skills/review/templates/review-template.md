@@ -9,6 +9,9 @@
 
 <fill:1 line — what was deliberately NOT touched, where that is worth stating: signatures, CLI surface, persisted formats, neighbouring modules>
 
+## Against our own decisions
+<fill:0..n bullets — where this work departs from what `decisions.md` / `architecture.md` already record: the decision, quoted or named, and what the code now does instead. A departure is not automatically wrong — a recorded decision can be outgrown — but it is the owner's to ratify, and an unnamed one lands as a silent precedent. Write `Nothing departs from the recorded decisions.` when the work sits inside them; the sentence is the finding, not filler>
+
 ## Settled — do not re-open in a revision cycle
 | decision | who | when |
 |---|---|---|

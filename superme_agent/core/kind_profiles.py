@@ -154,8 +154,83 @@ def item_scale(item: dict | None) -> str:
 #
 # `measurement` was here and is NOT: performance belongs inside the general audit, and a number
 # without a re-runnable recipe is a bad receipt in every family, not a family of its own.
-RESEARCH_KINDS: tuple[str, ...] = ("audit", "refactoring", "housekeeping", "security",
-                                   "study", "deep-diagnosis")
+@dataclass(frozen=True)
+class ResearchFamily:
+    """One row of the family registry. Adding a family is THIS ROW, one guide, one template — and
+    nothing else: the slug drives the guide path, the template name, the gate rows and the launch
+    bar, so there is no second list anywhere to keep in sync."""
+    slug: str
+    # STANDING vs COMMISSIONED. A standing family's subject is the codebase itself and its question
+    # never stops being worth asking, so it is launched from a BUTTON. A commissioned family is
+    # born from a ticket: someone asked this specific question about this specific thing.
+    standing: bool
+    # Does launching it need an INTEREST named first? Audit's question ("is this sound?") is
+    # meaningless until you say sound in WHAT — coverage, performance, logic, or its promises. The
+    # launch surface asks, and the answer goes into the item's description; there is no typed field
+    # in v1, deliberately (see the design doc — a field that only leans is one nobody can rely on).
+    asks_interest: bool
+    # lucide-react icon name for the launch bar (step 7). Lives here so a new family is one row.
+    icon: str
+    # One line, shown on the launch button and its tooltip. The owner's words, not the guide's.
+    blurb: str
+
+
+# THE FAMILY REGISTRY. Every property of an investigation family, in one table.
+#
+# The four STANDING families are the whole-codebase ones: their subject is this repo and their
+# question stands whether or not anyone asked it today. The two COMMISSIONED families are
+# ticket-born — a study is commissioned about a named thing, a deep diagnosis about a named
+# behaviour — and there is nothing to put on a button.
+#
+# `standing` also decides FAN-OUT (see `FANOUT_FAMILIES` below). That is not a coincidence being
+# exploited: a subject that is "the codebase" is large by definition and splits by area, while a
+# subject that is one thread splits badly. If a family ever needs one without the other, SPLIT THE
+# FIELD — do not special-case a slug at a call site.
+RESEARCH_FAMILIES: tuple[ResearchFamily, ...] = (
+    ResearchFamily("audit", standing=True, asks_interest=True, icon="Radar",
+                   blurb="Is a surface sound — coverage, performance, logic, or its promises?"),
+    ResearchFamily("refactoring", standing=True, asks_interest=False, icon="Blocks",
+                   blurb="This code is hard to work in — what shape should it be?"),
+    ResearchFamily("housekeeping", standing=True, asks_interest=False, icon="Eraser",
+                   blurb="What has gone stale — dead code, wrong comments, abandoned config?"),
+    ResearchFamily("security", standing=True, asks_interest=False, icon="ShieldAlert",
+                   blurb="What is exposed, and what path would an attacker actually walk?"),
+    ResearchFamily("study", standing=False, asks_interest=False, icon="BookOpen",
+                   blurb="How does someone else do this, and what should we take?"),
+    ResearchFamily("deep-diagnosis", standing=False, asks_interest=False, icon="Stethoscope",
+                   blurb="What is the mechanism behind a behaviour we cannot explain?"),
+)
+
+FAMILY_BY_SLUG: dict[str, ResearchFamily] = {f.slug: f for f in RESEARCH_FAMILIES}
+
+# TWO MIRRORS THIS TABLE CANNOT DRIVE, both pinned in `test_research_kind` so adding a row fails
+# loudly rather than half-working:
+#   1. `dev_tools.TriageFacts.research_kind` — a `Literal[...]`, which must be spelled out for the
+#      JSON schema the model sees and for static analysis. Its prose is DELIBERATELY not this
+#      table's `blurb`: that one sells a button to the owner, this one teaches triage how to pick.
+#      Same fact, two audiences — the record/report split, applied to a sentence.
+#   2. `skills/triage/SKILL.md` — the picking guidance, agent-facing for the same reason.
+# Everything else (guide path, template, gate rows, fan-out, the launch bar) derives from here.
+
+# DERIVED, never hand-maintained — the one-writer rule applied to a list. Both of these were their
+# own literal tuples until 2026-08-14, which is two places to edit and one to forget.
+RESEARCH_KINDS: tuple[str, ...] = tuple(f.slug for f in RESEARCH_FAMILIES)
+
+
+def family_guide(slug: str) -> str:
+    """The guide path a `slug` family's investigate run must read, relative to the skill folder.
+    The slug IS the filename — that is the whole naming rule, and `method_read` counts reads of it."""
+    return f"references/{slug}.md"
+
+
+def family_template(slug: str) -> str:
+    """The investigation template name for a family. Same rule: the slug IS the shape."""
+    return f"investigation-{slug}"
+
+
+def standing_families() -> tuple[ResearchFamily, ...]:
+    """The button-launchable families, in registry order — what the launch bar renders."""
+    return tuple(f for f in RESEARCH_FAMILIES if f.standing)
 
 # The families whose guide PRESCRIBES fan-out — each `references/<family>.md` carries a `## Fan-out`
 # section telling investigate to split the surface across subagents (by area, or by boundary for
@@ -170,7 +245,7 @@ RESEARCH_KINDS: tuple[str, ...] = ("audit", "refactoring", "housekeeping", "secu
 #
 # `study` and `deep-diagnosis` are absent deliberately: both follow ONE thread of enquiry to its end,
 # and splitting a diagnosis across agents is how a causal chain gets lost.
-FANOUT_FAMILIES: tuple[str, ...] = ("audit", "refactoring", "housekeeping", "security")
+FANOUT_FAMILIES: tuple[str, ...] = tuple(f.slug for f in RESEARCH_FAMILIES if f.standing)
 
 
 def research_kind(item: dict | None) -> str | None:

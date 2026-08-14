@@ -184,13 +184,16 @@ async def _judge(ctx, context_id: str, item_id: str, item: dict, gate: str, dev_
     events = _dev_store.list_events(context_id, item_id=item_id, limit=100)
     # ONE computation of this gate's checks (core/gate_briefs) — the owner's drilldown reads the same
     # call, so the deputy can never judge from different numbers than the owner is shown (§2.1).
-    # Did investigate fan out? Spine-counted here because core has no spine access — the same
-    # reason `events` is passed in. `None` when the item is not research: nobody looked, and the
-    # check must not read that as zero.
-    subagents = (_spine.subagent_count(context_id, item_id, phase="investigate")
-                 if str(item.get("kind")) == "research" else None)
+    # The counters the item folder cannot answer, from the ONE reader the owner's drilldown uses.
+    # Never inline a counter here: only `subagents` was threaded for a day (2026-08-13→14), which
+    # broke the promise in the comment above — `guide_check` returns None on a `None` count, so the
+    # deputy judged without the one BLOCKING research row while the owner's drilldown showed it.
+    # Same gate, same item, two row sets, and the deputy is the side that can approve unattended.
+    from . import drilldown as _drill, git_ops as _git_ops
+    counters = _drill.gate_counters(_spine, context_id, item, dev_root,
+                                    _git_ops.repo_anchor(ctx, _spine))
     state = gate_briefs.gate_state(item, item_dir, dev_root, ctx.cwd,
-                                   all_items=all_items, events=events, subagents=subagents)
+                                   all_items=all_items, events=events, **counters)
     dep_root = deputy_core.deputy_root(context_id)  # mandate lives in the harness cell, not knowledge
     mandate = deputy_core.read_mandate(dep_root)
     digest = deputy_core.log_digest(item_dir, gate)  # this item's prior calls AT THIS GATE (continuity)

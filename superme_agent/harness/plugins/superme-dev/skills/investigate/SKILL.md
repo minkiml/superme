@@ -1,29 +1,42 @@
 ---
 name: investigate
-description: Run a research work-item's investigation — answer the plan's questions inside its boundaries, evidence recorded in the item folder. Use when a research work-item is in its investigate phase; not for implementing anything (use build) or for drawing the conclusions (use review, at the review phase).
+description: Run a research work-item's investigation — set the questions and the walls, then answer them with evidence recorded in the item folder. Use when a research work-item is in its investigate phase; not for implementing anything (use build) or for drawing the conclusions (use review, at the review phase).
 argument-hint: "[work-item-id]"
 category: workspace
 ---
 
 # Investigate (research item)
 
-Answer the plan's **Questions**, within its **Boundaries**, to its **Done criteria**.
+Set the **questions** and the **walls**, then answer them with receipts.
 
-**The subject is whatever the plan names** — this repo, another codebase, a library, an external body
+**The subject is whatever the item names** — this repo, another codebase, a library, an external body
 of material, the behaviour of a running system. What never changes across those: a research item has
 no worktree, your only writes are the item's own folder, and every claim you record carries the
 receipt that makes it checkable by someone who was not here.
 
-## Step 1 — The plan bounds the work
+## Step 1 — Bound the sweep before you read anything
 
-Read `artifacts/plan.md`:
+**A research item has no plan phase.** Nothing upstream states what you are answering or where you
+stop — that is yours to set, and it is the first thing you write, before the code and before the
+first finding. An unbounded sweep does not run out of questions; it runs out of run.
 
-- **`## Questions`** are the deliverable — each one is answered, or its state is stated.
-- **`## Method`** names the subject and the sources. It is also what tells you which kind of
-  investigation this is (step 2).
-- **`## Boundaries`** are hard walls — time, depth, which subsystems, which sources. A thread
-  leading outside them is recorded as an open thread, never chased.
-- **`## Done criteria`** say when to stop. An investigation without them doesn't converge.
+Read what the item gives you:
+
+- **`artifacts/brief.md`** — `## Problem` is why this exists, `## Context` is what the owner already
+  knows or has pointed you at, `## Classification` carries the family. A button-launched sweep has no
+  brief at all: its subject, and its interest or area, are in the item's own title and description.
+- **The item header** — the family (step 2) and the subject.
+
+Then write these into `investigation.md` `## Questions`, before anything else:
+
+1. **The questions**, as questions. Three sharp ones beat eight vague ones.
+2. **The walls** — what is in scope and what is explicitly not. A whole-repo sweep says so; an area
+   sweep names the area. A thread leading outside becomes an open thread, never a detour.
+3. **Done** — what has to be true for this to be finished.
+
+**Done when** someone who has not read the brief could tell, from your questions alone, what this
+sweep will and will not have looked at. Get the walls wrong and it is cheap to correct now: the owner
+reads them at the gate, and everything you record afterwards is read against them.
 
 ## Step 2 — Know which investigation this is
 
@@ -41,7 +54,7 @@ the report is read against that bar. On an older item that carries none, name it
 | **deep-diagnosis** | `references/deep-diagnosis.md` | what is the mechanism behind a behaviour we cannot explain? | the narrowest located cause, what you ruled out on the way, and what you could not determine |
 
 **Read your family's file above before you do anything else — it is your first tool call after this
-skill loads, ahead of the plan, the code, and the scaffold.** It defines what counts as an answer
+skill loads, ahead of the brief, the code, and the scaffold.** It defines what counts as an answer
 for this family and how to enumerate the surface; everything you read before it, you read without
 knowing the bar. The kernel counts that read, and the review gate refuses an item whose investigate
 never opened it.
@@ -77,6 +90,33 @@ what the surface was and why it was too small to split. An unexplained single-th
 at the gate as a surface that was quietly narrowed, and the kernel counts your spawns whether or not
 you mention them.
 
+### Preflight, then split
+
+Confirm the subject resolves and the surface is non-empty before you spawn anything: the path
+exists, the repo is present, the URL answers. A subject that isn't there fails here, in one cheap
+check — not six times over, once inside each parallel subagent, each billing you for the same
+discovery.
+
+### Every brief is self-contained
+
+**A subagent inherits nothing.** It cannot see this skill, your family guide, or the item, so
+whatever the brief does not carry, the work is done without. "Audit the auth module" buys you a
+reader working to no bar — and its findings come back looking exactly like findings written to one.
+
+Four things travel in every brief:
+
+1. **The bar, pasted.** The lines of `references/<family>.md` that say what counts as a finding
+   here — the text, copied in, not the path. Name the path as well so the subagent can reach the
+   rest when it needs it.
+2. **The boundaries**, from `## Boundaries`. The walls are yours to enforce and it cannot read them.
+3. **The judgment it does not make.** Your guide's `## Fan-out` names what stays with you —
+   severity, reachability, the shape, what transfers. Say so in the brief: a subagent that returns
+   a verdict has answered a question nobody asked it.
+4. **The return shape** — evidence with pointers (`file:line`, a URL, a command and its output).
+
+**Done when** each brief still makes sense to someone who has read nothing else. The kernel records
+what you sent; a brief too thin to carry a bar is visible at the gate as one.
+
 - **When a question asks how something BEHAVES or how much it COSTS, measure it.** Reading the
   source tells you the complexity class, never the number. Throwaway scripts are fine, scoped into
   your own item folder: write the script there and run it as `cd <item-dir> && python3 bench.py`. An
@@ -84,8 +124,8 @@ you mention them.
   holds for the shell too — so name no path outside the item folder and seed its fixtures there. A
   measurement that genuinely cannot be made is evidence when you say which number is missing and
   what it would have settled; a guess wearing a number's clothes is not.
-- **Sources outside the repo are yours when the plan or the owner names one.** `WebFetch` and
-  `WebSearch` need no approval, so a link in `## Method`, in the brief's `## Context`, or in the
+- **Sources outside the repo are yours when the item or the owner names one.** `WebFetch` and
+  `WebSearch` need no approval, so a link in the item's own description, in the brief's `## Context`, or in the
   owner's imported references is there to be opened. Pin it like a `file:line` — URL and the date
   you read it — and keep the distinction that matters: a doc page is evidence about the library,
   never about how THIS codebase uses it.

@@ -103,6 +103,23 @@ Four sections are never yours to write:
 On long builds, sync with the trunk via `sync_from_main` (commit first) and resolve any conflicts it
 reports yourself.
 
+### Tag every probe, and the cleanup is one grep
+
+Print statements, temporary logs, a hardcoded value you dropped in to watch something — all of it is
+fine while you are working, and all of it is invisible by the time you are three tasks further on.
+So give every temporary line a tag the moment you write it:
+
+```python
+print(f"[DEBUG-a4f2] cursor={cursor} rows={len(rows)}")   # ← one tag per debugging session
+```
+
+**Pick four hex characters once per cycle and reuse them.** Before you fill the cycle report, run
+`grep -rn "\[DEBUG-" .` in the worktree — an empty result is the check, and a hit is a line to
+delete. Untagged instrumentation survives; tagged instrumentation dies on one command.
+
+The review gate greps your branch's added lines for the same tag, so a probe you meant to remove
+arrives at the owner's gate naming its own file and line.
+
 ## Step 3 — Walls become records, never a stall
 
 The owner is not watching; nothing you ask mid-run reaches them. So decide and record:

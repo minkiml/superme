@@ -1,10 +1,11 @@
 # Security review — what is exposed
 
-Read before a security investigation: the plan asks what an attacker could reach, what handles
+Read before a security investigation: the item asks what an attacker could reach, what handles
 untrusted input carelessly, or what data is unsanitized, leaking, or junk.
 
 ## Contents
 
+- **Two breadths** — boundaries are the unit, not directories
 - **The bar: a path, end to end**
 - **The surface: where trust changes hands**
 - **What to look for** — by boundary
@@ -13,6 +14,19 @@ untrusted input carelessly, or what data is unsanitized, leaking, or junk.
 - **Fan-out, and what not to run**
 - **The follow-up is triage**
 - **What a security review does NOT do**
+
+## Two breadths
+
+The item says whether this is **the whole repo** or **one area**. The bar — a path, end to end — is
+the same at both.
+
+| breadth | how you enumerate |
+|---|---|
+| **whole repo** | by BOUNDARY, one entry-point class at a time: routes, tool arguments, shell calls, deserialization, paths built from input, data read back out of storage. **Trust boundaries are the unit; directories are not** — a path starts at an entry point and ends wherever it ends, and a directory-shaped sweep cuts it in half |
+| **one area** | every trust transition inside it — **including the ones whose far side is outside your area.** A boundary at the edge of the scope is still yours; walking it out is how you find that the caller validates nothing |
+
+**Open `## Attack surface` with the breadth** — "whole repo, by boundary class" or the area named —
+and its size.
 
 ## The bar: a path, end to end
 
@@ -59,7 +73,7 @@ Record the list with its size in `## Attack surface`.
 
 ## Data: sanitizing, leakage, junk
 
-The plan may be asking about the data itself rather than the code:
+The item may be asking about the data itself rather than the code:
 
 - **Unsanitized** — stored as given and rendered, executed or interpolated later. Name where it is
   stored and where it comes back out; the gap between those two is the finding.
@@ -80,6 +94,9 @@ looked at nothing, and the reader cannot tell which.
 Split by BOUNDARY, one subagent per entry-point class, each returning candidate paths with
 `file:line`. You walk each path yourself before it enters the record — a partial path is how a
 non-finding gets written down as high.
+
+**In the brief:** the X → Y → Z bar, pasted. With it a subagent returns paths, or says which leg it
+could not complete — and both of those are useful. Without it, it returns smells.
 
 **Read, reason, and probe within the item's own folder only.** Do not exercise a live system, do not
 run an exploit against anything real, and do not craft input for a running service. A path you can

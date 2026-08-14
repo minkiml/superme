@@ -435,6 +435,8 @@ class DevKnowledgeService:
         autopilot: bool = False,
         cohort: str | None = None,
         prompt_extraction: bool = False,
+        research_kind: str | None = None,
+        born_at: str | None = None,
     ) -> dict:
         """Stamp a new top-level work-item from a pushed inbox item.
 
@@ -460,8 +462,22 @@ class DevKnowledgeService:
         NEVER adopt its orphaned (permanent, never-delete-logs) runs/dev-events — the 305k-token
         ghost post-mortem, 2026-07-13. Returns {id, folder}.
         """
-        from .kind_profiles import DEFAULT_SCALE, get_profile
+        from .kind_profiles import DEFAULT_SCALE, RESEARCH_KINDS, get_profile
         profile = get_profile(kind)  # loud KeyError on unknown kind, before any disk write
+        # A BUTTON-LAUNCHED STANDING SWEEP is born already classified and already past triage: the
+        # button IS the classification (the family is which button was pressed), and there is no
+        # ticket for triage to read. Every other mint point leaves both null and enters at phase 0,
+        # because a kind is a PROPOSAL until triage confirms it — this is the one case where the
+        # owner did the confirming, by choosing. Both are validated here, before any disk write, so
+        # a caller cannot mint an item into a phase its kind does not have.
+        if research_kind is not None:
+            if kind != "research":
+                raise ValueError("research_kind belongs only to a research item")
+            if research_kind not in RESEARCH_KINDS:
+                raise ValueError(f"research_kind must be one of {RESEARCH_KINDS}")
+        if born_at is not None and born_at not in profile.phases:
+            raise ValueError(f"a {profile.kind} item has no `{born_at}` phase "
+                             f"(its phases are {profile.phases})")
         if spawned_from is not None:
             if not isinstance(spawned_from, dict) or not spawned_from.get("item"):
                 raise ValueError("spawned_from must be {item, relation[, note]}")
@@ -536,9 +552,12 @@ class DevKnowledgeService:
             # before the item leaves the first phase; see kind_profiles.ITEM_SCALES.
             f"scale: {DEFAULT_SCALE}\nscale_reason: null\n"
             # Born unjudged — there is no default family (kind_profiles.RESEARCH_KINDS). Triage
-            # names one on a research item; on an implementation item it stays null forever.
-            f"research_kind: null\nresearch_kind_reason: null\n"
-            f"phase: {profile.phases[0]}\nstatus: {status}\n"
+            # names one on a research item; on an implementation item it stays null forever. The
+            # exception is a button-launched sweep, where the owner named it by pressing it.
+            f"research_kind: {json.dumps(research_kind) if research_kind else 'null'}\n"
+            f"research_kind_reason: "
+            f"{json.dumps('launched from the ' + research_kind + ' button') if research_kind else 'null'}\n"
+            f"phase: {born_at or profile.phases[0]}\nstatus: {status}\n"
             f"done_at: null\nartifacts: []\n{extra}"
             f"session_id: {json.dumps(session_id) if session_id else 'null'}\n"
             f"created_at: {today}\nupdated_at: {today}\n---\n"

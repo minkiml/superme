@@ -1914,6 +1914,53 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/dev/research/sweeps/families": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Dev Sweep Families
+         * @description The launch bar's buttons — a projection of `kind_profiles.RESEARCH_FAMILIES`.
+         *
+         *     Read-only and repo-independent: which sweeps EXIST is a property of this harness, not of the
+         *     project. Adding a family is a row in that registry; this route grows a button with no edit.
+         */
+        get: operations["dev_sweep_families_dev_research_sweeps_families_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dev/research/sweeps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dev Sweep Launch
+         * @description Launch a standing sweep: mint the item at `investigate`, then fire its first run.
+         *
+         *     Costs real money, so the surface confirms before calling this — but the refusal that matters is
+         *     here: an unknown family, or one that is not standing, is a 400 rather than a research item with
+         *     no button behind it.
+         */
+        post: operations["dev_sweep_launch_dev_research_sweeps_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/dev/memory/stats": {
         parameters: {
             query?: never;
@@ -5668,6 +5715,59 @@ export interface components {
             /** Min User Msgs */
             min_user_msgs: number;
         };
+        /** SweepFamiliesResponse */
+        SweepFamiliesResponse: {
+            /**
+             * Families
+             * @default []
+             */
+            families: components["schemas"]["SweepFamily"][];
+        };
+        /**
+         * SweepFamily
+         * @description One launch button — a projection of `kind_profiles.ResearchFamily`. Only STANDING families
+         *     appear: a commissioned one is raised as a ticket about a named subject, so it has no button.
+         */
+        SweepFamily: {
+            /** Family */
+            family: string;
+            /** Icon */
+            icon: string;
+            /** Blurb */
+            blurb: string;
+            /** Asks Interest */
+            asks_interest: boolean;
+        };
+        /** SweepLaunchBody */
+        SweepLaunchBody: {
+            /** Family */
+            family: string;
+            /**
+             * Context Id
+             * @default global
+             */
+            context_id: string;
+            /**
+             * Area
+             * @default
+             */
+            area: string;
+            /**
+             * Interest
+             * @default
+             */
+            interest: string;
+        };
+        /** SweepLaunchResponse */
+        SweepLaunchResponse: {
+            /** Ok */
+            ok: boolean;
+            work_item: components["schemas"]["WorkItem"];
+            /** Family */
+            family: string;
+            /** Started */
+            started: boolean;
+        };
         /** SweepResponse */
         SweepResponse: {
             /** Status */
@@ -9357,6 +9457,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AbandonResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dev_sweep_families_dev_research_sweeps_families_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SweepFamiliesResponse"];
+                };
+            };
+        };
+    };
+    dev_sweep_launch_dev_research_sweeps_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SweepLaunchBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SweepLaunchResponse"];
                 };
             };
             /** @description Validation Error */

@@ -5,6 +5,9 @@ A skill is a **procedure the agent runs** — a workflow, packaged as a folder (
 and runs **in the main context** (unless `context: fork`), auto-invoked by semantic match on its
 `description`. So write for that reader: lean, concrete, imperative.
 
+
+**Write in the workspace's own words.** `../../references/glossary.md` holds the vocabulary every skill, template and report shares — record vs report, run vs session, receipt, check, bar — with an `Avoid` line on each naming the synonym that will be read as something else. A new artifact that invents its own word for an existing thing is the drift this file exists to stop.
+
 ## Resolution order — pick the lightest that holds
 `skill (inline) → subagent (separate context) → command (explicit-only)`. A skill is the **default** for a
 reusable procedure auto-invoked on intent. Escalate to a subagent only for context isolation, a different

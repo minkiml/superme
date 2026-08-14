@@ -1,7 +1,7 @@
 # Study — {title}
 
 ## Questions
-<fill:the plan's questions, each with where it now stands — answered | partial | open>
+<fill:WRITTEN FIRST, before any code. The questions this sweep answers, as questions — yours to set from the brief (or, for a button-launched sweep, from the item's own title and description); then the WALLS, what is in scope and what is explicitly not, naming the area or saying whole-repo; then what DONE means. Update each question's state as you go — answered | partial | open. A reader who has not seen the brief should be able to tell from this section alone what was and was not looked at>
 
 ## Source
 <fill:what you studied, pinned so a later reader sees the same thing — repo + commit, library + the version we would resolve to, or URL + date read. Note here where their docs and their code disagree>
@@ -19,4 +19,4 @@
 <fill:what adopting the transferable parts would actually take, as items someone could file — in landing order, each one naming what it touches here. Nothing is adopted by this item; this section is what makes adoption a decision the owner can take rather than an idea in a report>
 
 ## Open threads
-<fill:what is still unresolved and what would resolve it, incl. anything outside the plan's Boundaries (parked, never chased) — or "none">
+<fill:what is still unresolved and what would resolve it, incl. anything outside the walls you set above (parked, never chased) — or "none">

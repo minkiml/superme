@@ -1,6 +1,6 @@
 # Refactoring study — what shape should this be
 
-Read before a refactoring investigation: the plan names code that is hard to work in and asks what
+Read before a refactoring investigation: the item names code that is hard to work in and asks what
 shape it should have instead.
 
 **This item does not change the code.** It produces a shape, the case for it, and the honest cost;
@@ -10,6 +10,7 @@ started.
 
 ## Contents
 
+- **Two breadths, and where each one looks** — the git history is the whole-repo enumeration
 - **Evidence before proposal** — and why this order is the whole discipline
 - **Making "hard to work in" measurable**
 - **The proposed shape** — concrete enough to argue with
@@ -17,6 +18,20 @@ started.
 - **Fan-out**
 - **The follow-up IS the proposal**
 - **What a refactoring study does NOT do**
+
+## Two breadths, and where each one looks
+
+The item says whether the subject is **the whole repo** or **one area**. The bar is the same; where
+you look for candidates is not.
+
+| breadth | what you enumerate |
+|---|---|
+| **whole repo** | **the GIT HISTORY, not the file tree.** Walk `git log` over a good stretch and find what keeps coming back — the files that appear in change after change, the areas where fixes cluster. Deepening pays off in FUTURE changes, so the code that has been changed most is where the payoff is; a module nobody has touched in a year is not hard to work in, it is finished. A tree walk finds big files, which is a different question and usually the wrong one |
+| **one area** | the named module **and everything that calls it**. The shape question is about a boundary, and a boundary cannot be judged from one side |
+
+**Open `## What makes it hard` with the breadth and how you found your candidates** — "whole repo,
+hot spots from 400 commits" or the area named. A proposal whose origin is unstated reads as the first
+thing the investigator happened to open, and often is.
 
 ## Evidence before proposal
 
@@ -56,6 +71,13 @@ seams are. Name the files.
 - **Give the alternative you rejected**, and why. A proposal with no discarded option reads as the
   first idea, and often is.
 
+**Run the deletion test on anything you propose to remove.** Imagine the module gone, and say which
+happens: the complexity VANISHES (it was a pass-through, and deleting it is the whole proposal), or
+it REAPPEARS across its callers (it was earning its keep, and the proposal has to say where that
+complexity goes instead). A proposal that has not answered this for each piece it removes is moving
+code, not deepening it — and moved complexity comes back at the call sites, where it is harder to
+see and nobody is looking for it.
+
 ## The cost
 
 `## What the move costs` is the section that decides whether this is adopted, and understating it is
@@ -74,6 +96,10 @@ Split by AREA when the subject is large: one subagent per module, each returning
 part hard, with `file:line` — never a proposed shape. Synthesis does not delegate. A shape is a
 whole-system judgment, and a subagent proposing one for its own corner is how a refactor becomes six
 incompatible refactors.
+
+**In the brief:** what counts as evidence here — the duplication, the coupling, the callers that all
+pass the same three arguments, each at `file:line` — and the line that "it feels messy" is not it.
+Ask for what makes THAT part hard, and say plainly that the shape is yours to draw, not theirs.
 
 ## The follow-up IS the proposal
 
