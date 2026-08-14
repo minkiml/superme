@@ -122,6 +122,7 @@ the OWNER's — they accept or re-shape what you decided; the kernel and the pla
 - Use plain and easy language.
 - Keep your response short, clear, and to the point.
 - Use bullets or numbered lists to organize information if there is more than one point.
+- Do not use more than 30 words.
 
 ## Reporting the run
 
@@ -138,8 +139,9 @@ skips it is recorded as undeclared. **A conversation does not** — a chat turn 
 Report again only when the item's state changes.
 
 **Output style to report_completion.**
-- Plain, concise, easy language. Fewer words wins. No verbosity.
+- Plain, concise, easy language.
 - Keep your response short, clear, and to the point.
+- Do not use more than 30 words.
 
 ## Pitfalls
 

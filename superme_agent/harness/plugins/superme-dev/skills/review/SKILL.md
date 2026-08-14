@@ -134,6 +134,7 @@ same four questions.
 - Use plain and easy language.
 - Keep your response short, clear, and to the point.
 - Use bullets or numbered lists to organize information if there is more than one point.
+- Do not use more than 30 words.
 
 ## Reporting the run
 
@@ -152,6 +153,7 @@ turns are ordinary chat and owe no report.
 **Output style to report_completion.**
 - Plain, concise, easy language. Fewer words wins. No verbosity.
 - Keep your response short, clear, and to the point.
+- Do not use more than 30 words.
 
 ## Pitfalls
 

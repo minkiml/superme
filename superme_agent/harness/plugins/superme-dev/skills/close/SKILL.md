@@ -80,6 +80,7 @@ six months.
 - Use plain and easy language.
 - Keep your response short, clear, and to the point.
 - Use bullets or numbered lists to organize information if there is more than one point.
+- Do not use more than 30 words.
 
 ## Reporting the run
 
@@ -95,8 +96,9 @@ sessions, and marks it done. You never advance or complete the item yourself.
   updated". That sentence outlives the item.
 
 **Output style to report_completion.**
-- Plain, concise, easy language. Fewer words wins. No verbosity.
+- Plain, concise, easy language.
 - Keep your response short, clear, and to the point.
+- Do not use more than 30 words.
 
 ## Pitfalls
 

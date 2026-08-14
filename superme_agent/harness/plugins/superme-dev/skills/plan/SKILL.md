@@ -199,7 +199,7 @@ report.
 - Plain, concise, easy language. Fewer words wins. No verbosity.
 - Keep your response short, clear, and to the point.
 - Use bullets or numbered lists to organize information if there is more than one point.
-
+- Do not use more than 30 words.
 ## Reporting the run
 
 `report_completion` says why THIS RUN stopped. A run is one invocation of you — it is not the phase,
@@ -220,8 +220,9 @@ state actually changes: `success` once the plan is finished. Reporting every rou
 that is already parked, and a premature `success` un-parks one whose questions are still open.
 
 **Output style to report_completion.**
-- Plain, concise, easy language. Fewer words wins. No verbosity.
+- Plain, concise, easy language.
 - Keep your response short, clear, and to the point.
+- Do not use more than 30 words.
 
 ## Pitfalls
 

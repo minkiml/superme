@@ -177,6 +177,7 @@ questions are answered vs open, what the evidence leans toward, where to pick up
 ## Chat response style
 - Use plain and easy language.
 - Keep your response short, clear, and to the point.
+- Do not use more than 30 words.
 - Use bullets or numbered lists to organize information if there is more than one point.
 
 ## Reporting the run
@@ -196,7 +197,8 @@ whatever you report, the item rests at the owner's gate afterwards. Nothing re-f
 undeclared.
 
 **Output style to report_completion.**
-- Plain, concise, easy language. Fewer words wins. No verbosity.
+- Plain, concise, easy language. 
+- Do not use more than 30 words.
 - Keep your response short, clear, and to the point.
 
 ## Pitfalls
