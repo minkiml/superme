@@ -288,16 +288,17 @@ export default function WorkItemModal({
             <div className="flex items-center gap-1.5">
               <span className="font-mono text-[10px] text-faint">{it.id}</span>
               <StatusBadge it={it} running={running} bucket={bucket} />
+              {/* ONE chip, not two: kind and family are a single fact read left to right
+                  ("RESEARCH: AUDIT"), and splitting them invited reading the family as a second,
+                  unrelated badge. */}
               <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${
-                kindChipClass(it.kind)}`}>
+                kindChipClass(it.kind)}`}
+                    title={researchKindLabel(it.research_kind)
+                      ? 'The research family this item follows — it picks the guide investigate reads and the bar review judges against.'
+                      : undefined}>
                 {it.kind ?? 'implementation'}
+                {researchKindLabel(it.research_kind) && `: ${researchKindLabel(it.research_kind)}`}
               </span>
-              {researchKindLabel(it.research_kind) && (
-                <span className="rounded-full bg-kind-research/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-kind-research"
-                      title="Which research family this item follows — it picks the guide investigate reads and the bar review judges against.">
-                  {researchKindLabel(it.research_kind)}
-                </span>
-              )}
               {it.deliverable && (
                 <span className="rounded-full bg-hover px-2 py-0.5 font-mono text-[10px] text-faint">{it.deliverable}</span>
               )}

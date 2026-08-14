@@ -118,7 +118,16 @@ _TRANSIENT_TEXT = re.compile(
     r"|broken pipe|timed? ?out|eof occurred|network is (unreachable|down)"
     r"|name or service not known|cannot connect|failed to establish|remote end closed",
     re.I)
-_RATE_TEXT = re.compile(r"rate[ _-]?limit|usage limit|too many requests|quota exceeded", re.I)
+# `session limit` and `usage limit reached` are the CLIENT's own words for a spent window, and they
+# arrive as ordinary prose with no status code anywhere in them — observed live 2026-08-14 as
+# "You've hit your session limit · resets 5pm (Pacific/Auckland)". A pattern that only knew the API's
+# phrasing read that as a normal reply and filed the run as `done`.
+_RATE_TEXT = re.compile(r"rate[ _-]?limit|usage limit|session limit|limit reached"
+                        r"|too many requests|quota exceeded", re.I)
+# NOT parsed: a limit that names a wall-clock reset ("resets 5pm") carries no number of seconds.
+# `_retry_after` returns None and the ladder's own floor (300s) decides the wait — the right default,
+# since the string gives no timezone and a guessed one schedules a retry either pointlessly early or
+# hours late.
 
 # `retry-after: 90`, `retry after 90 seconds`, `try again in 90s`.
 _RETRY_AFTER = re.compile(r"(?:retry[- ]after|try again in)\D{0,12}?(\d{1,5})", re.I)
@@ -179,7 +188,20 @@ def classify(*, exc: BaseException | None = None, reply: str | None = None,
             return Fault("transient", "the connection timed out or dropped")
         return _from_text(f"{type(exc).__name__}: {exc}", source="crash")
     if reply and not did_work:
-        m = _API_ERROR_REPLY.match(reply.strip())
+        text = reply.strip()
+        m = _API_ERROR_REPLY.match(text)
         if m:
-            return _from_text(reply.strip()[:400], source="upstream error, no work done")
+            return _from_text(text[:400], source="upstream error, no work done")
+        # A SPENT USAGE WINDOW usually arrives as plain prose, with no `API Error: 429` prefix and no
+        # status code at all — the client says it in its own voice and the turn simply ends. Matched
+        # here rather than by widening the prefix gate, because `_from_text`'s fallback is `fault`:
+        # sending every short reply down that path would file ordinary answers as crashes. Only a
+        # reply that NAMES a limit, from a turn that did no work, is read as one.
+        # Found live 2026-08-14: a review run ended with "You've hit your session limit · resets 5pm",
+        # was classified NO_FAULT, and the run was recorded `done` with zero tokens — so no `error`
+        # status, no Resume, and the work-item sat at its gate with unfillable checks. A limit is the
+        # most ordinary interruption this system meets; it must not be the one it cannot see.
+        if _RATE_TEXT.search(text):
+            return Fault("rate_limited", f"the usage window is spent — {_detail(text)}",
+                         _retry_after(text))
     return NO_FAULT

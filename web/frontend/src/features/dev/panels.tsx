@@ -11,7 +11,7 @@ import { useLive } from '@/lib/live'
 import { K } from '@/lib/live/keys'
 import { fmtLocal, fmtTokens, fmtDuration, fmtModel, toModelKey, MODELS as MODEL_CATALOG, DEFAULT_MODEL, EFFORTS as EFFORT_CATALOG, DEFAULT_EFFORT } from '@/lib/format'
 import { PHASE_LABEL, PHASE_VERB, STATUS_COLOR, STATUS_LABEL, STATUS_STRIPE, primaryStatus,
-         agoLabel, kindChipClass, researchKindLabel } from './common'
+         agoLabel, researchKindLabel } from './common'
 
 // Phase accent → literal dot class (Tailwind needs the full string present in source).
 // (the per-lane dot colour map lived here until 2026-07-31 — see KANBAN_GROUPS for why it went)
@@ -215,15 +215,19 @@ function WorkCard({
       } ${bound ? '' : attnRing} ${clickable ? 'cursor-pointer transition hover:border-accent hover:shadow-md' : ''}`}
     >
       {/* 1 · status (+ branch provenance) */}
-      <div className="flex items-center gap-1.5">
+      <div className="flex min-w-0 items-center gap-1.5">
         <StatusBadge it={it} running={running} bucket={bucket} />
-        {/* ONE kind chip, not two: a card is a glance, and the family already implies research.
-            Implementation items carry the plain kind so the two are told apart at a scan. */}
-        <span className={`shrink-0 rounded px-1 py-px text-[9.5px] font-medium uppercase tracking-wide ${
-          kindChipClass(it.kind)}`}>
-          {researchKindLabel(it.research_kind) ?? (it.kind ?? 'implementation')}
-        </span>
-        <span className="ml-auto flex items-center gap-1.5"><BranchInfo it={it} /></span>
+        {/* RESEARCH ONLY. A kanban card is a few centimetres wide and the status badge already
+            fills most of the row — adding "IMPLEMENTATION" to the majority of cards truncated the
+            status it sits beside and said nothing (implementation is the default). The FAMILY is
+            the half that carries information, so that is the half the card spends its width on;
+            the drilldown header states both in full. */}
+        {researchKindLabel(it.research_kind) && (
+          <span className="min-w-0 truncate rounded bg-kind-research/10 px-1 py-px text-[9.5px] font-medium uppercase tracking-wide text-kind-research">
+            {researchKindLabel(it.research_kind)}
+          </span>
+        )}
+        <span className="ml-auto shrink-0 flex items-center gap-1.5"><BranchInfo it={it} /></span>
       </div>
       {/* 2 · name — one line, ellipsis when long */}
       <div className="truncate text-[12.5px] leading-snug text-fg" title={it.title}>{it.title}</div>
