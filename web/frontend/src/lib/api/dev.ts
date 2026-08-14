@@ -44,6 +44,10 @@ export type WorkItem = {
   title?: string
   description?: string // the item.md body
   kind?: WorkKind | null // machinery selector (null on pre-workflow items = implementation)
+  // Which research FAMILY, on a research item: audit | refactoring | housekeeping | security |
+  // deep-diagnosis | study. Absent on implementation items. Free-form on purpose — a family added
+  // to the backend renders unstyled rather than making this type a second place to update.
+  research_kind?: string | null
   phase: WorkPhase
   status: WorkStatus | null // runnable axis (done = terminal); null only on pre-workflow items
   // Why the work stopped, one owner-facing line. Present ONLY while status is `error` (R2) —
@@ -87,7 +91,10 @@ export type WorkItem = {
   total_tokens?: number // accumulated tokens across all finished runs
   phase_tokens?: Record<string, number> // per-phase 3-type Σ {phase → tokens}; card shows current phase's
   phase_tokens_4type?: Record<string, number> // per-phase 4-type Σ (3-type + cache_read), recorded behind
-  last_run?: { tokens: number; duration_ms: number | null; model?: string | null; ctx_pct?: number | null } | null
+  // `ended_at` is epoch SECONDS (like run_started_at) — the card renders "3m ago" from it locally,
+  // so the label keeps counting between polls instead of freezing at fetch time.
+  last_run?: { tokens: number; duration_ms: number | null; model?: string | null
+               ctx_pct?: number | null; ended_at?: number | null } | null
   tasks?: { done: number; total: number } | null // tasks.md checklist progress (null = no tasks.md)
   seen_at?: string | null // owner-opened read receipt (S7 attention: terminal + unseen = unread)
 }

@@ -34,6 +34,12 @@
   --c-dev: 59 130 246;
   --c-core: 18 168 120;
   --c-universal: 124 108 240;
+  /* WORK-KIND accents — what a work-item IS, an axis of its own. Deliberately not reused from the
+     status hues (success/warn/danger say how it is GOING) or the scope hues (core/dev/universal say
+     WHERE it lives): a chip borrowing either would make a claim it doesn't mean. Build = slate-teal
+     (it changes the product); research = indigo (it changes what we know). */
+  --c-kind-build: 15 132 145;
+  --c-kind-research: 99 91 205;
   color-scheme: light;
 }
 
@@ -59,6 +65,9 @@
   --c-dev: 110 168 254;
   --c-core: 95 227 179;
   --c-universal: 185 167 247;
+  /* work-kind accents, lifted for the dark ground (see the light block for why they are their own axis) */
+  --c-kind-build: 94 213 217;
+  --c-kind-research: 167 158 250;
   color-scheme: dark;
 }
 

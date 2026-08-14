@@ -1594,7 +1594,8 @@ class SystemSpine:
         for r in rows:
             s = out.setdefault(r["item_id"], {"total_tokens": 0, "runs": 0, "last_tokens": 0,
                                               "last_duration_ms": None, "last_model": None,
-                                              "last_ctx_pct": None, "by_phase": {}, "by_phase_cr": {}})
+                                              "last_ctx_pct": None, "last_ended_at": None,
+                                              "by_phase": {}, "by_phase_cr": {}})
             toks = self._display_tokens(r)  # 3-type (excl cache_read), matches the dashboard default
             s["total_tokens"] += toks
             s["runs"] += 1
@@ -1608,6 +1609,11 @@ class SystemSpine:
             s["last_duration_ms"] = _duration_ms(r["started_at"], r["ended_at"])
             s["last_model"] = r["model"]
             s["last_ctx_pct"] = r["ctx_pct"]
+            # WHEN the item last actually did something — the card's "3 minutes ago". The rows are
+            # ordered by `started_at`, so the final assignment is the newest finished run. It is the
+            # END, not the start: an item whose 40-minute run finished a minute ago has just moved,
+            # and dating it by the start would read as forty minutes idle.
+            s["last_ended_at"] = r["ended_at"]
         return out
 
     def recent_runs(self, *, limit: int = 50) -> list[dict]:

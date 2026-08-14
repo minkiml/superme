@@ -10,7 +10,8 @@ import { addInbox, updateInbox, deleteInbox, pushInbox, getRepos, type WorkItem,
 import { useLive } from '@/lib/live'
 import { K } from '@/lib/live/keys'
 import { fmtLocal, fmtTokens, fmtDuration, fmtModel, toModelKey, MODELS as MODEL_CATALOG, DEFAULT_MODEL, EFFORTS as EFFORT_CATALOG, DEFAULT_EFFORT } from '@/lib/format'
-import { PHASE_LABEL, PHASE_VERB, STATUS_COLOR, STATUS_LABEL, STATUS_STRIPE, primaryStatus } from './common'
+import { PHASE_LABEL, PHASE_VERB, STATUS_COLOR, STATUS_LABEL, STATUS_STRIPE, primaryStatus,
+         agoLabel, kindChipClass, researchKindLabel } from './common'
 
 // Phase accent → literal dot class (Tailwind needs the full string present in source).
 // (the per-lane dot colour map lived here until 2026-07-31 — see KANBAN_GROUPS for why it went)
@@ -216,6 +217,12 @@ function WorkCard({
       {/* 1 · status (+ branch provenance) */}
       <div className="flex items-center gap-1.5">
         <StatusBadge it={it} running={running} bucket={bucket} />
+        {/* ONE kind chip, not two: a card is a glance, and the family already implies research.
+            Implementation items carry the plain kind so the two are told apart at a scan. */}
+        <span className={`shrink-0 rounded px-1 py-px text-[9.5px] font-medium uppercase tracking-wide ${
+          kindChipClass(it.kind)}`}>
+          {researchKindLabel(it.research_kind) ?? (it.kind ?? 'implementation')}
+        </span>
         <span className="ml-auto flex items-center gap-1.5"><BranchInfo it={it} /></span>
       </div>
       {/* 2 · name — one line, ellipsis when long */}
@@ -239,6 +246,14 @@ function WorkCard({
           {running
             ? <LiveTimer startedAt={it.run_started_at} />
             : <span className="tabular-nums" title="Duration of the last run">{settledTime ?? '—'}</span>}
+          {/* HOW LONG SINCE it last moved — only when nothing is running, because a live timer
+              already answers "is this warm?" and two clocks on one row invite comparing them. */}
+          {!running && agoLabel(it.last_run?.ended_at) && (
+            <>
+              <span>·</span>
+              <span title="When this item's last run finished">{agoLabel(it.last_run?.ended_at)}</span>
+            </>
+          )}
         </div>
       )}
       {/* 5 · the ONE action a card carries (R4). The card is otherwise a pure glance — every other

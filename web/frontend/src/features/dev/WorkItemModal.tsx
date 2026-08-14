@@ -26,7 +26,7 @@ import { K } from '@/lib/live/keys'
 import { build, navigate, useRoute, PHASES, type ItemTab, type ItemSub, type Phase } from '@/lib/router'
 import { fmtModel, fmtTokens, fmtLocal, toModelKey } from '@/lib/format'
 import { StatusBadge, DEFAULT_RUN_MODEL, DEFAULT_RUN_EFFORT } from './panels'
-import { PHASE_LABEL, STATUS_LABEL } from './common'
+import { PHASE_LABEL, STATUS_LABEL, kindChipClass, researchKindLabel } from './common'
 
 // The work-item drilldown (renovation v2 §4) — "what is needed from me, and what has this produced".
 //
@@ -69,9 +69,12 @@ const CHECK_ICON: Record<string, typeof FileText> = {
 }
 
 // Per-kind pipeline (mirrors the backend KIND_PROFILES) — the progress bar's stops.
+// ⚠ HAND-COPIED, and it has drifted once: research kept a `plan` stop for weeks after the phase was
+// removed from the backend profile (research-sweep-model §3), so every sweep showed a step that
+// cannot happen. Nothing enforces the mirror — when a pipeline changes, change it here too.
 const PIPELINES: Record<string, string[]> = {
   implementation: ['triage', 'plan', 'build', 'vet', 'review', 'close'],
-  research: ['triage', 'plan', 'investigate', 'review', 'close'],
+  research: ['triage', 'investigate', 'review', 'close'],
 }
 
 const TABS: { id: ItemTab; label: string; icon: typeof FileText }[] = [
@@ -285,9 +288,16 @@ export default function WorkItemModal({
             <div className="flex items-center gap-1.5">
               <span className="font-mono text-[10px] text-faint">{it.id}</span>
               <StatusBadge it={it} running={running} bucket={bucket} />
-              <span className="rounded-full bg-hover px-2 py-0.5 text-[10px] uppercase tracking-wide text-faint">
+              <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${
+                kindChipClass(it.kind)}`}>
                 {it.kind ?? 'implementation'}
               </span>
+              {researchKindLabel(it.research_kind) && (
+                <span className="rounded-full bg-kind-research/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-kind-research"
+                      title="Which research family this item follows — it picks the guide investigate reads and the bar review judges against.">
+                  {researchKindLabel(it.research_kind)}
+                </span>
+              )}
               {it.deliverable && (
                 <span className="rounded-full bg-hover px-2 py-0.5 font-mono text-[10px] text-faint">{it.deliverable}</span>
               )}

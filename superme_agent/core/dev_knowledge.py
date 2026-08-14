@@ -401,7 +401,10 @@ class DevKnowledgeService:
             it["phase_tokens_4type"] = {p: by_phase.get(p, 0) + by_phase_cr.get(p, 0) for p in by_phase}
             it["last_run"] = (
                 {"tokens": s.get("last_tokens", 0), "duration_ms": s.get("last_duration_ms"),
-                 "model": s.get("last_model"), "ctx_pct": s.get("last_ctx_pct")}
+                 "model": s.get("last_model"), "ctx_pct": s.get("last_ctx_pct"),
+                 # Epoch seconds, like `run_started_at` — the surface renders the elapsed itself, so
+                 # "3 minutes ago" keeps counting between polls instead of freezing at fetch time.
+                 "ended_at": _iso_epoch(s.get("last_ended_at"))}
                 if s.get("runs") else None
             )
             info = live_by_item.get(wid)

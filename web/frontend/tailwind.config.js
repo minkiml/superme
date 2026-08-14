@@ -31,6 +31,9 @@ export default {
         dev: 'rgb(var(--c-dev) / <alpha-value>)',
         core: 'rgb(var(--c-core) / <alpha-value>)',
         universal: 'rgb(var(--c-universal) / <alpha-value>)',
+        // work-kind accents — what an item IS (build vs research), its own axis
+        'kind-build': 'rgb(var(--c-kind-build) / <alpha-value>)',
+        'kind-research': 'rgb(var(--c-kind-research) / <alpha-value>)',
       },
       fontFamily: {
         sans: ['Inter Variable', 'Hanken Grotesk Variable', 'system-ui', '-apple-system', 'sans-serif'],

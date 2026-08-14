@@ -6215,6 +6215,8 @@ export interface components {
             title?: string | null;
             /** Kind */
             kind?: ("implementation" | "research") | null;
+            /** Research Kind */
+            research_kind?: string | null;
             spawned_from?: components["schemas"]["SpawnedFrom"] | null;
             /** Superseded By */
             superseded_by?: string | null;
@@ -6411,6 +6413,8 @@ export interface components {
             model?: string | null;
             /** Ctx Pct */
             ctx_pct?: number | null;
+            /** Ended At */
+            ended_at?: number | null;
         };
         /**
          * WorkItemScaffoldResponse

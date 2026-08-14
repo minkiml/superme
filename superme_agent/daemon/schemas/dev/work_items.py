@@ -38,6 +38,8 @@ class WorkItemLastRun(BaseModel):
     duration_ms: int | None = None
     model: str | None = None
     ctx_pct: int | None = None
+    # Epoch seconds at which the newest finished run ENDED — the card's "3 minutes ago".
+    ended_at: float | None = None
 
 
 class WorkItemTasks(BaseModel):
@@ -66,6 +68,10 @@ class WorkItem(BaseModel):
     # edge, `outcome` stamps HOW the item ended (with status=done), `superseded_by` backs the
     # superseded outcome, `inbox_id` is the originating inbox row (D5 trace).
     kind: WorkKind | None = None
+    # Which research FAMILY, on a `research` item (audit | refactoring | housekeeping | security |
+    # deep-diagnosis | study). It has always ridden extra='allow'; declared here because the surface
+    # now labels it, and a field a surface renders should be one the contract names.
+    research_kind: str | None = None
     spawned_from: SpawnedFrom | None = None
     superseded_by: str | None = None
     outcome: WorkOutcome | None = None

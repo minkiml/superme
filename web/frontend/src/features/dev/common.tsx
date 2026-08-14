@@ -100,3 +100,50 @@ export function Empty({ children }: { children: ReactNode }) {
     <div className="rounded-lg border border-dashed border-line bg-surface p-6 text-sm text-muted">{children}</div>
   )
 }
+
+// ── Work-kind labelling ──────────────────────────────────────────────────────────────────────
+// Two chips, one axis: WHAT the item is (`kind`) and, for research, which FAMILY (`research_kind`).
+// They share a hue so they read as one statement — the family chip is the lighter half of the pair,
+// not a second unrelated badge. Colours are the `kind-*` tokens: the status hues (success/warn/
+// danger) say how the work is GOING and the scope hues (core/dev/universal) say where it LIVES, so
+// borrowing either here would make the chip claim something it doesn't mean.
+export const KIND_CHIP: Record<string, string> = {
+  implementation: 'bg-kind-build/10 text-kind-build',
+  research: 'bg-kind-research/10 text-kind-research',
+}
+
+// The family's own word, not the slug. `deep-diagnosis` is two words to a reader and a hyphen only
+// to the filesystem, and an unknown value renders as-is rather than vanishing — a family added to
+// the backend shows up unstyled instead of silently unlabelled.
+export const RESEARCH_KIND_LABEL: Record<string, string> = {
+  audit: 'Audit',
+  refactoring: 'Refactoring',
+  housekeeping: 'Housekeeping',
+  security: 'Security',
+  'deep-diagnosis': 'Deep diagnosis',
+  study: 'Study',
+}
+
+export function kindChipClass(kind?: string | null): string {
+  return KIND_CHIP[kind ?? 'implementation'] ?? KIND_CHIP.implementation
+}
+
+export function researchKindLabel(rk?: string | null): string | null {
+  if (!rk) return null
+  return RESEARCH_KIND_LABEL[rk] ?? rk.replace(/-/g, ' ')
+}
+
+// "3m ago" — how long since the item last DID something. Deliberately coarse: the reader is asking
+// "is this still warm or has it been sitting?", and a card that ticks by the second answers a
+// question nobody asked while making the whole board twitch. `null` when the item has never run.
+export function agoLabel(epochSeconds?: number | null): string | null {
+  if (!epochSeconds) return null
+  const secs = Math.max(0, Math.floor(Date.now() / 1000 - epochSeconds))
+  if (secs < 60) return 'just now'
+  const mins = Math.floor(secs / 60)
+  if (mins < 60) return `${mins}m ago`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  return days < 7 ? `${days}d ago` : `${Math.floor(days / 7)}w ago`
+}
