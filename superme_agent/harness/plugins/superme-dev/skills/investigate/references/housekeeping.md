@@ -51,17 +51,26 @@ State which you got in `## Surface & sample`, in its first line.
 judgment: one pass over the tree, and the only way to cover every declaration rather than the ones
 you happened to look at.
 
-1. **List the declarations** — one grep for definition lines across the tree, names only.
-2. **Count each name's occurrences** repo-wide, across code AND config, docs, templates and scripts
-   — the places a string-reached caller hides.
-3. **A name occurring once is a candidate**: the only mention is its own definition.
-4. **A name whose other mentions are all inside its own file is also a candidate** — reachable inside
-   a module nothing outside reaches is the same as unreachable.
+1. **List the declarations** — one grep for definition lines across the tree, names only, each
+   paired with the file it was declared in.
+2. **Count each name's mentions OUTSIDE its own file** — repo-wide, across code AND config, docs,
+   templates and scripts, the places a string-reached caller hides.
+3. **Zero outside mentions makes it a candidate.** Nothing else does. A name used only within its
+   declaring file is as unreachable from outside as one used nowhere at all, so both land on the
+   shortlist by the same count and neither needs a judgment call to get there.
 
-**Good example**
+Count outside-the-file, never total. A total count sorts names into bands — one mention, two, three
+— and the middle bands are too large to check by hand, so they get sampled, and a dead symbol whose
+own docstring names it sits in the sample gap. The outside-file count has no middle: it is zero or
+it is not.
+
+**Bad and good examples**
 ```example
-✓ grep -rhoE "^(def|class) [A-Za-z_]+" --include="*.py" . | awk '{print $2}' | sort -u > syms
-  then, per name: grep -rowE "\b<name>\b" . | wc -l   → keep the ones at 1
+✗ per name: grep -rowE "\b<name>\b" . | wc -l    → keep the ones at 1
+  (a name mentioned by its own docstring counts 2 and is never looked at again)
+
+✓ grep -rnE "^(def|class) [A-Za-z_]+" --include="*.py" . | sed -E 's/(.*):[0-9]+:(def|class) ([A-Za-z_]+).*/\3 \1/' > syms
+  then, per `<name> <file>` pair: grep -rowE "\b<name>\b" . | grep -v "^<file>:" | wc -l
 ```
 
 Use the equivalent for whatever the tree is written in — exported functions, classes, components,

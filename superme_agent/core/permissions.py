@@ -92,6 +92,13 @@ _BASH_SCRATCH_HINT = (
     "approval; nothing in it is read as a result or kept after the item closes. Use it instead of "
     "`$TMPDIR` or `/tmp`, which are outside every boundary."
 )
+# Stamped on EVERY refusal. Not a scolding — the number is the point: what a report gets wrong
+# about its own tooling is never the individual wall (each one is explained where it happens), it
+# is how many there were by the time the report is written.
+_REFUSAL_TALLY = (
+    "(Tool calls refused so far this run: {n}. The kernel keeps this count — quote it in your "
+    "record's coverage note rather than recalling it, and say what it left unverified.)"
+)
 _LEARNING_SCOPE_DENIED = (
     "This run may only use Bash and write inside its own scratch workspace. That target is outside "
     "it, so the call is out of the run's scope rather than refused by anyone — draft into the "
@@ -866,4 +873,21 @@ def build_can_use_tool(approve: ApproveFn, *, blocked_skills: dict[str, str] | N
         return PermissionResultDeny(
             message=verdict if isinstance(verdict, str) and verdict.strip() else _DENIED_BY_OWNER)
 
-    return can_use_tool
+    refused = 0
+
+    async def counted(tool_name: str, input_data: dict, context: ToolPermissionContext
+                      ) -> PermissionResultAllow | PermissionResultDeny:
+        """Every refusal carries a running tally. Each individual deny message already asks the
+        agent to record what it could not do, and each is read once, two hundred calls before the
+        report gets written — measured 2026-08-16, a run refused fourteen times reported "no tool
+        was unavailable". A count is the one thing the agent cannot reconstruct and the kernel
+        cannot get wrong, so the kernel states it, and states it again on every refusal."""
+        nonlocal refused
+        result = await can_use_tool(tool_name, input_data, context)
+        if isinstance(result, PermissionResultDeny):
+            refused += 1
+            return PermissionResultDeny(
+                message=f"{result.message}\n\n{_REFUSAL_TALLY.format(n=refused)}")
+        return result
+
+    return counted
