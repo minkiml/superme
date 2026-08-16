@@ -62,7 +62,7 @@ from .turns import ResilientTurn
 from ...harness.tools.run_tools import make_run_report_server
 from ...core.permissions import VET_READONLY_NUDGE
 from ...harness.tools.dev_tools import make_dev_mcp_server
-from .runs import (_LiveTokens, _begin_run, _end_run, turn_surface,
+from .runs import (_LiveTokens, _begin_run, _end_run, surface_from_turn,
                    bank_auto_checkpoint, capture_event, capture_prompt, capture_run_input,
                    compacted_checkpoint, ensure_completion, fire_auto_triage, mark_item_error, read_completion,
                    reset_vet_thread, retry_notice)
@@ -449,14 +449,6 @@ async def _run_background_vet(ctx, context_id: str, item_id: str,
     capture_prompt(context_id, trigger, item_id=item_id)
     # Prompt inspector "A" — throwaway probes ONLY: vet passes work_item_preamble as system_append at
     # the worktree ctx. Normal items skip capture (the run_input table no longer grows per-run).
-    if _autopilot.is_prompt_extraction(item):
-        capture_run_input(context_id, item_id, ctx=wt_ctx,
-                          system_append=kernel_speech.work_item_preamble(item_id, item, str(item_dir), interactive=False),
-                          prompt=prompt, phase="vet",
-                          surface=turn_surface(model=model, effort=effort, mcp=["dev", "run"],
-                                               write_boundary=boundary, sandbox_writes=boundary,
-                                               read_only=True, resumes=False),
-                          background=True)
     final_tokens = None
     final_usage = None
     final_session = None
@@ -468,8 +460,8 @@ async def _run_background_vet(ctx, context_id: str, item_id: str,
     # and `turn.fault` afterwards is a typed verdict, not a bare "something threw".
     turn = ResilientTurn("vet", item_id=item_id,
                          notify=retry_notice(context_id, item_id, "vet"))
-    async for ev in turn.stream(
-        _agent, wt_ctx, prompt,
+    # Built once, then both SNAPSHOTTED and SENT — see `runs.surface_from_turn`.
+    turn_kwargs = dict(
         resume=None,                     # vet FORGETS — fresh eyes, prior reports are data
         model=model, effort=effort,
         approve=deny_all,                # background: nothing outside the boundary runs
@@ -480,7 +472,16 @@ async def _run_background_vet(ctx, context_id: str, item_id: str,
         write_boundary=boundary,         # boundary Bash autonomy (running checks IS the job)
         sandbox_writes=boundary,         # …and the kernel holds that same boundary (sandbox.py)
         deny_write_tools=VET_READONLY_NUDGE,   # …but file-write tools die outright (§4)
-    ):
+    )
+    # Prompt inspector "A" — throwaway probes ONLY: vet passes work_item_preamble as system_append at
+    # the worktree ctx. Normal items skip capture (the run_input table no longer grows per-run).
+    if _autopilot.is_prompt_extraction(item):
+        capture_run_input(context_id, item_id, ctx=wt_ctx,
+                          system_append=turn_kwargs["system_append"],
+                          prompt=prompt, phase="vet",
+                          surface=surface_from_turn(turn_kwargs, mcp=["dev", "run"]),
+                          background=True)
+    async for ev in turn.stream(_agent, wt_ctx, prompt, **turn_kwargs):
         if isinstance(ev, Usage):
             live.bump(context_id, item_id, ev)
         elif isinstance(ev, Result):
@@ -721,14 +722,6 @@ async def _run_background_build(ctx, context_id: str, item_id: str,
     # Prompt inspector "A" — throwaway probes ONLY: build passes work_item_preamble as system_append
     # at the worktree ctx; the body carries the orient block only on the item's first build turn (else
     # just the trigger). Normal items skip capture (the run_input table no longer grows per-run).
-    if _autopilot.is_prompt_extraction(item):
-        capture_run_input(context_id, item_id, ctx=wt_ctx,
-                          system_append=kernel_speech.work_item_preamble(item_id, item, str(item_dir), interactive=False),
-                          prompt=prompt, phase="build",
-                          surface=turn_surface(model=model, effort=effort, mcp=["dev", "run"],
-                                               write_boundary=boundary, sandbox_writes=boundary,
-                                               resumes=bool(prev_build)),
-                          background=True)
     final_tokens = None
     final_usage = None
     final_session = None
@@ -742,8 +735,8 @@ async def _run_background_build(ctx, context_id: str, item_id: str,
     # the ladder is spent reports a failure the loop treats as a fault.
     turn = ResilientTurn("build", item_id=item_id,
                          notify=retry_notice(context_id, item_id, "build"))
-    async for ev in turn.stream(
-        _agent, wt_ctx, prompt,
+    # Built once, then both SNAPSHOTTED and SENT — see `runs.surface_from_turn`.
+    turn_kwargs = dict(
         resume=prev_build,               # build REMEMBERS — same thread every cycle
         model=model, effort=effort,
         approve=deny_all,
@@ -757,7 +750,17 @@ async def _run_background_build(ctx, context_id: str, item_id: str,
         item_bound=True,                 # one item is the subject — no board-wide in-progress list
         write_boundary=boundary,         # S4 freeze: writes stay in worktree + item dir
         sandbox_writes=boundary,         # …enforced for shell commands by the OS (sandbox.py)
-    ):
+    )
+    # Prompt inspector "A" — throwaway probes ONLY: build passes work_item_preamble as system_append
+    # at the worktree ctx; the body carries the orient block only on the item's first build turn (else
+    # just the trigger). Normal items skip capture (the run_input table no longer grows per-run).
+    if _autopilot.is_prompt_extraction(item):
+        capture_run_input(context_id, item_id, ctx=wt_ctx,
+                          system_append=turn_kwargs["system_append"],
+                          prompt=prompt, phase="build",
+                          surface=surface_from_turn(turn_kwargs, mcp=["dev", "run"]),
+                          background=True)
+    async for ev in turn.stream(_agent, wt_ctx, prompt, **turn_kwargs):
         if isinstance(ev, Usage):
             live.bump(context_id, item_id, ev)
         elif isinstance(ev, Result):

@@ -14,13 +14,13 @@ Answer a research work-item's questions with evidence, and leave the record some
 **Every claim you record carries a pointer**: `file:line`, a URL with the date you read it, or a
 command and its output.
 
-Copy this into your first reply and tick each line as you finish it:
+Copy this into your first response and tick each line as you finish it:
 
 ```
 Investigation progress:
-- [ ] 1 Family guide read
+- [ ] 1 <family> guide read
 - [ ] 2 Record scaffolded, questions and walls and Done written
-- [ ] 3 Surface split, readers spawned
+- [ ] 3 Surface split, investigators spawned
 - [ ] 4 Receipts verified at their own lines
 - [ ] 5 Record filled
 - [ ] 6 Follow-up work sized

@@ -468,6 +468,24 @@ def turn_surface(*, model: str | None = None, effort: str | None = None,
             "read_only": bool(read_only), "approve": approve, "resumes": bool(resumes)}
 
 
+def surface_from_turn(turn_kwargs: dict, *, mcp: list[str] | None = None) -> dict:
+    """`turn_surface` READ OFF the kwargs a turn is actually sent with.
+
+    The inspector used to restate the surface beside the call, and a restatement can be wrong: an
+    intake run recorded `write_boundary=[item_dir]` while the stream below it passed no boundary at
+    all, so every shell command it issued was refused and the capture said otherwise. A snapshot of
+    the real arguments cannot drift from them."""
+    return turn_surface(
+        model=turn_kwargs.get("model"),
+        effort=turn_kwargs.get("effort"),
+        mcp=mcp if mcp is not None else sorted(turn_kwargs.get("extra_mcp_servers") or {}),
+        write_boundary=turn_kwargs.get("write_boundary"),
+        sandbox_writes=turn_kwargs.get("sandbox_writes"),
+        read_only=bool(turn_kwargs.get("deny_write_tools")),
+        resumes=bool(turn_kwargs.get("resume")),
+    )
+
+
 def _authored_extras(ctx, item: dict, phase: str | None, mcp: list[str]) -> dict:
     """The prompt text SuperMe authors OUTSIDE the system append — the two channels a capture of the
     append alone silently omits, each as ready-to-render fragments.
@@ -1230,33 +1248,32 @@ async def _run_background_close(ctx, context_id: str, item_id: str, item_dir: Pa
     focus = kernel_speech.work_item_preamble(
         item_id, item, str(item_dir), interactive=False,
         compacted_checkpoint=compacted_checkpoint(ctx, item, session_id))
-    # Prompt inspector "A" — throwaway probes ONLY: capture matches the real send exactly.
-    if _autopilot.is_prompt_extraction(item):
-        capture_run_input(context_id, item_id, ctx=ctx, system_append=focus, prompt=prompt,
-                          phase="close",
-                          surface=turn_surface(model=model, effort=effort, mcp=["dev", "run"],
-                                               write_boundary=[item_dir],
-                                               sandbox_writes=[item_dir],
-                                               resumes=bool(session_id)),
-                          background=True)
     final_tokens = final_usage = final_session = None
     run_started = time.time()
     live = _LiveTokens()
     sink: dict = {}   # report_completion lands here (run_tools) — read after the turn
     turn = ResilientTurn("auto-close", item_id=item_id,
                          notify=retry_notice(context_id, item_id, "close"))
-    async for ev in turn.stream(
-        _agent, ctx, prompt,
+    # Built once, then both SNAPSHOTTED and SENT — see `surface_from_turn`.
+    turn_kwargs = dict(
         resume=session_id,   # RESUME the intake thread — the closeout narrates the whole item
         model=model,
         effort=effort or _spine.effective_effort(context_id),
         approve=scoped_writes_approve(item_dir, deny_all),
+        write_boundary=[item_dir],   # the shell boundary, matching the sandbox beside it
         sandbox_writes=[item_dir],   # sandboxed shell; the item folder is its one outside write
         extra_mcp_servers={**_dev_mcp(ctx, ctx.cwd, item_id, scope="close"),
                            "run": make_run_report_server(sink)},
         system_append=focus,   # Current-focus pointer incl. the run protocol
         item_bound=True,       # one item is this run's subject — no board-wide in-progress list
-    ):
+    )
+    # Prompt inspector "A" — throwaway probes ONLY: capture matches the real send exactly.
+    if _autopilot.is_prompt_extraction(item):
+        capture_run_input(context_id, item_id, ctx=ctx, system_append=focus, prompt=prompt,
+                          phase="close",
+                          surface=surface_from_turn(turn_kwargs, mcp=["dev", "run"]),
+                          background=True)
+    async for ev in turn.stream(_agent, ctx, prompt, **turn_kwargs):
         if isinstance(ev, Usage):
             live.bump(context_id, item_id, ev)
         elif isinstance(ev, Result):
@@ -1412,18 +1429,6 @@ async def _background_intake_run(ctx, context_id: str, item_id: str, item_dir: P
     prompt = trigger
     capture_prompt(context_id, trigger, item_id=item_id)
     focus = kernel_speech.work_item_preamble(item_id, item, str(item_dir), interactive=False)
-    # Prompt inspector "A" — throwaway probes ONLY: capture matches the real send exactly.
-    # Normal items skip capture (the run_input table no longer grows per-run).
-    if _autopilot.is_prompt_extraction(item):
-        capture_run_input(context_id, item_id, ctx=ctx, system_append=focus, prompt=prompt,
-                          phase=skill,
-                          surface=turn_surface(model=model, effort=effort, mcp=["dev", "run"],
-                                               write_boundary=[item_dir],
-                                               sandbox_writes=[item_dir],
-                                               # this runner is ALWAYS a fresh pass (resume=None):
-                                               # a re-plan must not read as "already done"
-                                               resumes=False),
-                          background=True)
     final_tokens = None
     final_usage = None
     final_session = None
@@ -1432,18 +1437,32 @@ async def _background_intake_run(ctx, context_id: str, item_id: str, item_dir: P
     sink: dict = {}   # report_completion lands here (run_tools) — read after the turn
     turn = ResilientTurn(f"background {skill}", item_id=item_id,
                          notify=retry_notice(context_id, item_id, skill))
-    async for ev in turn.stream(
-        _agent, ctx, prompt,
+    # Built once, then both SNAPSHOTTED and SENT — see `surface_from_turn`.
+    turn_kwargs = dict(
         resume=prev_session,   # this PHASE's own thread; None the first time it is entered
         model=model,
         effort=effort or _spine.effective_effort(context_id),  # item → repo → system → medium
         approve=scoped_writes_approve(item_dir, deny_all),
+        # The shell boundary, matching the write sandbox beside it. Without it every command the
+        # read-only classifier cannot prove — a scripted inventory, a probe, anything with a pipe
+        # into a file — went to `deny_all` with no path to allow, for this run AND every reader it
+        # spawned. Build and vet have carried this since the freeze boundary landed; the intake
+        # phases never did, and a research sweep is the one that most needs a shell.
+        write_boundary=[item_dir],
         sandbox_writes=[item_dir],   # sandboxed shell; the item folder is its one outside write
         extra_mcp_servers={**_dev_mcp(ctx, ctx.cwd, item_id, scope=skill),
                            "run": make_run_report_server(sink)},
         system_append=focus,   # Current-focus pointer incl. the run protocol
         item_bound=True,       # one item is this run's subject — no board-wide in-progress list
-    ):
+    )
+    # Prompt inspector "A" — throwaway probes ONLY: capture matches the real send exactly.
+    # Normal items skip capture (the run_input table no longer grows per-run).
+    if _autopilot.is_prompt_extraction(item):
+        capture_run_input(context_id, item_id, ctx=ctx, system_append=focus, prompt=prompt,
+                          phase=skill,
+                          surface=surface_from_turn(turn_kwargs, mcp=["dev", "run"]),
+                          background=True)
+    async for ev in turn.stream(_agent, ctx, prompt, **turn_kwargs):
         if isinstance(ev, Usage):
             live.bump(context_id, item_id, ev)
         elif isinstance(ev, Result):

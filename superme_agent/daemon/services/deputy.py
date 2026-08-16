@@ -30,7 +30,7 @@ from ...core import kernel_speech, gate_briefs, deputy as deputy_core
 from ...core import autopilot as _autopilot
 from ...harness.tools.run_tools import make_deputy_verdict_server
 from .runs import _begin_run, _LiveTokens, capture_prompt, capture_event, capture_run_input, \
-    _dev_mcp, retry_notice, turn_surface
+    _dev_mcp, retry_notice, surface_from_turn
 from .turns import ResilientTurn
 
 log = logging.getLogger("superme-agent")
@@ -228,21 +228,14 @@ async def _judge(ctx, context_id: str, item_id: str, item: dict, gate: str, dev_
     # Prompt inspector "A" — throwaway probes ONLY. The deputy was the one run the X-ray could not
     # see: it judges three gates, costs ~19% of an item, and had no capture site at all, so the
     # inspector's "actual input over a lifecycle" was silently missing a whole speaker.
-    if _autopilot.is_prompt_extraction(item):
-        capture_run_input(context_id, item_id, ctx=ctx, system_append=system_append,
-                          prompt=prompt, phase=f"deputy:{gate}",
-                          surface=turn_surface(model=model, effort=effort, mcp=["dev", "deputy"],
-                                               write_boundary=[], sandbox_writes=[],
-                                               read_only=True, resumes=False),
-                          background=True)
     final_tokens = None
     final_usage = None
     live = _LiveTokens()
     sink: dict = {}   # the deputy_verdict tool (run_tools) lands the verdict here
     turn = ResilientTurn("deputy judge", item_id=item_id,
                          notify=retry_notice(context_id, item_id, gate))
-    async for ev in turn.stream(
-        _agent, ctx, prompt,
+    # Built once, then both SNAPSHOTTED and SENT — see `runs.surface_from_turn`.
+    turn_kwargs = dict(
         resume=None,                       # fresh per gate — the deputy FORGETS (design §2b)
         model=model, effort=effort,
         approve=deny_all,                  # read-only judge: no writes, no shell side effects
@@ -252,7 +245,13 @@ async def _judge(ctx, context_id: str, item_id: str, item: dict, gate: str, dev_
         system_append=system_append,
         item_bound=True,                   # judging one item — no board-wide in-progress list
         deny_write_tools=_READONLY_NUDGE,  # Write/Edit die outright — it inspects, never edits
-    ):
+    )
+    if _autopilot.is_prompt_extraction(item):
+        capture_run_input(context_id, item_id, ctx=ctx, system_append=system_append,
+                          prompt=prompt, phase=f"deputy:{gate}",
+                          surface=surface_from_turn(turn_kwargs, mcp=["dev", "deputy"]),
+                          background=True)
+    async for ev in turn.stream(_agent, ctx, prompt, **turn_kwargs):
         if isinstance(ev, Usage):
             live.bump(context_id, item_id, ev)
         elif isinstance(ev, Result):
