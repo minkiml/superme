@@ -133,8 +133,13 @@ def fanout_check(family: str | None, subagents: int | None) -> dict | None:
 
 # The size below which a brief cannot have carried a bar. Deliberately generous: the shortest family
 # bar on its own (security's X→Y→Z) runs ~300 characters, and the contract asks for the bar plus the
-# plan's boundaries plus the return shape. So this is a floor for IMPOSSIBILITY, not a target — it
-# fires on "audit the auth module", and stays quiet on anything that made a real attempt.
+# plan's boundaries plus the slice this worker owns. So this is a floor for IMPOSSIBILITY, not a
+# target — it fires on "audit the auth module", and stays quiet on anything that made a real attempt.
+#
+# UNCHANGED when the return shape and the read discipline moved OUT of the brief and into the
+# `investigator` agent (2026-08-15). Briefs got leaner by design, and a floor that tracked the
+# contract's length would have punished exactly that improvement. 600 still sits below the
+# family-bar-plus-boundaries minimum, which is the only thing it was ever measuring.
 BRIEF_FLOOR = 600
 
 
@@ -164,7 +169,7 @@ def brief_check(sizes: list[int] | None) -> dict | None:
         "criterion": "brief_carried", "ok": False,
         "detail": (f"{len(thin)} of {len(sizes)} subagent brief(s) were under {BRIEF_FLOOR} chars "
                    f"(smallest {min(thin)}). A brief that short cannot have carried the family's "
-                   f"bar, the plan's boundaries and a return shape — so those workers read to no "
+                   f"bar and the plan's boundaries — so those workers read to no "
                    f"standard, and what they returned reads like evidence gathered against one. "
                    f"Treat their findings as leads, not receipts."),
     }

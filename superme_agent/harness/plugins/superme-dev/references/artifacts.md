@@ -10,6 +10,12 @@ Terminology: **validation** = build's own internal checks (unit tests, compile, 
 errors). **verification** = vet's real, practical, safely-isolated tests (scenario runs, live
 checks). Vet verifies; it does not validate.
 
+## Contents
+
+- **The playbook** — rules that apply to writing every artifact
+- **The kinds** — every artifact, who writes it, who reads it, and when it is retired
+- **`plan.md` — the section contract**, once for the implementation kind and once for research
+- **`build-vet-<n>.md`** — the cycle report, and which phase writes which fence
 ## The playbook (applies to every kind)
 
 1. **Scaffold first** — call `scaffold_artifact(item_id, artifact)`. Code writes the skeleton
@@ -19,9 +25,8 @@ checks). Vet verifies; it does not validate.
    A comment-only section (a pen's or the driver's) is not yours to write.
    **A template's `<fill:…>` slots and its `<!-- … -->` notes are BOTH instructions to you, and
    neither survives into the file you write** — you replace the slots and drop the notes. Copied
-   through, an authoring note becomes the document's opening paragraph: caught 2026-08-03, where
-   the owner's review report opened with "Keep it ≤ 1 page; tables over paragraphs" and the PR page
-   showed them their own instructions instead of the review.
+   through, an authoring note becomes the document's opening paragraph — the reader is shown the
+   instructions for writing the document instead of the document.
 3. **The gate self-checks.** The phase gate that CONSUMES the doc runs the validator (template
    sections present, fill-bearing sections filled, no slots left). A failed check is an itemized,
    retry-shaped list — fix and re-present; nothing was persisted or advanced.
@@ -97,7 +102,7 @@ have to read the history of the decision to find it. Splitting them is what let 
 carrying `**Delivered:**`, `## Proposed work` and the decision line — three fields it was parsed
 for and nobody reading it wanted.
 
-**Retired (2026-07-27, workflow-renovation-v2 §3.1 demolition):** `assumptions.md` + the
+**Retired — do not scaffold or write these:** `assumptions.md` + the
 `record_assumption` tool — an agent's judgment call now goes in its own phase record's
 `## Assumptions` section and surfaces in that phase's report · `readiness.md` — said what
 `report-review.md` already says · `closeout.md` — close's output is `reports/report-close.md` +

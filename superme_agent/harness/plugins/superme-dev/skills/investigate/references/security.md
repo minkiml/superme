@@ -43,7 +43,7 @@ Severity follows the path, not the severity of the word: **high** = the path is 
 **medium** = it needs a precondition you should name; **low** = defence in depth. A missing best
 practice with no path is a hardening note, and it says so.
 
-## Know the domain of the codebase <!--Complete this-->
+## Know the domain of the codebase
 - Understand the domain of working codebase and data characteristics (e.g., any sensitive data? - such as PHI, PII, and so on)
 -  
 

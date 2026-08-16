@@ -1045,8 +1045,14 @@ def _set_triage_classification(*, store, context_id, dev_root=None, bound_item_i
         # message telling the agent nothing was recorded.
         fam = _s(args, "research_kind")
         if _s(args, "kind") == "research" and not fam:
-            return _err("A research item needs `research_kind` (audit | study | measurement | "
-                        "diagnosis) + `research_kind_reason` — it decides what counts as an "
+            # The list MUST match the Literal on `research_kind` above. It did not until
+            # 2026-08-14: it named `measurement` and `diagnosis`, which are not families, and
+            # omitted refactoring, housekeeping, security and deep-diagnosis, which are. An agent
+            # that hits a refusal is being told what to do next, so a wrong menu here sends it to
+            # pick a value the very next call will reject.
+            return _err("A research item needs `research_kind` (audit | refactoring | "
+                        "housekeeping | security | study | deep-diagnosis) + "
+                        "`research_kind_reason` — it decides what counts as an "
                         "answer, which guide the investigation follows, and the shape of the "
                         "record it writes. Nothing was recorded; call again with both.")
         if _s(args, "kind") != "research" and fam:

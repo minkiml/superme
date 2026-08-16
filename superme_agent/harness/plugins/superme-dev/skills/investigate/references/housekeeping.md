@@ -10,6 +10,7 @@ question with a provable answer.
 ## Contents
 
 - **Two breadths** — sweep by kind, or sweep an area exhaustively
+- **Start mechanical** — the declaration inventory that produces your shortlist
 - **The bar: proof, not absence of evidence**
 - **What to sweep** — the four kinds of stale
 - **What looks dead and isn't** — the section that pays for itself
@@ -30,6 +31,32 @@ The item says whether this is **the whole repo** or **one area**. Same bar, diff
 **Open `## Surface & sample` with the breadth** — "whole repo, by kind" or the area named — and the
 sizes. A later sweep starts from that line.
 
+## Start mechanical
+
+**Dead code is found by counting, not by reading.** Before any judgment, produce the shortlist
+mechanically — it costs one pass over the tree and it is the only way to cover every declaration
+rather than the ones you happened to look at.
+
+1. **List the declarations.** One grep for definition lines across the tree, names only.
+2. **Count each name's occurrences** repo-wide, across code AND config, docs, templates and scripts —
+   the places a string-reached caller hides.
+3. **A name occurring once is a candidate**: the only mention is its own definition.
+4. **A name whose other mentions are all in its own file is also a candidate** — reachable inside a
+   module that nothing outside reaches is the same as unreachable.
+
+```example
+✓ grep -rhoE "^(def|class) [A-Za-z_]+" --include="*.py" . | awk '{print $2}' | sort -u > syms
+  then, per name: grep -rowE "\b<name>\b" . | wc -l   → keep the ones at 1
+```
+
+Use the equivalent for whatever the tree is written in — exported functions, classes, components,
+config keys. **Report the two numbers**: how many declarations were inventoried, and how many
+survived to the shortlist. That pair is your coverage receipt for this kind, and it is checkable.
+
+The shortlist is where the judgment starts, not where it ends: the section below applies to the
+shortlist, not to the tree. Inverting that order is what makes a sweep expensive and incomplete at
+the same time — reading files to find candidates, then having no budget left to prove them.
+
 ## The bar: proof, not absence of evidence
 
 `grep` returning nothing is where this work STARTS, not where it ends. Before anything is called
@@ -46,6 +73,28 @@ dead, check the ways a caller can hide from a text search:
 Each item in `## What can go` carries how you searched and which of these you ruled out. Anything
 you cannot prove either way is an OPEN THREAD, never a deletion — this family's one catastrophic
 failure is removing something that was reachable, and it is always cheaper to leave it.
+
+**Follow the graph, not the reference count.** A group of files that only reference each other is
+not reached — it is a dead island with internal traffic, and a naive count reads it as busy. When
+something looks live because many files reference it, ask what reaches THOSE files, and keep
+walking outward until you arrive at something the system actually starts: an entry point genuinely
+invoked, a route genuinely served, a command a person or a script genuinely runs.
+
+```example
+✗ "The legacy CLI package is live — 30-odd files reference it, and it has its own entry point."
+✓ "Every one of those references is inside the package. Nothing invokes the entry point: no
+   script, no CI job, no docs. The package is dead as a unit — except its config module, which
+   the live server imports directly."
+```
+
+This is the family's other catastrophic failure, and it is the expensive one: leaving a whole
+retired subsystem in place because its internal traffic looked like life. **Where a group dies as a
+unit, propose it as one item** and name the members that survive it.
+
+**A clean area is a claim too.** "Swept, nothing found" needs the same receipt as a finding — the
+surface enumerated and how it was searched. Without that it is indistinguishable from an area
+nobody read, and it is worse, because it retires the question. An area handed to you clean but
+without its enumeration is UNSWEPT; record it as an open thread.
 
 ## What to sweep
 
@@ -89,10 +138,16 @@ owner as one, at their gate.
 
 ## Fan-out
 
-Split by AREA, one subagent per directory or module, each returning candidates with `file:line` and
-the searches it ran. You keep the reachability judgment: a subagent that has only read one directory
-cannot know what the rest of the repo reaches into it, and that is exactly the mistake that deletes
-something live.
+**Split the way the breadth above says, not by habit.** A ONE-AREA sweep splits by kind — one
+subagent per kind inside that area. A WHOLE-REPO sweep splits by kind across the tree; give each
+reader one kind and the whole tree for it, so the fourth kind gets the same attention as the first.
+Splitting a whole-repo sweep by directory is the shape that table warns against, and it is easy to
+drift into because directories are the obvious handles — count your readers against the breadth
+before you spawn.
+
+Each returns candidates with `file:line` and the searches it ran. You keep the reachability
+judgment: a subagent that has read one slice cannot know what the rest of the repo reaches into it,
+and that is exactly the mistake that deletes something live.
 
 **In the brief:** the four ways a caller hides from a text search, pasted in full, and the ask —
 candidates with the searches that were run, never a deletion list. A subagent given only "find dead
