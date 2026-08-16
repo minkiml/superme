@@ -9,6 +9,8 @@ provable answer, so this family is graded on proof.
 ## Contents
 
 - **The bar** — what counts as a finding here
+- **What stale actually looks like** — the recurring shapes
+- **What is worth reporting** — ranking them
 - **Pick your breadth**
 - **Start mechanical** — the inventory that produces your shortlist
 - **Prove or reject each candidate**
@@ -33,6 +35,57 @@ Four kinds to check in depth are in scope:
 
 **Stale is not the same as ugly.** Naming you dislike, a long function, an awkward abstraction — that
 is `refactoring`, a different family with a different bar. Say so and leave them.
+
+## What stale actually looks like
+
+The four kinds say what the bar is. These are the shapes that keep turning up inside them — the
+list to hold in your head while you sweep, so you recognise one rather than derive it. Each reads
+*what it is* → *what to do*. Not exhaustive, and a repo's own history will add to it.
+
+- **Retired subsystem** — a group of files that only reference each other, superseded by something
+  newer, often with a note somewhere already saying so. → propose as ONE removal, naming the
+  members the live system still imports.
+- **Superseded generation** — a second implementation of the same surface, left beside the one that
+  replaced it (an old page tier, a v1 client, a pre-migration module). → confirm which is wired,
+  remove the other whole.
+- **Compatibility shim** — a wrapper, alias or re-export kept "so old callers keep working", with no
+  old callers left. → remove it and the indirection it was hiding.
+- **Landed flag** — a feature flag, env switch or config branch whose other branch no longer exists,
+  or that every environment now sets the same way. → delete the branch and the flag together.
+- **Renamed-in-code-only** — a variable, key or path the code reads under a new name while the docs,
+  example files or deploy config still name the old one. → fix the document; the code is the truth.
+- **Vestigial parameter** — an argument, field or option every caller passes identically, or that
+  nothing downstream reads. → drop it from the signature and the call sites.
+- **Commented-out code** — a block preserved in comments "in case". → delete it; version control is
+  the case.
+- **Orphaned test material** — a fixture, mock, snapshot or test file for code that no longer
+  exists. → remove with whatever it tested.
+- **Unpulled dependency** — a package pinned in the manifest that nothing imports. → drop the pin,
+  after checking it is not a transitive or tooling-only requirement.
+- **Parked artefact** — files named as drafts or backups (`*.old`, `*.bak`, `_v2`, `_new`,
+  `copy of`) sitting in the source tree. → remove, or explain why one is load-bearing.
+- **Aspirational comment** — a docstring or note describing behaviour that was planned, narrowed, or
+  never built, including a TODO pointing at work that shipped or was abandoned. → rewrite it to what
+  the code does, or delete the note.
+- **Outgrown docstring** — accurate when written, now describing a fraction of what the thing does.
+  → the recurring one, and the easiest to read past: check the docstring against the whole surface,
+  not against the first method under it.
+
+## What is worth reporting
+
+A sweep that reports everything it proves has still not done the ranking a reader needs, and
+housekeeping findings differ enormously in worth. Rank by how much the finding costs the people
+working in this repo:
+
+| worth | what it looks like |
+|---|---|
+| **high** | a whole dead group; anything that misleads a reader into believing something untrue about live code — a comment, a doc, a flag |
+| **medium** | dead symbols with real weight behind them: a helper, a page, a route, a dependency |
+| **low** | single unused imports, dead loggers, one-line drift |
+
+Low-worth findings are still worth reporting — they are free to remove and they batch — but they go
+in one grouped item, never interleaved with the ones a person must think about. Twenty imports
+listed ahead of a retired subsystem buries the only finding that mattered.
 
 ## Pick your breadth
 
@@ -64,17 +117,12 @@ Count outside-the-file, never total. A total count sorts names into bands — on
 own docstring names it sits in the sample gap. The outside-file count has no middle: it is zero or
 it is not.
 
-**Bad and good examples**
-```example
-✗ per name: grep -rowE "\b<name>\b" . | wc -l    → keep the ones at 1
-  (a name mentioned by its own docstring counts 2 and is never looked at again)
+Do it in one pass over the tree, not one pass per name: collect every occurrence of every
+identifier once into `name → the files it appears in`, then a name is a candidate when that set
+holds only its own file, or nothing. Re-walking the tree per name gives the same answer and costs
+one walk per declaration.
 
-✓ grep -rnE "^(def|class) [A-Za-z_]+" --include="*.py" . | sed -E 's/(.*):[0-9]+:(def|class) ([A-Za-z_]+).*/\3 \1/' > syms
-  then, per `<name> <file>` pair: grep -rowE "\b<name>\b" . | grep -v "^<file>:" | wc -l
-```
-
-Use the equivalent for whatever the tree is written in — exported functions, classes, components,
-config keys.
+Use whatever the tree is written in — exported functions, classes, components, config keys.
 
 Then run the same pass over FILES, because the name pass cannot see a dead group:
 
