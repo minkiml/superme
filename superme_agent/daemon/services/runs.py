@@ -399,7 +399,11 @@ def _artifact_desc(tool_name: str, ti: dict) -> tuple[str, str, str]:
             return "tool", tool_name, f"{path} [whole]"
         return "tool", tool_name, path
     if tool_name == "Bash":
-        return "tool", "Bash", (ti.get("description") or str(ti.get("command", "")))[:60]
+        # 200, not 60: at 60 characters two shell commands that differ only in their path argument
+        # render identically, so the trail cannot answer "why was this one refused and that one
+        # allowed" — the question the tab exists for. Prefer the raw command over the model's own
+        # `description`, which is prose about the command rather than the command.
+        return "tool", "Bash", (str(ti.get("command") or "") or str(ti.get("description", "")))[:200]
     if tool_name in ("Grep", "Glob"):
         return "tool", tool_name, str(ti.get("pattern", ""))
     if tool_name in ("WebFetch", "WebSearch"):

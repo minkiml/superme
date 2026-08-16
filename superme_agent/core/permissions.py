@@ -66,6 +66,20 @@ NO_HUMAN_TO_ASK = (
     "and don't route around it: do what you can with the tools you have, and record what you "
     "couldn't do in your report."
 )
+# A shell command that is neither provably read-only nor scoped into this run's write boundary.
+# It is a real refusal about THIS command — and, unlike most refusals, it has a fix the agent can
+# apply itself. Measured 2026-08-16: an investigation wrote helper scripts into its item folder and
+# then invoked them from its scratch-worktree cwd, so every call missed the boundary and came back
+# with the generic headless refusal ("don't route around it"). It obeyed, dropped the scripted half
+# of its sweep, and reported the coverage gap. Naming the remedy is what turns that into one retry.
+_BASH_OUTSIDE_BOUNDARY = (
+    "That command runs outside this run's write boundary, which is {roots}. This shell did not "
+    "start there, and the command does not name it — so nothing about the call says it stays "
+    "inside. Scope it in and it runs with no approval at all: `cd {first} && <your command>`, or "
+    "pass the directory explicitly (`git -C {first} …`). Keep every path it names inside that "
+    "directory. If the work genuinely belongs outside it, that is a wall — say so in your record "
+    "rather than looking for another way through."
+)
 _LEARNING_SCOPE_DENIED = (
     "This run may only use Bash and write inside its own scratch workspace. That target is outside "
     "it, so the call is out of the run's scope rather than refused by anyone — draft into the "
@@ -658,6 +672,9 @@ def build_can_use_tool(approve: ApproveFn, *, blocked_skills: dict[str, str] | N
         tool_name: str, input_data: dict, context: ToolPermissionContext
     ) -> PermissionResultAllow | PermissionResultDeny:
         nonlocal spawned
+        # Set only by the Bash branch, and only when a command missed the write boundary. Bound
+        # here so every path below can read it without caring whether that branch ran.
+        bash_boundary_miss: str | None = None
         if subagent_cap is not None and tool_name in SUBAGENT_TOOLS:
             if spawned >= subagent_cap:
                 log.warning("subagent cap reached (%d) — refused a further %s spawn",
@@ -750,6 +767,17 @@ def build_can_use_tool(approve: ApproveFn, *, blocked_skills: dict[str, str] | N
                     and ((cwd is not None and _in_any(cwd, write_boundary))
                          or _bash_scoped_into_boundary(command, write_boundary))):
                 return PermissionResultAllow()
+            # Not read-only, and not scoped into the boundary. It still goes to `approve` — an owner
+            # at the keyboard may well want to allow it — but the REFUSAL now carries the remedy
+            # instead of the generic "a background run cannot ask anyone" sentence, which is true
+            # and useless here: the command was refusable on its own terms and fixable in one edit.
+            # Only when scoping it in WOULD work — the command names no path outside the boundary,
+            # it simply isn't anchored inside one. A command that does reach outside gets the plain
+            # refusal: telling it to `cd` in would be advice that cannot be followed, and for a
+            # destructive one it would be advice worth not giving.
+            if write_boundary and not _bash_escapes_boundary(command, write_boundary):
+                bash_boundary_miss = _BASH_OUTSIDE_BOUNDARY.format(
+                    roots=", ".join(f"`{r}`" for r in write_boundary), first=write_boundary[0])
         # L2 read-guard: keep reads inside the host's scope (before the safe-tool auto-allow).
         if read_roots and cwd is not None and tool_name in _READ_TOOLS:
             target = _read_target(input_data)
@@ -764,6 +792,10 @@ def build_can_use_tool(approve: ApproveFn, *, blocked_skills: dict[str, str] | N
         log.info("approval: %s -> %s", tool_name, "ALLOW" if verdict is True else "DENY")
         if verdict is True:
             return PermissionResultAllow()
+        # A shell command that missed its own write boundary is refused ABOUT ITSELF, and the agent
+        # can fix it — so that sentence wins over whatever generic wording the approver returned.
+        if bash_boundary_miss:
+            return PermissionResultDeny(message=bash_boundary_miss)
         # A surface that KNOWS why hands back the sentence; one that only knows "no" gets the
         # owner-refusal wording, which is what a plain False has always meant at this seam.
         return PermissionResultDeny(
