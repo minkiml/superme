@@ -49,7 +49,7 @@ list to hold in your head while you sweep, so you recognise one rather than deri
   exists. → remove with whatever it tested.
 - **Unpulled dependency** — a package pinned in the manifest that nothing imports. → drop the pin,
   after checking it is not a transitive or tooling-only requirement.
-- **Parked artefact** — files named as drafts or backups (`*.old`, `*.bak`, `_v2`, `_new`,
+- **Parked artefact** — files named as drafts or backups (e.g., `*.old`, `*.bak`, `_v2`, `_new`,
   `copy of`) sitting in the source tree. → remove, or explain why one is load-bearing.
 - **Aspirational comment** — a docstring or note describing behaviour that was planned, narrowed, or
   never built, including a TODO pointing at work that shipped or was abandoned. → rewrite it to what
@@ -60,7 +60,7 @@ list to hold in your head while you sweep, so you recognise one rather than deri
 - **Log in a comment** — a comment carrying history: what changed, when, who asked, which incident.
   → version control holds that. Delete the narration; keep only the rule it happened to state, in
   the present tense.
-- **Restating comment** — prose saying in words what the line beneath it says in code. → delete it.
+- **Restating & Obvious comment** — prose saying in words what the line beneath it says in code. → delete it.
   If the WHY is missing, that is what should be there instead.
 - **Excusing comment** — a paragraph explaining why the code below is confusing, instead of the code
   being less confusing. → the comment is evidence, not the finding: name the code as a refactoring
@@ -110,6 +110,10 @@ Neither is a superset of the other.
 
 **Names**
 
+0. **Exclude what nobody hand-wrote** before you count anything — generated clients and schema
+   types, vendored dependencies, build output, lockfiles. A dead export in a generated file is not
+   a finding; it is regenerated next build. State the exclusion and its size, so the inventory's
+   denominator is the code somebody actually maintains.
 1. List every declaration, each paired with the file it was declared in.
 2. Count each name's mentions **outside its own file** — across code, config, docs, templates and
    scripts, where a string-reached caller hides.

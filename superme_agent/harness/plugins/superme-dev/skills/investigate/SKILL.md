@@ -30,7 +30,7 @@ Investigation progress:
 ## 1 · Read your family's guide
 
 Open `references/<family>.md` for the family named in your Current focus block — before the brief,
-before any code. It gives you the bar: what counts as a finding here, and what counts as proof.
+before any code. It gives you the **bar & absolute guidance** to follow: what counts as a finding here, and what counts as proof.
 
 | family | guide |
 |---|---|
@@ -121,6 +121,11 @@ it, the brief was wrong: say so in `investigation.md` and spend what is left on 
 
 ## 5 · Fill the record
 
+- **Read only what could change an answer.** Your subject is the tree the item points at. Generated
+  code, vendored dependencies, lockfiles, build output, caches and session logs cost the same per
+  token as source and produce no finding — count them from a listing, never read them. Nor does a
+  sweep need to understand the system to answer its questions: a PRD, an architecture doc or a
+  README tour is evidence only when a question is about what the document CLAIMS.
 - **A listing you produced once is a file, not a command to re-run.** Write an inventory, a
   candidate shortlist or a file census into the item folder the first time you build it, then read
   it back. Re-deriving it costs the same as building it and tells you nothing new.

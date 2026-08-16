@@ -612,6 +612,28 @@ def kills_the_host(command: str) -> bool:
     return False
 
 
+_PUBLISH_NUDGE = (
+    "Publishing to a remote is not available to any session here. Every boundary this run has is "
+    "about the local disk, and a push leaves it — the owner's gate is the merge, and nothing "
+    "reaches a remote without passing it. If your work genuinely needs to be somewhere else, say "
+    "so in your record and let the owner move it."
+)
+
+
+def publishes_outward(command: str) -> bool:
+    """True if this shell command would send local work to a remote. The write boundary and the OS
+    sandbox both reason about the local filesystem, so a push is the one mutation that escapes
+    every wall by not touching disk at all — and a research run, which is read-only on code by
+    construction, holds a full checkout it could publish. `git stash push` is a local operation and
+    is not this."""
+    toks = [t.strip("'\"") for t in shlex_split_safe(command)]
+    for i, tok in enumerate(toks[:-1]):
+        if Path(tok).name in ("git", "gh") and "push" in toks[i + 1:]:
+            # `git stash push` / `git stash push -u` — a local stash, not a remote.
+            return "stash" not in toks[i + 1: toks.index("push", i + 1)]
+    return False
+
+
 def bypasses_commit_hooks(command: str) -> bool:
     """True if this shell command runs a hook-firing git subcommand with hooks turned off."""
     toks = [t.strip("'\"") for t in shlex_split_safe(command)]
@@ -827,6 +849,10 @@ def build_can_use_tool(approve: ApproveFn, *, blocked_skills: dict[str, str] | N
             if kills_the_host(command):
                 log.warning("host-kill denied: %s", command)
                 return PermissionResultDeny(message=_KILL_HOST_NUDGE)
+            # …or send local work to a remote. Nothing in SuperMe pushes and no skill asks for it.
+            if publishes_outward(command):
+                log.warning("outward publish denied: %s", command)
+                return PermissionResultDeny(message=_PUBLISH_NUDGE)
             if is_read_only_bash(command):
                 return PermissionResultAllow()
             # A general session's shell ASKS rather than refuses. The classifier proves read-only or
