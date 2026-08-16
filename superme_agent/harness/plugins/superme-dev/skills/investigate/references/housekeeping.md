@@ -22,11 +22,11 @@ provable answer, so this family is graded on proof.
 A finding is a thing that is stale **plus the proof nothing reaches it**. `grep` returning nothing
 is where this work starts, not where it ends.
 
-Four kinds are in scope:
+Four kinds to check in depth are in scope:
 
 | kind | what makes it stale | the recurring miss |
 |---|---|---|
-| comments and docstrings | it describes behaviour the code no longer has | deleting a comment that is merely terse; wrong is the bar, not brief |
+| comments and docstrings | it describes behaviour the code no longer has, heavy and overstated comments --- e.g., logs must be be in comments | deleting a comment that is merely terse; wrong is the bar, not brief |
 | dead code | nothing reaches it | a symbol reached only in an error path nobody hits — it is reachable |
 | unused declarations | imported, assigned or declared and never read | a side-effecting import: removing it changes behaviour, and the file rarely says so |
 | abandoned config and flags | the branch it selects no longer exists, or has one live value | a flag some environment sets that this repo never mentions |
@@ -92,6 +92,12 @@ can return twenty dead symbols and miss the retired subsystem sitting around the
 Where there is no single root to walk from, the pass is the same run backwards: for each file, ask
 what imports it, then what imports THAT, until you either reach something the system starts or run
 out of files — the second answer is a dead island.
+
+**Both shortlists reach the record — the file pass is step 4, not a replacement for 1–3.** They
+find different things and neither is a superset: the name pass finds a dead symbol sitting in a live
+file, the file pass finds a live-looking symbol sitting in a dead file. A sweep that walks the graph
+and stops has traded every unused assignment, every stale docstring and every orphan helper for one
+group. Carry both lists to the end and report from both.
 
 **Write the inventory and the counts into your item folder as you build them**, and read them back
 from there afterwards. This pass is the most expensive command in the sweep and its answer does not
