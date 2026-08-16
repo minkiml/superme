@@ -67,7 +67,10 @@ A thread leading outside the walls becomes an open thread, not a detour.
 
 ## 3 · Split the surface and spawn readers
 
-First confirm the subject is there — the path resolves, the repo is present, the URL answers.
+First confirm the subject is there — the path resolves, the repo is present, the URL answers. In the
+same breath, settle what tools you have: one command that reports which interpreters and linters
+exist and whether your item folder is writable. Record the answer and treat it as settled — a
+missing tool is a line in your record, not something to rediscover later.
 
 Then split it, and spawn one `subagent_type: superme-dev:investigator` per slice. Use that exact
 string: a partial identifier resolves to a generic reader instead of erroring.
@@ -106,8 +109,21 @@ report.
 
 Anything you could not verify goes to `## Open threads` marked unverified, or goes.
 
+**Once readers are out, you stop searching.** From the first spawn onward your only searches are:
+
+1. verifying one receipt at the line you were handed,
+2. resolving a contradiction between two readers,
+3. finishing a hiding-mechanism check a reader flagged and could not complete.
+
+Enumerating the surface again, or searching for the kind of thing a reader was sent to find, is the
+sweep run twice — you pay for both and learn nothing the second time. If you catch yourself doing
+it, the brief was wrong: say so in `investigation.md` and spend what is left on the gap it names.
+
 ## 5 · Fill the record
 
+- **A listing you produced once is a file, not a command to re-run.** Write an inventory, a
+  candidate shortlist or a file census into the item folder the first time you build it, then read
+  it back. Re-deriving it costs the same as building it and tells you nothing new.
 - **A reader's clean area that arrives without numbers is UNSWEPT.** It belongs in `## Open
   threads`, never in the record as clean.
 - **When a question asks how something behaves or how much it costs, measure it.** Write a throwaway

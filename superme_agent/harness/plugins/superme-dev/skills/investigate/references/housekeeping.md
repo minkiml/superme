@@ -67,6 +67,10 @@ you happened to look at.
 Use the equivalent for whatever the tree is written in — exported functions, classes, components,
 config keys.
 
+**Write the inventory and the counts into your item folder as you build them**, and read them back
+from there afterwards. This pass is the most expensive command in the sweep and its answer does not
+change during the run.
+
 **The shortlist is your unit of accounting.** Report how many declarations you inventoried and how
 many survived to it, and make sure every survivor appears somewhere in the record: proposed in
 `## What can go`, rejected in `## What must stay`, or unresolved in `## Open threads`. A candidate
