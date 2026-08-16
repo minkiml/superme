@@ -1461,6 +1461,42 @@ def _file_plan_report(*, store, context_id, dev_root=None, bound_item_id=None, *
     return file_plan_report
 
 
+class FileInvestigateReportArgs(TypedDict, total=False):
+    item_id: Required[Annotated[str, "the work-item id"]]
+    body: Required[Annotated[str, ("the whole report, filled from "
+                                   "`templates/report-investigate-template.md` — every section, "
+                                   "every `<fill:…>` slot replaced. Passed verbatim; nothing is "
+                                   "derived and nothing is appended")]]
+
+
+def _file_investigate_report(*, store, context_id, dev_root=None, bound_item_id=None, **_):
+    async def file_investigate_report(args: dict) -> dict:
+        """The investigation's user report. Every other phase's report path is built in code; this
+        one was named in prose, and an agent working inside `artifacts/` resolved the relative
+        `reports/` against it and filed the report where nothing reads. The path is code's now, and
+        an unfilled slot is refused rather than shipped."""
+        from ...core import artifacts as _arts
+        item_id = _s(args, "item_id")
+        if (msg := _bound_err(item_id, bound_item_id)):
+            return _err(msg)
+        d = _item_dir(dev_root, item_id)
+        if d is None:
+            return _err(f"No work-item {item_id!r} here.")
+        body = _s(args, "body") or ""
+        if not body.strip():
+            return _err("body is empty — the report is the deliverable, not a formality.")
+        path = d / "reports" / "report-investigate.md"
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(body if body.endswith("\n") else body + "\n")
+        except OSError as e:
+            return _err(str(e))
+        if issues := _arts.report_issues(d, "report-investigate"):
+            return _err(f"{path} written, but it is not finished: {'; '.join(issues)}")
+        return _ok(f"{path} written.")
+    return file_investigate_report
+
+
 class FileVetReportArgs(TypedDict, total=False):
     item_id: Required[Annotated[str, "the work-item id"]]
     summary: Required[Annotated[str, ("one line — what this pass establishes, in the owner's "
@@ -1879,6 +1915,13 @@ _ITEM_DEV_TOOLS: list[ToolSpec] = [
         FilePlanReportArgs, _file_plan_report,
     ),
     ToolSpec(
+        "file_investigate_report",
+        "File the investigation's user report (investigate phase, once the record is complete). "
+        "You supply the whole body, filled from its template; the tool owns the path and refuses "
+        "a report with an unfilled slot left in it.",
+        FileInvestigateReportArgs, _file_investigate_report,
+    ),
+    ToolSpec(
         "file_vet_report",
         "File the verification report (vet phase, after every check is recorded): the verdict "
         "and check table are derived from the recorded entries; you supply only the "
@@ -2054,7 +2097,7 @@ TOOL_SCOPES: dict[str, tuple[str, ...]] = {
             "read_verification_library", "file_vet_report"),
     "review": ("scaffold_artifact", "request_authorization"),
     "close": ("apply_knowledge_delta", "read_verification_library", "create_inbox_item"),
-    "investigate": ("scaffold_artifact", "write_checkpoint"),
+    "investigate": ("scaffold_artifact", "write_checkpoint", "file_investigate_report"),
     "itemize": ("itemize_and_launch", "read_inbox", "read_dev_log", "create_inbox_item"),
     # --- kernel-fired turns that are not a phase ---
     "deputy": ("read_dev_log", "read_run"),             # it judges a report; it writes a verdict

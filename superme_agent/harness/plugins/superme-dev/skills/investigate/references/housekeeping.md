@@ -73,6 +73,7 @@ list to hold in your head while you sweep, so you recognise one rather than deri
 - true today, or gone; an outdated comment is worse than none
 - no history — what changed, when, and who asked lives in version control
 - no excuses — if code needs a paragraph to be understandable, the finding is the code
+- no overstatement - never comment for ovbious and clear things.
 
 ## What is worth reporting
 

@@ -153,8 +153,10 @@ Group findings that share one fix into one item.
 
 ## 7 · Write the report and bank a checkpoint
 
-Copy `templates/report-investigate-template.md` to `reports/report-investigate.md`, overwriting.
-Then bank a `write_checkpoint`: which questions are answered, which are open, where to pick up.
+Fill `templates/report-investigate-template.md` and hand the whole body to
+`file_investigate_report`. It owns the path and refuses a report with an unfilled slot left in it —
+never write the file yourself. Then bank a `write_checkpoint`: which questions are answered, which
+are open, where to pick up.
 
 Write it plainly, in fewer words than feel natural. Never restate the item's kind, deliverable or
 id. Omit a field rather than filling it with "none".
