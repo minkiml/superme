@@ -21,7 +21,7 @@ from pathlib import Path
 
 from fastapi import HTTPException
 
-from ...core import artifacts, git_layer, knowledge_delta
+from ...core import artifacts, git_layer, kind_profiles, knowledge_delta
 from ...core import autopilot as _autopilot
 from ...core.spine import REVIEW_MODE_DEFAULT
 
@@ -43,6 +43,43 @@ def repo_review_mode(ctx, spine) -> str:
     mode describes the repo's bar today, so flipping it applies to items already sitting at review."""
     rc = spine.repo(ctx.id)
     return rc.review_mode if rc else REVIEW_MODE_DEFAULT
+
+
+def ensure_scratch_worktree(ctx, context_id: str, item: dict, *, dev, dev_store, spine) -> Path:
+    """The isolated tree a READ-ONLY kind reads from — created on demand, returned as the cwd its
+    runs should use. Falls back to `ctx.cwd` (the live repo) for any kind that doesn't want one,
+    and for any failure: an investigation that cannot run is worse than one running where it
+    always ran, and the permission layer is still in front of it either way.
+
+    LAZY rather than gate-driven, because a sweep-launched research item is minted straight at
+    `investigate` (`create_work_item(phase="investigate")`) and never passes through `advance_item`
+    — a hook on the transition would have covered the ticket-born half only. Every run of every
+    phase comes through here instead, so the first one to arrive makes the tree and the rest reuse
+    it. Idempotent: a recorded tree that still exists is returned untouched; one whose dir has been
+    swept away is simply remade.
+    """
+    kind = str(item.get("kind") or "")
+    if not kind_profiles.get_profile(kind).scratch_worktree:
+        return ctx.cwd
+    item_id = str(item.get("id") or "")
+    recorded = str(item.get("git_worktree") or "")
+    if recorded and Path(recorded).is_dir():
+        return Path(recorded)
+    try:
+        rec = git_layer.create_scratch_worktree(ctx.cwd, ctx.id, item_id,
+                                                base=repo_anchor(ctx, spine))
+    except (git_layer.GitError, git_layer.GitBusy) as e:
+        # Never fatal. A repo that is not a git repository at all is the common case here (the
+        # playground was one for a while), and research reads fine without isolation.
+        log.warning("scratch worktree unavailable for %s — reading the live repo: %s", item_id, e)
+        return ctx.cwd
+    dev.set_work_item_git(ctx.internal_root / "dev", item_id,
+                          git_worktree=rec["worktree"], git_base=rec["base"])
+    if not rec.get("reused"):
+        dev_store.log_event(context_id, "git.worktree",
+                            f"Created a detached read-only checkout at {rec['base']}",
+                            item_id=item_id, actor="daemon", meta=rec)
+    return Path(rec["worktree"])
 
 
 def pr_open(item: dict) -> bool:

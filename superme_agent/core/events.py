@@ -62,14 +62,19 @@ class ToolResult:
 
 @dataclass
 class Usage:
-    """A live token snapshot for ONE assistant step. NOTE it is a CUMULATIVE-for-the-turn snapshot,
-    NOT a per-step delta: each successive step's SDK usage is the fullest single prompt so far
-    (history + all tool exchanges), so it grows over the turn. The run ledger accumulates these as a
-    rough LIVE estimate only (which over-counts — see spine.bump_run); the AUTHORITATIVE per-type
-    accounting is written once at finish from the whole-turn Result usage. `usage` is the raw SDK
-    usage dict for this step, carrying all four token types (input / cache_creation / cache_read /
-    output) so the ledger keeps them separate and never drops cache_read; `total_tokens` is the
-    legacy critical-sum (excludes cache_read)."""
+    """The usage of ONE API call, emitted per assistant step. Several steps of one call share a
+    `message_id` and repeat that call's usage, so a reader must DEDUPE by it — summing every step
+    over-counts. Deduped, summing across message_ids gives the turn's real spend, because that is
+    how the calls are billed, and it includes SUBAGENT calls: their messages arrive on this same
+    stream (tagged `parent_tool_use_id`) and are counted here.
+
+    That last point is why this — not `Result.usage` — is the run's total (measured 2026-08-14:
+    `Result.usage` is the parent conversation's own calls only, 8.3x smaller on a fully-delegated
+    turn). See `services/runs._LiveTokens`, which does the dedupe and the accumulation.
+
+    `usage` is the raw SDK usage dict for this call, carrying all four token types (input /
+    cache_creation / cache_read / output) so the ledger keeps them separate and never drops
+    cache_read; `total_tokens` is the legacy critical-sum (excludes cache_read)."""
     total_tokens: int = 0
     input_tokens: int = 0
     output_tokens: int = 0

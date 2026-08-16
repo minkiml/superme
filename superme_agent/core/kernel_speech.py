@@ -553,6 +553,27 @@ def work_item_preamble(item_id: str, item: dict, item_dir, *, interactive: bool 
             "writes are disabled by design. Record outcomes with `record_verification` and "
             "file the report with `file_vet_report`."
         )
+    elif wt and kind_profiles.get_profile(kind).scratch_worktree:
+        # A SCRATCH tree (kind_profiles: research). Same directory shape as a build worktree,
+        # opposite meaning — nothing here lands, so the sentence below must not borrow the build
+        # boundary's "your changes go here". Two things the agent cannot work out for itself and
+        # would otherwise get wrong in its report: this is a checkout of the ANCHOR (so
+        # uncommitted work in the owner's tree is not visible, and saying so is honest reporting,
+        # not a caveat), and the absolute paths it sees are this tree's, not the repository's.
+        base = item.get("git_base")
+        lines.append(
+            f"\n**Where you are reading:** `{wt}/` — a detached, throwaway checkout of "
+            f"`{base or 'the anchor'}` made for this item, NOT the working tree. It exists so a "
+            f"read-only investigation cannot touch real code, and it is deleted when the item "
+            f"closes. Writes belong in the item's own folder (artifacts, checkpoints); nothing "
+            f"here is committed and nothing merges.\n"
+            f"Two consequences for what you write: cite files **repo-relative** "
+            f"(`superme_agent/core/spine.py:412`), never with this directory's absolute path — a "
+            f"reader following an absolute path lands in a tree that will not exist. And what you "
+            f"are reading is the committed state of `{base or 'the anchor'}`: uncommitted work in "
+            f"the owner's own tree is not here, so if a finding depends on that, say which state "
+            f"you read."
+        )
     elif wt:
         # The branch BASE rides here too (renovation §2.2): review reports the diff shape from
         # `git diff --stat <base>...HEAD`, and nothing else in the session carries that commit —

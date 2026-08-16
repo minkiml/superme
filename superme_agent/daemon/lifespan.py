@@ -15,7 +15,7 @@ from fastapi import FastAPI
 from . import app_state
 from ..core import dev_store, git_layer
 from ..gateway import contexts
-from .services import dashboard_stream
+from .services import dashboard_stream, watchdog
 from .services.learning import _idle_sweep_loop, SWEEP_POLL_SECONDS, SWEEP_IDLE_SECONDS
 
 log = logging.getLogger("superme-agent")
@@ -357,7 +357,14 @@ async def lifespan(app: FastAPI):
     task = asyncio.create_task(_idle_sweep_loop())
     log.info("idle sweep loop started (every %ds, idle threshold %ds, auto-learning=%s)",
              SWEEP_POLL_SECONDS, SWEEP_IDLE_SECONDS, app_state.spine.get_learning_enabled())
+    # The stall watchdog: an item run that stops emitting for STALL_SECONDS is stopped, labelled
+    # `error` and handed back through Resume. The restart reconcilers above cover runs whose task
+    # died WITH the daemon; this one covers the run still nominally alive inside it.
+    stall_task = asyncio.create_task(watchdog.watch_loop())
+    log.info("stall watchdog started (every %ds, stall threshold %ds)",
+             watchdog.POLL_SECONDS, watchdog.STALL_SECONDS)
     try:
         yield
     finally:
         task.cancel()
+        stall_task.cancel()

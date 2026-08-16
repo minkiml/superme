@@ -21,6 +21,7 @@ import logging
 from fastapi import HTTPException
 
 from ...core import artifacts, kind_profiles, git_layer, autopilot as autopilot_core
+from . import run_tasks
 
 log = logging.getLogger("superme-agent")
 
@@ -456,7 +457,7 @@ def advance_item(ctx, context_id: str, item_id: str, *, dev, dev_store, spine,
                         if auto_skill == "plan" else
                         _run_background_item_skill(ctx, context_id, item_id, phase_dir, auto_skill,
                                                    p_model, p_effort))
-                asyncio.create_task(coro)
+                run_tasks.track(asyncio.create_task(coro))
                 auto_started = True
         except Exception:
             log.exception("auto-%s on approve failed to start for %s", auto_skill, item_id)

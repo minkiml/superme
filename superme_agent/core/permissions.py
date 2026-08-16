@@ -28,7 +28,7 @@ from claude_agent_sdk import (
     ToolPermissionContext,
 )
 
-from ..harness.policy import is_safe
+from ..harness.policy import MAX_SUBAGENTS, SUBAGENT_TOOLS, is_safe
 
 log = logging.getLogger("superme-agent")
 
@@ -494,6 +494,19 @@ _KILL_HOST_NUDGE = (
 )
 
 
+# The fan-out backstop's deny message (harness.policy.MAX_SUBAGENTS). It has to do two jobs: stop
+# the spawn, and make sure the CAP — not a quietly narrowed surface — is what the gate reads. An
+# agent told only "denied" carries on and reports as though it covered everything.
+_SUBAGENT_CAP_NUDGE = (
+    "Subagent limit reached — this run has already spawned {cap} of them, which is the ceiling for "
+    "ONE run. Nothing is wrong with the brief; there are simply no more readers to hand it to.\n\n"
+    "Read the remaining surface yourself, and SAY SO in your report: name what you were about to "
+    "delegate and that the limit is why you read it directly. A reader that was cut off and did not "
+    "say so is indistinguishable from one that found nothing — and the gate can only judge the "
+    "difference if you write it down."
+)
+
+
 def kills_the_host(command: str) -> bool:
     """True if this shell command would stop the daemon (or BFF) serving the dashboard.
 
@@ -579,7 +592,8 @@ def build_can_use_tool(approve: ApproveFn, *, blocked_skills: dict[str, str] | N
                        write_boundary: list[Path] | None = None,
                        deny_write_tools: str | None = None,
                        protected_paths: list[Path] | None = None,
-                       protected_nudge: str | None = None):
+                       protected_nudge: str | None = None,
+                       subagent_cap: int | None = MAX_SUBAGENTS):
     """Wrap a surface's ApproveFn into the SDK `can_use_tool` callback.
 
     Safe (read-only) tools auto-allow; everything else defers to `approve`. `blocked_skills` maps a
@@ -631,11 +645,28 @@ def build_can_use_tool(approve: ApproveFn, *, blocked_skills: dict[str, str] | N
     grant one either. `Bash` is deliberately NOT covered — vet must RUN checks (tests, env), and
     the freeze-boundary shell rule still applies; the guarantee is "no write capability via file
     tools", the same honest limit as the boundary itself.
+
+    `subagent_cap` bounds how many subagents ONE turn may spawn (harness.policy.MAX_SUBAGENTS by
+    default; `None` disables). The count lives in this closure, and a closure is built per turn, so
+    "per turn" is what it means — and it counts NESTED spawns too, because a subagent's tool calls
+    come back through this same callback. Checked before the safe-tool auto-allow, since `Agent` is
+    a safe tool and would otherwise never reach a rule.
     """
+    spawned = 0   # this turn's subagent tally — see `subagent_cap` above
 
     async def can_use_tool(
         tool_name: str, input_data: dict, context: ToolPermissionContext
     ) -> PermissionResultAllow | PermissionResultDeny:
+        nonlocal spawned
+        if subagent_cap is not None and tool_name in SUBAGENT_TOOLS:
+            if spawned >= subagent_cap:
+                log.warning("subagent cap reached (%d) — refused a further %s spawn",
+                            subagent_cap, tool_name)
+                return PermissionResultDeny(
+                    message=_SUBAGENT_CAP_NUDGE.format(cap=subagent_cap))
+            # Counted on the ALLOW, not on the attempt: a spawn the SDK never runs must not spend
+            # a slot, and a refused one is already reported by its deny message.
+            spawned += 1
         if blocked_skills and tool_name in _SKILL_TOOLS:
             for n in _invoked_skill_names(tool_name, input_data):
                 if n in blocked_skills:

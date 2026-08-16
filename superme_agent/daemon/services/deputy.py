@@ -257,7 +257,11 @@ async def _judge(ctx, context_id: str, item_id: str, item: dict, gate: str, dev_
             live.bump(context_id, item_id, ev)
         elif isinstance(ev, Result):
             final_tokens = ev.tokens
-            final_usage = ev.usage
+            # The turn total is the accumulated per-message usage (parent + subagents), NOT
+            # `Result.usage`, which covers the parent conversation only — measured 3-8x smaller
+            # on fan-out runs (see _LiveTokens). Falls back to the Result when no Usage step ever
+            # arrived, which is the only case where it is the fuller of the two.
+            final_usage = live.usage(ev.usage) or ev.usage
         if isinstance(ev, (Status, TextDelta, ToolResult)):
             capture_event(context_id, ev, item_id=item_id)
     # A judge that never ran returns no verdict — which the caller already treats as "no judgment",

@@ -28,6 +28,7 @@ import logging
 
 from ..app_state import dev as _dev, dev_store as _dev_store, spine as _spine
 from ...gateway import contexts
+from . import run_tasks
 
 log = logging.getLogger("superme-agent")
 
@@ -159,5 +160,5 @@ def _fire(ctx, context_id: str, item_id: str, phase: str) -> tuple[bool, str]:
     coro = (_run_background_plan(ctx, context_id, item_id, item_dir, model, effort)
             if phase == "plan" else
             _run_background_item_skill(ctx, context_id, item_id, item_dir, phase, model, effort))
-    asyncio.create_task(coro)
+    run_tasks.track(asyncio.create_task(coro))
     return True, f"re-fired the {phase} run"

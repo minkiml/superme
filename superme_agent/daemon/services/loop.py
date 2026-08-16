@@ -57,7 +57,7 @@ from ...core import artifacts as _arts
 from ...core import autopilot as _autopilot
 from ...core import kernel_speech
 from ...core import plan_revision as _plan_revision
-from . import checks as _checks
+from . import checks as _checks, run_tasks
 from .turns import ResilientTurn
 from ...harness.tools.run_tools import make_run_report_server
 from ...core.permissions import VET_READONLY_NUDGE
@@ -394,7 +394,7 @@ def start_vet_run(ctx, context_id: str, item_id: str) -> tuple[bool, str]:
         return False, "a run is already in progress for this item"
     # A paged item the owner just re-launched is active again (the launch IS the answer);
     # _begin_run rested it already.
-    asyncio.create_task(_run_background_vet(ctx, context_id, item_id, model, effort))
+    run_tasks.track(asyncio.create_task(_run_background_vet(ctx, context_id, item_id, model, effort)))
     return True, "vet"
 
 
@@ -485,7 +485,11 @@ async def _run_background_vet(ctx, context_id: str, item_id: str,
             live.bump(context_id, item_id, ev)
         elif isinstance(ev, Result):
             final_tokens = ev.tokens
-            final_usage = ev.usage
+            # The turn total is the accumulated per-message usage (parent + subagents), NOT
+            # `Result.usage`, which covers the parent conversation only — measured 3-8x smaller
+            # on fan-out runs (see _LiveTokens). Falls back to the Result when no Usage step ever
+            # arrived, which is the only case where it is the fuller of the two.
+            final_usage = live.usage(ev.usage) or ev.usage
             final_session = ev.session_id
             _sessions.record(wt_ctx, ev.session_id)
             if ev.session_id:
@@ -638,8 +642,8 @@ def start_first_build(ctx, context_id: str, item_id: str) -> tuple[bool, str]:
     model, effort = _resolve_run_params(context_id, item)
     if not _begin_run(ctx, context_id, item_id, "build", model, phase="build"):
         return False, "a run is already in progress for this item"
-    asyncio.create_task(_run_background_build(ctx, context_id, item_id, model, effort,
-                                              trigger=trigger))
+    run_tasks.track(asyncio.create_task(
+        _run_background_build(ctx, context_id, item_id, model, effort, trigger=trigger)))
     return True, "build"
 
 
@@ -663,7 +667,7 @@ def start_build_cycle(ctx, context_id: str, item_id: str) -> tuple[bool, str]:
     model, effort = _resolve_run_params(context_id, item)
     if not _begin_run(ctx, context_id, item_id, "build", model, phase="build"):
         return False, "a run is already in progress for this item"
-    asyncio.create_task(_run_background_build(ctx, context_id, item_id, model, effort))
+    run_tasks.track(asyncio.create_task(_run_background_build(ctx, context_id, item_id, model, effort)))
     return True, "build"
 
 
@@ -758,7 +762,11 @@ async def _run_background_build(ctx, context_id: str, item_id: str,
             live.bump(context_id, item_id, ev)
         elif isinstance(ev, Result):
             final_tokens = ev.tokens
-            final_usage = ev.usage
+            # The turn total is the accumulated per-message usage (parent + subagents), NOT
+            # `Result.usage`, which covers the parent conversation only — measured 3-8x smaller
+            # on fan-out runs (see _LiveTokens). Falls back to the Result when no Usage step ever
+            # arrived, which is the only case where it is the fuller of the two.
+            final_usage = live.usage(ev.usage) or ev.usage
             final_session = ev.session_id
             _sessions.record(wt_ctx, ev.session_id)
             if ev.session_id:
@@ -902,4 +910,3 @@ def deny_authorization(ctx, context_id: str, item_id: str, auth_id: str, *,
                          meta={"auth_id": auth_id, "scope": auth.get("scope"), "by": by,
                                "check": auth.get("check")})
     return True, "denied"
-

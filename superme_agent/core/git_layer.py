@@ -442,6 +442,45 @@ def create_worktree(repo_dir: Path, repo_id: str, item_id: str, title: str = "",
                 "commit_hook": hook}
 
 
+def create_scratch_worktree(repo_dir: Path, repo_id: str, item_id: str, *,
+                            base: str | None = None) -> dict:
+    """A DETACHED throwaway checkout for a read-only phase — no branch, nothing to merge.
+
+    Why it exists (2026-08-14 security review): a research run reads real code, so its cwd was the
+    real repository — and the OS sandbox makes a run's own cwd writable by design (`core.sandbox`:
+    "a shell write inside the run's cwd succeeds"). The permission layer was therefore the ONLY
+    thing between an investigation and the working tree, where a build phase has two walls: the
+    same classifier PLUS a worktree nobody merges. This gives the read-only phases the second wall.
+
+    Detached on purpose. A branch is the durable half of an implementation worktree — the thing a
+    merge lands and a reconcile rebuilds from — and research merges nothing, so a branch here would
+    be a promise of a landing that never comes (and would show up in `list_branches` as one). The
+    record carries `branch: None`, which is how every downstream reader tells the two apart.
+
+    Cheap to lose: if the dir is gone, the next run makes another. Existing dir → returned as is,
+    so a re-entered phase keeps whatever the last one left in it."""
+    repo_dir = Path(repo_dir)
+    if not is_git_repo(repo_dir):
+        raise GitError(f"not a git repository: {repo_dir}")
+    wt = worktree_dir(repo_id, item_id)
+    with repo_lock(repo_dir):
+        _git(repo_dir, "worktree", "prune", check=False)
+        base = resolve_anchor(repo_dir, base)
+        base_sha = _out(repo_dir, "rev-parse", base)
+        if wt.is_dir():
+            return {"branch": None, "worktree": str(wt), "base": base, "base_sha": base_sha,
+                    "created_at": datetime.now().isoformat(timespec="seconds"), "reused": True}
+        wt.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            _git(repo_dir, "worktree", "add", "--detach", str(wt), base)
+        except GitError:
+            _git(repo_dir, "worktree", "remove", "--force", str(wt), check=False)
+            _git(repo_dir, "worktree", "prune", check=False)
+            raise
+        return {"branch": None, "worktree": str(wt), "base": base, "base_sha": base_sha,
+                "created_at": datetime.now().isoformat(timespec="seconds"), "reused": False}
+
+
 def servers_in(wt: Path) -> list[int]:
     """Every LISTENING process whose working directory is `wt` — the vet-env servers this worktree
     owns, identified by the one fact that survives everything else.
@@ -635,8 +674,17 @@ def reconcile(repo_dir: Path, repo_id: str, records: dict[str, dict]) -> list[di
         _git(repo_dir, "worktree", "prune", check=False)
         registered = [e["path"] for e in list_worktrees(repo_dir)]
         for item_id, rec in records.items():
-            branch = rec.get("branch") or branch_name(item_id)
             wt = Path(rec.get("worktree") or worktree_dir(repo_id, item_id))
+            # A branchless record is a SCRATCH tree (`create_scratch_worktree`): detached, nothing
+            # to rebuild from and nothing that needs rebuilding — its next run makes another. Only
+            # the registration is worth checking; the branch tests below would call every one of
+            # them broken, on a repo where they are all perfectly healthy.
+            if not rec.get("branch"):
+                if wt.is_dir() and not any(_same_path(r, wt) for r in registered):
+                    actions.append({"item_id": item_id, "action": "orphan-dir",
+                                    "detail": f"{wt} exists but git does not register it"})
+                continue
+            branch = rec["branch"]
             b = branch_exists(repo_dir, branch)
             if b and not wt.is_dir():
                 try:

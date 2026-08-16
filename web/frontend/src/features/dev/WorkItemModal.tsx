@@ -1755,6 +1755,18 @@ function GitPane({ it, contextId, actions, busy, onAct, onChanged }: {
   if (!it.git_branch && !it.git_worktree) {
     return <Empty>No git record yet — the branch + worktree are created when build starts.</Empty>
   }
+  // A worktree with NO branch is a scratch checkout (a research item's detached read-only tree).
+  // Every row below is about a branch and a landing, and this one has neither — rendering them
+  // would answer "merged? not yet" about an item that will never merge.
+  if (!it.git_branch) {
+    return (
+      <Empty>
+        A detached read-only checkout — this item reads code, it doesn&apos;t change any. There is no
+        branch and nothing to land; the tree is removed when the item closes.
+        <div className="mt-2 font-mono text-[11px] text-faint">{it.git_worktree}</div>
+      </Empty>
+    )
+  }
   if (!health) return <Loading />
   const gitActions = actions.filter((a) => a.home === 'git')
   const pr = gitActions.find((a) => a.id === 'pr')

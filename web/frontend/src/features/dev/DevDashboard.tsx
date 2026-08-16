@@ -326,7 +326,7 @@ function EnvMap({ data, selected, onSelect }: { data: DevData; selected: Zoom; o
         className="flex-1" icon={Bot} label="Workspace" subtitle="the living plan · worktree"
         selected={selected === 'workspace'} onClick={() => onSelect('workspace')}
       >
-        <StatusDots item={g.by_status} total={activeCount} />
+        <StatusDots item={g.by_status} total={activeCount} done={g.shipped ?? 0} />
       </StoreCard>
     </div>
   )
@@ -406,7 +406,9 @@ function KindBreakdown({ entries }: { entries: InboxEntry[] }) {
 }
 
 // Compact live status breakdown for the Workspace node.
-function StatusDots({ item, total }: { item: Record<string, number>; total: number }) {
+function StatusDots({ item, total, done }: {
+  item: Record<string, number>; total: number; done: number
+}) {
   const dot = (Icon: typeof Circle, n: number, label: string, cls: string) => (
     <span className="inline-flex items-center gap-1" title={`${n} ${label}`}>
       <Icon size={11} className={cls} />
@@ -418,9 +420,12 @@ function StatusDots({ item, total }: { item: Record<string, number>; total: numb
       <div className="flex items-baseline gap-1.5">
         <span className="text-xl font-semibold tabular-nums text-fg">{total}</span>
         <span className="text-[11px] text-muted">work-items</span>
-        {/* Done = officially closed (approved through close) — kept beside the live count, off the
-            live-status dots below (a shipped item has left the board). */}
-        <span className="text-[11px] text-faint">· <span className="tabular-nums text-success">{item.done ?? 0}</span> done</span>
+        {/* DONE IS THE SAME NUMBER AS SHIPPED, deliberately (owner, 2026-08-14). It read
+            `by_status.done` — every item that ENDED, abandoned and superseded included — while the
+            Shipped tile counted only the ones that landed, so the header could say "1 done" above
+            "0 shipped" and both were right about different questions. Work that was dropped is
+            neither done nor completed; it just leaves the board. One question, one number. */}
+        <span className="text-[11px] text-faint">· <span className="tabular-nums text-success">{done}</span> done</span>
       </div>
       <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted">
         {dot(Circle, item.active ?? 0, STATUS_LABEL.active, 'fill-current text-accent-text')}
@@ -448,9 +453,13 @@ function WorkspaceStats({ items, buckets, shipped, onShowShipped }: {
   )
   return (
     <div className="mb-4 flex flex-wrap items-center gap-x-7 gap-y-3 rounded-xl bg-sunken px-4 py-3">
-      {/* Stopped work leads the row and appears ONLY when there is some (R2): a permanent "0
-          stopped" tile trains the eye to skip the one place it must not. */}
-      {n('error') > 0 && cell('stopped', n('error'), 'text-danger')}
+      {/* Stopped work leads the row and is ALWAYS rendered, greyed at zero (owner, 2026-08-14).
+          It used to appear only when non-zero, on the reasoning that a permanent "0 stopped" tile
+          trains the eye to skip it — but a row that changes width between visits is worse: every
+          other number shifts one label leftward, and the owner read "1 stopped, 4 needs you" off a
+          row that said exactly that, mapped onto the wrong tiles. A stat row's positions must be
+          fixed or its numbers cannot be trusted at a glance, which is the only way they are read. */}
+      {cell('stopped', n('error'), n('error') > 0 ? 'text-danger' : 'text-faint')}
       {cell(STATUS_LABEL.active, n('active'), 'text-accent-text')}
       {cell(STATUS_LABEL.awaiting_human, n('awaiting_human'), 'text-warn')}
       {cell(STATUS_LABEL.awaiting_child, n('awaiting_child'))}

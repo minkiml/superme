@@ -6,6 +6,31 @@ so it travels with the agent regardless of workspace. Future per-path / per-work
 write rules belong here too.
 """
 
+# The subagent spawn. `Agent` is the SDK's name for it; `Task` is the older one, and both are
+# accepted because a CLI upgrade must not silently uncap the fleet.
+SUBAGENT_TOOLS = {"Agent", "Task"}
+
+# How many subagents ONE turn may spawn, counting nested spawns (a subagent's own tool calls pass
+# through the same callback). NOT a concurrency limit — twelve at once and twelve in sequence spend
+# the same budget; nothing bounds how many run in parallel.
+#
+# 8, set by the owner 2026-08-14 (down from the 12 first proposed). Measured fan-out on a real
+# codebase is 5–8, so this sits ON the observed ceiling rather than above it: it will occasionally
+# refuse a legitimate thirteenth split, and that is the intent — a run wanting more than eight
+# readers is a run worth interrupting. The refusal is declared to the agent (below), so a sweep
+# capped here says so at the gate instead of reading as a complete one.
+#
+# Why a cap exists at all (2026-08-14): the `Agent` tool sits in SAFE_TOOLS below — auto-allowed,
+# unlimited, no timeout — and a run that spawned five Explore subagents over the SuperMe hub went
+# silent for 24 minutes and burned 452k tokens with nothing to show. The stall itself is the
+# watchdog's problem (daemon/services/watchdog.py); this is the other half — the number of agents
+# a single turn can put in flight, which nothing bounded before.
+#
+# The cap is DECLARED to the agent when it bites (see permissions.build_can_use_tool), never
+# silent: a reader that was cut off must be able to say so in its report, or the gate reads a
+# narrowed surface as a complete one.
+MAX_SUBAGENTS = 8
+
 # Tools with no side effects on the machine or the outside world: auto-allow.
 # Everything else (Write, Edit, Bash, …) is gated behind a human in Slack.
 SAFE_TOOLS = {

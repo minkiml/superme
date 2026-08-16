@@ -12,13 +12,14 @@ import asyncio
 import json as _json
 import logging
 import time
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 
 from ..app_state import agent as _agent, dev as _dev, dev_store as _dev_store, \
     spine as _spine, sessions as _sessions
 from ..deps import cache_slash as _cache_slash
-from . import item_stream
+from . import item_stream, run_tasks
 from ...core import Init, Usage, Result, Status, TextDelta, ToolResult, scoped_writes_approve, deny_all
 from ...core import artifacts as _arts
 from ...core import autopilot as _autopilot
@@ -126,27 +127,99 @@ def _begin_run(ctx, context_id: str, item_id: str, kind: str = "plan",
 
 
 class _LiveTokens:
-    """Per-run live token tally for an item's in-flight estimate, DEDUPED by message_id. The SDK
-    emits several Usage steps per API call sharing one message_id (one per content block), so
-    summing every step over-counts ~2-5x. Keep the latest 3-type value per message (usage can grow
-    within a message) and write their SUM absolutely to the running row — each call counted once, so
-    the card footer tracks accurately and lands on the authoritative finish figure. Older SDK builds
-    with no message_id fall back to summing (`_legacy`)."""
+    """Per-run token tally, DEDUPED by message_id — and, since 2026-08-14, the run's AUTHORITATIVE
+    total rather than a live estimate of one.
+
+    The SDK emits several Usage steps per API call sharing one message_id (one per content block),
+    so summing every STEP over-counts. Keeping the latest per message_id fixes that, and what
+    remains is one entry per API call — which summed IS the turn's real spend, because that is how
+    the calls are billed.
+
+    **Why this is now the authority.** `Result.usage` covers the PARENT conversation's calls only.
+    Measured on the hub (2026-08-14): a turn whose subagent did all the work reported 75,857 here
+    against 9,150 there — 8.3x — and `Result.usage.output_tokens` was 219, the parent's two-line
+    reply. Two fresh research sweeps reproduced it at 3.0x and 3.3x. Subagent messages arrive on
+    the same stream (tagged `parent_tool_use_id`) and are counted here; they are absent there. So
+    the figure that was being called authoritative was the smaller, partial one, and every fan-out
+    run — the most expensive thing SuperMe does — was under-reported in exactly proportion to how
+    much it delegated.
+
+    `usage()` returns the summed 4-type dict for `finish_item_run`, which writes the typed columns
+    from it. The shape matches a raw SDK usage dict so every existing reader is unchanged."""
+
+    _KEYS = ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens",
+             "output_tokens")
 
     def __init__(self) -> None:
-        self._by_msg: dict[str, int] = {}
-        self._legacy = 0
+        self._by_msg: dict[str, dict] = {}
+        self._legacy: list[dict] = []      # steps from an SDK build with no message_id
 
     def bump(self, context_id: str, item_id: str, ev) -> None:
-        mid = getattr(ev, "message_id", None)
-        if mid:
-            self._by_msg[mid] = ev.total_tokens   # latest wins
-        else:
-            self._legacy += ev.total_tokens
-        _spine.set_item_run_tokens(
-            context_id, item_id,
-            tokens=sum(self._by_msg.values()) + self._legacy, ctx_pct=ev.ctx_pct,
-        )
+        """Record one step. NEVER raises — this is telemetry, and it runs inside the run's own task,
+        so anything that escapes here kills the WORK. That is not hypothetical: on 2026-08-14 an
+        unexpected usage value raised out of this method, the task died mid-investigation, and the
+        run row stayed `running` until the watchdog stopped it 20 minutes later. A counter that can
+        stop a run is worse than no counter."""
+        try:
+            mid = getattr(ev, "message_id", None)
+            step = dict(getattr(ev, "usage", None) or {})
+            if mid:
+                self._by_msg[mid] = step   # latest wins — usage can grow within one message
+            else:
+                self._legacy.append(step)
+            _spine.set_item_run_tokens(
+                context_id, item_id, tokens=self.tokens(), ctx_pct=ev.ctx_pct,
+            )
+        except Exception:
+            log.exception("live token bump failed for %s — the run continues, uncounted", item_id)
+
+    @staticmethod
+    def _num(value) -> int:
+        """A usage field as an int, or 0 for anything that isn't one.
+
+        A usage dict is EXTERNAL DATA from the SDK, and this accumulator runs on every step of every
+        run — so an unexpected value must never be able to stop the work. It could, until
+        2026-08-14: a step arrived with a LIST where an int was expected, `int()` raised inside
+        `bump`, the whole run task died mid-flight, and the row sat `running` until the stall
+        watchdog closed it 20 minutes later. 486k tokens of real investigation, lost to a token
+        COUNTER. The shape is logged once so the surprise is still learnable."""
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            if value not in (None, ""):
+                log.warning("unusable token value in SDK usage (%r) — counted as 0", value)
+            return 0
+        return int(value)
+
+    def usage(self, final: dict | None = None) -> dict | None:
+        """The whole turn's usage — parent AND subagents — as a raw-shaped dict, or None if no
+        Usage step ever arrived (then the caller keeps `Result.usage` as the only thing it has).
+
+        `final` is `Result.usage`, and it is read for ONE field: **output_tokens**. A per-message
+        usage dict carries the API's `message_start` numbers, where the input and cache figures are
+        final but the output count is a PLACEHOLDER — measured 2026-08-15 on a 3-tool-call probe:
+        every message reported 1–2 output tokens while the Result reported 188. Summed over a
+        700-call sweep that placeholder produced 1,805 output tokens for run 1402, which is off by
+        roughly two orders of magnitude. The input and cache sides are unaffected (the probe's
+        per-message cache_creation summed to exactly the Result's), so only this one field is
+        taken from the smaller-but-real aggregate.
+
+        The residual, deliberately left: `Result.usage` is parent-only, so **subagent output is
+        still uncounted**. It is the cheapest slice of a fan-out by volume and there is no other
+        signal for it on the stream — a known undercount of one field beats an invented one. Total
+        spend is dominated by cache_creation and cache_read, both of which DO include subagents."""
+        steps = list(self._by_msg.values()) + self._legacy
+        if not steps:
+            return None
+        summed = {k: sum(self._num(s.get(k)) for s in steps) for k in self._KEYS}
+        summed["output_tokens"] = max(summed["output_tokens"],
+                                      self._num((final or {}).get("output_tokens")))
+        return summed
+
+    def tokens(self) -> int:
+        """The 3-type scalar (input + cache_creation + output; cache_read excluded, as everywhere
+        else) — what the running row shows and what the card footer counts up."""
+        u = self.usage() or {}
+        return (self._num(u.get("input_tokens")) + self._num(u.get("cache_creation_input_tokens"))
+                + self._num(u.get("output_tokens")))
 
 
 def _end_run(ctx, context_id: str, item_id: str, tokens: int | None,
@@ -254,6 +327,18 @@ def _short_path(p, keep: int = 4) -> str:
     return "/".join(parts) if len(parts) <= keep else "…/" + "/".join(parts[-keep:])
 
 
+def _int_or_none(value) -> int | None:
+    """An int, or None for anything a tool's arguments might hold instead. Tool input is written by
+    an AGENT, so every field in it is untrusted shape — and the trail formatter below is not a
+    place that may raise (see the Read span)."""
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _artifact_desc(tool_name: str, ti: dict) -> tuple[str, str, str]:
     """Map a tool-use to (kind, head, detail). kind ∈ tool|subagent|skill|mcp."""
     ti = ti or {}
@@ -300,10 +385,16 @@ def _artifact_desc(tool_name: str, ti: dict) -> tuple[str, str, str]:
         # early is re-sent on every later step. The run-protocol rule that asks for spans was
         # therefore unobservable by the very trace meant to check it (2026-08-10).
         if tool_name == "Read":
-            off, lim = ti.get("offset"), ti.get("limit")
+            # `offset`/`limit` are whatever the AGENT typed, not a validated shape. A list here
+            # raised TypeError out of this formatter, out of `capture_event`, and out of the run's
+            # own task — killing a live investigation and leaving its row `running` until the stall
+            # watchdog closed it 20 minutes later. Seen three times on 2026-08-14 (runs 1399-1401,
+            # ~1.4M tokens) and almost certainly the original 24-minute incident too. A LABEL for a
+            # trace row must never be able to stop the work it is describing.
+            off, lim = _int_or_none(ti.get("offset")), _int_or_none(ti.get("limit"))
             if off is not None or lim is not None:
-                start = int(off or 0)
-                span = f"{start}-{start + int(lim)}" if lim is not None else f"{start}+"
+                start = off or 0
+                span = f"{start}-{start + lim}" if lim is not None else f"{start}+"
                 return "tool", tool_name, f"{path} [{span}]"
             return "tool", tool_name, f"{path} [whole]"
         return "tool", tool_name, path
@@ -486,7 +577,23 @@ def capture_event(repo_id: str, ev, *, run_id: int | None = None, item_id: str |
     watching this item (`item_stream.publish`), so build/vet/intake turns stream live. Run-lock means
     one live run per item, so the FE attributes each live frame to the item's CURRENT phase lane.
     `publish_live=False` for the INTERACTIVE ws turn — it already streams itself directly to the panel
-    that fired it, so broadcasting would double it there (run-lock means no other panel needs the echo)."""
+    that fired it, so broadcasting would double it there (run-lock means no other panel needs the echo).
+
+    **NEVER RAISES.** This is called from inside the run's own task for every event, so anything that
+    escapes here does not lose a trail row — it kills the WORK. That is not theoretical: a `Read`
+    whose `limit` arrived as a list raised out of `_artifact_desc` and took three hub investigations
+    with it on 2026-08-14 (~1.4M tokens), each leaving its row `running` until the watchdog closed
+    it. The specific shape is fixed at the source; this is the wall that makes the class of bug
+    survivable, because the trail is a description of the work and must never outrank it."""
+    try:
+        _capture_event(repo_id, ev, run_id=run_id, item_id=item_id, publish_live=publish_live)
+    except Exception:
+        log.exception("trail capture failed for %s — the run continues, this event unrecorded",
+                      item_id or repo_id)
+
+
+def _capture_event(repo_id: str, ev, *, run_id: int | None = None, item_id: str | None = None,
+                   publish_live: bool = True) -> None:
     # Resolve the run ONCE, here. Every background phase caller passes only `item_id` and lets
     # `log_run_event` resolve the run for the DB row — but the live frame was being published with
     # the caller's `run_id`, i.e. None, so the browser could not match it to the history it already
@@ -767,9 +874,9 @@ def fire_review_entry(context_id: str, item_id: str, spine) -> bool:
         if _begin_run(ctx, context_id, item_id, "review", model, phase="review") is None:
             return False   # a run is already in flight — don't double-fire
         _dev.set_work_item_status(dev_root, item_id, "active")
-        asyncio.create_task(
+        run_tasks.track(asyncio.create_task(
             _run_background_item_skill(ctx, context_id, item_id,
-                                       dev_root / "work-items" / item_id, "review", model, effort))
+                                       dev_root / "work-items" / item_id, "review", model, effort)))
         return True
     except Exception:
         log.exception("review-entry run failed to start for %s", item_id)
@@ -804,10 +911,10 @@ def fire_first_investigate(context_id: str, item_id: str, spine) -> bool:
         effort = spine.effective_effort(context_id, item_effort=item.get("effort"))
         if _begin_run(ctx, context_id, item_id, "investigate", model, phase="investigate") is None:
             return False   # a run is already in flight — don't double-fire
-        asyncio.create_task(
+        run_tasks.track(asyncio.create_task(
             _run_background_item_skill(ctx, context_id, item_id,
                                        dev_root / "work-items" / item_id,
-                                       "investigate", model, effort))
+                                       "investigate", model, effort)))
         return True
     except Exception:
         log.exception("first investigate run failed to start for %s", item_id)
@@ -838,9 +945,9 @@ def fire_auto_triage(context_id: str, item_id: str, spine) -> bool:
         effort = spine.effective_effort(context_id, item_effort=item.get("effort"))
         if _begin_run(ctx, context_id, item_id, "triage", model, phase="triage") is None:
             return False   # a run is already in flight — don't double-fire
-        asyncio.create_task(
+        run_tasks.track(asyncio.create_task(
             _run_background_triage(ctx, context_id, item_id, dev_root / "work-items" / item_id,
-                                   model, effort))
+                                   model, effort)))
         return True
     except Exception:
         log.exception("auto-triage failed to start for %s", item_id)
@@ -959,10 +1066,10 @@ def fire_phase_feedback(context_id: str, item_id: str, *, phase: str, feedback: 
                              item_id=item_id, actor=by,
                              meta={"phase": run_phase, "origin_gate": phase, "speech": feedback,
                                    "text": prompt, "by": by})
-        asyncio.create_task(
+        run_tasks.track(asyncio.create_task(
             _run_deputy_feedback_turn(ctx, context_id, item_id, dev_root / "work-items" / item_id,
                                       session_id=session_id, phase=run_phase, prompt=prompt,
-                                      model=model, effort=effort))
+                                      model=model, effort=effort)))
         return True
     except Exception:
         log.exception("%s feedback re-run failed to start for %s", by, item_id)
@@ -1074,9 +1181,9 @@ def fire_close_run(context_id: str, item_id: str, spine) -> bool:
         effort = spine.effective_effort(context_id, item_effort=item.get("effort"))
         if _begin_run(ctx, context_id, item_id, "close", model, phase="close") is None:
             return False   # a run is already in flight — don't double-fire (it owns the status)
-        asyncio.create_task(
+        run_tasks.track(asyncio.create_task(
             _run_background_close(ctx, context_id, item_id, dev_root / "work-items" / item_id,
-                                  model, effort))
+                                  model, effort)))
         return True
     except Exception:
         log.exception("auto-close failed to start for %s", item_id)
@@ -1240,6 +1347,16 @@ async def _background_intake_run(ctx, context_id: str, item_id: str, item_dir: P
     owner's gate) on finish."""
     dev_root = ctx.internal_root / "dev"
     item = _dev.read_work_item(dev_root, item_id) or {}
+    # A READ-ONLY kind reads from its own detached checkout, not the working tree (kind_profiles:
+    # `scratch_worktree`). The swap is here, at the one door every intake phase comes through, so
+    # all of an item's phases share one cwd — a thread that read the repo at triage and the tree at
+    # investigate would be one agent watching its own paths move. No-op for every other kind.
+    from .git_ops import ensure_scratch_worktree
+    repo_dir = ensure_scratch_worktree(ctx, context_id, item,
+                                       dev=_dev, dev_store=_dev_store, spine=_spine)
+    if repo_dir != ctx.cwd:
+        ctx = replace(ctx, cwd=repo_dir)
+        item = _dev.read_work_item(dev_root, item_id) or item   # re-read: the git record moved
     # The phase this run IS — read off the item, which `gates.autopilot_advance` already flipped.
     # NOT `skill`: they coincide for triage/plan/investigate/review/close but not for `itemize`,
     # which is a research item's closing run and belongs in the `close` slot.
@@ -1327,7 +1444,11 @@ async def _background_intake_run(ctx, context_id: str, item_id: str, item_dir: P
             live.bump(context_id, item_id, ev)
         elif isinstance(ev, Result):
             final_tokens = ev.tokens
-            final_usage = ev.usage
+            # The turn total is the accumulated per-message usage (parent + subagents), NOT
+            # `Result.usage`, which covers the parent conversation only — measured 3-8x smaller
+            # on fan-out runs (see _LiveTokens). Falls back to the Result when no Usage step ever
+            # arrived, which is the only case where it is the fuller of the two.
+            final_usage = live.usage(ev.usage) or ev.usage
             final_session = ev.session_id
             _sessions.record(ctx, ev.session_id)
             if ev.session_id:
@@ -1425,7 +1546,11 @@ async def _run_background_resolve(ctx, context_id: str, item_id: str, worktree: 
             live.bump(context_id, item_id, ev)
         elif isinstance(ev, Result):
             final_tokens = ev.tokens
-            final_usage = ev.usage
+            # The turn total is the accumulated per-message usage (parent + subagents), NOT
+            # `Result.usage`, which covers the parent conversation only — measured 3-8x smaller
+            # on fan-out runs (see _LiveTokens). Falls back to the Result when no Usage step ever
+            # arrived, which is the only case where it is the fuller of the two.
+            final_usage = live.usage(ev.usage) or ev.usage
             final_session = ev.session_id
             _sessions.record(ctx, ev.session_id)
         if isinstance(ev, (Status, TextDelta, ToolResult)):

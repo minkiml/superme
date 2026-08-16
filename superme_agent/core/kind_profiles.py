@@ -16,10 +16,20 @@ class KindProfile:
     kind: str
     # Ordered phase pipeline. The FIRST phase is the intake (triage); the LAST is `close`.
     phases: tuple[str, ...]
-    # Does this kind get git isolation (branch + worktree, S4)? Research reads main, changes nothing.
+    # Does this kind PRODUCE CODE — branch + worktree at build entry, merge at review exit (S4)?
+    # Read as "this kind lands something", not merely "it gets a directory": `review_merge` and the
+    # PR machinery key off it (gates.py), which is why research says False.
     worktree: bool
     # May this kind write general dev-knowledge (anchor docs) at merge (D7)? Research: never.
     knowledge_writes: bool
+    # Does this kind read the repo from a DETACHED throwaway checkout instead of the working tree?
+    # Orthogonal to `worktree` above, and deliberately a second field rather than a third state of
+    # the first: this one buys isolation, that one buys a landing. A read-only kind wants isolation
+    # WITHOUT a landing — the OS sandbox leaves a run's own cwd writable (core/sandbox.py), so a
+    # research run pointed at the real repo had the permission layer as its only wall. Created
+    # lazily by the runner (services/git_ops.ensure_scratch_worktree), removed by clearance like
+    # any other, and carried on the item as `git_worktree` with `git_branch` left None.
+    scratch_worktree: bool = False
     # phase → artifact kinds that phase EMITS (D6; consumed by the next gate). Scaffolding lands S2.
     emits: dict[str, tuple[str, ...]] = field(default_factory=dict)
     # Artifact kinds the close gate mechanically REQUIRES to exist (D6 §8; enforced S6).
@@ -85,6 +95,11 @@ KIND_PROFILES: dict[str, KindProfile] = {
         phases=("triage", "investigate", "review", "close"),
         worktree=False,
         knowledge_writes=False,
+        # …but it DOES get an isolated tree to read from (2026-08-14). Research is the read-only
+        # kind, and "read-only" was enforced by the permission classifier alone while the run's cwd
+        # was the live repository — the one wall Bash is least path-checkable against. Detached, so
+        # nothing about "research merges nothing" changes.
+        scratch_worktree=True,
         emits={
             "triage": ("brief",),
             "investigate": ("investigation",),
@@ -364,12 +379,19 @@ def session_role(phase: str | None) -> str:
     return _ROLE_FOR_PHASE[p]
 
 
-def role_uses_worktree(role: str) -> bool:
+def role_uses_worktree(role: str, kind: str | None = None) -> bool:
     """Whether turns run at the item's WORKTREE cwd (build/vet) vs the repo (every intake phase).
     Accepts either a role or a slot — `build`/`vet` name the same thing in both vocabularies, and
     every other slot is an intake phase, which stays repo-level even while a worktree exists: close
     merges into main, and the CLI's per-cwd transcript storage means an intake thread must never
-    change cwd mid-life."""
+    change cwd mid-life.
+
+    `kind` flips that for a SCRATCH-worktree kind: research has no build/vet role at all, so its
+    every phase is an intake one, and leaving them repo-level would defeat the isolation entirely.
+    The mid-life rule is still honoured, in the other direction — ALL of a research item's phases
+    run at the scratch tree, so the one thread it has never sees its cwd move."""
+    if kind and get_profile(kind).scratch_worktree:
+        return True
     return role in ("build", "vet")
 
 

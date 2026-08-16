@@ -441,7 +441,7 @@ async def ws_agent(ws: WebSocket) -> None:
                 # rubber-stamp per command, while writes to main stay denied.
                 if item_worktree:
                     write_boundary = [item_worktree, item_dir]
-                    if kind_profiles.role_uses_worktree(session_role):
+                    if kind_profiles.role_uses_worktree(session_role, item.get("kind")):
                         ctx = replace(ctx, cwd=item_worktree)
                 # Vet is READ-ONLY on files (build-vet-loop §4 anti-self-report): file-write tools
                 # are denied outright — evidence + report go through the MCP tools; the shell stays

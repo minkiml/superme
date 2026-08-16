@@ -1089,12 +1089,16 @@ class SystemSpine:
             self._finish_usage_apply(c, run_id, usage)
 
     def _finish_usage_apply(self, c: sqlite3.Connection, run_id: int, usage: dict | None) -> None:
-        """Write the AUTHORITATIVE per-type accounting at finish (see finish_run docstring).
+        """Write the per-type accounting at finish. Set the four typed columns absolutely from
+        `usage`, store the raw blob, and reconcile the legacy `tokens` scalar to match. No-op when
+        no usage arrived (e.g. an errored turn) — whatever the row accumulated is kept.
 
-        One run == one turn, so `usage` (the whole-turn Result usage, aggregated across iterations by
-        the SDK) IS the run's total. Set the four typed columns absolutely from it, store the full raw
-        blob, and reconcile the legacy `tokens` scalar to match (overriding the in-flight estimate).
-        No-op when no final usage arrived (e.g. an errored turn) — the live estimate is kept."""
+        **`usage` MUST be the whole turn's — parent AND subagents.** Callers pass the accumulated
+        per-message total (`services/runs._LiveTokens.usage`), NOT `Result.usage`. That was the bug
+        here until 2026-08-14: `Result.usage` covers the parent conversation's calls only, so
+        overwriting with it silently REPLACED a full count with a partial one — measured 8.3x
+        smaller on a fully-delegated turn and ~3x on two real research sweeps. The word
+        "authoritative" was doing the damage: it made the smaller number look like the truth."""
         if not usage:
             return
         i, cc, cr, o = self._usage_parts(usage)
@@ -1129,6 +1133,29 @@ class SystemSpine:
                 args,
             ).fetchall()
             return [self._run_dict(r) for r in rows]
+
+    def live_item_runs_quiet_since(self) -> list[dict]:
+        """Every in-flight WORK-ITEM run with the timestamp of its most recent sign of life —
+        `{run, quiet_since}`, where `quiet_since` is the last `run_event` for that run, or the run's
+        own `started_at` when it has emitted nothing at all.
+
+        The substrate of the stall watchdog (daemon/services/watchdog.py). ONE query rather than an
+        events-per-run walk, because this is polled: `events_for_run` returns a run's whole trail,
+        and a 300-event investigation would be re-read every tick to learn one timestamp.
+
+        Item runs only. A chat turn is watched by the person who started it; an item run is the
+        unattended kind, and the one that went silent for 24 minutes on 2026-08-14 with nobody the
+        wiser. Timestamps are the ISO strings both tables already store — comparable as text
+        because `_now()` writes one format, which is also why this returns them raw and leaves the
+        threshold to the caller (the RULE is the watchdog's; the READ is the spine's)."""
+        with self._conn() as c:
+            rows = c.execute(
+                "SELECT r.*, COALESCE(MAX(e.created_at), r.started_at) AS quiet_since"
+                "  FROM run r LEFT JOIN run_event e ON e.run_id = r.id"
+                " WHERE r.status='running' AND r.item_id IS NOT NULL"
+                " GROUP BY r.id ORDER BY datetime(r.started_at) ASC"
+            ).fetchall()
+            return [{**self._run_dict(r), "quiet_since": r["quiet_since"]} for r in rows]
 
     def runs_for_item(self, repo_id: str, item_id: str) -> list[dict]:
         """Every run this work-item has had, OLDEST-first — the spine of the F2 unified timeline

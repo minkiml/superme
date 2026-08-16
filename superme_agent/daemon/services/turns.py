@@ -37,6 +37,7 @@ from collections.abc import AsyncIterator, Callable
 
 from ...core import Status, TextDelta
 from ...core.faults import RETRY_LADDER, Fault, NO_FAULT, classify
+from . import run_tasks
 
 log = logging.getLogger("superme-agent")
 
@@ -60,7 +61,21 @@ class ResilientTurn:
     async def stream(self, agent, ctx, prompt: str, **kw) -> AsyncIterator:
         """Yield the turn's events, re-attempting on the ladder when an attempt fails without
         having done anything. Leaves `self.fault` set to the final verdict: NO_FAULT if some
-        attempt got through, otherwise the failure the caller must act on."""
+        attempt got through, otherwise the failure the caller must act on.
+
+        Registers this task against the item for the whole turn (`run_tasks`), so the stall
+        watchdog has something to cancel when the stream goes quiet. Here rather than in each
+        runner because this is the one place every item run passes through — and a runner that
+        forgot to register would be exactly the run nobody could stop."""
+        watch = run_tasks.register(getattr(ctx, "id", ""), self.item_id)
+        try:
+            async for ev in self._attempts(agent, ctx, prompt, **kw):
+                yield ev
+        finally:
+            run_tasks.release(watch)
+
+    async def _attempts(self, agent, ctx, prompt: str, **kw) -> AsyncIterator:
+        """The ladder itself — `stream` wraps this with the task registration."""
         attempt = 0
         while True:
             saw_call = False
