@@ -81,17 +81,19 @@ def sandbox_options(writes: list[Path] | None) -> dict:
 # shapes, was refused each time, and dropped the scripted half of its sweep.
 #
 # So each item folder carries its own. It is INSIDE the write boundary, so it needs no new
-# permission and no new sandbox root — the boundary the run already has covers it. Its contents are
-# never read back as a result and never survive the item: this is working space, not a record. The
-# self-ignoring `.gitignore` keeps every byte of it out of the knowledge repo without a rule
-# anywhere else having to know the directory exists.
+# permission and no new sandbox root — the boundary the run already has covers it.
+#
+# Working space, not a record: nothing downstream reads it, and it is TRANSIENT by construction —
+# made when a run is told about it, dropped again the moment that run ends without having used it,
+# and removed outright when the item goes terminal. An item folder a person opens therefore shows
+# a scratch dir only while one is genuinely in use. Keeping it out of the knowledge history is the
+# job of one ignore rule at the knowledge root (see dev_knowledge), never a marker file per item.
 SCRATCH_DIRNAME = "scratch"
-_SCRATCH_GITIGNORE = "*\n"
 
 
 def ensure_scratch(item_dir: Path) -> Path:
-    """Create (idempotently) and return `<item_dir>/scratch/`. Safe to call on every run: it is a
-    `mkdir -p` plus one small file, and it repairs items minted before the directory existed.
+    """Create (idempotently) and return `<item_dir>/scratch/`. Called where the directory is NAMED
+    to an agent, so an item never carries one before a run could use it.
 
     Returns the path even when it could not be created. The caller is naming the directory to an
     agent, and a failed mkdir must not cost it the whole preamble — nor is the loss silent in
@@ -100,12 +102,34 @@ def ensure_scratch(item_dir: Path) -> Path:
     scratch = Path(item_dir) / SCRATCH_DIRNAME
     try:
         scratch.mkdir(parents=True, exist_ok=True)
-        marker = scratch / ".gitignore"
-        if not marker.exists():
-            marker.write_text(_SCRATCH_GITIGNORE)
     except OSError as exc:
         log.warning("could not create scratch dir %s: %s", scratch, exc)
     return scratch
+
+
+def prune_scratch(item_dir: Path, *, only_if_empty: bool = True) -> bool:
+    """Remove `<item_dir>/scratch/`, and report whether it went.
+
+    `only_if_empty` is the per-run sweep: every run is offered the directory, most never write in
+    it, and an empty one left behind is clutter in a folder the owner reads. A run that DID leave
+    files keeps them — a phase can be resumed or re-entered, and re-deriving an inventory costs
+    exactly what building it cost.
+
+    `only_if_empty=False` is the terminal sweep, which is what makes the preamble's promise
+    ("nothing here is kept after this item closes") true in code rather than only in prose.
+
+    Never raises: this is housekeeping, and an item that cannot be tidied must still close."""
+    scratch = Path(item_dir) / SCRATCH_DIRNAME
+    try:
+        if not scratch.is_dir():
+            return False
+        if only_if_empty and any(scratch.iterdir()):
+            return False
+        shutil.rmtree(scratch)
+        return True
+    except OSError as exc:
+        log.warning("could not remove scratch dir %s: %s", scratch, exc)
+        return False
 
 
 def _roots(paths: list[Path]) -> list[str]:

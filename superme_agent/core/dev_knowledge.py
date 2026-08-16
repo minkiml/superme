@@ -27,6 +27,31 @@ from . import sandbox
 from .titles import check_title, normalize_title
 
 
+_KNOWLEDGE_IGNORE = """\
+# A work-item's `scratch/` is a run's working space — inventories, sorted lists, a helper script.
+# Nothing downstream reads it and nothing keeps it past the item, so none of it belongs in the
+# knowledge history. One rule, at the root, covers every repo's sub-home.
+*/dev/work-items/*/scratch/
+"""
+
+
+def _ensure_knowledge_ignore(dev_root: Path) -> None:
+    """Write the knowledge home's `.gitignore` if it has none. `dev_root` is
+    `<knowledge-root>/<repo-id>-knowledge/dev`, so the root is two levels up.
+
+    At the ROOT rather than per item: a knowledge home may be given its own remote, and the rule
+    belongs once where that remote would read it — not as a marker file in every item folder,
+    which is a file the owner has to look at for every item that will never use the directory.
+    Never raises; an ignore rule is not worth failing a mint over, and the next mint retries."""
+    try:
+        root = Path(dev_root).parent.parent
+        marker = root / ".gitignore"
+        if root.is_dir() and not marker.exists():
+            marker.write_text(_KNOWLEDGE_IGNORE)
+    except OSError:
+        pass
+
+
 def _iso_epoch(iso: str | None) -> float | None:
     """Spine ISO start stamp → epoch seconds, for the card's live elapsed-time timer."""
     if not iso:
@@ -508,11 +533,14 @@ class DevKnowledgeService:
         # report — which made triage reach for `mkdir -p`, a mutation the boundary check does not
         # auto-allow (it keys on the session's cwd, and triage sits at the repo), so the phase was
         # denied a directory inside its own item and had to work around it (live, 2026-08-07).
-        # An item's own folders are the kernel's to make, not an agent's — including `scratch/`,
-        # the one place a phase's shell may put intermediate output (see core/sandbox).
+        # An item's own folders are the kernel's to make, not an agent's.
+        #
+        # `scratch/` is deliberately NOT among them: it is a run's working space, so it is made
+        # when a run is told about it and swept when unused (see core/sandbox). Minting it here
+        # gave every item an empty directory the owner had to scroll past.
         for sub in ("artifacts", "reports"):
             (folder / sub).mkdir(parents=True, exist_ok=True)
-        sandbox.ensure_scratch(folder)
+        _ensure_knowledge_ignore(dev_root)
 
         today = date.today().isoformat()
         # Optional provenance lines — written only when set (absent = null on read; no dead fields).
@@ -948,6 +976,11 @@ class DevKnowledgeService:
             fm = _upsert("superseded_by", superseded_by, fm)
         fm = re.sub(r"(?m)^updated_at:.*$", f"updated_at: {today}", fm)
         item.write_text(f"---\n{fm}\n---\n{body}")
+        # Terminal is where working space stops being anyone's. Every phase is told "nothing in
+        # scratch is kept after this item closes"; this is the line that makes that true, and the
+        # only one — nothing else on the close path removes it. Deliberately AFTER the stamp, and
+        # idempotent above it: a failed tidy must not cost the item its terminal state.
+        sandbox.prune_scratch(item.parent, only_if_empty=False)
         return True
 
     def write_artifact(self, dev_root: Path, item_id: str, name: str, text: str) -> bool:
@@ -1645,8 +1678,9 @@ class DevKnowledgeService:
             if sub.is_dir():
                 shutil.rmtree(sub)
                 removed.append(name + "/")
-        (folder / "artifacts").mkdir(parents=True, exist_ok=True)   # as `create_work_item` leaves it
-        sandbox.ensure_scratch(folder)
+        for name in ("artifacts", "reports"):    # exactly as `create_work_item` leaves it —
+            (folder / name).mkdir(parents=True, exist_ok=True)   # `scratch/` waits for a run
+
         log_file = folder / "deputy-log.jsonl"
         if log_file.exists():
             log_file.unlink()

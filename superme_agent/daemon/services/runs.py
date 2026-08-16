@@ -25,6 +25,7 @@ from ...core import artifacts as _arts
 from ...core import autopilot as _autopilot
 from ...core.autopilot import PROMPT_EXTRACTION_FEATURE
 from ...core import git_layer, kernel_speech, kind_profiles
+from ...core import sandbox as _sandbox
 from ...core.faults import RETRY_LADDER
 from ...core.models import MODEL_TIERS
 from ...harness.tools.dev_tools import make_dev_mcp_server
@@ -249,6 +250,16 @@ def _end_run(ctx, context_id: str, item_id: str, tokens: int | None,
     # the cumulative-for-the-turn Usage snapshots and so over-counts (that mismatch was the "62k vs 305k").
     total = _spine.run_tokens(rid) if rid else (tokens or 0)
     _set_status(ctx, item_id, status)
+    # Every run is OFFERED `scratch/` in its preamble and most never write in it, so without this
+    # the offer alone litters the item folder the owner reads. Empty-only: a run that did leave
+    # files keeps them, because a phase can be resumed or re-entered and rebuilding an inventory
+    # costs exactly what building it cost. The terminal sweep (dev_knowledge) takes the rest.
+    #
+    # Read defensively and skipped when there is no root: TIDYING MUST NEVER BE ON THE CRITICAL
+    # PATH of finishing a run. A run whose spine row never closes is a stranded item; a scratch dir
+    # that survives an hour longer is nothing.
+    if (root := getattr(ctx, "internal_root", None)) is not None:
+        _sandbox.prune_scratch(Path(root) / "dev" / "work-items" / item_id)
     # Run end — item-scoped, with the final token total. PRD §4.9.
     _dev_store.log_event(context_id, f"{kind}.end", f"Finished {kind} run · Σ {total} tok",
                          item_id=item_id, actor="daemon", meta={"tokens": total})
