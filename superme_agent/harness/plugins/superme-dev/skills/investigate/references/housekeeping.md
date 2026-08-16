@@ -100,86 +100,59 @@ State which you got in `## Surface & sample`, in its first line.
 
 ## Start mechanical
 
-**Dead code is found by counting, not by reading.** Produce the shortlist mechanically before any
-judgment: one pass over the tree, and the only way to cover every declaration rather than the ones
-you happened to look at.
+Build the shortlist by counting, before reading anything. Two passes, both required: the name pass
+finds a dead symbol in a live file, the file pass finds a live-looking symbol in a dead file.
+Neither is a superset of the other.
 
-1. **List the declarations** — one grep for definition lines across the tree, names only, each
-   paired with the file it was declared in.
-2. **Count each name's mentions OUTSIDE its own file** — repo-wide, across code AND config, docs,
-   templates and scripts, the places a string-reached caller hides.
-3. **Zero outside mentions makes it a candidate.** Nothing else does. A name used only within its
-   declaring file is as unreachable from outside as one used nowhere at all, so both land on the
-   shortlist by the same count and neither needs a judgment call to get there.
+**Names**
 
-Count outside-the-file, never total. A total count sorts names into bands — one mention, two, three
-— and the middle bands are too large to check by hand, so they get sampled, and a dead symbol whose
-own docstring names it sits in the sample gap. The outside-file count has no middle: it is zero or
-it is not.
+1. List every declaration, each paired with the file it was declared in.
+2. Count each name's mentions **outside its own file** — across code, config, docs, templates and
+   scripts, where a string-reached caller hides.
+3. Zero outside mentions makes it a candidate. Nothing else does.
 
-Do it in one pass over the tree, not one pass per name: collect every occurrence of every
-identifier once into `name → the files it appears in`, then a name is a candidate when that set
-holds only its own file, or nothing. Re-walking the tree per name gives the same answer and costs
-one walk per declaration.
+Never count total mentions: a total sorts names into bands, the middle bands are too big to check by
+hand and get sampled, and a dead symbol whose own docstring names it sits in the sample gap.
 
-Use whatever the tree is written in — exported functions, classes, components, config keys.
+One walk, not one per name — collect every identifier occurrence into `name → files`, then read the
+candidates off it.
 
-Then run the same pass over FILES, because the name pass cannot see a dead group:
+**Files**
 
-4. **Sweep files, not names.** Walk imports outward from what actually starts the system — the
-   entry points, the server's route registrations, the app's root component — and mark every file
-   you reach. Any file you never reach is a candidate, and it takes with it everything it imports
-   that nothing live imports too.
+4. Walk imports outward from what starts the system: entry points, route registrations, the root
+   component. Any file never reached is a candidate, and it takes with it whatever only it imports.
 
-**A file full of used symbols is dead if its only users are other dead files.** Every name inside a
-retired subsystem has callers — its siblings — so every one of them clears the name pass, and the
-whole group is invisible to it. This is the largest single deletion a sweep can find and the one it
-is most likely to walk past, which is why the file sweep is a step and not a judgment call: a sweep
-can return twenty dead symbols and miss the retired subsystem sitting around them.
+A file full of used symbols is dead when its only users are other dead files — every name in a
+retired subsystem has callers, its siblings, so the whole group clears the name pass invisibly.
+Where there is no single root, run the walk backwards: what imports this, then what imports that,
+until you reach something that starts or run out of files.
 
-Where there is no single root to walk from, the pass is the same run backwards: for each file, ask
-what imports it, then what imports THAT, until you either reach something the system starts or run
-out of files — the second answer is a dead island.
+Write both inventories into your item folder as you build them and read them back from there; this
+is the most expensive command in the sweep and its answer does not change during the run.
 
-**Both shortlists reach the record — the file pass is step 4, not a replacement for 1–3.** They
-find different things and neither is a superset: the name pass finds a dead symbol sitting in a live
-file, the file pass finds a live-looking symbol sitting in a dead file. A sweep that walks the graph
-and stops has traded every unused assignment, every stale docstring and every orphan helper for one
-group. Carry both lists to the end and report from both.
-
-**Write the inventory and the counts into your item folder as you build them**, and read them back
-from there afterwards. This pass is the most expensive command in the sweep and its answer does not
-change during the run.
-
-**The shortlist is your unit of accounting.** Report how many declarations you inventoried and how
-many survived to it, and make sure every survivor appears somewhere in the record: proposed in
-`## What can go`, rejected in `## What must stay`, or unresolved in `## Open threads`. A candidate
-that appears in none of them reads as one nobody checked.
-
-Judgment starts at the shortlist, not at the tree. Reading files to find candidates and then having
-no budget left to prove them is how this sweep goes expensive and incomplete at the same time.
+**Every name that reached a shortlist appears in the record** — proposed in `## What can go`,
+rejected in `## What must stay`, or unresolved in `## Open threads`. One that appears in none reads
+as one nobody checked.
 
 ## Prove or reject each candidate
 
-Before anything is called dead, rule out the four ways a caller hides from a text search:
+Rule out the four ways a caller hides from a text search, and say which you ruled out and how:
 
-- **Reached by string** — a name in config, a route table, a plugin registry, a task or agent name,
-  a template.
-- **Reached from outside this repo** — a public API, a CLI entry point, an import by a sibling
-  project, a script someone runs by hand.
-- **Reached by convention** — a hook, an override, a fixture the test runner collects by naming
-  rule, a subclass method the base class calls.
-- **Reached indirectly** — reflection, dynamic dispatch, a decorator that registers on import.
+- **By string** — config, a route table, a plugin registry, a task or agent name, a template.
+- **From outside this repo** — a public API, a CLI entry point, a sibling project, a script somebody
+  runs by hand.
+- **By convention** — a hook, an override, a fixture the runner collects by naming rule, a subclass
+  method the base class calls.
+- **Indirectly** — reflection, dynamic dispatch, a decorator that registers on import.
 
-Say which you ruled out and how. Anything you cannot prove either way is an OPEN THREAD, never a
-deletion — this family's one catastrophic failure is removing something reachable, and leaving it is
-always cheaper.
+Anything you cannot prove either way is an open thread, never a deletion: removing something
+reachable is this family's one catastrophic failure, and leaving it is always cheaper. The second
+mechanism is the trap — an endpoint invoked only from outside the repo looks dead from every angle a
+search can see, so read what a candidate DOES before calling it dead.
 
-A group off the file sweep gets the same four questions, asked of the GROUP: does anything outside
-it name any member — by string, from outside the repo, by convention, indirectly. Its internal
-traffic proves nothing, so a member's callers are evidence only when the caller is outside the
-group. Expect one or two members to survive: a config module or a helper the live system also
-imports. Name them; they are the difference between a clean removal and a broken one.
+Ask the same four of a GROUP. Its internal traffic is not evidence; a member's caller counts only
+from outside the group. Expect one or two members to survive — a config module, a helper the live
+system also imports — and name them.
 
 **Bad and good examples**
 ```example
@@ -188,34 +161,24 @@ imports. Name them; they are the difference between a clean removal and a broken
    no CI job, no docs. Dead as a unit — except its config module, which the live server imports."
 ```
 
-**Where a group dies as a unit, propose it as one item** and name the members that survive it.
-
 ## What looks dead and isn't
 
-Write `## What must stay` as you go. Every candidate you investigate and reject belongs there with
-**what reaches it** — the reaching mechanism named, not just "it's used".
+Write `## What must stay` as you go: every candidate you rejected, with the reaching mechanism named
+— not "it's used". Twenty removals and nothing rejected is a sweep that greped once and stopped.
 
-Twenty removals and nothing rejected is the signature of a sweep that greped once and stopped. The
-rejections are where the reachability work is visible, and they are what lets a reader trust the
-removals next to them.
-
-Write it for a reader deciding today, not for the next sweep — sweeps start fresh, because
-inheriting a judgment means inheriting a stale one, and reachability is the fact most likely to have
-moved since. Anything you would only write to save a later sweep effort goes in `## Open threads`.
-
-**Caution**: Code (e.g., function or API) may look dead (unused anywhere within the codebase) when it is actually being used from an external source (e.g., an externally-invoked API like QR code) — check the contents and logic of looking-dead code before calling it dead. Raise it if uncertain with your thought and rationale.
+Write it for a reader deciding today, not for the next sweep: reachability is the fact most likely
+to have moved by then. Anything you would only write to save a later sweep goes in `## Open threads`.
 
 ## Splitting the work
 
-Split by KIND, not by directory — one reader per kind, each given the whole tree for it. Directories
-are the obvious handles and they are the wrong ones here: split that way and the fourth kind gets
-attention in the first two directories and is quietly dropped everywhere after.
+Split by KIND, one reader per kind, each given the whole tree. Split by directory and the fourth
+kind gets attention in the first two directories and is dropped everywhere after.
 
-Paste the four hiding mechanisms into every brief. A reader given only "find dead code in `x/`"
-greps once and returns exactly the list this family exists to not produce.
+Paste the four hiding mechanisms into every brief; a reader given only "find dead code in `x/`"
+greps once and returns the list this family exists to not produce.
 
 Readers return candidates with `file:line` and the searches they ran. **You keep the reachability
-verdict**: a reader that has seen one slice cannot know what the rest of the repo reaches into it.
+verdict** — a reader who has seen one slice cannot know what the rest of the repo reaches into it.
 
 ## Shaping the follow-up
 

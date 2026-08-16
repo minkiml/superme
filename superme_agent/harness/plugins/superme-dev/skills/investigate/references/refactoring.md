@@ -7,6 +7,7 @@ owner files from your follow-up.
 ## Contents
 
 - **The bar** — what counts as evidence here
+- **What hard-to-work-in looks like** — the recurring shapes
 - **Pick your breadth** — the git history is the whole-repo enumeration
 - **Measure the difficulty**
 - **Draw the proposed shape**
@@ -25,6 +26,39 @@ proposal should still agree with your evidence.
 
 Write `## What makes it hard` before `## Proposed shape`, in that order. The failure mode of this
 family is a shape you liked, justified afterwards.
+
+## What hard-to-work-in looks like
+
+The shapes that keep turning up, so you recognise one rather than derive it. Each reads *what it is*
+→ *what shape replaces it*. A labelled heuristic, never a violation — the repo's own conventions win
+where they disagree, and anything a linter already enforces is not your finding.
+
+- **Shotgun surgery** — one logical change forces edits scattered across many files. → gather what
+  changes together into one module.
+- **Divergent change** — one module is edited for several unrelated reasons. → split it so each part
+  changes for one reason.
+- **Drifted duplicate** — the same logic shape in several places, no longer identical. → extract the
+  shape; the drift is the argument, name what each copy does differently.
+- **Data clump** — the same few fields travel together through call after call. → a type wanting to
+  be born; make it and pass that.
+- **Primitive obsession** — a string or int standing in for a domain concept with its own rules. →
+  give the concept a small type that holds those rules.
+- **Feature envy** — a function that reaches into another module's data more than its own. → move it
+  onto the data it envies.
+- **Message chain** — callers navigating `a.b().c().d()`, depending on a structure they shouldn't
+  know. → one method on the first object that hides the walk.
+- **Middle man** — a layer that mostly forwards calls onward. → cut it; call the real target.
+- **Speculative generality** — parameters, hooks or abstraction for needs nothing has. → inline it
+  back until a real need appears.
+- **Repeated conditional** — the same `switch`/`if`-cascade on the same type in several places. →
+  polymorphism, or one table both sites read.
+- **God module** — everything imports it and it imports everything, so nothing can be tested or
+  changed alone. → carve out the parts with distinct callers first; the rest follows.
+- **Temporal coupling** — two calls that must happen in a certain order, with nothing enforcing it.
+  → make the order impossible to get wrong: one call, or a type the second needs from the first.
+- **Untestable seam** — the logic is only reachable through I/O, a clock, or a network call. → the
+  strongest refactoring case there is; separate the decision from the effect and both become
+  testable.
 
 ## Pick your breadth
 
