@@ -76,6 +76,23 @@ it is not.
 Use the equivalent for whatever the tree is written in — exported functions, classes, components,
 config keys.
 
+Then run the same pass over FILES, because the name pass cannot see a dead group:
+
+4. **Sweep files, not names.** Walk imports outward from what actually starts the system — the
+   entry points, the server's route registrations, the app's root component — and mark every file
+   you reach. Any file you never reach is a candidate, and it takes with it everything it imports
+   that nothing live imports too.
+
+**A file full of used symbols is dead if its only users are other dead files.** Every name inside a
+retired subsystem has callers — its siblings — so every one of them clears the name pass, and the
+whole group is invisible to it. This is the largest single deletion a sweep can find and the one it
+is most likely to walk past, which is why the file sweep is a step and not a judgment call: a sweep
+can return twenty dead symbols and miss the retired subsystem sitting around them.
+
+Where there is no single root to walk from, the pass is the same run backwards: for each file, ask
+what imports it, then what imports THAT, until you either reach something the system starts or run
+out of files — the second answer is a dead island.
+
 **Write the inventory and the counts into your item folder as you build them**, and read them back
 from there afterwards. This pass is the most expensive command in the sweep and its answer does not
 change during the run.
@@ -104,10 +121,11 @@ Say which you ruled out and how. Anything you cannot prove either way is an OPEN
 deletion — this family's one catastrophic failure is removing something reachable, and leaving it is
 always cheaper.
 
-**Follow the graph, not the reference count.** A group of files that only reference each other is not
-reached; it is a dead island with internal traffic, and a naive count reads it as busy. When
-something looks live because many files reference it, ask what reaches THOSE files, and keep walking
-outward until you arrive at something the system actually starts.
+A group off the file sweep gets the same four questions, asked of the GROUP: does anything outside
+it name any member — by string, from outside the repo, by convention, indirectly. Its internal
+traffic proves nothing, so a member's callers are evidence only when the caller is outside the
+group. Expect one or two members to survive: a config module or a helper the live system also
+imports. Name them; they are the difference between a clean removal and a broken one.
 
 **Bad and good examples**
 ```example
@@ -130,6 +148,8 @@ removals next to them.
 Write it for a reader deciding today, not for the next sweep — sweeps start fresh, because
 inheriting a judgment means inheriting a stale one, and reachability is the fact most likely to have
 moved since. Anything you would only write to save a later sweep effort goes in `## Open threads`.
+
+**Caution**: Code (e.g., function or API) may look dead (unused anywhere within the codebase) when it is actually being used from an external source (e.g., an externally-invoked API like QR code) — check the contents and logic of looking-dead code before calling it dead. Raise it if uncertain with your thought and rationale.
 
 ## Splitting the work
 
