@@ -133,6 +133,11 @@ SAFE_TOOLS = {
     # factual in it is derived from plan.md rather than asserted. A background plan run would
     # otherwise stall on the last step of its own work.
     "mcp__dev__file_plan_report",
+    # Investigate's report pen — the same shape as the two above, and the phase's ONLY way to
+    # produce its deliverable now that the path is code's rather than the agent's. Registering a
+    # tool without listing it here leaves it callable and refused: a background run reaches its
+    # last step, is denied, and finishes with everything except the report the owner reads.
+    "mcp__dev__file_investigate_report",
     "mcp__dev__write_checkpoint",
     # Agent-run freshness sync (D9): merges trunk INTO the item's own worktree only — trunk itself
     # is never written; conflicts abort-and-report by default.
