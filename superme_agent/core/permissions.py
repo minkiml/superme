@@ -449,7 +449,14 @@ def _bash_scoped_into_boundary(command: str, roots: list[Path]) -> bool:
     the REPO cwd for transcript continuity, but their legitimate worktree work NAMES the worktree,
     so a command that enters the boundary explicitly is as safe to auto-allow as one run from inside
     it. A bare mutating command (no scoping — a `rm` at the repo cwd) does NOT match, so it still
-    defers to the owner."""
+    defers to the owner.
+
+    ALSO true when the command names at least one absolute path and EVERY absolute path it names
+    sits inside a root — `mkdir -p <item-dir>/scratch`, `python3 <item-dir>/probe.py`. That command
+    is scoped by its ARGUMENTS rather than by a prefix, and refusing it while allowing the identical
+    work behind `cd` teaches a rule nobody can follow: an investigation was refused permission to
+    create a scratch directory inside its own item folder. A command naming no absolute path stays
+    unmatched — it resolves against a cwd this function cannot see."""
     toks = shlex_split_safe(command)
     for i, raw in enumerate(toks[:-1]):
         if raw.strip("'\"") in ("cd", "-C"):
@@ -462,7 +469,20 @@ def _bash_scoped_into_boundary(command: str, roots: list[Path]) -> bool:
                         return True
                 except (OSError, ValueError):
                     pass
-    return False
+    named = 0
+    for raw in toks:
+        tok = raw.strip("'\"")
+        if tok.startswith("~"):
+            tok = str(Path(tok).expanduser())
+        if not tok.startswith("/"):
+            continue
+        named += 1
+        try:
+            if not _in_any(Path(tok), roots):
+                return False
+        except (OSError, ValueError):
+            return False
+    return named > 0
 
 
 # Bypassing the commit gate is denied for every session, in every phase — the one shell rule that
