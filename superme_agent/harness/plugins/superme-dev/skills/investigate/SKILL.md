@@ -7,279 +7,155 @@ category: workspace
 
 # Investigate
 
-Set the **questions** and the **walls**, then answer them with receipts.
+Answer a research work-item's questions with evidence, and leave the record someone else acts from.
 
-Copy this into your first reply and tick each item as you finish it. The steps that get skipped are
-the cheap ones near the end — the record, the follow-up work, the honest gap — and skipping them is
-invisible until the gate:
+**You need:** the work-item id and its investigation family — both in your Current focus block.
+**You may not:** change any code, or write anywhere but the item folder.
+**Every claim you record carries a pointer**: `file:line`, a URL with the date you read it, or a
+command and its output.
+
+Copy this into your first reply and tick each line as you finish it:
 
 ```
 Investigation progress:
-- [ ] 1 · Family guide read (references/<family>.md) — your first tool call, before anything
-- [ ] 2 · Questions + walls + Done written to investigation.md, against that guide's bar
-- [ ] 3 · Surface split, readers spawned with the bar pasted into each brief
-- [ ] 4 · Receipts verified — every finding I kept, checked at its own line
-- [ ] 5 · investigation.md current: findings, what must stay, what I could not settle
-- [ ] 6 · Follow-up work sized so someone could file it
-- [ ] 7 · reports/report-investigate.md written + checkpoint banked
+- [ ] 1 Family guide read
+- [ ] 2 Record scaffolded, questions and walls and Done written
+- [ ] 3 Surface split, readers spawned
+- [ ] 4 Receipts verified at their own lines
+- [ ] 5 Record filled
+- [ ] 6 Follow-up work sized
+- [ ] 7 Report written, checkpoint banked
 ```
 
-**The subject is whatever the item names** — this repo, another codebase, a library, an external body
-of material, the behaviour of a running system. What never changes across those: a research item has
-no worktree, your only writes are the item's own folder, and every claim you record carries the
-receipt that makes it checkable by someone who was not here.
+## 1 · Read your family's guide
 
-## Step 1 — Bound the sweep before you read the subject
+Open `references/<family>.md` for the family named in your Current focus block — before the brief,
+before any code. It gives you the bar: what counts as a finding here, and what counts as proof.
 
-**A research item has no plan phase.** Nothing upstream states what you are answering or where you
-stop — that is yours to set, and it is the first thing you write, before the code and before the
-first finding. An unbounded sweep does not run out of questions; it runs out of run.
+| family | guide |
+|---|---|
+| audit | `references/audit.md` |
+| refactoring | `references/refactoring.md` |
+| housekeeping | `references/housekeeping.md` |
+| security | `references/security.md` |
+| study | `references/study.md` |
+| deep-diagnosis | `references/deep-diagnosis.md` |
 
-**One thing precedes it: your family's guide (Step 2).** It defines what counts as an answer here,
-and questions set without it are questions set against no bar. Read the guide, then write these.
+If your item names no family, pick the closest one from what the item asks for, and say which you
+picked in `investigation.md`. If the work turns out to be a different family than the item says, say
+so in your report.
 
-Read what the item gives you:
+## 2 · Scaffold the record, and write the questions
 
-- **`artifacts/brief.md`** — `## Problem` is why this exists, `## Context` is what the owner already
-  knows or has pointed you at, `## Classification` carries the family. A button-launched sweep has no
-  brief at all: its subject, and its interest or area, are in the item's own title and description.
-- **The item header** — the family (step 2) and the subject.
+Call `scaffold_artifact(item_id, "investigation")`. Your family's sections appear; each one tells
+you what it owes. Fill them as you go from here on, never at the end.
 
-Then write these into `investigation.md` `## Questions`, before anything else:
+Read `artifacts/brief.md` — `## Problem` is why this exists, `## Context` is what the owner already
+knows, `## Classification` carries the family. A button-launched sweep has no brief: its subject and
+area are in the item's own title and description.
+
+Then write these into `## Questions`, before you read any code:
 
 1. **The questions**, as questions. Three sharp ones beat eight vague ones.
-2. **The walls** — what is in scope and what is explicitly not. A whole-repo sweep says so; an area
-   sweep names the area. A thread leading outside becomes an open thread, never a detour.
+2. **The walls** — what is in scope and what is explicitly not. Whole repo, or the area named.
 3. **Done** — what has to be true for this to be finished.
 
-**Done when** someone who has not read the brief could tell, from your questions alone, what this
-sweep will and will not have looked at. Get the walls wrong and it is cheap to correct now: the owner
-reads them at the gate, and everything you record afterwards is read against them.
+**Check:** someone who has not read the brief can tell, from your questions alone, what this sweep
+will and will not have looked at.
 
-## Step 2 — Know which investigation this is
+A thread leading outside the walls becomes an open thread, not a detour.
 
-**Triage named the family and it is in your item header** — it decides what counts as an answer, and
-the report is read against that bar. On an older item that carries none, name it yourself from
-`## Method` and say which in `investigation.md`.
+## 3 · Split the surface and spawn readers
 
-| family | Instruction | the question behind it | what a receipt is here |
-|---|---|---|---|
-| **audit** | `references/audit.md` | is this surface sound — coverage, performance, logic, features, bugs? | the surface you enumerated and what you sampled from it. "Nothing found" only means something beside the list of what was looked at |
-| **refactoring** | `references/refactoring.md` | this code is hard to work in — what shape should it be? | what makes it hard, shown in the code, before any proposal; and what the new shape costs |
-| **housekeeping** | `references/housekeeping.md` | what has gone stale — comments, dead code, unused declarations? | proof nothing reaches it. Unreferenced is not unused until you have looked past this repo's grep |
-| **security** | `references/security.md` | what is exposed — risks, unsafe smells, unsanitized or junk data? | the path an attacker actually walks, named end to end. A worry is not a finding |
-| **study** | `references/study.md` | how does someone else do this, and what should WE take? | the source pinned (commit, version, or URL + date read), and what transfers here kept separate from what they do |
-| **deep-diagnosis** | `references/deep-diagnosis.md` | what is the mechanism behind a behaviour we cannot explain? | the narrowest located cause, what you ruled out on the way, and what you could not determine |
+First confirm the subject is there — the path resolves, the repo is present, the URL answers.
 
-**Read your family's file above before you do anything else — it is your first tool call after this
-skill loads, ahead of the brief, the questions, the code, and the scaffold.** It defines what counts as an answer
-for this family and how to enumerate the surface; everything you read before it, you read without
-knowing the bar. The kernel counts that read, and the review gate refuses an item whose investigate
-never opened it.
+Then split it, and spawn one `subagent_type: superme-dev:investigator` per slice. Use that exact
+string: a partial identifier resolves to a generic reader instead of erroring.
 
-Do not take your own artifact looking correct as proof you read it: the scaffolder stamps the
-family's sections whether or not you did, so a record written blind comes out the right SHAPE and
-the wrong DEPTH.
+Split by question. When one question spans a large surface, split that question by area — your
+family's guide says which way round for this family.
 
-**A number is a receipt in every family** — the command, the repeats, the environment. Reading the
-source gives you the complexity class, never the value.
+> **Test:** would knowing the answer to question B change HOW you read for question A?
+> No → separate readers.
 
-Most items are mainly one family with some of another; you follow the one on the item. If the work
-turns out to be a different family than triage judged, that is worth a line in your report — it is
-the owner's to correct, and by then your record is already in the shape triage picked.
+Read it all yourself only when the answers chain, or the whole surface is small enough that
+splitting costs more than it saves. Then write one line in `investigation.md` saying which of those
+it was.
 
-## Step 3 — Investigate with receipts
+**Each brief carries three things and nothing else:**
 
-**Split the surface first, then read. Spawn `subagent_type: superme-dev:investigator` —
-one per question, or one per area when a single question spans several.** Each returns evidence with
-pointers (`file:line`, a URL, a command's output), never summaries. You stay the synthesizer: a
-subagent's finding is a lead until you have seen the receipt.
+1. **The bar** — the lines of your family's guide that say what counts as a finding, pasted in as
+   text, not as a path. Name the file as well, so the reader can reach the rest.
+2. **The walls**, from your `## Questions`.
+3. **The one question, or the one area.**
 
-**That exact string, in full.** A partial identifier does not resolve, and it does not error
-either: the spawn falls back to a generic reader carrying none of the discipline below, and the
-trail records the fallback rather than the failure. Check your first spawn names the agent you
-meant.
+**Check:** each brief still makes sense to someone who has read nothing else.
 
-Independence is decidable, not a feeling — apply the test rather than weighing it:
+## 4 · Verify every receipt you keep
 
-> **Would knowing the answer to question B change HOW you read for question A?**
-> No → independent → they go to separate subagents. Two questions over different files, different
-> subsystems, or different sources are independent unless you can name the dependency.
+A reader's finding is a lead until you have seen the line yourself. Verify it with a range read at
+the line you were given. Never open the file whole for this, and never re-read a reader's surface;
+if you want to, the brief asked for summaries instead of receipts, and that is a note for your
+report.
 
-Reading it all yourself is allowed exactly twice: when the answers genuinely chain (B tells you
-where to look for A), or when the whole surface is small enough that splitting costs more than it
-saves. **Either way you say so in `investigation.md`** — one line naming which questions chained, or
-what the surface was and why it was too small to split. An unexplained single-threaded sweep reads
-at the gate as a surface that was quietly narrowed, and the kernel counts your spawns whether or not
-you mention them.
-
-### Preflight, then split
-
-Confirm the subject resolves and the surface is non-empty before you spawn anything: the path
-exists, the repo is present, the URL answers. A subject that isn't there fails here, in one cheap
-check — not six times over, once inside each parallel subagent, each billing you for the same
-discovery.
-
-### Every brief is self-contained
-
-**A subagent starts in a fresh context.** It gets its own system prompt and the project's CLAUDE.md
-— and nothing else of yours: not this skill, not your family guide, not the item, not a file you
-have already read. So whatever the brief does not carry, the work is done without. "Audit the auth
-module" buys you a reader working to no bar, and its findings come back looking exactly like
-findings written to one.
-
-Three things travel in every brief:
-
-1. **The bar, pasted.** The lines of `references/<family>.md` that say what counts as a finding
-   here — the text, copied in, not the path. Name the path as well so the subagent can reach the
-   rest when it needs it.
-2. **The boundaries**, from `## Boundaries`. The walls are yours to enforce and it cannot read them.
-3. **The one question, or the one area.** Which slice of the surface is its, and nothing else.
-
-The return shape, the read discipline, and the judgment it does not make (severity, reachability
-beyond its slice, the verdict) are in the `investigator` agent itself — do not repeat them. What is
-family-specific goes in the brief; what is true of every reader is already there.
-
-**Done when** each brief still makes sense to someone who has read nothing else. The kernel records
-what you sent; a brief too thin to carry a bar is visible at the gate as one.
-
-### Reading is what a sweep costs
-
-**Search is the evidence; the file is the last resort.** A whole file you open enters the context
-and is re-billed on every call after it, so its price is per remaining step, not per read. The
-investigator agent carries the full discipline; this is the copy that governs **your own** reading,
-and it stays here rather than being delegated because a failed spawn must not also lose the rule.
-
-- **Grep with `-n` and `-C 3` before opening anything.** The match plus its context is usually the
-  whole receipt.
-- **Verifying a subagent's receipt is a range read at the line it gave you.**
-  - ✗ It reports `spine.py:412`; you `Read spine.py` whole to check it.
-  - ✓ `Read spine.py offset=395 limit=45`.
-- **Whole file only when you will use the whole file**; never open one to look for a name; never
-  re-read what you already have; enumerate the tree once, not per question.
-- **Synthesis reads what the subagents returned, not the files they returned it from.** If you find
-  yourself re-reading their surface, the briefs asked for summaries instead of receipts — fix the
-  brief next time; do not re-run the sweep yourself.
-
-**`## Surface & sample` states coverage as NUMBERS, per kind or per area**: how many units were in
-scope, how many were checked at what depth, and what was left at a shallower depth. A fraction is
-the point — "all of it, exhaustively" is the one answer that cannot be true and cannot be checked.
-
+**Bad and good examples**
 ```example
-✗ "Swept the backend exhaustively."
-✓ "Backend, 289 tracked files: every module-level def/class name-checked repo-wide (772 symbols);
-   ~18 files read at line depth, drawn from the largest recent commit; the remaining ~180 were
-   grepped for imports only, not verified for use."
+✗ A reader cites loader.py:412 → you Read loader.py whole to check it.
+✓ A reader cites loader.py:412 → you Read loader.py offset=395 limit=45.
 ```
 
-Carry each reader's own coverage line through — if one hands you an area with no numbers, that area
-is UNSWEPT and belongs in `## Open threads`, not in the record as clean.
+Anything you could not verify goes to `## Open threads` marked unverified, or goes.
 
-### A clean result is a claim, and it needs a receipt
+## 5 · Fill the record
 
-"Swept, nothing found" and "swept, six findings" cost the same to write and are read the same way at
-the gate — but only one of them is checkable. **Whenever you record that an area is clean, record
-what was enumerated and how it was searched, in the same breath.**
+- **A reader's clean area that arrives without numbers is UNSWEPT.** It belongs in `## Open
+  threads`, never in the record as clean.
+- **When a question asks how something behaves or how much it costs, measure it.** Write a throwaway
+  script inside the item folder and run it there: `cd <item-dir> && python3 bench.py`. Name no path
+  outside the folder. If you cannot measure it, say which number is missing and what it would have
+  settled.
+- **A source outside the repo is yours when the item or the owner names one.** `WebFetch` and
+  `WebSearch` need no approval. Pin a URL the way you pin a `file:line` — the address and the date
+  you read it. A doc page is evidence about the library, never about how this codebase uses it.
+- **If answering needs material too big for the item folder** — a cloned repository, a bulk dataset
+  — stop and say so in `## Open threads`. Where it should live is the owner's call.
 
+## 6 · Size the follow-up work
+
+`## Follow-up work` is items someone could file as they stand, in the order they should land, each
+naming what it touches. Your family's guide says how to shape them.
+
+Group findings that share one fix into one item.
+
+**Bad and good examples**
 ```example
-✗ "The service layer and the API layer were swept exhaustively — no dead code found."
-✓ "Service layer (27 files): every module-level def/class grepped repo-wide by name; clean except
-   the two below. API layer (12 files): every exported handler traced to a route registration."
+✗ "Improve error handling."
+✓ "Validate the path argument in the three handlers at routes/files.py:88,140,203."
 ```
 
-The first sentence is what a slice nobody read also produces, and it is the more dangerous of the
-two because it retires the question. If a subagent hands you a clean area without its enumeration,
-that area is **unswept** — say so in `## Open threads` rather than passing the claim through.
+**You record; you never file.** The owner chooses every branch-off at the review gate.
 
-- **When a question asks how something BEHAVES or how much it COSTS, measure it.** Reading the
-  source tells you the complexity class, never the number. Throwaway scripts are fine, scoped into
-  your own item folder: write the script there and run it as `cd <item-dir> && python3 bench.py`. An
-  unscoped command at the repo cwd is denied — a research item is read-only on real code, and that
-  holds for the shell too — so name no path outside the item folder and seed its fixtures there. A
-  measurement that genuinely cannot be made is evidence when you say which number is missing and
-  what it would have settled; a guess wearing a number's clothes is not.
-- **Sources outside the repo are yours when the item or the owner names one.** `WebFetch` and
-  `WebSearch` need no approval, so a link in the item's own description, in the brief's `## Context`, or in the
-  owner's imported references is there to be opened. Pin it like a `file:line` — URL and the date
-  you read it — and keep the distinction that matters: a doc page is evidence about the library,
-  never about how THIS codebase uses it.
-- **Material too big to keep is a wall, not a decision.** Your write boundary is the item folder, and
-  it is not a place to park a cloned repository or a bulk dataset. If answering the question needs
-  one, say so in `## Open threads` and in your report rather than doing it quietly — where that
-  material should live is the owner's call to make, not yours to invent.
-- **Don't go browsing past the Boundaries.** An open-ended search is answering beyond the walls with
-  a browser.
-- **`scaffold_artifact(item_id, "investigation")`, then keep it current as you go.** Its sections
-  come from your family — fill the ones you are given. It is the record the report is written from,
-  so a claim you cannot point at does not belong in it, and what did NOT pay off earns its section
-  as much as what did: that is what stops the next investigation re-walking this one.
+## 7 · Write the report and bank a checkpoint
 
+Copy `templates/report-investigate-template.md` to `reports/report-investigate.md`, overwriting.
+Then bank a `write_checkpoint`: which questions are answered, which are open, where to pick up.
 
-## Step 4 — Name the work this implies
+Write it plainly, in fewer words than feel natural. Never restate the item's kind, deliverable or
+id. Omit a field rather than filling it with "none".
 
-**The findings are half of what this item owes; the work they imply is the other half.** A research
-item exists so real work can follow it, and `## Follow-up work` is where that becomes possible —
-items sized so someone could file them, in the order they should land, each naming what it touches.
-Your family's guide says how to shape them.
+## 8 · Report the run
 
-Sizing is the judgment. "Improve error handling" is not an item; "validate the path argument in the
-three handlers at `routes/fs.py:88,140,203`" is. Group findings that share one fix into one item.
+- **`success`** — every question is answered, or its Done criterion is met.
+- **`partial`** — you ran out of run before you ran out of questions. Name the open ones.
+- **`blocked`** — nothing could be investigated: the subject is unreachable, or the walls make the
+  work impossible.
 
-**You record; you never file.** Every branch-off is decided in ONE place — the owner, at the review
-gate, reading your report. Putting work on the board from here would commit them to it before they
-chose it, which is exactly the step this section replaces.
+## Chat and completion style
 
-## Step 5 — Write the user-facing report
-
-Copy `templates/report-investigate-template.md` to `reports/report-investigate.md`, overwriting —
-the owner's standing answer to "what do we know". Bank a `write_checkpoint` alongside it (which
-questions are answered vs open, what the evidence leans toward, where to pick up).
-
-- **`**Summary:**` is the finding in one line**, and the dashboard shows it alone: "every command
-  re-reads the whole ledger, so the wait grows with the file". Not "the investigation is
-  progressing".
-- **`## How we know` separates measured from reasoned.** A number from a real run and a conclusion
-  from reading must not read the same way — a guess in the clothes of a measurement is the one way a
-  research item does damage.
-- **`## What we didn't settle` is almost never empty.** Write it before you write the findings.
-
-**Tone and style when writing to user-facing report**
-- Plain, easy language. Fewer words wins.
-- Never restate the item's kind, deliverable or id. Spend the space on the judgment behind them.
-- Omit a prose field rather than filling it with "none" — an absent block reads better.
-
-## Chat response style
-- Use plain and easy language.
-- Keep your response short, clear, and to the point.
-- Do not use more than 30 words.
-- Use bullets or numbered lists to organize information if there is more than one point.
-
-## Reporting the run
-
-`report_completion` says why THIS RUN stopped. **There is no loop here** — this run IS the phase, and
-whatever you report, the item rests at the owner's gate afterwards. Nothing re-fires you on its own.
-
-- **`success`** — every question is answered, or its Done criterion is met. Not "I found something
-  interesting".
-- **`partial`** — the honest ending for an investigation that ran out of run before it ran out of
-  questions. Say which questions are still open; the checkpoint and `investigation.md` are what the
-  next session picks up from.
-- **`blocked`** — nothing could be investigated at all: the subject isn't reachable, or the
-  boundaries make the work impossible.
-
-**A run the kernel fired always declares an outcome**, and a run that skips it is recorded as
-undeclared.
-
-**Output style to report_completion.**
-- Plain, concise, easy language. 
-- Do not use more than 30 words.
-- Keep your response short, clear, and to the point.
+Plain language, under 30 words, bullets when there is more than one point.
 
 ## Pitfalls
 
-- **Editing code "just to try something"** — a research item is read-only on real code by contract;
-  an experiment that must mutate it is a proposal, not a detour.
-- **Answering beyond the boundaries** — thoroughness outside the walls is scope creep with a better
-  reputation; park it as an open thread.
-- **Recording a conclusion instead of what you saw** — this doc holds evidence; the verdicts are
-  drawn later, from it.
+- **Editing code "just to try something"** — an experiment that must mutate code is a proposal.
+- **Answering past the walls** — park it as an open thread.
+- **Recording a conclusion instead of what you saw** — the verdicts get drawn at review, from this.
