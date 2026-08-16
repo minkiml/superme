@@ -3,19 +3,6 @@
 The item asks what an attacker could reach, what handles untrusted input carelessly, or what data is
 unsanitized, leaking, or junk.
 
-## Contents
-
-- **The bar** — a path, end to end
-- **Know the domain first**
-- **Pick your breadth** — boundaries are the unit, not directories
-- **Enumerate where trust changes hands**
-- **What to look for**, by boundary
-- **Data: unsanitized, leaking, junk**
-- **What is defended** — mandatory in this family
-- **Splitting the work, and what not to run**
-- **Shaping the follow-up** — it is triage
-- **What a security review does NOT do**
-
 ## The bar
 
 A finding is a story with an actor: **someone who controls X reaches Y and gets Z.** If you cannot

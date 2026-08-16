@@ -3,17 +3,6 @@
 The item names something outside this repo — another codebase, a library we might depend on, a
 product whose design we want, a published method or page — and asks what we should take from it.
 
-## Contents
-
-- **The bar** — two claims, kept apart
-- **Pin the source**
-- **Apply the transfer test**
-- **Copying is a licence question**
-- **Where to start**, by what you are studying
-- **Splitting the work**
-- **Shaping the follow-up** — what adopting it would take
-- **What a study does NOT do**
-
 ## The bar
 
 Two claims, and they never share a sentence:

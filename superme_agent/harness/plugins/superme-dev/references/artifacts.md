@@ -10,12 +10,6 @@ Terminology: **validation** = build's own internal checks (unit tests, compile, 
 errors). **verification** = vet's real, practical, safely-isolated tests (scenario runs, live
 checks). Vet verifies; it does not validate.
 
-## Contents
-
-- **The playbook** — rules that apply to writing every artifact
-- **The kinds** — every artifact, who writes it, who reads it, and when it is retired
-- **`plan.md` — the section contract**, once for the implementation kind and once for research
-- **`build-vet-<n>.md`** — the cycle report, and which phase writes which fence
 ## The playbook (applies to every kind)
 
 1. **Scaffold first** — call `scaffold_artifact(item_id, artifact)`. Code writes the skeleton

@@ -7,14 +7,6 @@ prompt it's handed, never the conversation that spawned it. So the brief must st
 
 **Write in the workspace's own words.** `../../references/glossary.md` holds the vocabulary every skill, template and report shares — record vs report, run vs session, receipt, check, bar — with an `Avoid` line on each naming the synonym that will be read as something else. A new artifact that invents its own word for an existing thing is the drift this file exists to stop.
 
-## Contents
-
-- **The self-contained skeleton** — what a brief must carry, since a subagent inherits nothing
-- **Rules** — scope, tools, honesty, return shape
-- **No comments in the body** — plus the plugin-manifest traps worth knowing
-- **Frontmatter** — native vs SuperMe-added
-- **An example Template** — Task · Inputs · Workflow · Return Format · Critical Rules
-- **Worked example** (`forge`) · **Checklist** — run before you ship
 ## The self-contained skeleton (the heart of it)
 The worker has no ambient context, so the prompt must stand alone. The recurring skeleton:
 1. **Role line** — "You are a specialized X agent that …".

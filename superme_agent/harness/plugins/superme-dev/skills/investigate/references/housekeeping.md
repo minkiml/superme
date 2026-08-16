@@ -6,19 +6,6 @@ functions, unused declarations, abandoned config, anything unaccounted for.
 The question is not "is this good code". It is **"does anything still reach this"** — and that has a
 provable answer, so this family is graded on proof.
 
-## Contents
-
-- **The bar** — what counts as a finding here
-- **What stale actually looks like** — the recurring shapes
-- **What is worth reporting** — ranking them
-- **Pick your breadth**
-- **Start mechanical** — the inventory that produces your shortlist
-- **Prove or reject each candidate**
-- **What looks dead and isn't**
-- **Splitting the work**
-- **Shaping the follow-up**
-- **What housekeeping does NOT do**
-
 ## The bar
 
 A finding is a thing that is stale **plus the proof nothing reaches it**. `grep` returning nothing
@@ -28,7 +15,7 @@ Four kinds to check in depth are in scope:
 
 | kind | what makes it stale | the recurring miss |
 |---|---|---|
-| comments and docstrings | it describes behaviour the code no longer has, heavy and overstated comments --- e.g., logs must be be in comments | deleting a comment that is merely terse; wrong is the bar, not brief |
+| comments and docstrings | it describes behaviour the code no longer has, or carries weight a comment should not: history, narration, an excuse for the code beneath it | deleting a comment that is merely terse; wrong or heavy is the bar, not brief |
 | dead code | nothing reaches it | a symbol reached only in an error path nobody hits — it is reachable |
 | unused declarations | imported, assigned or declared and never read | a side-effecting import: removing it changes behaviour, and the file rarely says so |
 | abandoned config and flags | the branch it selects no longer exists, or has one live value | a flag some environment sets that this repo never mentions |
@@ -70,6 +57,22 @@ list to hold in your head while you sweep, so you recognise one rather than deri
 - **Outgrown docstring** — accurate when written, now describing a fraction of what the thing does.
   → the recurring one, and the easiest to read past: check the docstring against the whole surface,
   not against the first method under it.
+- **Log in a comment** — a comment carrying history: what changed, when, who asked, which incident.
+  → version control holds that. Delete the narration; keep only the rule it happened to state, in
+  the present tense.
+- **Restating comment** — prose saying in words what the line beneath it says in code. → delete it.
+  If the WHY is missing, that is what should be there instead.
+- **Excusing comment** — a paragraph explaining why the code below is confusing, instead of the code
+  being less confusing. → the comment is evidence, not the finding: name the code as a refactoring
+  candidate and say so.
+
+**What a comment owes.** Use this to judge one, and to say what should replace it:
+
+- the WHY — never a restatement of the line below it
+- short enough to take in at a glance
+- true today, or gone; an outdated comment is worse than none
+- no history — what changed, when, and who asked lives in version control
+- no excuses — if code needs a paragraph to be understandable, the finding is the code
 
 ## What is worth reporting
 

@@ -6,18 +6,6 @@ subsystem, whether a feature does what it promises, what is broken.
 Security and dead code are their own families (`security.md`, `housekeeping.md`). If the item is
 really asking one of those, say so in your report rather than doing half of it here.
 
-## Contents
-
-- **The bar** — what counts as a finding here
-- **Pick your breadth**
-- **Enumerate the surface first**
-- **Sample deliberately**
-- **Severity**
-- **Where to start**, by what is being audited
-- **Splitting the work**
-- **Shaping the follow-up**
-- **Three things to do instead**
-
 ## The bar
 
 A finding names WHERE (`file.py:214`) and what actually goes wrong — for a user, a caller, or a load

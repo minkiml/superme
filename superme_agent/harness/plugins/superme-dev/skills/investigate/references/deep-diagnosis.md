@@ -2,20 +2,6 @@
 
 The item names a behaviour nobody can explain and asks why it happens.
 
-## Contents
-
-- **Check this is the right family**
-- **Build a tight loop that goes red** — everything waits behind this
-- **Ways to build one**, in order
-- **When you genuinely cannot build one**
-- **Rank the hypotheses before you test one**
-- **Narrow, don't browse**
-- **Ruling out is evidence**
-- **State the mechanism, and how far the evidence goes**
-- **Splitting the work**
-- **Shaping the follow-up** — the fix, and the class
-- **What a deep diagnosis does NOT do**
-
 ## Check this is the right family
 
 A deep diagnosis is a work-item with a gate. It earns that only when at least one of these holds:

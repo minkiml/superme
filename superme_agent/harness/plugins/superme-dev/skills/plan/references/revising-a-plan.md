@@ -3,14 +3,6 @@
 Read this when the item arrived here from review carrying feedback and an existing `plan.md` that
 build already worked against. A first plan never needs it.
 
-## Contents
-
-- The one way in
-- Split the feedback into concerns
-- What the tool's fields cannot tell you
-- What you do not decide
-- Where this rejoins the skill
-
 ## The one way in
 
 Change the plan **only** through `revise_plan` — never by rewriting the file. The tool validates the

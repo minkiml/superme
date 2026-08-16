@@ -7,19 +7,6 @@ reading the wrong field, and how two phases describe the same act as if it were 
 Read this when you are writing a skill, a template, an artifact, or a report. Read the `Avoid` line
 as hard as the definition: it names the word that will be understood as something else.
 
-## Contents
-
-- **The unit of work** — work-item · kind · family · item folder · worktree
-- **The machinery of a phase** — phase · gate · run · session · cycle · outcome
-- **The two documents** — record vs report, and why the split is load-bearing
-- **The words for proof** — receipt · claim · evidence · check · bar
-- **The words for scope** — surface · boundary · wall
-- **Who acts** — owner · deputy · subagent
-- **Rejected framings** — what these words will NOT mean, and why
-- **Flagged ambiguities** — the pairs that have already caused a bug
-
----
-
 ## The unit of work
 
 **Work-item** — one unit of this host's dev work, with its own folder, its own phases, and its own
@@ -151,8 +138,6 @@ with whoever spawned it.
 **Brief** — two different things by context, and both are real: the subagent's prompt (above), and
 `artifacts/brief.md`, triage's record for the plan phase. Say "subagent brief" or "the item's brief"
 wherever the sentence could go either way.
-
----
 
 ## Rejected framings
 

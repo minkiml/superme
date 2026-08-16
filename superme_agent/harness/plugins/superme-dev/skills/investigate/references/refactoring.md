@@ -4,18 +4,6 @@ The item names code that is hard to work in and asks what shape it should have i
 a shape, the case for it, and the honest cost. The change itself is separate implementation work the
 owner files from your follow-up.
 
-## Contents
-
-- **The bar** — what counts as evidence here
-- **What hard-to-work-in looks like** — the recurring shapes
-- **Pick your breadth** — the git history is the whole-repo enumeration
-- **Measure the difficulty**
-- **Draw the proposed shape**
-- **Price the move**
-- **Splitting the work**
-- **Shaping the follow-up** — it IS the proposal
-- **What a refactoring study does NOT do**
-
 ## The bar
 
 Evidence is the code, at `file:line` — the duplication, the coupling, the function whose callers all
