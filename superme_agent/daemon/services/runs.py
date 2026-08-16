@@ -1406,6 +1406,15 @@ async def _background_intake_run(ctx, context_id: str, item_id: str, item_dir: P
         except Exception:
             log.exception("pre-replace checkpoint failed for %s", item_id)
     title = item.get("title") or item_id
+    # A research item's worktree is a SCRATCH tree (kind_profiles) — a detached checkout made so a
+    # read-only investigation cannot touch real code. It is the only tree this run reads, and the
+    # only one whose contents it may destroy without consequence, which is exactly the test for a
+    # shell root. An implementation item's worktree is not one: it holds work that merges.
+    wt = item.get("git_worktree")
+    scratch_tree = ([Path(wt)]
+                    if wt and kind_profiles.get_profile(
+                        str(item.get("kind") or "implementation")).scratch_worktree
+                    else [])
     # Thin trigger: which skill for which item — nothing else. The procedure lives in the
     # superme-dev:<skill> skill (its "## Background runs" section); the run protocol rides the
     # Current-focus background variant below. Orientation is on-demand — the skill's directed
@@ -1449,7 +1458,13 @@ async def _background_intake_run(ctx, context_id: str, item_id: str, item_dir: P
         # spawned. Build and vet have carried this since the freeze boundary landed; the intake
         # phases never did, and a research sweep is the one that most needs a shell.
         write_boundary=[item_dir],
-        sandbox_writes=[item_dir],   # sandboxed shell; the item folder is its one outside write
+        # A research sweep reads a tree it may not write to and writes to a folder it is not
+        # standing in, so nearly every honest command it composes names both — and one path
+        # outside the write boundary refuses the whole command. Its scratch worktree is therefore
+        # nameable by the SHELL (a detached throwaway checkout: nothing commits, nothing merges,
+        # closing deletes it), while the write TOOLS stay pinned to the item folder above.
+        shell_roots=scratch_tree,
+        sandbox_writes=[item_dir, *scratch_tree],   # the kernel holds the same two roots
         extra_mcp_servers={**_dev_mcp(ctx, ctx.cwd, item_id, scope=skill),
                            "run": make_run_report_server(sink)},
         system_append=focus,   # Current-focus pointer incl. the run protocol

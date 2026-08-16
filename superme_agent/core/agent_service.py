@@ -361,6 +361,7 @@ class AgentService:
         enforce_silent: bool = False, effort: str | None = None, scope_reads: bool = False,
         system_append: str | None = None, gate_general_mutations: bool = False,
         general_write_root: Path | None = None, write_boundary: list[Path] | None = None,
+        shell_roots: list[Path] | None = None,
         hooks: dict | None = None, block_categories: set[str] | None = None,
         deny_write_tools: str | None = None,
         protected_paths: list[Path] | None = None,
@@ -439,6 +440,7 @@ class AgentService:
                 gate_general_mutations=gate_general_mutations,
                 general_write_root=general_write_root,
                 write_boundary=write_boundary,
+                shell_roots=shell_roots,   # nameable by the shell, never by the write tools
                 deny_write_tools=deny_write_tools,   # vet read-only (build-vet-loop §4/§8·O4)
                 protected_paths=protected_paths,      # review read-only on plan.md (§2.1)
                 protected_nudge=protected_nudge,
@@ -472,6 +474,7 @@ class AgentService:
         gate_general_mutations: bool = False,
         general_write_root: Path | None = None,
         write_boundary: list[Path] | None = None,
+        shell_roots: list[Path] | None = None,
         hooks: dict | None = None,
         block_categories: set[str] | None = None,
         deny_write_tools: str | None = None,
@@ -497,7 +500,8 @@ class AgentService:
             scope_reads=scope_reads, system_append=system_append,
             gate_general_mutations=gate_general_mutations,
             general_write_root=general_write_root, write_boundary=write_boundary,
-            hooks=hooks, block_categories=block_categories, deny_write_tools=deny_write_tools,
+            shell_roots=shell_roots, hooks=hooks, block_categories=block_categories,
+            deny_write_tools=deny_write_tools,
             protected_paths=protected_paths, protected_nudge=protected_nudge,
             sandbox_writes=sandbox_writes, item_bound=item_bound,
         )

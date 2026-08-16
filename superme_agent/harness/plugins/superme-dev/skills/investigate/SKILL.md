@@ -14,7 +14,7 @@ Answer a research work-item's questions with evidence, and leave the record some
 **Every claim you record carries a pointer**: `file:line`, a URL with the date you read it, or a
 command and its output.
 
-Copy this into your first response and tick each line as you finish it:
+Copy this into your first response and tick each line as you progress:
 
 ```
 Investigation progress:

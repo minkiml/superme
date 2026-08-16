@@ -674,6 +674,7 @@ def build_can_use_tool(approve: ApproveFn, *, blocked_skills: dict[str, str] | N
                        gate_general_mutations: bool = False,
                        general_write_root: Path | None = None,
                        write_boundary: list[Path] | None = None,
+                       shell_roots: list[Path] | None = None,
                        deny_write_tools: str | None = None,
                        protected_paths: list[Path] | None = None,
                        protected_nudge: str | None = None,
@@ -729,6 +730,19 @@ def build_can_use_tool(approve: ApproveFn, *, blocked_skills: dict[str, str] | N
     grant one either. `Bash` is deliberately NOT covered — vet must RUN checks (tests, env), and
     the freeze-boundary shell rule still applies; the guarantee is "no write capability via file
     tools", the same honest limit as the boundary itself.
+
+    `shell_roots` are directories the SHELL may name, and nothing else. They widen neither the
+    write tools' boundary nor the sandbox's own — they answer a narrower question: does naming this
+    path mean the command left its run's territory. A research sweep needs them because it is the
+    one run whose SOURCE and DESTINATION are different trees: it reads a detached scratch worktree
+    and writes into its item folder, so every honest command it composes names both, and a rule
+    that reads "one absolute path outside the write boundary ⇒ refuse" refuses all of them.
+    Measured 2026-08-16: giving the sweep a scratch directory without this took its refusals from
+    14 to 40, because each refused command was one that named the tree it was reading. A path here
+    is one whose contents this run may destroy without consequence — the research worktree is a
+    throwaway checkout of the anchor that nothing commits, nothing merges, and closing deletes.
+    File writes stay confined by `write_boundary`, so the shell reaching further never becomes the
+    write tools reaching further.
 
     `subagent_cap` bounds how many subagents ONE turn may spawn (harness.policy.MAX_SUBAGENTS by
     default; `None` disables). The count lives in this closure, and a closure is built per turn, so
@@ -833,9 +847,13 @@ def build_can_use_tool(approve: ApproveFn, *, blocked_skills: dict[str, str] | N
             # (build/vet — worktree cwd), OR the command explicitly scopes itself into it via
             # `cd <worktree>` / `git -C <worktree>` (review/close — repo cwd for transcript
             # continuity, P4). Both require the command to name no path OUTSIDE the boundary.
-            if (write_boundary and not _bash_escapes_boundary(command, write_boundary)
-                    and ((cwd is not None and _in_any(cwd, write_boundary))
-                         or _bash_scoped_into_boundary(command, write_boundary))):
+            # `reachable` is the shell's territory: the write boundary plus any `shell_roots` this
+            # run may also name. The write TOOLS above were already decided against `write_boundary`
+            # alone, so a shell root never becomes a place the agent can `Write` to.
+            reachable = [*(write_boundary or []), *(shell_roots or [])]
+            if (reachable and not _bash_escapes_boundary(command, reachable)
+                    and ((cwd is not None and _in_any(cwd, reachable))
+                         or _bash_scoped_into_boundary(command, reachable))):
                 return PermissionResultAllow()
             # Not read-only, and not scoped into the boundary. It still goes to `approve` — an owner
             # at the keyboard may well want to allow it — but the REFUSAL now carries the remedy
@@ -845,9 +863,9 @@ def build_can_use_tool(approve: ApproveFn, *, blocked_skills: dict[str, str] | N
             # it simply isn't anchored inside one. A command that does reach outside gets the plain
             # refusal: telling it to `cd` in would be advice that cannot be followed, and for a
             # destructive one it would be advice worth not giving.
-            if write_boundary and not _bash_escapes_boundary(command, write_boundary):
+            if reachable and not _bash_escapes_boundary(command, reachable):
                 bash_boundary_miss = _BASH_OUTSIDE_BOUNDARY.format(
-                    roots=", ".join(f"`{r}`" for r in write_boundary), first=write_boundary[0])
+                    roots=", ".join(f"`{r}`" for r in reachable), first=reachable[0])
                 if scratch := _scratch_in(write_boundary):
                     bash_boundary_miss += _BASH_SCRATCH_HINT.format(scratch=scratch)
         # L2 read-guard: keep reads inside the host's scope (before the safe-tool auto-allow).
