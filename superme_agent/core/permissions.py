@@ -29,6 +29,7 @@ from claude_agent_sdk import (
 )
 
 from ..harness.policy import MAX_SUBAGENTS, SUBAGENT_TOOLS, is_safe
+from .sandbox import SCRATCH_DIRNAME
 
 log = logging.getLogger("superme-agent")
 
@@ -79,6 +80,17 @@ _BASH_OUTSIDE_BOUNDARY = (
     "pass the directory explicitly (`git -C {first} …`). Keep every path it names inside that "
     "directory. If the work genuinely belongs outside it, that is a wall — say so in your record "
     "rather than looking for another way through."
+)
+# Appended only when the boundary actually HAS a scratch directory (item folders do; a build
+# worktree does not — telling a builder to create one would litter the repo). Measured 2026-08-16:
+# every refused command in a live investigation was refused for one reason — it redirected into
+# `$TMPDIR`. Real mechanical work needs a file to put a list in, and an agent that is told "stay
+# inside the boundary" without being told where a temp file may live has been given half a rule.
+_BASH_SCRATCH_HINT = (
+    "\n\nIf what you needed was somewhere to put intermediate output, this run has a scratch "
+    "directory at `{scratch}/`. It is inside the boundary, so commands writing there need no "
+    "approval; nothing in it is read as a result or kept after the item closes. Use it instead of "
+    "`$TMPDIR` or `/tmp`, which are outside every boundary."
 )
 _LEARNING_SCOPE_DENIED = (
     "This run may only use Bash and write inside its own scratch workspace. That target is outside "
@@ -414,6 +426,37 @@ def _target_in_any(input_data: dict, roots: list[Path]) -> bool:
         return False
 
 
+# Paths that are not places. `/dev/null` and the standard streams name a kernel device, not a
+# directory anyone can be inside, so asking whether they sit in a write boundary is a category
+# error — and answering "no" costs real work: measured 2026-08-16, an investigation's capability
+# probe (`… | sed … > /dev/null; echo $?`) was refused as an out-of-boundary write, and so were
+# several inventory commands whose only sin was discarding stderr. They are transparent to both
+# boundary checks: they never mark a command as escaping, and they never count as the in-boundary
+# path that scopes one.
+_PSEUDO_DEVICE_ROOTS = ("/dev/null", "/dev/zero", "/dev/tty",
+                        "/dev/stdin", "/dev/stdout", "/dev/stderr", "/dev/fd/")
+
+
+def _is_pseudo_device(token: str) -> bool:
+    """True for `/dev/null` and friends — a kernel device, not a location on disk."""
+    return any(token == p or token.startswith(p) for p in _PSEUDO_DEVICE_ROOTS)
+
+
+def _scratch_in(roots: list[Path]) -> Path | None:
+    """The first boundary root that already HAS a `scratch/` directory, or None. Read from disk
+    rather than derived: an item folder is scaffolded with one, a build worktree is not, and the
+    difference is exactly the difference between a remedy the agent can follow and an instruction
+    to litter the repo with a directory nobody asked for."""
+    for root in roots:
+        try:
+            cand = Path(root) / SCRATCH_DIRNAME
+            if cand.is_dir():
+                return cand
+        except (OSError, ValueError):
+            continue
+    return None
+
+
 # Tokens that look like an absolute path (`/x`, `~/x`) — the only part of a shell command we can
 # honestly reason about. Everything else (relative paths, `cd`, substitution) resolves against the
 # session cwd, which the boundary check already pins inside the worktree.
@@ -427,7 +470,7 @@ def _bash_escapes_boundary(command: str, roots: list[Path]) -> bool:
         tok = raw.strip("'\"")
         if tok.startswith("~"):
             tok = str(Path(tok).expanduser())
-        if not tok.startswith("/"):
+        if not tok.startswith("/") or _is_pseudo_device(tok):
             continue
         if not _in_any(Path(tok), roots):
             return True
@@ -474,7 +517,7 @@ def _bash_scoped_into_boundary(command: str, roots: list[Path]) -> bool:
         tok = raw.strip("'\"")
         if tok.startswith("~"):
             tok = str(Path(tok).expanduser())
-        if not tok.startswith("/"):
+        if not tok.startswith("/") or _is_pseudo_device(tok):
             continue
         named += 1
         try:
@@ -798,6 +841,8 @@ def build_can_use_tool(approve: ApproveFn, *, blocked_skills: dict[str, str] | N
             if write_boundary and not _bash_escapes_boundary(command, write_boundary):
                 bash_boundary_miss = _BASH_OUTSIDE_BOUNDARY.format(
                     roots=", ".join(f"`{r}`" for r in write_boundary), first=write_boundary[0])
+                if scratch := _scratch_in(write_boundary):
+                    bash_boundary_miss += _BASH_SCRATCH_HINT.format(scratch=scratch)
         # L2 read-guard: keep reads inside the host's scope (before the safe-tool auto-allow).
         if read_roots and cwd is not None and tool_name in _READ_TOOLS:
             target = _read_target(input_data)

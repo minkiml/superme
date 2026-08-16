@@ -31,9 +31,12 @@ sandbox that silently refuses the owner's own `pip install` trades a real capabi
 guarantee the human already provides.
 """
 
+import logging
 import shutil
 import sys
 from pathlib import Path
+
+log = logging.getLogger("superme-agent")
 
 # `allowUnsandboxedCommands: False` is the load-bearing line: without it a command can opt out via
 # `dangerouslyDisableSandbox`, and a boundary the occupant can lift is not a boundary.
@@ -68,6 +71,41 @@ def sandbox_options(writes: list[Path] | None) -> dict:
     if writes is None:
         return {}
     return {"sandbox": _POLICY, "add_dirs": _roots(writes)}
+
+
+# ------------------------------------------------------------------ somewhere to put a temp file
+# A boundary that says only where you may NOT write is half a rule. Real mechanical work — an
+# inventory of every declaration in a repo, a sorted list to diff against another — needs a file to
+# put a list in, and the shell's usual answer (`$TMPDIR`, `/tmp`) is outside every boundary SuperMe
+# grants. Measured 2026-08-16: an investigation reached for `$TMPDIR` six times in three different
+# shapes, was refused each time, and dropped the scripted half of its sweep.
+#
+# So each item folder carries its own. It is INSIDE the write boundary, so it needs no new
+# permission and no new sandbox root — the boundary the run already has covers it. Its contents are
+# never read back as a result and never survive the item: this is working space, not a record. The
+# self-ignoring `.gitignore` keeps every byte of it out of the knowledge repo without a rule
+# anywhere else having to know the directory exists.
+SCRATCH_DIRNAME = "scratch"
+_SCRATCH_GITIGNORE = "*\n"
+
+
+def ensure_scratch(item_dir: Path) -> Path:
+    """Create (idempotently) and return `<item_dir>/scratch/`. Safe to call on every run: it is a
+    `mkdir -p` plus one small file, and it repairs items minted before the directory existed.
+
+    Returns the path even when it could not be created. The caller is naming the directory to an
+    agent, and a failed mkdir must not cost it the whole preamble — nor is the loss silent in
+    practice: creating a directory inside the write boundary is one of the things the boundary
+    already auto-allows, so an agent that finds it missing can make it in one command."""
+    scratch = Path(item_dir) / SCRATCH_DIRNAME
+    try:
+        scratch.mkdir(parents=True, exist_ok=True)
+        marker = scratch / ".gitignore"
+        if not marker.exists():
+            marker.write_text(_SCRATCH_GITIGNORE)
+    except OSError as exc:
+        log.warning("could not create scratch dir %s: %s", scratch, exc)
+    return scratch
 
 
 def _roots(paths: list[Path]) -> list[str]:

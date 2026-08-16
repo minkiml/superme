@@ -23,6 +23,7 @@ from pathlib import Path
 
 import yaml
 
+from . import sandbox
 from .titles import check_title, normalize_title
 
 
@@ -507,9 +508,11 @@ class DevKnowledgeService:
         # report — which made triage reach for `mkdir -p`, a mutation the boundary check does not
         # auto-allow (it keys on the session's cwd, and triage sits at the repo), so the phase was
         # denied a directory inside its own item and had to work around it (live, 2026-08-07).
-        # An item's own folders are the kernel's to make, not an agent's.
+        # An item's own folders are the kernel's to make, not an agent's — including `scratch/`,
+        # the one place a phase's shell may put intermediate output (see core/sandbox).
         for sub in ("artifacts", "reports"):
             (folder / sub).mkdir(parents=True, exist_ok=True)
+        sandbox.ensure_scratch(folder)
 
         today = date.today().isoformat()
         # Optional provenance lines — written only when set (absent = null on read; no dead fields).
@@ -1635,12 +1638,15 @@ class DevKnowledgeService:
         item_md.write_text("---\n" + "\n".join(lines) + "\n---\n" + body.lstrip("\n"))
 
         removed = []
-        for name in ("artifacts", "reports", "checkpoints"):
+        # `scratch/` goes with them: it is a re-run's working space, and last attempt's half-built
+        # inventories are exactly the stale input a fresh run must not find lying around.
+        for name in ("artifacts", "reports", "checkpoints", sandbox.SCRATCH_DIRNAME):
             sub = folder / name
             if sub.is_dir():
                 shutil.rmtree(sub)
                 removed.append(name + "/")
         (folder / "artifacts").mkdir(parents=True, exist_ok=True)   # as `create_work_item` leaves it
+        sandbox.ensure_scratch(folder)
         log_file = folder / "deputy-log.jsonl"
         if log_file.exists():
             log_file.unlink()

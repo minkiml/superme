@@ -29,7 +29,7 @@ Pure functions over plain data — no daemon imports.
 import json
 from pathlib import Path
 
-from . import artifacts, kind_profiles
+from . import artifacts, kind_profiles, sandbox
 
 
 # =============================================================================================
@@ -598,6 +598,19 @@ def work_item_preamble(item_id: str, item: dict, item_dir, *, interactive: bool 
             "\n**Edit boundary:** this phase touches no real code — writes belong in the item's "
             "own folder (artifacts, checkpoints); " + code_line
         )
+    # Every boundary above includes the item folder, so this sentence is true in all of them —
+    # and it is the half of the boundary rule the agent could not work out for itself. Told only
+    # where it may NOT write, a shell reaches for `$TMPDIR`, is refused, and abandons the work that
+    # needed a file (measured 2026-08-16). Made here rather than at each of the six runners: naming
+    # a directory and creating it are one act, and a path the kernel names must exist.
+    scratch = sandbox.ensure_scratch(Path(item_dir))
+    lines.append(
+        f"\n**Scratch space:** intermediate output — inventories, sorted lists, a helper script, "
+        f"anything you need a file for rather than a pipe — goes in `{scratch}/`. It is inside the "
+        f"boundary, so nothing there needs approval. Use it instead of `$TMPDIR` or `/tmp`, which "
+        f"are outside every boundary. Nothing in it is read as a result or kept after this item "
+        f"closes, so put working files there freely and cite none of them."
+    )
     # Two ENDINGS in one block was the defect here (owner, 2026-08-11): this said "say so and stop"
     # while the run protocol below says the `report_completion` call IS the closing statement and
     # nothing follows it. Both are true — of different sessions. So the ending belongs to whichever
