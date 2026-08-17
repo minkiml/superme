@@ -27,8 +27,36 @@ second ticket for work already on the board is noise the owner has to clean up.
 ## Step 2 — File what survives
 
 For each non-duplicate proposal, `create_inbox_item` with `spawned_from_item` = this item and
-`relation: "spawn"`, and a brief carrying what a cold triage session needs: what was found, why this
-work follows, and where the evidence lives.
+`relation: "spawn"`.
+
+**The four brief fields, and what each owes here.** They are the whole cold-start context: the
+triage session that reads them has this item's id and nothing else. Every pointer must survive the
+reader not having your context.
+
+| field | what it owes on a spawn from a report |
+|---|---|
+| `background` | the one finding this proposal answers, in the report's terms — not a summary of the whole sweep |
+| `discussion` | where the evidence is: **artifact file AND the section inside it**, plus the commit sha the report measured against |
+| `direction` | the proposal's `delivers:` clause, carried across |
+| `constraints` | the proposal's `depends-on` verbatim, plus anything the report marked NOT COVERED that touches this work |
+
+**Name the section, not just the file.** `artifacts/investigation.md` alone makes a cold reader
+open a long document and search it.
+
+**Bad and good examples** — the `discussion` field:
+
+```
+Full list in the parent item's investigation.md.
+```
+
+```
+Parent item a1b2c3d4e5f6, `artifacts/investigation.md` `## What can go`, rows D–F.
+Measured against commit 0f1e2d3.
+```
+
+**Write "none" only where the report wrote none.** An empty `constraints` on a proposal whose
+`depends-on` says none is correct and reads correctly. An empty one on a proposal that carried a
+gate has thrown the gate away.
 
 - **File what the report proposed** — you are not re-scoping it. A proposal too vague to file is
   filed as it stands with its vagueness visible, not sharpened by you into something the report

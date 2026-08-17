@@ -76,6 +76,9 @@ discussion just added. Never re-file it and never edit its existing text.
    not restate what the item already says.
 3. **Call `append_inbox_item(item_id, addition)`** — one call per item. It preserves the existing
    content and marks the item agent-touched (origin gains `agent`).
+   - Pass `brief_field` when the addition belongs under a specific handoff-brief section —
+   `background`, `direction` or `constraints`. It defaults to `discussion`, and a constraint
+   mirrored into Discussion summary is one the triage session will not find where it reads.
 
 ## Step 4: Confirm
 

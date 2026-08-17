@@ -18,6 +18,9 @@ yours if you leave it one.
 
 - **`item.md`, and everything in `preliminary/`** — the handoff brief is why this item exists; the
   title alone lost the discussion that shaped it.
+  - **`preliminary/` is read-only** — it is provenance. A thin or absent brief is not yours to
+    repair; say so in `brief.md`'s `## Problem` and work from `item.md` alone, rather than
+    inventing the context it should have carried.
 - **`general/project-prd.md`** — skim the deliverables list. You name one in step 4.
 
 Done when you can say in one sentence what this item wants. If the item is not in `triage`, stop and

@@ -671,6 +671,37 @@ def _wk_note(work_kind: str) -> str:
             " No work kind filed — triage decides it alone.")
 
 
+_BRIEF_FIELDS = ("background", "discussion", "direction", "constraints")
+
+
+def _brief_nudge(args: dict, *, spawned: bool, repairable: bool) -> str:
+    """Name the brief slots this call left empty. The four fields ARE the cold-start context — the
+    session filing has them and the triage session that reads them has nothing else — so an empty
+    one is context thrown away at the only moment it was free.
+
+    A BRANCH-OFF is held to EACH field, not merely to "not all four empty": it is filed from a
+    parent that already holds the answer, so a blank slot there is a carry that did not happen. A
+    plain capture may genuinely have only a background, so it is flagged only when wholly empty.
+
+    `repairable` is false once the row has auto-pushed: the brief has moved into the item's
+    `preliminary/`, which is immutable provenance, so there is nothing left to append to and the
+    only honest instruction is to say so where the owner will read it."""
+    missing = [f for f in _BRIEF_FIELDS if not _s(args, f)]
+    if not missing or (not spawned and len(missing) < len(_BRIEF_FIELDS)):
+        return ""
+    head = (f" NOTE: the handoff brief's {', '.join(missing)} "
+            f"{'slot is' if len(missing) == 1 else 'slots are'} EMPTY")
+    if not repairable:
+        return head + (" — the brief has already moved into the item's read-only `preliminary/`, "
+                       "so it cannot be amended. Say in your reply what is missing from it.")
+    if spawned:
+        return head + (" — and this is a branch-off, so the parent item holds what belongs there. "
+                       "Fill them now with `append_inbox_item` (it mirrors onto the brief).")
+    return head + (". If this discussion holds real context, capture it now with "
+                   "`append_inbox_item` (it mirrors onto the brief) — the future triage session "
+                   "cold-starts from this brief and shouldn't start blind.")
+
+
 def _create_inbox_item(*, store, context_id, dev_root=None, fire_triage=None, **_):
     async def create_inbox_item(args: dict) -> dict:
         from pathlib import Path
@@ -743,17 +774,14 @@ def _create_inbox_item(*, store, context_id, dev_root=None, fire_triage=None, **
                     triaged = False
             paused = " Parent paused (awaiting_child) until it closes." if relation == "blocking" else ""
             kick = " Triage is running on it." if triaged else " It rests at triage for a triage pass."
+            # The auto-push branch used to return before the brief check ran, so the children that
+            # cold-start IMMEDIATELY were the only ones never told their brief was empty.
             return _ok(f"Branch-off filed and AUTO-PUSHED: inbox #{row['id']} → work-item "
                        f"{wi['id']} ({relation} child of {parent}; brief moved to its "
-                       f"preliminary/).{paused}{kick}{_wk_note(_s(args, 'work_kind'))}")
+                       f"preliminary/).{paused}{kick}{_wk_note(_s(args, 'work_kind'))}"
+                       + (_brief_nudge(args, spawned=True, repairable=False) if brief else ""))
         where = f" Handoff brief at {brief}." if brief else ""
-        # An empty brief throws away exactly the context this session holds — flag it back so the
-        # agent fills the fields (the future triage session cold-starts from this brief).
-        filled = any(_s(args, k) for k in ("background", "discussion", "direction", "constraints"))
-        nudge = ("" if filled or not brief else
-                 " NOTE: the handoff brief's slots are EMPTY. If this discussion holds real "
-                 "context, capture it now with `append_inbox_item` (it mirrors onto the brief) — "
-                 "the future triage session cold-starts from this brief and shouldn't start blind.")
+        nudge = _brief_nudge(args, spawned=bool(parent), repairable=True) if brief else ""
         return _ok(f"Created inbox item #{row['id']} — \"{title}\".{where}{nudge}"
                    f"{_wk_note(_s(args, 'work_kind'))} "
                    f"It's in the Inbox for the owner to review and push into a work-item.")
@@ -889,6 +917,11 @@ class AppendInboxItemArgs(TypedDict, total=False):
     addition: Required[Annotated[str, ("the NEW, on-point content from this discussion to append — "
                                        "what the existing item doesn't already cover. Never a rewrite; "
                                        "the existing text is preserved and this is added under it")]]
+    brief_field: Annotated[Literal["background", "discussion", "direction", "constraints"],
+                           ("which handoff-brief section this addition belongs under (default "
+                            "`discussion`). Name it when you are filling a slot the original "
+                            "filing left empty — an addition mirrored into the wrong section is "
+                            "as good as lost to the triage session that reads by section")]
 
 
 def _append_inbox_item(*, store, context_id, dev_root=None, **_):
@@ -907,13 +940,19 @@ def _append_inbox_item(*, store, context_id, dev_root=None, **_):
         if row is None:
             return _err(f"No inbox item #{item_id} to append to.")
         # Mirror the append onto the handoff brief when one exists (D5: append, never rewrite).
+        # The section is the caller's to name: this used to hardcode `discussion`, so an append
+        # meant to fill an empty `constraints` landed under Discussion summary and the triage
+        # session — which reads the brief BY SECTION — never saw it where it looked.
+        field = _s(args, "brief_field") or "discussion"
+        if field not in _BRIEF_FIELDS:
+            return _err(f"`brief_field` must be one of {', '.join(_BRIEF_FIELDS)}.")
         if dev_root:
             from pathlib import Path
             from ...core import artifacts as _arts
             from ...core.inbox_flow import inbox_content_dir
             folder = inbox_content_dir(Path(dev_root), row["id"])
             if (folder / "handoff-brief.md").exists():
-                _arts.write_handoff_brief(folder, row.get("title") or "", discussion=addition)
+                _arts.write_handoff_brief(folder, row.get("title") or "", **{field: addition})
         return _ok(f"Appended to inbox item #{row['id']} — \"{row.get('title') or ''}\" "
                    f"(existing content untouched; origin now {', '.join(row.get('origin') or [])}).")
     return append_inbox_item
