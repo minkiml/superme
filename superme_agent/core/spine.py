@@ -141,6 +141,14 @@ class RepoConfig:
     anchor_branch: str | None = None  # the branch every git site targets (branch-from base · sync
     # source · merge target). None = derive the repo's own default branch; set it when direct-to-main
     # is forbidden and a sanctioned intermediate (e.g. `develop`) is the furthest SuperMe may go.
+    source_ignored: list = field(default_factory=list)  # gitignored paths that are nonetheless part
+    # of this repo's SOURCE, copied read-only into a research scratch worktree. A worktree is a
+    # checkout, so it holds tracked files only — and a `housekeeping` sweep's whole obligation is a
+    # NEGATIVE claim ("nothing reaches this"), which an incomplete tree cannot support. Measured
+    # live: a sweep read "zero callers repo-wide" for a function an ignored test suite calls.
+    # Repo-relative directory or file paths, no globs, no `..`, never absolute. Default EMPTY on
+    # purpose — most ignored content (dependencies, caches, build output, `.env`) must never be
+    # copied, and this repo alone ignores ~18k files. Naming what IS source is the owner's call.
     vet_env: dict | None = None  # how to boot a server that runs an ITEM WORKTREE's code, so a
     # check that queries one is not answered by whatever instance happens to be listening (which
     # serves a different checkout — a deleted endpoint still reads as present there). Keys:
@@ -167,6 +175,22 @@ class RepoConfig:
         elif self.vet_env is not None and not isinstance(self.vet_env, dict):
             log.warning("repo %r: vet_env must be a mapping; ignoring it", self.id)
             self.vet_env = None
+        # Every entry is checked HERE, once, so no consumer has to re-derive what is safe: a path
+        # that escapes the repo would copy something the owner never named into a tree an agent
+        # reads. Dropped loudly rather than sanitised — a silently-rewritten path is a path nobody
+        # can find again in the config they wrote.
+        clean: list[str] = []
+        for raw in (self.source_ignored or []):
+            # Absoluteness is tested on the RAW value: stripping the leading slash first would
+            # turn `/etc/passwd` into a valid-looking relative path instead of rejecting it.
+            absolute = Path(str(raw).strip()).is_absolute()
+            rel = str(raw).strip().strip("/")
+            if not rel or absolute or ".." in Path(rel).parts:
+                log.warning("repo %r: source_ignored entry %r is not a repo-relative path; "
+                            "ignoring it", self.id, raw)
+                continue
+            clean.append(rel)
+        self.source_ignored = clean
 
     # --- home conventions (the relocation pass edits THESE, not the YAML) -----------
     def _knowledge_base(self) -> Path:
@@ -209,6 +233,8 @@ class RepoConfig:
             d["anchor_branch"] = self.anchor_branch
         if self.vet_env:
             d["vet_env"] = dict(self.vet_env)
+        if self.source_ignored:
+            d["source_ignored"] = list(self.source_ignored)
         return d
 
 
@@ -254,6 +280,7 @@ def load_repos(path: Path = REPOS_CONFIG_FILE) -> dict[str, RepoConfig]:
             review_mode=(spec.get("review_mode") or REVIEW_MODE_DEFAULT),
             anchor_branch=spec.get("anchor_branch") or None,
             vet_env=spec.get("vet_env") or None,
+            source_ignored=spec.get("source_ignored") or [],
         )
     return out
 

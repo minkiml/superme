@@ -22,6 +22,11 @@ repos:
       ready: /openapi.json
       url_env: SUPERME_DAEMON_URL
 
+    # Gitignored paths that are nonetheless this repo's SOURCE, mirrored read-only
+    # into a research scratch worktree. `scripts/` holds ~40 offline suites that a
+    # checkout omits, which made a housekeeping sweep report a live function as dead.
+    source_ignored:
+      - scripts
   dummy:
     label: Dummy Project
     cwd: "/Users/cooma/Developer/my_docs/dummy_project"

@@ -16,6 +16,8 @@ list (NOT an exception) so the caller can hold the item at review instead of adv
 from __future__ import annotations
 
 import logging
+import os
+import shutil
 from datetime import datetime
 from pathlib import Path
 
@@ -43,6 +45,88 @@ def repo_review_mode(ctx, spine) -> str:
     mode describes the repo's bar today, so flipping it applies to items already sitting at review."""
     rc = spine.repo(ctx.id)
     return rc.review_mode if rc else REVIEW_MODE_DEFAULT
+
+
+# Junk that lives INSIDE an otherwise-source directory. An allowlisted path is a statement about
+# what the owner considers source, not a promise that every byte under it is — a Python package
+# carries its own caches, and copying those buys an agent nothing but noise to read past.
+_NOT_SOURCE = frozenset({"__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache",
+                         "node_modules", ".git", ".venv", "venv", ".DS_Store"})
+_NOT_SOURCE_SUFFIX = (".pyc", ".pyo", ".so", ".dylib", ".db", ".sqlite", ".sqlite3", ".log")
+# NEVER copied, whatever the config says. A secret is the one thing gitignore is most often
+# protecting, and the cost of the owner mis-naming a path once is a credential sitting in a tree an
+# agent reads and quotes. Refused loudly instead — this is the floor under the allowlist, not a
+# rule the allowlist can lift.
+_NEVER_SOURCE_SUFFIX = (".pem", ".key", ".p12", ".pfx", ".keystore")
+
+
+def _is_secret(name: str) -> bool:
+    low = name.lower()
+    return (low == ".env" or low.startswith(".env.") or low.endswith(_NEVER_SOURCE_SUFFIX)
+            or low.startswith(("id_rsa", "id_ed25519", "credentials", ".netrc", ".npmrc",
+                               ".pypirc")))
+
+
+def _mirror_source_ignored(repo: Path, worktree: Path, paths: list[str]) -> tuple[int, list[str]]:
+    """Copy the owner-named gitignored SOURCE paths into a fresh scratch worktree, read-only.
+
+    A worktree is a checkout, so it holds tracked files only. That is right for isolation and wrong
+    for the one claim `housekeeping` exists to make — "nothing reaches this" cannot be proven in a
+    tree that is missing files. This closes the gap for exactly the paths the owner named in
+    `RepoConfig.source_ignored`, and for nothing else: the default is empty, and a repo that names
+    nothing keeps today's behaviour.
+
+    Copies are made **read-only** (mode 0o444 / dirs 0o555). The run is already denied writes
+    outside its item folder by the permission layer; the file mode is the second wall, so a copy
+    can never be mistaken for a place to edit — and edits here would be invisible, landing in a
+    throwaway tree instead of the repo.
+
+    Returns `(files_copied, skipped_reasons)`. Never raises: a mirror that fails leaves the run
+    with today's incomplete tree, which is worse but not broken, and the skip is reported so the
+    silence that caused this defect is not simply reintroduced one layer down.
+    """
+    copied, skipped = 0, []
+    for rel in paths:
+        src, dst = repo / rel, worktree / rel
+        try:
+            if not src.exists():
+                skipped.append(f"{rel}: not present in the repo")
+                continue
+            if _is_secret(Path(rel).name):
+                skipped.append(f"{rel}: refused — this looks like a secret, and the allowlist "
+                               f"cannot lift that")
+                continue
+            if src.is_file():
+                if dst.exists():
+                    skipped.append(f"{rel}: already in the checkout")
+                    continue
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, dst)
+                dst.chmod(0o444)
+                copied += 1
+                continue
+            # MERGE into the directory rather than skipping when it exists. The case that matters
+            # is a partly-tracked dir — this repo's `scripts/` has 5 tracked files and ~40 ignored
+            # ones — so skip-if-present would skip exactly the directory the defect was found in.
+            for cur, dirs, files in os.walk(src):
+                dirs[:] = [d for d in dirs if d not in _NOT_SOURCE]
+                target = dst / Path(cur).relative_to(src)
+                target.mkdir(parents=True, exist_ok=True)
+                for f in files:
+                    if f in _NOT_SOURCE or f.endswith(_NOT_SOURCE_SUFFIX) or _is_secret(f):
+                        continue
+                    out = target / f
+                    if out.exists():        # tracked: the checkout's copy is authoritative
+                        continue
+                    shutil.copy2(Path(cur) / f, out)
+                    out.chmod(0o444)
+                    copied += 1
+            # Directory modes come last: a read-only dir cannot be written into while walking it.
+            for cur, dirs, _ in os.walk(dst, topdown=False):
+                Path(cur).chmod(0o555)
+        except Exception as e:                                  # noqa: BLE001 — never fatal
+            skipped.append(f"{rel}: {e}")
+    return copied, skipped
 
 
 def ensure_scratch_worktree(ctx, context_id: str, item: dict, *, dev, dev_store, spine) -> Path:
@@ -76,9 +160,24 @@ def ensure_scratch_worktree(ctx, context_id: str, item: dict, *, dev, dev_store,
     dev.set_work_item_git(ctx.internal_root / "dev", item_id,
                           git_worktree=rec["worktree"], git_base=rec["base"])
     if not rec.get("reused"):
+        # Mirror the owner-named gitignored source BEFORE the tree is announced, so the first run
+        # to arrive already reads a complete one. Only on a fresh tree: a reused tree was mirrored
+        # when it was made, and re-copying would fight the read-only modes it now carries.
+        cfg = spine.repo(ctx.id)
+        named = list(getattr(cfg, "source_ignored", None) or [])
+        copied, skipped = _mirror_source_ignored(ctx.cwd, Path(rec["worktree"]), named) \
+            if named else (0, [])
         dev_store.log_event(context_id, "git.worktree",
-                            f"Created a detached read-only checkout at {rec['base']}",
-                            item_id=item_id, actor="daemon", meta=rec)
+                            f"Created a detached read-only checkout at {rec['base']}"
+                            + (f" · mirrored {copied} file(s) from {len(named)} ignored source "
+                               f"path(s)" if named else ""),
+                            item_id=item_id, actor="daemon",
+                            meta={**rec, **({"source_ignored": named, "mirrored": copied}
+                                            if named else {}),
+                                  **({"mirror_skipped": skipped} if skipped else {})})
+        if skipped:
+            log.warning("scratch worktree %s: source_ignored not fully mirrored — %s",
+                        item_id, "; ".join(skipped))
     return Path(rec["worktree"])
 
 

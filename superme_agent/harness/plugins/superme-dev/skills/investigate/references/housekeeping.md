@@ -11,6 +11,28 @@ provable answer, so this family is graded on proof.
 A finding is a thing that is stale **plus the proof nothing reaches it**. `grep` returning nothing
 is where this work starts, not where it ends.
 
+**Your checkout may not be the whole repo.** You read a detached checkout, which holds the files
+git TRACKS. Files the project ignores — test suites, local tooling, scratch directories — can call
+the thing you are about to call dead, and they are not here to be found. Before writing any "no
+callers" line:
+
+1. Run `git status --ignored --porcelain` (or `git check-ignore -v <path>`) to see what this tree
+   omits.
+2. If anything omitted could plausibly reference your candidate, the claim is **not proven**.
+   Record it under `## Open threads` naming the omitted path, and leave the finding at "no tracked
+   caller" — never at "no callers".
+
+**Bad and good examples** — the same finding:
+
+```
+`helper()` — zero callers repo-wide.
+```
+
+```
+`helper()` — no caller in the tracked tree (`grep -rn '\.helper('`). NOT proven repo-wide: this
+checkout omits `tools/` (gitignored), which is where this project keeps its test suites.
+```
+
 Four kinds to check in depth are in scope:
 
 | kind | what makes it stale | the recurring miss |
