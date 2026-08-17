@@ -5,7 +5,7 @@ import { RepoIcon } from '@/lib/repoIcons'
 import type { OrbitRepo } from '@/features/shell/useCommandStats'
 import { getProjectStatus, getAttention, type AttentionBadge, type WorkItem } from '@/lib/api'
 import { setRepoGit, getRepoBranches } from '@/lib/api/system'
-import { useLive } from '@/lib/live'
+import { invalidate, useLive } from '@/lib/live'
 import { K } from '@/lib/live/keys'
 import Dropdown from '@/ui/Dropdown'
 import TabBar from '@/ui/TabBar'
@@ -106,7 +106,13 @@ export default function DevWorkspace({
   useEffect(() => {
     setAnchor(repo.anchorBranch ?? branches.data?.anchor ?? repo.resolvedAnchor ?? '')
   }, [repo.id, repo.anchorBranch, repo.resolvedAnchor, branches.data?.anchor])
-  const anchorOptions = (branches.data?.branches ?? []).map((b) => ({ value: b, label: b }))
+  // The list is fetched once (branches change rarely), so it can be older than the anchor the
+  // server just told us about — a branch created or deleted outside this tab is not in it. Keep the
+  // CURRENT anchor in the options whatever the list says: a dropdown showing a value it cannot
+  // offer is a one-way door, since picking anything else loses the way back until a reload.
+  const anchorOptions = Array.from(
+    new Set([...(branches.data?.branches ?? []), ...(anchor ? [anchor] : [])]),
+  ).map((b) => ({ value: b, label: b }))
 
   // Onboarding gate (S5·B): a repo whose project memory isn't established yet (PRD defines no
   // deliverables) shows the onboarding front door instead of the work tabs — you can't take on work
@@ -192,7 +198,12 @@ export default function DevWorkspace({
                   <Dropdown
                     value={anchor}
                     options={anchorOptions}
-                    onChange={(v) => { setAnchor(v); setRepoGit(repo.id, { anchor_branch: v }).catch(() => {}) }}
+                    onChange={(v) => {
+                      setAnchor(v)
+                      setRepoGit(repo.id, { anchor_branch: v })
+                        .then(() => invalidate(K.repoBranches(repo.id)))
+                        .catch(() => {})
+                    }}
                     align="right"
                     width="w-40"
                     title={repo.anchorError
