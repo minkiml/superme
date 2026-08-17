@@ -2320,6 +2320,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/dev/decisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Dev Decisions
+         * @description This repo's decision ledger — every call the owner has ruled on, newest FIRST.
+         *
+         *     The file is append-only and reads chronologically (oldest first, per its own contract); a reader
+         *     scanning for what was decided lately wants the opposite, so the order is flipped here and only
+         *     here. Nothing is derived: the entries are the file's own headings and bodies.
+         *
+         *     A repo with no ledger reads as an empty list — the correct starting state for a project where
+         *     nobody has had to rule on anything yet, never an error.
+         */
+        get: operations["dev_decisions_dev_decisions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/dev/verification/{entry_id}": {
         parameters: {
             query?: never;
@@ -3156,6 +3183,22 @@ export interface components {
             /** Tables */
             tables: components["schemas"]["TableInfo"][];
         };
+        /** DecisionEntry */
+        DecisionEntry: {
+            /** Id */
+            id: string;
+            /** Title */
+            title: string;
+            /** Status */
+            status: string;
+            /** Body */
+            body: string;
+        };
+        /** DecisionsResponse */
+        DecisionsResponse: {
+            /** Decisions */
+            decisions: components["schemas"]["DecisionEntry"][];
+        };
         /** DeputyConfigBody */
         DeputyConfigBody: {
             /** Enabled */
@@ -3377,6 +3420,8 @@ export interface components {
             proof: components["schemas"]["ProofRow"][];
             /** Lenses */
             lenses: components["schemas"]["LensRead"][];
+            /** Decisions */
+            decisions: components["schemas"]["DecisionEntry"][];
             /** Reports */
             reports: string[];
         };
@@ -3870,6 +3915,11 @@ export interface components {
             ok: boolean;
             work_item: components["schemas"]["WorkItem"];
             inbox: components["schemas"]["InboxRow"];
+            /**
+             * Brief Issues
+             * @default []
+             */
+            brief_issues: string[];
         };
         /**
          * InboxRow
@@ -10086,6 +10136,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["VerificationLibraryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dev_decisions_dev_decisions_get: {
+        parameters: {
+            query?: {
+                context_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DecisionsResponse"];
                 };
             };
             /** @description Validation Error */

@@ -62,8 +62,15 @@ function replySpeaker(feature: string | null | undefined): Speaker {
 // The tinted fills go through `--chat-accent-soft` (set beside `--chat-accent` in ChatPanel) rather
 // than an opacity modifier: `--chat-accent` holds a whole `rgb(...)` string, and Tailwind cannot
 // decompose one to apply `/10` to it.
-const SPEAKER_META: Record<Speaker, { label: string; Icon: typeof Bot; tint: string; bubble: string }> = {
-  you: { label: 'You', Icon: User, tint: 'text-fg', bubble: 'bg-[var(--chat-accent-soft)] border-[var(--chat-accent-line)]' },
+//
+// `right` mirrors the OWNER's row, the same way a general session does it (MessageList's `TALKER`):
+// their own turns sit on the opposite side from everything said to them, and stop short of the full
+// width. Read in one column at one width, an owner turn was indistinguishable from an agent's at a
+// glance — which is the one distinction a transcript has to make without being read.
+const SPEAKER_META: Record<Speaker,
+  { label: string; Icon: typeof Bot; tint: string; bubble: string; right?: boolean }> = {
+  you: { label: 'You', Icon: User, tint: 'text-fg', right: true,
+         bubble: 'bg-[var(--chat-accent-soft)] border-[var(--chat-accent-line)]' },
   agent: { label: 'superme', Icon: Bot, tint: 'text-accent-text', bubble: 'bg-hover border-line' },
   deputy: { label: 'Deputy', Icon: ShieldCheck, tint: 'text-deputy', bubble: 'bg-deputy/10 border-deputy/30' },
 }
@@ -368,15 +375,18 @@ export default function TimelineView({
                 <span className="h-px flex-1 bg-line" />
               </div>
             )}
-            <div className="flex gap-2">
+            <div className={`flex gap-2 ${sm.right ? 'flex-row-reverse' : ''}`}>
               {/* The icon gutter is held even on a continuation row, so every bubble in a run stays
-                  on one left edge instead of stepping out when its header is dropped. */}
+                  on one edge instead of stepping out when its header is dropped. */}
               <div className={`mt-0.5 shrink-0 ${sm.tint}`} title={sm.label}>
                 {lead ? <sm.Icon size={14} /> : <span className="block h-[14px] w-[14px]" />}
               </div>
-              <div className="min-w-0 flex-1">
+              {/* The owner's column stops at 85% and hugs its own side; everyone else fills the
+                  lane. A turn that spans the full width reads as narration however it is tinted. */}
+              <div className={`min-w-0 ${sm.right ? 'max-w-[85%]' : 'flex-1'}`}>
                 {lead && (
-                  <div className="mb-0.5 flex items-center gap-1.5 text-[10px] text-faint">
+                  <div className={`mb-0.5 flex items-center gap-1.5 text-[10px] text-faint
+                                   ${sm.right ? 'justify-end' : ''}`}>
                     <span className={sm.tint}>{sm.label}</span>
                     {b.phase && <span>· {PHASE_LABEL[b.phase] ?? b.phase}</span>}
                   </div>

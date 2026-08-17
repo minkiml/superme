@@ -9,6 +9,7 @@ computed in `core/` or a decision made in `services/drilldown.py`. Nothing is de
 from __future__ import annotations
 
 from pydantic import BaseModel
+from .general import DecisionEntry
 
 
 class GateCheck(BaseModel):
@@ -240,6 +241,8 @@ class DrilldownResponse(BaseModel):
     actions: list[DrilldownAction]
     proof: list[ProofRow]
     lenses: list[LensRead]
+    # Rulings this item's gate wrote into the project ledger — shown where the owner gave them.
+    decisions: list[DecisionEntry]
     reports: list[str]      # phases that have a report to read; the rest grey out
 
 

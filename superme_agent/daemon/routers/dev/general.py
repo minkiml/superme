@@ -12,6 +12,7 @@ from ....core.dev_knowledge import ANCHOR_DOCS, LEGACY_DOCS
 from ...schemas.dev.general import (
     GeneralDocsResponse, GeneralDocResponse, GeneralDocSaveBody, GeneralDocSaveResponse,
     LibraryEntryBody, ProjectStatusResponse, RoadmapBoardResponse, PortraitResponse, LintResponse,
+    DecisionsResponse,
     VerificationLibraryResponse,
 )
 
@@ -65,6 +66,20 @@ def dev_verification_library(context_id: str = "global") -> dict:
     implementation plan inherits, and the available ones a plan cites by id. A repo with no library
     reads as two empty lists — the correct starting state, never an error."""
     return _vl.read_library(_dev_root(context_id))
+
+
+@router.get("/dev/decisions", response_model=DecisionsResponse)
+def dev_decisions(context_id: str = "global") -> dict:
+    """This repo's decision ledger — every call the owner has ruled on, newest FIRST.
+
+    The file is append-only and reads chronologically (oldest first, per its own contract); a reader
+    scanning for what was decided lately wants the opposite, so the order is flipped here and only
+    here. Nothing is derived: the entries are the file's own headings and bodies.
+
+    A repo with no ledger reads as an empty list — the correct starting state for a project where
+    nobody has had to rule on anything yet, never an error."""
+    from ....core import decision_ledger as _dl
+    return {"decisions": list(reversed(_dl.read_entries(_dev_root(context_id))))}
 
 
 @router.patch("/dev/verification/{entry_id}", response_model=GeneralDocSaveResponse)

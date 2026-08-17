@@ -68,6 +68,17 @@ class VerificationLibraryResponse(BaseModel):
     available: list[LibraryEntry]
 
 
+class DecisionEntry(BaseModel):
+    id: str            # D-NNN — the grep anchor and supersession target, never reused
+    title: str
+    status: str        # accepted | superseded by D-NNN | deprecated (inline in the heading)
+    body: str          # Date · Decision · Why · Rejected · Source, verbatim
+
+
+class DecisionsResponse(BaseModel):
+    decisions: list[DecisionEntry]
+
+
 class LibraryEntryBody(BaseModel):
     context_id: str = "global"
     tier: str          # standing | available — promoting is the owner's call and nobody else's

@@ -331,6 +331,14 @@ export type VerificationLibrary = Schema<'VerificationLibraryResponse'>
 export function getVerificationLibrary(contextId = 'global'): Promise<VerificationLibrary> {
   return getJSON(`/api/dev/verification?context_id=${q(contextId)}`)
 }
+// The DECISION LEDGER — every call the owner has ruled on, newest first. Read-only by contract:
+// entries are append-only history, reversed by appending a new one, never edited in place. The
+// kernel is the only writer (it records a ruling the moment it is given at a review gate), so
+// there is no save/patch counterpart here and there should never be one.
+export type DecisionEntry = Schema<'DecisionEntry'>
+export function getDecisions(contextId = 'global'): Promise<{ decisions: DecisionEntry[] }> {
+  return getJSON(`/api/dev/decisions?context_id=${q(contextId)}`)
+}
 export function moveLibraryEntry(entryId: string, tier: 'standing' | 'available', contextId = 'global'): Promise<{ ok: boolean; name: string }> {
   return sendJSON(`/api/dev/verification/${q(entryId)}`, 'PATCH', { tier, context_id: contextId })
 }

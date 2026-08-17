@@ -25,6 +25,7 @@ from datetime import datetime
 from pathlib import Path
 
 from ...core import artifacts as _arts
+from ...core import decision_ledger as _ledger
 from ...core import gate_briefs, kind_profiles, status_router
 from . import attention as _attention
 from .rerun import rerun_reason as _rerun_reason
@@ -496,6 +497,10 @@ def build_payload(item: dict, item_dir: Path, dev_root: Path, main_repo_dir: Pat
         # The standing lenses' read of this cycle (verification-model §3). Item-wide by nature —
         # they answer questions no single task owns — so they sit beside the proof rows, not in one.
         "lenses": [{"lens": ln, **r} for ln, r in _arts.lens_reads(item_dir).items()],
+        # The rulings THIS item's gate turned into permanent project decisions. Shown here because
+        # this is where the owner answered: a ruling that silently becomes durable teaches nothing,
+        # and the next sweep reading it back is invisible from any other screen.
+        "decisions": _ledger.entries_for_item(dev_root, str(item.get("id"))),
         # Which phases have a report to read — the Reports tab greys the rest rather than offering a
         # tab that opens empty.
         "reports": [p for p in kind_profiles.get_profile(item.get("kind")).phases

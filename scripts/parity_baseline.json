@@ -8,6 +8,7 @@
     "GET /contexts",
     "GET /dev",
     "GET /dev/attention",
+    "GET /dev/decisions",
     "GET /dev/general",
     "GET /dev/general/{name}",
     "GET /dev/harness/assets",
@@ -1907,6 +1908,50 @@
           "title": "DatabaseInfo",
           "type": "object"
         },
+        "DecisionEntry": {
+          "properties": {
+            "body": {
+              "title": "Body",
+              "type": "string"
+            },
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "status": {
+              "title": "Status",
+              "type": "string"
+            },
+            "title": {
+              "title": "Title",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "title",
+            "status",
+            "body"
+          ],
+          "title": "DecisionEntry",
+          "type": "object"
+        },
+        "DecisionsResponse": {
+          "properties": {
+            "decisions": {
+              "items": {
+                "$ref": "#/components/schemas/DecisionEntry"
+              },
+              "title": "Decisions",
+              "type": "array"
+            }
+          },
+          "required": [
+            "decisions"
+          ],
+          "title": "DecisionsResponse",
+          "type": "object"
+        },
         "DeputyConfigBody": {
           "properties": {
             "enabled": {
@@ -2379,6 +2424,13 @@
               "title": "Checks",
               "type": "array"
             },
+            "decisions": {
+              "items": {
+                "$ref": "#/components/schemas/DecisionEntry"
+              },
+              "title": "Decisions",
+              "type": "array"
+            },
             "gate": {
               "title": "Gate",
               "type": "string"
@@ -2455,6 +2507,7 @@
             "actions",
             "proof",
             "lenses",
+            "decisions",
             "reports"
           ],
           "title": "DrilldownResponse",
@@ -3486,6 +3539,11 @@
             "inbox_open": {
               "title": "Inbox Open",
               "type": "integer"
+            },
+            "shipped": {
+              "default": 0,
+              "title": "Shipped",
+              "type": "integer"
             }
           },
           "required": [
@@ -3710,6 +3768,17 @@
                 }
               ],
               "title": "Title"
+            },
+            "work_kind": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Work Kind"
             }
           },
           "required": [
@@ -3836,6 +3905,17 @@
                 }
               ],
               "title": "Title"
+            },
+            "work_kind": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Work Kind"
             }
           },
           "title": "InboxPatch",
@@ -3854,6 +3934,14 @@
         },
         "InboxPushResponse": {
           "properties": {
+            "brief_issues": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Brief Issues",
+              "type": "array"
+            },
             "inbox": {
               "$ref": "#/components/schemas/InboxRow"
             },
@@ -3995,6 +4083,21 @@
             "updated_at": {
               "title": "Updated At",
               "type": "string"
+            },
+            "work_kind": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "implementation",
+                    "research"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Work Kind"
             }
           },
           "required": [
@@ -5808,6 +5911,17 @@
               "title": "Ok",
               "type": "boolean"
             },
+            "outcome": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Outcome"
+            },
             "phase": {
               "anyOf": [
                 {
@@ -5858,6 +5972,11 @@
                 }
               ],
               "title": "Target"
+            },
+            "terminal": {
+              "default": false,
+              "title": "Terminal",
+              "type": "boolean"
             },
             "title": {
               "title": "Title",
@@ -8212,6 +8331,11 @@
               "title": "Id",
               "type": "string"
             },
+            "item_gone": {
+              "default": false,
+              "title": "Item Gone",
+              "type": "boolean"
+            },
             "item_id": {
               "anyOf": [
                 {
@@ -9787,6 +9911,32 @@
               ],
               "title": "Phase Tokens 4Type"
             },
+            "proposed_kind": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "implementation",
+                    "research"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Proposed Kind"
+            },
+            "research_kind": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Research Kind"
+            },
             "root_id": {
               "anyOf": [
                 {
@@ -10325,6 +10475,17 @@
               ],
               "title": "Duration Ms"
             },
+            "ended_at": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ended At"
+            },
             "model": {
               "anyOf": [
                 {
@@ -10586,6 +10747,47 @@
             }
           },
           "summary": "Dev Attention"
+        }
+      },
+      "/dev/decisions": {
+        "get": {
+          "description": "This repo's decision ledger \u2014 every call the owner has ruled on, newest FIRST.\n\nThe file is append-only and reads chronologically (oldest first, per its own contract); a reader\nscanning for what was decided lately wants the opposite, so the order is flipped here and only\nhere. Nothing is derived: the entries are the file's own headings and bodies.\n\nA repo with no ledger reads as an empty list \u2014 the correct starting state for a project where\nnobody has had to rule on anything yet, never an error.",
+          "operationId": "dev_decisions_dev_decisions_get",
+          "parameters": [
+            {
+              "in": "query",
+              "name": "context_id",
+              "required": false,
+              "schema": {
+                "default": "global",
+                "title": "Context Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/DecisionsResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Decisions"
         }
       },
       "/dev/general": {

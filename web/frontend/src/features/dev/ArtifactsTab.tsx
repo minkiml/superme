@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ScrollText, Loader2, Bot, Sparkles, Pencil, Save, X, Plus, Trash2, Check, ShieldCheck, ClipboardCheck, ArrowUp, ArrowDown } from 'lucide-react'
+import { ScrollText, Loader2, Bot, Sparkles, Pencil, Save, X, Plus, Trash2, Check, ShieldCheck, ClipboardCheck, ArrowUp, ArrowDown, Gavel, ChevronRight } from 'lucide-react'
 import Markdown from '@/ui/Markdown'
 import Modal from '@/ui/Modal'
 import Toggle from '@/ui/Toggle'
@@ -9,6 +9,7 @@ import {
   getConstitutions, toggleConstitution, getLocalPlugins, getHarnessFile, saveHarnessFile,
   getAssets, assetAction, getDeputyMandate, saveDeputyMandate, type AssetItem, type AssetAction,
   getVerificationLibrary, moveLibraryEntry, dropLibraryEntry, type LibraryEntry,
+  getDecisions, type DecisionEntry,
   type ManagedConstitution, type HarnessEntry,
 } from '@/lib/api'
 import ConstitutionModal from './ConstitutionModal'
@@ -26,7 +27,7 @@ function stripFrontmatter(text: string): string {
   return m ? text.slice(m[0].length) : text
 }
 
-type Sub = 'constitution' | 'skills' | 'agents' | 'verification' | 'deputy'
+type Sub = 'constitution' | 'skills' | 'agents' | 'verification' | 'decisions' | 'deputy'
 
 export default function ArtifactsTab({ contextId }: { contextId: string }) {
   const [sub, setSub] = useState<Sub>('constitution')
@@ -38,10 +39,14 @@ export default function ArtifactsTab({ contextId }: { contextId: string }) {
   const [openConst, setOpenConst] = useState<ManagedConstitution | null>(null)
   const [openPlugin, setOpenPlugin] = useState<HarnessEntry | null>(null)
   const [library, setLibrary] = useState<LibraryEntry[] | null>(null)
+  const [decisions, setDecisions] = useState<DecisionEntry[] | null>(null)
 
   function load() {
     getVerificationLibrary(contextId)
       .then((r) => setLibrary([...r.standing, ...r.available]))
+      .catch((e) => setErr(String(e)))
+    getDecisions(contextId)
+      .then((r) => setDecisions(r.decisions))
       .catch((e) => setErr(String(e)))
     getConstitutions(contextId)
       .then((d) => setConsts(d.constitutions.filter((c) => c.origin === 'repo')))
@@ -76,6 +81,7 @@ export default function ArtifactsTab({ contextId }: { contextId: string }) {
             { key: 'skills', label: 'Skills', icon: Sparkles, count: skills?.length ?? null },
             { key: 'agents', label: 'Agents', icon: Bot, count: agents?.length ?? null },
             { key: 'verification', label: 'Verification', icon: ClipboardCheck, count: library?.length ?? null },
+            { key: 'decisions', label: 'Decisions', icon: Gavel, count: decisions?.length ?? null },
             { key: 'deputy', label: 'Deputy', icon: ShieldCheck, count: null },
           ]}
         />
@@ -154,6 +160,25 @@ export default function ArtifactsTab({ contextId }: { contextId: string }) {
                 </ListOrState>
               </section>
             ))}
+          </div>
+        )}
+        {sub === 'decisions' && (
+          <div className="space-y-4">
+            <p className="text-[12px] text-faint">
+              Calls YOU ruled on, newest first. Recorded by the kernel the moment you answer at a
+              gate — so every entry here is yours, never an agent's. Later runs read this before
+              asking, which is what stops the same question coming back.
+            </p>
+            <ListOrState
+              list={decisions}
+              empty="Nothing ruled yet — a decision lands here the first time you answer a question at a review gate."
+            >
+              {(items) => (
+                <div className="space-y-2">
+                  {items.map((d) => <DecisionRow key={d.id} d={d} />)}
+                </div>
+              )}
+            </ListOrState>
           </div>
         )}
         {sub === 'deputy' && <DeputyPanel contextId={contextId} />}
@@ -320,6 +345,36 @@ function ConstitutionRow({ c, contextId, onToggled, onOpen }: { c: ManagedConsti
 
 // One verification-library entry. Promote/demote is the owner's only lever over what every future
 // plan inherits, so it sits on the row itself rather than behind a popup.
+// A ledger entry. NO actions, deliberately: this is append-only history, reversed by appending a
+// new entry, never edited or dropped — so a row that offered a button would be offering something
+// the contract forbids. It expands instead, because the WHY is the part worth reading and the one
+// thing a title cannot carry.
+function DecisionRow({ d }: { d: DecisionEntry }) {
+  const [open, setOpen] = useState(false)
+  const live = d.status === 'accepted'
+  return (
+    <div className="rounded-lg border border-line bg-surface">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left hover:bg-hover"
+      >
+        <ChevronRight size={12} className={`shrink-0 text-faint transition-transform ${open ? 'rotate-90' : ''}`} />
+        <span className="shrink-0 font-mono text-[13px] text-fg">{d.id}</span>
+        <span className="min-w-0 flex-1 truncate text-[12.5px] text-fg">{d.title}</span>
+        <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${
+          live ? 'bg-success/10 text-success' : 'bg-hover text-faint'}`}>
+          {live ? 'accepted' : d.status}
+        </span>
+      </button>
+      {open && (
+        <div className="border-t border-line px-3.5 py-2.5 text-[12px]">
+          <Markdown text={d.body} tone="dev" />
+        </div>
+      )}
+    </div>
+  )
+}
+
 function LibraryRow({ e, contextId, onChanged }: { e: LibraryEntry; contextId: string; onChanged: () => void }) {
   const [busy, setBusy] = useState(false)
   const standing = e.tier === 'standing'

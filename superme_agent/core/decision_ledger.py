@@ -130,6 +130,18 @@ def record_rulings(dev_root: Path, item_dir: Path, item_id: str, *, date: str,
     return written
 
 
+def entries_for_item(dev_root: Path, item_id: str) -> list[dict]:
+    """The entries THIS item's gate recorded — read back from the same provenance line the writer
+    stamps. Shown on the item's own drilldown so the owner sees, where they ruled, that the ruling
+    became permanent: a memory nobody is told about is one they cannot rely on."""
+    want = str(item_id or "")
+    if not want:
+        return []
+    return [e for e in read_entries(dev_root)
+            if any(line.strip().startswith("- **Source**:") and want in line
+                   for line in e["body"].splitlines())]
+
+
 def settled_index(dev_root: Path) -> str:
     """The ledger as a scan line per entry — what a phase reads BEFORE asking the owner anything.
 

@@ -152,9 +152,11 @@ export {
   type AttentionBadge,
   type CheckpointStub,
   getVerificationLibrary,
+  getDecisions,
   moveLibraryEntry,
   dropLibraryEntry,
   type LibraryEntry,
+  type DecisionEntry,
   type VerificationLibrary,
 } from './dev'
 export { agentSocketUrl } from './agent'
