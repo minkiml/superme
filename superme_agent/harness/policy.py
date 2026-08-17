@@ -138,6 +138,15 @@ SAFE_TOOLS = {
     # tool without listing it here leaves it callable and refused: a background run reaches its
     # last step, is denied, and finishes with everything except the report the owner reads.
     "mcp__dev__file_investigate_report",
+    # The remaining four, all one pen (`_phase_report_pen`) and all the same shape: they write only
+    # `<item>/reports/report-<phase>.md`, they refuse a body with an unfilled slot, and they exist so
+    # the path is never an agent's to resolve. These four wrote from a path named in prose until
+    # investigate proved what that costs — a report filed under `artifacts/`, where the drilldown
+    # never looks, sitting on disk and invisible.
+    "mcp__dev__file_triage_report",
+    "mcp__dev__file_build_report",
+    "mcp__dev__file_review_report",
+    "mcp__dev__file_close_report",
     "mcp__dev__write_checkpoint",
     # Agent-run freshness sync (D9): merges trunk INTO the item's own worktree only — trunk itself
     # is never written; conflicts abort-and-report by default.

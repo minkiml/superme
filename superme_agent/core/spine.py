@@ -61,6 +61,15 @@ DISPOSABLE_FEATURES = {"distill", "sweep", "write"}
 # running). Work-item jobs are counted separately (via their item-bound runs). See agent_counts().
 LEARNING_FEATURES = {"distill", "sweep", "capture", "write"}
 _RUN_STATUSES = {"running", "done", "aborted", "waiting"}
+# Statuses a run holds when it ENDED without ever returning a final usage, so its `tokens` scalar is
+# the live in-flight estimate and not a measurement. Every display that would otherwise fall back to
+# that scalar reads this set and reports 0 instead — measured usage only, unmeasured is 0, never an
+# estimate wearing the measured column's name.
+#
+# `running` is deliberately NOT here. An in-flight row carries the same estimate, but it is read by
+# `live_run` to show a run's progress AS it happens, labelled live and never summed into a total.
+# Zeroing it would blank a working card to protect a total it was never part of.
+_UNRECONCILED_STATUSES = {"aborted"}
 
 
 def _now() -> str:
@@ -291,12 +300,30 @@ class SystemSpine:
         """The reconciling per-run token amount for DISPLAY (activity log, run cards): the THREE main
         typed columns — input + cache_creation + output — EXCLUDING cache_read (cheap re-reads of
         already-cached context, which otherwise dwarf the number ~1000× and drown the real "new work"
-        signal). Falls back to the legacy scalar for pre-migration rows (already a 3-type sum). This is
-        the SAME 3-type definition the token dashboard's default (`total`) sums, so a run's number
-        reconciles across surfaces; the full 4-type volume lives behind the dashboard's toggle."""
+        signal). This is the SAME 3-type definition the token dashboard's default (`total`) sums, so a
+        run's number reconciles across surfaces; the full 4-type volume is behind the dashboard toggle.
+
+        Two DIFFERENT populations have zero in all four typed columns, and only one of them may use
+        the legacy `tokens` scalar as a fallback:
+
+        - a pre-migration row, which ENDED normally and whose scalar is itself a measured 3-type sum;
+        - a run that never returned a final usage — aborted, killed, errored — whose scalar is the
+          live in-flight estimate, and an over-counting one (it sums the cumulative-per-turn Usage
+          snapshots). That is not a measurement, and the token dashboard already refuses to fold it
+          in. Without the status test the item card folded it in anyway, so the same run read as
+          372k on the card and 0 on the dashboard — an estimate wearing the measured column's name.
+
+        A row that reaches here without a `status` (a projection that did not select it) is treated
+        as ended, which is the pre-migration reading and the historical behaviour."""
         typed = ((row["tok_input"] or 0) + (row["tok_cache_creation"] or 0)
                  + (row["tok_output"] or 0))
-        return typed if typed > 0 else (row["tokens"] or 0)
+        if typed > 0:
+            return typed
+        try:
+            status = row["status"]
+        except (IndexError, KeyError):
+            status = None
+        return 0 if status in _UNRECONCILED_STATUSES else (row["tokens"] or 0)
 
     def _run_dict(self, r) -> dict:
         """Row → dict for a `run` row, with `tokens` overridden to the 3-type display amount (see
@@ -1622,8 +1649,8 @@ class SystemSpine:
         out: dict[str, dict] = {}
         with self._conn() as c:
             rows = c.execute(
-                f"SELECT item_id, tokens, tok_input, tok_cache_creation, tok_cache_read, tok_output,"
-                f" model, ctx_pct, phase, started_at, ended_at FROM run"
+                f"SELECT item_id, status, tokens, tok_input, tok_cache_creation, tok_cache_read,"
+                f" tok_output, model, ctx_pct, phase, started_at, ended_at FROM run"
                 f" WHERE {' AND '.join(where)} ORDER BY datetime(started_at)", args,
             ).fetchall()
         for r in rows:
@@ -2153,7 +2180,19 @@ class SystemSpine:
                           phases: tuple[str, ...] = ("build", "vet")) -> int:
         """An item's accumulated 3-type token spend over the given phases (every run — live and
         finished, interactive and background: the loop's meter reads what the item actually cost in
-        those phases, whoever spent it). Legacy pre-typed rows fall back to `tokens`.
+        those phases, whoever spent it). Rows with no typed usage fall back to `tokens`.
+
+        THAT FALLBACK IS DELIBERATE HERE, and it is the opposite of what `_display_tokens` does —
+        two readers, two questions:
+
+        - `_display_tokens` answers "what did we MEASURE", so an aborted run's in-flight estimate is
+          excluded: a number shown as measured must be one.
+        - this answers "what has this item COST", and an aborted run's tokens were really spent. The
+          breaker exists to stop runaway cost; zeroing a crashed attempt would let an item that
+          aborts repeatedly burn without limit, which is the failure the breaker is FOR.
+
+        So do not "fix" the disagreement by making these match. Changing either one changes which
+        question it answers.
 
         DISCARDED RUNS ARE EXCLUDED, and this is the reason the filter matters most: this feeds the
         loop's BUDGET BREAKER. Counting a re-run's thrown-away attempt would hand the fresh attempt

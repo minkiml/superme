@@ -94,8 +94,9 @@ it starts — a plan handed an answer implements it, and never finds the better 
 
 ## Step 6 — Write the user-facing report
 
-Copy `templates/report-triage-template.md` to `reports/report-triage.md` and fill its slots. It is
-the OWNER's — they accept or re-shape what you decided; the kernel and the plan phase read
+Fill `templates/report-triage-template.md` and hand the whole body to `file_triage_report`. It owns
+the path and refuses a report with an unfilled slot left in it — never write the file yourself. It
+is the OWNER's — they accept or re-shape what you decided; the kernel and the plan phase read
 `brief.md`. A re-run overwrites it: the report always describes the item as it stands NOW.
 
 - **Every line traces to `brief.md`** — a projection of it, never a place for a new fact.

@@ -1461,12 +1461,61 @@ def _file_plan_report(*, store, context_id, dev_root=None, bound_item_id=None, *
     return file_plan_report
 
 
-class FileInvestigateReportArgs(TypedDict, total=False):
+class FilePhaseReportArgs(TypedDict, total=False):
+    """The argument shape every whole-body pen shares: the item, and the finished report."""
     item_id: Required[Annotated[str, "the work-item id"]]
-    body: Required[Annotated[str, ("the whole report, filled from "
-                                   "`templates/report-investigate-template.md` — every section, "
-                                   "every `<fill:…>` slot replaced. Passed verbatim; nothing is "
-                                   "derived and nothing is appended")]]
+    body: Required[Annotated[str, ("the whole report, filled from this phase's template in "
+                                   "`templates/` — every section, every `<fill:…>` slot replaced. "
+                                   "Passed verbatim; nothing is derived and nothing is appended")]]
+
+
+FileInvestigateReportArgs = FilePhaseReportArgs
+
+
+def _phase_report_pen(phase: str):
+    """Build the pen for one phase's user-facing report.
+
+    ONE FACTORY, because there is one rule: `<item>/reports/report-<phase>.md`, built in code and
+    never named to an agent. A phase that names its own path in prose is a confused resolution away
+    from filing where the drilldown does not look — the run's cwd is not always the item folder, and
+    an agent that has been writing under `artifacts/` will resolve a bare `reports/` against THAT.
+    That is not hypothetical: it happened to `investigate`, on a real run, and the report was lost
+    to its reader while sitting on disk the whole time.
+
+    Four phases were still writing from prose when this was written. Copying the investigate pen
+    four times would have made four places for the rule to drift; this way the rule has one home
+    and a new phase is one line."""
+    def factory(*, store, context_id, dev_root=None, bound_item_id=None, **_):
+        async def file_phase_report(args: dict) -> dict:
+            from ...core import artifacts as _arts
+            item_id = _s(args, "item_id")
+            if (msg := _bound_err(item_id, bound_item_id)):
+                return _err(msg)
+            d = _item_dir(dev_root, item_id)
+            if d is None:
+                return _err(f"No work-item {item_id!r} here.")
+            body = _s(args, "body") or ""
+            if not body.strip():
+                return _err("body is empty — the report is the deliverable, not a formality.")
+            stem = f"report-{phase}"
+            path = d / "reports" / f"{stem}.md"
+            try:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(body if body.endswith("\n") else body + "\n")
+            except OSError as e:
+                return _err(str(e))
+            if issues := _arts.report_issues(d, stem):
+                return _err(f"{path} written, but it is not finished: {'; '.join(issues)}")
+            return _ok(f"{path} written.")
+        file_phase_report.__name__ = f"file_{phase}_report"
+        return file_phase_report
+    return factory
+
+
+_file_triage_report = _phase_report_pen("triage")
+_file_build_report = _phase_report_pen("build")
+_file_review_report = _phase_report_pen("review")
+_file_close_report = _phase_report_pen("close")
 
 
 def _file_investigate_report(*, store, context_id, dev_root=None, bound_item_id=None, **_):
@@ -1921,6 +1970,37 @@ _ITEM_DEV_TOOLS: list[ToolSpec] = [
         "a report with an unfilled slot left in it.",
         FileInvestigateReportArgs, _file_investigate_report,
     ),
+    # The same pen for the four phases that used to write from a path named in prose. Same contract
+    # every time: you hand over the whole filled body, the tool owns the path and refuses a report
+    # with an unfilled slot left in it.
+    ToolSpec(
+        "file_triage_report",
+        "File triage's user report (triage phase, once the classification is settled). You supply "
+        "the whole body, filled from its template; the tool owns the path and refuses a report "
+        "with an unfilled slot left in it.",
+        FilePhaseReportArgs, _file_triage_report,
+    ),
+    ToolSpec(
+        "file_build_report",
+        "File the build cycle's user report (build phase, at the end of a cycle). You supply the "
+        "whole body, filled from its template; the tool owns the path and refuses a report with "
+        "an unfilled slot left in it.",
+        FilePhaseReportArgs, _file_build_report,
+    ),
+    ToolSpec(
+        "file_review_report",
+        "File the review's user report (review phase, once the verdict is drawn). You supply the "
+        "whole body, filled from its template; the tool owns the path and refuses a report with "
+        "an unfilled slot left in it.",
+        FilePhaseReportArgs, _file_review_report,
+    ),
+    ToolSpec(
+        "file_close_report",
+        "File the close-out's user report (close phase, once the knowledge delta is applied). You "
+        "supply the whole body, filled from its template; the tool owns the path and refuses a "
+        "report with an unfilled slot left in it.",
+        FilePhaseReportArgs, _file_close_report,
+    ),
     ToolSpec(
         "file_vet_report",
         "File the verification report (vet phase, after every check is recorded): the verdict "
@@ -2088,17 +2168,25 @@ TOOL_SCOPES: dict[str, tuple[str, ...]] = {
                    "itemize_and_launch"),
     "diagnosis": ("read_dev_log", "read_run"),          # strictly read-only, by design
     # --- the item phases: scope name == the skill the run fires ---
-    "triage": ("scaffold_artifact", "set_triage_classification", "create_inbox_item"),
+    "triage": ("scaffold_artifact", "set_triage_classification", "create_inbox_item",
+               "file_triage_report"),
     "plan": ("scaffold_artifact", "dry_run_checks", "read_verification_library",
              "file_plan_report", "revise_plan", "read_dev_log"),
     "build": ("record_validation", "request_authorization", "sync_from_main", "write_checkpoint",
-              "create_inbox_item"),
+              "create_inbox_item", "file_build_report"),
     "vet": ("record_verification", "record_diagnosis", "record_lens", "nominate_check",
             "read_verification_library", "file_vet_report"),
-    "review": ("scaffold_artifact", "request_authorization"),
-    "close": ("apply_knowledge_delta", "read_verification_library", "create_inbox_item"),
+    "review": ("scaffold_artifact", "request_authorization", "file_review_report"),
+    "close": ("apply_knowledge_delta", "read_verification_library", "create_inbox_item",
+              "file_close_report"),
     "investigate": ("scaffold_artifact", "write_checkpoint", "file_investigate_report"),
-    "itemize": ("itemize_and_launch", "read_inbox", "read_dev_log", "create_inbox_item"),
+    # `itemize_and_launch` is NOT here, though this scope is named for it. It belongs to the two
+    # CHAT scopes, where the owner approves each call; this run is a background one with nobody to
+    # ask, and the skill it fires says in as many words "Never itemize_and_launch — that is
+    # onboarding's". Mounting it anyway made the scope contradict its own skill, and left the run
+    # holding a tool whose only possible outcome was a refusal. Filing inbox items (which the owner
+    # then pushes or drops) is the whole job, and `create_inbox_item` is what does it.
+    "itemize": ("read_inbox", "read_dev_log", "create_inbox_item"),
     # --- kernel-fired turns that are not a phase ---
     "deputy": ("read_dev_log", "read_run"),             # it judges a report; it writes a verdict
     "handoff": ("write_checkpoint",),                   # the pre-compaction turn, item-bound branch

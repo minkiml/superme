@@ -96,8 +96,9 @@ should change" is a finished investigation, not a failed one. Leave `**Owner's d
 
 ## Step 4 — Write the user-facing report
 
-Copy `templates/report-review-template.md` to `reports/report-review.md` and fill it. ONE template
-for every kind: an implementation item, a research item and whatever kind comes later all answer the
+Fill `templates/report-review-template.md` and hand the whole body to `file_review_report`. It owns
+the path and refuses a report with an unfilled slot left in it — never write the file yourself. ONE
+template for every kind: an implementation item, a research item and whatever kind comes later all answer the
 same four questions.
 
 | section | implementation | research |
