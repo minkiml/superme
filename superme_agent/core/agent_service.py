@@ -9,6 +9,7 @@ extra_mcp_servers).
 """
 
 import logging
+from collections import deque
 from pathlib import Path
 from typing import AsyncIterator
 
@@ -37,6 +38,24 @@ from .permissions import ApproveFn, build_can_use_tool, deny_all
 from .sandbox import sandbox_options
 
 log = logging.getLogger("superme-agent")
+
+# The CLI subprocess's last stderr lines, kept so a launch that dies before any turn can be
+# diagnosed. The SDK only pipes stderr when a callback is registered, and its ProcessError says
+# "Check stderr output for details" while piping nothing — so the one message that explains the
+# failure was being discarded at the moment it mattered. Bounded: a long-running turn can be
+# chatty on stderr, and this exists for the tail, not the transcript.
+_CLI_STDERR: deque[str] = deque(maxlen=40)
+
+
+def _cli_stderr(line: str) -> None:
+    line = (line or "").rstrip()
+    if line:
+        _CLI_STDERR.append(line)
+
+
+def cli_stderr_tail(n: int = 12) -> str:
+    """The CLI's last stderr lines, newest last — for a fault report to quote."""
+    return "\n".join(list(_CLI_STDERR)[-n:])
 
 
 def _result_text(content) -> str:
@@ -393,6 +412,12 @@ class AgentService:
             blocked.update({n: msg for n in skills_in_category(turn_plugins, cat)})
         return ClaudeAgentOptions(
             cwd=str(ctx.cwd),                       # the Context (cwd / workspace)
+            # The CLI's own stderr. Without this callback the SDK does not pipe it, so a
+            # subprocess that dies during `initialize()` raises `ProcessError: exit code 1` with
+            # the text "Check stderr output for details" and there is no stderr to check — which
+            # is exactly how a launch failure stayed undiagnosable through two live occurrences.
+            # Kept to the last few lines: this is a diagnosis aid, not a second transcript.
+            stderr=_cli_stderr,
             resume=resume,                          # continuous session (surface-owned)
             # Normalize the model to a CONCRETE id here — the ONE execution choke every turn passes
             # through — so a tier alias (`sonnet`) never silently runs a lagging concrete version.

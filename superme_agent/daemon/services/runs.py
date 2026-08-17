@@ -1100,6 +1100,17 @@ def fire_phase_feedback(context_id: str, item_id: str, *, phase: str, feedback: 
         session_id = (slots.get(kind_profiles.session_slot(run_phase))
                       or slots.get(kind_profiles.LEGACY_INTAKE_SLOT)
                       or item.get("session_id") or None)
+        # SAME CWD SWAP THE PHASE RUNNER DOES. A read-only kind's session belongs to its detached
+        # checkout, and Claude Code stores sessions per project path — so resuming it from the repo
+        # root cannot find it and the CLI exits 1 before any turn. Measured: `--resume <sid>` from
+        # the worktree exits 0, from the repo exits 1 with "No conversation found with session ID".
+        # Every phase run came through the swap and this path did not, which is why only the
+        # send-back re-run ever died. No-op for every kind without a scratch worktree.
+        from .git_ops import ensure_scratch_worktree
+        repo_dir = ensure_scratch_worktree(ctx, context_id, item,
+                                           dev=_dev, dev_store=_dev_store, spine=_spine)
+        if repo_dir != ctx.cwd:
+            ctx = replace(ctx, cwd=repo_dir)
         model = _spine.effective_model(context_id, item_model=item.get("model"))
         effort = _spine.effective_effort(context_id, item_effort=item.get("effort"))
         if _begin_run(ctx, context_id, item_id, skill, model, phase=run_phase) is None:

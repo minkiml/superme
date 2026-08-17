@@ -186,7 +186,17 @@ def classify(*, exc: BaseException | None = None, reply: str | None = None,
             return Fault("transient", f"the connection dropped ({exc.strerror or exc.errno})")
         if isinstance(exc, (TimeoutError, ConnectionError)):
             return Fault("transient", "the connection timed out or dropped")
-        return _from_text(f"{type(exc).__name__}: {exc}", source="crash")
+        text = f"{type(exc).__name__}: {exc}"
+        # A CLI subprocess that dies during startup raises ProcessError telling the reader to
+        # check a stderr the SDK never piped — a reason that names where the answer is and does
+        # not carry it. Two live launch failures were undiagnosable for exactly that. Splice the
+        # tail we now capture into the reason itself, so the record holds the cause and not a
+        # pointer to it.
+        if "exit code" in text.lower() or "stderr" in text.lower():
+            from .agent_service import cli_stderr_tail
+            if (tail := cli_stderr_tail(6)):
+                text = f"{text} — CLI stderr: {' | '.join(tail.splitlines())}"
+        return _from_text(text, source="crash")
     if reply and not did_work:
         text = reply.strip()
         m = _API_ERROR_REPLY.match(text)

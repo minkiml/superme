@@ -110,6 +110,22 @@ def _log_entries(item_dir: Path) -> list[dict]:
     return rows
 
 
+def pending_send_back(item_dir: Path) -> dict | None:
+    """The item's latest decision when it is a `send_back`, else None.
+
+    Read by Resume. A stopped item is by definition one whose run did not finish, so if the last
+    thing the deputy said was "go fix this", that instruction has not been carried out — and
+    re-firing the plain phase prompt drops it. Measured live: a research item resumed into its
+    finished investigate session, replied "already complete", and no-oped, while the deputy went on
+    correctly sending it back at a full pass per round.
+
+    Re-delivering an instruction that WAS somehow acted on costs a cheap "already done"; losing one
+    costs a guaranteed no-op and another deputy pass. The asymmetry decides it."""
+    rows = _log_entries(item_dir)
+    last = rows[-1] if rows else None
+    return last if last and last.get("decision") == "send_back" else None
+
+
 def append_decision(item_dir: Path, gate: str, decision: str, because: str, *,
                     change: str | None = None, authorize: str | None = None) -> None:
     """Append one deputy call to THIS item's log (one JSON object per line, never rewritten).

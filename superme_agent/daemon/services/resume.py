@@ -27,6 +27,7 @@ import asyncio
 import logging
 
 from ..app_state import dev as _dev, dev_store as _dev_store, spine as _spine
+from ...core import deputy as _deputy
 from ...gateway import contexts
 from . import run_tasks
 
@@ -75,6 +76,30 @@ def resume_item(context_id: str, item_id: str) -> tuple[bool, str]:
             return False, why
         phase = str(item.get("phase"))
         was = str(item.get("error_reason") or "")
+        # An UNCONSUMED send-back is re-delivered, not dropped. `_fire` re-runs the phase with its
+        # ordinary prompt, which says nothing about what the deputy asked for — so a resumed item
+        # whose last verdict was "go fix this" reads its own finished transcript and no-ops, while
+        # the deputy keeps paying a full pass to re-derive the same verdict. Routed through the
+        # feedback firer instead, which is the path that carries the reason and the asked-for change.
+        pending = _deputy.pending_send_back(dev_root / "work-items" / item_id)
+        if pending:
+            from .runs import fire_phase_feedback
+            _dev.set_work_item_status(dev_root, item_id, "active")
+            started = fire_phase_feedback(
+                context_id, item_id, phase=phase,
+                feedback=str(pending.get("change") or pending.get("because") or ""), by="deputy")
+            if started:
+                _dev_store.log_event(
+                    context_id, "run.resume",
+                    f"Resumed the {phase} run, carrying the deputy's send-back",
+                    item_id=item_id, actor="owner",
+                    meta={"phase": phase, "was": was[:200],
+                          "send_back": str(pending.get("because") or "")[:300]})
+                log.info("resumed %s at %s with the pending send-back", item_id, phase)
+                return True, f"re-fired the {phase} run with the deputy's send-back"
+            _dev.set_work_item_error(dev_root, item_id, was or "the work stopped")
+            log.warning("resume: feedback re-fire failed for %s — falling back to a plain re-run",
+                        item_id)
         # Clearing the error is what makes the item eligible again — and `set_work_item_status`
         # drops `error_reason` with it, so a resumed item never carries a stale explanation.
         _dev.set_work_item_status(dev_root, item_id, "active")
