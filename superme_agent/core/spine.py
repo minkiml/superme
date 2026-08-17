@@ -81,6 +81,18 @@ def _norm(p) -> str:
     return str(Path(p).resolve())
 
 
+# Shell commands that put a file's CONTENTS into the run's context. `ls`, `find`, `stat` and `wc`
+# name a path without opening it, so they are deliberately absent — naming the guide is not reading
+# it. Used by `read_hits`, where the question is whether a directed read actually happened.
+_FILE_OPENERS = frozenset({"cat", "bat", "head", "tail", "less", "more", "sed", "awk", "grep",
+                           "egrep", "fgrep", "rg", "nl", "strings"})
+
+
+def _opens_a_file(command: str) -> bool:
+    """True if any word in a shell command is a program that reads file contents."""
+    return any(w.strip("'\"();|&`$") in _FILE_OPENERS for w in command.split())
+
+
 def _duration_ms(started_at: str | None, ended_at: str | None) -> int | None:
     """Run wall-clock from the ISO started/ended stamps (None if either is missing/unparseable)."""
     if not started_at or not ended_at:
@@ -1267,16 +1279,23 @@ class SystemSpine:
 
         Matched against the trace's own short-path description (last four segments), so the needle
         should be a tail like `investigate/references/audit.md`. Across every run at the phase: a
-        send-back means investigate ran twice, and reading the guide on either pass counts."""
+        send-back means investigate ran twice, and reading the guide on either pass counts.
+
+        Counts the ACT, not the tool. `cat <guide>` puts the file in the run's context exactly as
+        `Read` does, and an instrument that recognised only one of them reported a run that opened
+        its guide first thing as never having opened it — then blocked its gate on that. Commands
+        that merely NAME the path without opening it (`ls`, `find`, `stat`, `wc`) are not reads, so
+        a reading verb has to be present too."""
         with self._conn() as c:
-            row = c.execute(
-                "SELECT COUNT(*) AS n FROM run_event e JOIN run r ON r.id = e.run_id"
+            rows = c.execute(
+                "SELECT e.name, e.description FROM run_event e JOIN run r ON r.id = e.run_id"
                 " WHERE r.repo_id=? AND r.item_id=? AND r.phase=?"
-                "   AND e.kind='tool' AND e.name='Read' AND e.description LIKE ?"
+                "   AND e.kind='tool' AND e.name IN ('Read','Bash') AND e.description LIKE ?"
                 "   AND e.discarded_at IS NULL AND r.discarded_at IS NULL",
                 (repo_id, item_id, phase, f"%{needle}%"),
-            ).fetchone()
-            return int(row["n"] if row else 0)
+            ).fetchall()
+        return sum(1 for r in rows if r["name"] == "Read"
+                   or _opens_a_file(r["description"] or ""))
 
     def last_phase_run_end(self, repo_id: str, item_id: str, *, phase: str) -> str | None:
         """When this item's most recent FINISHED run at `phase` ended (ISO-8601 UTC), or None if
