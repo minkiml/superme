@@ -107,6 +107,9 @@ Never both a default and a question on one proposal. If you cannot name which of
 question passes, it is limb 2 — decide it. An unanswered question is not filed as work, so every one
 you write either spends the owner's decision or costs that finding its ticket.
 
+Before writing any limb-3 question, `read_decisions`. A ruling already in the ledger IS the answer:
+drop the question and write the proposal against that `D-NNN`.
+
 **Bad and good examples**
 ```example
 ✗ **Question:** delete the unused `legacy-theme.css`?

@@ -438,6 +438,29 @@ def advance_item(ctx, context_id: str, item_id: str, *, dev, dev_store, spine,
         # close-entry auto-fire: an implementation close stays owner-triggered (it finalizes
         # knowledge), while a research close writes no knowledge and exists to record this decision.
         auto_skill = "itemize"
+        # …and the SAME approve records the rulings the owner gave, before `itemize` runs on them.
+        # An answer given here is the only durable thing this item produces: the question is stored
+        # nowhere (the next sweep raises it again by itself), so if the answer does not land in the
+        # ledger now, the owner will be asked it again on the next pass over the same code.
+        #
+        # Core writes it, not the itemize agent — the ledger is append-only and never pruned, so
+        # every entry has to trace to a question an owner was asked. Idempotent by (item, question):
+        # a resume or a second approve after a revision re-enters here and must not duplicate an
+        # entry nobody is allowed to remove. Never fatal — a ledger write must not cost the owner
+        # their approval.
+        try:
+            from datetime import date as _date
+
+            from ...core import decision_ledger as _ledger
+            ids = _ledger.record_rulings(dev_root, dev_root / "work-items" / item_id, item_id,
+                                         date=_date.today().isoformat(), project=str(ctx.id))
+            if ids:
+                dev_store.log_event(context_id, "decision.recorded", item_id=item_id,
+                                    summary=f"recorded {len(ids)} owner ruling(s): "
+                                            + ", ".join(ids),
+                                    meta={"ids": ids})
+        except Exception:
+            log.exception("recording owner rulings failed for %s", item_id)
     auto_started = False
     if nxt == "review":
         # Review's entry run goes through the SHARED firer, because the loop's vet→review hop

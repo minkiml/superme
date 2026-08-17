@@ -22,6 +22,10 @@ yours if you leave it one.
     repair; say so in `brief.md`'s `## Problem` and work from `item.md` alone, rather than
     inventing the context it should have carried.
 - **`general/project-prd.md`** — skim the deliverables list. You name one in step 4.
+- **`read_decisions`** — the choices the owner has already ruled on. An item whose subject is
+  already settled is smaller than it looks, and sometimes moot: say which `D-NNN` covers it in
+  `brief.md`'s `## Problem` and size it against the ruling, not against the open question it was
+  filed as.
 
 Done when you can say in one sentence what this item wants. If the item is not in `triage`, stop and
 say so.

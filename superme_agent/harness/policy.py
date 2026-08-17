@@ -65,6 +65,10 @@ SAFE_TOOLS = {
     # 2026-08-03, where close reported "read_verification_library was unavailable this run (denied)"
     # and the library could never have been written to even if vet had nominated.
     "mcp__dev__read_verification_library",
+    # The project's decision ledger, read-only. Every phase that can raise a question for the owner
+    # calls it FIRST, so a denial here does not block the run — it makes the run re-ask something
+    # the owner already settled, which is the cost this whole path exists to remove.
+    "mcp__dev__read_decisions",
     # An approved research review's proposals, pre-split into filed-able and withheld. `itemize`
     # fires in the background with nobody to approve a prompt, and this read is the ONLY thing
     # standing between an unruled proposal and a ticket that reads as startable — a denial here

@@ -173,6 +173,11 @@ the code is not blocked — answer it and write the answer. Pass up only the cal
 preference, and say for each which way you would go; review types them and the owner rules the few
 that are theirs.
 
+**Check what the owner has already ruled.** Before you pass ANY call up, `read_decisions`. A title
+that answers your call means it is settled: write the finding with the `D-NNN` cited as its answer,
+and do not pass it up. The ledger is the record of questions this owner has already been asked —
+re-asking one spends a decision they already made.
+
 **You record; you never file.** The owner chooses every branch-off at the review gate.
 
 ## 7 · Write the report and bank a checkpoint

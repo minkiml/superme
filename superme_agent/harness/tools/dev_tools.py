@@ -1445,6 +1445,28 @@ def _read_verification_library(*, store, context_id, dev_root=None, bound_item_i
     return read_verification_library
 
 
+class ReadDecisionsArgs(TypedDict, total=False):
+    entry_id: Annotated[str, "a `D-NNN` id to read in full — omit to get the index of every "
+                             "decision's id, status and title"]
+
+
+def _read_decisions(*, store, context_id, dev_root=None, bound_item_id=None, **_):
+    async def read_decisions(args: dict) -> dict:
+        from ...core import decision_ledger as _ledger
+        entry_id = _s(args, "entry_id")
+        if not entry_id:
+            return _ok("## Decisions already settled in this project\n"
+                       + _ledger.settled_index(dev_root)
+                       + "\n\nA title that answers your question means it is ALREADY RULED — cite "
+                         "the id as the answer instead of asking the owner again. Pass `entry_id` "
+                         "for the full entry when a title looks close but you need the wording.")
+        for e in _ledger.read_entries(dev_root):
+            if e["id"].lower() == entry_id.lower():
+                return _ok(f"### {e['id']} · {e['title']} · {e['status']}\n{e['body']}")
+        return _err(f"No decision {entry_id!r} in this project's ledger.")
+    return read_decisions
+
+
 class ReadResearchProposalsArgs(TypedDict, total=False):
     item_id: Required[Annotated[str, "the research work-item id whose review record to read"]]
 
@@ -1860,7 +1882,13 @@ def _apply_knowledge_delta(*, store, context_id, dev_root=None, repo_dir=None,
                         "docs describe what is IN the main tree, so they change only when code "
                         "does. Nothing this item concludes has been implemented yet — its "
                         "conclusions belong in its own report, and reach the docs later via the "
-                        "work that acts on them.")
+                        "work that acts on them.\n"
+                        "One anchor doc is not covered by that reason and is written anyway: "
+                        "`decisions.md` is immutable HISTORY, not current-state truth, so an "
+                        "owner's ruling belongs in it the moment they give it. THE KERNEL writes "
+                        "that entry at the review gate, from the typed proposal the owner answered "
+                        "— never an agent, so the ledger's every entry traces to a question an "
+                        "owner was asked. You have nothing to do there; it is already recorded.")
         # Close is the ONLY writing moment (renovation §2.3): before it, the owner has not yet
         # locked the code, so a doc written earlier could describe something that never lands.
         if not is_final_phase(item.get("kind"), item.get("phase") or "triage"):
@@ -2085,6 +2113,14 @@ _ITEM_DEV_TOOLS: list[ToolSpec] = [
         "plan) and the available ones a plan can cite by id instead of re-authoring. At close, "
         "pass item_id to also get this item's nominations rendered as ready-to-write entries.",
         ReadVerificationLibraryArgs, _read_verification_library,
+    ),
+    ToolSpec(
+        "read_decisions",
+        "Read this project's decision ledger — the choices the owner has already ruled on. Call it "
+        "BEFORE raising a question for the owner or scoping an item: a subject already settled here "
+        "is answered, and re-asking it spends a decision they already made. Returns the index by "
+        "default; pass `entry_id` for one entry in full.",
+        ReadDecisionsArgs, _read_decisions,
     ),
     ToolSpec(
         "read_research_proposals",
@@ -2317,17 +2353,19 @@ TOOL_SCOPES: dict[str, tuple[str, ...]] = {
     "diagnosis": ("read_dev_log", "read_run"),          # strictly read-only, by design
     # --- the item phases: scope name == the skill the run fires ---
     "triage": ("scaffold_artifact", "set_triage_classification", "create_inbox_item",
-               "file_triage_report"),
+               "read_decisions", "file_triage_report"),
     "plan": ("scaffold_artifact", "dry_run_checks", "read_verification_library",
              "file_plan_report", "revise_plan", "read_dev_log"),
     "build": ("record_validation", "request_authorization", "sync_from_main", "write_checkpoint",
               "create_inbox_item", "file_build_report"),
     "vet": ("record_verification", "record_diagnosis", "record_lens", "nominate_check",
             "read_verification_library", "file_vet_report"),
-    "review": ("scaffold_artifact", "request_authorization", "file_review_report"),
+    "review": ("scaffold_artifact", "request_authorization", "read_decisions",
+               "file_review_report"),
     "close": ("apply_knowledge_delta", "read_verification_library", "create_inbox_item",
               "file_close_report"),
-    "investigate": ("scaffold_artifact", "write_checkpoint", "file_investigate_report"),
+    "investigate": ("scaffold_artifact", "write_checkpoint", "read_decisions",
+                    "file_investigate_report"),
     # `itemize_and_launch` is NOT here, though this scope is named for it. It belongs to the two
     # CHAT scopes, where the owner approves each call; this run is a background one with nobody to
     # ask, and the skill it fires says in as many words "Never itemize_and_launch — that is
