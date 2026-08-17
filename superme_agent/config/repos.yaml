@@ -21,6 +21,7 @@ repos:
       port_env: SUPERME_DAEMON_PORT
       ready: /openapi.json
       url_env: SUPERME_DAEMON_URL
+    anchor_branch: superme-dev
 
     # Gitignored paths that are nonetheless this repo's SOURCE, mirrored read-only
     # into a research scratch worktree. `scripts/` holds ~40 offline suites that a
