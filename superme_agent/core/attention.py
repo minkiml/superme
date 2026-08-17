@@ -43,7 +43,7 @@ def _is_terminal(item: dict) -> bool:
     return bool(item.get("done_at")) or str(item.get("status")) == "done"
 
 
-def _reason(item: dict, bucket: str, stalled: bool = False) -> str:
+def _reason(item: dict, bucket: str, stalled: bool = False, rulings: int = 0) -> str:
     phase = str(item.get("phase") or "")
     if bucket == "error":
         # The stored reason IS the message — written where the work stopped, by the runner that
@@ -59,6 +59,12 @@ def _reason(item: dict, bucket: str, stalled: bool = False) -> str:
             # this one reached a gate and lost its run. Same claim on the owner, different story.
             return f"stalled at the {gate} gate — active with nothing running" if gate \
                 else f"stalled (mid-{phase}) — active with nothing running"
+        # An item that ASKS the owner something must not read like one that merely finished. The
+        # gate brief names the questions too, but that is a page reached by opening the item —
+        # this line is what summons them, and a call nobody knows is waiting is a call nobody makes.
+        if rulings:
+            return (f"at the {gate} gate — {rulings} proposal(s) need a call only you can make "
+                    "(approving without ruling drops them)")
         return f"at the {gate} gate — your decision" if gate \
             else f"awaiting you (mid-{phase})"
     if bucket == "deputy_working":
@@ -69,7 +75,8 @@ def _reason(item: dict, bucket: str, stalled: bool = False) -> str:
     return f"{item.get('outcome') or 'closed'} — unreviewed"
 
 
-def assign(items: list[dict], running_ids: set[str], deputy_ids: set[str] = frozenset()) -> dict:
+def assign(items: list[dict], running_ids: set[str], deputy_ids: set[str] = frozenset(),
+           rulings_by_item: dict[str, int] | None = None) -> dict:
     """Bucket every item → {buckets: {tier: [row…]}, badge: {tier, color, count} | None}.
     A row carries what the kanban/badge surfaces need: id · title · kind · phase · status ·
     outcome · bucket · reason (one human line) · gate (when parked at one).
@@ -108,7 +115,7 @@ def assign(items: list[dict], running_ids: set[str], deputy_ids: set[str] = froz
             "kind": get_profile(it.get("kind")).kind,
             "phase": it.get("phase"), "status": it.get("status"),
             "outcome": it.get("outcome"), "bucket": tier,
-            "reason": _reason(it, tier, stalled),
+            "reason": _reason(it, tier, stalled, (rulings_by_item or {}).get(iid, 0)),
             "gate": GATE_FOR_PHASE.get(str(it.get("phase") or "")) if tier == "needs_you" else None,
         })
     badge = None

@@ -40,7 +40,7 @@ def _ask_card(raw) -> list[dict]:
     return out
 
 
-def classify_hold(item: dict, events: list[dict]) -> dict:
+def classify_hold(item: dict, events: list[dict], *, rulings: list[dict] | None = None) -> dict:
     """Why is this awaiting_human item parked? Read its events NEWEST-FIRST and take the first that
     names a parking cause; fall back to the phase (review = the review gate, else a generic gate
     wait). Returns {kind, reason, actor} — pure, no IO."""
@@ -68,6 +68,18 @@ def classify_hold(item: dict, events: list[dict]) -> dict:
                     "actor": "daemon"}
     phase = str(item.get("phase") or "")
     if phase == "review":
+        # A research review may be holding a call only the owner can make. Say WHICH call, on the
+        # card that summons them — the gate brief names it too, but that is a page they reach by
+        # opening the item, and an item that asks them something has to be distinguishable from one
+        # that merely finished. Otherwise the question is invisible until the day they happen to
+        # look, which is the same failure as never asking. Rides the grill's ask-card shape, so the
+        # question renders where the owner already reads questions.
+        if rulings:
+            n = len(rulings)
+            return {"kind": "question",
+                    "reason": f"Ready for your review — {n} proposal(s) wait on a call only you "
+                              "can make. Approving without ruling drops them.",
+                    "actor": "owner", "questions": rulings}
         # `strict` repos (§2.2): the deputy already approved and the PR is open, so the owner's
         # act is narrower and lives elsewhere — say which one it is rather than offering the
         # generic gate. Derived from the item's own record; still pure.
@@ -82,6 +94,27 @@ def classify_hold(item: dict, events: list[dict]) -> dict:
     return {"kind": "gate",
             "reason": f"{(phase or 'current').capitalize()} is finished and waiting for your decision.",
             "actor": "owner"}
+
+
+def _pending_rulings(dev_root, item: dict) -> list[dict]:
+    """This item's proposals that ask the owner something and carry no answer, as ask-card fields.
+    Only at REVIEW: before it the review record does not exist, and after it the item is terminal
+    and the unruled proposals are gone by design. Best-effort — a hold must never be lost to a
+    malformed report."""
+    if str(item.get("phase")) != "review" or str(item.get("kind")) != "research":
+        return []
+    try:
+        from pathlib import Path
+
+        from ...core import artifacts as _arts
+        _, held = _arts.filed_and_withheld(
+            _arts.research_proposals(Path(dev_root) / "work-items" / str(item.get("id"))))
+        return [{"question": p["question"], "recommend": p.get("suggested", ""),
+                 "why": p.get("why_now", ""), "instead": p.get("title", "")}
+                for p in held if p.get("question")]
+    except Exception:
+        log.exception("attention: failed to read pending rulings for %s", item.get("id"))
+        return []
 
 
 def holds_for_repo(context_id: str, *, dev, dev_store, dev_root) -> list[dict]:
@@ -100,7 +133,7 @@ def holds_for_repo(context_id: str, *, dev, dev_store, dev_root) -> list[dict]:
             events = dev_store.list_events(context_id, item_id=str(it.get("id")), limit=25)
         except Exception:
             events = []
-        c = classify_hold(it, events)
+        c = classify_hold(it, events, rulings=_pending_rulings(dev_root, it))
         out.append({"id": it.get("id"), "title": it.get("title") or it.get("id"),
                     "session_id": it.get("session_id"),
                     "phase": it.get("phase"), "cohort": it.get("cohort"), **c})

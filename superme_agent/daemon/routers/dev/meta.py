@@ -8,7 +8,7 @@ from ...deps import dev_root
 from ...schemas.dev.meta import (
     AttentionResponse, DevReadResponse, DevLogResponse, WorkGraphResponse,
 )
-from ....core import attention, workgraph
+from ....core import artifacts, attention, workgraph
 from ....core.dev_knowledge import _parse_deliverables, _parse_waves
 
 router = APIRouter()
@@ -53,7 +53,21 @@ async def dev_attention(context_id: str = "global",
     # The deputy subset: live runs stamped feature="deputy" (its judgment is standing in for the
     # owner, so it gets its own attention tier, not the generic green "running") — F1.
     deputy = {iid for iid, r in live.items() if str(r.get("feature")) == "deputy"}
-    return {"context_id": context_id, **attention.assign(items, running, deputy)}
+    # How many proposals in each parked research review are waiting on a ruling only the owner can
+    # give. Read here rather than inside `assign` so that stays pure — and read at ALL, because the
+    # bare "at the review gate" line is identical whether or not the item is asking them something.
+    rulings = {}
+    for it in items:
+        if str(it.get("status")) == "awaiting_human" and str(it.get("phase")) == "review":
+            try:
+                _f, held = artifacts.filed_and_withheld(
+                    artifacts.research_proposals(root / "work-items" / str(it.get("id"))))
+                if held:
+                    rulings[str(it.get("id"))] = len(held)
+            except Exception:
+                pass
+    return {"context_id": context_id,
+            **attention.assign(items, running, deputy, rulings_by_item=rulings)}
 
 
 @router.get("/dev/workgraph", response_model=WorkGraphResponse)
