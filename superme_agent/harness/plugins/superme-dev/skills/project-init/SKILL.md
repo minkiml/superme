@@ -93,9 +93,11 @@ no human until a review gate.
    If the owner would rather just establish and start work by hand, that's fine — skip to Step 8 and
    launch nothing.
 3. On confirm, call **`itemize_and_launch`** with the batch: `key` = the deliverable id (so `after`
-   edges wire by key), `title`, a one-line `description` of the value (not a plan), and `after` from
-   the `Needs`. The tool creates them all on autopilot, parks dependents at `awaiting_upstream`, and
-   starts the ready ones.
+   edges wire by key), `title`, a one-line `description` of the value (not a plan), `after` from
+   the `Needs`, and `kind` — `implementation` where the deliverable is changed code, `research`
+   where it is an answer or a decision. Every entry needs one; the call is refused without it. The
+   tool creates them all on autopilot, parks dependents at `awaiting_upstream`, and starts the
+   ready ones.
 
 ## Step 8: Close out
 State what is now **in motion** (not merely what was created), **when the owner is next needed**, and

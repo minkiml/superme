@@ -72,6 +72,10 @@ class WorkItem(BaseModel):
     # deep-diagnosis | study). It has always ridden extra='allow'; declared here because the surface
     # now labels it, and a field a surface renders should be one the contract names.
     research_kind: str | None = None
+    # What the FILER said this item was, frozen at birth (§4.1). Provenance beside `inbox_id`, not
+    # a second routing field: nothing reads it after triage, and the surface shows it only where it
+    # differs from `kind` — i.e. where somebody was overruled.
+    proposed_kind: WorkKind | None = None
     spawned_from: SpawnedFrom | None = None
     superseded_by: str | None = None
     outcome: WorkOutcome | None = None

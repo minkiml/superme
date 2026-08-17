@@ -31,6 +31,9 @@ class InboxBody(BaseModel):
     model: str | None = None
     effort: str | None = None
     autopilot: bool = True     # drives its own gates after push; the card's toggle opts out
+    # §4.1: the PROPOSED work-item kind (implementation | research). None = undecided, which is
+    # what every capture was before the field — triage then judges alone.
+    work_kind: str | None = None
 
 
 class InboxPatch(BaseModel):
@@ -44,6 +47,8 @@ class InboxPatch(BaseModel):
     model: str | None = None
     effort: str | None = None
     autopilot: bool | None = None
+    # "" clears it back to undecided; None means the caller didn't touch the field.
+    work_kind: str | None = None
 
 
 class InboxPushBody(BaseModel):
@@ -58,6 +63,7 @@ async def dev_inbox_add(body: InboxBody, dev_store: DevStore = Depends(get_dev_s
             body.context_id, body.text, body.kind, body.tag,
             title=body.title, origin=body.origin, spawned_from=body.spawned_from,
             model=body.model, effort=body.effort, autopilot=body.autopilot,
+            work_kind=body.work_kind,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -85,6 +91,7 @@ async def dev_inbox_update(item_id: int, body: InboxPatch, dev_store: DevStore =
         item_id, status=body.status, kind=body.kind, tag=body.tag,
         text=body.text, title=body.title, routed_to=body.routed_to,
         model=body.model, effort=body.effort, autopilot=body.autopilot,
+        work_kind=body.work_kind,
     )
     if item is None:
         raise HTTPException(status_code=404, detail="inbox item not found")

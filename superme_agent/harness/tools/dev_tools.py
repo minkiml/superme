@@ -641,6 +641,15 @@ class CreateInboxItemArgs(TypedDict, total=False):
                                    "context/decisions and any pointers or references (work-item ids, "
                                    "paths, doc names). NOT a raw transcript dump")]]
     kind: Annotated[Literal["note", "idea", "todo", "question"], "item flavor (default note)"]
+    work_kind: Annotated[Literal["implementation", "research"],
+                         ("which machinery this becomes when pushed: `implementation` changes code "
+                          "(plan → build → vet → review, on its own branch), `research` answers a "
+                          "question (investigate → findings, no branch, nothing merged). Pick by "
+                          "what the item DELIVERS — an item whose output is a decision, a report "
+                          "or an answer is research even when code prompted it. SET IT whenever "
+                          "you can tell; omit only when you genuinely cannot, which leaves triage "
+                          "to decide alone. Triage re-reads your choice and disputes it if it "
+                          "disagrees, so a wrong one costs a question, not a wrong pipeline")]
     spawned_from_item: Annotated[str, ("branch-off ONLY: the parent work-item id this spawns from "
                                        "(requires `relation`)")]
     relation: Annotated[Literal["blocking", "parallel", "spawn"],
@@ -652,6 +661,14 @@ class CreateInboxItemArgs(TypedDict, total=False):
     discussion: Annotated[str, "handoff brief: what was discussed/concluded so far"]
     direction: Annotated[str, "handoff brief: high-level direction or options, with leanings — NO plans/implementation detail"]
     constraints: Annotated[str, "handoff brief: constraints, tried-but-failed, out-of-scope"]
+
+
+def _wk_note(work_kind: str) -> str:
+    """Say the filed kind back in the tool's own return. §4.1's rule for agent-driven filing is
+    that the choice is ANNOUNCED, not merely stored — an owner reading the session has to be able
+    to argue with it before the item lands, and an unsaid choice is one nobody can argue with."""
+    return (f" Filed as a {work_kind} item (triage confirms it)." if work_kind else
+            " No work kind filed — triage decides it alone.")
 
 
 def _create_inbox_item(*, store, context_id, dev_root=None, fire_triage=None, **_):
@@ -693,6 +710,7 @@ def _create_inbox_item(*, store, context_id, dev_root=None, fire_triage=None, **
             row = store.add_inbox(
                 context_id, body, kind=_s(args, "kind") or "note",
                 title=title, origin=["agent"], spawned_from=spawned_from,
+                work_kind=_s(args, "work_kind") or None,
             )
         except Exception as e:
             return _err(f"Could not create the inbox item: {e}")
@@ -727,7 +745,7 @@ def _create_inbox_item(*, store, context_id, dev_root=None, fire_triage=None, **
             kick = " Triage is running on it." if triaged else " It rests at triage for a triage pass."
             return _ok(f"Branch-off filed and AUTO-PUSHED: inbox #{row['id']} → work-item "
                        f"{wi['id']} ({relation} child of {parent}; brief moved to its "
-                       f"preliminary/).{paused}{kick}")
+                       f"preliminary/).{paused}{kick}{_wk_note(_s(args, 'work_kind'))}")
         where = f" Handoff brief at {brief}." if brief else ""
         # An empty brief throws away exactly the context this session holds — flag it back so the
         # agent fills the fields (the future triage session cold-starts from this brief).
@@ -736,7 +754,8 @@ def _create_inbox_item(*, store, context_id, dev_root=None, fire_triage=None, **
                  " NOTE: the handoff brief's slots are EMPTY. If this discussion holds real "
                  "context, capture it now with `append_inbox_item` (it mirrors onto the brief) — "
                  "the future triage session cold-starts from this brief and shouldn't start blind.")
-        return _ok(f"Created inbox item #{row['id']} — \"{title}\".{where}{nudge} "
+        return _ok(f"Created inbox item #{row['id']} — \"{title}\".{where}{nudge}"
+                   f"{_wk_note(_s(args, 'work_kind'))} "
                    f"It's in the Inbox for the owner to review and push into a work-item.")
     return create_inbox_item
 
@@ -829,7 +848,13 @@ class ItemizeItemArgs(TypedDict, total=False):
     after: Annotated[list[str], ("keys of items in THIS batch (or ids of existing work-items) that "
                                  "must finish before this one starts — from the PRD deliverables' "
                                  "`Needs` edges. Omit for items that can start immediately")]
-    kind: Annotated[Literal["implementation", "research"], "work-item kind (default implementation)"]
+    kind: Required[Annotated[Literal["implementation", "research"],
+                             ("which machinery this item runs: `implementation` changes code (plan "
+                              "→ build → vet → review, on its own branch), `research` answers a "
+                              "question (investigate → findings, no branch, nothing merged). Pick "
+                              "by what the item DELIVERS — an item whose output is a decision, a "
+                              "report or an answer is research even when code prompted it. Triage "
+                              "re-reads your choice and disputes it if it disagrees")]]
 
 
 class ItemizeAndLaunchArgs(TypedDict, total=False):
@@ -1007,6 +1032,11 @@ class SetTriageClassificationArgs(TypedDict, total=False):
                               "we cannot explain. Pick by the QUESTION, not the subject — reading "
                               "another project to find OUR bug is deep-diagnosis, not study, and a "
                               "sweep that happens to find a bug is still an audit")]
+    kind_override_reason: Annotated[str, ("ONLY when you are recording a kind that contradicts the "
+                                          "one this item was filed under, and only after the owner "
+                                          "has told you which it is. Quote their answer. Without "
+                                          "it a contradicting kind is refused — overruling the "
+                                          "filer is the owner's call, not yours")]
     research_kind_reason: Annotated[str, ("one line for why that family — required alongside "
                                           "`research_kind`, same reason as scale_reason: this is "
                                           "what the owner argues with at the gate, and this label "
@@ -1039,6 +1069,21 @@ def _set_triage_classification(*, store, context_id, dev_root=None, bound_item_i
             return _err("Kind/deliverable are fixed after the triage-exit gate — this item is "
                         f"already in `{item.get('phase')}`. A post-triage need is a branch-off "
                         "(create_inbox_item), never a re-kind.")
+        # A kind that contradicts the FILED one is refused, for the same reason and in the same
+        # place as the pairing check below: before any write. The filer already judged, so this is
+        # not triage deciding an open question — it is triage overruling somebody, and the item's
+        # kind is frozen at this gate. So the run must stop and ask instead: `needs_user` parks the
+        # item, pages the owner and renders the question as a card. The override arg is how the
+        # answer comes back, and it is recorded as an event so the reversal is never silent.
+        proposed = str(item.get("proposed_kind") or "")
+        override = _s(args, "kind_override_reason")
+        if proposed and _s(args, "kind") and _s(args, "kind") != proposed and not override:
+            return _err(
+                f"This item was FILED as {proposed!r}; you are recording {_s(args, 'kind')!r}. "
+                "Kind is frozen after this gate, so you may not overrule the filer alone. Nothing "
+                "was recorded. End your run with report_completion(machine.outcome='needs_user'), "
+                "asking the owner which it is and saying what you saw that disagrees. When they "
+                "answer, call this again with `kind_override_reason` quoting their decision.")
         # The kind/family PAIRING is checked before anything is written. Every other validation
         # here can afford to run in place because it guards its own field; this one spans two, and
         # a refusal raised halfway would leave the item holding a new title, kind and scale under a
@@ -1069,6 +1114,12 @@ def _set_triage_classification(*, store, context_id, dev_root=None, bound_item_i
             dev.set_work_item_kind(root, item_id, kind)
         except KeyError as e:
             return _err(str(e))
+        if proposed and kind != proposed:
+            store.log_event(
+                context_id, "item.kind_override",
+                f"Kind overruled: filed as {proposed}, recorded as {kind} — {override}",
+                item_id=item_id, actor="agent",
+                meta={"proposed_kind": proposed, "kind": kind, "reason": override})
         deliverable = _s(args, "deliverable")
         d_note = ""
         if deliverable and deliverable.lower() != "none":

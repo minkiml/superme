@@ -481,11 +481,17 @@ def gate_state(item: dict, item_dir: Path, dev_root: Path,
         # recording tool (set_triage_classification). The old `kind set + body filled` check was a
         # tautology — an inbox push satisfies both without any triage agent running.
         ready = bool(item.get("triaged_at"))
+        # An overruled proposal is said out loud here — the kind is frozen past this gate, and it
+        # was the owner who unblocked the reversal, so the one place they see the item before it
+        # is fixed should show that it happened rather than only the value that won.
+        proposed = str(item.get("proposed_kind") or "")
+        overruled = (f" (filed as {proposed})"
+                     if proposed and proposed != str(item.get("kind") or "") else "")
         checks.append({"criterion": "triage_ran", "ok": ready,
                        "detail": (f"classification recorded {item.get('triaged_at')}" if ready
                                   else "no classification recorded (set_triage_classification "
                                        "never ran)")
-                                 + f" · kind={item.get('kind') or 'unset'}, "
+                                 + f" · kind={item.get('kind') or 'unset'}{overruled}, "
                                    f"body {'filled' if item_body.strip() else 'empty'}"})
     elif gate == "pre-main":
         plan = _strip_fm(_artifact_text(item_dir, "plan") or "")

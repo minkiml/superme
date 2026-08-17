@@ -38,6 +38,9 @@ Rules:
 - **Title** = a short, specific headline (what+where), not a sentence and not a slug.
 - **kind** = `todo` for a change to make, `idea` for a proposal to consider, `question` for something
   to resolve, `note` otherwise (default `note`).
+- **work_kind** = `implementation` if the ticket's deliverable is changed code, `research` if it is
+  an answer, a report or a decision. Set it whenever the discussion settled which; omit it when the
+  discussion genuinely did not, and say in your reply that you left it for triage.
 
 Then call `create_inbox_item` with the title/body/kind AND the **handoff-brief fields** — the tool
 scaffolds `handoff-brief.md` next to the ticket, and these four fields are its content. Fill them

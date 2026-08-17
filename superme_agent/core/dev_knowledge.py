@@ -457,7 +457,8 @@ class DevKnowledgeService:
         description: str = "",
         *,
         session_id: str | None = None,
-        kind: str = "implementation",
+        kind: str,
+        proposed_kind: str | None = None,
         spawned_from: dict | None = None,
         inbox_id: int | None = None,
         after: list[str] | None = None,
@@ -472,7 +473,13 @@ class DevKnowledgeService:
         Creates `work-items/<id>/{item.md, artifacts/}`, entering at phase=triage, status=active
         (workspace-workflow D1/D2: every item passes triage; kind is a PROPOSAL until the
         triage-exit gate confirms it). `kind` is validated against KIND_PROFILES — an unknown kind
-        raises loud (ValueError) with NO folder created. `spawned_from` = the D3 provenance edge
+        raises loud (ValueError) with NO folder created, and it is REQUIRED with no default: the
+        profile table's own rule is that an unknown kind never resolves silently, and a default
+        here broke that one file away — every ordinary ticket got an implementation pipeline
+        because nobody was asked. `proposed_kind` = what the FILER said this was, when they said
+        anything; it is birth provenance like `inbox_id`, never routed on, and triage reads it once
+        to tell "nobody judged yet" apart from "someone judged and I disagree".
+        `spawned_from` = the D3 provenance edge
         `{item, relation: blocking|parallel|spawn, note?}` (child-side single write; parent views
         are derived by scan); relation is validated. `inbox_id` = the originating inbox row (D5
         trace; the row itself also stays, with `routed_to` as the reverse pointer). `after` = PEER
@@ -491,7 +498,7 @@ class DevKnowledgeService:
         NEVER adopt its orphaned (permanent, never-delete-logs) runs/dev-events — the 305k-token
         ghost post-mortem, 2026-07-13. Returns {id, folder}.
         """
-        from .kind_profiles import DEFAULT_SCALE, RESEARCH_KINDS, get_profile
+        from .kind_profiles import DEFAULT_SCALE, KIND_PROFILES, RESEARCH_KINDS, get_profile
         profile = get_profile(kind)  # loud KeyError on unknown kind, before any disk write
         # A BUTTON-LAUNCHED STANDING SWEEP is born already classified and already past triage: the
         # button IS the classification (the family is which button was pressed), and there is no
@@ -499,6 +506,8 @@ class DevKnowledgeService:
         # because a kind is a PROPOSAL until triage confirms it — this is the one case where the
         # owner did the confirming, by choosing. Both are validated here, before any disk write, so
         # a caller cannot mint an item into a phase its kind does not have.
+        if proposed_kind is not None and proposed_kind not in KIND_PROFILES:
+            raise ValueError(f"proposed_kind must be one of {sorted(KIND_PROFILES)}")
         if research_kind is not None:
             if kind != "research":
                 raise ValueError("research_kind belongs only to a research item")
@@ -552,6 +561,12 @@ class DevKnowledgeService:
             extra += f"spawned_from: {json.dumps(edge)}\n"   # JSON is valid YAML flow mapping
         if inbox_id is not None:
             extra += f"inbox_id: {inbox_id}\n"
+        # What the FILER proposed this item's kind was — written only when somebody actually said
+        # (absent reads null: nobody judged, which is what every item minted before this field is).
+        # Frozen at birth and read by exactly one reader, triage: agreeing with it is silent, and
+        # overruling it is the owner's call, not the agent's (set_triage_classification).
+        if proposed_kind:
+            extra += f"proposed_kind: {proposed_kind}\n"
         # Autopilot is a per-item POLICY (not a run-state): does the workflow drive itself through
         # this item's gates, or wait for a click at each. Written only when on (absent reads False —
         # no dead `autopilot: false` lines on the hand-driven majority). Onboarding items are born
@@ -606,7 +621,7 @@ class DevKnowledgeService:
         (autopilot slice 4c). Every item is born `autopilot=true` and stamped with one shared
         `cohort` id (aggregate-spend observability groups on it).
 
-        `items` = `[{key, title, description?, kind?, after:[key|id]}]`. `key` is a caller-local
+        `items` = `[{key, title, description, kind, after:[key|id]}]`. `key` is a caller-local
         HANDLE used only to express edges within this batch — the real opaque ids are minted here,
         so the caller (which doesn't know ids yet) can wire the PRD's `Needs` graph by key. Each
         `after` entry is resolved: a batch key → that item's minted id; an existing on-disk id →
@@ -635,9 +650,15 @@ class DevKnowledgeService:
             if key in seen:
                 raise ValueError(f"duplicate item key {key!r}")
             seen.add(key)
+            # No default kind here either: this is agent-driven creation, and the whole reason the
+            # field is asked for is that an itemizer usually KNOWS which it is (a decision with no
+            # code is not an implementation item) and used to have no way to say so.
+            item_kind = str(it.get("kind") or "").strip()
+            if not item_kind:
+                raise ValueError(f"item {key!r} is missing a `kind` (implementation | research)")
             specs.append({"key": key, "title": title,
                           "description": str(it.get("description") or ""),
-                          "kind": str(it.get("kind") or "implementation"),
+                          "kind": item_kind,
                           "after": [str(a) for a in (it.get("after") or []) if a]})
         keys = {s["key"] for s in specs}
         for s in specs:                                   # validate every edge BEFORE any write
@@ -653,8 +674,12 @@ class DevKnowledgeService:
         for key in order:
             s = next(x for x in specs if x["key"] == key)
             after_ids = [key_to_id.get(a, a) for a in s["after"]]   # batch key → id; existing id passes
+            # The caller's kind is BOTH what the item runs as and what it proposed: these items
+            # skip the inbox but not triage, so the claim is still a claim, and triage confirming
+            # it (or disputing it) works here exactly as it does on a pushed row.
             wi = self.create_work_item(dev_root, s["title"], s["description"],
                                        session_id=session_id, kind=s["kind"],
+                                       proposed_kind=s["kind"],
                                        after=after_ids, autopilot=True, cohort=cohort_id)
             key_to_id[key] = wi["id"]
             item = self.read_work_item(dev_root, wi["id"]) or {}

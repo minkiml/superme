@@ -85,7 +85,9 @@ a review gate.
    owner's **single explicit confirm**. If they'd rather establish memory and drive work by hand, skip
    to Step 8 and launch nothing.
 3. On confirm, call **`itemize_and_launch`** with the batch: `key` = the deliverable id, `title`, a
-   one-line `description` of the value (not a plan), and `after` from the `Needs`.
+   one-line `description` of the value (not a plan), `after` from the `Needs`, and `kind` —
+   `implementation` where the deliverable is changed code, `research` where it is an answer or a
+   decision. Every entry needs one; the call is refused without it.
 
 ## Step 8: Close out
 State what is now **in motion**, **when the owner is next needed**, and the **one place to watch**

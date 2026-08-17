@@ -132,7 +132,9 @@ The owner is not watching; nothing you ask mid-run reaches them. So decide and r
   `request_authorization` (what · why · doc · scope · the check it blocks). The blocked check DEFERS
   and the request rides to review; a grant routes back to you, a denial accepts the gap.
 - **Work that must be fixed first** → `create_inbox_item` with relation `blocking`; worth doing but
-  not now → relation `spawn`. Never absorb out-of-scope work into this worktree.
+  not now → relation `spawn`. Never absorb out-of-scope work into this worktree. Pass
+  `work_kind: "implementation"` — a branch-off from a build is code unless what you actually hit
+  was a question nobody can answer yet, which is `research`.
 
 Either way, finish every OTHER task. A wall on some tasks reports `partial`, never `blocked`.
 

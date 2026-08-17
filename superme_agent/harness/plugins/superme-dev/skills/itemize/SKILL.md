@@ -33,6 +33,9 @@ work follows, and where the evidence lives.
 - **File what the report proposed** — you are not re-scoping it. A proposal too vague to file is
   filed as it stands with its vagueness visible, not sharpened by you into something the report
   never said.
+- **Carry the proposal's own typing into `work_kind`.** `## Proposed work` types each entry —
+  `implementation` where the deliverable is changed code, `research` where it is an answer or a
+  decision. Pass that verbatim; never re-decide it, and never leave it unset on a typed proposal.
 - **`spawn` is the only legal relation here.** Never `itemize_and_launch` — that is onboarding's
   direct-mint path, and from here it would start building a conclusion nobody approved.
 - **More than a handful is itself a finding.** If the report proposed eight things, file them and

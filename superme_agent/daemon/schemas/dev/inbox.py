@@ -3,7 +3,7 @@
 from pydantic import BaseModel
 
 from .work_items import WorkItem, SpawnedFrom
-from ..common import InboxKind, InboxStatus, InboxOrigin
+from ..common import InboxKind, InboxStatus, InboxOrigin, WorkKind
 
 
 class InboxRow(BaseModel):
@@ -29,6 +29,9 @@ class InboxRow(BaseModel):
     # work-item route only accepts the flag pre-build — capture is the moment always in time.
     # ON by default: driving itself is the normal case, and the card's toggle is the opt-out.
     autopilot: bool = True
+    # §4.1: which machinery this row becomes when pushed (implementation | research). NULL = nobody
+    # has judged yet, and triage decides alone — the behaviour every row had before the field.
+    work_kind: WorkKind | None = None
 
 
 class InboxPushResponse(BaseModel):

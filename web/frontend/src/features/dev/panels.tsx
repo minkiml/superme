@@ -23,6 +23,13 @@ export const DEFAULT_RUN_MODEL = DEFAULT_MODEL
 // Reasoning-effort levels selectable per run, alongside the model. Default "medium".
 export const RUN_EFFORTS = EFFORT_CATALOG.map((e) => ({ value: e.key, label: e.label }))
 export const DEFAULT_RUN_EFFORT = DEFAULT_EFFORT
+// The PROPOSED work-item kind. "Undecided" is a first-class option, not a placeholder — leaving it
+// there is a real answer (triage judges alone), so it leads the list rather than sitting under one.
+export const WORK_KIND_OPTS = [
+  { value: '', label: 'Undecided' },
+  { value: 'implementation', label: 'Implementation' },
+  { value: 'research', label: 'Research' },
+]
 
 // What Save on an inbox card writes back. Content and setting travel together because the card has
 // one Save. `model`/`effort` are always concrete — the picker offers the three catalog options and
@@ -34,6 +41,7 @@ type InboxConfigPatch = {
   model: string
   effort: string
   autopilot: boolean
+  work_kind: string
 }
 
 // Shared dev-knowledge store views — the bodies for Workspace (work-items) and Inbox. Rendered
@@ -506,6 +514,13 @@ function InboxCard({
           </span>
         )}
         {!e.title && <span className="italic">untitled</span>}
+        {/* The proposed work kind, shown ONLY when one was filed: an absent label means undecided,
+            which is a real state and not worth a word of its own on every row. */}
+        {e.work_kind && (
+          <span className="text-muted" title="Proposed work kind — triage confirms it">
+            {e.work_kind}
+          </span>
+        )}
         <span>{fmtLocal(e.created_at)}</span>
       </div>
     </div>
@@ -548,6 +563,9 @@ function InboxEditModal({
   const [model, setModel] = useState(toModelKey(e.model) || toModelKey(repoModel) || DEFAULT_RUN_MODEL)
   const [effort, setEffort] = useState(e.effort ?? repoEffort ?? DEFAULT_RUN_EFFORT)
   const [autopilot, setAutopilot] = useState(!!e.autopilot)
+  // The proposed work-item kind. "" is a real value here, not an empty control: it means nobody
+  // has judged, and triage then decides alone — which is what every row did before the field.
+  const [workKind, setWorkKind] = useState<string>(e.work_kind ?? '')
 
   return (
     // Contained (not viewport-fixed) so it overlays the dashboard column and leaves the chat rail
@@ -594,6 +612,9 @@ function InboxEditModal({
               <div className="mt-2.5 space-y-2.5">
                 <ConfigRow label="Autopilot" hint="Drives its own gates; the deputy judges each one for you.">
                   <Toggle on={autopilot} onChange={setAutopilot} onColor="bg-accent" />
+                </ConfigRow>
+                <ConfigRow label="Work kind" hint="Implementation changes code; research answers a question. Triage confirms it.">
+                  <Dropdown value={workKind} options={WORK_KIND_OPTS} onChange={setWorkKind} width="w-36" align="right" />
                 </ConfigRow>
                 <ConfigRow label="Model" hint="Which model this item's runs use.">
                   <Dropdown value={model} options={RUN_MODELS} onChange={setModel} width="w-36" align="right" />
@@ -643,6 +664,7 @@ function InboxEditModal({
                 model,
                 effort,
                 autopilot,
+                work_kind: workKind,
               })
             }
           >

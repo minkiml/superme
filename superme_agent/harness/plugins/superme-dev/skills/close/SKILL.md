@@ -70,7 +70,8 @@ six months.
   thing — that a research item writes no anchor docs, and what would have to happen for its findings
   to reach them.
 - **Anything worth doing later becomes `create_inbox_item`** (relation `spawn`), never an implicit
-  "someone will notice".
+  "someone will notice". Give each one a `work_kind`: a leftover task is `implementation`, an
+  unresolved question or a doc gap you could not settle is `research`.
 
 **Tone and style when writing to user-facing report**
 - Plain, easy language. Fewer words wins.

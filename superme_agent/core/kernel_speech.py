@@ -529,6 +529,16 @@ def work_item_preamble(item_id: str, item: dict, item_dir, *, interactive: bool 
         lines.append(f"\n**Investigation family: `{fam}`.**"
                      + (f" Triage's reason: {why}" if why else "")
                      + " Your phase's contract says what that family owes.")
+    # WHAT THE FILER PROPOSED (§4.1). Triage is the only reader — after this phase the kind is
+    # frozen, so nowhere later can act on it. Said here because the refusal that enforces it lands
+    # at a tool call, and an agent should meet a rule before it meets the wall.
+    if phase == "triage" and (proposed := str(item.get("proposed_kind") or "")):
+        lines.append(
+            f"\n**This item was filed as `{proposed}`.** Read the ask yourself and judge it — but "
+            f"that judgment was already made once. If you agree, record `{proposed}` and say "
+            "nothing about it. If you disagree, you may not simply record the other one: end your "
+            "run with `report_completion(machine.outcome='needs_user')`, ask the owner which it "
+            "is, and say what you saw that disagrees.")
     # The owner's standing input, on EVERY turn of every phase. Each intake phase runs in its own
     # session, so anything they said in an earlier one is gone from this thread; the durable copy
     # lives in the artifacts, and until now reached a phase only if that phase's skill happened to

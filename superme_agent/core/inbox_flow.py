@@ -51,6 +51,12 @@ def push_inbox_item(store, dev: DevKnowledgeService, dev_root: Path, row: dict, 
             dev_root,
             title=row.get("title") or row.get("text") or "",
             description=row.get("text") or "",
+            # The row's PROPOSED kind becomes the item's kind; an unproposed row falls to
+            # `implementation`, which is what every push did before the field existed. The two are
+            # kept apart on the item — `kind` is what it runs as, `proposed_kind` is what was
+            # claimed — because triage has to be able to tell a fall-back from a judgment.
+            kind=row.get("work_kind") or "implementation",
+            proposed_kind=row.get("work_kind"),
             spawned_from=row.get("spawned_from"),
             inbox_id=inbox_id,
             # The third capture-time policy: whether the item drives its own gates. Set at BIRTH

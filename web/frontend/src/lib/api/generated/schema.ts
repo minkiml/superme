@@ -3823,6 +3823,8 @@ export interface components {
              * @default true
              */
             autopilot: boolean;
+            /** Work Kind */
+            work_kind?: string | null;
         };
         /** InboxDeleteResponse */
         InboxDeleteResponse: {
@@ -3851,6 +3853,8 @@ export interface components {
             effort?: string | null;
             /** Autopilot */
             autopilot?: boolean | null;
+            /** Work Kind */
+            work_kind?: string | null;
         };
         /** InboxPushBody */
         InboxPushBody: {
@@ -3914,6 +3918,8 @@ export interface components {
              * @default true
              */
             autopilot: boolean;
+            /** Work Kind */
+            work_kind?: ("implementation" | "research") | null;
         };
         /** InjectBody */
         InjectBody: {
@@ -6217,6 +6223,8 @@ export interface components {
             kind?: ("implementation" | "research") | null;
             /** Research Kind */
             research_kind?: string | null;
+            /** Proposed Kind */
+            proposed_kind?: ("implementation" | "research") | null;
             spawned_from?: components["schemas"]["SpawnedFrom"] | null;
             /** Superseded By */
             superseded_by?: string | null;

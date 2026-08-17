@@ -34,6 +34,10 @@ say so.
   mixed item stalls at whichever pipeline it isn't.
 - **Genuinely torn** → pick the safer kind (research over a mixed item) and say why in the brief.
   You make the call; the gate is where the owner disagrees with it.
+- **Already filed under a kind** → your preamble says so. Agreeing is silent: record that kind and
+  move on. Disagreeing is not yours to settle — end the run with
+  `report_completion(machine.outcome='needs_user')` naming both kinds and what you read that
+  disagrees. `set_triage_classification` refuses the contradicting kind until the owner answers.
 
 **A research item also needs its FAMILY**, with its own one-line reason. It decides what counts as
 an answer — the method the investigation follows and the shape of the record it writes — so an item
@@ -56,8 +60,9 @@ not `study`, and a sweep that happens to turn up a bug is still an `audit`.
 Two judgments, on different axes:
 
 - **Scope — what belongs in THIS item.** Several independent deliveries → keep the core here, branch
-  the rest off with `create_inbox_item` (relation `spawn`). Don't split what one session can
-  deliver; an extra item costs real tax.
+  the rest off with `create_inbox_item` (relation `spawn`), each with its own `work_kind` — you have
+  read the whole ask, so leaving that unset on a split you yourself scoped wastes what you know.
+  Don't split what one session can deliver; an extra item costs real tax.
 - **Scale — how much content the work is worth.** `small` or `standard`, with the one-line reason
   the owner argues with. It rides every later phase: `small` makes plan, build, vet and review read
   narrow and write short. The pipeline never changes — a small item still gets its branch, its

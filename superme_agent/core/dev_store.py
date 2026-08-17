@@ -316,6 +316,13 @@ class DevStore:
             # that is always in time. Stored 0/1, ON by default; carried into the item by inbox_flow.
             if "autopilot" not in cols:
                 c.execute("ALTER TABLE inbox ADD COLUMN autopilot INTEGER NOT NULL DEFAULT 1")
+            # `work_kind` = the PROPOSED work-item kind (kind_profiles.KIND_PROFILES key), set by
+            # whoever files the ticket. NULL = nobody has judged yet, which is exactly the behaviour
+            # every row had before this column: triage decides alone. Deliberately NOT named `kind`
+            # — that column already means the ticket's FLAVOUR (note|idea|todo|question), and two
+            # `kind`s on one row is the exact shape of the data-model audit's wrong-field bugs.
+            if "work_kind" not in cols:
+                c.execute("ALTER TABLE inbox ADD COLUMN work_kind TEXT")
 
     # --- inbox CRUD -------------------------------------------------------------
 
@@ -324,16 +331,25 @@ class DevStore:
                   title: str | None = None, origin="user",
                   spawned_from: dict | None = None,
                   model: str | None = None, effort: str | None = None,
-                  autopilot: bool = True) -> dict:
+                  autopilot: bool = True, work_kind: str | None = None) -> dict:
         """`spawned_from` (D3) = the provenance edge a branch-off item carries from birth:
         {item, relation: blocking|parallel|spawn, note?}. Validated here; NULL for plain captures.
         `model`/`effort` (F3) = the run config chosen at capture, locked into the work-item at push;
         NULL = inherit the repo/system default. `autopilot` = the same capture-time decision for
         whether the item drives its own gates — ON by default (owner, 2026-08-02): driving itself is
-        the normal case, and the toggle is for the exceptions."""
+        the normal case, and the toggle is for the exceptions.
+
+        `work_kind` = the PROPOSED work-item kind, which push carries onto the item and triage then
+        confirms or disputes. Validated LOUD against KIND_PROFILES rather than silently dropped: a
+        typo'd proposal that vanished would read at triage as "nobody proposed one", and the whole
+        point of the field is that triage can tell those two states apart."""
         text = (text or "").strip()
         if not text:
             raise ValueError("empty inbox text")
+        if work_kind is not None:
+            from .kind_profiles import KIND_PROFILES
+            if work_kind not in KIND_PROFILES:
+                raise ValueError(f"work_kind must be one of {sorted(KIND_PROFILES)}")
         if spawned_from is not None:
             if not isinstance(spawned_from, dict) or not spawned_from.get("item"):
                 raise ValueError("spawned_from must be {item, relation[, note]}")
@@ -345,11 +361,13 @@ class DevStore:
         with self._conn() as c:
             cur = c.execute(
                 "INSERT INTO inbox (context_id,kind,text,title,tag,status,origin,spawned_from,"
-                "model,effort,autopilot,created_at,updated_at) VALUES (?,?,?,?,?,'open',?,?,?,?,?,?,?)",
+                "model,effort,autopilot,work_kind,created_at,updated_at) "
+                "VALUES (?,?,?,?,?,'open',?,?,?,?,?,?,?,?)",
                 (context_id, kind, text, (title or None), (tag or None),
                  json.dumps(origins),
                  json.dumps(spawned_from) if spawned_from else None,
-                 (model or None), (effort or None), int(bool(autopilot)), now, now),
+                 (model or None), (effort or None), int(bool(autopilot)),
+                 (work_kind or None), now, now),
             )
             return self._get(c, cur.lastrowid)
 
@@ -401,12 +419,21 @@ class DevStore:
     def update_inbox(self, item_id: int, **fields) -> dict | None:
         sets = {k: v for k, v in fields.items()
                 if k in {"kind", "text", "tag", "status", "routed_to", "title",
-                         "model", "effort", "autopilot"}
+                         "model", "effort", "autopilot", "work_kind"}
                 and v is not None}
         if sets.get("kind") not in _KINDS:
             sets.pop("kind", None)
         if sets.get("status") not in _STATUSES:
             sets.pop("status", None)
+        if "work_kind" in sets:
+            # The one field here with a meaningful NULL, so it needs a way to be un-set: an empty
+            # string clears it back to undecided (a bare None can't reach here — the filter above
+            # reads None as "caller didn't mention this field"). Anything else must be a real kind.
+            from .kind_profiles import KIND_PROFILES
+            if not sets["work_kind"]:
+                sets["work_kind"] = None
+            elif sets["work_kind"] not in KIND_PROFILES:
+                sets.pop("work_kind")
         if "autopilot" in sets:
             sets["autopilot"] = int(bool(sets["autopilot"]))
         with self._conn() as c:
