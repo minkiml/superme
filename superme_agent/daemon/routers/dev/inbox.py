@@ -87,12 +87,15 @@ async def dev_inbox_update(item_id: int, body: InboxPatch, dev_store: DevStore =
         raise HTTPException(status_code=404, detail="inbox item not found")
     if cur.get("status") == "pushed":
         raise HTTPException(status_code=409, detail="inbox item was pushed — the row is trace now")
-    item = dev_store.update_inbox(
-        item_id, status=body.status, kind=body.kind, tag=body.tag,
-        text=body.text, title=body.title, routed_to=body.routed_to,
-        model=body.model, effort=body.effort, autopilot=body.autopilot,
-        work_kind=body.work_kind,
-    )
+    try:
+        item = dev_store.update_inbox(
+            item_id, status=body.status, kind=body.kind, tag=body.tag,
+            text=body.text, title=body.title, routed_to=body.routed_to,
+            model=body.model, effort=body.effort, autopilot=body.autopilot,
+            work_kind=body.work_kind,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     if item is None:
         raise HTTPException(status_code=404, detail="inbox item not found")
     return item

@@ -429,11 +429,17 @@ class DevStore:
             # The one field here with a meaningful NULL, so it needs a way to be un-set: an empty
             # string clears it back to undecided (a bare None can't reach here — the filter above
             # reads None as "caller didn't mention this field"). Anything else must be a real kind.
+            #
+            # And an invalid one RAISES rather than being dropped like `kind`/`status` above. Those
+            # two can afford silence because their fallback is the value already on the row; this
+            # field's is NULL, which is itself a meaningful state — so a dropped typo would land
+            # the caller on "undecided" and read back exactly like a deliberate clear. Same reason
+            # `add_inbox` is loud: the whole point of the field is telling those two apart.
             from .kind_profiles import KIND_PROFILES
             if not sets["work_kind"]:
                 sets["work_kind"] = None
             elif sets["work_kind"] not in KIND_PROFILES:
-                sets.pop("work_kind")
+                raise ValueError(f"work_kind must be one of {sorted(KIND_PROFILES)}")
         if "autopilot" in sets:
             sets["autopilot"] = int(bool(sets["autopilot"]))
         with self._conn() as c:
