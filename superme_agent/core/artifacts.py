@@ -1113,6 +1113,104 @@ def proposed_work(item_dir: Path) -> str:
     return " ".join(body.split())
 
 
+# ----------------------------------------------------- research proposals (the typed `## Proposed work`)
+# A research item's findings imply work, but research may not DECIDE — so each proposal carries how
+# its open call was handled. Three shapes, and only the third can withhold a proposal:
+#
+#   no ruling fields          — nothing to decide; files as-is.
+#   `Default applied`         — a preference with a safe, cheaply reversed default. Files WITH the
+#                               default stated; the owner adjusts it at the gate if it is wrong.
+#   `Question` (+ reason)     — a preference whose default is destructive or expensive to reverse.
+#                               Files ONLY once `Answer` carries the owner's ruling.
+#
+# The withheld case is the whole point: a brief that says "do X, pending a ruling nobody gave" reads
+# as actionable, and a build agent asked to finish it will pick an option — which is the one act
+# research is not allowed to perform. Nothing stores an unanswered question; the next sweep re-reads
+# the same code and raises it again, which is the reminder a parked question could never be.
+_PROPOSAL_FIELDS = {
+    "Title": "title", "Kind": "kind", "Why now": "why_now", "Delivers": "delivers",
+    "Default applied": "default_applied", "Question": "question",
+    "Reserved because": "reserved_because", "Suggested": "suggested", "Answer": "answer",
+    # The free-prose predecessor of `Question`. Kept as a field so an older review's line lands in
+    # its own key instead of running on into `Why now` — it gates nothing (it never could: no
+    # reader ever consumed it), and reading it as a question would retroactively withhold work on
+    # items written before the field existed.
+    "Depends-on": "legacy_depends_on",
+}
+_PROPOSAL_FIELD = re.compile(r"^\s*\*\*(" + "|".join(_PROPOSAL_FIELDS) + r"):\*\*\s*(.*)$")
+# Closed set, and the reason the set is closed: an agent that must name which limb a question passes
+# writes fewer questions than one that may simply assert the owner should decide.
+RESERVED_REASONS = ("destructive", "expensive_to_reverse")
+
+
+def research_proposals(item_dir: Path) -> list[dict]:
+    """`## Proposed work` → one dict per proposal, keyed by `_PROPOSAL_FIELDS`. A block opens at
+    `**Title:**`; a line that matches no field header continues the field above it (values wrap).
+    Unfilled `<fill:…>` slots read as absent. Returns [] when the section is missing or unfilled."""
+    path = Path(item_dir) / "artifacts" / artifact_file("review")
+    if not path.is_file():
+        return []
+    text = re.sub(r"<!--.*?-->", "", path.read_text(), flags=re.DOTALL)
+    body = _split_sections(text).get("Proposed work", "")
+    out: list[dict] = []
+    cur: dict | None = None
+    field: str | None = None
+    for line in body.splitlines():
+        m = _PROPOSAL_FIELD.match(line)
+        if m:
+            key = _PROPOSAL_FIELDS[m.group(1)]
+            if key == "title":
+                cur = {v: "" for v in _PROPOSAL_FIELDS.values()}
+                out.append(cur)
+            if cur is None:      # a stray field before any title — nothing to attach it to
+                continue
+            field = key
+            cur[key] = _vet_value(m.group(2))
+        elif cur is not None and field and line.strip():
+            cur[field] = (cur[field] + " " + _vet_value(line)).strip()
+    return [p for p in out if p["title"]]
+
+
+def proposal_is_withheld(prop: dict) -> bool:
+    """A proposal the owner has not ruled on: it asks a question and carries no answer."""
+    return bool(prop.get("question")) and not str(prop.get("answer") or "").strip()
+
+
+def filed_and_withheld(props: list[dict]) -> tuple[list[dict], list[dict]]:
+    """Split proposals into (files now, waits for the owner). Per-proposal, never per-review — one
+    open question must not hold settled siblings, or a busy week turns into a stuck board."""
+    filed = [p for p in props if not proposal_is_withheld(p)]
+    return filed, [p for p in props if proposal_is_withheld(p)]
+
+
+def research_proposal_issues(props: list[dict]) -> list[str]:
+    """Structural faults in the proposal blocks — read at the review gate, where the owner can still
+    send the item back. A malformed ruling field is worse than none: it decides whether a proposal
+    files, so a typo silently changes what reaches the queue."""
+    issues: list[str] = []
+    for p in props:
+        label = clip(p.get("title") or "(untitled)", 60)
+        if p.get("question"):
+            reason = p.get("reserved_because", "")
+            if not reason:
+                issues.append(f"proposal {label!r}: asks the owner a question with no "
+                              "`Reserved because` — name the limb it passes "
+                              f"({' or '.join(RESERVED_REASONS)}) or decide it yourself")
+            elif reason not in RESERVED_REASONS:
+                issues.append(f"proposal {label!r}: `Reserved because` must be one of "
+                              f"{'/'.join(RESERVED_REASONS)} (got {reason!r})")
+            if not p.get("suggested"):
+                issues.append(f"proposal {label!r}: a question with no `Suggested` makes the owner "
+                              "do the research again — state the answer you would give")
+        if p.get("answer") and not p.get("question"):
+            issues.append(f"proposal {label!r}: carries an `Answer` with no `Question` — a ruling "
+                          "with no question recorded cannot be read back")
+        if p.get("question") and p.get("default_applied"):
+            issues.append(f"proposal {label!r}: carries both `Default applied` and `Question` — a "
+                          "call is either yours to make or the owner's, never both")
+    return issues
+
+
 # --------------------------------------------------------------- `## From you` (the owner's input)
 # The one section of any report the OWNER writes, and the only place in the item where their own
 # words arrive as instruction rather than as chat. It lives in the triage brief because that is the

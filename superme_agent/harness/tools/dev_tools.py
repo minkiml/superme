@@ -1445,6 +1445,51 @@ def _read_verification_library(*, store, context_id, dev_root=None, bound_item_i
     return read_verification_library
 
 
+class ReadResearchProposalsArgs(TypedDict, total=False):
+    item_id: Required[Annotated[str, "the research work-item id whose review record to read"]]
+
+
+def _read_research_proposals(*, store, context_id, dev_root=None, bound_item_id=None, **_):
+    async def read_research_proposals(args: dict) -> dict:
+        from ...core import artifacts as _arts
+        item_id = _s(args, "item_id")
+        if err := _bound_err(item_id, bound_item_id):
+            return _err(err)
+        d = _item_dir(dev_root, item_id)
+        if d is None:
+            return _err(f"No work-item {item_id!r} in this repo — check the id you were given.")
+        props = _arts.research_proposals(d)
+        if not props:
+            return _ok("This review proposes no work. That is a real outcome — report "
+                       "`clean_noop` and say so in the Owner's decision line.")
+        filed, held = _arts.filed_and_withheld(props)
+        out = [f"## File these ({len(filed)})"]
+        for p in filed:
+            out.append(f"\n### {p['title']}")
+            out.append(f"- work_kind: {p['kind'] or '(untyped — the report owed one)'}")
+            for label, key in (("why now", "why_now"), ("delivers", "delivers"),
+                               ("default applied", "default_applied"),
+                               ("owner's ruling", "answer")):
+                if p.get(key):
+                    out.append(f"- {label}: {p[key]}")
+        if not filed:
+            out.append("- (none)")
+        # The withheld list is reported, never filed. Naming them is what keeps a half-filed review
+        # distinguishable from a clean one — the owner cannot see an absence.
+        out.append(f"\n## Do NOT file these ({len(held)}) — the owner has not ruled")
+        for p in held:
+            out.append(f"\n### {p['title']}")
+            out.append(f"- question: {p['question']}")
+            out.append(f"- reserved because: {p['reserved_because'] or '(unstated)'}")
+        if not held:
+            out.append("- (none)")
+        if issues := _arts.research_proposal_issues(props):
+            out.append("\n## Malformed proposal blocks")
+            out.extend(f"- {i}" for i in issues)
+        return _ok("\n".join(out))
+    return read_research_proposals
+
+
 class RequestAuthorizationArgs(TypedDict, total=False):
     item_id: Required[Annotated[str, "the work-item id"]]
     what: Required[Annotated[str, "the contract change you can't self-authorize, one line "
@@ -2042,6 +2087,15 @@ _ITEM_DEV_TOOLS: list[ToolSpec] = [
         ReadVerificationLibraryArgs, _read_verification_library,
     ),
     ToolSpec(
+        "read_research_proposals",
+        "Read an approved research review's proposed work, already split into what you may file "
+        "and what you may not. A proposal that asks the owner a question and carries no answer is "
+        "NOT yours to file — report it as withheld. Use this instead of judging the report "
+        "yourself: the split is what stops a ticket claiming to be startable when its ruling was "
+        "never given.",
+        ReadResearchProposalsArgs, _read_research_proposals,
+    ),
+    ToolSpec(
         "request_authorization",
         "Request authorization for a contract change you can't self-authorize (an owner-reserved "
         "anchor-doc edit). The blocked vet check DEFERS instead of failing — never edit the vet "
@@ -2280,7 +2334,7 @@ TOOL_SCOPES: dict[str, tuple[str, ...]] = {
     # onboarding's". Mounting it anyway made the scope contradict its own skill, and left the run
     # holding a tool whose only possible outcome was a refusal. Filing inbox items (which the owner
     # then pushes or drops) is the whole job, and `create_inbox_item` is what does it.
-    "itemize": ("read_inbox", "read_dev_log", "create_inbox_item"),
+    "itemize": ("read_inbox", "read_dev_log", "read_research_proposals", "create_inbox_item"),
     # --- kernel-fired turns that are not a phase ---
     "deputy": ("read_dev_log", "read_run"),             # it judges a report; it writes a verdict
     "handoff": ("write_checkpoint",),                   # the pre-compaction turn, item-bound branch

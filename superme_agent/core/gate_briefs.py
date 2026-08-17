@@ -49,8 +49,11 @@ _BLOCKING: dict[str, tuple[str, ...] | str] = {
     "pre-main": ("plan_complete",),
     # `method_read` blocks (see guide_check): the others in its neighbourhood describe judgment
     # calls a small item can honestly fail, this one describes an instruction that was not followed.
+    # `owner_rulings` blocks only when the ruling fields are MALFORMED — it passes with questions
+    # outstanding, so an open call never greys Approve (the unruled proposals just do not file).
     "review": ("no_pending_authorizations", "evidence_fresh", "artifacts_complete",
-               "findings_delivered", "spawns_exist", "children_terminal", "method_read"),
+               "findings_delivered", "spawns_exist", "children_terminal", "method_read",
+               "owner_rulings"),
     "close": _ALL,
 }
 
@@ -342,7 +345,34 @@ def research_readiness(item_dir: Path) -> list[dict]:
                    if proposals else
                    "`## Proposed work` in review.md is empty — say what work these findings imply, "
                    "or say plainly that none follows; itemize files it from there"},
+        # What the owner is here to decide. Research may not choose, so a proposal whose call is
+        # theirs waits — and a withheld proposal is INVISIBLE unless this row names it: an absence
+        # from the inbox looks exactly like a review that proposed less.
+        #
+        # It passes with questions outstanding, on purpose. Approve stays live and the unruled
+        # proposals simply do not file (itemize reads the same split). Blocking here would hold
+        # settled siblings hostage to one open call, and a gate that cannot be cleared is a gate
+        # that gets cleared carelessly. What DOES block is an unreadable ruling field — the owner
+        # cannot answer a question whose terms are malformed, and a bad `Reserved because` silently
+        # changes which proposals file.
+        _owner_rulings(item_dir),
     ]
+
+
+def _owner_rulings(item_dir: Path) -> dict:
+    props = A.research_proposals(item_dir)
+    issues = A.research_proposal_issues(props)
+    _, held = A.filed_and_withheld(props)
+    if issues:
+        detail = "; ".join(issues)
+    elif held:
+        detail = f"{len(held)} of {len(props)} proposal(s) wait on you — " + " · ".join(
+            f"{A.clip(p['title'], 48)}: {p['question']}"
+            + (f" (suggested: {p['suggested']})" if p.get("suggested") else "")
+            for p in held) + ". Approving without ruling drops them; the next sweep raises them again."
+    else:
+        detail = "no proposal needs your ruling"
+    return {"criterion": "owner_rulings", "ok": not issues, "detail": detail}
 
 
 # --------------------------------------------------------------------------- brief assembly

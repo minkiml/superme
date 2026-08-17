@@ -65,6 +65,11 @@ SAFE_TOOLS = {
     # 2026-08-03, where close reported "read_verification_library was unavailable this run (denied)"
     # and the library could never have been written to even if vet had nominated.
     "mcp__dev__read_verification_library",
+    # An approved research review's proposals, pre-split into filed-able and withheld. `itemize`
+    # fires in the background with nobody to approve a prompt, and this read is the ONLY thing
+    # standing between an unruled proposal and a ticket that reads as startable — a denial here
+    # does not stop the run, it makes the run file everything.
+    "mcp__dev__read_research_proposals",
     # The SANCTIONED itemize writes (work-item-session-recognition-prd): create one inbox item from a
     # discussion, or APPEND new discussion onto an existing item (the dedup path). Auto-allowed so a
     # general session can ticket work without a prompt; the one exemption to the general-session

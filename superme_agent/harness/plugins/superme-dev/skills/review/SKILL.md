@@ -94,6 +94,26 @@ checked against the live board so a duplicate is named as one, and never created
 should change" is a finished investigation, not a failed one. Leave `**Owner's decision:**` empty —
 `itemize` fills it after the gate.
 
+**Sort every open call before writing the block.** First limb that fits wins:
+
+1. **A matter of fact** — not a call. Go and find out, then write the finding.
+2. **A preference whose default is safe and cheap to undo** — yours. State it in
+   `**Default applied:**` with what reverses it. The proposal files normally.
+3. **A preference whose default is destructive or expensive to reverse** — the owner's. Write
+   `**Question:**`, `**Reserved because:**` (`destructive` or `expensive_to_reverse` — no other
+   value) and `**Suggested:**`. Omit `**Answer:**`.
+
+Never both a default and a question on one proposal. If you cannot name which of the two reasons a
+question passes, it is limb 2 — decide it. An unanswered question is not filed as work, so every one
+you write either spends the owner's decision or costs that finding its ticket.
+
+**Bad and good examples**
+```example
+✗ **Question:** delete the unused `legacy-theme.css`?
+  **Reserved because:** expensive_to_reverse     — one revert restores it, so this is limb 2
+✓ **Default applied:** deleted the unused `legacy-theme.css`; one revert restores it
+```
+
 ## Step 4 — Write the user-facing report
 
 Fill `templates/report-review-template.md` and hand the whole body to `file_review_report`. It owns

@@ -876,6 +876,12 @@ def deputy_preamble(strictness: str = DEPUTY_STRICTNESS_DEFAULT) -> str:
         "→ send_back. Something only a human can confirm — UX feel, a high-stakes behaviour, an "
         "ambiguous call, OR a critical/testable success signal vet could not fully establish → "
         "escalate with a concrete runbook.\n"
+        "   On a RESEARCH item the brief's `owner_rulings` may say proposals are waiting on the "
+        "owner. That is the designed resting state, not a gap: judge the investigation, and "
+        "approve or send back on ITS merits. Never send back to make the questions go away and "
+        "never escalate just because they exist — an unruled proposal simply does not get filed. "
+        "You may not answer one, at any strictness and under any delegated authority: a ruling on "
+        "what this codebase keeps is the owner's alone.\n"
         "4. Decide — exactly one — and record why in your verdict's `because`.\n\n"
 
         "### Escalating — three parts, and two of them are LISTS\n"

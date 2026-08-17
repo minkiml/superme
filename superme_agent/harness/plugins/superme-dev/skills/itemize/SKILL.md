@@ -18,11 +18,21 @@ is a proposal lost.
 
 ## Step 1 — Read the proposals against the live board
 
-`artifacts/review.md` `## Proposed work` is the list. Check each one against what already exists —
-`read_dev_log`, the roadmap, open inbox items.
+`read_research_proposals` with this item's id returns two lists: **File these** and **Do NOT file
+these**. It has already applied the one rule you may not apply yourself — a proposal that asks the
+owner a question and carries no answer is withheld, because a ticket whose ruling was never given
+reads as startable and whoever picks it up will choose for them.
 
-A proposal that duplicates live work is **not filed**. Name the item it duplicates in step 3; a
-second ticket for work already on the board is noise the owner has to clean up.
+File only from the first list. Never file from the second, and never re-derive either list by
+reading `## Proposed work` yourself.
+
+Then check each filed-able proposal against what already exists — `read_dev_log`, the roadmap, open
+inbox items. A proposal that duplicates live work is **not filed** either. Name the item it
+duplicates in step 3; a second ticket for work already on the board is noise the owner has to clean
+up.
+
+If the tool reports malformed proposal blocks, file what is well-formed and name the malformed ones
+in step 3 — do not repair the report.
 
 ## Step 2 — File what survives
 
@@ -38,7 +48,7 @@ reader not having your context.
 | `background` | the one finding this proposal answers, in the report's terms — not a summary of the whole sweep |
 | `discussion` | where the evidence is: **artifact file AND the section inside it**, plus the commit sha the report measured against |
 | `direction` | the proposal's `delivers:` clause, carried across |
-| `constraints` | the proposal's `depends-on` verbatim, plus anything the report marked NOT COVERED that touches this work |
+| `constraints` | the proposal's `**Default applied:**` or the owner's ruling verbatim, plus anything the report marked NOT COVERED that touches this work |
 
 **Name the section, not just the file.** `artifacts/investigation.md` alone makes a cold reader
 open a long document and search it.
@@ -54,9 +64,9 @@ Parent item a1b2c3d4e5f6, `artifacts/investigation.md` `## What can go`, rows D�
 Measured against commit 0f1e2d3.
 ```
 
-**Write "none" only where the report wrote none.** An empty `constraints` on a proposal whose
-`depends-on` says none is correct and reads correctly. An empty one on a proposal that carried a
-gate has thrown the gate away.
+**Write "none" only where the report wrote none.** An empty `constraints` on a proposal that stated
+no default and carried no ruling is correct and reads correctly. An empty one on a proposal that
+carried either has thrown away the decision the child item runs on.
 
 - **File what the report proposed** — you are not re-scoping it. A proposal too vague to file is
   filed as it stands with its vagueness visible, not sharpened by you into something the report
@@ -75,6 +85,10 @@ gate has thrown the gate away.
 Fill `artifacts/review.md`'s **Owner's decision** line: what you filed, with inbox ids, and what you
 skipped as a duplicate and of what. The gate reads this line back, and a research item whose
 proposals vanished without a trace is the failure this line exists to catch.
+
+**Name every withheld proposal and its question.** The owner cannot see an absence — without this
+line a half-filed review is indistinguishable from a complete one. Write the count and the
+questions: `2 of 5 not filed — awaiting your ruling on <question>, <question>`.
 
 A proposal you did not file for any other reason is recorded here too, with why. Then say what was
 filed and stop.

@@ -27,7 +27,7 @@ Investigation progress:
 - [ ] 7 Report written, checkpoint banked
 ```
 
-## 1 · Read your family's guide
+## 1 · Must read your family's guide
 
 Open `references/<family>.md` for the family named in your Current focus block — before the brief,
 before any code. It gives you the **bar & absolute guidance** to follow: what counts as a finding here, and what counts as proof.
@@ -167,6 +167,11 @@ Group findings that share one fix into one item.
 ✗ "Improve error handling."
 ✓ "Validate the path argument in the three handlers at routes/files.py:88,140,203."
 ```
+
+**Settle what reading can settle.** A follow-up that hangs on a question you could answer by opening
+the code is not blocked — answer it and write the answer. Pass up only the calls that turn on a
+preference, and say for each which way you would go; review types them and the owner rules the few
+that are theirs.
 
 **You record; you never file.** The owner chooses every branch-off at the review gate.
 
