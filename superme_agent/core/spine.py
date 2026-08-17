@@ -927,14 +927,22 @@ class SystemSpine:
             ).fetchall()
             return [dict(r) for r in rows]
 
-    def sessions_for_repo(self, repo_id: str) -> list[dict]:
-        """Every session row bound to a repo, resumable or not — the disconnect cascade walks
-        these to hard-delete each through the session-deletion-trace-model (row + transcript
-        gone, run trace preserved + stamped)."""
+    def sessions_for_repo(self, repo_id: str, *, resumable_only: bool = False) -> list[dict]:
+        """Every session row bound to a repo — the WORKSPACE's threads, wherever they ran.
+
+        `repo_id` is the identity that survives a worktree: a phase run executes with its cwd
+        swapped to `~/.superme/worktrees/<repo>/<item>`, but it is still this workspace's thread, so
+        anything asking "what has been said in this workspace" must ask by repo and not by cwd.
+
+        Default is EVERY row, resumable or not — the disconnect cascade walks these to hard-delete
+        each through the session-deletion-trace-model. The picker passes `resumable_only`."""
+        where = ["repo_id=?"]
+        if resumable_only:
+            where.append("resumable=1")
         with self._conn() as c:
             rows = c.execute(
-                "SELECT * FROM session WHERE repo_id=? ORDER BY datetime(updated_at) DESC",
-                (repo_id,)).fetchall()
+                f"SELECT * FROM session WHERE {' AND '.join(where)}"
+                " ORDER BY datetime(updated_at) DESC", (repo_id,)).fetchall()
             return [dict(r) for r in rows]
 
     def running_run_count(self, repo_id: str) -> int:

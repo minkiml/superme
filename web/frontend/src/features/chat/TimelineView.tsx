@@ -54,9 +54,17 @@ function replySpeaker(feature: string | null | undefined): Speaker {
   return 'agent' // chat (interactive owner turn) + every phase agent reply is the agent talking
 }
 
+// Who spoke, and the fill that says so at a glance. The agent's fill is `bg-hover` — the SAME one
+// MessageList gives it in a general session, because a bubble should not change colour depending on
+// which thread it is read in. It was `bg-surface`, which is exactly the rail's own background, so
+// the agent's bubbles read as unfilled while the general session's read as grey.
+//
+// The tinted fills go through `--chat-accent-soft` (set beside `--chat-accent` in ChatPanel) rather
+// than an opacity modifier: `--chat-accent` holds a whole `rgb(...)` string, and Tailwind cannot
+// decompose one to apply `/10` to it.
 const SPEAKER_META: Record<Speaker, { label: string; Icon: typeof Bot; tint: string; bubble: string }> = {
-  you: { label: 'You', Icon: User, tint: 'text-fg', bubble: 'bg-[--chat-accent]/10 border-[--chat-accent]/25' },
-  agent: { label: 'superme', Icon: Bot, tint: 'text-accent-text', bubble: 'bg-surface border-line' },
+  you: { label: 'You', Icon: User, tint: 'text-fg', bubble: 'bg-[var(--chat-accent-soft)] border-[var(--chat-accent-line)]' },
+  agent: { label: 'superme', Icon: Bot, tint: 'text-accent-text', bubble: 'bg-hover border-line' },
   deputy: { label: 'Deputy', Icon: ShieldCheck, tint: 'text-deputy', bubble: 'bg-deputy/10 border-deputy/30' },
 }
 

@@ -258,11 +258,21 @@ class SessionStore:
         scan = self._scan(ctx, session_id)
         return scan["messages"] if scan else []
 
+    def _workspace_rows(self, ctx: Context) -> list[dict]:
+        """This workspace's resumable session rows — the one membership answer `list`, `read` and
+        `rename` all use, so a thread cannot be listable but unreadable, or readable but unnameable.
+
+        Scoped by REPO, not by cwd. A phase run executes with its cwd swapped to the item's worktree
+        (`~/.superme/worktrees/<repo>/<item>`) while `record` still stamps `repo_id=ctx.id` — so a
+        cwd match silently dropped every work-item thread from the picker, which is how a whole
+        research sweep could run and leave no conversation the owner could open."""
+        return self._spine.sessions_for_repo(ctx.id, resumable_only=True)
+
     def list(self, ctx: Context, mode: str | None = None) -> list[dict]:
         """Sessions that ran in this workspace (any surface), newest first. When `mode`
         ("core"|"dev") is given, only that mode's threads — the chat picker scopes by mode."""
         out = []
-        for rec in self._spine.sessions_for_cwd(ctx.cwd):
+        for rec in self._workspace_rows(ctx):
             sid = rec["id"]
             sess_mode = rec.get("mode", "core")
             if mode and sess_mode != mode:
@@ -298,7 +308,7 @@ class SessionStore:
     def rename(self, ctx: Context, session_id: str, title: str | None) -> bool:
         """Set (or clear) a session's owner TITLE override, if it belongs to this workspace. A blank
         title reverts to the transcript-derived title. Returns True if a row was updated."""
-        if session_id not in {r["id"] for r in self._spine.sessions_for_cwd(ctx.cwd)}:
+        if session_id not in {r["id"] for r in self._workspace_rows(ctx)}:
             return False
         return self._spine.set_session_title(session_id, title)
 
@@ -307,7 +317,7 @@ class SessionStore:
         or None if the session isn't in this workspace. The agent still resumes with
         full server-side context — we just don't replay the whole transcript in the UI.
         """
-        recs = {r["id"]: r for r in self._spine.sessions_for_cwd(ctx.cwd)}
+        recs = {r["id"]: r for r in self._workspace_rows(ctx)}
         if session_id not in recs:
             return None
         scan = self._scan(ctx, session_id)
