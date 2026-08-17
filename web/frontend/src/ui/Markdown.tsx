@@ -139,6 +139,36 @@ const TONE: Record<string, string> = {
 // emphasis reads uniformly. Placed after the base so it wins over `[&_strong]:text-fg`.
 const BOLD_TINT = '[&_strong]:text-warn'
 
+// Reports are written as `**Label.**`-headed blocks by an agent filling a template, and markdown
+// needs a BLANK LINE to believe a block ended. Without one, two things collapse: a paragraph
+// written under a table is parsed as one more ROW of it (a finding's conclusions rendered inside
+// its own evidence table), and a label written under a paragraph is read as its last sentence.
+// Neither is recoverable from the styling — restore the blank lines the grammar implies.
+//
+// A block label is deliberately narrow: bold, short, opening the line, closed by `.` or `:`. Bold
+// used mid-sentence for emphasis never matches, so an ordinary wrapped paragraph is left alone.
+// Fenced blocks are skipped whole — a `|` inside one is content, not structure.
+const BLOCK_LABEL = /^\*\*[^*\n]{1,40}[.:]\*\*/
+function openBlocks(md: string): string {
+  const lines = md.split('\n')
+  const out: string[] = []
+  let fenced = false
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    const prev = out[out.length - 1]
+    if (!fenced && prev !== undefined && prev.trim() !== '' && !/^\s*\|/.test(prev)
+        && BLOCK_LABEL.test(line))
+      out.push('')
+    out.push(line)
+    if (/^\s*(```|~~~)/.test(line)) fenced = !fenced
+    if (fenced) continue
+    const next = lines[i + 1]
+    if (/^\s*\|/.test(line) && next !== undefined && next.trim() !== '' && !/^\s*\|/.test(next))
+      out.push('')
+  }
+  return out.join('\n')
+}
+
 export default function Markdown({
   text,
   variant = 'chat',
@@ -159,7 +189,7 @@ export default function Markdown({
   // paragraphs") rendered at the top of the owner's review report and on the PR page as if it were
   // the report (owner, 2026-08-03). The writers that instantiate templates strip these too — this
   // is the second line of defence, for the templates an AGENT copies rather than code.
-  const body = useMemo(() => text.replace(/[ \t]*<!--[\s\S]*?-->\n?/g, ''), [text])
+  const body = useMemo(() => openBlocks(text.replace(/[ \t]*<!--[\s\S]*?-->\n?/g, '')), [text])
   return (
     <div className={`${VARIANTS[variant]}${tint}`}>
       <ReactMarkdown

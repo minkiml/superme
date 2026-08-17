@@ -473,7 +473,7 @@ def _bash_escapes_boundary(command: str, roots: list[Path]) -> bool:
     read-only classifier already refuses those constructs, and Bash is not path-checkable in
     general — see build_can_use_tool). Escaping doesn't deny; it falls through to the normal
     prompt, so a deliberate outside command still works with the owner's click."""
-    for raw in shlex_split_safe(command):
+    for raw in _path_tokens(command):
         tok = raw.strip("'\"")
         if tok.startswith("~"):
             tok = str(Path(tok).expanduser())
@@ -490,6 +490,56 @@ def shlex_split_safe(command: str) -> list[str]:
         return shlex.split(command)
     except ValueError:
         return command.split()
+
+
+# Commands whose first positional argument is a PATTERN, not a path. Both boundary checks below
+# reason about a command by reading its `/…` tokens as paths, and a regex is spelled like one:
+# `grep -v '/generated/' <in> > <out>` names two files, both in bounds, and was refused for the
+# third "path" — which was the pattern. `-e`/`--regexp` take the pattern as their VALUE, so they
+# are skipped in pairs, the same shape as git's global options.
+_PATTERN_FIRST = frozenset({"grep", "egrep", "fgrep", "rg", "ag", "sed", "awk", "gawk"})
+_PATTERN_OPTS = frozenset({"-e", "--regexp"})
+
+
+def _seg_path_tokens(seg: list[str]) -> list[str]:
+    """One pipeline segment's tokens, minus the pattern argument if its command takes one."""
+    if not seg or Path(seg[0].strip("'\"")).name not in _PATTERN_FIRST:
+        return seg
+    out: list[str] = []
+    i, pattern_taken = 1, False
+    while i < len(seg):
+        bare = seg[i].strip("'\"")
+        if bare in _PATTERN_OPTS:
+            pattern_taken = True                       # the pattern is this option's value
+            i += 2
+            continue
+        if bare.startswith("-"):
+            pattern_taken = pattern_taken or bare.startswith("--regexp=")
+            i += 1
+            continue
+        if not pattern_taken:
+            pattern_taken = True                       # the first bare word is the pattern
+            i += 1
+            continue
+        out.append(seg[i])
+        i += 1
+    return out
+
+
+def _path_tokens(command: str) -> list[str]:
+    """Every token of a shell command that could name a path. Split per LINE as well as on shell
+    operators: an agent writes a multi-line script, and `shlex` treats a newline as plain
+    whitespace, so without this the second line's command is read as the first one's argument."""
+    out: list[str] = []
+    for line in command.splitlines() or [command]:
+        seg: list[str] = []
+        for tok in [*shlex_split_safe(line), ";"]:
+            if tok in _BASH_SEPARATORS:
+                out.extend(_seg_path_tokens(seg))
+                seg = []
+            else:
+                seg.append(tok)
+    return out
 
 
 def _bash_scoped_into_boundary(command: str, roots: list[Path]) -> bool:
@@ -520,7 +570,7 @@ def _bash_scoped_into_boundary(command: str, roots: list[Path]) -> bool:
                 except (OSError, ValueError):
                     pass
     named = 0
-    for raw in toks:
+    for raw in _path_tokens(command):
         tok = raw.strip("'\"")
         if tok.startswith("~"):
             tok = str(Path(tok).expanduser())
