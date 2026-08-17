@@ -38,6 +38,10 @@ class InboxPushResponse(BaseModel):
     ok: bool
     work_item: WorkItem
     inbox: InboxRow
+    # D5's brief self-check, run at the last moment it is actionable: the brief has just moved into
+    # the item's read-only `preliminary/`. Empty = fine. Never blocks the push — a bare capture is
+    # legal — it says how cold triage is about to start.
+    brief_issues: list[str] = []
 
 
 class InboxDeleteResponse(BaseModel):

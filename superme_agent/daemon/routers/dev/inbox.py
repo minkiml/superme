@@ -125,7 +125,8 @@ async def dev_inbox_push(item_id: int, body: InboxPushBody,
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
     fire_auto_triage(body.context_id, wi["id"], spine)   # #120 — shared first-kick (services.runs)
-    return {"ok": True, "work_item": wi, "inbox": dev_store.get_inbox(item_id)}
+    return {"ok": True, "work_item": wi, "inbox": dev_store.get_inbox(item_id),
+            "brief_issues": wi.get("brief_issues") or []}
 
 
 @router.delete("/dev/inbox/{item_id}", response_model=InboxDeleteResponse)

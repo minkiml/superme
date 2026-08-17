@@ -31,10 +31,21 @@ def inbox_content_dir(dev_root: Path, inbox_id: int) -> Path:
     return Path(dev_root) / "inbox" / str(inbox_id)
 
 
+def brief_state(dev_root: Path, item_id: str) -> list[str]:
+    """The handoff brief's issues as the item now holds it, or [] when it is fine (D5's gate-time
+    self-check). An ABSENT brief is one issue, not zero: a bare FE capture is legal, and the point
+    of saying so is that the item's whole cold-start context is then its one-line row."""
+    from . import artifacts as _arts
+    p = Path(dev_root) / "work-items" / item_id / "preliminary" / "handoff-brief.md"
+    if not p.exists():
+        return ["no handoff brief — this item's only context is its row text"]
+    return _arts.self_check(Path(dev_root) / "work-items" / item_id, "handoff-brief", path=p)
+
+
 def push_inbox_item(store, dev: DevKnowledgeService, dev_root: Path, row: dict, *,
                     context_id: str, actor: str = "owner") -> dict:
     """Run the full push transaction for an OPEN inbox row. Returns the created work-item dict
-    ({id, folder}). Raises ValueError on an already-pushed row."""
+    ({id, folder, brief_issues}). Raises ValueError on an already-pushed row."""
     if row.get("status") == "pushed":
         raise ValueError("inbox item already pushed")
     inbox_id = row["id"]
@@ -82,14 +93,23 @@ def push_inbox_item(store, dev: DevKnowledgeService, dev_root: Path, row: dict, 
             shutil.move(str(src), str(dst))
             moved = True
     store.push_inbox(inbox_id, wi["id"])
+    # D5's consuming check, at the last moment it can change anything. The brief is EDITABLE while
+    # the row sits in the inbox and immutable the instant it lands in `preliminary/` — so push is
+    # where "this item starts cold" is still actionable (cancel, fill, push again) and everywhere
+    # later it is only a complaint. Reported, never blocking: D5 makes a bare-title capture legal
+    # on purpose, and triage backfills nothing it cannot write.
+    brief_issues = brief_state(dev_root, wi["id"])
     store.log_event(
         context_id, "inbox.push",
-        f"Pushed to workspace: {row.get('title') or wi['id']}",
+        f"Pushed to workspace: {row.get('title') or wi['id']}"
+        + (f" — brief: {brief_issues[0]}" if brief_issues else ""),
         item_id=wi["id"], actor=actor,
         meta={"inbox_id": inbox_id, "preliminary": moved,
+              **({"brief_issues": brief_issues} if brief_issues else {}),
               **({"relation": row["spawned_from"]["relation"],
                   "parent": row["spawned_from"]["item"]} if row.get("spawned_from") else {})},
     )
+    wi["brief_issues"] = brief_issues
     # A blocking child pauses its parent until the child family closes (D3).
     sf = row.get("spawned_from") or {}
     if sf.get("relation") == "blocking":

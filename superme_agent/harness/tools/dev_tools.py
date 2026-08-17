@@ -854,7 +854,11 @@ def _push_inbox_item(*, store, context_id, dev_root=None, fire_triage=None,
         title = (row.get("title") or row.get("text") or "")[:80]
         kick = ("Triage is running on it now." if triaged else
                 "It rests at triage until a triage run starts.")
-        return _ok(f"Pushed {_qid('inbox', item_id)} → {_qid('item', wi['id'])} — \"{title}\". {kick}")
+        # The brief is immutable from this moment (it now lives in the item's `preliminary/`), so
+        # this is the last place saying so can still mean anything to whoever pushed.
+        cold = (f" NOTE: {'; '.join(wi.get('brief_issues') or [])} — triage starts colder than it "
+                "should." if wi.get("brief_issues") else "")
+        return _ok(f"Pushed {_qid('inbox', item_id)} → {_qid('item', wi['id'])} — \"{title}\". {kick}{cold}")
     return push_inbox_item
 
 
