@@ -50,18 +50,33 @@ so in your report.
 Call `scaffold_artifact(item_id, "investigation")`. Your family's sections appear; each one tells
 you what it owes. Fill them as you go from here on, never at the end.
 
-Read `artifacts/brief.md` — `## Problem` is why this exists, `## Context` is what the owner already
-knows, `## Classification` carries the family. A button-launched sweep has no brief: its subject and
-area are in the item's own title and description.
+Where the questions come from depends on which kind of item this is, and getting that backwards
+wastes the most expensive thing you have:
 
-Then write these into `## Questions`, before you read any code:
+| the item | its questions |
+|---|---|
+| **a commissioned investigation** — it has an `artifacts/brief.md` | YOURS TO WRITE, from the brief. `## Problem` is why this exists, `## Context` is what the owner already knows, `## Classification` carries the family. |
+| **a standing sweep** — launched from a button, no brief, subject in its own title | ALREADY ANSWERED. Your family's guide names the kinds it sweeps for, and those ARE the questions. Do not invent a fresh set. |
 
-1. **The questions**, as questions. Three sharp ones beat eight vague ones.
-2. **The walls** — what is in scope and what is explicitly not. Whole repo, or the area named.
-3. **Done** — what has to be true for this to be finished.
+That second row is the one that goes wrong. A standing housekeeping sweep is not asking "what should
+I ask about this repo" — the family settled that. Restating the guide's kinds as questions of your
+own wording buys nothing and quietly changes what gets swept, because a paraphrase drifts. Name the
+kinds, in the guide's words, and spend your thinking on the two things the guide CANNOT know:
+
+Write into `## Questions`, before you read any code:
+
+1. **The questions.** Commissioned → yours, as questions; three sharp ones beat eight vague ones.
+   Standing → your family's kinds, quoted, plus any the item's own description adds.
+2. **The walls** — what is in scope and what is explicitly NOT. "The whole repo" is a starting
+   point, not a wall: say which trees are in (source you maintain) and which are out (generated
+   clients, vendored dependencies, build output, lockfiles, fixtures), and how big each excluded
+   group is. An unstated exclusion reads later as a gap in coverage rather than a decision.
+3. **Done** — what has to be true for this to be finished. For a standing sweep, per kind: a kind is
+   done when its inventory is built AND every candidate on it is proved or rejected. Say that here
+   so a kind you run out of budget for reads as unfinished rather than as clean.
 
 **Check:** someone who has not read the brief can tell, from your questions alone, what this sweep
-will and will not have looked at.
+will and will not have looked at — including what you deliberately excluded, and how much of it.
 
 A thread leading outside the walls becomes an open thread, not a detour.
 
@@ -72,11 +87,25 @@ same breath, settle what tools you have: one command that reports which interpre
 exist and whether your item folder is writable. Record the answer and treat it as settled — a
 missing tool is a line in your record, not something to rediscover later.
 
-Then split it, and spawn one `subagent_type: superme-dev:investigator` per slice. Use that exact
-string: a partial identifier resolves to a generic reader instead of erroring.
+**Census first, then split.** If your family's guide names a mechanical pass — an inventory, a
+declaration list, a file walk — YOU run it, once, before any reader exists, and write it into your
+scratch directory. Readers then read it back instead of each rebuilding it.
 
-Split by question. When one question spans a large surface, split that question by area — your
-family's guide says which way round for this family.
+Do not skip this to save a step. Split first and every reader independently enumerates the same
+tree, so the most expensive command in the sweep is paid for as many times as you have readers, and
+their counts disagree with each other for no reason a person can then resolve.
+
+The census is also what makes the split honest: until something has counted the surface, "one reader
+per question" is a guess about where the work is. With counts in hand you can see that one slice is
+five times another and cut it again.
+
+Then spawn one `subagent_type: superme-dev:investigator` per slice. Use that exact string: a partial
+identifier resolves to a generic reader instead of erroring.
+
+Split by question, then by SIZE. When the census shows one question's surface dwarfs the others,
+split that question by area — your family's guide says which way round for this family. Aim for
+slices within roughly 2× of each other: a reader given five times its siblings' work does not fail
+loudly, it quietly returns less, and its thin answer looks identical to a clean area.
 
 > **Test:** would knowing the answer to question B change HOW you read for question A?
 > No → separate readers.
@@ -85,14 +114,20 @@ Read it all yourself only when the answers chain, or the whole surface is small 
 splitting costs more than it saves. Then write one line in `investigation.md` saying which of those
 it was.
 
-**Each brief carries three things and nothing else:**
+**Each brief carries four things and nothing else:**
 
 1. **The bar** — the lines of your family's guide that say what counts as a finding, pasted in as
    text, not as a path. Name the file as well, so the reader can reach the rest.
 2. **The walls**, from your `## Questions`.
 3. **The one question, or the one area.**
+4. **Where it may write, as an absolute path** — your scratch directory, named in full, plus the
+   census files already in it. A reader inherits your boundary but NOT your briefing: told only what
+   to find, it reaches for `$TMPDIR`, is refused by the kernel, and then spends its budget probing
+   whether it has a shell at all instead of answering the question. Tell it the path and tell it the
+   census is already there.
 
-**Check:** each brief still makes sense to someone who has read nothing else.
+**Check:** each brief still makes sense to someone who has read nothing else — and a reader that
+needs a file knows, from the brief alone, where to put it.
 
 ## 4 · Verify every receipt you keep
 

@@ -135,8 +135,16 @@ retired subsystem has callers, its siblings, so the whole group clears the name 
 Where there is no single root, run the walk backwards: what imports this, then what imports that,
 until you reach something that starts or run out of files.
 
-Write both inventories into your item folder as you build them and read them back from there; this
-is the most expensive command in the sweep and its answer does not change during the run.
+**Both inventories are built ONCE, by you, into your scratch directory, BEFORE any reader exists.**
+They are the most expensive commands in the sweep and their answers do not change during the run, so
+paying for them again is pure loss — and paying for them once per reader is that loss multiplied.
+Hand every reader the scratch path and the file names; a reader that has to enumerate the tree
+itself is doing your work with a fraction of your budget.
+
+They are also what makes the split honest. Until something has counted the surface, one reader per
+kind is a guess about where the work is: the four kinds differ in size by an order of magnitude, and
+the biggest one silently returns less rather than failing. With the counts in front of you, cut the
+large kind by area and give the small ones one reader between them.
 
 **Every name that reached a shortlist appears in the record** — proposed in `## What can go`,
 rejected in `## What must stay`, or unresolved in `## Open threads`. One that appears in none reads
@@ -179,11 +187,22 @@ to have moved by then. Anything you would only write to save a later sweep goes 
 
 ## Splitting the work
 
-Split by KIND, one reader per kind, each given the whole tree. Split by directory and the fourth
-kind gets attention in the first two directories and is dropped everywhere after.
+**Split by KIND first — never by directory.** Split by directory and the fourth kind gets attention
+in the first two directories and is dropped everywhere after.
 
-Paste the four hiding mechanisms into every brief; a reader given only "find dead code in `x/`"
-greps once and returns the list this family exists to not produce.
+**Then rebalance by SIZE, using the census you already built.** One reader per kind is where the
+split starts, not where it ends: the four kinds are nothing like each other in cost. Dead code and
+unused declarations each need the whole declaration inventory walked; abandoned config is a bounded
+list of env vars, pins and config files, and a reader handed that alone spends most of its life
+being spawned. Give the small kinds one reader between them, and cut the large kind by area — the
+kind stays whole across its readers, so nothing is dropped.
+
+Aim for slices within roughly 2× of each other. An oversized reader does not fail loudly; it returns
+less and its thin answer is indistinguishable from a clean area.
+
+Every brief carries the four hiding mechanisms, the scratch path, and the census file names. A
+reader given only "find dead code in `x/`" greps once and returns the list this family exists to not
+produce; a reader given no scratch path rebuilds the inventory you already paid for.
 
 Readers return candidates with `file:line` and the searches they ran. **You keep the reachability
 verdict** — a reader who has seen one slice cannot know what the rest of the repo reaches into it.
