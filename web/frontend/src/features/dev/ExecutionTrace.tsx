@@ -51,7 +51,7 @@ export function TraceRows<T extends TraceRow & { id?: number | string }>({
 
 function CallRow<T extends TraceRow>({ n, pair, time }: { n: number; pair: PairedCall<T>; time?: (row: T) => string }) {
   const [open, setOpen] = useState(false)
-  const { call, result, depth } = pair
+  const { call, result, depth, children, agent } = pair
   const { icon: Icon, color } = callVisual(call)
   const output = result?.description?.trim() || ''
   const hasOutput = output.length > 0
@@ -69,6 +69,15 @@ function CallRow<T extends TraceRow>({ n, pair, time }: { n: number; pair: Paire
         className={`flex w-full items-baseline gap-2 rounded px-1 py-0.5 text-left text-[13px] ${hasOutput ? 'hover:bg-hover' : 'cursor-default'}`}
       >
         <span className="w-5 shrink-0 text-right font-mono text-[10px] text-faint">{n}</span>
+        {/* WHOSE call this is. Concurrent sub-agents interleave, so a child row sits under whichever
+            spawn scrolled past last — usually not its own. The tag carries the attribution the
+            position throws away, and matches the tag on that agent's own spawn row. */}
+        {agent !== undefined && (
+          <span className="shrink-0 rounded-sm bg-hover px-1 font-mono text-[9px] leading-4 text-faint"
+                title={nested ? `Called by sub-agent A${agent}` : `Sub-agent A${agent}`}>
+            A{agent}
+          </span>
+        )}
         {/* The colored, per-tool icon is the row's identity — always shown. Expandable rows also get a
             trailing chevron (below) as the disclosure affordance. */}
         <Icon size={12} className="shrink-0 translate-y-0.5" style={{ color }} />
@@ -76,6 +85,15 @@ function CallRow<T extends TraceRow>({ n, pair, time }: { n: number; pair: Paire
           <span className="text-fg">{call.name}</span>
           {call.description && <span className="text-faint"> - {call.description}</span>}
         </span>
+        {/* A spawn's own total. The rows below it belong to whichever readers were running, not to
+            this one, so without the count a reader that made seventy calls can look like it made
+            three and stopped. */}
+        {children !== undefined && (
+          <span className="shrink-0 rounded bg-hover px-1.5 py-px font-mono text-[10px] text-muted"
+                title={`${children} tool call${children === 1 ? '' : 's'} by this sub-agent, wherever they appear below`}>
+            {children} calls
+          </span>
+        )}
         {hasOutput && (
           <ChevronRight size={11} className={`shrink-0 translate-y-0.5 text-faint transition-transform ${open ? 'rotate-90' : ''}`} />
         )}

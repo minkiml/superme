@@ -18,7 +18,17 @@ export type TraceRow = {
 // several children into one ordered stream, so without it three parallel readers render as one
 // confused agent. Only two levels: the SDK's own nesting can go deeper, but a spawn inside a spawn
 // is not something SuperMe's skills do, and a generic tree would cost more than it explains.
-export type PairedCall<T extends TraceRow> = { call: T; result: T | null; depth: 0 | 1 }
+// Rows render in CALL ORDER, so a fan-out's children arrive braided and the ones sitting under a
+// spawn row mostly belong to other readers. Two fields carry the attribution the position destroys:
+//
+//   `agent`    — which sub-agent this is. On a spawn row it is that agent's own number; on a child
+//                row it is the number of the spawn it belongs to. Same number, both ends, so a row
+//                can be matched to its agent by eye without the nesting having to be true.
+//   `children` — a spawn's own total, wherever those calls appear. Without it a reader that made
+//                seventy calls but only three of them adjacent reads as one that stopped after three.
+export type PairedCall<T extends TraceRow> = {
+  call: T; result: T | null; depth: 0 | 1; children?: number; agent?: number
+}
 
 // Pair each call with its result (null if none), in call order. Callers render one row per pair and
 // number them 1..N — so the badge (N) and the last row number always agree, on either surface.
@@ -37,6 +47,24 @@ export function pairTrace<T extends TraceRow>(events: T[]): PairedCall<T>[] {
       rows.push(slot)
       pending.push(slot)
     }
+  }
+  // Attribute every child to the spawn it actually belongs to — over the WHOLE list, not the rows
+  // that happen to follow it, which is the point.
+  const byParent = new Map<string, number>()
+  for (const r of rows) {
+    const p = r.call.parent_tool_id
+    if (p) byParent.set(p, (byParent.get(p) ?? 0) + 1)
+  }
+  // Number the spawns in the order they appear, so the label is short and reads the same at both ends.
+  const agentNo = new Map<string, number>()
+  for (const r of rows) {
+    const id = r.call.tool_id
+    if (id && byParent.has(id) && !agentNo.has(id)) agentNo.set(id, agentNo.size + 1)
+  }
+  for (const r of rows) {
+    const id = r.call.tool_id
+    if (id && byParent.has(id)) { r.children = byParent.get(id); r.agent = agentNo.get(id) }
+    else if (r.call.parent_tool_id) r.agent = agentNo.get(r.call.parent_tool_id)
   }
   return rows
 }
