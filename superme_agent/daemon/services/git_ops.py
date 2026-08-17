@@ -311,8 +311,15 @@ def build_downstream_digest(item_dir: Path, *, char_cap: int = 2400) -> str | No
         if review_record.is_file():
             body = review_record.read_text().strip()
             if body:
-                parts.append("Review's record of the last pass (artifacts/review.md):\n"
-                             + body[:char_cap])
+                head = body[:char_cap]
+                parts.append("Review's record of the last pass (artifacts/review.md):\n" + head)
+                # `Owner's decision` is the one line a re-plan may not silently re-open, and it sits
+                # at the END of the record — so a head-truncation drops it exactly when the record
+                # is long enough to need it. Carry it separately instead of widening the cap, which
+                # would only move the cliff to the next section that grows.
+                decision = artifacts.owner_decision(item_dir)
+                if decision and decision not in head:
+                    parts.append(f"Owner's decision at that review: {decision}")
     except Exception:
         log.exception("digest: review record read failed for %s", item_dir)
     try:

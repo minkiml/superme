@@ -363,15 +363,24 @@ def _owner_rulings(item_dir: Path) -> dict:
     props = A.research_proposals(item_dir)
     issues = A.research_proposal_issues(props)
     _, held = A.filed_and_withheld(props)
+    # A rule outlives the item, so the gate is the last place the owner can refuse one they never
+    # agreed to. It is named even when nothing waits: approving with no open question still makes
+    # whatever rules are written here permanent.
+    rules = [p for p in props if A.proposal_promotable(p)]
+    tail = ("" if not rules else
+            f" Approving records {len(rules)} standing rule(s) in this project's ledger — " +
+            " · ".join(A.clip(p["rule"], 90) for p in rules) +
+            ". Send the item back if a rule reaches further than your ruling did.")
     if issues:
         detail = "; ".join(issues)
     elif held:
         detail = f"{len(held)} of {len(props)} proposal(s) wait on you — " + " · ".join(
             f"{A.clip(p['title'], 48)}: {p['question']}"
             + (f" (suggested: {p['suggested']})" if p.get("suggested") else "")
-            for p in held) + ". Approving without ruling drops them; the next sweep raises them again."
+            for p in held) + (". Approving without ruling drops them; the next sweep raises them "
+                              "again.") + tail
     else:
-        detail = "no proposal needs your ruling"
+        detail = ("no proposal needs your ruling" + tail) if not rules else tail.strip()
     return {"criterion": "owner_rulings", "ok": not issues, "detail": detail}
 
 

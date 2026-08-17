@@ -1131,6 +1131,10 @@ _PROPOSAL_FIELDS = {
     "Title": "title", "Kind": "kind", "Why now": "why_now", "Delivers": "delivers",
     "Default applied": "default_applied", "Question": "question",
     "Reserved because": "reserved_because", "Suggested": "suggested", "Answer": "answer",
+    # The generalization the answer establishes, if it establishes one. Written WITH `Answer` and
+    # never before it: a rule follows from the ruling, so one written beside the question would only
+    # be true if the owner took the suggestion. Empty is the normal case — see `promotable`.
+    "Rule": "rule",
     # The free-prose predecessor of `Question`. Kept as a field so an older review's line lands in
     # its own key instead of running on into `Why now` — it gates nothing (it never could: no
     # reader ever consumed it), and reading it as a question would retroactively withhold work on
@@ -1183,6 +1187,18 @@ def filed_and_withheld(props: list[dict]) -> tuple[list[dict], list[dict]]:
     return filed, [p for p in props if proposal_is_withheld(p)]
 
 
+def proposal_promotable(prop: dict) -> bool:
+    """Does this ruling establish something a LATER reader can use? Only then is it project memory.
+
+    The test is `Rule`, not `Reserved because`. Those answer different questions: the reserved reason
+    says the call was the owner's to make (the action is destructive or expensive to reverse), which
+    is a property of the ACTION and says nothing about whether the answer generalizes. A one-off
+    destructive act produces a one-off answer — "delete this file" is an instruction that dies with
+    the file, not a rule anybody can apply. So the common case is EMPTY: an answered question is
+    remembered only when the answer was written down as a rule that binds work outside this item."""
+    return bool(str(prop.get("rule") or "").strip()) and bool(str(prop.get("answer") or "").strip())
+
+
 def research_proposal_issues(props: list[dict]) -> list[str]:
     """Structural faults in the proposal blocks — read at the review gate, where the owner can still
     send the item back. A malformed ruling field is worse than none: it decides whether a proposal
@@ -1205,6 +1221,10 @@ def research_proposal_issues(props: list[dict]) -> list[str]:
         if p.get("answer") and not p.get("question"):
             issues.append(f"proposal {label!r}: carries an `Answer` with no `Question` — a ruling "
                           "with no question recorded cannot be read back")
+        if str(p.get("rule") or "").strip() and not str(p.get("answer") or "").strip():
+            issues.append(f"proposal {label!r}: carries a `Rule` with no `Answer` — a rule is what "
+                          "the owner's ruling established, so it cannot be written before there is "
+                          "a ruling to establish it")
         if p.get("question") and p.get("default_applied"):
             issues.append(f"proposal {label!r}: carries both `Default applied` and `Question` — a "
                           "call is either yours to make or the owner's, never both")

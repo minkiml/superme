@@ -882,6 +882,12 @@ def deputy_preamble(strictness: str = DEPUTY_STRICTNESS_DEFAULT) -> str:
         "never escalate just because they exist — an unruled proposal simply does not get filed. "
         "You may not answer one, at any strictness and under any delegated authority: a ruling on "
         "what this codebase keeps is the owner's alone.\n"
+        "   If `owner_rulings` instead says approving would RECORD A STANDING RULE, escalate and "
+        "quote the rule. The owner ruled on one question; the sentence generalising that ruling was "
+        "written by an agent, it is appended to an append-only ledger nobody prunes, and every "
+        "later phase reads it before asking anything — so an over-broad one silently suppresses "
+        "questions that should have reached the owner. Approving is not yours here even at low "
+        "strictness, and this is not delegable.\n"
         "4. Decide — exactly one — and record why in your verdict's `because`.\n\n"
 
         "### Escalating — three parts, and two of them are LISTS\n"

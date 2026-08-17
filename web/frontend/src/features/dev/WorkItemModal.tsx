@@ -584,14 +584,16 @@ function NowPane({ d, it, contextId, busy, onAct }: {
         </details>
       )}
 
-      {/* WHAT YOUR RULING BECAME. A call answered at this item's gate is written into the project's
-          decision ledger, and from then on every later run reads it before asking anything — which
-          is invisible from here unless this card says so. Shown on the item where the answer was
-          GIVEN, so the consequence lands next to the act rather than in a tab nobody opened. */}
+      {/* WHAT YOUR RULING ESTABLISHED. Most rulings are spent when the work is done and record
+          nothing; the rare one that states a STANDING RULE is written into the project's decision
+          ledger, and from then on every later run reads it before asking anything — which is
+          invisible from here unless this card says so. Shown on the item where the ruling was
+          GIVEN, so the consequence lands next to the act rather than in a tab nobody opened, and
+          the owner can see the rule reaches no further than what they actually said. */}
       {d.decisions.length > 0 && (
         <section className="rounded-md border border-line bg-sunken px-3 py-2.5">
           <SectionHeader className="flex items-center gap-1.5">
-            <Gavel size={13} /> Your rulings, recorded
+            <Gavel size={13} /> Rules your ruling set
           </SectionHeader>
           <ul className="mt-1.5 space-y-1.5">
             {d.decisions.map((dec) => (
@@ -602,7 +604,7 @@ function NowPane({ d, it, contextId, busy, onAct }: {
             ))}
           </ul>
           <p className="mt-1.5 text-[11px] text-faint">
-            In this project's decision ledger — later runs read it before asking again.
+            Standing in this project's decision ledger — later runs read it before asking again.
           </p>
         </section>
       )}

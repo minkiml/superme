@@ -117,6 +117,29 @@ drop the question and write the proposal against that `D-NNN`.
 ✓ **Default applied:** deleted the unused `legacy-theme.css`; one revert restores it
 ```
 
+**When the owner rules, write `**Answer:**` — and `**Rule:**` only if one is there.** Their answer
+is spent once the work is done. A rule is kept forever, so it earns its line only by binding work
+nobody has proposed yet. Two tests, both of which it must pass:
+
+- **Standalone** — a reader who has never heard of this item can act on it. Name no file this item
+  touched, no item id, nothing they must go and look up.
+- **Not yet written** — `read_decisions` first. If a `D-NNN` already says it, there is no new rule.
+
+Most rulings establish nothing, and leaving the line out is the correct outcome, not a gap. Writing
+one anyway costs more than a missing entry: every later phase reads the ledger before asking
+anything, so a rule that overreaches silently suppresses questions that should have been asked.
+
+```example
+Owner ruling: "delete the old exporter, don't leave a stub"
+
+✗ **Rule:** delete the old exporter rather than stubbing it
+      — the same instruction reworded; spent the moment that file is gone
+✗ **Rule:** prefer deleting dead code
+      — true of everything and settles nothing; no future call goes differently
+✓ **Rule:** a superseded module is deleted outright — no re-export shim, no tombstone file
+      — the next reader meets a superseded module and knows the call without asking
+```
+
 ## Step 4 — Write the user-facing report
 
 Fill `templates/report-review-template.md` and hand the whole body to `file_review_report`. It owns

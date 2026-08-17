@@ -438,29 +438,37 @@ def advance_item(ctx, context_id: str, item_id: str, *, dev, dev_store, spine,
         # close-entry auto-fire: an implementation close stays owner-triggered (it finalizes
         # knowledge), while a research close writes no knowledge and exists to record this decision.
         auto_skill = "itemize"
-        # …and the SAME approve records the rulings the owner gave, before `itemize` runs on them.
-        # An answer given here is the only durable thing this item produces: the question is stored
-        # nowhere (the next sweep raises it again by itself), so if the answer does not land in the
-        # ledger now, the owner will be asked it again on the next pass over the same code.
+        # …and the SAME approve records the standing RULES this item settled, before `itemize` runs.
+        # Most rulings settle nothing general and record nothing: an instruction is spent once its
+        # work is done. The rare one stated as a rule outlives the item, which is the only reason it
+        # is worth keeping — a later sweep reads it and does not re-raise what is already settled.
         #
         # Core writes it, not the itemize agent — the ledger is append-only and never pruned, so
         # every entry has to trace to a question an owner was asked. Idempotent by (item, question):
         # a resume or a second approve after a revision re-enters here and must not duplicate an
         # entry nobody is allowed to remove. Never fatal — a ledger write must not cost the owner
         # their approval.
-        try:
-            from datetime import date as _date
+        #
+        # OWNER APPROVALS ONLY. The owner ruled on the question; the sentence generalising that
+        # ruling was written by an agent, and it lands in a ledger every later phase reads before
+        # asking anything — so an over-broad one suppresses questions that should have reached them.
+        # The deputy is told to escalate rather than approve here; this is the half that does not
+        # depend on it obeying. A skipped entry costs nothing the next sweep cannot re-raise, while
+        # an entry nobody may prune costs forever.
+        if actor == "owner":
+            try:
+                from datetime import date as _date
 
-            from ...core import decision_ledger as _ledger
-            ids = _ledger.record_rulings(dev_root, dev_root / "work-items" / item_id, item_id,
-                                         date=_date.today().isoformat(), project=str(ctx.id))
-            if ids:
-                dev_store.log_event(context_id, "decision.recorded", item_id=item_id,
-                                    summary=f"recorded {len(ids)} owner ruling(s): "
-                                            + ", ".join(ids),
-                                    meta={"ids": ids})
-        except Exception:
-            log.exception("recording owner rulings failed for %s", item_id)
+                from ...core import decision_ledger as _ledger
+                ids = _ledger.record_rulings(dev_root, dev_root / "work-items" / item_id, item_id,
+                                             date=_date.today().isoformat(), project=str(ctx.id))
+                if ids:
+                    dev_store.log_event(context_id, "decision.recorded", item_id=item_id,
+                                        summary=f"recorded {len(ids)} standing rule(s): "
+                                                + ", ".join(ids),
+                                        meta={"ids": ids})
+            except Exception:
+                log.exception("recording standing rules failed for %s", item_id)
     auto_started = False
     if nxt == "review":
         # Review's entry run goes through the SHARED firer, because the loop's vet→review hop
