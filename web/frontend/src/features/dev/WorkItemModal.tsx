@@ -4,7 +4,7 @@ import {
   Terminal, GitBranch, FlaskConical, Ban, GitMerge, Undo2, ShieldCheck,
   AlertTriangle, MessageSquare, CornerUpLeft, Plane, ExternalLink, Gauge, ListChecks,
   ChevronRight, CircleDot, RotateCcw, Play, Plus, Trash2, PenLine,
-  Network, Inbox, ClipboardCheck, ClipboardList, KeyRound,
+  Network, Inbox, ClipboardCheck, ClipboardList, KeyRound, Gavel,
 } from 'lucide-react'
 import Markdown from '@/ui/Markdown'
 import Modal from '@/ui/Modal'
@@ -66,6 +66,7 @@ const CHECK_ICON: Record<string, typeof FileText> = {
   revisions_recorded: History,
   evidence_fresh: ShieldCheck,
   no_pending_authorizations: KeyRound,
+  owner_rulings: Gavel,
 }
 
 // Per-kind pipeline (mirrors the backend KIND_PROFILES) — the progress bar's stops.
