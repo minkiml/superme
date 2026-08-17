@@ -121,9 +121,11 @@ def _mirror_source_ignored(repo: Path, worktree: Path, paths: list[str]) -> tupl
                     shutil.copy2(Path(cur) / f, out)
                     out.chmod(0o444)
                     copied += 1
-            # Directory modes come last: a read-only dir cannot be written into while walking it.
-            for cur, dirs, _ in os.walk(dst, topdown=False):
-                Path(cur).chmod(0o555)
+            # DIRECTORIES STAY WRITABLE. Read-only files were the point; read-only dirs were a
+            # mistake that broke the tree's own disposal — on Unix, unlinking depends on the
+            # DIRECTORY's write bit, not the file's, so `git worktree remove --force` failed with
+            # "Permission denied" and clearance left the checkout behind on a closed item.
+            # 0444 on the files still makes a copy unwritable, which is all the second wall owed.
         except Exception as e:                                  # noqa: BLE001 — never fatal
             skipped.append(f"{rel}: {e}")
     return copied, skipped
