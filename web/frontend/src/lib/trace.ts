@@ -66,5 +66,27 @@ export function pairTrace<T extends TraceRow>(events: T[]): PairedCall<T>[] {
     if (id && byParent.has(id)) { r.children = byParent.get(id); r.agent = agentNo.get(id) }
     else if (r.call.parent_tool_id) r.agent = agentNo.get(r.call.parent_tool_id)
   }
-  return rows
+
+  // GROUP each sub-agent's calls under its own spawn. Indentation is read as "belongs to the row
+  // above"; leaving the list in call order made that bracket false, because concurrent readers
+  // interleave and a child lands under whichever spawn ran most recently.
+  //
+  // The parent's own calls keep their place, so before-the-fan-out and after-it still read in order.
+  // What is given up is cross-agent ordering INSIDE the fan-out — which reader got a slot first is
+  // scheduler noise, and each row still carries its own timestamp.
+  const kids = new Map<string, PairedCall<T>[]>()
+  for (const r of rows) {
+    const p = r.call.parent_tool_id
+    if (p && byParent.has(p)) kids.set(p, [...(kids.get(p) ?? []), r])
+  }
+  const grouped: PairedCall<T>[] = []
+  for (const r of rows) {
+    const p = r.call.parent_tool_id
+    // An orphan (its spawn is not in this slice of the trace) keeps its place rather than vanishing.
+    if (p && byParent.has(p)) continue
+    grouped.push(r)
+    const id = r.call.tool_id
+    if (id && kids.has(id)) grouped.push(...kids.get(id)!)
+  }
+  return grouped
 }
