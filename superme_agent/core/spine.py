@@ -588,6 +588,17 @@ class SystemSpine:
             # instead of reading three parallel readers as one confused agent. Additive.
             self._ensure_columns(c, "run_artifact", {"tool_id": "TEXT", "parent_tool_id": "TEXT"})
             self._ensure_columns(c, "run_event", {"tool_id": "TEXT", "parent_tool_id": "TEXT"})
+            # PAYLOAD — the row's full, uncapped text, for the few rows where the TEXT is the thing
+            # being audited rather than something to display. `description` is the trace ROW: short,
+            # truncated, written to be read at a glance. The two were the same field, so the only
+            # record of a subagent's brief was its LENGTH — the one input that decides what a reader
+            # does, kept as a number. Sizes prove a brief too short to have carried a bar; they can
+            # never show whether the bar it carried was the right one.
+            #
+            # Written only where that gap is real (today: subagent spawns), NULL everywhere else —
+            # a trail row's description is already its whole content. Same row, same run, same seq,
+            # same `discarded_at`: retiring a run retires its briefs with it, no second lifecycle.
+            self._ensure_columns(c, "run_event", {"payload": "TEXT"})
             # SWEEP_WATERMARK — the capture sweep's per-session swept position (WI-8). `position`
             # is the count of chat messages already swept for a session; every sweep advances it
             # to the transcript head, so a message is NEVER swept twice (content-level idempotency).
@@ -1244,28 +1255,61 @@ class SystemSpine:
         findings come back looking exactly like findings written to one.
 
         Size is a PROXY and is read as one: it can prove a brief too short to have carried a bar,
-        never that a long one carried the right bar. The trace row records `brief <n>` (written by
-        `runs._artifact_desc`); spawns from before that landed carry no size and are skipped, so an
-        older item reports fewer sizes than spawns rather than a pile of fake zeros.
+        never that a long one carried the right bar — read `subagent_briefs` for that. Measured from
+        the stored brief where there is one; older spawns fall back to the `brief <n>` the trace row
+        recorded (written by `runs._artifact_desc`), and spawns from before even that landed carry
+        no size and are skipped, so an older item reports fewer sizes than spawns rather than a pile
+        of fake zeros.
 
         Returns one size per spawn that recorded one, newest run last. Empty list = no spawn ever
         recorded a size, which is not the same as a thin brief and must not be scored as one."""
         with self._conn() as c:
             rows = c.execute(
-                "SELECT e.description AS d FROM run_event e JOIN run r ON r.id = e.run_id"
+                "SELECT e.description AS d, LENGTH(e.payload) AS n"
+                "  FROM run_event e JOIN run r ON r.id = e.run_id"
                 " WHERE r.repo_id=? AND r.item_id=? AND r.phase=?"
-                "   AND e.kind='subagent' AND e.description LIKE '%brief %'"
+                "   AND e.kind='subagent'"
+                "   AND (e.payload IS NOT NULL OR e.description LIKE '%brief %')"
                 "   AND e.discarded_at IS NULL AND r.discarded_at IS NULL"
                 " ORDER BY e.id ASC",
                 (repo_id, item_id, phase),
             ).fetchall()
         sizes: list[int] = []
         for row in rows:
+            if row["n"] is not None:        # the brief itself — measured, not parsed back out
+                sizes.append(int(row["n"]))
+                continue
             tail = str(row["d"] or "").rsplit("brief ", 1)[-1]
             digits = "".join(ch for ch in tail if ch.isdigit())
             if digits:
                 sizes.append(int(digits))
         return sizes
+
+    def subagent_briefs(self, repo_id: str, item_id: str, *,
+                        phase: str) -> list[dict]:
+        """Every subagent BRIEF this item's runs sent at `phase`, in spawn order, with its text.
+
+        The brief is the whole channel to a spawned worker — what it is told to find, the bar it is
+        judged against, where it may write — and until it was stored, the only record of it was a
+        character count. A reader that came back with nothing could not be told apart from a clean
+        area, because the question "what was it actually asked?" had no answer anywhere.
+
+        One dict per spawn: `run_id`, `at` (when), `label` (the trace row's own description — who
+        was spawned, which model), and `text`. Spawns from before briefs were stored are absent
+        rather than present-and-empty: nothing was kept, and an empty string would read as a brief
+        that said nothing."""
+        with self._conn() as c:
+            rows = c.execute(
+                "SELECT e.run_id, e.created_at, e.description, e.payload"
+                "  FROM run_event e JOIN run r ON r.id = e.run_id"
+                " WHERE r.repo_id=? AND r.item_id=? AND r.phase=?"
+                "   AND e.kind='subagent' AND e.payload IS NOT NULL"
+                "   AND e.discarded_at IS NULL AND r.discarded_at IS NULL"
+                " ORDER BY e.id ASC",
+                (repo_id, item_id, phase),
+            ).fetchall()
+        return [{"run_id": r["run_id"], "at": r["created_at"],
+                 "label": r["description"], "text": r["payload"]} for r in rows]
 
     def read_hits(self, repo_id: str, item_id: str, *, phase: str, needle: str) -> int:
         """How many times this item's runs at `phase` READ a path containing `needle`.
@@ -1517,11 +1561,14 @@ class SystemSpine:
     # --- run events (the per-RUN observability trail: prompt · reply · tool/skill/agent calls) ---
     def log_run_event(self, *, repo_id: str, kind: str, name: str, description: str | None = None,
                       run_id: int | None = None, item_id: str | None = None,
-                      tool_id: str | None = None, parent_tool_id: str | None = None) -> None:
+                      tool_id: str | None = None, parent_tool_id: str | None = None,
+                      payload: str | None = None) -> None:
         """Append one event to a run's trail (`seq` orders within the run). Pass `run_id` directly
         (chat / background), or `item_id` to resolve the item's currently-running run. `tool_id` (the
         SDK tool_use id) lets a `result` row pair back to its call; `parent_tool_id` names the
-        sub-agent spawn the row came from (NULL = the parent). Best-effort — never raises."""
+        sub-agent spawn the row came from (NULL = the parent). `payload` is the row's full uncapped
+        text where that differs from what the row DISPLAYS — see the column's note in `_ensure`.
+        Best-effort — never raises."""
         try:
             with self._conn() as c:
                 if run_id is None and item_id is not None:
@@ -1537,10 +1584,11 @@ class SystemSpine:
                 ).fetchone()["n"]
                 c.execute(
                     "INSERT INTO run_event"
-                    " (run_id,repo_id,item_id,seq,kind,name,description,tool_id,parent_tool_id,created_at)"
-                    " VALUES (?,?,?,?,?,?,?,?,?,?)",
+                    " (run_id,repo_id,item_id,seq,kind,name,description,tool_id,parent_tool_id,"
+                    "  payload,created_at)"
+                    " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                     (run_id, repo_id, item_id, seq, kind, name, description, tool_id,
-                     parent_tool_id, _now()),
+                     parent_tool_id, payload, _now()),
                 )
         except Exception:  # noqa: BLE001 — telemetry must never break a turn
             pass

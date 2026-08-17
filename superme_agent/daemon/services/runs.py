@@ -350,6 +350,17 @@ def _int_or_none(value) -> int | None:
         return None
 
 
+def _artifact_payload(tool_name: str, ti: dict) -> str | None:
+    """The row's full text, for the rows where the TEXT is what gets audited — not what the trace
+    displays. Only a sub-agent's brief today: a spawned worker inherits nothing (not the phase
+    skill, not the family guide, not the plan), so the brief is the entire input deciding what it
+    does, and it was the one input nothing kept. `None` everywhere else, and deliberately: a trail
+    row's description already IS its content, and copying it would double the trail for no reader."""
+    if tool_name in ("Task", "Agent"):
+        return str(ti.get("prompt") or "") or None
+    return None
+
+
 def _artifact_desc(tool_name: str, ti: dict) -> tuple[str, str, str]:
     """Map a tool-use to (kind, head, detail). kind ∈ tool|subagent|skill|mcp."""
     ti = ti or {}
@@ -641,7 +652,8 @@ def _capture_event(repo_id: str, ev, *, run_id: int | None = None, item_id: str 
         kind, head, detail = _artifact_desc(ev.tool_name, ev.tool_input or {})
         _spine.log_run_event(repo_id=repo_id, kind=kind, name=head, description=detail,
                              run_id=run_id, item_id=item_id, tool_id=ev.tool_id,
-                             parent_tool_id=ev.parent_tool_id)
+                             parent_tool_id=ev.parent_tool_id,
+                             payload=_artifact_payload(ev.tool_name, ev.tool_input or {}))
         if publish_live:
             _publish_timeline(item_id, run_id, kind, head, detail, ev.tool_id, ev.parent_tool_id)
     elif isinstance(ev, ToolResult):
