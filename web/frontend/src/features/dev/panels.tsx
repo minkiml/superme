@@ -106,10 +106,16 @@ export type WorkActions = {
 
 // The 8-stage union pipeline collapsed to FOUR board columns so the whole board fits one view
 // (no horizontal scroll). Adjacent phases that read as one stage of work merge: intake (triage +
-// plan) and the build⟷vet loop (build/investigate + vet/report). Review and close stay their own
-// columns — they're the human gates. An item keeps its real phase; it's just placed in the column
-// whose group owns that phase. The investigation-kind analogues (investigate/report) ride with
-// build/vet.
+// plan) and the doing (build/vet for implementation, investigate/report for research). Review and
+// close stay their own columns — they're the human gates. An item keeps its real phase; it's just
+// placed in the column whose group owns that phase.
+//
+// That middle column is labelled `Work`, not `Build & Vet` (owner, 2026-08-18). A column label
+// names the whole lane, and this lane holds two different machineries: a research item in it is
+// investigating or reporting, never building or vetting, so half the board's items sat under a
+// heading that described the other kind. Naming both pairs would need four words and still leave
+// a reader matching card to clause. The card already prints the item's real phase, so the column
+// only has to say WHICH STAGE of the pipeline this is — the one where the work is actually done.
 //
 // The lane dots CARRY NO COLOUR (2026-07-31). They used to walk the status palette — dev-blue,
 // warn-amber, success-green — and that palette already means something everywhere else on this
@@ -121,7 +127,7 @@ export type WorkActions = {
 // goes back to meaning one thing per colour.
 const KANBAN_GROUPS: { key: string; label: string; phases: string[] }[] = [
   { key: 'intake', label: 'Triage & Plan', phases: ['triage', 'plan'] },
-  { key: 'work', label: 'Build & Vet', phases: ['build', 'investigate', 'vet', 'report'] },
+  { key: 'work', label: 'Work', phases: ['build', 'investigate', 'vet', 'report'] },
   { key: 'review', label: 'Review', phases: ['review'] },
   { key: 'close', label: 'Close', phases: ['close'] },
 ]
@@ -596,7 +602,7 @@ function InboxEditModal({
     <Modal onClose={onCancel} title="Inbox item" maxW="max-w-lg" z="z-40" contain dismissable={false}>
       <div className="p-4">
         <TabBar
-          tabs={[['content', 'Content'], ['setting', 'Setting']] as const}
+          tabs={[['content', 'Content'], ['setting', kind === 'note' ? 'Info' : 'Setting']] as const}
           value={tab}
           onChange={setTab}
           size="sm"
@@ -629,22 +635,10 @@ function InboxEditModal({
             {/* ── how this item will be worked ───────────────────────────────────────────────
                 ALL FOUR describe a RUN — which gates drive themselves, which machinery the item
                 becomes, which model and effort its runs spend. A note has no runs: it is never
-                pushed, so no work-item is ever born to carry them. Showing the controls anyway
-                asks the owner to configure something that cannot happen, and a Work kind dropdown
-                on a note contradicts the rule that a note is not work at all. */}
-            {kind === 'note' ? (
-              <section className="rounded-md border border-line bg-sunken px-3 py-2.5">
-                <SectionHeader>Setting</SectionHeader>
-                <div className="mt-1.5 text-[12px] leading-relaxed text-muted">
-                  Nothing to set. A note is yours — it is never pushed and never becomes a
-                  work-item, so there are no runs to configure.
-                </div>
-                <div className="mt-1.5 text-[11px] leading-snug text-faint">
-                  Want it worked on? Switch its kind to <span className="font-medium">item</span> on
-                  the Content tab, and the settings come back.
-                </div>
-              </section>
-            ) : (
+                pushed, so no work-item is ever born to carry them. The section is not shown at
+                all for a note — an empty card explaining its own absence is still a card, and the
+                tab beside it renames to Info, which is all a note's second tab ever holds. */}
+            {kind !== 'note' && (
             <section className="rounded-md border border-line bg-sunken px-3 py-2.5">
               <SectionHeader>Setting</SectionHeader>
               <div className="mt-1 text-[11px] leading-snug text-faint">

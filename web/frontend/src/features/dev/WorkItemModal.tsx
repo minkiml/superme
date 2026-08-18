@@ -1933,7 +1933,7 @@ function Loading() {
 // this map. (`build` appears twice on purpose: cycle 1 invokes the skill, later cycles RESUME that
 // same thread, so only the first carries a `skill` row.)
 const RUN_KIND: Record<string, string> = {
-  chat: 'your chat turn',
+  chat: 'chat',
   resolve: 'conflict resolver',
   deputy: 'deputy judgment',
   compact: 'compaction',
@@ -1974,7 +1974,11 @@ function TracePane({ artifacts, runs, execution }: {
       {groups.map((g, gi) => {
         const calls = pairTrace(g.items)
         const meta = g.run != null ? byId.get(g.run) : undefined
-        const what = meta?.feature ? RUN_KIND[meta.feature] ?? meta.feature : null
+        // A chat turn is named for the lane it interrupted — `review:chat`, not `your chat turn`.
+        // Every other run in the list is titled by the phase that fired it, so an owner turn with
+        // no phase on it was the one row that could not be placed against the ones around it.
+        const kind = meta?.feature ? RUN_KIND[meta.feature] ?? meta.feature : null
+        const what = kind && meta?.feature === 'chat' && meta.phase ? `${meta.phase}:${kind}` : kind
         return (
           <div key={gi}>
             <div className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-faint">

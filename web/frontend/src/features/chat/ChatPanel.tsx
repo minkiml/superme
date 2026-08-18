@@ -364,15 +364,11 @@ export default function ChatPanel({
   return (
     <div
       className="relative flex h-full min-h-0 flex-col border-l border-line bg-surface"
-      // The chat rail's accent follows the mode: core = mint (pastel green), dev = blue. The two
-      // translucent variants are derived HERE rather than by an opacity modifier at the point of
-      // use: these hold whole `rgb(...)` strings, and Tailwind cannot decompose one to apply `/10`.
+      // The chat rail's accent follows the mode: core = mint (pastel green), dev = blue. It holds a
+      // whole `rgb(...)` string, so a translucent variant cannot be derived at the point of use —
+      // Tailwind cannot decompose one to apply `/10`. Both bubble rails read it at full strength.
       style={{
         ['--chat-accent' as string]: mode === 'core' ? 'rgb(var(--c-core))' : 'rgb(var(--c-dev))',
-        ['--chat-accent-soft' as string]: mode === 'core'
-          ? 'rgb(var(--c-core) / 0.10)' : 'rgb(var(--c-dev) / 0.10)',
-        ['--chat-accent-line' as string]: mode === 'core'
-          ? 'rgb(var(--c-core) / 0.25)' : 'rgb(var(--c-dev) / 0.25)',
       } as CSSProperties}
     >
       <ChatHeader

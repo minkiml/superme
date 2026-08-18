@@ -54,14 +54,11 @@ function replySpeaker(feature: string | null | undefined): Speaker {
   return 'agent' // chat (interactive owner turn) + every phase agent reply is the agent talking
 }
 
-// Who spoke, and the fill that says so at a glance. The agent's fill is `bg-hover` — the SAME one
-// MessageList gives it in a general session, because a bubble should not change colour depending on
-// which thread it is read in. It was `bg-surface`, which is exactly the rail's own background, so
-// the agent's bubbles read as unfilled while the general session's read as grey.
-//
-// The tinted fills go through `--chat-accent-soft` (set beside `--chat-accent` in ChatPanel) rather
-// than an opacity modifier: `--chat-accent` holds a whole `rgb(...)` string, and Tailwind cannot
-// decompose one to apply `/10` to it.
+// Who spoke, and the fill that says so at a glance. The agent's fill is `bg-hover` and the owner's
+// is a surface bubble ruled on its accent edge — the SAME two MessageList gives them in a general
+// session, because a bubble should not change appearance depending on which thread it is read in.
+// The owner's was a solid accent tint here, so the same sentence typed into the two rails came back
+// looking like two different kinds of thing (owner, 2026-08-18).
 //
 // `right` mirrors the OWNER's row, the same way a general session does it (MessageList's `TALKER`):
 // their own turns sit on the opposite side from everything said to them, and stop short of the full
@@ -70,7 +67,7 @@ function replySpeaker(feature: string | null | undefined): Speaker {
 const SPEAKER_META: Record<Speaker,
   { label: string; Icon: typeof Bot; tint: string; bubble: string; right?: boolean }> = {
   you: { label: 'You', Icon: User, tint: 'text-fg', right: true,
-         bubble: 'bg-[var(--chat-accent-soft)] border-[var(--chat-accent-line)]' },
+         bubble: 'border-line border-l-2 border-l-[var(--chat-accent)] bg-surface' },
   agent: { label: 'superme', Icon: Bot, tint: 'text-accent-text', bubble: 'bg-hover border-line' },
   deputy: { label: 'Deputy', Icon: ShieldCheck, tint: 'text-deputy', bubble: 'bg-deputy/10 border-deputy/30' },
 }
@@ -388,14 +385,20 @@ export default function TimelineView({
                   <div className={`mb-0.5 flex items-center gap-1.5 text-[10px] text-faint
                                    ${sm.right ? 'justify-end' : ''}`}>
                     <span className={sm.tint}>{sm.label}</span>
-                    {b.phase && <span>· {PHASE_LABEL[b.phase] ?? b.phase}</span>}
+                    {/* The phase names WHICH AGENT is talking — there is one per phase, and the
+                        header is the only place that says so. The owner is the same person in
+                        every lane, and the divider above already names it, so `You · Review`
+                        only asserted that the owner had a phase. */}
+                    {b.speaker !== 'you' && b.phase && <span>· {PHASE_LABEL[b.phase] ?? b.phase}</span>}
                   </div>
                 )}
                 {b.report
                   ? <ReportCard r={b.report} phase={b.phase} />
                   : (
-                    <div className={`rounded-lg border px-2.5 py-1.5 text-[12.5px] text-fg ${sm.bubble}`}>
-                      <Markdown text={b.text} variant="chat" tone="dev" />
+                    <div className={`rounded-lg border px-3 py-2 text-[12.5px] text-fg ${sm.bubble}`}>
+                      {b.speaker === 'you'
+                        ? <span className="whitespace-pre-wrap [overflow-wrap:anywhere]">{b.text}</span>
+                        : <Markdown text={b.text} variant="chat" tone="dev" />}
                     </div>
                   )}
               </div>
