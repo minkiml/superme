@@ -3711,7 +3711,7 @@
               "title": "Effort"
             },
             "kind": {
-              "default": "note",
+              "default": "item",
               "title": "Kind",
               "type": "string"
             },

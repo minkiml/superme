@@ -30,7 +30,7 @@ from pathlib import Path
 from . import artifacts as A
 from . import plan_revision
 from . import status_router
-from .kind_profiles import get_profile, research_kind
+from .kind_profiles import get_profile, item_fanout, research_kind
 
 # The four briefed human gates, keyed by the phase whose EXIT they guard (D2/D10).
 GATE_FOR_PHASE = {"triage": "triage-exit", "plan": "pre-main", "review": "review",
@@ -103,7 +103,8 @@ def close_readiness(item: dict, item_dir: Path, all_items: list[dict]) -> dict:
     return {"ok": all(c["ok"] for c in checks), "checks": checks}
 
 
-def fanout_check(family: str | None, subagents: int | None) -> dict | None:
+def fanout_check(family: str | None, subagents: int | None,
+                 fanout: str = "expected") -> dict | None:
     """The `fanned_out` row, or None when the question doesn't apply to this item.
 
     ASKED ONLY WHERE ITS ANSWERER EXISTS — the rule three separate defects taught this codebase in
@@ -118,10 +119,22 @@ def fanout_check(family: str | None, subagents: int | None) -> dict | None:
     splitting is a judgment: a two-file area honestly does not need it. So this states the fact and
     lets the deputy (review strictness `high`) and the owner judge it, rather than hard-refusing an
     Approve on a heuristic. What it removes is the SILENCE: a whole-repo sweep that ran single-
-    threaded used to be indistinguishable, on every surface, from one that split properly."""
-    from .kind_profiles import FANOUT_FAMILIES
+    threaded used to be indistinguishable, on every surface, from one that split properly.
+
+    A THIRD condition, added after a live false alarm: triage may have judged the surface BOUNDED.
+    A run that split nothing because its brief said not to did exactly as it was told, and a row
+    calling that single-threaded blames it for obeying — while contradicting a decision made
+    upstream, in prose this check could not read. The answerer for "should this have split" is
+    TRIAGE, not the family default, whenever triage actually answered."""
+    from .kind_profiles import FANOUT_FAMILIES, item_fanout
     if family not in FANOUT_FAMILIES or subagents is None:
         return None
+    if item_fanout({"fanout": fanout}) == "bounded":
+        # Not silence — the judgement is still on the gate, so the owner can disagree with THAT
+        # rather than with the run. What is gone is a red row for a run that followed its brief.
+        return {"criterion": "fanned_out", "ok": True,
+                "detail": (f"triage judged this surface bounded, so no split was expected — "
+                           f"investigate spawned {subagents}. Disagree with the sizing, not the run.")}
     return {
         "criterion": "fanned_out",
         "ok": subagents > 0,
@@ -616,7 +629,8 @@ def gate_state(item: dict, item_dir: Path, dev_root: Path,
             # it against. A green `fanned_out` over thin briefs is the shape of the defect that
             # existed before either row — motion that looks like method.
             for row in (guide_check(research_kind(item), guide_reads),
-                        fanout_check(research_kind(item), subagents),
+                        fanout_check(research_kind(item), subagents,
+                                     fanout=item_fanout(item)),
                         brief_check(brief_sizes)):
                 if row is not None:
                     checks.append(row)

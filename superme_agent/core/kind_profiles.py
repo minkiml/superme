@@ -135,6 +135,27 @@ DEFAULT_KIND = "implementation"
 ITEM_SCALES: tuple[str, ...] = ("small", "standard")
 DEFAULT_SCALE = "standard"
 
+# --- FAN-OUT: does this research surface need splitting across subagents? -------------------------
+# A SEPARATE field from `scale`, on purpose. Scale asks how much content the work is worth;
+# fan-out asks whether the surface divides. A bounded folder can be `standard` (real work, a real
+# judgement) and still take one thread, which is exactly the case this exists for. Folding it into
+# scale would make one field answer two questions — the shape of defect this codebase keeps
+# meeting, most recently a decision ledger whose promotion test was the wrong lever entirely.
+#
+# `expected` is the default and the family's own prescription: a whole-repo sweep splits. `bounded`
+# is triage saying it looked and this one does not. It is triage's call to make because triage is
+# the phase that has read the whole ask and sized the surface — investigate then obeys the brief,
+# and a gate row contradicting that brief blames the run for doing as it was told.
+ITEM_FANOUT: tuple[str, ...] = ("expected", "bounded")
+DEFAULT_FANOUT = "expected"
+
+
+def item_fanout(item: dict | None) -> str:
+    """Whether this item's surface was judged to need splitting. Forgiving like `item_scale`: an
+    absent value means nobody judged, and the family's prescription stands."""
+    v = str((item or {}).get("fanout") or "").strip()
+    return v if v in ITEM_FANOUT else DEFAULT_FANOUT
+
 
 def item_scale(item: dict | None) -> str:
     """This item's declared scale, defaulting to `standard`. Deliberately FORGIVING where

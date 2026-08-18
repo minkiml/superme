@@ -74,6 +74,15 @@ Two judgments, on different axes:
   the owner argues with. It rides every later phase: `small` makes plan, build, vet and review read
   narrow and write short. The pipeline never changes — a small item still gets its branch, its
   tasks and its merge.
+- **Fan-out — does the surface DIVIDE?** Research only, and a different question from scale: a
+  bounded surface can still be real work. Whole-repo sweeps split across subagents by default, so
+  say nothing and that stands. Set `fanout: "bounded"` when you have looked and it does not divide
+  — one folder, one subsystem, one thread's worth. Investigate then follows your call, and the
+  review gate judges the run against it instead of against the family default.
+
+  Say it in the FIELD, not only in `scale_reason`. A judgement that lives in prose is one no
+  reader has, and the gate will report the run as having failed to split — blaming it for doing
+  exactly what your brief told it.
 
 ## Step 4 — Name it, and record the classification
 

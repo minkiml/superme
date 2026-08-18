@@ -1076,6 +1076,15 @@ class SetTriageClassificationArgs(TypedDict, total=False):
                                "its branch, its numbered tasks, a commit per task and a merge. Size "
                                "of the DIFF is not the test, and neither is the task count: a "
                                "one-line change to something load-bearing is standard")]]
+    fanout: Annotated[Literal["expected", "bounded"],
+                      ("research only, and only worth setting when it is `bounded`: does this "
+                       "surface need SPLITTING across subagents? `expected` (the default) is the "
+                       "family's own prescription — a whole-repo sweep divides. `bounded` is you "
+                       "saying you looked and it does not: one folder, one subsystem, one thread's "
+                       "worth. Investigate obeys your call, and the review gate then judges the run "
+                       "against it instead of against the family default. Separate from `scale` on "
+                       "purpose — size and splittability are different questions, and a bounded "
+                       "surface can still be real work")]
     scale_reason: Required[Annotated[str, ("one line, in your own words, for why that scale — what "
                                            "you saw that settled it. Required for BOTH values: this "
                                            "is what the owner reads at the gate to disagree with, "
@@ -1200,6 +1209,8 @@ def _set_triage_classification(*, store, context_id, dev_root=None, bound_item_i
         try:
             dev.set_work_item_scale(root, item_id, _s(args, "scale") or "",
                                     _s(args, "scale_reason") or "")
+            if (_fo := _s(args, "fanout")):
+                dev.set_work_item_fanout(root, item_id, _fo)
         except ValueError as e:
             return _err(str(e))
         # The investigation family — the third axis, and the only one that applies to a single kind

@@ -884,6 +884,42 @@ class DevKnowledgeService:
         item.write_text(f"---\n{fm}\n---\n{body}")
         return True
 
+    def set_work_item_fanout(self, dev_root: Path, item_id: str, fanout: str) -> bool:
+        """Set a research item's `fanout` — whether triage judged this surface to need SPLITTING
+        across subagents (kind_profiles.ITEM_FANOUT).
+
+        No reason field, unlike scale and family. Those labels are arguments the owner reads at the
+        gate; this one is only ever written to say "and here is why the run you are looking at ran
+        one thread" — the sizing argument already lives in `scale_reason`, and a second reason line
+        would ask triage to justify the same judgement twice.
+
+        Items minted before this field existed have no line, so the write INSERTS after
+        `scale_reason:` (or `kind:`) rather than assuming a slot — readers default via
+        `item_fanout`, so an absent value is the family's prescription, not an error."""
+        from .kind_profiles import ITEM_FANOUT
+        if fanout not in ITEM_FANOUT:
+            raise ValueError(f"fanout must be one of {'/'.join(ITEM_FANOUT)} (got {fanout!r})")
+        item = Path(dev_root) / "work-items" / item_id / "item.md"
+        if not item.exists():
+            return False
+        text = item.read_text()
+        m = _FRONTMATTER.match(text)
+        if not m:
+            return False
+        _, body = _parse_md(text)
+        fm = m.group(1)
+        line = f"fanout: {fanout}"
+        if re.search(r"(?m)^fanout:", fm):
+            fm = re.sub(r"(?m)^fanout:.*$", lambda _m: line, fm)
+        elif re.search(r"(?m)^scale_reason:", fm):
+            fm = re.sub(r"(?m)^scale_reason:(.*)$",
+                        lambda mm: f"scale_reason:{mm.group(1)}\n{line}", fm, count=1)
+        else:
+            fm = re.sub(r"(?m)^kind:(.*)$", lambda mm: f"kind:{mm.group(1)}\n{line}", fm, count=1)
+        fm = re.sub(r"(?m)^updated_at:.*$", f"updated_at: {date.today().isoformat()}", fm)
+        item.write_text(f"---\n{fm}\n---\n{body}")
+        return True
+
     def set_work_item_research_kind(self, dev_root: Path, item_id: str, research_kind: str,
                                     reason: str) -> bool:
         """Set a research item's investigation family + the one line behind it
