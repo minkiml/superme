@@ -27,6 +27,7 @@ import { build, navigate, useRoute, PHASES, type ItemTab, type ItemSub, type Pha
 import { fmtModel, fmtTokens, fmtLocal, toModelKey } from '@/lib/format'
 import { StatusBadge, DEFAULT_RUN_MODEL, DEFAULT_RUN_EFFORT } from './panels'
 import { PHASE_LABEL, STATUS_LABEL, kindChipClass, researchKindLabel } from './common'
+import { useContainerWidth, railTight } from '@/lib/layout'
 
 // The work-item drilldown (renovation v2 §4) — "what is needed from me, and what has this produced".
 //
@@ -170,6 +171,10 @@ export default function WorkItemModal({
   // The feed carries PENDING requests only, and only at the review gate (`gate_briefs.gate_state`) —
   // so a non-empty list IS "something is waiting on you", with no second rule deciding that here.
   const auths = d?.authorizations ?? []
+  // The tab rail measures itself — the drilldown is as wide as the surface it sits in, which the
+  // window's width does not tell you.
+  const [railRef, railW] = useContainerWidth<HTMLDivElement>()
+  const tightRail = railTight(railW, TABS.length, auths.length > 0 ? 130 : 0)
   // The Authorization sub exists only on an item that HAS one — a tab that opens empty on every
   // other item teaches the owner to ignore the row it sits in.
   const subs: ItemSub[] = tab === 'quick'
@@ -325,13 +330,15 @@ export default function WorkItemModal({
           itself lives in its own Quick View sub, and this is what makes a pending one impossible to
           miss from any tab without spending a third of the modal on a card most items never have.
           It is a pointer, not a second renderer — it carries no detail and takes no decision. */}
-      <div className="flex shrink-0 items-center gap-1 border-b border-line px-4">
+      {/* Narrow: labels off, the current tab keeps its word — the same rule every rail in the app
+          follows, and no rail ever scrolls sideways (`lib/layout`). */}
+      <div ref={railRef} className="flex shrink-0 flex-wrap items-center gap-1 border-b border-line px-4">
         {TABS.map(({ id, label, icon: Icon }) => (
-          <button key={id} onClick={() => go(id, null)}
-                  className={`flex items-center gap-1.5 border-b-2 px-3 py-2 text-[13px] transition ${
-                    tab === id ? 'border-accent text-fg' : 'border-transparent text-muted hover:text-fg'
-                  }`}>
-            <Icon size={14} /> {label}
+          <button key={id} onClick={() => go(id, null)} title={label} aria-label={label}
+                  className={`flex shrink-0 items-center gap-1.5 border-b-2 py-2 text-[13px] transition ${
+                    tightRail ? 'px-2' : 'px-3'
+                  } ${tab === id ? 'border-accent text-fg' : 'border-transparent text-muted hover:text-fg'}`}>
+            <Icon size={14} /> {(!tightRail || tab === id) && label}
           </button>
         ))}
         {auths.length > 0 && (

@@ -17,6 +17,7 @@ import ActivityLog from './ActivityLog'
 import PromptXrayTab from './PromptXrayTab'
 import SweepBar from './SweepBar'
 import OnboardingLanding, { type OnboardMode } from './OnboardingLanding'
+import { useContainerWidth, railTight } from '@/lib/layout'
 
 // The Dev workspace — the per-repo Tier-2 detail surface, reached from an orbit node's inspector
 // ("Open dev workspace"). It takes over the main area (the shell owns the header + tabs) and holds
@@ -86,6 +87,12 @@ export default function DevWorkspace({
   // attention centre cannot land on the wrong tab in the first place.)
   const isHub = repo.id === 'global'
   const c = colorFor(repo.id)
+  // The header measures ITSELF — it can be 500px wide inside a 1400px window, so the window's
+  // width is not the question being asked (`lib/layout`).
+  const [headRef, headW] = useContainerWidth<HTMLDivElement>()
+  // Same rule every tab rail in the app uses — the six labels plus the sweep control need this
+  // much seat, and below it the labels go (`lib/layout`).
+  const tight = railTight(headW, TABS.length, 140)
   // Either of Pipeline's two panes means the Pipeline tab is what's showing.
   const pipelineTab = tab === 'pipeline' || tab === 'workspace'
 
@@ -149,7 +156,7 @@ export default function DevWorkspace({
   return (
     <div className="flex h-full flex-col overflow-hidden bg-app">
       {/* shell header — back · repo swatch · label · scope · quick-switch, then the tab rail */}
-      <div className="shrink-0 border-b border-line px-4 pt-3">
+      <div ref={headRef} className="shrink-0 border-b border-line px-4 pt-3">
         {/* The identity block truncates and the control cluster stays whole: a header narrows by
             shortening the NAME, never by letting a picker slide under it. `flex-wrap` is the last
             resort — past the width where even a truncated name leaves room, the controls drop to
@@ -169,7 +176,11 @@ export default function DevWorkspace({
           >
             {!isHub && repo.icon && <RepoIcon name={repo.icon} size={16} color={c} />}
           </span>
-          <div className="min-w-0 flex-1 overflow-hidden">
+          {/* A floor, not just `min-w-0`: an identity block that shrinks without limit never lets
+              the row WRAP — it just crushes the project's name to an initial and keeps the
+              pickers on the same line. With a floor, the controls drop to their own line first
+              and the name stays a name. */}
+          <div className="min-w-[10rem] flex-1 overflow-hidden">
             <div className="flex items-center gap-2">
               <span className="truncate text-[15px] font-semibold text-fg">{isHub ? 'SuperMe Hub' : repo.label}</span>
               {badge && (
@@ -185,7 +196,9 @@ export default function DevWorkspace({
             </div>
             <div className="truncate text-[12px] text-faint">dev workspace</div>
           </div>
-          <div className="ml-auto flex shrink-0 items-center gap-2">
+          {/* The cluster wraps INSIDE itself once even its own line is too narrow — the pickers keep
+              their widths (each names a value, and a squeezed picker names nothing) and stack. */}
+          <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
             {/* The landing pair — HOW the work lands (review bar) and WHERE (anchor branch), decided
                 where the work is watched. Hidden behind the onboarding gate for the same reason the
                 tabs are: a project with no memory has no work to land yet. No labels — each picker
@@ -228,12 +241,14 @@ export default function DevWorkspace({
         {/* the work tabs appear only once memory is established — the gate hides them otherwise.
             The sweep bar rides the same row, right-aligned: the tabs are places you GO, a sweep is
             something you START, and it is gated on the same "is this repo onboarded" question —
-            there is nothing to sweep before the project has a memory. */}
-        {/* A tab rail SCROLLS; it never clips. The pane below is `overflow-hidden`, so a tab past
-            the right edge is not merely cut off — it is unreachable, and it is the only way to
-            that surface. */}
+            there is nothing to sweep before the project has a memory.
+
+            NARROW: the six labels drop and only the CURRENT tab keeps its word (`lib/layout`). Six
+            icons fit any pane this app can produce, so nothing is ever hidden behind a sideways
+            scroll — and the one label that survives is the one answering "where am I", which is
+            the question a rail of undifferentiated icons stops answering. */}
         {established === true && (
-          <div className="mt-3 flex gap-1 overflow-x-auto">
+          <div className="mt-3 flex flex-wrap items-center gap-1">
             {TABS.map((t) => {
               const Icon = t.icon
               // Pipeline stays lit for either of its panes — the rail names the tab, not the pane.
@@ -243,11 +258,13 @@ export default function DevWorkspace({
                   key={t.id}
                   onClick={() => onTabChange(t.id)}
                   style={on ? { color: c, borderColor: c } : undefined}
-                  className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2 text-[13px] font-medium transition ${
-                    on ? '' : 'border-transparent text-muted hover:text-fg'
-                  }`}
+                  title={t.label}
+                  aria-label={t.label}
+                  className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 py-2 text-[13px] font-medium transition ${
+                    tight ? 'px-2' : 'px-3'
+                  } ${on ? '' : 'border-transparent text-muted hover:text-fg'}`}
                 >
-                  <Icon size={14} /> {t.label}
+                  <Icon size={14} /> {(!tight || on) && t.label}
                 </button>
               )
             })}

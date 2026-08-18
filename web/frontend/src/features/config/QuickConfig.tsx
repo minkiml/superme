@@ -285,9 +285,9 @@ function BackgroundAgents() {
       {data.agents.map((a, i) => (
           <div
             key={a.feature}
-            className={`flex items-center justify-between gap-3 bg-surface px-4 py-3 ${i < data.agents.length - 1 ? 'border-b border-line' : ''}`}
+            className={`flex flex-wrap items-center justify-between gap-x-3 gap-y-2 bg-surface px-4 py-3 ${i < data.agents.length - 1 ? 'border-b border-line' : ''}`}
           >
-            <div className="min-w-0">
+            <div className="min-w-[9rem] flex-1">
               <div className="flex items-center gap-1.5">
                 <span className="text-[14px] text-fg">{a.label}</span>
                 {/* Scope tag (muted) — these learning sub-agents are universal, dev-scope. */}
@@ -565,7 +565,9 @@ function RepoRow({ repo, last }: { repo: OrbitRepo; last: boolean }) {
   }
   return (
     <div className={`bg-surface ${last ? '' : 'border-b border-line'}`}>
-      <div className="flex items-center gap-3 px-4 pb-1.5 pt-2.5">
+      {/* The row wraps rather than crushing: the repo's NAME takes the first line and its three
+          controls drop under it. Each picker names a value, so a squeezed one names nothing. */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 pb-1.5 pt-2.5">
         {repo.icon && !isHub ? (
           <RepoIcon name={repo.icon} size={15} color={repo.color} className="shrink-0" />
         ) : (
@@ -574,7 +576,7 @@ function RepoRow({ repo, last }: { repo: OrbitRepo; last: boolean }) {
             style={isHub ? { backgroundImage: 'var(--grad-iris)' } : { backgroundColor: repo.color }}
           />
         )}
-        <span className="min-w-0 flex-1 truncate text-[14px] text-fg">{isHub ? 'SuperMe Hub' : repo.label}</span>
+        <span className="min-w-[8rem] flex-1 truncate text-[14px] text-fg">{isHub ? 'SuperMe Hub' : repo.label}</span>
         <Dropdown value={model} options={MODELS} onChange={changeModel} align="right" width="w-36" title={`${isHub ? 'SuperMe Hub' : repo.label} model`} />
         <Dropdown value={effort} options={EFFORTS} onChange={changeEffort} align="right" width="w-32" title={`${isHub ? 'SuperMe Hub' : repo.label} reasoning effort`} />
         <Toggle on={learning} onChange={changeLearning} />

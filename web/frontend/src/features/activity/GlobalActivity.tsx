@@ -3,6 +3,7 @@ import { Activity, RefreshCw, Loader2, ChevronDown, Link2Off } from 'lucide-reac
 import { colorFor, featureColor, featureLabel } from '@/lib/palette'
 import { RepoIcon } from '@/lib/repoIcons'
 import { fmtTokens, fmtLocal, fmtModel, fmtDuration } from '@/lib/format'
+import { useContainerWidth } from '@/lib/layout'
 import { getRuns, type Run } from '@/lib/api'
 import { useLive } from '@/lib/live'
 import { K } from '@/lib/live/keys'
@@ -18,7 +19,25 @@ import RunTraceModal from './RunTraceModal'
 
 const PAGE = 30
 // Shared column template so the header and every row align exactly.
-const COLS = 'grid grid-cols-[1.4fr_72px_48px_1fr_84px_64px_100px] items-center gap-3'
+// The run table SHEDS COLUMNS as it narrows; it never scrolls sideways (`lib/layout`). Sideways is
+// the worst answer for a table — the columns that vanish are the right-hand ones, which is exactly
+// where the numbers are, and nothing on screen says they exist. Dropping them is the same loss made
+// visible, and every row opens its full trace on click, so nothing shed here is unreachable.
+//
+// What goes, in order: `Scope` and `Took` (a mode and a duration, neither of which anyone scans a
+// feed for), then `Model`. What never goes: which repo, what ran, how much it cost, and when.
+type Density = 'full' | 'mid' | 'tight'
+
+const COLS: Record<Density, string> = {
+  full: 'grid grid-cols-[1.4fr_72px_48px_1fr_84px_64px_100px] items-center gap-3',
+  mid: 'grid grid-cols-[1.4fr_72px_1fr_84px_100px] items-center gap-3',
+  tight: 'grid grid-cols-[1.4fr_72px_72px_86px] items-center gap-2',
+}
+
+function densityFor(w: number): Density {
+  if (w === 0 || w >= 720) return 'full'
+  return w >= 560 ? 'mid' : 'tight'
+}
 
 // How long a run took (start→end). Live/unfinished runs have no end yet.
 const took = (r: Run) => (r.ended_at ? fmtDuration(Date.parse(r.ended_at) - Date.parse(r.started_at)) : '—')
@@ -30,6 +49,8 @@ export default function GlobalActivity({
   stats: CommandStats
   onDiagnose?: (run: Run, query: string) => void
 }) {
+  const [tableRef, tableW] = useContainerWidth<HTMLDivElement>()
+  const density = densityFor(tableW)
   const [limit, setLimit] = useState(PAGE) // grows by PAGE each "Load more"; the fetch pulls this many
   const [openRun, setOpenRun] = useState<Run | null>(null)
 
@@ -104,19 +125,19 @@ export default function GlobalActivity({
         ) : runs.length === 0 ? (
           <Empty>No runs recorded yet.</Empty>
         ) : (
-          <div className="overflow-hidden rounded-xl border border-line">
+          <div ref={tableRef} className="overflow-hidden rounded-xl border border-line">
             {/* column header */}
-            <div className={`${COLS} border-b border-line bg-surface/60 px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-faint`}>
+            <div className={`${COLS[density]} border-b border-line bg-surface/60 px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-faint`}>
               <span>Repo</span>
               <span>Op</span>
-              <span>Scope</span>
-              <span>Model</span>
+              {density === 'full' && <span>Scope</span>}
+              {density !== 'tight' && <span>Model</span>}
               <span className="text-right">Tokens</span>
-              <span className="text-right">Took</span>
+              {density === 'full' && <span className="text-right">Took</span>}
               <span className="text-right">When</span>
             </div>
             {runs.map((r, i) => (
-              <RunRow key={r.id} r={r} meta={metaFor(r.repo_id)} last={i === runs.length - 1 && !hasMore} onOpen={() => setOpenRun(r)} />
+              <RunRow key={r.id} r={r} meta={metaFor(r.repo_id)} density={density} last={i === runs.length - 1 && !hasMore} onOpen={() => setOpenRun(r)} />
             ))}
             {hasMore && (
               <button
@@ -149,14 +170,14 @@ export default function GlobalActivity({
   )
 }
 
-function RunRow({ r, meta, last, onOpen }: { r: Run; meta: { label: string; color: string; icon: string | null; archived?: boolean }; last: boolean; onOpen: () => void }) {
+function RunRow({ r, meta, density, last, onOpen }: { r: Run; meta: { label: string; color: string; icon: string | null; archived?: boolean }; density: Density; last: boolean; onOpen: () => void }) {
   const isHub = r.repo_id === 'global'
   return (
     <button
       type="button"
       onClick={onOpen}
       title="View trace"
-      className={`${COLS} w-full bg-surface px-4 py-2.5 text-left transition hover:bg-hover ${last ? '' : 'border-b border-line'}`}
+      className={`${COLS[density]} w-full bg-surface px-4 py-2.5 text-left transition hover:bg-hover ${last ? '' : 'border-b border-line'}`}
     >
       <span className="flex min-w-0 items-center gap-2">
         {meta.icon && !isHub ? (
@@ -194,15 +215,17 @@ function RunRow({ r, meta, last, onOpen }: { r: Run; meta: { label: string; colo
         </span>
         {r.phase && <span className="px-0.5 text-[10px] lowercase text-faint">{r.phase}</span>}
       </span>
-      <span className="text-[11px] text-faint">{r.mode}</span>
-      <span className="truncate text-[11px] text-muted" title={r.model ?? undefined}>{r.model ? fmtModel(r.model) : '—'}</span>
+      {density === 'full' && <span className="text-[11px] text-faint">{r.mode}</span>}
+      {density !== 'tight' && (
+        <span className="truncate text-[11px] text-muted" title={r.model ?? undefined}>{r.model ? fmtModel(r.model) : '—'}</span>
+      )}
       {/* `r.tokens` is ALREADY the 3-type display amount — `spine._run_dict` overrides it through
           `_display_tokens` (input + cache_write + output, excluding cache_read) so every
           run-returning surface reconciles with the token dashboard's default. Do NOT recompute it
           here from typed columns: they are not on the wire, and a second definition of one number is
           how the two surfaces drift apart. */}
       <span className="text-right font-mono text-[11px] text-muted">{fmtTokens(r.tokens)}</span>
-      <span className="text-right font-mono text-[11px] text-faint">{took(r)}</span>
+      {density === 'full' && <span className="text-right font-mono text-[11px] text-faint">{took(r)}</span>}
       <span className="text-right font-mono text-[11px] text-faint">{fmtLocal(r.started_at)}</span>
     </button>
   )

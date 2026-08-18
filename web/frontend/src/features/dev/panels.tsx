@@ -12,6 +12,7 @@ import { K } from '@/lib/live/keys'
 import { fmtLocal, fmtTokens, fmtDuration, fmtModel, toModelKey, MODELS as MODEL_CATALOG, DEFAULT_MODEL, EFFORTS as EFFORT_CATALOG, DEFAULT_EFFORT } from '@/lib/format'
 import { PHASE_LABEL, PHASE_VERB, STATUS_COLOR, STATUS_LABEL, STATUS_STRIPE, primaryStatus,
          agoLabel, researchKindLabel, KIND_TEXT, workKindLabel } from './common'
+import { useContainerWidth } from '@/lib/layout'
 
 // Phase accent → literal dot class (Tailwind needs the full string present in source).
 // (the per-lane dot colour map lived here until 2026-07-31 — see KANBAN_GROUPS for why it went)
@@ -134,19 +135,26 @@ const KANBAN_GROUPS: { key: string; label: string; phases: string[] }[] = [
 
 export function WorkspaceKanban({ items, onOpen, onResume, running, boundItemId, buckets }: { items: WorkItem[]; buckets?: Record<string, string> } & WorkActions) {
   const visible = items.filter(isActive)
+  const [boardRef, boardW] = useContainerWidth<HTMLDivElement>()
   // NO whole-board empty state (owner, 2026-08-09). An empty board used to collapse to one line of
   // prose, so the four columns — the shape of the pipeline itself — vanished exactly when the owner
   // had the most room to learn them, and the board appeared to be a different component each time
   // work drained. Every column already renders its own `—`, and the header above already says
   // `0 active`, so the lanes ARE the empty state and the layout never moves.
   const inGroup = (phases: string[]) => visible.filter((it) => phases.includes(it.phase ?? 'triage'))
+  // The four lanes REFLOW; the board never scrolls sideways (owner, 2026-08-18). A lane past the
+  // right edge is a stage of the pipeline the owner cannot see they have, and showing the whole
+  // pipeline at once is the board's entire job.
+  //
+  // 4 → 2 → 1, and never 3: `auto-fit` would have packed three lanes and left `Close` alone on a
+  // second row, which reads as a wrap accident rather than a layout. Halving keeps the rows even
+  // and keeps the pairs meaningful — intake beside work, then review beside close.
+  const lanes = boardW === 0 || boardW >= 716 ? 4 : boardW >= 392 ? 2 : 1
   return (
-    // Four fixed columns floored at a readable width; they fit without scroll at normal widths and
-    // fall back to horizontal scroll only when the pane is very narrow.
-    <div className="overflow-x-auto">
+    <div ref={boardRef}>
       <div
         className="grid gap-3"
-        style={{ gridTemplateColumns: `repeat(${KANBAN_GROUPS.length}, minmax(150px, 1fr))` }}
+        style={{ gridTemplateColumns: `repeat(${lanes}, minmax(0, 1fr))` }}
       >
         {KANBAN_GROUPS.map((g) => {
         const col = inGroup(g.phases)

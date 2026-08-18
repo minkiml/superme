@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { type RefObject, useEffect, useRef, useState } from 'react'
 
 // ── The app's ONE responsive rule ────────────────────────────────────────────────────────────
 // Every page is the same three-band frame: the nav rail, the main surface, the chat rail. Only the
@@ -58,4 +58,45 @@ export function useFrame(chatPref: number, navPref: boolean): Frame {
     stacked: room < MAIN_MIN + CHAT_MIN,
     railWidth: Math.max(CHAT_MIN, Math.min(chatPref, room - MAIN_MIN)),
   }
+}
+
+// ── Inside a pane ────────────────────────────────────────────────────────────────────────────
+// The frame above decides how wide a pane IS; these decide what a pane does with the width it got.
+// Two rules, and they are the same rule twice:
+//
+//   Nothing adapts by growing a horizontal scrollbar. A sideways scrollbar hides content behind a
+//   gesture — the reader cannot see that there is more, and on a trackpad they find it by accident.
+//   Panes REFLOW instead: lanes wrap, labels drop to icons, side-by-side becomes stacked. (Code and
+//   diffs are the one exception, and they are not layout: a wrapped source line is a changed line.)
+//
+//   A pane measures ITSELF, never the window. `useContainerWidth` is the container query this
+//   Tailwind version does not have — the same answer, from a ResizeObserver.
+
+export const PANE = {
+  narrow: 480, // below this a pane shows one column and its controls shed their labels
+  mid: 720, // below this a pane stops trying to hold two full-width things side by side
+}
+
+export function useContainerWidth<T extends HTMLElement>(): [RefObject<T>, number] {
+  const ref = useRef<T>(null)
+  const [w, setW] = useState(0)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const ro = new ResizeObserver(([e]) => setW(e.contentRect.width))
+    ro.observe(el)
+    setW(el.getBoundingClientRect().width)
+    return () => ro.disconnect()
+  }, [])
+  return [ref, w]
+}
+
+// A tab rail sheds its LABELS before it sheds anything else, and the active tab keeps its word —
+// a rail of undifferentiated icons no longer answers "where am I", which is half of what a rail is
+// for. `TAB_SEAT` is roughly what one labelled tab occupies; `extra` is anything else riding the
+// same row. Used by every tab rail in the app, so they all narrow the same way.
+export const TAB_SEAT = 108
+
+export function railTight(width: number, tabs: number, extra = 0): boolean {
+  return width > 0 && width < tabs * TAB_SEAT + extra
 }

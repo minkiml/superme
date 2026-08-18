@@ -11,6 +11,7 @@ import {
   getWorkItemPr, getWorkItemPrDiff, advanceWorkItem,
   type PrView, type PrDiff,
 } from '@/lib/api'
+import { useViewportWidth, PANE } from '@/lib/layout'
 
 // The dedicated PR page (renovation §4.4) — `strict`'s review surface, and readable in any mode.
 //
@@ -97,6 +98,8 @@ export default function PrPage({ itemId, contextId }: {
     return Number.isFinite(saved) && saved >= 20 && saved <= 80 ? saved : 44
   })
   useEffect(() => { localStorage.setItem(SPLIT_KEY, String(split)) }, [split])
+  // The PR page owns the whole window, so the window IS its container.
+  const narrow = useViewportWidth() < PANE.mid + PANE.narrow
 
   // `keepErr` is what makes a refused merge readable: the refusal itself CHANGES the item (the
   // freshness re-vet syncs the branch and moves the phase), so the catch below reloads — and a
@@ -177,18 +180,25 @@ export default function PrPage({ itemId, contextId }: {
         <div className="shrink-0 border-b border-line bg-danger/10 px-4 py-2 text-xs text-danger">{err}</div>
       )}
 
-      <div className="flex min-h-0 flex-1">
+      {/* Below the width where two readable panes fit, they STACK and the splitter goes with them
+          (`lib/layout`): the report reads first, the walkthrough under it, both full width. Two
+          200px columns of prose and code side by side is not a smaller version of this page — it
+          is a different, unreadable one. */}
+      <div className={`flex min-h-0 flex-1 ${narrow ? 'flex-col overflow-y-auto' : ''}`}>
         {/* Left — the review report: whether this should land at all. What to know while READING a
             task's code lives with that task on the right, so the two panes never say the same thing
             twice. */}
-        <div className="min-w-0 overflow-y-auto px-5 py-4" style={{ width: `${split}%` }}>
+        <div
+          className={narrow ? 'shrink-0 border-b border-line px-5 py-4' : 'min-w-0 overflow-y-auto px-5 py-4'}
+          style={narrow ? undefined : { width: `${split}%` }}
+        >
           {pr?.report
             ? <Markdown text={pr.report} variant="doc" tone="dev" />
             : <p className="text-sm text-faint">No review report yet — it is written when the item enters review.</p>}
         </div>
-        <Splitter split={split} onSplit={setSplit} />
+        {!narrow && <Splitter split={split} onSplit={setSplit} />}
         {/* Right — the walkthrough. */}
-        <div className="min-w-0 flex-1 overflow-y-auto px-5 py-4">
+        <div className={`min-w-0 flex-1 px-5 py-4 ${narrow ? '' : 'overflow-y-auto'}`}>
           {!pr ? (
             <div className="flex items-center gap-2 py-6 text-sm text-muted">
               <Loader2 size={14} className="animate-spin" /> Reading the branch…

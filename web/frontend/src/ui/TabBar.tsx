@@ -25,10 +25,10 @@ export default function TabBar<T extends string>({
   const shell = variant === 'outlined' ? 'border border-line bg-surface' : 'bg-hover'
   const selected = variant === 'outlined' ? 'bg-hover text-fg' : 'bg-surface text-fg'
   return (
-    // `max-w-full overflow-x-auto` is the app's tab-rail rule (`lib/layout`): a bar too wide for
-    // its column scrolls inside itself rather than pushing the column wider or losing its last tab
-    // off the edge. The buttons hold their own width so scrolling reveals whole labels.
-    <div className={`${full ? 'flex w-full' : 'inline-flex'} max-w-full overflow-x-auto rounded-lg ${shell} p-0.5 ${text} ${className}`}>
+    // A bar too wide for its column WRAPS (`lib/layout`): it never scrolls sideways and never
+    // pushes the column wider. A tab hidden behind a horizontal scrollbar is a destination the
+    // reader cannot see exists, which is the one thing a set of tabs has to make obvious.
+    <div className={`${full ? 'flex w-full' : 'inline-flex'} max-w-full flex-wrap rounded-lg ${shell} p-0.5 ${text} ${className}`}>
       {tabs.map(([t, lbl]) => (
         <button
           key={t}
