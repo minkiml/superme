@@ -387,9 +387,9 @@ function Metric({ n, unit, tone }: { n: number; unit: string; tone: string }) {
   )
 }
 
-// Open-inbox breakdown by kind (todo · note · idea · question), nonzero only.
+// Open-inbox breakdown by kind (item · note), nonzero only.
 function KindBreakdown({ entries }: { entries: InboxEntry[] }) {
-  const kinds: InboxEntry['kind'][] = ['todo', 'idea', 'note', 'question']
+  const kinds: InboxEntry['kind'][] = ['item', 'note']
   const counts = kinds
     .map((k) => [k, entries.filter((e) => e.kind === k).length] as const)
     .filter(([, n]) => n > 0)

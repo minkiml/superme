@@ -3994,10 +3994,8 @@
             },
             "kind": {
               "enum": [
-                "note",
-                "idea",
-                "todo",
-                "question"
+                "item",
+                "note"
               ],
               "title": "Kind",
               "type": "string"

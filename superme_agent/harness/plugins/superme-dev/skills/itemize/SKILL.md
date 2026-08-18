@@ -18,13 +18,26 @@ is a proposal lost.
 
 ## Step 1 — Read the proposals against the live board
 
-`read_research_proposals` with this item's id returns two lists: **File these** and **Do NOT file
-these**. It has already applied the one rule you may not apply yourself — a proposal that asks the
-owner a question and carries no answer is withheld, because a ticket whose ruling was never given
-reads as startable and whoever picks it up will choose for them.
+**An inbox item is a thing that becomes a WORK ITEM when the owner pushes it.** That is the whole
+definition, and it is the test every proposal has to pass before you file it. A row that cannot
+become one puts a ticket on the owner's board whose own body says there is nothing to do, beside a
+live Push button that would cut a branch for a no-op.
 
-File only from the first list. Never file from the second, and never re-derive either list by
-reading `## Proposed work` yourself.
+`read_research_proposals` with this item's id returns three lists: **File these** and two kinds of
+**Do NOT file these**. It has already applied the two rules you may not apply yourself:
+
+- **no answer** — a proposal that asks the owner a question and carries no ruling. A ticket whose
+  ruling was never given reads as startable, and whoever picks it up will choose for them.
+- **settled, nothing to do** — a proposal the owner ruled by changing nothing ("keep it", "leave
+  it"). The ruling is real; the work is gone. Its home is `## Settled` in the review record, and it
+  is named in step 3 — never filed.
+
+File only from the first list. Never file from either second list, and never re-derive any of them
+by reading `## Proposed work` yourself.
+
+Never file an item to RECORD something — a decision, a ruling, a fact you want kept. The inbox holds
+work. A ruling worth keeping is already a `Rule` in the project's decisions; one that is not is
+spent, and neither belongs on the board.
 
 Then check each filed-able proposal against what already exists — `read_dev_log`, the roadmap, open
 inbox items. A proposal that duplicates live work is **not filed** either. Name the item it

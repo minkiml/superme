@@ -14,7 +14,13 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-_KINDS = {"note", "idea", "todo", "question"}
+# TWO kinds, and they differ in what the row can DO — which is the only reason a kind is worth
+# storing. `item` is a capture that becomes a WORK ITEM when pushed; `note` is the owner's own
+# thought, never pushed, there to be picked up in conversation. The predecessors — note/idea/todo/
+# question — were a flavour nothing read: no code branched on the value, so the four columns bought
+# a decision at capture time and paid nothing back. Only an owner can author a `note`; every agent
+# path mints `item`, which is what makes the distinction trustworthy rather than advisory.
+_KINDS = {"item", "note"}
 # open = awaiting push · pushed = promoted to a work-item.
 # ("pushed" replaces the old "triaged" — the inbox→workspace gesture is "push".)
 # Dropping an item is a HARD DELETE (delete_inbox), not a soft status — so there is no
@@ -323,10 +329,21 @@ class DevStore:
             # `kind`s on one row is the exact shape of the data-model audit's wrong-field bugs.
             if "work_kind" not in cols:
                 c.execute("ALTER TABLE inbox ADD COLUMN work_kind TEXT")
+            # note/idea/todo/question -> `item`, ALL of them, INCLUDING the old "note". Free notes
+            # did not exist before this migration, so no historical row can be one: the old "note"
+            # meant "a captured thought to push", not "mine, keep it off the board".
+            #
+            # Keyed off the presence of a legacy value, not off the values themselves. A table
+            # holding `idea`/`todo`/`question` has never been migrated, so EVERY row in it predates
+            # free notes and converts. Once none remain the guard never fires again, which is what
+            # keeps a real owner-authored `note` safe from a second pass.
+            if c.execute("SELECT 1 FROM inbox WHERE kind IN ('idea','todo','question') "
+                         "LIMIT 1").fetchone():
+                c.execute("UPDATE inbox SET kind='item'")
 
     # --- inbox CRUD -------------------------------------------------------------
 
-    def add_inbox(self, context_id: str, text: str, kind: str = "note",
+    def add_inbox(self, context_id: str, text: str, kind: str = "item",
                   tag: str | None = None,
                   title: str | None = None, origin="user",
                   spawned_from: dict | None = None,

@@ -298,26 +298,24 @@ function LiveTimer({ startedAt }: { startedAt?: number | null }) {
 
 // --- inbox ----------------------------------------------------------------------
 
+// TWO kinds, and they differ in what the row can DO. `item` becomes a work-item when pushed;
+// `note` is the owner's own thought, never pushed, there to be picked up in conversation. The
+// predecessors — todo/idea/note/question — were a flavour nothing read: no code anywhere branched
+// on the value, so four columns bought a decision at capture time and paid nothing back.
 const KIND_OPTS = [
-  { value: 'todo', label: 'todo' },
-  { value: 'idea', label: 'idea' },
+  { value: 'item', label: 'item' },
   { value: 'note', label: 'note' },
-  { value: 'question', label: 'question' },
 ]
-// Each capture kind gets a distinct token-driven marker (warn / universal / dev / danger) so the
-// palette re-themes from the design tokens, not per-file hex.
-const KIND_COLUMNS: { kind: InboxKind; label: string; dot: string }[] = [
-  { kind: 'todo', label: 'Todo', dot: 'bg-warn' },
-  { kind: 'idea', label: 'Idea', dot: 'bg-universal' },
-  { kind: 'note', label: 'Note', dot: 'bg-dev' },
-  { kind: 'question', label: 'Question', dot: 'bg-danger' },
+const KIND_COLUMNS: { kind: InboxKind; label: string; dot: string; blurb: string }[] = [
+  { kind: 'item', label: 'Items', dot: 'bg-warn',
+    blurb: 'Becomes a work-item when you push it' },
+  { kind: 'note', label: 'Notes', dot: 'bg-dev',
+    blurb: 'Yours — never pushed. Ask about one in a general session' },
 ]
 // Left-edge stripe per kind (mirrors the work-card status stripe) — literal classes for Tailwind.
 const KIND_STRIPE: Record<string, string> = {
-  todo: 'border-l-warn',
-  idea: 'border-l-universal',
+  item: 'border-l-warn',
   note: 'border-l-dev',
-  question: 'border-l-danger',
 }
 
 // The inbox is the active capture queue, laid out as columns by kind. Resolving an item clears
@@ -333,7 +331,7 @@ export function InboxView({
 }) {
   const [text, setText] = useState('')
   const [title, setTitle] = useState('')
-  const [kind, setKind] = useState<InboxKind>('todo')
+  const [kind, setKind] = useState<InboxKind>('item')
   const [busy, setBusy] = useState(false)
   // The repo's Quick-config defaults, so a card's Config tab can NAME what an unset row inherits
   // ("Repo default — Sonnet 5") instead of showing a blank that looks like nothing is configured.
@@ -396,9 +394,10 @@ export function InboxView({
           return (
             <div key={col.kind} className="flex min-h-[5rem] flex-col rounded-xl border border-line bg-surface">
               <div className="flex items-center justify-between border-b border-line px-3 py-2">
-                <span className="flex items-center gap-2 text-sm font-semibold text-fg">
-                  <span className={`h-2.5 w-2.5 rounded-[3px] ${col.dot}`} />
+                <span className="flex min-w-0 items-baseline gap-2 text-sm font-semibold text-fg">
+                  <span className={`h-2.5 w-2.5 shrink-0 self-center rounded-[3px] ${col.dot}`} />
                   {col.label}
+                  <span className="truncate text-[11px] font-normal text-faint">{col.blurb}</span>
                 </span>
                 <span className="rounded-full bg-hover px-2 py-0.5 text-xs font-medium tabular-nums text-muted">{its.length}</span>
               </div>
@@ -460,11 +459,17 @@ function InboxCard({
     >
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
-          {e.title ? (
-            <div className="text-[14px] font-medium leading-snug text-fg">{e.title}</div>
-          ) : (
-            <div className="text-[14px] font-medium italic leading-snug text-faint">Untitled</div>
-          )}
+          {/* The id, on the CARD and not only inside the edit view. It is how the owner names a
+              row out loud — in chat, in a message, to me — and one buried a click deep cannot do
+              that job. Monospace + muted so it labels without competing with the title. */}
+          <div className="flex items-baseline gap-1.5">
+            <span className="shrink-0 font-mono text-[11px] text-faint">#{e.id}</span>
+            {e.title ? (
+              <span className="text-[14px] font-medium leading-snug text-fg">{e.title}</span>
+            ) : (
+              <span className="text-[14px] font-medium italic leading-snug text-faint">Untitled</span>
+            )}
+          </div>
           <div className="mt-1 line-clamp-2 text-[12.5px] leading-snug text-muted">{e.text}</div>
         </div>
         <div className="mt-0.5 flex shrink-0 items-center gap-1" onClick={(ev) => ev.stopPropagation()}>
@@ -483,14 +488,18 @@ function InboxCard({
             </>
           ) : (
             <>
-              {/* Push — the primary action, made prominent (tinted pill, always visible). */}
-              <button
-                title="Push to workspace — creates a queued work-item"
-                onClick={onPush}
-                className="inline-flex items-center gap-1 rounded-md bg-accent-soft px-2 py-1 text-[11px] font-medium text-accent-text transition hover:bg-accent hover:text-on-accent"
-              >
-                Push <ArrowRight size={12} />
-              </button>
+              {/* Push — the primary action, made prominent (tinted pill, always visible), and
+                  absent on a NOTE. A note has no work to become, so the button would be a promise
+                  the route refuses anyway; the honest surface is not to offer it. */}
+              {e.kind !== 'note' && (
+                <button
+                  title="Push to workspace — creates a queued work-item"
+                  onClick={onPush}
+                  className="inline-flex items-center gap-1 rounded-md bg-accent-soft px-2 py-1 text-[11px] font-medium text-accent-text transition hover:bg-accent hover:text-on-accent"
+                >
+                  Push <ArrowRight size={12} />
+                </button>
+              )}
               <button
                 title="Drop — delete this item"
                 onClick={() => setConfirmDel(true)}

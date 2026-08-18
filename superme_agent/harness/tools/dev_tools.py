@@ -640,16 +640,15 @@ class CreateInboxItemArgs(TypedDict, total=False):
     body: Required[Annotated[str, ("the item content — a crisp synthesis of intent + the on-point "
                                    "context/decisions and any pointers or references (work-item ids, "
                                    "paths, doc names). NOT a raw transcript dump")]]
-    kind: Annotated[Literal["note", "idea", "todo", "question"], "item flavor (default note)"]
-    work_kind: Annotated[Literal["implementation", "research"],
+    work_kind: Required[Annotated[Literal["implementation", "research"],
                          ("which machinery this becomes when pushed: `implementation` changes code "
                           "(plan → build → vet → review, on its own branch), `research` answers a "
                           "question (investigate → findings, no branch, nothing merged). Pick by "
                           "what the item DELIVERS — an item whose output is a decision, a report "
-                          "or an answer is research even when code prompted it. SET IT whenever "
-                          "you can tell; omit only when you genuinely cannot, which leaves triage "
-                          "to decide alone. Triage re-reads your choice and disputes it if it "
-                          "disagrees, so a wrong one costs a question, not a wrong pipeline")]
+                          "or an answer is research even when code prompted it. REQUIRED: if you "
+                          "cannot name which of the two this becomes, it is not an inbox item and "
+                          "must not be filed. Triage re-reads your choice and disputes it if it "
+                          "disagrees, so a wrong one costs a question, not a wrong pipeline")]]
     spawned_from_item: Annotated[str, ("branch-off ONLY: the parent work-item id this spawns from "
                                        "(requires `relation`)")]
     relation: Annotated[Literal["blocking", "parallel", "spawn"],
@@ -737,11 +736,28 @@ def _create_inbox_item(*, store, context_id, dev_root=None, fire_triage=None, **
                         f"{relation!r} branch-off (those auto-push and branch off git). Use "
                         "`relation: \"spawn\"` — it waits in the inbox for the owner's push.")
             spawned_from = {"item": parent, "relation": relation}
+        # WHAT AN INBOX ITEM IS, checked rather than assumed: a thing that BECOMES A WORK ITEM when
+        # the owner pushes it. `work_kind` is the whole test — naming which machinery it becomes is
+        # the same act as saying it is work at all. Filed live once without it: a research review
+        # ruled "keep the file", and the ruling was filed as an implementation ticket whose own body
+        # read "no file change needed; this records the decision" — a branch waiting to be cut for a
+        # no-op. A decision already made is not work; it belongs in the record that holds it.
+        #
+        # LAST, after the shape checks: a malformed branch-off is the more basic mistake and the
+        # caller should hear about that first. Nothing reaches the store without passing this one.
+        if (wk := _s(args, "work_kind")) not in ("implementation", "research"):
+            return _err(
+                "`work_kind` is required and must be `implementation` or `research`. An inbox item "
+                "is a thing that becomes a WORK ITEM when pushed, so if you cannot name which of "
+                "the two this becomes, it is not an inbox item. A settled decision, a ruling you "
+                "want remembered, or anything with nothing to build belongs in the record that "
+                "holds it — not on the owner's board.")
         try:
+            # `item`, always. `note` is the OWNER's free note — their own thought, never pushed —
+            # so an agent has no way to mint one, which is what makes the distinction trustworthy.
             row = store.add_inbox(
-                context_id, body, kind=_s(args, "kind") or "note",
-                title=title, origin=["agent"], spawned_from=spawned_from,
-                work_kind=_s(args, "work_kind") or None,
+                context_id, body, kind="item",
+                title=title, origin=["agent"], spawned_from=spawned_from, work_kind=wk,
             )
         except Exception as e:
             return _err(f"Could not create the inbox item: {e}")
@@ -1485,6 +1501,11 @@ def _read_research_proposals(*, store, context_id, dev_root=None, bound_item_id=
             return _ok("This review proposes no work. That is a real outcome — report "
                        "`clean_noop` and say so in the Owner's decision line.")
         filed, held = _arts.filed_and_withheld(props)
+        # THREE groups, not two. A ruling that settled a question by changing nothing leaves a
+        # proposal with no deliverable — it is an answer, not work — so it is reported and never
+        # filed, exactly like an unruled one, and for the same reason: an inbox item is a thing that
+        # becomes a work item, and neither of these can.
+        filed, settled = _arts.filed_and_settled(props)
         out = [f"## File these ({len(filed)})"]
         for p in filed:
             out.append(f"\n### {p['title']}")
@@ -1504,6 +1525,15 @@ def _read_research_proposals(*, store, context_id, dev_root=None, bound_item_id=
             out.append(f"- question: {p['question']}")
             out.append(f"- reserved because: {p['reserved_because'] or '(unstated)'}")
         if not held:
+            out.append("- (none)")
+        out.append(f"\n## Do NOT file these ({len(settled)}) — settled, nothing to do")
+        for p in settled:
+            out.append(f"\n### {p['title']}")
+            out.append(f"- question: {p['question'] or '(none)'}")
+            out.append(f"- owner's ruling: {p['answer']}")
+            out.append("- the ruling left nothing to build. Name it under `## Settled` in the "
+                       "review record so the answer is on the record, and file NO item.")
+        if not settled:
             out.append("- (none)")
         if issues := _arts.research_proposal_issues(props):
             out.append("\n## Malformed proposal blocks")

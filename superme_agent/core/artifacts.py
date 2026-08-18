@@ -1145,6 +1145,9 @@ _PROPOSAL_FIELD = re.compile(r"^\s*\*\*(" + "|".join(_PROPOSAL_FIELDS) + r"):\*\
 # Closed set, and the reason the set is closed: an agent that must name which limb a question passes
 # writes fewer questions than one that may simply assert the owner should decide.
 RESERVED_REASONS = ("destructive", "expensive_to_reverse")
+# `Becomes work` is a yes/no, and absent means yes: the ordinary proposal is work, and only a ruling
+# that emptied it has to say so.
+BECOMES_WORK = ("yes", "no")
 
 
 def research_proposals(item_dir: Path) -> list[dict]:
@@ -1199,6 +1202,27 @@ def proposal_promotable(prop: dict) -> bool:
     return bool(str(prop.get("rule") or "").strip()) and bool(str(prop.get("answer") or "").strip())
 
 
+def proposal_becomes_work(prop: dict) -> bool:
+    """Does this proposal still describe WORK once the owner has ruled on it?
+
+    An inbox item is a thing that becomes a work item when pushed. That is the whole definition, and
+    a proposal that fails it was never an item — it is an answer. Half of every keep-or-delete
+    question lands on "keep", which empties the deliverable: nothing to plan, nothing to build,
+    nothing to verify. Filing it anyway puts a ticket on the owner's board whose own body says there
+    is nothing to do, and hands them a Push button that would cut a branch for a no-op.
+
+    Absent reads as YES. The ordinary proposal is work; only a ruling that emptied one declares it."""
+    return str(prop.get("becomes_work") or "yes").strip().lower() != "no"
+
+
+def filed_and_settled(props: list[dict]) -> tuple[list[dict], list[dict]]:
+    """Split the FILE-ABLE proposals into (become work, settled with nothing to do). The second list
+    is reported, never filed: the owner's ruling is on the record, and no ticket carries it."""
+    filed, _ = filed_and_withheld(props)
+    return ([p for p in filed if proposal_becomes_work(p)],
+            [p for p in filed if not proposal_becomes_work(p)])
+
+
 def research_proposal_issues(props: list[dict]) -> list[str]:
     """Structural faults in the proposal blocks — read at the review gate, where the owner can still
     send the item back. A malformed ruling field is worse than none: it decides whether a proposal
@@ -1213,14 +1237,28 @@ def research_proposal_issues(props: list[dict]) -> list[str]:
                               "`Reserved because` — name the limb it passes "
                               f"({' or '.join(RESERVED_REASONS)}) or decide it yourself")
             elif reason not in RESERVED_REASONS:
+                # The commonest way to fail this is to answer the field's own grammar: "Reserved
+                # BECAUSE" invites a reason, and the value that follows the right word is prose.
+                # So the message names where the prose belongs rather than only what is wrong.
+                first = reason.split()[0].rstrip(":,;.").strip("`*")
+                hint = (f" — the word {first!r} is right; delete everything after it and put the "
+                        "reasoning in `Suggested`" if first in RESERVED_REASONS else "")
                 issues.append(f"proposal {label!r}: `Reserved because` must be one of "
-                              f"{'/'.join(RESERVED_REASONS)} (got {reason!r})")
+                              f"{'/'.join(RESERVED_REASONS)} and nothing else "
+                              f"(got {reason!r}){hint}")
             if not p.get("suggested"):
                 issues.append(f"proposal {label!r}: a question with no `Suggested` makes the owner "
                               "do the research again — state the answer you would give")
         if p.get("answer") and not p.get("question"):
             issues.append(f"proposal {label!r}: carries an `Answer` with no `Question` — a ruling "
                           "with no question recorded cannot be read back")
+        becomes = str(p.get("becomes_work") or "").strip().lower()
+        if becomes and becomes not in BECOMES_WORK:
+            issues.append(f"proposal {label!r}: `Becomes work` must be "
+                          f"{' or '.join(BECOMES_WORK)} (got {p['becomes_work']!r})")
+        elif becomes == "no" and not str(p.get("answer") or "").strip():
+            issues.append(f"proposal {label!r}: says `Becomes work: no` with no `Answer` — a "
+                          "proposal is only emptied by a ruling, so with no ruling it is still work")
         if str(p.get("rule") or "").strip() and not str(p.get("answer") or "").strip():
             issues.append(f"proposal {label!r}: carries a `Rule` with no `Answer` — a rule is what "
                           "the owner's ruling established, so it cannot be written before there is "

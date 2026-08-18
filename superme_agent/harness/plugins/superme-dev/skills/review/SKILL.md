@@ -100,8 +100,12 @@ should change" is a finished investigation, not a failed one. Leave `**Owner's d
 2. **A preference whose default is safe and cheap to undo** — yours. State it in
    `**Default applied:**` with what reverses it. The proposal files normally.
 3. **A preference whose default is destructive or expensive to reverse** — the owner's. Write
-   `**Question:**`, `**Reserved because:**` (`destructive` or `expensive_to_reverse` — no other
-   value) and `**Suggested:**`. Omit `**Answer:**`.
+   `**Question:**`, `**Reserved because:**` and `**Suggested:**`. Omit `**Answer:**`.
+
+`**Reserved because:**` takes ONE BARE WORD — `destructive` or `expensive_to_reverse` — and nothing
+else. The field is read as a value, not as a sentence, so appending the reason to it fails the gate
+and the whole review waits on a revision. The reason belongs in `**Suggested:**`, where the owner
+actually reads it.
 
 Never both a default and a question on one proposal. If you cannot name which of the two reasons a
 question passes, it is limb 2 — decide it. An unanswered question is not filed as work, so every one
@@ -115,6 +119,11 @@ drop the question and write the proposal against that `D-NNN`.
 ✗ **Question:** delete the unused `legacy-theme.css`?
   **Reserved because:** expensive_to_reverse     — one revert restores it, so this is limb 2
 ✓ **Default applied:** deleted the unused `legacy-theme.css`; one revert restores it
+
+✗ **Reserved because:** destructive — the file is untracked, so there is no undo
+      — the word is right and the field still fails: everything after it is prose
+✓ **Reserved because:** destructive
+  **Suggested:** delete — it is untracked, so there is no undo either way; …
 ```
 
 **When the owner rules, write `**Answer:**` — and `**Rule:**` only if one is there.** Their answer
@@ -128,6 +137,16 @@ nobody has proposed yet. Two tests, both of which it must pass:
 Most rulings establish nothing, and leaving the line out is the correct outcome, not a gap. Writing
 one anyway costs more than a missing entry: every later phase reads the ledger before asking
 anything, so a rule that overreaches silently suppresses questions that should have been asked.
+
+**Then ask whether the proposal is still work.** An inbox item is a thing that becomes a WORK ITEM
+when pushed — that is the whole definition. A ruling of "keep it", "leave it as it is", "no change"
+empties the proposal: there is nothing to plan, build or verify. Write `**Becomes work:** no` and
+name it under `## Settled` instead. It is not filed, and that is the point: a ticket whose own body
+says there is nothing to do still costs the owner a row on their board and a live Push button that
+would cut a branch for a no-op.
+
+Do not reach for an inbox item as somewhere to keep a decision. If the ruling is worth remembering
+it is a `Rule`; if it is not, it is spent. Neither is work.
 
 ```example
 Owner ruling: "delete the old exporter, don't leave a stub"

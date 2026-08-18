@@ -99,7 +99,8 @@ export type WorkItem = {
   seen_at?: string | null // owner-opened read receipt (S7 attention: terminal + unseen = unread)
 }
 
-export type InboxKind = 'note' | 'idea' | 'todo' | 'question'
+// `item` becomes a work-item when pushed; `note` is the owner's own, never pushed.
+export type InboxKind = 'item' | 'note'
 // open = awaiting push · pushed = promoted to a work-item. (Drop = hard delete, not a status.)
 export type InboxStatus = 'open' | 'pushed'
 export type InboxOrigin = 'user' | 'agent' // who created it (user-made vs agent branch-off proposal)

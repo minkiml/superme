@@ -3935,7 +3935,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "note" | "idea" | "todo" | "question";
+            kind: "item" | "note";
             /** Text */
             text: string;
             /** Tag */

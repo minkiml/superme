@@ -21,7 +21,7 @@ router = APIRouter()
 class InboxBody(BaseModel):
     text: str
     title: str | None = None  # short headline, entered manually on capture
-    kind: str = "note"  # note | idea | todo | question
+    kind: str = "item"  # item (becomes a work-item on push) | note (the owner's own)
     tag: str | None = None
     origin: str = "user"  # user (manual) | agent (branch-off proposal)
     context_id: str = "global"
@@ -119,6 +119,15 @@ async def dev_inbox_push(item_id: int, body: InboxPushBody,
     row = next((r for r in rows if r["id"] == item_id), None)
     if row is None:
         raise HTTPException(status_code=404, detail="inbox item not found")
+    # A `note` is the owner's own thought, not a capture — it has no work to become, so it has no
+    # push. Refused here rather than hidden only in the UI: the button is the reminder, the route
+    # is the rule, and a note reaching triage would put the owner's private jotting on the board.
+    if str(row.get("kind")) == "note":
+        raise HTTPException(
+            status_code=409,
+            detail=("This is a note, not an inbox item — notes stay yours and never become work. "
+                    "Talk it over in a general session; if it turns out to be work, capture it as "
+                    "an item."))
     try:
         wi = inbox_flow.push_inbox_item(dev_store, dev, dev_root(body.context_id), row,
                                         context_id=body.context_id, actor="owner")

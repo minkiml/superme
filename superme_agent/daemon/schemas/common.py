@@ -49,7 +49,8 @@ SpawnRelation = Literal["blocking", "parallel", "spawn"]
 RunOutcome = Literal["success", "clean_noop", "blocked", "approval_required", "exhausted", "stagnated"]
 
 # --- inbox triage ---
-InboxKind = Literal["note", "idea", "todo", "question"]
+# `item` becomes a work-item on push; `note` is the owner's own, never pushed.
+InboxKind = Literal["item", "note"]
 InboxStatus = Literal["open", "pushed"]
 InboxOrigin = Literal["user", "agent"]
 

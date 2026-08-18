@@ -31,10 +31,11 @@ neither when the proposal needs no call at all>
 **Delivers:** <fill:what exists when it is done>
 **Default applied:** <fill:the call you made, and what reverses it — only for a call that is safe and cheap to undo>
 **Question:** <fill:the one call only the owner may make>
-**Reserved because:** <fill:destructive | expensive_to_reverse>
+**Reserved because:** <fill:ONE bare word, `destructive` or `expensive_to_reverse`, and nothing else — no dash, no sentence. The reason it is that word goes in Suggested>
 **Suggested:** <fill:the answer you would give>
 **Answer:** <fill:the owner's ruling — leave this line out entirely until they have given one>
 **Rule:** <fill:the standing rule their ruling establishes, if it establishes one — leave the line out otherwise, which is the usual case>
+**Becomes work:** <fill:`no` when the ruling left nothing to build; leave the line out otherwise>
 
 A proposal that asks a `Question` and carries no `Answer` is NOT filed as work. It waits, and if the
 owner never rules it is dropped rather than queued: a ticket that depends on a ruling nobody gave
@@ -43,6 +44,11 @@ reads as ready, and whoever picks it up will choose for them.
 An `Answer` is spent when the work is done. A `Rule` is kept forever, so write one only when the
 ruling settles something for work nobody has proposed yet — and write it as a sentence that stands
 without this item: no file this item touched, no ticket id, nothing the reader must look up.
+
+**An inbox item is a thing that becomes a WORK ITEM when pushed.** Half of every keep-or-delete
+question is ruled "keep", which empties the proposal: nothing to plan, nothing to build, nothing to
+verify. Mark those `Becomes work: no` and name them under `## Settled` — the ruling belongs on the
+record, and a ticket saying "nothing to do" belongs nowhere.
 
 **Owner's decision:**
 
