@@ -36,11 +36,15 @@ Rules:
   to this ticket, not the back-and-forth.
 - **No invention.** Do NOT create and/or add any new contents/ideas that were never discussed.
 - **Title** = a short, specific headline (what+where), not a sentence and not a slug.
-- **kind** = `todo` for a change to make, `idea` for a proposal to consider, `question` for something
-  to resolve, `note` otherwise (default `note`).
-- **work_kind** = `implementation` if the ticket's deliverable is changed code, `research` if it is
-  an answer, a report or a decision. Set it whenever the discussion settled which; omit it when the
-  discussion genuinely did not, and say in your reply that you left it for triage.
+- **work_kind** (REQUIRED) = `implementation` if the ticket's deliverable is changed code,
+  `research` if it is an answer, a report or a decision. There is no third option and no omitting
+  it: an inbox item is a thing that becomes a WORK ITEM when the owner pushes it, so naming which
+  machinery it becomes is the same act as saying it is work at all. If the discussion did not settle
+  which of the two this is, it did not settle that there is work here — do not file it. A decision
+  already made, or anything with nothing to build, belongs in the record that holds it.
+
+There is no `kind` to set. Every item you file is an `item`; a `note` is the owner's own jotting,
+which never becomes work, and only they can write one.
 
 Then call `create_inbox_item` with the title/body/kind AND the **handoff-brief fields** — the tool
 scaffolds `handoff-brief.md` next to the ticket, and these four fields are its content. Fill them
@@ -100,7 +104,7 @@ genuinely distinct, unrelated pieces of work.
 — nothing matches — so it's a new ticket:
 
 - title: `Status pill on run trace header in Activity dashboard`
-- kind: `todo`
+- work_kind: `implementation`
 - body:
   ```
   **What:** Add a color-coded status pill to a run's execution-trace header: green=done, red=errored,

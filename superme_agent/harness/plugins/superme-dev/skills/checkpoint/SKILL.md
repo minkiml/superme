@@ -47,9 +47,11 @@ Five things, because they live only in the conversation:
    - On a work-item → `plan.md`'s `## Decisions & clarifications`.
    - Project-wide → **Name what the anchor docs will owe**: which of
      `project-prd / architecture / capabilities` this decision changes, and how.
-   - Really work rather than a decision → file it with `create_inbox_item` and say you did. Set
-     `work_kind` only if the thread already settled whether it is code or an answer; a checkpoint
-     usually has not, and an omitted `work_kind` leaves the call to triage.
+   - Really work rather than a decision → file it with `create_inbox_item` and say you did.
+     `work_kind` is REQUIRED: an inbox item is a thing that becomes a work item when the owner
+     pushes it, so naming which machinery it becomes is the same act as saying it is work. If the
+     thread has not settled which, it has not settled that this is work either — leave it as the
+     decision it is, in one of the two destinations above.
 
    "This was never written down" without a destination is a dead end for whoever reads it.
 
