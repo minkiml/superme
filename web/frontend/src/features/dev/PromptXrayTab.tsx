@@ -50,7 +50,7 @@ export default function PromptXrayTab({ contextId }: { contextId: string }) {
   return (
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-3xl p-6">
-        <header className="mb-2 flex items-center gap-2.5">
+        <header className="mb-2 flex flex-wrap items-center gap-x-2.5 gap-y-1">
           <ScanSearch size={18} className="text-dev" />
           <h1 className="text-[17px] font-semibold text-fg">Prompt X-ray</h1>
           <span className="text-[13px] text-faint">the actual input prompts, captured over a real lifecycle</span>

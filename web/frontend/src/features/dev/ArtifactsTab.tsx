@@ -63,7 +63,7 @@ export default function ArtifactsTab({ contextId }: { contextId: string }) {
   return (
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-3xl p-6">
-        <header className="mb-2 flex items-center gap-2.5">
+        <header className="mb-2 flex flex-wrap items-center gap-x-2.5 gap-y-1">
           <ScrollText size={18} className="text-dev" />
           <h1 className="text-[17px] font-semibold text-fg">Artifacts</h1>
           <span className="text-[13px] text-faint">this host's own local operational artifacts</span>

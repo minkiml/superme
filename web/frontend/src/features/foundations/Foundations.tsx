@@ -79,7 +79,7 @@ export default function Foundations() {
   return (
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-4xl p-6">
-        <header className="mb-6 flex items-center gap-2.5">
+        <header className="mb-6 flex flex-wrap items-center gap-x-2.5 gap-y-1">
           <Layers size={18} className="text-universal" />
           <h1 className="text-[17px] font-semibold text-fg">Foundations</h1>
           <span className="text-[13px] text-faint">SuperMe's repo-agnostic identity &amp; machinery</span>
@@ -97,7 +97,7 @@ export default function Foundations() {
               <Loader2 size={14} className="animate-spin" /> Loading…
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="grid cols-narrow gap-3">
               {files.map((f) => (
                 <button
                   key={f.key}
@@ -139,7 +139,7 @@ export default function Foundations() {
             <p className="mb-3 text-[12px] text-faint">Universal constitution — always-on rules, grouped by the mode that loads them. Toggle to control what loads.</p>
             {/* One column per mode (Dev · Core) — matches the Skills/Agents split; no shared column
                 (a constitution is always mode-scoped). */}
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid cols-wide gap-4">
               {(['dev', 'core'] as const).map((mode) => {
                 const rows = consts.filter((c) => c.mode === mode)
                 return (

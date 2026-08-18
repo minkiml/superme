@@ -25,7 +25,7 @@ export default function Internals() {
   return (
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-4xl p-6">
-        <header className="mb-1 flex items-center gap-2.5">
+        <header className="mb-1 flex flex-wrap items-center gap-x-2.5 gap-y-1">
           <Boxes size={18} className="text-universal" />
           <h1 className="text-[17px] font-semibold text-fg">Internals</h1>
           <span className="rounded bg-warn/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-warn">temporary</span>
@@ -61,7 +61,7 @@ export default function Internals() {
                     <h2 className="text-[13px] font-semibold text-fg">{db.name}</h2>
                     <span className="font-mono text-[11px] text-faint">{db.tables.length} tables</span>
                   </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="grid cols-mid gap-3">
                     {db.tables.map((t) => <TableCard key={t.name} t={t} />)}
                   </div>
                 </section>

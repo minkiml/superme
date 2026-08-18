@@ -600,7 +600,7 @@ function ReviewQueue({
         The <code className="text-muted">distill</code> agent proposed these from captured candidates.
         Click one to review its details and the candidates behind it, then accept, reject, or drop.
       </p>
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+      <div className="grid cols-mid gap-2">
         {proposals.map((p) => (
           <ProposalCard key={p.id} p={p} onOpen={() => setOpen(p)} />
         ))}

@@ -18,6 +18,7 @@ import Internals from '@/features/internals/Internals'
 import ChatPanel, { type DevBinding, type SeedTurn } from '@/features/chat/ChatPanel'
 import ConnectModal from '@/features/shell/ConnectModal'
 import { GLOBAL, type ContextRef } from '@/lib/contexts'
+import { useFrame, CHAT_MIN, CHAT_MAX } from '@/lib/layout'
 import { listContexts, type ChatMode, type Run, type SystemHold } from '@/lib/api'
 import { invalidate } from '@/lib/live'
 import { startPush } from '@/lib/live/push'
@@ -34,9 +35,10 @@ const NAV: NavRow[] = [
   { id: 'internals', label: 'Internals', icon: Boxes }, // TEMPORARY internals inventory — deletable
 ]
 
-// Chat-rail drag bounds: wide enough to read a long agent turn, never so wide the main area dies.
-const CHAT_MIN = 360
-const CHAT_MAX = 900
+// (The chat-rail bounds and the whole three-band responsive rule live in `lib/layout` — the frame
+// is the same on every page, so its arithmetic belongs in one place rather than in this file.)
+
+const NAV_COLLAPSE_KEY = 'superme.nav.collapsed'
 
 // The renovated cockpit: full-width top bar + global stats strip, then a row of
 // [navigate · orbit · chater rail] under the strip, over a slim status bar.
@@ -65,6 +67,25 @@ export default function App() {
     const saved = Number(localStorage.getItem('superme.chatWidth'))
     return saved >= CHAT_MIN && saved <= CHAT_MAX ? saved : 480
   })
+  // The nav rail's collapse is the OWNER's choice, held here rather than inside the rail, because
+  // the frame also collapses it on its own when the window can no longer afford the labels — two
+  // writers for one fact only work if the fact lives above both of them.
+  const [navPref, setNavPref] = useState(() => {
+    try { return localStorage.getItem(NAV_COLLAPSE_KEY) === '1' } catch { return false }
+  })
+  const toggleNav = useCallback(() => {
+    setNavPref((c) => {
+      const next = !c
+      try { localStorage.setItem(NAV_COLLAPSE_KEY, next ? '1' : '0') } catch { /* private mode */ }
+      return next
+    })
+  }, [])
+  const frame = useFrame(chatWidth, navPref)
+  // Below the stacking width the two bands cannot share the row, so arriving there closes the rail
+  // rather than letting it cover the surface the owner just navigated to. Opening it deliberately
+  // from the icon strip still works — that is the owner asking for the chat INSTEAD of the board.
+  useEffect(() => { if (frame.stacked) setChatOpen(false) }, [frame.stacked])
+
   const dragging = useRef(false)
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
@@ -262,14 +283,19 @@ export default function App() {
         <NavColumn
           items={NAV}
           active={navActive}
+          collapsed={frame.navIcons}
+          onToggle={toggleNav}
           onSelect={(id) => navigate(id === 'nexus' ? { name: 'nexus' } : { name: 'surface', surface: id as Surface })}
         />
-        <main className="min-w-0 flex-1 overflow-hidden">{Main()}</main>
+        {/* Stacked + open ⇒ the chat IS the surface; main is unmounted from the row rather than
+            squeezed behind it. `hidden` and not a conditional render, so the surface keeps its
+            state (scroll position, open drilldown) while the chat is being read. */}
+        <main className={frame.stacked && chatOpen ? 'hidden' : 'min-w-0 flex-1 overflow-hidden'}>{Main()}</main>
 
         {/* persistent chater rail — kept mounted; full panel when open, a slim quick-switch rail
             (recent sessions + dev/core toggle) when collapsed. */}
         {/* drag handle — only while the rail is open (the collapsed rail has a fixed width) */}
-        {chatOpen && (
+        {chatOpen && !frame.stacked && (
           <div
             onMouseDown={startDrag}
             title="Drag to resize the chat"
@@ -277,9 +303,14 @@ export default function App() {
             className="w-2 shrink-0 cursor-col-resize bg-transparent transition hover:bg-accent/40"
           />
         )}
+        {/* Three states, one element: the icon strip (closed), a resizable band beside the surface,
+            or — when the row is too narrow to split — the whole row. The width is `frame.railWidth`,
+            never the raw preference: see `lib/layout`. */}
         <div
-          style={chatOpen ? { width: chatWidth } : undefined}
-          className={`shrink-0 border-l border-line ${chatOpen ? '' : 'w-14'}`}
+          style={chatOpen && !frame.stacked ? { width: frame.railWidth } : undefined}
+          className={`shrink-0 border-l border-line ${
+            !chatOpen ? 'w-14' : frame.stacked ? 'min-w-0 flex-1' : ''
+          }`}
         >
           <ChatPanel
             key={`${chatContext}:${chatMode}`}

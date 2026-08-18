@@ -128,6 +128,19 @@ export function kindChipClass(kind?: string | null): string {
   return KIND_CHIP[kind ?? 'implementation'] ?? KIND_CHIP.implementation
 }
 
+// The same two hues as `KIND_CHIP`, as bare text — for rows that label the kind inline instead of
+// in a filled chip. One source for the pair, so a kind cannot read blue in one surface and green
+// in another.
+export const KIND_TEXT: Record<string, string> = {
+  implementation: 'text-kind-build',
+  research: 'text-kind-research',
+}
+
+export function workKindLabel(kind?: string | null): string | null {
+  if (!kind) return null
+  return kind.charAt(0).toUpperCase() + kind.slice(1)
+}
+
 export function researchKindLabel(rk?: string | null): string | null {
   if (!rk) return null
   return RESEARCH_KIND_LABEL[rk] ?? rk.replace(/-/g, ' ')

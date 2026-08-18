@@ -89,7 +89,7 @@ export default function QuickConfig({ stats }: { stats: CommandStats }) {
   return (
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-3xl p-6">
-        <header className="mb-6 flex items-center gap-2.5">
+        <header className="mb-6 flex flex-wrap items-center gap-x-2.5 gap-y-1">
           <SlidersHorizontal size={18} className="text-dev" />
           <h1 className="text-[17px] font-semibold text-fg">Quick config</h1>
           <span className="text-[13px] text-faint">command-centre settings</span>

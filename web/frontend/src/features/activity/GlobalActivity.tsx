@@ -81,7 +81,7 @@ export default function GlobalActivity({
   return (
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-4xl p-6">
-        <header className="mb-4 flex items-center gap-2.5">
+        <header className="mb-4 flex flex-wrap items-center gap-x-2.5 gap-y-1">
           <Activity size={18} className="text-dev" />
           <h1 className="text-[17px] font-semibold text-fg">Activity</h1>
           <span className="text-[13px] text-faint">SuperMe agent runs · all repos · both scopes</span>

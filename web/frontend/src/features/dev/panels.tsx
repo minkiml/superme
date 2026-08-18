@@ -11,7 +11,7 @@ import { useLive } from '@/lib/live'
 import { K } from '@/lib/live/keys'
 import { fmtLocal, fmtTokens, fmtDuration, fmtModel, toModelKey, MODELS as MODEL_CATALOG, DEFAULT_MODEL, EFFORTS as EFFORT_CATALOG, DEFAULT_EFFORT } from '@/lib/format'
 import { PHASE_LABEL, PHASE_VERB, STATUS_COLOR, STATUS_LABEL, STATUS_STRIPE, primaryStatus,
-         agoLabel, researchKindLabel } from './common'
+         agoLabel, researchKindLabel, KIND_TEXT, workKindLabel } from './common'
 
 // Phase accent → literal dot class (Tailwind needs the full string present in source).
 // (the per-lane dot colour map lived here until 2026-07-31 — see KANBAN_GROUPS for why it went)
@@ -396,7 +396,7 @@ export function InboxView({
       </div>
 
       {/* columns by kind — 2×2 */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div className="grid cols-mid gap-3">
         {KIND_COLUMNS.map((col) => {
           const its = open.filter((e) => e.kind === col.kind)
           return (
@@ -473,15 +473,22 @@ function InboxCard({
           {/* The id, on the CARD and not only inside the edit view. It is how the owner names a
               row out loud — in chat, in a message, to me — and one buried a click deep cannot do
               that job. Monospace + muted so it labels without competing with the title. */}
+          {/* NO body preview under the title (owner, 2026-08-18). A row's title is written to be
+              the whole row — two clamped lines of the body under it repeated the same sentence in
+              grey, and a card whose second line is always a truncated version of its first reads as
+              unfinished. A title-less row falls back to the body IN the title slot, so the fallback
+              is the identity line rather than a second one. */}
           <div className="flex items-baseline gap-1.5">
             <span className="shrink-0 font-mono text-[11px] text-faint">#{e.id}</span>
+            {/* `overflow-wrap:anywhere` because these strings are written by an agent or by the
+                owner: a title can be one unbroken token (a path, an identifier) longer than the
+                column, and a word that cannot break pushes the whole card wider than its lane. */}
             {e.title ? (
-              <span className="text-[14px] font-medium leading-snug text-fg">{e.title}</span>
+              <span className="min-w-0 text-[14px] font-medium leading-snug text-fg [overflow-wrap:anywhere]">{e.title}</span>
             ) : (
-              <span className="text-[14px] font-medium italic leading-snug text-faint">Untitled</span>
+              <span className="min-w-0 line-clamp-2 text-[13px] leading-snug text-muted [overflow-wrap:anywhere]">{e.text}</span>
             )}
           </div>
-          <div className="mt-1 line-clamp-2 text-[12.5px] leading-snug text-muted">{e.text}</div>
         </div>
         <div className="mt-0.5 flex shrink-0 items-center gap-1" onClick={(ev) => ev.stopPropagation()}>
           {confirmDel ? (
@@ -531,26 +538,29 @@ function InboxCard({
           )}
         </div>
       </div>
-      <div className="mt-1.5 flex items-center gap-2 text-[11px] text-faint">
+      {/* The footer reads left-to-right as WHO · WHAT · WHEN, and the time is pushed to the far
+          edge by `ml-auto`: it is the one field every row carries and the only one worth scanning
+          down a column, which a ragged position defeats. */}
+      <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-faint">
         {e.origin?.includes('user') && (
           <span className="inline-flex items-center gap-0.5 text-success" title="Created / contributed by you">
-            <User size={11} /> user
+            <User size={11} /> User
           </span>
         )}
         {e.origin?.includes('agent') && (
           <span className="inline-flex items-center gap-0.5 text-accent" title="An agent contributed to this item">
-            <Bot size={11} /> agent
+            <Bot size={11} /> Agent
           </span>
         )}
-        {!e.title && <span className="italic">untitled</span>}
         {/* The proposed work kind, shown ONLY when one was filed: an absent label means undecided,
-            which is a real state and not worth a word of its own on every row. */}
+            which is a real state and not worth a word of its own on every row. It carries the same
+            hue the work-item board gives that kind, so the row and the card it becomes agree. */}
         {e.work_kind && (
-          <span className="text-muted" title="Proposed work kind — triage confirms it">
-            {e.work_kind}
+          <span className={KIND_TEXT[e.work_kind] ?? 'text-muted'} title="Proposed work kind — triage confirms it">
+            {workKindLabel(e.work_kind)}
           </span>
         )}
-        <span>{fmtLocal(e.created_at)}</span>
+        <span className="ml-auto shrink-0">{fmtLocal(e.created_at)}</span>
       </div>
     </div>
     {editing && (

@@ -124,6 +124,19 @@ select.bare {
   background-position: right center;
 }
 
+/* ── Container-driven columns ───────────────────────────────────────────────
+   The app is a three-band frame (nav · main · chat rail), so a pane's width has almost nothing to
+   do with the window's: at 1000px of viewport the main surface can be 560px or the whole row,
+   depending on the rails. That makes Tailwind's `sm:` / `md:` prefixes the wrong instrument for
+   anything INSIDE main — they answer a question about the window while the layout is asking one
+   about the column. These three answer the column's own question instead: fit as many tracks as
+   the container can hold at that minimum, then reflow. One vocabulary, every page.
+
+   Pick by the narrowest width the CONTENT stays readable at, not by how many columns you want. */
+.cols-narrow { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+.cols-mid    { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.cols-wide   { grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
+
 /* Quiet, themed scrollbars. */
 *::-webkit-scrollbar {
   width: 10px;

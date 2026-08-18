@@ -72,7 +72,7 @@ export function HarnessPlugins({ only, learned, publishedByKey, onGovernanceChan
         </p>
       )}
       {/* One column per scope (Dev · Core · Shared) rather than a long vertical list. */}
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid cols-mid gap-4">
         {[...scopes].sort((a, b) => (SCOPE_ORDER[a.scope] ?? 9) - (SCOPE_ORDER[b.scope] ?? 9)).map((s) => {
           const entries = only === 'agent' ? [...s.agents] : only === 'skill' ? [...s.skills] : [...s.agents, ...s.skills]
           // Group by category — learned items collapse into the LEARNED bucket.

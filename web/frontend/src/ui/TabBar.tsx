@@ -25,12 +25,15 @@ export default function TabBar<T extends string>({
   const shell = variant === 'outlined' ? 'border border-line bg-surface' : 'bg-hover'
   const selected = variant === 'outlined' ? 'bg-hover text-fg' : 'bg-surface text-fg'
   return (
-    <div className={`${full ? 'flex w-full' : 'inline-flex'} rounded-lg ${shell} p-0.5 ${text} ${className}`}>
+    // `max-w-full overflow-x-auto` is the app's tab-rail rule (`lib/layout`): a bar too wide for
+    // its column scrolls inside itself rather than pushing the column wider or losing its last tab
+    // off the edge. The buttons hold their own width so scrolling reveals whole labels.
+    <div className={`${full ? 'flex w-full' : 'inline-flex'} max-w-full overflow-x-auto rounded-lg ${shell} p-0.5 ${text} ${className}`}>
       {tabs.map(([t, lbl]) => (
         <button
           key={t}
           onClick={() => onChange(t)}
-          className={`rounded-md ${pad} font-medium ${full ? 'flex-1 text-center' : ''} ${value === t ? selected : 'text-muted hover:text-fg'}`}
+          className={`shrink-0 whitespace-nowrap rounded-md ${pad} font-medium ${full ? 'flex-1 text-center' : ''} ${value === t ? selected : 'text-muted hover:text-fg'}`}
         >
           {lbl}
         </button>

@@ -313,7 +313,10 @@ function EnvMap({ data, selected, onSelect }: { data: DevData; selected: Zoom; o
   const openInbox = data.inbox.filter((e) => e.status === 'open')
   const activeCount = data.work_items.filter(isActive).length
   return (
-    <div className="flex items-stretch gap-2">
+    // The two stores and the arrow between them read as one sentence, so they wrap together rather
+    // than being squeezed: below the width where both fit, the second store drops to its own line
+    // and the arrow goes with it.
+    <div className="flex flex-wrap items-stretch gap-2">
       <StoreCard
         className="flex-1" icon={Inbox} label="Inbox" subtitle="capture queue"
         selected={selected === 'inbox'} onClick={() => onSelect('inbox')}

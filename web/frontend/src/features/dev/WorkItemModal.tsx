@@ -1787,8 +1787,7 @@ function GitPane({ it, contextId, actions, busy, onAct, onChanged }: {
   if (!it.git_branch) {
     return (
       <Empty>
-        A detached read-only checkout — this item reads code, it doesn&apos;t change any. There is no
-        branch and nothing to land; the tree is removed when the item closes.
+        There is no branch and nothing to land; the tree is removed when the item closes.
         <div className="mt-2 font-mono text-[11px] text-faint">{it.git_worktree}</div>
       </Empty>
     )

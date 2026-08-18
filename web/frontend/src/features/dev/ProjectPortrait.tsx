@@ -97,7 +97,7 @@ export default function ProjectPortrait({ contextId }: { contextId: string }) {
           get equal weight: what a project refuses is as defining as what it pursues. */}
       {hasGoals ? (
         <Band title="Goals & non-goals" src="project-prd">
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+          <div className="grid cols-wide gap-6">
             <div className="space-y-5">
               {goals.now.length > 0 && (
                 <div>

@@ -39,7 +39,7 @@ function KindStep({ onPick, onClose }: { onPick: (k: Kind) => void; onClose: () 
     <div className="p-6">
       <h2 className="text-[16px] font-semibold text-fg">Connect a domain</h2>
       <p className="mt-1 text-[13px] text-muted">Point SuperMe at a project directory. It becomes a node in the orbit, ready to onboard.</p>
-      <div className="mt-5 grid gap-3 sm:grid-cols-2">
+      <div className="mt-5 grid cols-mid gap-3">
         <button onClick={() => onPick('new')} className="flex flex-col rounded-xl border border-line bg-surface p-4 text-left hover:border-dev">
           <Sparkles size={18} className="text-dev" />
           <div className="mt-2 text-[14px] font-semibold text-fg">New project</div>

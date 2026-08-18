@@ -8,25 +8,19 @@ export type NavRow = { id: string; label: string; icon: LucideIcon; badge?: stri
 type Props = {
   items: NavRow[]
   active: string
+  // Collapsed is decided by the SHELL, not here: it is the owner's stored choice OR the frame's,
+  // when the window can no longer afford the labels (`lib/layout`). This rail renders the answer
+  // and reports the click; it does not hold the state, because two owners for one flag is how a
+  // rail ends up expanded on a window with no room for it.
+  collapsed: boolean
+  onToggle: () => void
   onSelect: (id: string) => void
 }
 
-const COLLAPSE_KEY = 'superme.nav.collapsed'
-
 // The System & Dev local nav (left column). The orbit is the repo navigator, so there's
 // no separate Functional tier here — Me + projects are reached from orbit nodes. Collapsible to an
-// icon rail (persisted); collapsed hides the labels + the light/dark toggle.
-export default function NavColumn({ items, active, onSelect }: Props) {
-  const [collapsed, setCollapsed] = useState(() => {
-    try { return localStorage.getItem(COLLAPSE_KEY) === '1' } catch { return false }
-  })
-  function toggle() {
-    setCollapsed((c) => {
-      const next = !c
-      try { localStorage.setItem(COLLAPSE_KEY, next ? '1' : '0') } catch { /* private mode */ }
-      return next
-    })
-  }
+// icon rail; collapsed hides the labels + the light/dark toggle.
+export default function NavColumn({ items, active, collapsed, onToggle, onSelect }: Props) {
 
   // Collapsed-rail hover tooltip (same pattern as the chat rail): fixed-position so it's never clipped
   // and shows instantly. Anchored to the RIGHT of the icon since this rail sits on the left. `top` is
@@ -39,7 +33,7 @@ export default function NavColumn({ items, active, onSelect }: Props) {
       <div className={`flex items-center pb-2 ${collapsed ? 'justify-center' : 'justify-between px-2.5'}`}>
         {!collapsed && <p className="text-[12px] font-semibold uppercase tracking-wider text-faint">Navigate</p>}
         <button
-          onClick={toggle}
+          onClick={onToggle}
           title={collapsed ? 'Expand navigation' : 'Collapse navigation'}
           aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'}
           className="rounded-md p-1 text-accent-text transition-colors hover:bg-accent/15 hover:text-accent-text"
