@@ -1,5 +1,5 @@
 import { useState, useEffect, type ReactNode } from 'react'
-import { Plus, Trash2, CornerDownRight, GitBranch, ArrowRight, X, Bot, User, Loader2, MessageSquareText } from 'lucide-react'
+import { Plus, Trash2, CornerDownRight, GitBranch, ArrowRight, X, Bot, User, Loader2, MessageSquareText, MessagesSquare } from 'lucide-react'
 import Dropdown from '@/ui/Dropdown'
 import Markdown from '@/ui/Markdown'
 import Modal from '@/ui/Modal'
@@ -324,9 +324,11 @@ export function InboxView({
   entries,
   contextId,
   onChanged,
+  onDiscussNote,
 }: {
   entries: InboxEntry[]
   contextId: string
+  onDiscussNote?: (inboxId: number, title: string) => void
   onChanged: () => void
 }) {
   const [text, setText] = useState('')
@@ -412,6 +414,7 @@ export function InboxView({
                       repoModel={repo?.model_override}
                       repoEffort={repo?.effort_override}
                       onPush={() => pushInbox(e.id, contextId).then(onChanged)}
+                      onDiscuss={onDiscussNote && (() => onDiscussNote(e.id, e.title || e.text.slice(0, 60)))}
                       onSave={(patch) => updateInbox(e.id, patch).then(onChanged)}
                       onDelete={() => deleteInbox(e.id).then(onChanged)}
                     />
@@ -431,6 +434,7 @@ function InboxCard({
   repoModel,
   repoEffort,
   onPush,
+  onDiscuss,
   onSave,
   onDelete,
 }: {
@@ -438,6 +442,7 @@ function InboxCard({
   repoModel?: string | null
   repoEffort?: string | null
   onPush: () => void
+  onDiscuss?: () => void
   onSave: (patch: InboxConfigPatch) => void
   onDelete: () => void
 }) {
@@ -491,6 +496,15 @@ function InboxCard({
               {/* Push — the primary action, made prominent (tinted pill, always visible), and
                   absent on a NOTE. A note has no work to become, so the button would be a promise
                   the route refuses anyway; the honest surface is not to offer it. */}
+              {e.kind === 'note' && onDiscuss && (
+                <button
+                  title="Discuss — opens a new general chat about this note"
+                  onClick={onDiscuss}
+                  className="inline-flex items-center gap-1 rounded-md bg-accent-soft px-2 py-1 text-[11px] font-medium text-accent-text transition hover:bg-accent hover:text-on-accent"
+                >
+                  <MessagesSquare size={12} /> Discuss
+                </button>
+              )}
               {e.kind !== 'note' && (
                 <button
                   title="Push to workspace — creates a queued work-item"
@@ -612,7 +626,25 @@ function InboxEditModal({
           </div>
         ) : (
           <div className="space-y-4">
-            {/* ── how this item will be worked ─────────────────────────────────────────────── */}
+            {/* ── how this item will be worked ───────────────────────────────────────────────
+                ALL FOUR describe a RUN — which gates drive themselves, which machinery the item
+                becomes, which model and effort its runs spend. A note has no runs: it is never
+                pushed, so no work-item is ever born to carry them. Showing the controls anyway
+                asks the owner to configure something that cannot happen, and a Work kind dropdown
+                on a note contradicts the rule that a note is not work at all. */}
+            {kind === 'note' ? (
+              <section className="rounded-md border border-line bg-sunken px-3 py-2.5">
+                <SectionHeader>Setting</SectionHeader>
+                <div className="mt-1.5 text-[12px] leading-relaxed text-muted">
+                  Nothing to set. A note is yours — it is never pushed and never becomes a
+                  work-item, so there are no runs to configure.
+                </div>
+                <div className="mt-1.5 text-[11px] leading-snug text-faint">
+                  Want it worked on? Switch its kind to <span className="font-medium">item</span> on
+                  the Content tab, and the settings come back.
+                </div>
+              </section>
+            ) : (
             <section className="rounded-md border border-line bg-sunken px-3 py-2.5">
               <SectionHeader>Setting</SectionHeader>
               <div className="mt-1 text-[11px] leading-snug text-faint">
@@ -633,6 +665,7 @@ function InboxEditModal({
                 </ConfigRow>
               </div>
             </section>
+            )}
 
             {/* ── what this row is ─────────────────────────────────────────────────────────── */}
             <section className="rounded-md border border-line bg-sunken px-3 py-2.5">

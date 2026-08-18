@@ -154,6 +154,19 @@ export default function App() {
     setSeed({ prompt: query, kind: 'diagnosis', subjectRunId: run.id })
   }
 
+  // Discuss a NOTE — the owner's own jotting, which never becomes work and so has no item session
+  // of its own to open. It gets a fresh GENERAL session instead, born with a turn naming the note by
+  // id: the agent reads it through `read_inbox` and picks the conversation up from there. Same seed
+  // machinery as a diagnosis, minus the kind — this is an ordinary chat that happens to start
+  // pointed at something.
+  function discussNote(repoId: string, inboxId: number, title: string) {
+    setBinding(null)
+    setChatContext(repoId)
+    setChatMode('dev')
+    setChatOpen(true)
+    setSeed({ prompt: `Let's talk about my note inbox:${inboxId} — "${title}". Read it, then tell me what you make of it.` })
+  }
+
   // Attention center → jump to an item. One `navigate`, where this used to be six ordered `set*`
   // calls with a comment explaining which order avoided a race (§6.3): the path IS the destination,
   // and the drilldown now has an address of its own rather than a `focusItem` request handed across
@@ -206,6 +219,7 @@ export default function App() {
           onExit={() => navigate({ name: 'nexus' })}
           repos={[stats.hub, ...stats.nodes].filter((r): r is OrbitRepo => !!r)}
           onSwitch={(r) => navigate({ name: 'dev', repoId: r.id, tab: 'pipeline' })}
+          onDiscussNote={(id, title) => discussNote(routeRepo.id, id, title)}
           boundItemId={binding?.workItemId ?? null}
           onBindItem={(it, ctx) => {
             // Take the chat over as this item's dev thread and reveal the rail.

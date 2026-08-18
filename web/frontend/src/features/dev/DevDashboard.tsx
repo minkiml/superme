@@ -25,12 +25,14 @@ export default function DevDashboard({
   contextId = 'global',
   onBindItem,
   onUnbindItem,
+  onDiscussNote,
   boundItemId,
   embedded = false,
 }: {
   contextId?: string
   onBindItem?: (it: WorkItem, contextId: string) => void
   onUnbindItem?: () => void
+  onDiscussNote?: (inboxId: number, title: string) => void
   boundItemId?: string | null
   embedded?: boolean // hosted inside the Dev workspace shell — the shell owns the header
 }) {
@@ -224,7 +226,7 @@ export default function DevDashboard({
               </ZoomPanel>
             ) : (
               <ZoomPanel title="Inbox" icon={Inbox} meta={`${data.glance.inbox_open ?? 0} open`}>
-                <InboxView entries={data.inbox} contextId={contextId} onChanged={load} />
+                <InboxView entries={data.inbox} contextId={contextId} onChanged={load} onDiscussNote={onDiscussNote} />
               </ZoomPanel>
             )}
           </div>

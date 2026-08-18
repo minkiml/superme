@@ -598,7 +598,10 @@ def _fmt_inbox(rows: list[dict]) -> str:
     """Render inbox rows compactly (open first, newest first — the store's order)."""
     if not rows:
         return "(inbox empty)"
-    out = ["# read_inbox · triage queue, open-first · record: inbox:<id> · <status> · <kind> [· tag · →routed · from …] · <title>"]
+    out = ["# read_inbox · open-first · record: inbox:<id> · <status> · <kind> [· tag · →routed · from …] · <title>"]
+    if any((r.get("kind") or "") == "note" for r in rows):
+        out.append("# `note` rows are the OWNER'S OWN — never pushed, never work. They are here to "
+                   "be discussed: read one in full and take the conversation from there.")
     for r in rows:
         head = f"{_qid('inbox', r['id'])} · {r.get('status') or 'open'} · {r.get('kind') or 'note'}"
         if r.get("tag"):
@@ -2275,7 +2278,10 @@ _MAIN_DEV_TOOLS: list[ToolSpec] = [
     ),
     ToolSpec(
         "read_inbox",
-        "Read this repo's inbox — captured items awaiting triage/routing into real work, open first.",
+        "Read this repo's inbox, open first. TWO kinds share it: `item` — a capture awaiting the "
+        "owner's push into real work — and `note`, the owner's own jotting, which is never pushed "
+        "and never becomes work. A note is there to be TALKED ABOUT: when the owner refers to one, "
+        "read it and pick the conversation up from there.",
         InboxArgs, _list_inbox,
     ),
     ToolSpec(

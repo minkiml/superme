@@ -65,6 +65,7 @@ export default function DevWorkspace({
   onSwitch,
   onBindItem,
   onUnbindItem,
+  onDiscussNote,
   boundItemId,
 }: {
   repo: OrbitRepo
@@ -77,6 +78,7 @@ export default function DevWorkspace({
   onSwitch?: (repo: OrbitRepo) => void // jump this workspace to another repo's dev dashboard
   onBindItem?: (it: WorkItem, contextId: string) => void // clicking a work-item binds the chat to it
   onUnbindItem?: () => void
+  onDiscussNote?: (inboxId: number, title: string) => void
   boundItemId?: string | null
 }) {
   // (There is no "snap to the pipeline tab" effect any more: an item drilldown IS an address whose
@@ -264,6 +266,7 @@ export default function DevWorkspace({
                 embedded
                 onBindItem={onBindItem}
                 onUnbindItem={onUnbindItem}
+                onDiscussNote={onDiscussNote}
                 boundItemId={boundItemId}
               />
             )}
