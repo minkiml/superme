@@ -43,9 +43,14 @@ function OperationBars({ tokens, full }: { tokens: TokenUsage; full: boolean }) 
   for (const [key, node] of Object.entries(cats)) {
     const feats = Object.entries(node.features ?? {})
     if (node.collapsed) {
+      // The bar carries its own parts on hover. One of them is usually most of it — the X-ray probe
+      // is ~80% of maintenance — and a group that can never be opened cannot be acted on.
+      const parts = feats.map(([f, n]) => [featureLabel(f), val(f, n)] as const)
+        .filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1])
       rows.push({
         key, label: node.label || key, color: CATEGORY_COLOR[key] ?? '#8b93a7',
-        value: feats.reduce((sum, [f, n]) => sum + val(f, n), 0),
+        value: parts.reduce((sum, [, v]) => sum + v, 0),
+        title: parts.map(([l, v]) => `${l} ${fmtTokens(v)}`).join(' · '),
       })
     } else {
       for (const [f, n] of feats) {
@@ -160,12 +165,7 @@ function OverTime({ ts, tokens, full }: { ts: TokenTimeseries; tokens: TokenUsag
           </span>
         ))}
       </div>
-      {full && (
-        <p className="text-[12px] leading-relaxed text-faint">
-          Cache read is cheap re-reads of already-cached context — counted in full here, but excluded
-          from the 3-type default because it isn’t new work.
-        </p>
-      )}
+
     </div>
   )
 }
@@ -241,8 +241,7 @@ export default function TokenDrilldown({ stats, onClose }: { stats: CommandStats
             {oldRepos.length > 0 && (
               <p className="pt-1 text-[12px] leading-relaxed text-faint">
                 <span className="text-muted">Old projects</span> — every project you no longer have:
-                disconnected, dropped, or deleted. Their spend is kept, so the bars still add up to
-                the total: {oldRepos.map((r) => r.label).join(' · ')}.
+                disconnected, dropped, or deleted.
               </p>
             )}
           </div>
