@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, GitBranch, Map, Brain, Package, Activity, ScanSearch, ChevronsUpDown, Check, Loader2 } from 'lucide-react'
+import { ArrowLeft, GitBranch, Map, Activity, ChevronsUpDown, Check, Loader2 } from 'lucide-react'
 import { colorFor } from '@/lib/palette'
 import { RepoIcon } from '@/lib/repoIcons'
 import type { OrbitRepo } from '@/features/shell/useCommandStats'
@@ -8,21 +8,19 @@ import { setRepoGit, getRepoBranches } from '@/lib/api/system'
 import { invalidate, useLive } from '@/lib/live'
 import { K } from '@/lib/live/keys'
 import Dropdown from '@/ui/Dropdown'
-import TabBar from '@/ui/TabBar'
 import DevDashboard from './DevDashboard'
 import RoadmapTab from './RoadmapTab'
-import { MemoryGovernance, PublishedInventory } from './LearningGovernance'
-import ArtifactsTab from './ArtifactsTab'
 import ActivityLog from './ActivityLog'
-import PromptXrayTab from './PromptXrayTab'
 import SweepBar from './SweepBar'
 import OnboardingLanding, { type OnboardMode } from './OnboardingLanding'
 import { useContainerWidth, railTight } from '@/lib/layout'
 
 // The Dev workspace — the per-repo Tier-2 detail surface, reached from an orbit node's inspector
 // ("Open dev workspace"). It takes over the main area (the shell owns the header + tabs) and holds
-// the three heavy dev surfaces for ONE repo: the plan→build pipeline, the learning governance queue,
-// and the per-repo activity log. Scoped by contextId (the repo id; only global is fully wired today).
+// this repo's WORK: the plan→build pipeline, the general knowledge behind it, and its activity log.
+//
+// Its learning queue, local artifacts and prompt probe left for System config · Project, where the
+// repo picker governs all four at once. What stays here is what you watch while work is moving.
 
 // Graph is no longer a tab — it's the Kanban⇄Graph toggle inside the Pipeline workspace panel
 // (same population, two projections).
@@ -32,7 +30,7 @@ import { useContainerWidth, railTight } from '@/lib/layout'
 // decision ledger join it as the general/ docs become addressable records rather than prose.
 // `workspace` is Pipeline's other PANE, not a seventh tab: it addresses the board where `pipeline`
 // addresses the capture queue. Both light the same rail entry — see `pipelineTab` below.
-type Tab = 'pipeline' | 'workspace' | 'project' | 'learning' | 'artifacts' | 'activity' | 'promptxray'
+type Tab = 'pipeline' | 'workspace' | 'project' | 'activity'
 // HOW this repo's work lands (workflow-renovation-v2 §2.2): does the diff get its own review gate
 // before it lands. Every repo starts on `fast`. Both landing knobs live in THIS header, beside the
 // repo they govern, rather than in the system-wide Quick config — the place you decide them is the
@@ -51,10 +49,7 @@ const REVIEW_MODE_HELP = 'How work lands · Fast: approving an item merges it. '
 const TABS: { id: Exclude<Tab, 'workspace'>; label: string; icon: typeof GitBranch }[] = [
   { id: 'pipeline', label: 'Pipeline', icon: GitBranch },
   { id: 'project', label: 'Project', icon: Map },
-  { id: 'learning', label: 'Learning', icon: Brain },
-  { id: 'artifacts', label: 'Artifacts', icon: Package },
   { id: 'activity', label: 'Activity', icon: Activity },
-  { id: 'promptxray', label: 'Prompt X-ray', icon: ScanSearch },
 ]
 
 export default function DevWorkspace({
@@ -90,8 +85,8 @@ export default function DevWorkspace({
   // The header measures ITSELF — it can be 500px wide inside a 1400px window, so the window's
   // width is not the question being asked (`lib/layout`).
   const [headRef, headW] = useContainerWidth<HTMLDivElement>()
-  // Same rule every tab rail in the app uses — the six labels plus the sweep control need this
-  // much seat, and below it the labels go (`lib/layout`).
+  // Same rule every tab rail in the app uses — the labels plus the sweep control need this much
+  // seat, and below it the labels go (`lib/layout`).
   const tight = railTight(headW, TABS.length, 140)
   // Either of Pipeline's two panes means the Pipeline tab is what's showing.
   const pipelineTab = tab === 'pipeline' || tab === 'workspace'
@@ -243,7 +238,7 @@ export default function DevWorkspace({
             something you START, and it is gated on the same "is this repo onboarded" question —
             there is nothing to sweep before the project has a memory.
 
-            NARROW: the six labels drop and only the CURRENT tab keeps its word (`lib/layout`). Six
+            NARROW: the labels drop and only the CURRENT tab keeps its word (`lib/layout`). The
             icons fit any pane this app can produce, so nothing is ever hidden behind a sideways
             scroll — and the one label that survives is the one answering "where am I", which is
             the question a rail of undifferentiated icons stops answering. */}
@@ -295,10 +290,7 @@ export default function DevWorkspace({
               />
             )}
             {tab === 'project' && <RoadmapTab contextId={repo.id} />}
-            {tab === 'learning' && <LearningTab contextId={repo.id} />}
-            {tab === 'artifacts' && <ArtifactsTab contextId={repo.id} />}
             {tab === 'activity' && <ActivityLog contextId={repo.id} />}
-            {tab === 'promptxray' && <PromptXrayTab contextId={repo.id} />}
           </>
         )}
       </div>
@@ -371,31 +363,6 @@ function RepoSwitcher({ current, others, onSwitch }: { current: OrbitRepo; other
           ))}
         </div>
       )}
-    </div>
-  )
-}
-
-// Learning — the tier-C governance surface for this repo: the review queue (candidate/knowledge
-// gauges + distill proposals through the two gates) and the published-artifact inventory. Skills &
-// Agents live in Foundations (they're universal, not per-repo), so they're deliberately not here.
-// (The pooled-knowledge asset pool lives in Artifacts → Constitution — it's a constitution surface,
-// not a learning one.)
-function LearningTab({ contextId }: { contextId: string }) {
-  const [view, setView] = useState<'review' | 'published'>('review')
-  return (
-    <div className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-3xl p-6">
-        <TabBar
-          className="mb-5"
-          variant="outlined"
-          full
-          value={view}
-          onChange={setView}
-          tabs={[['review', 'Review'], ['published', 'Published']] as const}
-        />
-        {view === 'review' && <MemoryGovernance contextId={contextId} />}
-        {view === 'published' && <PublishedInventory contextId={contextId} />}
-      </div>
     </div>
   )
 }

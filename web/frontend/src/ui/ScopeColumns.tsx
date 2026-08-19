@@ -13,6 +13,8 @@ import { useContainerWidth, PANE } from '@/lib/layout'
 export type ScopeCard = {
   key: string
   name: string
+  /** A second line under the name — what this artifact is, when the name doesn't say it. */
+  sub?: string
   /** Chips after the name — kind, model, `learned`. */
   badges?: ReactNode
   /** A control at the row's right edge (a toggle, a pin). Its own clicks never reach the card. */
@@ -38,6 +40,8 @@ export type ScopeColumn = {
   groups: ScopeGroup[]
   /** Shown in place of the groups when the scope holds nothing. */
   empty?: string
+  /** A control in the column's heading row — the one act that belongs to the column itself. */
+  action?: ReactNode
 }
 
 const CHIP: Record<string, string> = {
@@ -60,8 +64,14 @@ export default function ScopeColumns({ columns }: { columns: ScopeColumn[] }) {
     <div ref={ref} className="grid items-start gap-3.5" style={{ gridTemplateColumns: `repeat(${cols || 1}, minmax(0, 1fr))` }}>
       {columns.map((col) => (
         <section key={col.key} className="min-w-0 rounded-xl border border-line bg-surface p-3.5">
-          <h3 className={`text-[13px] font-semibold ${TEXT[col.tint]}`}>{col.name}</h3>
-          <div className="mb-3 text-[11px] text-faint">{col.note}</div>
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <h3 className={`text-[13px] font-semibold ${TEXT[col.tint]}`}>{col.name}</h3>
+              <div className="text-[11px] text-faint">{col.note}</div>
+            </div>
+            {col.action}
+          </div>
+          <div className="h-3" />
           {col.groups.every((g) => !g.cards.length) ? (
             <p className="text-[12px] text-faint">{col.empty ?? 'None in this scope.'}</p>
           ) : (
@@ -106,8 +116,11 @@ function Card({ card, icon: Icon }: { card: ScopeCard; icon: LucideIcon }) {
         card.onClick ? 'cursor-pointer transition hover:border-faint' : ''
       }`}
     >
-      <Icon size={13} className="shrink-0 text-faint" />
-      <span className="min-w-0 flex-1 truncate font-mono text-[13px] text-fg">{card.name}</span>
+      <Icon size={13} className="shrink-0 self-start text-faint" style={{ marginTop: card.sub ? 3 : 0 }} />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate font-mono text-[13px] text-fg">{card.name}</span>
+        {card.sub && <span className="mt-0.5 block text-[11.5px] leading-snug text-muted line-clamp-2">{card.sub}</span>}
+      </span>
       {card.badges}
       {/* A control inside a clickable row must not also open it — flipping a toggle is not a request
           to read the file. */}

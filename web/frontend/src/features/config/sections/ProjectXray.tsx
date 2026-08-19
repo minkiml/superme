@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ScanSearch, Loader2, ExternalLink, Play } from 'lucide-react'
+import { Loader2, ExternalLink, Play } from 'lucide-react'
 import { runPromptExtraction, getPromptExtractionStatus, type PromptExtractionStatus } from '@/lib/api/dev'
 import { fmtLocal } from '@/lib/format'
-import { PHASE_LABEL } from './common'
-import { Empty } from './common'
+import { PHASE_LABEL, Empty } from '@/features/dev/common'
+import { PaneHead } from '../controls'
 
 // Prompt X-ray — inspect the REAL input prompts SuperMe sends over a work-item's lifecycle. Rather
 // than capturing every run forever, this fires ONE throwaway probe on demand: a disposable work-item
@@ -11,7 +11,7 @@ import { Empty } from './common'
 // actual input, then tears itself down (no merge, no anchor writes, no leftover) — leaving only the
 // tagged run trace + these captured input pages. Each link opens the full input in a new tab.
 
-export default function PromptXrayTab({ contextId }: { contextId: string }) {
+export default function ProjectXray({ contextId, repoLabel }: { contextId: string; repoLabel: string }) {
   const [st, setSt] = useState<PromptExtractionStatus | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [launching, setLaunching] = useState(false)
@@ -48,18 +48,12 @@ export default function PromptXrayTab({ contextId }: { contextId: string }) {
   const links = st?.links ?? []
 
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-3xl p-6">
-        <header className="mb-2 flex flex-wrap items-center gap-x-2.5 gap-y-1">
-          <ScanSearch size={18} className="text-dev" />
-          <h1 className="text-[17px] font-semibold text-fg">Prompt X-ray</h1>
-          <span className="text-[13px] text-faint">the actual input prompts, captured over a real lifecycle</span>
-        </header>
-        <p className="mb-4 text-[12px] text-faint">
-          Firing a probe spins up a throwaway work-item that runs the real pipeline (triage → plan → build → vet →
-          review → close) on autopilot, captures each phase's input, then destroys itself — nothing is merged and no
-          knowledge is written. Only the captured input pages + run trace remain.
-        </p>
+    <>
+      <PaneHead
+        title="Prompt X-ray"
+        scope={repoLabel}
+        lede="Firing a probe spins up a throwaway work-item that runs the real pipeline (triage → plan → build → vet → review → close) on autopilot, captures each phase's input, then destroys itself — nothing is merged and no knowledge is written. Only the captured input pages and the run trace remain."
+      />
 
       <div className="mb-5 flex items-center gap-3">
         <button
@@ -107,7 +101,6 @@ export default function PromptXrayTab({ contextId }: { contextId: string }) {
           ))}
         </div>
       )}
-      </div>
-    </div>
+    </>
   )
 }

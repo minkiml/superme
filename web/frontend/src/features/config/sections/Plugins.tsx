@@ -5,7 +5,7 @@ import Modal from '@/ui/Modal'
 import SourceEditor from '@/ui/SourceEditor'
 import ScopeColumns, { type ScopeCard, type ScopeColumn, type ScopeGroup } from '@/ui/ScopeColumns'
 import { useEditGate, EditActions } from '@/ui/EditGate'
-import { PublishedFileModal } from '@/features/dev/LearningGovernance'
+import { PublishedFileModal } from '@/features/config/LearningGovernance'
 import {
   getHarnessPlugins, getHarnessFile, saveHarnessFile,
   type HarnessEntry, type HarnessScope, type PublishedItem,

@@ -20,7 +20,7 @@ import { useCallback, useSyncExternalStore } from 'react'
 // `workspace` is not a tab in the rail — it is the Pipeline tab's OTHER pane (the board, versus the
 // capture queue). §6.1 folds it into this slot rather than nesting it under `pipeline`, because the
 // two panes are peers: you are looking at one or the other, never at a workspace inside an inbox.
-export const DEV_TABS = ['pipeline', 'workspace', 'project', 'learning', 'artifacts', 'activity', 'promptxray'] as const
+export const DEV_TABS = ['pipeline', 'workspace', 'project', 'activity'] as const
 export type DevTab = (typeof DEV_TABS)[number]
 
 /**
@@ -45,7 +45,7 @@ export type Surface = (typeof SURFACES)[number]
 export const CONFIG_SECTIONS = [
   'general', 'learning',
   'identity', 'constitution', 'skills', 'agents',
-  'psettings',
+  'psettings', 'plearning', 'partifacts', 'pxray',
 ] as const
 export type ConfigSection = (typeof CONFIG_SECTIONS)[number]
 
@@ -56,6 +56,16 @@ export type ConfigSection = (typeof CONFIG_SECTIONS)[number]
 const LEGACY_SECTION: Record<string, ConfigSection> = {
   '/config': 'general',
   '/foundations': 'identity',
+}
+
+/**
+ * Dev-workspace tabs that became project sections of the popup. The repo stays in the path and the
+ * section joins the query, so the address still names the same repo AND the same content.
+ */
+const LEGACY_DEV_TAB: Record<string, ConfigSection> = {
+  learning: 'plearning',
+  artifacts: 'partifacts',
+  promptxray: 'pxray',
 }
 
 export const PHASES = ['triage', 'plan', 'build', 'vet', 'investigate', 'review', 'close'] as const
@@ -164,6 +174,13 @@ function refresh() {
     const q = new URLSearchParams(window.location.search)
     q.set('config', legacy)
     window.history.replaceState(null, '', `/?${q.toString()}`)
+  }
+  const devTab = window.location.pathname.match(/^(\/repo\/[^/]+\/dev)\/([^/]+)$/)
+  const movedTo = devTab && LEGACY_DEV_TAB[devTab[2]]
+  if (devTab && movedTo) {
+    const q = new URLSearchParams(window.location.search)
+    q.set('config', movedTo)
+    window.history.replaceState(null, '', `${devTab[1]}?${q.toString()}`)
   }
   snapshot = parse(window.location.pathname)
   // Canonicalise: a path that doesn't round-trip through parse/build gets rewritten in place. That

@@ -18,10 +18,10 @@ import {
   type EvalReport, type PublishedItem, type PublishedForm, type ProposalStep,
 } from '@/lib/api'
 import { fmtLocalDate, fmtLocal } from '@/lib/format'
-import { Empty } from './common'
+import { Empty } from '@/features/dev/common'
 
-// Learning governance surfaces (PRD §4.10.4) — the tier-C pipeline hosted in the Dev workspace's
-// Learning tab: `MemoryGovernance` (candidate gauges + the two-gate distill→forge→publish review
+// Learning governance surfaces (PRD §4.10.4) — the tier-C pipeline behind System config's
+// Project · Learning section: `MemoryGovernance` (candidate gauges + the two-gate distill→forge→publish review
 // queue, each proposal carrying its execution trace) and `PublishedInventory` (the live inventory
 // of learned artifacts). `PublishedFileModal` is exported for Foundations' skills/agents surface.
 // Was split out of the old ManageHarness.

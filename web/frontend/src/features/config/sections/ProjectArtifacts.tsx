@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ScrollText, Loader2, Bot, Sparkles, Pencil, X, Plus, Trash2, Check, ShieldCheck, ClipboardCheck, ArrowUp, ArrowDown, Gavel, ChevronRight } from 'lucide-react'
+import { ScrollText, Loader2, Bot, Sparkles, Pencil, X, Plus, Trash2, Check, ShieldCheck, ClipboardCheck, ArrowUp, ArrowDown, Gavel, ChevronRight, Package } from 'lucide-react'
 import Markdown from '@/ui/Markdown'
 import Modal from '@/ui/Modal'
 import Toggle from '@/ui/Toggle'
@@ -13,8 +13,10 @@ import {
   getDecisions, type DecisionEntry,
   type ManagedConstitution, type HarnessEntry,
 } from '@/lib/api'
-import ConstitutionModal from './ConstitutionModal'
-import { Empty } from './common'
+import ScopeColumns, { type ScopeCard, type ScopeColumn } from '@/ui/ScopeColumns'
+import ConstitutionModal from '@/features/dev/ConstitutionModal'
+import { Empty } from '@/features/dev/common'
+import { PaneHead } from '../controls'
 
 // Artifacts — a host's OWN local-harness operational artifacts (Dev workspace tab, after Learning).
 // Mirrors Foundations' universal artifact management (Constitution / Skills / Agents) — same underline
@@ -30,7 +32,7 @@ function stripFrontmatter(text: string): string {
 
 type Sub = 'constitution' | 'skills' | 'agents' | 'verification' | 'decisions' | 'deputy'
 
-export default function ArtifactsTab({ contextId }: { contextId: string }) {
+export default function ProjectArtifacts({ contextId, repoLabel }: { contextId: string; repoLabel: string }) {
   const [sub, setSub] = useState<Sub>('constitution')
   const [consts, setConsts] = useState<ManagedConstitution[] | null>(null)
   const [assets, setAssets] = useState<AssetItem[] | null>(null)
@@ -62,128 +64,113 @@ export default function ArtifactsTab({ contextId }: { contextId: string }) {
   useEffect(load, [contextId])
 
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-3xl p-6">
-        <header className="mb-2 flex flex-wrap items-center gap-x-2.5 gap-y-1">
-          <ScrollText size={18} className="text-dev" />
-          <h1 className="text-[17px] font-semibold text-fg">Artifacts</h1>
-          <span className="text-[13px] text-faint">this host's own local operational artifacts</span>
-        </header>
-        <p className="mb-4 text-[12px] text-faint">
-          Local to this host — enable/disable a constitution to control what loads; preview or edit any skill or agent.
-        </p>
-        <ArtifactTabs
-          className="mb-5"
-          tint="dev"
-          value={sub}
-          onChange={setSub}
-          tabs={[
-            { key: 'constitution', label: 'Constitution', icon: ScrollText, count: consts?.length ?? null },
-            { key: 'skills', label: 'Skills', icon: Sparkles, count: skills?.length ?? null },
-            { key: 'agents', label: 'Agents', icon: Bot, count: agents?.length ?? null },
-            { key: 'verification', label: 'Verification', icon: ClipboardCheck, count: library?.length ?? null },
-            { key: 'decisions', label: 'Decisions', icon: Gavel, count: decisions?.length ?? null },
-            { key: 'deputy', label: 'Deputy', icon: ShieldCheck, count: null },
-          ]}
-        />
-        {err && <div className="mb-3 text-sm text-danger">Couldn’t load — {err}</div>}
+    <>
+      <PaneHead
+        title="Artifacts"
+        scope={repoLabel}
+        lede="This host's own local operational artifacts — enable or disable what loads, and preview or edit any of it."
+      />
+    <ArtifactTabs
+        className="mb-5"
+        tint="dev"
+        value={sub}
+        onChange={setSub}
+        tabs={[
+          { key: 'constitution', label: 'Constitution', icon: ScrollText, count: consts?.length ?? null },
+          { key: 'skills', label: 'Skills', icon: Sparkles, count: skills?.length ?? null },
+          { key: 'agents', label: 'Agents', icon: Bot, count: agents?.length ?? null },
+          { key: 'verification', label: 'Verification', icon: ClipboardCheck, count: library?.length ?? null },
+          { key: 'decisions', label: 'Decisions', icon: Gavel, count: decisions?.length ?? null },
+          { key: 'deputy', label: 'Deputy', icon: ShieldCheck, count: null },
+        ]}
+      />
+      {err && <div className="mb-3 text-sm text-danger">Couldn’t load — {err}</div>}
 
-        {sub === 'constitution' && (
-          <div className="space-y-6">
-            {/* Repo-authored — constitutions forged for this host */}
-            <section>
-              <SectionLabel title="Local" hint="Local (project) constitutions" />
-              <ListOrState list={consts} empty="No local constitutions for this host yet — forge one, and it lands here.">
+      {sub === 'constitution' && (
+        consts === null || assets === null ? <Loading /> : (
+          <ScopeColumns
+            columns={[
+              {
+                key: 'local',
+                name: 'Local',
+                note: 'forged for this host',
+                tint: 'dev',
+                icon: ScrollText,
+                empty: 'No local constitutions yet — forge one, and it lands here.',
+                groups: [{ cards: consts.map((c) => constitutionCard(c, contextId, load, setOpenConst)) }],
+              },
+              {
+                key: 'expertise',
+                name: 'Expertise',
+                note: 'adopted for this repo from the shared pool',
+                tint: 'universal',
+                icon: Package,
+                empty: 'No expertise adopted for this repo yet.',
+                action: <AddAsset pool={assets.filter((a) => !a.adopted)} contextId={contextId} onAdded={load} />,
+                groups: [{ cards: assets.filter((a) => a.adopted).map((a) => assetCard(a, contextId, load)) }],
+              },
+            ]}
+          />
+        )
+      )}
+      {sub === 'skills' && (
+        <ListOrState list={skills} empty="No local skills for this host yet.">
+          {(items) => <PluginRows entries={items} onOpen={setOpenPlugin} />}
+        </ListOrState>
+      )}
+      {sub === 'agents' && (
+        <ListOrState list={agents} empty="No local agents for this host yet.">
+          {(items) => <PluginRows entries={items} onOpen={setOpenPlugin} />}
+        </ListOrState>
+      )}
+      {sub === 'verification' && (
+        <div className="space-y-6">
+          <p className="text-[12px] text-faint">
+            Checks this repo has proven. <b className="text-muted">Standing</b> entries are attached to every plan;
+            the rest are cited by name when they fit. Vet nominates, close writes — promoting is yours.
+          </p>
+          {(['standing', 'available'] as const).map((tier) => (
+            <section key={tier}>
+              <SectionLabel
+                title={tier === 'standing' ? 'Standing' : 'Available'}
+                hint={tier === 'standing' ? 'attached to every plan in this repo' : 'cited by name when it fits'}
+              />
+              <ListOrState
+                list={library ? library.filter((e) => e.tier === tier) : null}
+                empty={tier === 'standing'
+                  ? 'Nothing standing — no check is charged to every item here yet.'
+                  : 'Nothing yet — entries land here when close writes in what vet nominated.'}
+              >
                 {(items) => (
                   <div className="space-y-2">
-                    {items.map((c) => (
-                      <ConstitutionRow key={c.slug} c={c} contextId={contextId} onToggled={load} onOpen={() => setOpenConst(c)} />
-                    ))}
+                    {items.map((e) => <LibraryRow key={e.id} e={e} contextId={contextId} onChanged={load} />)}
                   </div>
                 )}
               </ListOrState>
             </section>
-
-            {/* Pooled knowledge — shared asset pool; onboarding auto-adopts, owner curates per-repo */}
-            <section>
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <div className="flex items-baseline gap-2">
-                  <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted">Expertise</h2>
-                  <span className="text-[11px] text-faint">Expertise adopted for this repo</span>
-                </div>
-                {assets && <AddAsset pool={assets.filter((a) => !a.adopted)} contextId={contextId} onAdded={load} />}
+          ))}
+        </div>
+      )}
+      {sub === 'decisions' && (
+        <div className="space-y-4">
+          <p className="text-[12px] text-faint">
+            Calls YOU ruled on, newest first. Recorded by the kernel the moment you answer at a
+            gate — so every entry here is yours, never an agent's. Later runs read this before
+            asking, which is what stops the same question coming back.
+          </p>
+          <ListOrState
+            list={decisions}
+            empty="Nothing ruled yet — a decision lands here the first time you answer a question at a review gate."
+          >
+            {(items) => (
+              <div className="space-y-2">
+                {items.map((d) => <DecisionRow key={d.id} d={d} />)}
               </div>
-              <ListOrState list={assets ? assets.filter((a) => a.adopted) : null} empty="No expertise adopted for this repo yet.">
-                {(items) => (
-                  <div className="space-y-2">
-                    {items.map((a) => (
-                      <AssetRow key={a.slug} it={a} contextId={contextId} onChanged={load} />
-                    ))}
-                  </div>
-                )}
-              </ListOrState>
-            </section>
-          </div>
-        )}
-        {sub === 'skills' && (
-          <ListOrState list={skills} empty="No local skills for this host yet.">
-            {(items) => <PluginRows entries={items} onOpen={setOpenPlugin} />}
+            )}
           </ListOrState>
-        )}
-        {sub === 'agents' && (
-          <ListOrState list={agents} empty="No local agents for this host yet.">
-            {(items) => <PluginRows entries={items} onOpen={setOpenPlugin} />}
-          </ListOrState>
-        )}
-        {sub === 'verification' && (
-          <div className="space-y-6">
-            <p className="text-[12px] text-faint">
-              Checks this repo has proven. <b className="text-muted">Standing</b> entries are attached to every plan;
-              the rest are cited by name when they fit. Vet nominates, close writes — promoting is yours.
-            </p>
-            {(['standing', 'available'] as const).map((tier) => (
-              <section key={tier}>
-                <SectionLabel
-                  title={tier === 'standing' ? 'Standing' : 'Available'}
-                  hint={tier === 'standing' ? 'attached to every plan in this repo' : 'cited by name when it fits'}
-                />
-                <ListOrState
-                  list={library ? library.filter((e) => e.tier === tier) : null}
-                  empty={tier === 'standing'
-                    ? 'Nothing standing — no check is charged to every item here yet.'
-                    : 'Nothing yet — entries land here when close writes in what vet nominated.'}
-                >
-                  {(items) => (
-                    <div className="space-y-2">
-                      {items.map((e) => <LibraryRow key={e.id} e={e} contextId={contextId} onChanged={load} />)}
-                    </div>
-                  )}
-                </ListOrState>
-              </section>
-            ))}
-          </div>
-        )}
-        {sub === 'decisions' && (
-          <div className="space-y-4">
-            <p className="text-[12px] text-faint">
-              Calls YOU ruled on, newest first. Recorded by the kernel the moment you answer at a
-              gate — so every entry here is yours, never an agent's. Later runs read this before
-              asking, which is what stops the same question coming back.
-            </p>
-            <ListOrState
-              list={decisions}
-              empty="Nothing ruled yet — a decision lands here the first time you answer a question at a review gate."
-            >
-              {(items) => (
-                <div className="space-y-2">
-                  {items.map((d) => <DecisionRow key={d.id} d={d} />)}
-                </div>
-              )}
-            </ListOrState>
-          </div>
-        )}
-        {sub === 'deputy' && <DeputyPanel contextId={contextId} />}
-      </div>
+        </div>
+      )}
+      {sub === 'deputy' && <DeputyPanel contextId={contextId} />}
 
       {openConst && (
         <ConstitutionModal
@@ -200,8 +187,59 @@ export default function ArtifactsTab({ contextId }: { contextId: string }) {
         />
       )}
       {openPlugin && <LocalFileModal contextId={contextId} entry={openPlugin} onClose={() => setOpenPlugin(null)} />}
-    </div>
+    </>
   )
+}
+
+// A local constitution as one card: click to preview, switch to control whether it loads.
+function constitutionCard(
+  c: ManagedConstitution,
+  contextId: string,
+  reload: () => void,
+  open: (c: ManagedConstitution) => void,
+): ScopeCard {
+  return {
+    key: c.slug,
+    name: c.title,
+    sub: c.description || undefined,
+    onClick: () => open(c),
+    trailing: (
+      <Toggle
+        on={c.enabled}
+        onChange={(v) => { toggleConstitution(c.slug, c.scope, v, contextId).then(reload).catch(() => {}) }}
+        onColor="bg-dev"
+        title={c.enabled ? 'Disable' : 'Enable'}
+      />
+    ),
+  }
+}
+
+// An adopted pool asset. Disabling keeps it adopted; Drop un-adopts it and returns it to the picker.
+function assetCard(a: AssetItem, contextId: string, reload: () => void): ScopeCard {
+  const act = (action: AssetAction) => { assetAction(a.slug, action, contextId).then(reload).catch(() => {}) }
+  return {
+    key: a.slug,
+    name: a.title,
+    sub: a.description || undefined,
+    badges: <span className="shrink-0 font-mono text-[10px] text-faint">{a.slug}</span>,
+    trailing: (
+      <span className="flex items-center gap-1.5">
+        <button
+          onClick={() => act('drop')}
+          title="Drop — un-adopt for this repo"
+          className="rounded p-1 text-faint hover:bg-hover hover:text-danger"
+        >
+          <Trash2 size={13} />
+        </button>
+        <Toggle
+          on={a.enabled}
+          onChange={(v) => act(v ? 'enable' : 'disable')}
+          onColor="bg-universal"
+          title={a.enabled ? 'Disable' : 'Enable'}
+        />
+      </span>
+    ),
+  }
 }
 
 function SectionLabel({ title, hint }: { title: string; hint: string }) {

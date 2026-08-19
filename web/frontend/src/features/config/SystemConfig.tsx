@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Bot, Brain, FileText, ScrollText, Settings2, SlidersHorizontal, Sparkles, type LucideIcon } from 'lucide-react'
+import { Bot, Brain, FileText, Package, ScanSearch, ScrollText, Settings2, SlidersHorizontal, Sparkles, type LucideIcon } from 'lucide-react'
 import Modal from '@/ui/Modal'
 import Dropdown from '@/ui/Dropdown'
 import { RepoIcon } from '@/lib/repoIcons'
@@ -11,6 +11,9 @@ import Identity from './sections/Identity'
 import Constitution from './sections/Constitution'
 import Plugins from './sections/Plugins'
 import ProjectSettings from './sections/ProjectSettings'
+import ProjectLearning from './sections/ProjectLearning'
+import ProjectArtifacts from './sections/ProjectArtifacts'
+import ProjectXray from './sections/ProjectXray'
 
 // The System config popup — every knob SuperMe has, in one overlay, grouped by the SCOPE it acts at.
 //
@@ -49,7 +52,12 @@ const GROUPS: Group[] = [
   {
     name: 'Project',
     project: true,
-    rows: [{ id: 'psettings', label: 'Settings', icon: Settings2 }],
+    rows: [
+      { id: 'psettings', label: 'Settings', icon: Settings2 },
+      { id: 'plearning', label: 'Learning', icon: Brain },
+      { id: 'partifacts', label: 'Artifacts', icon: Package },
+      { id: 'pxray', label: 'Prompt X-ray', icon: ScanSearch },
+    ],
   },
 ]
 
@@ -76,7 +84,7 @@ export default function SystemConfig({ repos, initialRepoId, onClose }: {
   const [repoId, setRepoId] = useState(initialRepoId ?? 'global')
   const repo = repos.find((r) => r.id === repoId) ?? repos.find((r) => r.id === 'global') ?? repos[0] ?? null
 
-  const name = (r: OrbitRepo) => (r.id === 'global' ? 'SuperMe Hub' : r.label)
+  function name(r: OrbitRepo) { return r.id === 'global' ? 'SuperMe Hub' : r.label }
 
   return (
     <Modal onClose={onClose} title="System config" maxW="max-w-5xl" column fill>
@@ -134,6 +142,9 @@ export default function SystemConfig({ repos, initialRepoId, onClose }: {
             <p className="py-8 text-center text-[13px] text-faint">No projects connected yet.</p>
           )}
           {section === 'psettings' && repo && <ProjectSettings repo={repo} />}
+          {section === 'plearning' && repo && <ProjectLearning contextId={repo.id} repoLabel={name(repo)} />}
+          {section === 'partifacts' && repo && <ProjectArtifacts contextId={repo.id} repoLabel={name(repo)} />}
+          {section === 'pxray' && repo && <ProjectXray contextId={repo.id} repoLabel={name(repo)} />}
         </div>
       </div>
     </Modal>
