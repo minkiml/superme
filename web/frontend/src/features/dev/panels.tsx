@@ -796,11 +796,6 @@ function InboxItemModal({
               ? 'Pushed — the brief is the work-item’s provenance now'
               : undefined}
           />
-          {!gate.editing && (
-            <button className="rounded-md bg-hover px-3 py-1.5 text-xs text-fg" onClick={onClose}>
-              Close
-            </button>
-          )}
         </div>
       </div>
     </Modal>
