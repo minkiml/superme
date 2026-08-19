@@ -13,7 +13,7 @@ import DevWorkspace from '@/features/dev/DevWorkspace'
 import CoreDashboard from '@/features/core/CoreDashboard'
 import Foundations from '@/features/foundations/Foundations'
 import GlobalActivity from '@/features/activity/GlobalActivity'
-import QuickConfig from '@/features/config/QuickConfig'
+import SystemConfig from '@/features/config/SystemConfig'
 import Internals from '@/features/internals/Internals'
 import ChatPanel, { type DevBinding, type SeedTurn } from '@/features/chat/ChatPanel'
 import ConnectModal from '@/features/shell/ConnectModal'
@@ -31,7 +31,9 @@ const NAV: NavRow[] = [
   { id: 'nexus', label: 'Nexus', icon: Radar },
   { id: 'foundations', label: 'Foundations', icon: Layers },
   { id: 'activity', label: 'Activity', icon: Activity },
-  { id: 'config', label: 'Quick config', icon: SlidersHorizontal },
+  // Not a surface: this row OPENS the System config popup (`?config=`), which lives over whatever
+  // you are looking at rather than replacing it.
+  { id: 'config', label: 'System config', icon: SlidersHorizontal },
   { id: 'internals', label: 'Internals', icon: Boxes }, // TEMPORARY internals inventory — deletable
 ]
 
@@ -135,7 +137,8 @@ export default function App() {
   // The repo a repo-scoped route names. `null` while the roster is still loading — which is the
   // whole reason this is derived rather than stored: deep-linking to /repo/x/dev arrives before
   // /repos has answered, and the old `dest` object could not exist until something clicked it.
-  const repoOf = (id: string) => [stats.hub, ...stats.nodes].find((r) => r?.id === id) ?? null
+  const roster = [stats.hub, ...stats.nodes].filter((r): r is OrbitRepo => !!r)
+  const repoOf = (id: string) => roster.find((r) => r.id === id) ?? null
   const routeRepoId =
     route.name === 'dev' || route.name === 'core' || route.name === 'repo' || route.name === 'item'
       ? route.repoId
@@ -207,6 +210,8 @@ export default function App() {
   // close button, not the back gesture).
   const drill = useParam('stats')
   const closeDrill = () => setParam('stats', null)
+  // Which System config section is open, if any — same query-overlay treatment as `?stats=`.
+  const configSection = useParam('config')
 
   // The inspector is the `repo` route, not a selection: `/repo/:id` is an address you can link to.
   const selectedRepo = route.name === 'repo' ? routeRepo : null
@@ -238,7 +243,7 @@ export default function App() {
           tab={route.name === 'item' ? 'pipeline' : route.tab}
           onTabChange={(tab) => navigate({ name: 'dev', repoId: routeRepo.id, tab })}
           onExit={() => navigate({ name: 'nexus' })}
-          repos={[stats.hub, ...stats.nodes].filter((r): r is OrbitRepo => !!r)}
+          repos={roster}
           onSwitch={(r) => navigate({ name: 'dev', repoId: r.id, tab: 'pipeline' })}
           onDiscussNote={(id, title) => discussNote(routeRepo.id, id, title)}
           boundItemId={binding?.workItemId ?? null}
@@ -256,7 +261,6 @@ export default function App() {
     if (route.name === 'surface') {
       if (route.surface === 'foundations') return <Foundations />
       if (route.surface === 'activity') return <GlobalActivity stats={stats} onDiagnose={launchDiagnosis} />
-      if (route.surface === 'config') return <QuickConfig stats={stats} />
       return <Internals />
     }
     return nexus
@@ -264,7 +268,8 @@ export default function App() {
 
   // Which nav row reads as current. A repo surface belongs to the Nexus branch (that is where you
   // came from and where Back goes), so it keeps the Nexus row lit rather than lighting nothing.
-  const navActive = route.name === 'surface' ? route.surface : 'nexus'
+  // The config row lights while its popup is open — it is the only row that is not a destination.
+  const navActive = configSection ? 'config' : route.name === 'surface' ? route.surface : 'nexus'
 
   return (
     <div className="flex h-full flex-col bg-app font-sans text-fg">
@@ -285,7 +290,11 @@ export default function App() {
           active={navActive}
           collapsed={frame.navIcons}
           onToggle={toggleNav}
-          onSelect={(id) => navigate(id === 'nexus' ? { name: 'nexus' } : { name: 'surface', surface: id as Surface })}
+          onSelect={(id) =>
+            id === 'config'
+              ? setParam('config', 'general')
+              : navigate(id === 'nexus' ? { name: 'nexus' } : { name: 'surface', surface: id as Surface })
+          }
         />
         {/* Stacked + open ⇒ the chat IS the surface; main is unmounted from the row rather than
             squeezed behind it. `hidden` and not a conditional render, so the surface keeps its
@@ -347,6 +356,15 @@ export default function App() {
           navigate({ name: 'nexus' }, { replace: true })
         }}
       />
+      {configSection && (
+        <SystemConfig
+          repos={roster}
+          // Opened over a repo surface, the picker starts on that repo — the project you are looking
+          // at is the project you came here to configure.
+          initialRepoId={routeRepoId}
+          onClose={() => setParam('config', null)}
+        />
+      )}
       {drill === 'tokens' && <TokenDrilldown stats={stats} onClose={closeDrill} />}
       {drill === 'ops' && <AgentsDrilldown stats={stats} onClose={closeDrill} />}
       {drill === 'learning' && <LearningDrilldown onClose={closeDrill} />}

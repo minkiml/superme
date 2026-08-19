@@ -34,8 +34,22 @@ export type DevTab = (typeof DEV_TABS)[number]
 export const STATS_TILES = ['tokens', 'ops', 'learning'] as const
 export type StatsTile = (typeof STATS_TILES)[number]
 
-export const SURFACES = ['foundations', 'activity', 'config', 'internals'] as const
+export const SURFACES = ['foundations', 'activity', 'internals'] as const
 export type Surface = (typeof SURFACES)[number]
+
+/**
+ * Sections of the System config popup, addressed as `?config=<section>`. A QUERY, like `?stats=`
+ * and for the same reason: the popup opens OVER whatever you were looking at, so a path segment
+ * would displace that surface and closing would have to guess where to return.
+ */
+export const CONFIG_SECTIONS = ['general', 'learning', 'psettings'] as const
+export type ConfigSection = (typeof CONFIG_SECTIONS)[number]
+
+/**
+ * Paths that used to be pages and are now sections of that popup. Rewritten on arrival, so an old
+ * link lands on the same content instead of silently on the Nexus.
+ */
+const LEGACY_SECTION: Record<string, ConfigSection> = { '/config': 'general' }
 
 export const PHASES = ['triage', 'plan', 'build', 'vet', 'investigate', 'review', 'close'] as const
 export type Phase = (typeof PHASES)[number]
@@ -138,6 +152,12 @@ const watchers = new Set<() => void>()
 let snapshot: Route = parse(window.location.pathname)
 
 function refresh() {
+  const legacy = LEGACY_SECTION[window.location.pathname]
+  if (legacy) {
+    const q = new URLSearchParams(window.location.search)
+    q.set('config', legacy)
+    window.history.replaceState(null, '', `/?${q.toString()}`)
+  }
   snapshot = parse(window.location.pathname)
   // Canonicalise: a path that doesn't round-trip through parse/build gets rewritten in place. That
   // covers junk (`/nonsense` → `/`, which would otherwise render the Nexus under an address that
