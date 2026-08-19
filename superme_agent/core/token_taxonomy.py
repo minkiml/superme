@@ -34,6 +34,12 @@ FEATURE_CATEGORY = {
     "triage": "workitem",
     "plan": "workitem",
     "build": "workitem",
+    "close": "workitem",
+    # The gate judge that rules on the owner's behalf while they are away (BV-A2). It runs per item,
+    # at that item's gates, and its spend belongs with the phases it judges. Unregistered until
+    # 2026-08-19, when the catch-all it had been falling into grew to the second-largest bar on the
+    # dashboard and this feature was most of it — the self-flag worked; nobody had read it.
+    "deputy": "workitem",
     # A research item's own work: the investigation and the itemization of what it proposed. Its
     # review-entry write-up is no longer here — it is the shared `review` run (below). Same bucket
     # as the implementation phases: all the item's autonomous work.
@@ -42,8 +48,7 @@ FEATURE_CATEGORY = {
     # The review-entry run, every kind (renovation §2.2). Before 2026-07-29 review had NO runner at
     # all, so this feature never appeared in a run row; research's ran under `research-report`.
     "review": "workitem",
-    # Historical: the retired `report` PHASE and the absorbed `research-report` skill. Kept so runs
-    # recorded before those changes still aggregate under work-item rather than self-flagging.
+    # Historical, and folded into `review` for display — see FEATURE_ALIAS.
     "report": "workitem",
     "research-report": "workitem",
     # The loop's fresh-eyes verification runs (build-vet-loop §5) — same bucket as the build
@@ -77,7 +82,32 @@ FEATURE_CATEGORY = {
 # The catch-all: any feature not in the map lands here, KEEPING its own feature name as a sub-bucket.
 UNCLASSIFIED = "other"
 
+# Retired feature → the live feature that absorbed its work. A rename in the code leaves the old
+# name in every run row already written, and reporting both is reporting one job twice under two
+# spellings. Aliasing folds the history into the name the work is called by NOW.
+#
+# This is a presentation mapping, not a correction: the `run` rows keep their own spelling, the
+# amounts are untouched, and nothing is estimated. Only add a pair when the two really are one job.
+FEATURE_ALIAS = {
+    # A research item used to fire a parallel `research-report` skill at review entry, and before
+    # that a `report` phase existed. Both were absorbed into the one shared `review` run.
+    "report": "review",
+    "research-report": "review",
+}
+
+# Categories the dashboard shows as a SINGLE bar instead of one bar per feature. A breakdown is
+# only worth its width where the parts are separately actionable: the work-item phases are (that
+# is the whole cost question), while `learning` reads as one background habit and `other` is
+# maintenance by definition. Declared here so the surface never re-decides it.
+COLLAPSED_CATEGORIES = ("learning", "other")
+
 
 def category_for(feature: str | None) -> str:
     """Map a run feature to its category, defaulting unregistered features to the catch-all."""
-    return FEATURE_CATEGORY.get(feature or "", UNCLASSIFIED)
+    return FEATURE_CATEGORY.get(display_feature(feature), UNCLASSIFIED)
+
+
+def display_feature(feature: str | None) -> str:
+    """The name this feature's work is reported under today — itself, unless it was renamed."""
+    f = feature or ""
+    return FEATURE_ALIAS.get(f, f)

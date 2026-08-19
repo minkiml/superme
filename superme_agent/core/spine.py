@@ -1797,7 +1797,9 @@ class SystemSpine:
         (never lost) so the full 4-type volume = `total + by_type["cache_read"]` (the dashboard toggle).
         Sums EVERY run row, so in-flight spend is included. SuperMe-context only. Back-compat:
         `total`/`by_scope`/`by_feature` are retained. (v1 caveat: forge-eval spend isn't in the spine.)"""
-        from .token_taxonomy import category_for, CATEGORY_ORDER
+        from .token_taxonomy import (
+            category_for, display_feature, CATEGORY_ORDER, CATEGORY_LABELS, COLLAPSED_CATEGORIES,
+        )
         with self._conn() as c:
             rows = c.execute(
                 "SELECT repo_id, mode, feature, COUNT(*) AS n,"
@@ -1828,13 +1830,16 @@ class SystemSpine:
         for r in rows:
             amt = _add_type(by_type, r)  # the row-group's accounted (3-type) amount
             total += amt
+            # Retired feature names report under the live name that absorbed their work — the DB row
+            # keeps its own spelling, only the reporting key moves (token_taxonomy.FEATURE_ALIAS).
+            feat = display_feature(r["feature"])
             by_scope[r["mode"]] = by_scope.get(r["mode"], 0) + amt
-            by_feature[r["feature"]] = by_feature.get(r["feature"], 0) + amt
-            by_feature_cr[r["feature"]] = by_feature_cr.get(r["feature"], 0) + r["tcr"]
-            cat = category_for(r["feature"])
+            by_feature[feat] = by_feature.get(feat, 0) + amt
+            by_feature_cr[feat] = by_feature_cr.get(feat, 0) + r["tcr"]
+            cat = category_for(feat)
             cnode = by_category.setdefault(cat, {"total": 0, "features": {}})
             cnode["total"] += amt
-            cnode["features"][r["feature"]] = cnode["features"].get(r["feature"], 0) + amt
+            cnode["features"][feat] = cnode["features"].get(feat, 0) + amt
             pr = by_repo.setdefault(r["repo_id"], {
                 "total": 0, "runs": 0, "by_scope": {}, "by_feature": {},
                 "by_type": _blank_type(), "by_category": {},
@@ -1843,14 +1848,23 @@ class SystemSpine:
             pr["total"] += amt
             pr["runs"] += r["n"] or 0
             pr["by_scope"][r["mode"]] = pr["by_scope"].get(r["mode"], 0) + amt
-            pr["by_feature"][r["feature"]] = pr["by_feature"].get(r["feature"], 0) + amt
+            pr["by_feature"][feat] = pr["by_feature"].get(feat, 0) + amt
             pcat = pr["by_category"].setdefault(cat, {"total": 0, "features": {}})
             pcat["total"] += amt
-            pcat["features"][r["feature"]] = pcat["features"].get(r["feature"], 0) + amt
+            pcat["features"][feat] = pcat["features"].get(feat, 0) + amt
 
-        # Stable category ordering (known first, catch-all last) for both global + per-repo trees.
+        # Stable category ordering (known first, catch-all last) for both global + per-repo trees,
+        # and each node carries its own display name + whether the surface should draw it as ONE bar
+        # or one bar per feature. Both are taxonomy decisions, so they travel WITH the tree rather
+        # than being re-decided by whoever renders it.
         def _order(tree: dict) -> dict:
-            return {k: tree[k] for k in CATEGORY_ORDER if k in tree}
+            out = {}
+            for k in CATEGORY_ORDER:
+                if k not in tree:
+                    continue
+                out[k] = {**tree[k], "label": CATEGORY_LABELS.get(k, k),
+                          "collapsed": k in COLLAPSED_CATEGORIES}
+            return out
 
         by_category = _order(by_category)
         for pr in by_repo.values():

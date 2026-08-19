@@ -825,6 +825,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/dev/inbox/{item_id}/brief": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Dev Inbox Brief
+         * @description One row's handoff brief (D5). Agent-filed rows carry one from birth; a bare capture has
+         *     none, and `content: null` says so rather than 404-ing — an absent brief is the state the
+         *     owner can still fill, not a missing resource.
+         */
+        get: operations["dev_inbox_brief_dev_inbox__item_id__brief_get"];
+        /**
+         * Dev Inbox Brief Save
+         * @description Overwrite one open row's handoff brief, creating it when the row never had one. 409 once
+         *     the row is pushed — the brief is the item's provenance from the moment it lands there.
+         */
+        put: operations["dev_inbox_brief_save_dev_inbox__item_id__brief_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/dev": {
         parameters: {
             query?: never;
@@ -2979,7 +3006,10 @@ export interface components {
         };
         /**
          * CategoryNode
-         * @description One node of Breakdown 1 — the semantic tree: a category total + its per-feature amounts.
+         * @description One node of Breakdown 1 — the semantic tree: a category total + its per-feature amounts,
+         *     plus how it should READ. `label` is the category's owner-facing name and `collapsed` says the
+         *     surface should draw it as one bar rather than one per feature — both are taxonomy decisions
+         *     (token_taxonomy), carried here so no renderer has to re-make them.
          */
         CategoryNode: {
             /**
@@ -2994,6 +3024,16 @@ export interface components {
             features: {
                 [key: string]: number;
             };
+            /**
+             * Label
+             * @default
+             */
+            label: string;
+            /**
+             * Collapsed
+             * @default false
+             */
+            collapsed: boolean;
         };
         /**
          * CheckpointStub
@@ -3840,7 +3880,7 @@ export interface components {
             title?: string | null;
             /**
              * Kind
-             * @default note
+             * @default item
              */
             kind: string;
             /** Tag */
@@ -3870,6 +3910,35 @@ export interface components {
             autopilot: boolean;
             /** Work Kind */
             work_kind?: string | null;
+        };
+        /** InboxBriefBody */
+        InboxBriefBody: {
+            /** Content */
+            content: string;
+        };
+        /**
+         * InboxBriefResponse
+         * @description One row's handoff brief (D5) — the cold-start context the item it becomes reads first.
+         *     `content` is null when no brief was filed, which is a legal state and not an error. `editable`
+         *     is false once the row is pushed: the brief has moved into the item's `preliminary/`, which is
+         *     provenance.
+         */
+        InboxBriefResponse: {
+            /** Id */
+            id: number;
+            /** Content */
+            content?: string | null;
+            /** Editable */
+            editable: boolean;
+            /** Path */
+            path: string;
+        };
+        /** InboxBriefSaveResponse */
+        InboxBriefSaveResponse: {
+            /** Ok */
+            ok: boolean;
+            /** Id */
+            id: number;
         };
         /** InboxDeleteResponse */
         InboxDeleteResponse: {
@@ -7822,6 +7891,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InboxPushResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dev_inbox_brief_dev_inbox__item_id__brief_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboxBriefResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dev_inbox_brief_save_dev_inbox__item_id__brief_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InboxBriefBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboxBriefSaveResponse"];
                 };
             };
             /** @description Validation Error */

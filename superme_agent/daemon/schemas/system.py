@@ -320,9 +320,14 @@ class TokenTypeSplit(BaseModel):
 
 
 class CategoryNode(BaseModel):
-    """One node of Breakdown 1 — the semantic tree: a category total + its per-feature amounts."""
+    """One node of Breakdown 1 — the semantic tree: a category total + its per-feature amounts,
+    plus how it should READ. `label` is the category's owner-facing name and `collapsed` says the
+    surface should draw it as one bar rather than one per feature — both are taxonomy decisions
+    (token_taxonomy), carried here so no renderer has to re-make them."""
     total: int = 0
     features: dict[str, int] = {}
+    label: str = ""
+    collapsed: bool = False
 
 
 class TokenBucket(BaseModel):

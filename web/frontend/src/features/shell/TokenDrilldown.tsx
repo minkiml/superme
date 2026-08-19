@@ -9,8 +9,10 @@ import Empty from '@/ui/Empty'
 import { getTokens, getTokenTimeseries, type TokenUsage, type TokenTimeseries } from '@/lib/api'
 import type { CommandStats } from './useCommandStats'
 
-// The Tokens tile drill-in — full-visibility accounting (token-usage-tracking-spec). Four lenses over
-// the SAME total: Per repo, By operation (per-feature), By token type (systematic split), Over time.
+// The Tokens tile drill-in — full-visibility accounting (token-usage-tracking-spec). Three lenses over
+// the SAME total: Per repo, By operation, Over time. The systematic token-type split is not a fourth
+// lens: it is ONE number per type with no parts to compare, so it reads as a figure line under the
+// trend that already plots those types, and a tab holding three bars is a tab holding a caption.
 //
 // A single MODE toggle governs the whole popup (2026-07-07): OFF = 3-type (input + cache write +
 // output — the "new work" the tile shows, default); ON = 4-type (also counts cache_read, the cheap
@@ -29,52 +31,44 @@ const TYPE_META: { key: string; label: string; color: string }[] = [
 // Types visible in the active mode: cache_read is 4-type-only.
 const typesFor = (full: boolean) => TYPE_META.filter((t) => full || t.key !== 'cache_read')
 
-// Breakdown 1 — per-operation (per-feature). 3-type by default; 4-type adds each feature's cache_read.
-// Features in the catch-all `other` category (onboarding, diagnosis, compact, unregistered) render as
-// ONE aggregated "Other" bar — meta/maintenance spend reads as a whole, not per-feature. Membership
-// comes from the payload's by_category tree, so the FE never duplicates the taxonomy.
-function FeatureBars({ tokens, full }: { tokens: TokenUsage; full: boolean }) {
-  const base = tokens.global?.by_feature ?? {}
+// Breakdown 1 — per-operation. The shape comes from the payload's category tree, never from a list
+// kept here: each category says whether it reads as ONE bar or one bar per feature (token_taxonomy
+// owns that call), so the work-item phases stay separately comparable — which is the cost question
+// — while background habit and maintenance each land as a single line instead of a tail of slivers.
+function OperationBars({ tokens, full }: { tokens: TokenUsage; full: boolean }) {
+  const cats = tokens.global?.by_category ?? {}
   const cr = tokens.global?.by_feature_cache_read ?? {}
-  const otherFeatures = new Set(Object.keys(
-    (tokens.global?.by_category as Record<string, { features?: Record<string, number> }> | undefined)
-      ?.other?.features ?? {},
-  ))
-  const val = (f: string) => (base[f] ?? 0) + (full ? cr[f] ?? 0 : 0)
-  const rows: Row[] = Object.keys(base)
-    .filter((f) => !otherFeatures.has(f))
-    .map((f) => ({ key: f, label: featureLabel(f), value: val(f), color: featureColor(f) }))
-  const otherTotal = [...otherFeatures].reduce((s, f) => s + val(f), 0)
-  if (otherTotal > 0) rows.push({ key: 'other', label: 'Other', value: otherTotal, color: '#8b93a7' })
+  const val = (f: string, n: number) => n + (full ? cr[f] ?? 0 : 0)
+  const rows: Row[] = []
+  for (const [key, node] of Object.entries(cats)) {
+    const feats = Object.entries(node.features ?? {})
+    if (node.collapsed) {
+      rows.push({
+        key, label: node.label || key, color: CATEGORY_COLOR[key] ?? '#8b93a7',
+        value: feats.reduce((sum, [f, n]) => sum + val(f, n), 0),
+      })
+    } else {
+      for (const [f, n] of feats) {
+        rows.push({ key: f, label: featureLabel(f), value: val(f, n), color: featureColor(f) })
+      }
+    }
+  }
   const shown = rows.filter((r) => r.value > 0).sort((a, b) => b.value - a.value)
   if (!shown.length) return <NoUsage />
   return <Bars rows={shown} />
 }
 
-// Breakdown 2 — the systematic token-type split. cache_read row appears only in 4-type mode.
-function TypeSplit({ tokens, full }: { tokens: TokenUsage; full: boolean }) {
-  const bt = tokens.global?.by_type
-  const rows: Row[] = typesFor(full)
-    .map((t) => ({ key: t.key, label: t.label, value: (bt?.[t.key as keyof typeof bt] as number) ?? 0, color: t.color }))
-    .filter((r) => r.value > 0)
-  if (!rows.length) return <NoUsage />
-  return (
-    <div className="space-y-3">
-      <Bars rows={rows} />
-      {full && (
-        <p className="pt-1 text-[12px] leading-relaxed text-faint">
-          Cache read is cheap re-reads of already-cached context — counted in full here, but excluded
-          from the 3-type default because it isn’t new work.
-        </p>
-      )}
-    </div>
-  )
+// A collapsed category is a bar in its own right, so it needs a colour that is clearly not one of
+// the operations beside it: grey for maintenance, one muted hue for the background habit.
+const CATEGORY_COLOR: Record<string, string> = {
+  learning: '#7c8cf8',
+  other: '#8b93a7',
 }
 
 // Over time — per-day usage. Two modes: a stacked by-type breakdown (each day's bar split by token
 // type, with a hover popover of the exact values) and a cumulative line. Both respect the 3/4-type
 // mode. ("Per day" was dropped — the stacked by-type view already IS the per-day total, split.)
-function OverTime({ ts, full }: { ts: TokenTimeseries; full: boolean }) {
+function OverTime({ ts, tokens, full }: { ts: TokenTimeseries; tokens: TokenUsage | null; full: boolean }) {
   const [mode, setMode] = useState<'type' | 'cumulative'>('type')
   const days = ts.days ?? []
   if (!days.length) return <NoUsage />
@@ -150,14 +144,27 @@ function OverTime({ ts, full }: { ts: TokenTimeseries; full: boolean }) {
         <span>{days[0].day}</span>
         <span>{days[days.length - 1].day}</span>
       </div>
-      {mode === 'type' && (
-        <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px]">
-          {types.map((t) => (
-            <span key={t.key} className="flex items-center gap-1 text-faint">
-              <span className="h-2 w-2 rounded-sm" style={{ backgroundColor: t.color }} /> {t.label}
+      {/* The legend carries each type's RUNNING TOTAL, not just its colour. It is the same key the
+          chart needs, and the systematic split has no parts to compare within a type — one figure
+          per line says everything a bar chart of three bars was saying, in the place the reader is
+          already looking. Shown in both modes: the totals are the period's, which the cumulative
+          view is also about. */}
+      <div className="flex flex-wrap gap-x-5 gap-y-1.5 border-t border-line pt-2.5 text-[11px]">
+        {types.map((t) => (
+          <span key={t.key} className="flex items-center gap-1.5">
+            <span className="h-2 w-2 shrink-0 rounded-sm" style={{ backgroundColor: t.color }} />
+            <span className="text-faint">{t.label}</span>
+            <span className="font-mono tabular-nums text-fg">
+              {fmtTokens((tokens?.global?.by_type?.[t.key as 'input'] as number) ?? 0)}
             </span>
-          ))}
-        </div>
+          </span>
+        ))}
+      </div>
+      {full && (
+        <p className="text-[12px] leading-relaxed text-faint">
+          Cache read is cheap re-reads of already-cached context — counted in full here, but excluded
+          from the 3-type default because it isn’t new work.
+        </p>
       )}
     </div>
   )
@@ -165,7 +172,7 @@ function OverTime({ ts, full }: { ts: TokenTimeseries; full: boolean }) {
 
 const NoUsage = () => <Empty>No usage recorded yet.</Empty>
 
-type Tab = 'repo' | 'category' | 'type' | 'time'
+type Tab = 'repo' | 'category' | 'time'
 
 export default function TokenDrilldown({ stats, onClose }: { stats: CommandStats; onClose: () => void }) {
   const [tab, setTab] = useState<Tab>('repo')
@@ -208,7 +215,6 @@ export default function TokenDrilldown({ stats, onClose }: { stats: CommandStats
   const TABS: [Tab, string][] = [
     ['repo', 'Per repo'],
     ['category', 'By operation'],
-    ['type', 'By token type'],
     ['time', 'Over time'],
   ]
 
@@ -234,15 +240,15 @@ export default function TokenDrilldown({ stats, onClose }: { stats: CommandStats
             <Bars rows={repoRows} />
             {oldRepos.length > 0 && (
               <p className="pt-1 text-[12px] leading-relaxed text-faint">
-                <span className="text-muted">Old projects</span> — disconnected, but their spend is kept:{' '}
-                {oldRepos.map((r) => r.label).join(' · ')}.
+                <span className="text-muted">Old projects</span> — every project you no longer have:
+                disconnected, dropped, or deleted. Their spend is kept, so the bars still add up to
+                the total: {oldRepos.map((r) => r.label).join(' · ')}.
               </p>
             )}
           </div>
         )}
-        {tab === 'category' && (tokens ? <FeatureBars tokens={tokens} full={full} /> : <NoUsage />)}
-        {tab === 'type' && (tokens ? <TypeSplit tokens={tokens} full={full} /> : <NoUsage />)}
-        {tab === 'time' && (ts ? <OverTime ts={ts} full={full} /> : <NoUsage />)}
+        {tab === 'category' && (tokens ? <OperationBars tokens={tokens} full={full} /> : <NoUsage />)}
+        {tab === 'time' && (ts ? <OverTime ts={ts} tokens={tokens} full={full} /> : <NoUsage />)}
       </div>
     </Modal>
   )

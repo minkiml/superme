@@ -1441,8 +1441,13 @@
           "type": "object"
         },
         "CategoryNode": {
-          "description": "One node of Breakdown 1 \u2014 the semantic tree: a category total + its per-feature amounts.",
+          "description": "One node of Breakdown 1 \u2014 the semantic tree: a category total + its per-feature amounts,\nplus how it should READ. `label` is the category's owner-facing name and `collapsed` says the\nsurface should draw it as one bar rather than one per feature \u2014 both are taxonomy decisions\n(token_taxonomy), carried here so no renderer has to re-make them.",
           "properties": {
+            "collapsed": {
+              "default": false,
+              "title": "Collapsed",
+              "type": "boolean"
+            },
             "features": {
               "additionalProperties": {
                 "type": "integer"
@@ -1450,6 +1455,11 @@
               "default": {},
               "title": "Features",
               "type": "object"
+            },
+            "label": {
+              "default": "",
+              "title": "Label",
+              "type": "string"
             },
             "total": {
               "default": 0,
