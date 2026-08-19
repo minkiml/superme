@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Brain, Settings2, SlidersHorizontal, type LucideIcon } from 'lucide-react'
+import { Bot, Brain, FileText, ScrollText, Settings2, SlidersHorizontal, Sparkles, type LucideIcon } from 'lucide-react'
 import Modal from '@/ui/Modal'
 import Dropdown from '@/ui/Dropdown'
 import { RepoIcon } from '@/lib/repoIcons'
@@ -7,6 +7,9 @@ import type { OrbitRepo } from '@/features/shell/useCommandStats'
 import { useParam, setParam, type ConfigSection } from '@/lib/router'
 import General from './sections/General'
 import LearningConfig from './sections/Learning'
+import Identity from './sections/Identity'
+import Constitution from './sections/Constitution'
+import Plugins from './sections/Plugins'
 import ProjectSettings from './sections/ProjectSettings'
 
 // The System config popup — every knob SuperMe has, in one overlay, grouped by the SCOPE it acts at.
@@ -32,6 +35,15 @@ const GROUPS: Group[] = [
     rows: [
       { id: 'general', label: 'General', icon: SlidersHorizontal },
       { id: 'learning', label: 'Learning', icon: Brain },
+    ],
+  },
+  {
+    name: 'System artifacts',
+    rows: [
+      { id: 'identity', label: 'Identity & charters', icon: FileText },
+      { id: 'constitution', label: 'Constitution', icon: ScrollText },
+      { id: 'skills', label: 'Skills', icon: Sparkles },
+      { id: 'agents', label: 'Agents', icon: Bot },
     ],
   },
   {
@@ -112,6 +124,10 @@ export default function SystemConfig({ repos, initialRepoId, onClose }: {
         <div className="min-w-0 flex-1 overflow-y-auto px-6 py-5">
           {section === 'general' && <General />}
           {section === 'learning' && <LearningConfig />}
+          {section === 'identity' && <Identity />}
+          {section === 'constitution' && <Constitution />}
+          {section === 'skills' && <Plugins only="skill" />}
+          {section === 'agents' && <Plugins only="agent" />}
           {/* A project section with no roster yet has nothing to configure — the picker above it is
               empty for the same reason, so say so rather than rendering controls bound to nothing. */}
           {PROJECT_SECTIONS.has(section) && !repo && (

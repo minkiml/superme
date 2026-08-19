@@ -34,7 +34,7 @@ export type DevTab = (typeof DEV_TABS)[number]
 export const STATS_TILES = ['tokens', 'ops', 'learning'] as const
 export type StatsTile = (typeof STATS_TILES)[number]
 
-export const SURFACES = ['foundations', 'activity', 'internals'] as const
+export const SURFACES = ['activity', 'internals'] as const
 export type Surface = (typeof SURFACES)[number]
 
 /**
@@ -42,14 +42,21 @@ export type Surface = (typeof SURFACES)[number]
  * and for the same reason: the popup opens OVER whatever you were looking at, so a path segment
  * would displace that surface and closing would have to guess where to return.
  */
-export const CONFIG_SECTIONS = ['general', 'learning', 'psettings'] as const
+export const CONFIG_SECTIONS = [
+  'general', 'learning',
+  'identity', 'constitution', 'skills', 'agents',
+  'psettings',
+] as const
 export type ConfigSection = (typeof CONFIG_SECTIONS)[number]
 
 /**
  * Paths that used to be pages and are now sections of that popup. Rewritten on arrival, so an old
  * link lands on the same content instead of silently on the Nexus.
  */
-const LEGACY_SECTION: Record<string, ConfigSection> = { '/config': 'general' }
+const LEGACY_SECTION: Record<string, ConfigSection> = {
+  '/config': 'general',
+  '/foundations': 'identity',
+}
 
 export const PHASES = ['triage', 'plan', 'build', 'vet', 'investigate', 'review', 'close'] as const
 export type Phase = (typeof PHASES)[number]

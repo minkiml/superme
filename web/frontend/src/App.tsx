@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Radar, Layers, Activity, SlidersHorizontal, Boxes } from 'lucide-react'
+import { Radar, Activity, SlidersHorizontal, Boxes } from 'lucide-react'
 import TopBar from '@/features/shell/TopBar'
 import NavColumn, { type NavRow } from '@/features/shell/NavColumn'
 import StatusBar from '@/features/shell/StatusBar'
@@ -11,7 +11,6 @@ import LearningDrilldown from '@/features/shell/LearningDrilldown'
 import { useCommandStats, type OrbitRepo } from '@/features/shell/useCommandStats'
 import DevWorkspace from '@/features/dev/DevWorkspace'
 import CoreDashboard from '@/features/core/CoreDashboard'
-import Foundations from '@/features/foundations/Foundations'
 import GlobalActivity from '@/features/activity/GlobalActivity'
 import SystemConfig from '@/features/config/SystemConfig'
 import Internals from '@/features/internals/Internals'
@@ -29,7 +28,6 @@ import { navigate, setParam, useParam, useRoute, type Surface } from '@/lib/rout
 // nodes, so there's no separate Functional tier in the nav.
 const NAV: NavRow[] = [
   { id: 'nexus', label: 'Nexus', icon: Radar },
-  { id: 'foundations', label: 'Foundations', icon: Layers },
   { id: 'activity', label: 'Activity', icon: Activity },
   // Not a surface: this row OPENS the System config popup (`?config=`), which lives over whatever
   // you are looking at rather than replacing it.
@@ -259,7 +257,6 @@ export default function App() {
       )
     }
     if (route.name === 'surface') {
-      if (route.surface === 'foundations') return <Foundations />
       if (route.surface === 'activity') return <GlobalActivity stats={stats} onDiagnose={launchDiagnosis} />
       return <Internals />
     }
