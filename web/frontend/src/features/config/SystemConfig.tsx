@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Bot, Brain, FileText, Package, ScanSearch, ScrollText, Settings2, SlidersHorizontal, Sparkles, type LucideIcon } from 'lucide-react'
 import Modal from '@/ui/Modal'
 import Dropdown from '@/ui/Dropdown'
 import { RepoIcon } from '@/lib/repoIcons'
 import type { OrbitRepo } from '@/features/shell/useCommandStats'
-import { useParam, setParam, type ConfigSection } from '@/lib/router'
+import { CONFIG_SECTIONS, useParam, setParam, type ConfigSection } from '@/lib/router'
 import General from './sections/General'
 import LearningConfig from './sections/Learning'
 import Identity from './sections/Identity'
@@ -61,9 +61,26 @@ const GROUPS: Group[] = [
   },
 ]
 
-const ROWS = GROUPS.flatMap((g) => g.rows)
 /** Which sections are scoped to the picked repo — i.e. need one before they can render. */
 const PROJECT_SECTIONS = new Set(GROUPS.filter((g) => g.project).flatMap((g) => g.rows.map((r) => r.id)))
+
+/**
+ * What each section renders. A RECORD keyed by the router's vocabulary rather than a chain of
+ * conditionals, so a section that is addressable but has no pane is a type error rather than a
+ * blank popup. Project sections receive the picked repo; system ones ignore it.
+ */
+const PANES: Record<ConfigSection, (repo: OrbitRepo, label: string) => ReactNode> = {
+  general: () => <General />,
+  learning: () => <LearningConfig />,
+  identity: () => <Identity />,
+  constitution: () => <Constitution />,
+  skills: () => <Plugins only="skill" />,
+  agents: () => <Plugins only="agent" />,
+  psettings: (repo) => <ProjectSettings repo={repo} />,
+  plearning: (repo, label) => <ProjectLearning contextId={repo.id} repoLabel={label} />,
+  partifacts: (repo, label) => <ProjectArtifacts contextId={repo.id} repoLabel={label} />,
+  pxray: (repo, label) => <ProjectXray contextId={repo.id} repoLabel={label} />,
+}
 
 export default function SystemConfig({ repos, initialRepoId, onClose }: {
   repos: OrbitRepo[]
@@ -74,7 +91,9 @@ export default function SystemConfig({ repos, initialRepoId, onClose }: {
   const param = useParam('config')
   // An unknown section is corrected in place rather than rendered blank: the popup is addressable,
   // so a stale or mistyped link must still land somewhere real.
-  const section = (ROWS.find((r) => r.id === param)?.id ?? 'general') as ConfigSection
+  const section = (CONFIG_SECTIONS as readonly string[]).includes(param ?? '')
+    ? (param as ConfigSection)
+    : 'general'
   useEffect(() => {
     if (param && param !== section) setParam('config', section)
   }, [param, section])
@@ -130,21 +149,13 @@ export default function SystemConfig({ repos, initialRepoId, onClose }: {
         </nav>
 
         <div className="min-w-0 flex-1 overflow-y-auto px-6 py-5">
-          {section === 'general' && <General />}
-          {section === 'learning' && <LearningConfig />}
-          {section === 'identity' && <Identity />}
-          {section === 'constitution' && <Constitution />}
-          {section === 'skills' && <Plugins only="skill" />}
-          {section === 'agents' && <Plugins only="agent" />}
           {/* A project section with no roster yet has nothing to configure — the picker above it is
               empty for the same reason, so say so rather than rendering controls bound to nothing. */}
-          {PROJECT_SECTIONS.has(section) && !repo && (
+          {PROJECT_SECTIONS.has(section) && !repo ? (
             <p className="py-8 text-center text-[13px] text-faint">No projects connected yet.</p>
+          ) : (
+            PANES[section](repo as OrbitRepo, repo ? name(repo) : '')
           )}
-          {section === 'psettings' && repo && <ProjectSettings repo={repo} />}
-          {section === 'plearning' && repo && <ProjectLearning contextId={repo.id} repoLabel={name(repo)} />}
-          {section === 'partifacts' && repo && <ProjectArtifacts contextId={repo.id} repoLabel={name(repo)} />}
-          {section === 'pxray' && repo && <ProjectXray contextId={repo.id} repoLabel={name(repo)} />}
         </div>
       </div>
     </Modal>

@@ -107,7 +107,7 @@ export function Empty({ children }: { children: ReactNode }) {
 // not a second unrelated badge. Colours are the `kind-*` tokens: the status hues (success/warn/
 // danger) say how the work is GOING and the scope hues (core/dev/universal) say where it LIVES, so
 // borrowing either here would make the chip claim something it doesn't mean.
-export const KIND_CHIP: Record<string, string> = {
+const KIND_CHIP: Record<string, string> = {
   implementation: 'bg-kind-build/10 text-kind-build',
   research: 'bg-kind-research/10 text-kind-research',
 }
@@ -115,7 +115,7 @@ export const KIND_CHIP: Record<string, string> = {
 // The family's own word, not the slug. `deep-diagnosis` is two words to a reader and a hyphen only
 // to the filesystem, and an unknown value renders as-is rather than vanishing — a family added to
 // the backend shows up unstyled instead of silently unlabelled.
-export const RESEARCH_KIND_LABEL: Record<string, string> = {
+const RESEARCH_KIND_LABEL: Record<string, string> = {
   audit: 'Audit',
   refactoring: 'Refactoring',
   housekeeping: 'Housekeeping',

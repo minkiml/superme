@@ -156,7 +156,7 @@ export function NumberField({ value, min, max, unit, onChange }: {
 }
 
 /** The deputy's four rungs. Filled up to and including the selected one; click a rung to set it. */
-export const STRICTNESS_ORDER = ['low', 'medium', 'high', 'extra'] as const
+const STRICTNESS_ORDER = ['low', 'medium', 'high', 'extra'] as const
 
 export function GaugeBar({ level, onPick }: { level: string; onPick: (l: string) => void }) {
   const idx = Math.max(0, STRICTNESS_ORDER.indexOf(level as (typeof STRICTNESS_ORDER)[number]))
