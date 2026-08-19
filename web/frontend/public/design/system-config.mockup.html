@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>System config — popup mockup (layout A)</title>
+<style>
+  /* Tokens lifted verbatim from web/frontend/src/index.css so this reads as the real cockpit. */
+  :root{
+    --app:#0d0e11; --sidebar:#08090b; --surface:#161a1d; --sunken:#101216; --hover:#1e2128;
+    --line:#262a31; --fg:#e7e9ee; --muted:#99a0ac; --faint:#5f6572;
+    --accent:#6ea8fe; --accent-soft:#17263f; --accent-text:#a7c7ff; --on-accent:#08121f;
+    --success:#5fe3b3; --danger:#f0796f; --warn:#e0a35a; --deputy:#c084fc;
+    --dev:#6ea8fe; --core:#5fe3b3; --universal:#b9a7f7;
+    --grad:linear-gradient(105deg,#6ea8fe,#a78bfa 38%,#f472b6 68%,#34d399);
+    --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  html.light{
+    --app:#f4f5f7; --sidebar:#eceef1; --surface:#ffffff; --sunken:#eef0f3; --hover:#e7e9ee;
+    --line:#dfe2e8; --fg:#1c2024; --muted:#5c626c; --faint:#9aa0ab;
+    --accent:#3b82f6; --accent-soft:#e4edfd; --accent-text:#2563eb; --on-accent:#fff;
+    --success:#128a5b; --danger:#d0453b; --warn:#b4791f; --deputy:#9333ea;
+    --dev:#3b82f6; --core:#12a878; --universal:#7c6cf0;
+  }
+  *{box-sizing:border-box;margin:0}
+  body{background:var(--app);color:var(--fg);font:15px/1.5 'Inter',system-ui,-apple-system,sans-serif;
+       min-height:100vh;display:flex;align-items:center;justify-content:center;padding:28px}
+  button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+
+  /* ── the popup shell ─────────────────────────────────────────────────── */
+  .modal{width:min(1120px,100%);height:min(780px,88vh);display:flex;flex-direction:column;
+         background:var(--app);border:1px solid var(--line);border-radius:16px;overflow:hidden;
+         box-shadow:0 24px 60px rgba(0,0,0,.45)}
+  .modal-head{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--line);flex:none}
+  .modal-head .logo{width:20px;height:20px;border-radius:6px;background:var(--grad);flex:none}
+  .modal-head h1{font-size:15px;font-weight:600}
+  .modal-head .x{margin-left:auto;color:var(--muted);padding:4px;border-radius:6px;line-height:0}
+  .modal-head .x:hover{background:var(--hover);color:var(--fg)}
+  .body{flex:1;min-height:0;display:flex}
+
+  /* ── sidebar ─────────────────────────────────────────────────────────── */
+  .side{width:216px;flex:none;background:var(--sidebar);border-right:1px solid var(--line);
+        padding:12px 10px;overflow-y:auto}
+  .grp{font:600 10px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--faint);
+       padding:14px 10px 6px}
+  .grp:first-child{padding-top:2px}
+  .row{display:flex;align-items:center;gap:9px;width:100%;padding:7px 10px;border-radius:8px;
+       font-size:13.5px;color:var(--muted);text-align:left}
+  .row:hover{background:var(--hover);color:var(--fg)}
+  .row.on{background:var(--hover);color:var(--fg);font-weight:500}
+  .row .ico{width:15px;flex:none;color:var(--faint);line-height:0}
+  .row.on .ico{color:var(--fg)}
+  .row .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .row .ct{font:11px var(--mono);color:var(--faint)}
+  .row .badge{font:600 10px var(--mono);color:var(--on-accent);background:var(--warn);
+              border-radius:999px;padding:1px 6px}
+  /* the repo picker that governs the PROJECT group */
+  .pickwrap{padding:2px 4px 6px}
+  select.pick{width:100%;appearance:none;background:var(--sunken);color:var(--fg);
+    border:1px solid var(--line);border-radius:8px;padding:6px 26px 6px 10px;font-size:12.5px;cursor:pointer;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2399a0ac' stroke-width='2' stroke-linecap='round'><polyline points='6 9 12 15 18 9'/></svg>");
+    background-repeat:no-repeat;background-position:right 7px center}
+  .grp.proj{display:flex;align-items:center;gap:6px;padding-bottom:4px}
+
+  /* ── pane ────────────────────────────────────────────────────────────── */
+  .pane{flex:1;min-width:0;overflow-y:auto;padding:22px 26px 34px}
+  .pane-head{display:flex;align-items:baseline;gap:10px;margin-bottom:4px}
+  .pane-head h2{font-size:17px;font-weight:600}
+  .scope{font:600 9.5px var(--mono);letter-spacing:.1em;text-transform:uppercase;
+         border-radius:4px;padding:2px 7px}
+  .scope.u{color:var(--universal);background:color-mix(in srgb,var(--universal) 15%,transparent)}
+  .scope.p{color:var(--dev);background:color-mix(in srgb,var(--dev) 15%,transparent)}
+  .scope.s{color:var(--muted);background:var(--hover)}
+  .lede{font-size:12.5px;color:var(--faint);margin-bottom:18px;max-width:62em;line-height:1.6}
+
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:12px}
+  .card + .card{margin-top:14px}
+  .cr{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 15px}
+  .cr + .cr{border-top:1px solid var(--line)}
+  .cr .t{font-size:14px}
+  .cr .h{font-size:12px;color:var(--faint);margin-top:2px;max-width:44em;line-height:1.5}
+  .sec{font:600 10.5px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);
+       margin:24px 0 9px}
+  .sec:first-of-type{margin-top:0}
+  .sub{font-size:12px;color:var(--faint);margin:-4px 0 9px;line-height:1.55}
+
+  /* controls */
+  .tog{width:34px;height:19px;border-radius:999px;background:var(--line);position:relative;flex:none;transition:.15s}
+  .tog::after{content:"";position:absolute;top:2px;left:2px;width:15px;height:15px;border-radius:50%;
+              background:var(--surface);transition:.15s;box-shadow:0 1px 2px rgba(0,0,0,.4)}
+  .tog.on{background:var(--accent)} .tog.on::after{left:17px}
+  .tog.on.dev{background:var(--dev)} .tog.on.core{background:var(--core)}
+  .num{display:inline-flex;align-items:baseline;gap:5px;background:var(--sunken);border:1px solid var(--line);
+       border-radius:7px;padding:4px 9px;font:13px var(--mono);min-width:84px;justify-content:flex-end}
+  .num span{font-size:11px;color:var(--faint)}
+  .gauge{display:flex;align-items:center;gap:8px}
+  .gauge i{width:26px;height:15px;border-radius:3px;background:var(--line);display:block}
+  .gauge i.f{background:var(--accent)} .gauge i.x{background:var(--warn)}
+  .gauge b{font:400 11px var(--mono);color:var(--faint);width:46px;text-transform:capitalize}
+  .btn{display:inline-flex;align-items:center;gap:6px;border-radius:8px;padding:6px 12px;font-size:13px;font-weight:500}
+  .btn.pri{background:var(--accent);color:var(--on-accent)}
+  .btn.ghost{border:1px solid var(--line);color:var(--muted)}
+  .btn.soft{border:1px solid color-mix(in srgb,var(--accent) 40%,transparent);
+            background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent-text)}
+  .btn[disabled]{opacity:.4;cursor:default}
+  .foot{display:flex;justify-content:flex-end;gap:8px;padding:11px 15px;border-top:1px solid var(--line)}
+
+  /* underline sub-tabs (ui/ArtifactTabs) */
+  .tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin-bottom:16px;flex-wrap:wrap}
+  .tabs button{display:flex;align-items:center;gap:6px;padding:8px 11px;font-size:13px;font-weight:500;
+               color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px}
+  .tabs button:hover{color:var(--fg)}
+  .tabs button.on{color:var(--fg);border-bottom-color:var(--tint,var(--dev))}
+  .tabs button .c{font:11px var(--mono);color:var(--faint)}
+
+  /* file cards / lists */
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:11px}
+  .fcard{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:13px 15px;text-align:left}
+  .fcard:hover{border-color:var(--faint)}
+  .fcard .h{display:flex;align-items:center;gap:8px}
+  .fcard .h b{font-size:14px;font-weight:600}
+  .fcard p{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.5;
+           display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .tag{font:600 9.5px var(--mono);letter-spacing:.08em;text-transform:uppercase;margin-left:auto}
+  .tag.u{color:var(--universal)} .tag.d{color:var(--dev)} .tag.c{color:var(--core)}
+  .lrow{display:flex;align-items:center;gap:9px;background:var(--surface);border:1px solid var(--line);
+        border-radius:10px;padding:9px 13px;font-size:13.5px}
+  .lrow + .lrow{margin-top:7px}
+  .lrow .k{font:600 9.5px var(--mono);letter-spacing:.08em;text-transform:uppercase;flex:none}
+  .lrow .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pill{font:600 9px var(--mono);letter-spacing:.06em;text-transform:uppercase;border-radius:4px;padding:2px 6px;flex:none}
+  .pill.warn{color:var(--warn);background:color-mix(in srgb,var(--warn) 15%,transparent)}
+  .pill.uni{color:var(--universal);background:color-mix(in srgb,var(--universal) 15%,transparent)}
+  .pill.ok{color:var(--success);background:color-mix(in srgb,var(--success) 15%,transparent)}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .colcard{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:13px}
+  .colcard h3{font-size:13px;font-weight:600} .colcard .s{font-size:11px;color:var(--faint);margin-bottom:10px}
+  .colcard .lrow{background:var(--sunken)}
+
+  /* proposal cards */
+  .pcards{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .pcard{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px;text-align:left}
+  .pcard:hover{border-color:var(--faint)}
+  .pcard .st{font:600 9px var(--mono);letter-spacing:.06em;text-transform:uppercase}
+  .pcard .ti{font-size:13px;margin:7px 0 9px;line-height:1.4}
+  .pcard .mt{font:10.5px var(--mono);color:var(--faint)}
+  .gauges{display:flex;gap:10px;margin-bottom:16px}
+  .gt{flex:1;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:11px 13px}
+  .gt .v{font:600 21px var(--mono);letter-spacing:-.02em}
+  .gt .l{font-size:11.5px;color:var(--faint);margin-top:1px}
+
+  /* the proposed-move callout */
+  .propose{border:1px dashed color-mix(in srgb,var(--warn) 55%,transparent);border-radius:12px;
+           background:color-mix(in srgb,var(--warn) 7%,transparent);margin-top:14px}
+  .propose .q{font-size:11.5px;color:var(--warn);padding:9px 15px 0;line-height:1.5}
+
+  .xrow{display:flex;align-items:center;gap:12px;background:var(--surface);border-bottom:1px solid var(--line);
+        padding:9px 13px;font-size:13px}
+  .xrow:last-child{border-bottom:none}
+  .xrow .n{width:20px;height:20px;border-radius:50%;background:color-mix(in srgb,var(--dev) 18%,transparent);
+           color:var(--dev);font:600 10px var(--mono);display:grid;place-items:center;flex:none}
+  .xrow .p{width:62px;font-weight:500;flex:none} .xrow .m{font:11.5px var(--mono);color:var(--faint)}
+  .listbox{border:1px solid var(--line);border-radius:10px;overflow:hidden}
+
+  /* Controls line up in COLUMNS, not to their own content: a picker sized to its own word makes
+     every row start somewhere different, which is what the misalignment was. */
+  .ctrl{display:flex;align-items:center;gap:8px;flex:none}
+  .dd{display:inline-flex;align-items:center;justify-content:space-between;gap:8px;background:var(--sunken);
+      border:1px solid var(--line);border-radius:8px;padding:5px 10px;font-size:13px;color:var(--fg);white-space:nowrap}
+  .dd.w-model{width:116px} .dd.w-effort{width:104px} .dd.w-wide{width:150px}
+  .dd::after{content:"";width:0;height:0;border:4px solid transparent;border-top-color:var(--muted);margin-top:3px;flex:none}
+
+  /* Scope columns — the Foundations skills layout: one column per loading scope, each grouped by
+     category. One shape for constitution, skills and agents, so the three read identically. */
+  .scopes{display:grid;gap:12px;align-items:start}
+  .scopes.n3{grid-template-columns:repeat(3,1fr)} .scopes.n2{grid-template-columns:repeat(2,1fr)}
+  .scol{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:13px;min-width:0}
+  .scol > h3{font-size:13px;font-weight:600}
+  .scol > .s{font-size:11px;color:var(--faint);margin-bottom:11px}
+  .cat{display:flex;align-items:center;gap:6px;margin:13px 0 7px}
+  .cat b{font:600 9.5px var(--mono);letter-spacing:.08em;text-transform:uppercase;border-radius:4px;padding:2px 7px}
+  .cat span{font:10.5px var(--mono);color:var(--faint)}
+  .acard{display:flex;align-items:center;gap:8px;background:var(--sunken);border:1px solid var(--line);
+         border-radius:9px;padding:8px 11px;width:100%;text-align:left;font:13px var(--mono);color:var(--fg)}
+  .acard + .acard{margin-top:6px}
+  .acard:hover{border-color:var(--faint)}
+  .acard .g{color:var(--faint);line-height:0;flex:none}
+  .acard .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  @media (max-width:1000px){ .scopes.n3{grid-template-columns:1fr 1fr} }
+
+  .hint{position:fixed;left:20px;bottom:16px;font:11px var(--mono);color:var(--faint)}
+  .hint b{color:var(--accent-text);font-weight:400}
+  .themer{position:fixed;right:20px;bottom:16px;font-size:12px;color:var(--muted);
+          border:1px solid var(--line);border-radius:8px;padding:5px 11px;background:var(--surface)}
+  @media (max-width:900px){ .grid2,.cols{grid-template-columns:1fr} .pcards{grid-template-columns:1fr 1fr} }
+</style>
+</head>
+<body>
+
+<div class="modal">
+  <div class="modal-head">
+    <span class="logo"></span>
+    <h1>System config</h1>
+    <button class="x" title="Close">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+    </button>
+  </div>
+
+  <div class="body">
+    <nav class="side" id="side"></nav>
+    <div class="pane" id="pane"></div>
+  </div>
+</div>
+
+<div class="hint">mockup · <b>?config=&lt;section&gt;</b> · sidebar + repo picker are live</div>
+<button class="themer" onclick="document.documentElement.classList.toggle('light')">Light / Dark</button>
+
+<script>
+// ── icons (lucide paths, inlined) ────────────────────────────────────────────
+const I = {
+  sliders:'<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/>',
+  brain:'<path d="M12 5a3 3 0 1 0-5.997.142A4 4 0 0 0 5 12.83V19a3 3 0 0 0 6 0zM12 5a3 3 0 1 1 5.997.142A4 4 0 0 1 19 12.83V19a3 3 0 0 1-6 0z"/>',
+  file:'<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v5h5"/>',
+  scroll:'<path d="M19 17V5a2 2 0 0 0-2-2H4M8 21h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1H10a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v2h4"/>',
+  spark:'<path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6 5.6 18.4"/>',
+  bot:'<rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4M8 16h.01M16 16h.01"/>',
+  pkg:'<path d="m7.5 4.27 9 5.15M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5M12 22V12"/>',
+  scan:'<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3M11 8v6M8 11h6"/>',
+  cog:'<circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+}
+const svg = (p, sz) => '<svg width="' + (sz||15) + '" height="' + (sz||15) + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">' + p + '</svg>'
+
+const REPOS = [
+  { id:'global', label:'SuperMe Hub' },
+  { id:'test-playground', label:'test-playground' },
+  { id:'superme-knowledge', label:'superme-knowledge' },
+]
+let repo = REPOS[0]
+let current = 'general'
+const subState = { learning:'review', artifacts:'constitution' }
+
+// ── sidebar map ──────────────────────────────────────────────────────────────
+// Two system rows, not three: everything about LEARNING sits together (the master switch, when the
+// sweep fires, and the agents that do it), and General holds what is left.
+const NAV = [
+  { group:'System' , rows:[
+    { id:'general'  , label:'General' , icon:I.sliders },
+    { id:'slearning', label:'Learning', icon:I.brain   },
+  ]},
+  { group:'System artifacts', rows:[
+    { id:'identity', label:'Identity & charters', icon:I.file  , count:3  },
+    { id:'uconst'  , label:'Constitution'       , icon:I.scroll, count:9  },
+    { id:'uskills' , label:'Skills'             , icon:I.spark , count:19 },
+    { id:'uagents' , label:'Agents'             , icon:I.bot   , count:7  },
+  ]},
+  { group:'Project', project:true, rows:[
+    { id:'psettings' , label:'Settings'    , icon:I.cog  },
+    { id:'plearning' , label:'Learning'    , icon:I.brain, badge:'5' },
+    { id:'partifacts', label:'Artifacts'   , icon:I.pkg  , count:18 },
+    { id:'pxray'     , label:'Prompt X-ray', icon:I.scan },
+  ]},
+]
+
+function renderSide(){
+  let out = ''
+  for (const g of NAV) {
+    out += '<div class="grp' + (g.project ? ' proj' : '') + '">' + g.group + '</div>'
+    if (g.project) {
+      out += '<div class="pickwrap"><select class="pick" id="repopick">'
+        + REPOS.map(r => '<option value="' + r.id + '"' + (r.id===repo.id?' selected':'') + '>' + r.label + '</option>').join('')
+        + '</select></div>'
+    }
+    for (const r of g.rows) {
+      const tail = r.badge ? '<span class="badge">' + r.badge + '</span>'
+                 : r.count != null ? '<span class="ct">' + r.count + '</span>' : ''
+      out += '<button class="row ' + (current===r.id?'on':'') + '" data-go="' + r.id + '">'
+           + '<span class="ico">' + svg(r.icon) + '</span><span class="n">' + r.label + '</span>' + tail + '</button>'
+    }
+  }
+  document.getElementById('side').innerHTML = out
+  document.querySelectorAll('[data-go]').forEach(b => b.onclick = () => { current = b.dataset.go; render() })
+  const pick = document.getElementById('repopick')
+  if (pick) pick.onchange = e => { repo = REPOS.find(r => r.id === e.target.value); render() }
+}
+
+// ── pane bits ────────────────────────────────────────────────────────────────
+const head = (title, scope, lede) => {
+  const [cls, txt] = scope.split(';')
+  return '<div class="pane-head"><h2>' + title + '</h2><span class="scope ' + cls + '">' + txt + '</span></div>'
+       + '<p class="lede">' + lede + '</p>'
+}
+const row = (t, h, ctrl) => '<div class="cr"><div><div class="t">' + t + '</div>'
+  + (h ? '<div class="h">' + h + '</div>' : '') + '</div><div class="ctrl">' + ctrl + '</div></div>'
+const dd  = (v, w) => '<span class="dd ' + (w||'w-model') + '">' + v + '</span>'
+const tog = (on, tint) => '<span class="tog ' + (on?'on':'') + ' ' + (tint||'') + '"></span>'
+const num = (v, u) => '<span class="num">' + v + '<span>' + u + '</span></span>'
+// A charter consults a foundational constitution BY NAME — it is always on, so it carries a pin
+// where the others carry a switch. A toggle that cannot be moved is a lie about what you control.
+const PIN = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--faint)" stroke-width="2" '
+  + 'stroke-linecap="round"><path d="M12 17v5M9 10.76V5a2 2 0 1 1 4 0v5.76a2 2 0 0 0 .59 1.42L16 14.5V17H8v-2.5l2.41-2.32A2 2 0 0 0 11 10.76"/></svg>'
+const gauge = (lvl) => {
+  const o = ['low','medium','high','extra'], i = o.indexOf(lvl)
+  return '<span class="gauge">' + o.map((_,n) => '<i class="' + (n<=i ? (n===3?'x':'f') : '') + '"></i>').join('')
+       + '<b>' + lvl + '</b></span>'
+}
+const tabs = (key, tint, list) => '<div class="tabs" style="--tint:var(--' + tint + ')">'
+  + list.map(([k,l,c]) => '<button class="' + (subState[key]===k?'on':'') + '" data-sub="' + key + ':' + k + '">'
+      + l + (c!=null ? '<span class="c">' + c + '</span>' : '') + '</button>').join('')
+  + '</div>'
+
+// One column per loading scope, each grouped by category — the Foundations layout, used by every
+// system-artifact surface so the three read identically.
+const CAT_TINT = { general:'muted', learning:'core', onboarding:'warn', workspace:'dev', uncategorized:'faint', mode:'universal' }
+function scopeColumns(cols){
+  return '<div class="scopes n' + cols.length + '">' + cols.map(col =>
+    '<div class="scol"><h3 style="color:var(--' + col.tint + ')">' + col.name + '</h3>'
+    + '<div class="s">' + col.sub + '</div>'
+    + col.groups.map(g =>
+        (!g.label ? '' :
+        '<div class="cat"><b style="color:var(--' + (CAT_TINT[g.label.toLowerCase()]||'muted')
+          + ');background:color-mix(in srgb,var(--' + (CAT_TINT[g.label.toLowerCase()]||'muted') + ') 14%,transparent)">'
+          + g.label + '</b><span>' + g.items.length + '</span></div>')
+        + g.items.map(it => {
+            const name = Array.isArray(it) ? it[0] : it
+            const extra = Array.isArray(it) ? it[1] : ''
+            return '<button class="acard"><span class="g">' + svg(col.glyph, 13) + '</span>'
+                 + '<span class="nm">' + name + '</span>' + extra + '</button>'
+          }).join('')
+      ).join('')
+    + '</div>').join('') + '</div>'
+}
+
+const P = {}
+
+P.general = () => head('General','s;System','Defaults every repo and every turn inherits unless something nearer overrides them.')
++ '<div class="card">'
++ row('Default model','the model SuperMe runs unless a repo or turn overrides it', dd('Opus 5'))
++ row('Default effort','the reasoning effort SuperMe runs unless a repo or turn overrides it', dd('Medium'))
++ row('Deputy','judges autopilot gates on your behalf — off runs autopilot unsupervised', tog(true))
++ '</div>'
++ '<div class="sec">Deputy strictness</div>'
++ '<p class="sub">Per gate — how readily it calls you. Low delegates most, extra calls you soonest. The refusal floor holds at every level.</p>'
++ '<div class="card">' + row('Triage','',gauge('low')) + row('Plan','',gauge('medium')) + row('Review','',gauge('extra')) + '</div>'
++ '<div class="sec">Compaction</div>'
++ '<p class="sub">When a work-item session auto-compacts. System-wide — the runtime honours this number as given.</p>'
++ '<div class="card">'
++ row('Trigger','context fill that fires auto-compaction (min 45% — the incompressible floor is 26%, plus room to work)', num(80,'%'))
++ row('Min gain','auto: a compaction must reclaim ≥50% of what the session could shed',
+      '<span style="font-size:12px;color:var(--faint)">Auto</span>' + tog(true))
++ '<div class="foot"><button class="btn pri" disabled>Apply</button></div></div>'
+
+P.slearning = () => head('Learning','s;System','Everything that governs how SuperMe learns: whether it runs, when it fires, and who does the work.')
++ '<div class="card">'
++ row('Auto-learning','master switch — off suspends learning for every repo, and nothing below fires', tog(true))
++ '</div>'
++ '<div class="sec">Capture sweep</div>'
++ '<p class="sub">When (and how eagerly) the automatic sweep runs. Only fires while the switch above is on.</p>'
++ '<div class="card">'
++ row('Idle time','a dev session quiet this long — with new content — gets swept', num(30,'min'))
++ row('Heartbeat','how often the daemon scans for idle sessions (latency, not frequency)', num(5,'min'))
++ row('Min conversation','only sweep once this many new user messages have accrued', num(3,'msgs'))
++ '<div class="foot"><button class="btn pri" disabled>Apply</button></div></div>'
++ '<div class="sec">Learning agents</div>'
++ '<p class="sub">The tier each agent runs on when the daemon fires it autonomously. Pick a tier — it auto-tracks that tier’s latest version.</p>'
++ '<div class="card">'
++ [['Capture','notices what is worth keeping','Sonnet 5','Low'],
+   ['Distill','turns candidates into proposals','Sonnet 5','Medium'],
+   ['Forge','writes the artifact and evaluates it','Opus 5','High']]
+    .map(([n,h,t,e]) => row(n, h, dd(t) + dd(e,'w-effort'))).join('')
++ '</div>'
+
+P.identity = () => head('Identity & charters','u;System artifacts','Hand-authored system-prompt sources. Editing takes effect on the next turn.')
++ '<div class="grid2">'
++ [['SELF','universal','u','You are <b>SuperMe</b>, the owner’s personal agentic AI harness — a growing second brain that works.'],
+   ['Dev charter','dev','d','You develop this host’s codebase. Your working surface is its code and its dev-knowledge.'],
+   ['Core charter','core','c','You are operating in core mode: SuperMe as the owner’s digital twin. You hold their context.']]
+   .map(([n,s,t,p]) => '<button class="fcard"><div class="h"><b>' + n + '</b><span class="tag ' + t + '">' + s + '</span></div><p>' + p + '</p></button>').join('')
++ '</div>'
+
+P.uconst = () => head('Constitution','u;System artifacts','Always-on rules, grouped by the mode that loads them. Toggle to control what loads.')
++ scopeColumns([
+  { name:'Dev', sub:'loaded in dev mode', tint:'dev', glyph:I.scroll, groups:[
+    { label:'Foundational', items:[['dev-knowledge-structure', PIN], ['work-item-lifecycle', PIN]] },
+    { label:'General', items:[['artifact-grammar', tog(true,'dev')], ['commit-contract', tog(true,'dev')], ['token-honesty', tog(false,'dev')]] },
+  ]},
+  { name:'Core', sub:'loaded in core mode', tint:'core', glyph:I.scroll, groups:[
+    { label:'Foundational', items:[['owner-voice', PIN], ['never-act-on-code', PIN]] },
+    { label:'General', items:[['note-vs-item', tog(true,'core')], ['recall-discipline', tog(false,'core')]] },
+  ]},
+])
+
+P.uskills = () => head('Skills','u;System artifacts','SuperMe’s own universal skills, grouped by the scope that loads them. Click any to preview or edit.')
++ scopeColumns([
+  { name:'Shared', sub:'loaded in every mode', tint:'universal', glyph:I.spark, groups:[
+    { label:'General', items:['handoff'] },
+    { label:'Uncategorized', items:['grill'] },
+  ]},
+  { name:'Dev', sub:'loaded in dev mode', tint:'dev', glyph:I.spark, groups:[
+    { label:'General', items:['create-inbox-item'] },
+    { label:'Learning', items:['forge-agent','forge-constitution','forge-skill'] },
+    { label:'Onboarding', items:['project-init','retrofit'] },
+    { label:'Workspace', items:['build','vet','plan-it','triage','review','close','investigate','research-sweep','deputy'] },
+  ]},
+  { name:'Core', sub:'loaded in core mode', tint:'core', glyph:I.spark, groups:[
+    { label:'General', items:['channel-deep-scan','release-notes'] },
+  ]},
+])
+
+P.uagents = () => head('Agents','u;System artifacts','SuperMe’s own universal sub-agents, grouped by the scope that loads them. Click any to preview or edit.')
++ scopeColumns([
+  { name:'Shared', sub:'loaded in every mode', tint:'universal', glyph:I.bot, groups:[
+    { label:'General', items:['handoff-writer'] },
+  ]},
+  { name:'Dev', sub:'loaded in dev mode', tint:'dev', glyph:I.bot, groups:[
+    { label:'Learning', items:['capture','distill','forge'] },
+    { label:'Workspace', items:['deputy','researcher','reviewer'] },
+  ]},
+  { name:'Core', sub:'loaded in core mode', tint:'core', glyph:I.bot, groups:[
+    { label:'General', items:[] },
+  ]},
+])
+
+P.psettings = () => head('Settings','p;' + repo.label, 'What ' + repo.label + ' inherits, and what it overrides. Leave a picker on “System default” to inherit.')
++ '<div class="card">'
++ row('Model','', dd(repo.id==='global' ? 'System default' : 'Sonnet 5','w-wide'))
++ row('Reasoning effort','', dd('System default','w-wide'))
++ row('Auto-learning','also needs the system master switch on', tog(true))
++ '</div>'
++ '<div class="propose"><div class="q">↓ These two live in the dev-workspace header today. Move them here, or leave them beside the work they govern?</div>'
++ '<div class="card" style="border:none;background:transparent;margin:0">'
++ row('Review mode','Fast: approving an item merges it. Strict: approving opens a PR and you merge from the PR page.', dd('Fast','w-wide'))
++ row('Anchor branch','what every git site targets: branch-from base, sync source, merge target',
+      dd(repo.id==='global' ? 'superme-dev' : 'main','w-wide'))
++ '</div></div>'
+
+P.plearning = () => head('Learning','p;' + repo.label,'Captured → distilled → forged → published. The gates are yours; the sidebar badge counts what is waiting on you.')
++ tabs('learning','dev',[['review','Review',5],['published','Published',12]])
++ (subState.learning==='review'
+  ? '<div class="gauges">'
+    + [[12,'candidates'],[3,'pending gate 1'],[2,'drafted · gate 2'],[12,'published']]
+        .map(([v,l]) => '<div class="gt"><div class="v">' + v + '</div><div class="l">' + l + '</div></div>').join('')
+    + '</div><div class="sec">Waiting on you</div><div class="pcards">'
+    + [['proposed','var(--warn)','A run that split nothing because its brief said not to did as it was told','constitution · dev · 0.82'],
+       ['proposed','var(--warn)','Requiring a field at the tool while a skill says to omit it is one broken run','rule · dev · 0.91'],
+       ['drafted','var(--accent)','Terminal is not a phase — finishing does not move the phase','constitution · dev · 0.88'],
+       ['writing','var(--deputy)','Suites read the live skill folders, never a candidate package','skill · universal · —'],
+       ['proposed','var(--warn)','A remembered rail width is a preference, not a promise','rule · dev · 0.74']]
+      .map(([st,c,ti,mt]) => '<button class="pcard"><div class="st" style="color:' + c + '">' + st + '</div>'
+        + '<div class="ti">' + ti + '</div><div class="mt">' + mt + '</div></button>').join('')
+    + '</div>'
+  : '<div class="sec">Published into the live harness</div>'
+    + '<p class="sub">Disable suspends one without losing it. Delete removes it for good. Effective on the next dev turn.</p>'
+    + [['constitution','terminal-is-not-a-phase','dev',1],['skill','research-sweep','universal',1],
+       ['agent','researcher','dev',1],['constitution','no-estimated-usage','dev',1],
+       ['skill','recall','core',0],['constitution','never-delete-logs','dev',1]]
+      .map(([f,n,s,on]) => '<div class="lrow"' + (on?'':' style="opacity:.6"') + '>'
+        + '<span class="k" style="color:var(--' + s + ')">' + f + '</span><span class="nm">' + n + '</span>'
+        + '<span class="pill warn">learned</span>' + tog(!!on, s==='universal'?'':s) + '</div>').join('')
+)
+
+P.partifacts = () => head('Artifacts','p;' + repo.label,'This host’s own local operational artifacts — enable or disable what loads, preview or edit any of it.')
++ tabs('artifacts','dev',[['constitution','Constitution',4],['skills','Skills',6],['agents','Agents',3],
+                          ['verification','Verification',5],['decisions','Decisions',12],['deputy','Deputy',null]])
++ (subState.artifacts==='constitution'
+  ? scopeColumns([
+      { name:'Local', sub:'forged for this host', tint:'dev', glyph:I.scroll, groups:[
+        { label:'', items:[['dev-knowledge-structure', tog(true,'dev')], ['hub-is-the-test-bed', tog(true,'dev')],
+                           ['one-rule-per-question', tog(true,'dev')], ['close-is-wrap-up-only', tog(false,'dev')]] },
+      ]},
+      { name:'Expertise', sub:'adopted for this repo from the shared pool', tint:'universal', glyph:I.pkg, groups:[
+        { label:'', items:[['python-async-runtime', '<span class="pill ok">adopted</span>'],
+                           ['sqlite-schema-migrations', '<span class="pill ok">adopted</span>'],
+                           ['react-live-data', '<span class="pill ok">adopted</span>']] },
+      ]},
+    ])
+  : subState.artifacts==='verification'
+  ? '<div class="sec">Standing checks</div>'
+    + '<p class="sub">Every work-item in this repo draws from these; a vet plan may add its own and contribute back.</p>'
+    + [['V1','the daemon boots and the log is clean'],['V2','offline suites green'],['V3','tsc + build green'],
+       ['V4','route parity against the snapshot'],['V5','no estimated usage reaches a surface']]
+      .map(([k,n]) => '<div class="lrow"><span class="k" style="color:var(--dev)">' + k + '</span><span class="nm">' + n
+        + '</span><span class="pill ok">standing</span></div>').join('')
+  : '<div class="lrow"><span class="nm" style="color:var(--faint)">— ' + subState.artifacts + ' —</span></div>')
+
+P.pxray = () => head('Prompt X-ray','p;' + repo.label,
+  'Fires a throwaway work-item that runs the real pipeline on autopilot, captures each phase’s actual input, then destroys itself. Nothing is merged and no knowledge is written.')
++ '<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">'
++ '<button class="btn soft">▶ Capture a live run</button>'
++ '<span style="font-size:12px;color:var(--faint)">last probe finished Aug 14, 2026, 11:02 PM</span></div>'
++ '<div class="sec">Captured inputs <span style="color:var(--faint)">· 6</span></div>'
++ '<div class="listbox">'
++ ['Triage','Plan','Build','Vet','Review','Close'].map((p,i) => '<div class="xrow">'
+    + '<span class="n">' + (i+1) + '</span><span class="p">' + p + '</span>'
+    + '<span class="m">run #' + (812+i) + '</span><span class="m">· Aug 14, 10:' + (40+i) + ' PM</span>'
+    + '<svg style="margin-left:auto" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--faint)" stroke-width="2">'
+    + '<path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></div>').join('')
++ '</div>'
+
+function render(){
+  renderSide()
+  document.getElementById('pane').innerHTML = (P[current] || P.general)()
+  document.querySelectorAll('[data-sub]').forEach(b => b.onclick = () => {
+    const [k,v] = b.dataset.sub.split(':'); subState[k] = v; render()
+  })
+  document.querySelectorAll('.tog').forEach(t => t.onclick = (e) => { e.stopPropagation(); t.classList.toggle('on') })
+}
+render()
+</script>
+</body>
+</html>
