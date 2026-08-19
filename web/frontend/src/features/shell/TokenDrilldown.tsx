@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { fmtTokens } from '@/lib/format'
-import { featureColor, featureLabel } from '@/lib/palette'
+import { operationRows } from '@/lib/tokens'
 import Modal from '@/ui/Modal'
 import TabBar from '@/ui/TabBar'
 import Toggle from '@/ui/Toggle'
@@ -31,43 +31,15 @@ const TYPE_META: { key: string; label: string; color: string }[] = [
 // Types visible in the active mode: cache_read is 4-type-only.
 const typesFor = (full: boolean) => TYPE_META.filter((t) => full || t.key !== 'cache_read')
 
-// Breakdown 1 — per-operation. The shape comes from the payload's category tree, never from a list
-// kept here: each category says whether it reads as ONE bar or one bar per feature (token_taxonomy
-// owns that call), so the work-item phases stay separately comparable — which is the cost question
-// — while background habit and maintenance each land as a single line instead of a tail of slivers.
+// Breakdown 1 — per-operation. The shape comes from the payload's category tree (see lib/tokens),
+// shared with every other surface that lists operations, so they cannot drift apart.
 function OperationBars({ tokens, full }: { tokens: TokenUsage; full: boolean }) {
-  const cats = tokens.global?.by_category ?? {}
-  const cr = tokens.global?.by_feature_cache_read ?? {}
-  const val = (f: string, n: number) => n + (full ? cr[f] ?? 0 : 0)
-  const rows: Row[] = []
-  for (const [key, node] of Object.entries(cats)) {
-    const feats = Object.entries(node.features ?? {})
-    if (node.collapsed) {
-      // The bar carries its own parts on hover. One of them is usually most of it — the X-ray probe
-      // is ~80% of maintenance — and a group that can never be opened cannot be acted on.
-      const parts = feats.map(([f, n]) => [featureLabel(f), val(f, n)] as const)
-        .filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1])
-      rows.push({
-        key, label: node.label || key, color: CATEGORY_COLOR[key] ?? '#8b93a7',
-        value: parts.reduce((sum, [, v]) => sum + v, 0),
-        title: parts.map(([l, v]) => `${l} ${fmtTokens(v)}`).join(' · '),
-      })
-    } else {
-      for (const [f, n] of feats) {
-        rows.push({ key: f, label: featureLabel(f), value: val(f, n), color: featureColor(f) })
-      }
-    }
-  }
-  const shown = rows.filter((r) => r.value > 0).sort((a, b) => b.value - a.value)
-  if (!shown.length) return <NoUsage />
-  return <Bars rows={shown} />
-}
-
-// A collapsed category is a bar in its own right, so it needs a colour that is clearly not one of
-// the operations beside it: grey for maintenance, one muted hue for the background habit.
-const CATEGORY_COLOR: Record<string, string> = {
-  learning: '#7c8cf8',
-  other: '#8b93a7',
+  const rows = operationRows(
+    tokens.global?.by_category,
+    full ? tokens.global?.by_feature_cache_read : undefined,
+  )
+  if (!rows.length) return <NoUsage />
+  return <Bars rows={rows} />
 }
 
 // Over time — per-day usage. Two modes: a stacked by-type breakdown (each day's bar split by token
@@ -224,7 +196,7 @@ export default function TokenDrilldown({ stats, onClose }: { stats: CommandStats
       <div className="flex items-center justify-between px-5 pt-4">
         <div className="flex items-baseline gap-2">
           <span className="text-2xl font-semibold tabular-nums text-fg">{fmtTokens(headlineTotal)}</span>
-          <span className="text-[12px] text-faint">tokens{full ? ' · incl. cache read' : ''}</span>
+          <span className="text-[12px] text-faint">tokens</span>
         </div>
         <label className="flex items-center gap-2 text-[12px] text-muted" title="Off: input + cache write + output (new work). On: also count cache read (full window volume).">
           <span>Cache read</span>

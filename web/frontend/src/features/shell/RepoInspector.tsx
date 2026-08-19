@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { X, ArrowRight, Pencil, Unplug, Loader2 } from 'lucide-react'
 import { disconnectRepo } from '@/lib/api'
 import { fmtTokens } from '@/lib/format'
-import { featureColor } from '@/lib/palette'
+import { operationRows } from '@/lib/tokens'
 import { RepoIcon } from '@/lib/repoIcons'
 import Modal from '@/ui/Modal'
 import TagEditor from './TagEditor'
@@ -57,8 +57,8 @@ export default function RepoInspector({
   const [disconnecting, setDisconnecting] = useState(false)
   if (!repo) return null
   const isHub = repo.id === 'global'
-  const ops = Object.entries(repo.byFeature).sort((a, b) => b[1] - a[1])
-  const opMax = ops.length ? ops[0][1] : 1
+  const ops = operationRows(repo.byCategory)
+  const opMax = ops.length ? ops[0].value : 1
   const splitTotal = repo.dev + repo.core || 1
 
   return (
@@ -109,14 +109,14 @@ export default function RepoInspector({
               <div className="border-t border-line pt-3">
                 <div className="mb-2 text-[12px] font-semibold uppercase tracking-wider text-muted">By operation</div>
                 <div className="max-h-[7.5rem] space-y-1.5 overflow-y-auto pr-1">
-                  {ops.map(([feat, val]) => (
-                    <div key={feat} className="flex items-center gap-2.5 text-[14px]">
-                      <span className="h-2 w-2 shrink-0 rounded-[3px]" style={{ backgroundColor: featureColor(feat) }} />
-                      <span className="w-16 shrink-0 truncate text-muted">{feat}</span>
+                  {ops.map((o) => (
+                    <div key={o.key} title={o.title} className="flex items-center gap-2.5 text-[14px]">
+                      <span className="h-2 w-2 shrink-0 rounded-[3px]" style={{ backgroundColor: o.color }} />
+                      <span className="w-16 shrink-0 truncate text-muted">{o.label}</span>
                       <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-hover">
-                        <div className="h-full rounded-full" style={{ width: `${(val / opMax) * 100}%`, backgroundColor: featureColor(feat) }} />
+                        <div className="h-full rounded-full" style={{ width: `${(o.value / opMax) * 100}%`, backgroundColor: o.color }} />
                       </div>
-                      <span className="w-12 shrink-0 text-right font-mono text-muted">{fmtTokens(val)}</span>
+                      <span className="w-12 shrink-0 text-right font-mono text-muted">{fmtTokens(o.value)}</span>
                     </div>
                   ))}
                 </div>

@@ -1916,7 +1916,14 @@ class SystemSpine:
                 " FROM run WHERE started_at IS NOT NULL GROUP BY day ORDER BY day",
                 (modifier,),
             ).fetchall()
+        # `date()` returns NULL for a `started_at` it cannot parse, and those rows would vanish from
+        # the axis without a word. Say so instead: the series is a published figure, and a reader who
+        # cannot see that a row was dropped cannot tell a quiet day from a lost one. (Both writers of
+        # the column emit ISO-8601, so this only ever fires on a row from an older path.)
         by_day = {r["day"]: r for r in rows if r["day"]}
+        if (lost := sum(r["n"] for r in rows if not r["day"])):
+            log.warning("token_timeseries: %d run(s) have an unparseable started_at and are absent "
+                        "from the day axis", lost)
         days: list[dict] = []
         cumulative = 0
         if by_day:

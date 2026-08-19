@@ -15,7 +15,9 @@ export type OrbitRepo = {
   core: number
   running: number
   agents: number
-  byFeature: Record<string, number>
+  // The per-repo category tree — the operation list reads it through lib/tokens, the same
+  // way the token drill-in does, so the two can never disagree about one repo's split.
+  byCategory: Record<string, { total?: number; features?: Record<string, number>; label?: string; collapsed?: boolean }>
   scopes: Record<string, ScopeStatus>
   modelOverride: string | null
   effortOverride: string | null
@@ -92,7 +94,7 @@ export function useCommandStats(pollMs = 5000): CommandStats {
         core: t?.by_scope?.core ?? 0,
         running: scopeList.reduce((n, s) => n + (s?.running ?? 0), 0),
         agents: scopeList.reduce((n, s) => n + (s?.agents ?? 0), 0),
-        byFeature: t?.by_feature ?? {},
+        byCategory: t?.by_category ?? {},
         scopes: r.scopes ?? {},
         modelOverride: r.model_override ?? null,
         effortOverride: r.effort_override ?? null,
