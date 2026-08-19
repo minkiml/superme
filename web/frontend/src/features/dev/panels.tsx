@@ -6,7 +6,9 @@ import Modal from '@/ui/Modal'
 import SectionHeader from '@/ui/SectionHeader'
 import TabBar from '@/ui/TabBar'
 import Toggle from '@/ui/Toggle'
-import { addInbox, updateInbox, deleteInbox, pushInbox, getRepos, type WorkItem, type InboxEntry, type InboxKind } from '@/lib/api'
+import { useEditGate, EditActions } from '@/ui/EditGate'
+import { addInbox, updateInbox, deleteInbox, pushInbox, getRepos, getInboxBrief, saveInboxBrief,
+         type WorkItem, type InboxEntry, type InboxKind, type InboxBrief } from '@/lib/api'
 import { useLive } from '@/lib/live'
 import { K } from '@/lib/live/keys'
 import { fmtLocal, fmtTokens, fmtDuration, fmtModel, toModelKey, MODELS as MODEL_CATALOG, DEFAULT_MODEL, EFFORTS as EFFORT_CATALOG, DEFAULT_EFFORT } from '@/lib/format'
@@ -429,7 +431,7 @@ export function InboxView({
                       repoEffort={repo?.effort_override}
                       onPush={() => pushInbox(e.id, contextId).then(onChanged)}
                       onDiscuss={onDiscussNote && (() => onDiscussNote(e.id, e.title || e.text.slice(0, 60)))}
-                      onSave={(patch) => updateInbox(e.id, patch).then(onChanged)}
+                      onSave={async (patch) => { await updateInbox(e.id, patch); onChanged() }}
                       onDelete={() => deleteInbox(e.id).then(onChanged)}
                     />
                   ))
@@ -457,7 +459,7 @@ function InboxCard({
   repoEffort?: string | null
   onPush: () => void
   onDiscuss?: () => void
-  onSave: (patch: InboxConfigPatch) => void
+  onSave: (patch: InboxConfigPatch) => Promise<void>
   onDelete: () => void
 }) {
   const [editing, setEditing] = useState(false)
@@ -572,110 +574,192 @@ function InboxCard({
       </div>
     </div>
     {editing && (
-      <InboxEditModal
+      <InboxItemModal
         e={e}
         repoModel={repoModel}
         repoEffort={repoEffort}
-        onCancel={() => setEditing(false)}
-        onSave={(patch) => { onSave(patch); setEditing(false) }}
+        onClose={() => setEditing(false)}
+        onSave={onSave}
       />
     )}
     </>
   )
 }
 
-// Popup editor for one inbox item. Two tabs, because a row carries two unrelated kinds of
-// question: WHAT it says (Content) and HOW it will be worked (Setting) — mixing them put run
-// config in the capture row, where it was answered by accident on every keystroke.
-function InboxEditModal({
+// The inspector for one inbox row. THREE tabs, because a row is three separable things: WHAT it
+// says (Content), the cold-start context it hands the work-item it becomes (Brief), and HOW it will
+// be worked (Setting). Mixing the last into the first put run config in the capture row, where it
+// was answered by accident on every keystroke.
+//
+// Two independent artifacts, so two independent edit gates: the ROW (content + setting travel
+// together — one PATCH, one Save) and the BRIEF (its own file, its own route). The action row shows
+// the gate belonging to whatever tab is open, because the buttons should act on what you are
+// looking at and nothing else.
+function InboxItemModal({
   e,
   repoModel,
   repoEffort,
   onSave,
-  onCancel,
+  onClose,
 }: {
   e: InboxEntry
   repoModel?: string | null   // the repo's Quick-config default — what an unset row starts at
   repoEffort?: string | null
-  onSave: (patch: InboxConfigPatch) => void
-  onCancel: () => void
+  onSave: (patch: InboxConfigPatch) => Promise<void>
+  onClose: () => void
 }) {
-  const [tab, setTab] = useState<'content' | 'setting'>('content')
-  const [title, setTitle] = useState(e.title ?? '')
-  const [text, setText] = useState(e.text)
-  const [kind, setKind] = useState<InboxKind>(e.kind)
+  const [tab, setTab] = useState<'content' | 'brief' | 'setting'>('content')
+
   // Model/effort are always a CONCRETE pick — three options each, no "inherit" row (owner,
   // 2026-08-02). A row that has never been touched shows the repo's Quick-config value as its
   // starting position, so the picker states the answer instead of deferring it one level.
-  const [model, setModel] = useState(toModelKey(e.model) || toModelKey(repoModel) || DEFAULT_RUN_MODEL)
-  const [effort, setEffort] = useState(e.effort ?? repoEffort ?? DEFAULT_RUN_EFFORT)
-  const [autopilot, setAutopilot] = useState(!!e.autopilot)
-  // The proposed work-item kind. "" is a real value here, not an empty control: it means nobody
-  // has judged, and triage then decides alone — which is what every row did before the field.
-  const [workKind, setWorkKind] = useState<string>(e.work_kind ?? '')
+  // `work_kind` is the exception: "" is a real value, not an empty control — nobody has judged,
+  // and triage then decides alone, which is what every row did before the field.
+  const saved: InboxConfigPatch = {
+    title: e.title ?? '',
+    text: e.text,
+    kind: e.kind,
+    model: toModelKey(e.model) || toModelKey(repoModel) || DEFAULT_RUN_MODEL,
+    effort: e.effort ?? repoEffort ?? DEFAULT_RUN_EFFORT,
+    autopilot: !!e.autopilot,
+    work_kind: e.work_kind ?? '',
+  }
+  const row = useEditGate<InboxConfigPatch>({
+    saved,
+    valid: (d) => !!d.text.trim(),
+    commit: (d) => onSave({ ...d, title: (d.title ?? '').trim() || null, text: d.text.trim() }),
+  })
+  const d = row.draft
+  const set = (patch: Partial<InboxConfigPatch>) => row.setDraft({ ...d, ...patch })
+  // Outside edit mode the tabs read the ROW, not the draft — a draft the owner abandoned must not
+  // decide which tabs exist.
+  const kind = row.editing ? d.kind : e.kind
+
+  // The handoff brief. Loaded when its tab is first opened rather than with the modal: most opens
+  // of this dialog never look at it, and a row that has no brief is the common case.
+  const [brief, setBrief] = useState<InboxBrief | null>(null)
+  const [briefErr, setBriefErr] = useState<string | null>(null)
+  useEffect(() => {
+    if (tab !== 'brief' || brief) return
+    let alive = true
+    getInboxBrief(e.id)
+      .then((b) => { if (alive) setBrief(b) })
+      .catch((err) => alive && setBriefErr(String(err)))
+    return () => { alive = false }
+  }, [tab, brief, e.id])
+  const briefGate = useEditGate({
+    saved: brief?.content ?? '',
+    valid: (t) => !!t.trim(),
+    commit: async (t) => { await saveInboxBrief(e.id, t); setBrief({ ...brief!, content: t }) },
+  })
+
+  // A NOTE is the owner's own thought and is never pushed, so no work-item is ever born to carry a
+  // brief or a run config. Both tabs are withheld rather than shown empty — a card explaining its
+  // own absence is still a card — and the third renames to Info, which is all a note's second tab
+  // ever holds.
+  const tabs = kind === 'note'
+    ? ([['content', 'Content'], ['setting', 'Info']] as const)
+    : ([['content', 'Content'], ['brief', 'Brief'], ['setting', 'Setting']] as const)
+  const gate = tab === 'brief' ? briefGate : row
+  const err = tab === 'brief' ? (briefGate.err ?? briefErr) : row.err
 
   return (
     // Contained (not viewport-fixed) so it overlays the dashboard column and leaves the chat rail
     // interactive — same containment as the work-item review popup.
-    <Modal onClose={onCancel} title="Inbox item" maxW="max-w-lg" z="z-40" contain dismissable={false}>
+    <Modal onClose={onClose} title="Inbox item" maxW="max-w-lg" z="z-40" contain dismissable={false}>
       <div className="p-4">
         <TabBar
-          tabs={[['content', 'Content'], ['setting', kind === 'note' ? 'Info' : 'Setting']] as const}
-          value={tab}
+          tabs={tabs}
+          value={tab === 'brief' && kind === 'note' ? 'content' : tab}
           onChange={setTab}
           size="sm"
           className="mb-3"
         />
 
-        {/* One fixed body height for both tabs — switching tabs must not resize the dialog under
-            the cursor (the Save row would jump out from under a click). */}
+        {/* One fixed body height for every tab — switching tabs must not resize the dialog under
+            the cursor (the action row would jump out from under a click). */}
         <div className="h-[21rem] overflow-y-auto">
         {tab === 'content' ? (
-          <div className="flex h-full flex-col gap-2">
-            <div className="flex items-center gap-2">
-              <Dropdown value={kind} options={KIND_OPTS} onChange={(v) => setKind(v as InboxKind)} />
-              <input
-                className="min-w-0 flex-1 rounded border border-line bg-sunken px-2 py-1.5 text-[13px] font-medium text-fg outline-none focus:border-accent placeholder:text-faint"
-                placeholder="Title (optional)"
-                value={title}
-                onChange={(ev) => setTitle(ev.target.value)}
-                autoFocus
+          row.editing ? (
+            <div className="flex h-full flex-col gap-2">
+              <div className="flex items-center gap-2">
+                <Dropdown value={d.kind} options={KIND_OPTS} onChange={(v) => set({ kind: v as InboxKind })} />
+                <input
+                  className="min-w-0 flex-1 rounded border border-line bg-sunken px-2 py-1.5 text-[13px] font-medium text-fg outline-none focus:border-accent placeholder:text-faint"
+                  placeholder="Title (optional)"
+                  value={d.title ?? ''}
+                  onChange={(ev) => set({ title: ev.target.value })}
+                  autoFocus
+                />
+              </div>
+              <textarea
+                className="w-full flex-1 resize-none rounded border border-line bg-sunken px-2 py-1.5 text-[13px] leading-relaxed text-fg outline-none focus:border-accent"
+                value={d.text}
+                onChange={(ev) => set({ text: ev.target.value })}
               />
             </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="flex items-baseline gap-2">
+                <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${e.kind === 'note' ? 'bg-hover text-faint' : 'bg-accent-soft text-accent-text'}`}>{e.kind}</span>
+                {e.title && <span className="min-w-0 text-[14px] font-medium leading-snug text-fg [overflow-wrap:anywhere]">{e.title}</span>}
+              </div>
+              <Markdown text={e.text} variant="doc" tone="dev" />
+            </div>
+          )
+        ) : tab === 'brief' ? (
+          brief === null ? (
+            briefErr ? null : <div className="flex items-center gap-2 text-sm text-muted"><Loader2 size={14} className="animate-spin" /> Loading…</div>
+          ) : briefGate.editing ? (
             <textarea
-              className="w-full flex-1 resize-none rounded border border-line bg-sunken px-2 py-1.5 text-[13px] leading-relaxed text-fg outline-none focus:border-accent"
-              value={text}
-              onChange={(ev) => setText(ev.target.value)}
+              className="h-full w-full resize-none rounded border border-line bg-sunken px-2 py-1.5 font-mono text-[12px] leading-relaxed text-fg outline-none focus:border-accent"
+              value={briefGate.draft}
+              onChange={(ev) => briefGate.setDraft(ev.target.value)}
+              spellCheck={false}
+              autoFocus
             />
-          </div>
+          ) : brief.content ? (
+            <Markdown text={stripFrontmatter(brief.content)} variant="doc" tone="dev" />
+          ) : (
+            <div className="text-[12px] leading-relaxed text-faint">
+              No brief was filed, so this row&rsquo;s whole cold-start context is its own text. Write
+              one here and the work-item it becomes reads it first.
+            </div>
+          )
         ) : (
           <div className="space-y-4">
             {/* ── how this item will be worked ───────────────────────────────────────────────
                 ALL FOUR describe a RUN — which gates drive themselves, which machinery the item
-                becomes, which model and effort its runs spend. A note has no runs: it is never
-                pushed, so no work-item is ever born to carry them. The section is not shown at
-                all for a note — an empty card explaining its own absence is still a card, and the
-                tab beside it renames to Info, which is all a note's second tab ever holds. */}
+                becomes, which model and effort its runs spend. */}
             {kind !== 'note' && (
             <section className="rounded-md border border-line bg-sunken px-3 py-2.5">
               <SectionHeader>Setting</SectionHeader>
               <div className="mt-1 text-[11px] leading-snug text-faint">
                 Set here while the row is open — push freezes all three onto the work-item.
               </div>
-              <div className="mt-2.5 space-y-2.5">
-                <ConfigRow label="Autopilot" hint="Drives its own gates; the deputy judges each one for you.">
-                  <Toggle on={autopilot} onChange={setAutopilot} onColor="bg-accent" />
-                </ConfigRow>
-                <ConfigRow label="Work kind" hint="Implementation changes code; research answers a question. Triage confirms it.">
-                  <Dropdown value={workKind} options={WORK_KIND_OPTS} onChange={setWorkKind} width="w-36" align="right" />
-                </ConfigRow>
-                <ConfigRow label="Model" hint="Which model this item's runs use.">
-                  <Dropdown value={model} options={RUN_MODELS} onChange={setModel} width="w-36" align="right" />
-                </ConfigRow>
-                <ConfigRow label="Effort" hint="How much reasoning each run spends.">
-                  <Dropdown value={effort} options={RUN_EFFORTS} onChange={setEffort} width="w-36" align="right" />
-                </ConfigRow>
-              </div>
+              {row.editing ? (
+                <div className="mt-2.5 space-y-2.5">
+                  <ConfigRow label="Autopilot" hint="Drives its own gates; the deputy judges each one for you.">
+                    <Toggle on={d.autopilot} onChange={(v) => set({ autopilot: v })} onColor="bg-accent" />
+                  </ConfigRow>
+                  <ConfigRow label="Work kind" hint="Implementation changes code; research answers a question. Triage confirms it.">
+                    <Dropdown value={d.work_kind} options={WORK_KIND_OPTS} onChange={(v) => set({ work_kind: v })} width="w-36" align="right" />
+                  </ConfigRow>
+                  <ConfigRow label="Model" hint="Which model this item's runs use.">
+                    <Dropdown value={d.model} options={RUN_MODELS} onChange={(v) => set({ model: v })} width="w-36" align="right" />
+                  </ConfigRow>
+                  <ConfigRow label="Effort" hint="How much reasoning each run spends.">
+                    <Dropdown value={d.effort} options={RUN_EFFORTS} onChange={(v) => set({ effort: v })} width="w-36" align="right" />
+                  </ConfigRow>
+                </div>
+              ) : (
+                <dl className="mt-2 space-y-1.5">
+                  <MetaRow label="Autopilot">{saved.autopilot ? 'On' : 'Off'}</MetaRow>
+                  <MetaRow label="Work kind">{optLabel(WORK_KIND_OPTS, saved.work_kind)}</MetaRow>
+                  <MetaRow label="Model">{optLabel(RUN_MODELS, saved.model)}</MetaRow>
+                  <MetaRow label="Effort">{optLabel(RUN_EFFORTS, saved.effort)}</MetaRow>
+                </dl>
+              )}
             </section>
             )}
 
@@ -703,31 +787,34 @@ function InboxEditModal({
         )}
         </div>
 
-        <div className="mt-3 flex justify-end gap-2">
-          <button className="rounded-md bg-hover px-3 py-1.5 text-xs text-fg hover:text-fg" onClick={onCancel}>
-            Cancel
-          </button>
-          <button
-            className="rounded-md bg-accent px-3 py-1.5 text-xs text-on-accent hover:opacity-90 disabled:opacity-40"
-            disabled={!text.trim()}
-            onClick={() =>
-              onSave({
-                title: title.trim() || null,
-                text: text.trim() || e.text,
-                kind,
-                model,
-                effort,
-                autopilot,
-                work_kind: workKind,
-              })
-            }
-          >
-            Save
-          </button>
+        {err && <div className="mt-2 text-[12px] text-danger">{err}</div>}
+        <div className="mt-3 flex items-center justify-end gap-2">
+          <EditActions
+            gate={gate}
+            readOnly={tab === 'brief' && (brief === null || !brief.editable)}
+            readOnlyNote={tab === 'brief' && brief && !brief.editable
+              ? 'Pushed — the brief is the work-item’s provenance now'
+              : undefined}
+          />
+          {!gate.editing && (
+            <button className="rounded-md bg-hover px-3 py-1.5 text-xs text-fg" onClick={onClose}>
+              Close
+            </button>
+          )}
         </div>
       </div>
     </Modal>
   )
+}
+
+// A picker's own word for a stored value — so the read view says "Sonnet 5", not `sonnet-5`.
+function optLabel(opts: { value: string; label: string }[], value: string): string {
+  return opts.find((o) => o.value === value)?.label ?? value ?? '—'
+}
+
+function stripFrontmatter(text: string): string {
+  const m = text.match(/^---\n[\s\S]*?\n---\n?/)
+  return m ? text.slice(m[0].length) : text
 }
 
 // One labelled control in the Config section: name + one-line why on the left, the control right.

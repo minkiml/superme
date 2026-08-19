@@ -9,6 +9,7 @@ import Toggle from '@/ui/Toggle'
 import ArtifactTabs from '@/ui/ArtifactTabs'
 import SectionHeader from '@/ui/SectionHeader'
 import SourceEditor from '@/ui/SourceEditor'
+import { useEditGate, EditActions } from '@/ui/EditGate'
 import {
   getProposals, approveProposal, updateStagedArtifact, publishProposal, rejectProposal, dropProposal,
   getMemoryStats, runDistill, getProposalExecution,
@@ -165,17 +166,21 @@ export function PublishedFileModal({ item, contextId, onClose, onSaved, onGovern
   showScope?: boolean // hide the scope chip where it's redundant (Foundations = always universal)
 }) {
   const [content, setContent] = useState<string | null>(null)
-  const [draft, setDraft] = useState('')
-  const [editing, setEditing] = useState(false)
   const [busy, setBusy] = useState(false)
   const [enabled, setEnabled] = useState(item.enabled)
   const [confirmDel, setConfirmDel] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  const gate = useEditGate({
+    saved: content ?? '',
+    valid: (d) => !!d.trim(),
+    commit: async (d) => { await savePublishedFile(item.proposal_id, d, contextId); onSaved() },
+  })
+  const { editing, draft } = gate
 
   useEffect(() => {
     let alive = true
     getPublishedFile(item.proposal_id, contextId)
-      .then((f) => { if (alive) { setContent(f.content); setDraft(f.content) } })
+      .then((f) => { if (alive) setContent(f.content) })
       .catch((e) => alive && setErr(String(e)))
     return () => { alive = false }
   }, [item.proposal_id, contextId])
@@ -189,11 +194,6 @@ export function PublishedFileModal({ item, contextId, onClose, onSaved, onGovern
   const Icon = PUB_FORM_META[item.form].icon
   const body = content ? content.replace(/^---\n[\s\S]*?\n---\n?/, '') : ''
 
-  async function save() {
-    setBusy(true); setErr(null)
-    try { await savePublishedFile(item.proposal_id, draft, contextId); onSaved() }
-    catch (e) { setErr(String(e)); setBusy(false) }
-  }
   async function toggleEnabled() {
     setBusy(true); setErr(null)
     try { await togglePublished(item.proposal_id, !enabled, contextId); setEnabled(!enabled); onGovernanceChange?.() }
@@ -232,30 +232,16 @@ export function PublishedFileModal({ item, contextId, onClose, onSaved, onGovern
                 <span className="mx-0.5 h-4 w-px bg-line" />
               </>
             )}
-            {!editing ? (
-              <button onClick={() => { setDraft(content ?? ''); setEditing(true) }} disabled={content === null}
-                className="flex items-center gap-1 rounded-md border border-line px-2 py-1 text-xs text-muted hover:bg-hover hover:text-fg disabled:opacity-50">
-                <Pencil size={12} /> Edit
-              </button>
-            ) : (
-              <>
-                <button onClick={() => { setEditing(false); setDraft(content ?? '') }} disabled={busy}
-                  className="rounded-md border border-line px-2 py-1 text-xs text-muted hover:bg-hover hover:text-fg disabled:opacity-50">Cancel</button>
-                <button onClick={save} disabled={busy || draft === content || !draft.trim()}
-                  className="flex items-center gap-1 rounded-md bg-accent px-2 py-1 text-xs text-on-accent hover:opacity-90 disabled:opacity-50">
-                  {busy ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} Save
-                </button>
-              </>
-            )}
+            <EditActions gate={gate} readOnly={content === null} />
             <button onClick={onClose} className="rounded p-1 text-muted hover:bg-hover hover:text-fg"><X size={16} /></button>
           </div>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
-          {err && <div className="mb-2 text-sm text-danger">{err}</div>}
+          {(gate.err ?? err) && <div className="mb-2 text-sm text-danger">{gate.err ?? err}</div>}
           {content === null ? (
             <div className="flex items-center gap-2 text-sm text-muted"><Loader2 size={14} className="animate-spin" /> Loading…</div>
           ) : editing ? (
-            <SourceEditor value={draft} onChange={setDraft} />
+            <SourceEditor value={draft} onChange={gate.setDraft} />
           ) : (
             <Markdown text={body} variant="doc" tone="dev" />
           )}
@@ -725,8 +711,6 @@ function ProposalModal({
   const [err, setErr] = useState<string | null>(null)
   const [answers, setAnswers] = useState<Record<string, string>>({})
   const [elapsed, setElapsed] = useState(0) // seconds the write run has been in flight (drives phase text)
-  const [editingArtifact, setEditingArtifact] = useState(false)
-  const [artifactDraft, setArtifactDraft] = useState('')
 
   const cands = cur.candidates ?? []
   const fields = cur.fields && typeof cur.fields === 'object' ? cur.fields : null
@@ -736,6 +720,13 @@ function ProposalModal({
   const drafted = status === 'drafted'
   const proposed = status === 'proposed'
   const blockingUnanswered = clar.some((q) => q.blocking && !((answers[q.question] ?? '').trim()))
+
+  const artGate = useEditGate({
+    saved: cur.staged_artifact ?? '',
+    valid: (d) => !!d.trim(),
+    commit: async (d) => { setCur((await updateStagedArtifact(cur.id, d, contextId)).proposal) },
+  })
+  const editingArtifact = artGate.editing
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
@@ -796,19 +787,6 @@ function ProposalModal({
       onDone()
     } catch (e) {
       setErr(String(e))
-      setBusy(null)
-    }
-  }
-  const saveArtifact = async () => {
-    setBusy('saveArtifact')
-    setErr(null)
-    try {
-      const { proposal } = await updateStagedArtifact(cur.id, artifactDraft, contextId)
-      setCur(proposal)
-      setEditingArtifact(false)
-    } catch (e) {
-      setErr(String(e))
-    } finally {
       setBusy(null)
     }
   }
@@ -902,41 +880,13 @@ function ProposalModal({
           ) : tab === 'artifact' ? (
             <PSection title={`Staged artifact${cur.staged_path ? ` → ${relArtifactPath(cur.staged_path)}` : ''}`}>
               <div className="mb-1.5 flex items-center gap-1.5">
-                {drafted && !editingArtifact && (
-                  <button
-                    onClick={() => { setArtifactDraft(cur.staged_artifact ?? ''); setEditingArtifact(true) }}
-                    className="flex items-center gap-1 rounded-md border border-line px-2 py-1 text-[11px] text-muted hover:bg-hover hover:text-fg"
-                  >
-                    <Pencil size={11} /> Edit
-                  </button>
-                )}
+                <EditActions gate={artGate} readOnly={!drafted} />
                 {editingArtifact && (
-                  <>
-                    <button
-                      onClick={saveArtifact}
-                      disabled={busy !== null || artifactDraft.trim() === (cur.staged_artifact ?? '').trim() || !artifactDraft.trim()}
-                      className="flex items-center gap-1 rounded-md bg-accent px-2 py-1 text-[11px] font-medium text-on-accent hover:opacity-90 disabled:opacity-50"
-                    >
-                      {busy === 'saveArtifact' ? <Loader2 size={11} className="animate-spin" /> : <Save size={11} />} Save
-                    </button>
-                    <button
-                      onClick={() => setEditingArtifact(false)}
-                      disabled={busy === 'saveArtifact'}
-                      className="rounded-md border border-line px-2 py-1 text-[11px] text-muted hover:bg-hover hover:text-fg disabled:opacity-50"
-                    >
-                      Cancel
-                    </button>
-                    <span className="text-[10px] text-faint">edits save to the draft; publish writes it to disk</span>
-                  </>
+                  <span className="text-[10px] text-faint">edits save to the draft; publish writes it to disk</span>
                 )}
               </div>
               {editingArtifact ? (
-                <textarea
-                  value={artifactDraft}
-                  onChange={(e) => setArtifactDraft(e.target.value)}
-                  spellCheck={false}
-                  className="h-[42vh] w-full resize-none rounded-md border border-line bg-app px-3 py-2.5 font-mono text-[12px] leading-relaxed text-fg outline-none focus:border-accent"
-                />
+                <SourceEditor value={artGate.draft} onChange={artGate.setDraft} surface="bg-app" className="h-[42vh]" />
               ) : (
                 <StagedArtifactPreview content={cur.staged_artifact ?? ''} />
               )}

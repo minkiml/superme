@@ -561,6 +561,18 @@ export function deleteInbox(id: number): Promise<{ ok: boolean; id: number }> {
   return sendJSON(`/api/dev/inbox/${id}`, 'DELETE')
 }
 
+// The row's HANDOFF BRIEF (D5) — the cold-start context the work-item it becomes reads first.
+// `content: null` means no brief was filed, which is legal (a bare capture) rather than missing.
+// `editable` goes false at push: the file has moved into the item's read-only `preliminary/`.
+export type InboxBrief = { id: number; content: string | null; editable: boolean; path: string }
+export function getInboxBrief(id: number): Promise<InboxBrief> {
+  return getJSON(`/api/dev/inbox/${id}/brief`)
+}
+
+export function saveInboxBrief(id: number, content: string): Promise<{ ok: boolean; id: number }> {
+  return sendJSON(`/api/dev/inbox/${id}/brief`, 'PUT', { content })
+}
+
 // Push an inbox item to the workspace — the owner's push (spawn branch-offs wait for this).
 // One shared transaction: work-item at triage/active + the brief folder moved to preliminary/.
 export type PushResult = { ok: boolean; work_item: { id: string; folder: string }; inbox: InboxEntry }

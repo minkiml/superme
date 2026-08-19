@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { Layers, FileText, X, Loader2, ScrollText, Pencil, Save, Sparkles, Bot, Pin } from 'lucide-react'
+import { Layers, FileText, X, Loader2, ScrollText, Sparkles, Bot, Pin } from 'lucide-react'
 import Markdown from '@/ui/Markdown'
 import Toggle from '@/ui/Toggle'
 import ArtifactTabs from '@/ui/ArtifactTabs'
+import SourceEditor from '@/ui/SourceEditor'
+import { useEditGate, EditActions } from '@/ui/EditGate'
 import { getFoundation, saveFoundationFile, getPublished, getHarnessPlugins, toggleConstitution, type FoundationFile, type FoundationConstitution, type PublishedItem } from '@/lib/api'
 import { HarnessPlugins } from '@/features/dev/HarnessPlugins'
 import ConstitutionModal from '@/features/dev/ConstitutionModal'
@@ -250,10 +252,12 @@ function ConstitutionRow({ c, learned = false, onToggled, onOpen }: { c: Foundat
 // View + edit one identity/charter file. Charters are hand-authored system-prompt sources —
 // editing is allowed (takes effect next turn); the raw markdown (frontmatter kept) is edited.
 function FileViewer({ file, onClose, onSaved }: { file: FoundationFile; onClose: () => void; onSaved: () => void }) {
-  const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState(file.body)
-  const [busy, setBusy] = useState(false)
-  const [err, setErr] = useState<string | null>(null)
+  const gate = useEditGate({
+    saved: file.body,
+    valid: (d) => !!d.trim(),
+    commit: async (d) => { await saveFoundationFile(file.key, d); onSaved() },
+  })
+  const { editing, draft, err } = gate
   // Close only on a TRUE backdrop click — press AND release both on the scrim (not a drag that
   // starts inside and ends out). While editing, an outside click never closes (only the X does).
   const downOnScrim = useRef(false)
@@ -263,18 +267,6 @@ function FileViewer({ file, onClose, onSaved }: { file: FoundationFile; onClose:
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose, editing])
-
-  async function save() {
-    setBusy(true)
-    setErr(null)
-    try {
-      await saveFoundationFile(file.key, draft)
-      onSaved()
-    } catch (e) {
-      setErr(String(e))
-      setBusy(false)
-    }
-  }
 
   return (
     <div
@@ -291,31 +283,7 @@ function FileViewer({ file, onClose, onSaved }: { file: FoundationFile; onClose:
           <span className="text-[15px] font-semibold text-fg">{file.label}</span>
           <span className={`text-[10px] font-medium uppercase tracking-wider ${SCOPE_COLOR[file.scope] ?? 'text-faint'}`}>{file.scope}</span>
           <div className="ml-auto flex items-center gap-1.5">
-            {!editing ? (
-              <button
-                onClick={() => { setDraft(file.body); setEditing(true) }}
-                className="flex items-center gap-1 rounded-md border border-line px-2 py-1 text-xs text-muted hover:bg-hover hover:text-fg"
-              >
-                <Pencil size={12} /> Edit
-              </button>
-            ) : (
-              <>
-                <button
-                  onClick={() => setEditing(false)}
-                  disabled={busy}
-                  className="rounded-md border border-line px-2 py-1 text-xs text-muted hover:bg-hover hover:text-fg disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={save}
-                  disabled={busy || draft === file.body || !draft.trim()}
-                  className="flex items-center gap-1 rounded-md bg-accent px-2 py-1 text-xs text-on-accent hover:opacity-90 disabled:opacity-50"
-                >
-                  {busy ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} Save
-                </button>
-              </>
-            )}
+            <EditActions gate={gate} />
             <button onClick={onClose} className="rounded-md p-1 text-muted hover:bg-hover hover:text-fg">
               <X size={18} />
             </button>
@@ -324,12 +292,7 @@ function FileViewer({ file, onClose, onSaved }: { file: FoundationFile; onClose:
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
           {err && <div className="mb-2 text-sm text-danger">{err}</div>}
           {editing ? (
-            <textarea
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              spellCheck={false}
-              className="h-[60vh] w-full resize-none rounded-md border border-line bg-sunken p-3 font-mono text-[12.5px] leading-relaxed text-fg outline-none focus:border-accent"
-            />
+            <SourceEditor value={draft} onChange={gate.setDraft} surface="bg-sunken" />
           ) : (
             <Markdown text={stripFrontmatter(file.body)} variant="doc" tone={file.scope as 'universal' | 'dev' | 'core'} />
           )}

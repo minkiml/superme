@@ -47,3 +47,23 @@ class InboxPushResponse(BaseModel):
 class InboxDeleteResponse(BaseModel):
     ok: bool
     id: int
+
+
+class InboxBriefResponse(BaseModel):
+    """One row's handoff brief (D5) — the cold-start context the item it becomes reads first.
+    `content` is null when no brief was filed, which is a legal state and not an error. `editable`
+    is false once the row is pushed: the brief has moved into the item's `preliminary/`, which is
+    provenance."""
+    id: int
+    content: str | None = None
+    editable: bool
+    path: str
+
+
+class InboxBriefBody(BaseModel):
+    content: str
+
+
+class InboxBriefSaveResponse(BaseModel):
+    ok: bool
+    id: int

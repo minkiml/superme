@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
-import { ScrollText, Loader2, Bot, Sparkles, Pencil, Save, X, Plus, Trash2, Check, ShieldCheck, ClipboardCheck, ArrowUp, ArrowDown, Gavel, ChevronRight } from 'lucide-react'
+import { ScrollText, Loader2, Bot, Sparkles, Pencil, X, Plus, Trash2, Check, ShieldCheck, ClipboardCheck, ArrowUp, ArrowDown, Gavel, ChevronRight } from 'lucide-react'
 import Markdown from '@/ui/Markdown'
 import Modal from '@/ui/Modal'
 import Toggle from '@/ui/Toggle'
 import ArtifactTabs from '@/ui/ArtifactTabs'
 import SourceEditor from '@/ui/SourceEditor'
+import { useEditGate, EditActions } from '@/ui/EditGate'
 import {
   getConstitutions, toggleConstitution, getLocalPlugins, getHarnessFile, saveHarnessFile,
   getAssets, assetAction, getDeputyMandate, saveDeputyMandate, type AssetItem, type AssetAction,
@@ -437,31 +438,24 @@ function PluginRows({ entries, onOpen }: { entries: HarnessEntry[]; onOpen: (e: 
 // View + edit one local skill/agent's raw markdown (scope='local', keyed to this host).
 function LocalFileModal({ contextId, entry, onClose }: { contextId: string; entry: HarnessEntry; onClose: () => void }) {
   const [content, setContent] = useState<string | null>(null)
-  const [draft, setDraft] = useState('')
-  const [editing, setEditing] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [err, setErr] = useState<string | null>(null)
+  const [loadErr, setLoadErr] = useState<string | null>(null)
+  const gate = useEditGate({
+    saved: content ?? '',
+    commit: async (d) => {
+      await saveHarnessFile('local', entry.kind, entry.name, d, contextId)
+      setContent(d)
+    },
+  })
+  const { editing, draft } = gate
+  const err = gate.err ?? loadErr
 
   useEffect(() => {
     let alive = true
     getHarnessFile('local', entry.kind, entry.name, contextId)
-      .then((f) => { if (alive) { setContent(f.content); setDraft(f.content) } })
-      .catch((e) => alive && setErr(String(e)))
+      .then((f) => { if (alive) setContent(f.content) })
+      .catch((e) => alive && setLoadErr(String(e)))
     return () => { alive = false }
   }, [contextId, entry.kind, entry.name])
-
-  async function save() {
-    setBusy(true); setErr(null)
-    try {
-      await saveHarnessFile('local', entry.kind, entry.name, draft, contextId)
-      setContent(draft)
-      setEditing(false)
-    } catch (e) {
-      setErr(String(e))
-    } finally {
-      setBusy(false)
-    }
-  }
 
   const Icon = entry.kind === 'agent' ? Bot : Sparkles
   return (
@@ -471,32 +465,7 @@ function LocalFileModal({ contextId, entry, onClose }: { contextId: string; entr
         <span className="font-mono text-sm text-fg">{entry.name}</span>
         <span className="rounded bg-hover px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-faint">{entry.kind}</span>
         <div className="ml-auto flex items-center gap-1.5">
-          {!editing ? (
-            <button
-              onClick={() => setEditing(true)}
-              disabled={content === null}
-              className="flex items-center gap-1 rounded-md border border-line px-2 py-1 text-xs text-muted hover:bg-hover hover:text-fg disabled:opacity-50"
-            >
-              <Pencil size={12} /> Edit
-            </button>
-          ) : (
-            <>
-              <button
-                onClick={() => { setEditing(false); setDraft(content ?? '') }}
-                disabled={busy}
-                className="rounded-md border border-line px-2 py-1 text-xs text-muted hover:bg-hover hover:text-fg disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={save}
-                disabled={busy || draft === content}
-                className="flex items-center gap-1 rounded-md bg-accent px-2 py-1 text-xs text-on-accent hover:opacity-90 disabled:opacity-50"
-              >
-                {busy ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} Save
-              </button>
-            </>
-          )}
+          <EditActions gate={gate} readOnly={content === null} />
           <button onClick={onClose} className="rounded p-1 text-muted hover:bg-hover hover:text-fg">
             <X size={16} />
           </button>
@@ -507,7 +476,7 @@ function LocalFileModal({ contextId, entry, onClose }: { contextId: string; entr
         {content === null ? (
           <Loading />
         ) : editing ? (
-          <SourceEditor value={draft} onChange={setDraft} />
+          <SourceEditor value={draft} onChange={gate.setDraft} />
         ) : (
           <Markdown text={stripFrontmatter(content)} variant="doc" tone="dev" />
         )}
@@ -521,32 +490,23 @@ function LocalFileModal({ contextId, entry, onClose }: { contextId: string; entr
 // it judges while the owner is away. Seeded from a template on connect; edits take effect next dispatch.
 function DeputyPanel({ contextId }: { contextId: string }) {
   const [content, setContent] = useState<string | null>(null)
-  const [draft, setDraft] = useState('')
-  const [editing, setEditing] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [err, setErr] = useState<string | null>(null)
+  const [loadErr, setLoadErr] = useState<string | null>(null)
+  const gate = useEditGate({
+    saved: content ?? '',
+    commit: async (d) => { await saveDeputyMandate(d, contextId); setContent(d) },
+  })
+  const { editing, draft } = gate
+  const err = gate.err ?? loadErr
 
   useEffect(() => {
     let alive = true
-    setContent(null); setEditing(false)
+    setContent(null); gate.close()
     getDeputyMandate(contextId)
-      .then((d) => { if (alive) { setContent(d.content); setDraft(d.content) } })
-      .catch((e) => alive && setErr(String(e)))
+      .then((d) => { if (alive) setContent(d.content) })
+      .catch((e) => alive && setLoadErr(String(e)))
     return () => { alive = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contextId])
-
-  async function save() {
-    setBusy(true); setErr(null)
-    try {
-      await saveDeputyMandate(draft, contextId)
-      setContent(draft)
-      setEditing(false)
-    } catch (e) {
-      setErr(String(e))
-    } finally {
-      setBusy(false)
-    }
-  }
 
   return (
     <section>
@@ -555,38 +515,15 @@ function DeputyPanel({ contextId }: { contextId: string }) {
           <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted">Mandate</h2>
           <span className="text-[11px] text-faint">the standing bar the deputy judges gates against while you’re away</span>
         </div>
-        {!editing ? (
-          <button
-            onClick={() => setEditing(true)}
-            disabled={content === null}
-            className="flex items-center gap-1 rounded-md border border-line px-2 py-1 text-[11px] text-muted hover:bg-hover hover:text-fg disabled:opacity-40"
-          >
-            <Pencil size={12} /> Edit
-          </button>
-        ) : (
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={() => { setEditing(false); setDraft(content ?? '') }}
-              disabled={busy}
-              className="rounded-md border border-line px-2 py-1 text-[11px] text-muted hover:bg-hover hover:text-fg disabled:opacity-40"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={save}
-              disabled={busy || draft === content}
-              className="flex items-center gap-1 rounded-md bg-dev px-2 py-1 text-[11px] font-medium text-white disabled:opacity-40"
-            >
-              {busy ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} Save
-            </button>
-          </div>
-        )}
+        <div className="flex items-center gap-1.5">
+          <EditActions gate={gate} tone="dev" readOnly={content === null} />
+        </div>
       </div>
       {err && <div className="mb-2 text-sm text-danger">{err}</div>}
       {content === null ? (
         <Loading />
       ) : editing ? (
-        <SourceEditor value={draft} onChange={setDraft} tone="dev" className="rounded-lg" />
+        <SourceEditor value={draft} onChange={gate.setDraft} tone="dev" className="rounded-lg" />
       ) : (
         <div className="rounded-lg border border-line bg-surface px-4 py-3">
           <Markdown text={stripFrontmatter(content)} variant="doc" tone="dev" />

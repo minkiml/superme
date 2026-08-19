@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { ScrollText, X, Pencil, Save, Loader2, Pin } from 'lucide-react'
+import { ScrollText, X, Pin } from 'lucide-react'
 import Markdown from '@/ui/Markdown'
 import Modal from '@/ui/Modal'
 import Toggle from '@/ui/Toggle'
 import SourceEditor from '@/ui/SourceEditor'
+import { useEditGate, EditActions } from '@/ui/EditGate'
 import { toggleConstitution, getConstitutionFile, saveConstitutionFile } from '@/lib/api'
 
 function stripFrontmatter(text: string): string {
@@ -35,12 +36,21 @@ export default function ConstitutionModal({
 }) {
   const [on, setOn] = useState(enabled)
   const [busy, setBusy] = useState(false)
-  const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState('') // the RAW file (frontmatter + body) while editing
-  const [saving, setSaving] = useState(false)
-  const [err, setErr] = useState<string | null>(null)
   // After a save, show the freshly-saved (stripped) body instead of the now-stale `body` prop.
   const [savedBody, setSavedBody] = useState<string | null>(null)
+  // The modal RENDERS the stripped body but EDITS the raw file, so the gate loads its own baseline
+  // at Edit-time — diffing a draft against the stripped text would arm Save on the frontmatter.
+  const gate = useEditGate({
+    saved: '',
+    valid: (d) => !!d.trim(),
+    load: async () => (await getConstitutionFile(slug, scope, contextId)).content,
+    commit: async (d) => {
+      await saveConstitutionFile(slug, scope, d, contextId)
+      setSavedBody(stripFrontmatter(d).trim())
+      onToggled?.() // reload the parent list so its cached body refreshes too
+    },
+  })
+  const { editing, draft, err } = gate
 
   async function toggle(v: boolean) {
     setBusy(true)
@@ -50,35 +60,6 @@ export default function ConstitutionModal({
       onToggled?.()
     } finally {
       setBusy(false)
-    }
-  }
-
-  async function startEdit() {
-    setErr(null)
-    setBusy(true)
-    try {
-      const { content } = await getConstitutionFile(slug, scope, contextId)
-      setDraft(content)
-      setEditing(true)
-    } catch (e) {
-      setErr(String(e))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function save() {
-    setSaving(true)
-    setErr(null)
-    try {
-      await saveConstitutionFile(slug, scope, draft, contextId)
-      setSavedBody(stripFrontmatter(draft).trim())
-      setEditing(false)
-      onToggled?.() // reload the parent list so its cached body refreshes too
-    } catch (e) {
-      setErr(String(e))
-    } finally {
-      setSaving(false)
     }
   }
 
@@ -94,46 +75,19 @@ export default function ConstitutionModal({
         {foundational && <span className="rounded bg-universal/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-universal">foundational</span>}
         {learned && <span className="rounded bg-warn/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-warn">learned</span>}
         <div className="ml-auto flex items-center gap-2">
-          {!editing ? (
-            <>
-              <button
-                onClick={startEdit}
-                disabled={busy}
-                className="flex items-center gap-1 rounded-md border border-line px-2 py-1 text-xs text-muted hover:bg-hover hover:text-fg disabled:opacity-50"
-              >
-                {busy ? <Loader2 size={12} className="animate-spin" /> : <Pencil size={12} />} Edit
-              </button>
-              {foundational ? (
-                <Pin size={15} className="text-faint" aria-label="Foundational — always on, can't be disabled" />
-              ) : (
-                <Toggle on={on} onChange={toggle} onColor={onColor} disabled={busy} title={on ? 'Disable' : 'Enable'} />
-              )}
-            </>
+          <EditActions gate={gate} />
+          {!editing && (foundational ? (
+            <Pin size={15} className="text-faint" aria-label="Foundational — always on, can't be disabled" />
           ) : (
-            <>
-              <button
-                onClick={() => { setEditing(false); setErr(null) }}
-                disabled={saving}
-                className="rounded-md border border-line px-2 py-1 text-xs text-muted hover:bg-hover hover:text-fg disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={save}
-                disabled={saving || !draft.trim()}
-                className="flex items-center gap-1 rounded-md bg-accent px-2 py-1 text-xs text-on-accent hover:opacity-90 disabled:opacity-50"
-              >
-                {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} Save
-              </button>
-            </>
-          )}
+            <Toggle on={on} onChange={toggle} onColor={onColor} disabled={busy} title={on ? 'Disable' : 'Enable'} />
+          ))}
           <button onClick={onClose} className="rounded p-1 text-muted hover:bg-hover hover:text-fg"><X size={16} /></button>
         </div>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
         {err && <div className="mb-2 text-sm text-danger">{err}</div>}
         {editing ? (
-          <SourceEditor value={draft} onChange={setDraft} surface="bg-sunken" />
+          <SourceEditor value={draft} onChange={gate.setDraft} surface="bg-sunken" />
         ) : (
           <>
             {description && <p className="mb-3 text-[12px] italic leading-relaxed text-faint">{description}</p>}

@@ -21,6 +21,7 @@
     "GET /dev/harness/plugins",
     "GET /dev/harness/published",
     "GET /dev/harness/published/{proposal_id}/file",
+    "GET /dev/inbox/{item_id}/brief",
     "GET /dev/lint",
     "GET /dev/log",
     "GET /dev/memory/proposals",
@@ -117,6 +118,7 @@
     "PUT /dev/harness/foundation",
     "PUT /dev/harness/plugin-file",
     "PUT /dev/harness/published/{proposal_id}/file",
+    "PUT /dev/inbox/{item_id}/brief",
     "PUT /dev/work-items/{item_id}/doc",
     "PUT /dev/work-items/{item_id}/from-you",
     "PUT /knowledge/file",
@@ -3785,6 +3787,72 @@
             "text"
           ],
           "title": "InboxBody",
+          "type": "object"
+        },
+        "InboxBriefBody": {
+          "properties": {
+            "content": {
+              "title": "Content",
+              "type": "string"
+            }
+          },
+          "required": [
+            "content"
+          ],
+          "title": "InboxBriefBody",
+          "type": "object"
+        },
+        "InboxBriefResponse": {
+          "description": "One row's handoff brief (D5) \u2014 the cold-start context the item it becomes reads first.\n`content` is null when no brief was filed, which is a legal state and not an error. `editable`\nis false once the row is pushed: the brief has moved into the item's `preliminary/`, which is\nprovenance.",
+          "properties": {
+            "content": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Content"
+            },
+            "editable": {
+              "title": "Editable",
+              "type": "boolean"
+            },
+            "id": {
+              "title": "Id",
+              "type": "integer"
+            },
+            "path": {
+              "title": "Path",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "editable",
+            "path"
+          ],
+          "title": "InboxBriefResponse",
+          "type": "object"
+        },
+        "InboxBriefSaveResponse": {
+          "properties": {
+            "id": {
+              "title": "Id",
+              "type": "integer"
+            },
+            "ok": {
+              "title": "Ok",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok",
+            "id"
+          ],
+          "title": "InboxBriefSaveResponse",
           "type": "object"
         },
         "InboxDeleteResponse": {
@@ -11866,6 +11934,94 @@
             }
           },
           "summary": "Dev Inbox Update"
+        }
+      },
+      "/dev/inbox/{item_id}/brief": {
+        "get": {
+          "description": "One row's handoff brief (D5). Agent-filed rows carry one from birth; a bare capture has\nnone, and `content: null` says so rather than 404-ing \u2014 an absent brief is the state the\nowner can still fill, not a missing resource.",
+          "operationId": "dev_inbox_brief_dev_inbox__item_id__brief_get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "item_id",
+              "required": true,
+              "schema": {
+                "title": "Item Id",
+                "type": "integer"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/InboxBriefResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Inbox Brief"
+        },
+        "put": {
+          "description": "Overwrite one open row's handoff brief, creating it when the row never had one. 409 once\nthe row is pushed \u2014 the brief is the item's provenance from the moment it lands there.",
+          "operationId": "dev_inbox_brief_save_dev_inbox__item_id__brief_put",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "item_id",
+              "required": true,
+              "schema": {
+                "title": "Item Id",
+                "type": "integer"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InboxBriefBody"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/InboxBriefSaveResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Dev Inbox Brief Save"
         }
       },
       "/dev/inbox/{item_id}/push": {

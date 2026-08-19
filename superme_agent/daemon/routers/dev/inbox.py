@@ -9,7 +9,10 @@ from ...app_state import (
     DevKnowledgeService, DevStore, SystemSpine, get_dev, get_dev_store, get_spine,
 )
 from ...deps import dev_root
-from ...schemas.dev.inbox import InboxRow, InboxPushResponse, InboxDeleteResponse
+from ...schemas.dev.inbox import (
+    InboxRow, InboxPushResponse, InboxDeleteResponse,
+    InboxBriefResponse, InboxBriefBody, InboxBriefSaveResponse,
+)
 from ...services.runs import fire_auto_triage
 from ....core import inbox_flow
 
@@ -156,3 +159,32 @@ async def dev_inbox_delete(item_id: int, dev_store: DevStore = Depends(get_dev_s
             actor="owner", meta={"inbox_id": item_id},
         )
     return result
+
+
+@router.get("/dev/inbox/{item_id}/brief", response_model=InboxBriefResponse)
+async def dev_inbox_brief(item_id: int, dev_store: DevStore = Depends(get_dev_store)) -> dict:
+    """One row's handoff brief (D5). Agent-filed rows carry one from birth; a bare capture has
+    none, and `content: null` says so rather than 404-ing — an absent brief is the state the
+    owner can still fill, not a missing resource."""
+    row = dev_store.get_inbox(item_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="inbox item not found")
+    root = dev_root(row["context_id"])
+    content, editable = inbox_flow.read_brief(root, row)
+    path, _ = inbox_flow.brief_location(root, row)
+    return {"id": item_id, "content": content, "editable": editable, "path": str(path)}
+
+
+@router.put("/dev/inbox/{item_id}/brief", response_model=InboxBriefSaveResponse)
+async def dev_inbox_brief_save(item_id: int, body: InboxBriefBody,
+                               dev_store: DevStore = Depends(get_dev_store)) -> dict:
+    """Overwrite one open row's handoff brief, creating it when the row never had one. 409 once
+    the row is pushed — the brief is the item's provenance from the moment it lands there."""
+    row = dev_store.get_inbox(item_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="inbox item not found")
+    try:
+        inbox_flow.write_brief(dev_root(row["context_id"]), row, body.content)
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    return {"ok": True, "id": item_id}

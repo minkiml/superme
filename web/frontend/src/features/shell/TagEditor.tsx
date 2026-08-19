@@ -26,6 +26,10 @@ export default function TagEditor({
   const [saving, setSaving] = useState(false)
 
   const defaultColor = colorFor(repo.id)
+  // Same diff rule as every other editor (ui/EditGate): Save is live only while something differs.
+  // The gate itself doesn't apply here — a swatch picker IS the edit mode, and making the owner
+  // press Edit before they can click a colour would add a step to the only thing this popover does.
+  const dirty = color !== repo.color || icon !== repo.icon
 
   async function save() {
     setSaving(true)
@@ -102,8 +106,8 @@ export default function TagEditor({
           </button>
           <button
             onClick={save}
-            disabled={saving}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-[13px] font-medium text-on-accent hover:opacity-90 disabled:opacity-50"
+            disabled={saving || !dirty}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-[13px] font-medium text-on-accent hover:opacity-90 disabled:opacity-40"
           >
             {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Save
           </button>

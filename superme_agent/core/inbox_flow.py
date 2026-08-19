@@ -123,3 +123,44 @@ def push_inbox_item(store, dev: DevKnowledgeService, dev_root: Path, row: dict, 
                 item_id=parent_id, actor="daemon", meta={"child": wi["id"]},
             )
     return wi
+
+
+def brief_location(dev_root: Path, row: dict) -> tuple[Path, bool]:
+    """Where this row's handoff brief lives, and whether it is still writable.
+
+    An OPEN row keeps its brief in the inbox content folder and it is editable there: the brief is
+    the whole cold-start context of the item this row becomes, and push is the last moment that
+    changing it is free. A PUSHED row's brief has moved into the item's `preliminary/`, which is
+    provenance from the instant it arrives — read-only, and a correction belongs in plan.md.
+
+    The path is returned whether or not the file exists; an absent brief is a legal state (a bare
+    capture), not an error, and on an open row it is the state the owner can still fix.
+    """
+    dev_root = Path(dev_root)
+    if row.get("status") == "pushed" and row.get("routed_to"):
+        return (dev_root / "work-items" / str(row["routed_to"]) / "preliminary"
+                / "handoff-brief.md"), False
+    return inbox_content_dir(dev_root, row["id"]) / "handoff-brief.md", True
+
+
+def read_brief(dev_root: Path, row: dict) -> tuple[str | None, bool]:
+    """This row's handoff brief as raw markdown (frontmatter kept — it is part of what the agent
+    reading it sees), plus whether it may still be written. None = no brief filed."""
+    path, editable = brief_location(dev_root, row)
+    return (path.read_text() if path.is_file() else None), editable
+
+
+def write_brief(dev_root: Path, row: dict, content: str) -> Path:
+    """Overwrite this row's handoff brief with `content`, creating it if the row never had one.
+
+    An OVERWRITE, unlike the agent-side `write_handoff_brief`, which appends: an agent adding to a
+    brief cannot see what it would clobber, while the owner is editing the file's own text in front
+    of them. Raises ValueError once the row is pushed — its brief is provenance by then.
+    """
+    path, editable = brief_location(dev_root, row)
+    if not editable:
+        raise ValueError("this row is pushed — its brief is the item's provenance and is read-only")
+    from . import artifacts as _arts
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _arts._atomic_write(path, content)
+    return path

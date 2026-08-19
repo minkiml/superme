@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Bot, Loader2, Pencil, Save, Sparkles, X } from 'lucide-react'
+import { Bot, Loader2, Pencil, Sparkles, X } from 'lucide-react'
 import Markdown from '@/ui/Markdown'
 import Modal from '@/ui/Modal'
 import SourceEditor from '@/ui/SourceEditor'
+import { useEditGate, EditActions } from '@/ui/EditGate'
 import { getHarnessPlugins, getHarnessFile, saveHarnessFile, type HarnessScope, type HarnessEntry, type PublishedItem } from '@/lib/api'
 import { PublishedFileModal } from './LearningGovernance'
 
@@ -174,31 +175,21 @@ function HarnessRow({ entry, onClick, showKind = true, learned = false }: { entr
 // textarea and "Save" writes it back (takes effect on the next dev turn).
 function HarnessFileModal({ scope, entry, onClose }: { scope: string; entry: HarnessEntry; onClose: () => void }) {
   const [content, setContent] = useState<string | null>(null)
-  const [draft, setDraft] = useState('')
-  const [editing, setEditing] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [err, setErr] = useState<string | null>(null)
+  const [loadErr, setLoadErr] = useState<string | null>(null)
+  const gate = useEditGate({
+    saved: content ?? '',
+    commit: async (d) => { await saveHarnessFile(scope, entry.kind, entry.name, d); setContent(d) },
+  })
+  const { editing, draft } = gate
+  const err = gate.err ?? loadErr
 
   useEffect(() => {
     let alive = true
     getHarnessFile(scope, entry.kind, entry.name)
-      .then((f) => { if (alive) { setContent(f.content); setDraft(f.content) } })
-      .catch((e) => alive && setErr(String(e)))
+      .then((f) => { if (alive) setContent(f.content) })
+      .catch((e) => alive && setLoadErr(String(e)))
     return () => { alive = false }
   }, [scope, entry.kind, entry.name])
-
-  async function save() {
-    setBusy(true); setErr(null)
-    try {
-      await saveHarnessFile(scope, entry.kind, entry.name, draft)
-      setContent(draft)
-      setEditing(false)
-    } catch (e) {
-      setErr(String(e))
-    } finally {
-      setBusy(false)
-    }
-  }
 
   const Icon = entry.kind === 'agent' ? Bot : Sparkles
   return (
@@ -211,32 +202,7 @@ function HarnessFileModal({ scope, entry, onClose }: { scope: string; entry: Har
             <span className="rounded bg-accent-soft px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-accent-text">{entry.category}</span>
           )}
           <div className="ml-auto flex items-center gap-1.5">
-            {!editing ? (
-              <button
-                onClick={() => setEditing(true)}
-                disabled={content === null}
-                className="flex items-center gap-1 rounded-md border border-line px-2 py-1 text-xs text-muted hover:bg-hover hover:text-fg disabled:opacity-50"
-              >
-                <Pencil size={12} /> Edit
-              </button>
-            ) : (
-              <>
-                <button
-                  onClick={() => { setEditing(false); setDraft(content ?? '') }}
-                  disabled={busy}
-                  className="rounded-md border border-line px-2 py-1 text-xs text-muted hover:bg-hover hover:text-fg disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={save}
-                  disabled={busy || draft === content}
-                  className="flex items-center gap-1 rounded-md bg-accent px-2 py-1 text-xs text-on-accent hover:opacity-90 disabled:opacity-50"
-                >
-                  {busy ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} Save
-                </button>
-              </>
-            )}
+            <EditActions gate={gate} readOnly={content === null} />
             <button onClick={onClose} className="rounded p-1 text-muted hover:bg-hover hover:text-fg">
               <X size={16} />
             </button>
@@ -247,7 +213,7 @@ function HarnessFileModal({ scope, entry, onClose }: { scope: string; entry: Har
           {content === null ? (
             <div className="flex items-center gap-2 text-sm text-muted"><Loader2 size={14} className="animate-spin" /> Loading…</div>
           ) : editing ? (
-            <SourceEditor value={draft} onChange={setDraft} />
+            <SourceEditor value={draft} onChange={gate.setDraft} />
           ) : (
             <Markdown text={stripFrontmatter(content)} variant="doc" tone={SCOPE_TONE[scope]} />
           )}
