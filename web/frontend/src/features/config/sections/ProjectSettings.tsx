@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import Dropdown from '@/ui/Dropdown'
 import Toggle from '@/ui/Toggle'
-import { MODELS as MODEL_CATALOG, EFFORTS as EFFORT_CATALOG, toModelKey } from '@/lib/format'
+import { MODELS as MODEL_CATALOG, EFFORTS as EFFORT_CATALOG, fmtModel, toModelKey } from '@/lib/format'
 import { invalidate, useLive } from '@/lib/live'
 import { K } from '@/lib/live/keys'
-import { setRepoModel, setRepoEffort, setRepoLearning, type ModelAlias } from '@/lib/api'
+import { getSystem, setRepoModel, setRepoEffort, setRepoLearning, type ModelAlias } from '@/lib/api'
 import { setRepoGit, getRepoBranches } from '@/lib/api/system'
 import type { OrbitRepo } from '@/features/shell/useCommandStats'
 import { Card, ConfigRow, Divider, PaneHead, SectionLabel, W_WIDE } from '../controls'
@@ -13,8 +13,17 @@ import { Card, ConfigRow, Divider, PaneHead, SectionLabel, W_WIDE } from '../con
 // and how its work lands. "" means inherit, so the per-repo pickers carry a System-default option
 // the system-level ones cannot have.
 
-const MODELS = [{ value: '', label: 'System default' }, ...MODEL_CATALOG.map((m) => ({ value: m.key, label: m.label }))]
-const EFFORTS = [{ value: '', label: 'System default' }, ...EFFORT_CATALOG.map((e) => ({ value: e.key, label: e.label }))]
+// The inherit option NAMES the value it inherits. "System default" was a pointer to a setting that
+// no longer exists — a repo that picks nothing runs the declared default, and the picker should say
+// which one that is rather than making you go somewhere else to find out.
+const modelOptions = (fallback: string) => [
+  { value: '', label: `Default · ${fmtModel(fallback)}` },
+  ...MODEL_CATALOG.map((m) => ({ value: m.key, label: m.label })),
+]
+const effortOptions = (fallback: string) => [
+  { value: '', label: `Default · ${EFFORT_CATALOG.find((e) => e.key === fallback)?.label ?? fallback}` },
+  ...EFFORT_CATALOG.map((e) => ({ value: e.key, label: e.label })),
+]
 
 // HOW this repo's work lands (workflow-renovation-v2 §2.2): does the diff get its own review gate
 // before it lands. Every repo starts on `fast`.
@@ -30,7 +39,7 @@ export default function ProjectSettings({ repo }: { repo: OrbitRepo }) {
       <PaneHead
         title="Settings"
         scope={name}
-        lede={`What ${name} inherits, what it overrides, and how its work lands. Leave a picker on “System default” to inherit.`}
+        lede={`What ${name} runs on, and how its work lands. A picker left on its Default option follows the declared default rather than pinning a value here.`}
       />
       <Inheritance repo={repo} name={name} />
       <SectionLabel
@@ -43,6 +52,9 @@ export default function ProjectSettings({ repo }: { repo: OrbitRepo }) {
 }
 
 function Inheritance({ repo, name }: { repo: OrbitRepo; name: string }) {
+  // What this repo runs if it overrides nothing. Same cached key General reads, so naming it here
+  // costs no extra request.
+  const sys = useLive(K.systemOverview, getSystem, 0)
   const [model, setModel] = useState(toModelKey(repo.modelOverride))
   const [effort, setEffort] = useState(repo.effortOverride ?? '')
   const [learning, setLearning] = useState(repo.learningEnabled)
@@ -61,7 +73,7 @@ function Inheritance({ repo, name }: { repo: OrbitRepo; name: string }) {
       <ConfigRow title="Model" hint="the model this project's turns run on">
         <Dropdown
           value={model}
-          options={MODELS}
+          options={modelOptions(sys.data?.default_model ?? '')}
           onChange={(v) => { setModel(v); setRepoModel(repo.id, (v || null) as ModelAlias | null).then(after).catch(() => {}) }}
           align="right"
           width={W_WIDE}
@@ -72,7 +84,7 @@ function Inheritance({ repo, name }: { repo: OrbitRepo; name: string }) {
       <ConfigRow title="Reasoning effort" hint="how hard it thinks on this project">
         <Dropdown
           value={effort}
-          options={EFFORTS}
+          options={effortOptions(sys.data?.default_effort ?? 'medium')}
           onChange={(v) => { setEffort(v); setRepoEffort(repo.id, v || null).then(after).catch(() => {}) }}
           align="right"
           width={W_WIDE}

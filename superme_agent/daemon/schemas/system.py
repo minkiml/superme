@@ -43,11 +43,8 @@ class SystemResponse(BaseModel):
     """The System singleton: static config + the live half (in-flight runs) + the repo roster."""
     identity: str
     version: int
-    default_model: str | None = None
-    default_model_static: str | None = None
-    default_model_overridden: bool
-    default_effort: str            # effective system reasoning effort (runtime → YAML → "medium")
-    default_effort_overridden: bool
+    default_model: str | None = None   # what a repo with no override runs (YAML → built-in floor)
+    default_effort: str                # same, for reasoning effort
     policy_version: int
     default_repo: str
     learning_enabled: bool
@@ -177,12 +174,6 @@ class RunTraceResponse(BaseModel):
     events: list[RunEventRow]
 
 
-class SystemModelResponse(BaseModel):
-    ok: bool
-    model: str | None = None
-    effective: str | None = None
-
-
 class AgentModelRow(BaseModel):
     """One tunable background sub-agent: the TIER it tracks (sonnet/opus/haiku — the pick) and the
     concrete model that tier currently resolves to (what actually runs), plus its label and scope."""
@@ -244,12 +235,6 @@ class RepoModelResponse(BaseModel):
     repo_id: str
     model: str | None = None
     effective: str | None = None
-
-
-class SystemEffortResponse(BaseModel):
-    ok: bool
-    effort: str | None = None
-    effective: str
 
 
 class RepoEffortResponse(BaseModel):

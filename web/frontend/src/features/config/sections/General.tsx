@@ -1,27 +1,22 @@
 import { useEffect, useState } from 'react'
-import Dropdown from '@/ui/Dropdown'
 import Toggle from '@/ui/Toggle'
-import { MODELS as MODEL_CATALOG, EFFORTS as EFFORT_CATALOG } from '@/lib/format'
 import { invalidate, useLive } from '@/lib/live'
 import { K } from '@/lib/live/keys'
 import {
-  getSystem, setSystemModel, setSystemEffort, setSystemDeputy,
-  getCompactionConfig, setCompactionConfig,
-  type SystemOverview, type ModelAlias, type CompactionConfig,
+  getSystem, setSystemDeputy, getCompactionConfig, setCompactionConfig,
+  type SystemOverview, type CompactionConfig,
 } from '@/lib/api'
 import {
   ApplyBar, Card, ConfigRow, Divider, GaugeBar, Loading, NumberField, PaneHead, SectionLabel,
-  W_MAIN,
 } from '../controls'
 
-// System › General — what every repo and every turn inherits: which model, how hard it thinks, who
-// judges its gates, and when a long session compacts itself. Learning has a section of its own, so
-// nothing about learning is here.
-
-// The SYSTEM default can't "inherit a system default" — it IS the floor — so these are the concrete
-// tiers only, with no inherit option.
-const MODELS = MODEL_CATALOG.map((m) => ({ value: m.key, label: m.label }))
-const EFFORTS = EFFORT_CATALOG.map((e) => ({ value: e.key, label: e.label }))
+// System › General — the settings that are genuinely system-shaped: who judges the autopilot gates
+// and how readily, and when a long session compacts itself.
+//
+// Model and effort are NOT here. They were, and every repo overrode them — three projects choosing
+// the same value independently, which is what a default is, set one tier too low. A repo picks its
+// own; one that picks nothing runs the declared default (config/system.yaml, else the built-in
+// floor), which is what Project · Settings names in its inherit option.
 
 // The deputy escalation dial is set PER GATE, because a project can want a light touch at triage
 // and a cautious hand at review. The refusal floor holds at every level; this only moves the
@@ -39,7 +34,7 @@ export default function General() {
       <PaneHead
         title="General"
         scope="System"
-        lede="Defaults every repo and every turn inherits unless something nearer overrides them."
+        lede="System-wide behaviour: who judges the autopilot gates on your behalf, and when a long session compacts itself. A project’s own model and effort are set on that project."
       />
       {sys.error && !sys.data ? (
         <div className="text-sm text-danger">Couldn’t load system config — {String(sys.error)}</div>
@@ -59,13 +54,9 @@ export default function General() {
 
 function Defaults({ sys }: { sys: SystemOverview }) {
   // Held locally so a pick answers immediately; the cache it came from refreshes on its own clock.
-  const [model, setModel] = useState(sys.default_model ?? '')
-  const [effort, setEffort] = useState(sys.default_effort ?? 'medium')
   const [deputy, setDeputy] = useState(sys.deputy_enabled ?? true)
   const [strict, setStrict] = useState<Record<string, string>>(sys.deputy_strictness ?? {})
   useEffect(() => {
-    setModel(sys.default_model ?? '')
-    setEffort(sys.default_effort ?? 'medium')
     setDeputy(sys.deputy_enabled ?? true)
     setStrict(sys.deputy_strictness ?? {})
   }, [sys])
@@ -75,28 +66,6 @@ function Defaults({ sys }: { sys: SystemOverview }) {
   return (
     <>
       <Card>
-        <ConfigRow title="Default model" hint="the model SuperMe runs unless a repo or turn overrides it">
-          <Dropdown
-            value={model}
-            options={MODELS}
-            onChange={(v) => { setModel(v); setSystemModel(v as ModelAlias).then(after).catch(() => {}) }}
-            align="right"
-            width={W_MAIN}
-            title="System default model"
-          />
-        </ConfigRow>
-        <Divider />
-        <ConfigRow title="Default effort" hint="the reasoning effort SuperMe runs unless a repo or turn overrides it">
-          <Dropdown
-            value={effort}
-            options={EFFORTS}
-            onChange={(v) => { setEffort(v); setSystemEffort(v).then(after).catch(() => {}) }}
-            align="right"
-            width={W_MAIN}
-            title="System default reasoning effort"
-          />
-        </ConfigRow>
-        <Divider />
         <ConfigRow title="Deputy" hint="judges autopilot gates on your behalf — off runs autopilot unsupervised">
           <Toggle
             on={deputy}

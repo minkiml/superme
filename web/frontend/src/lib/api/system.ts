@@ -129,24 +129,12 @@ export function getRunTrace(runId: number): Promise<RunTrace> {
 
 type ModelSetResult = { ok: boolean; model: string | null; effective: string | null }
 
-// Set (model alias) or clear (null) the system-wide default model — the floor below per-repo
-// overrides. Clearing falls back to config/system.yaml, then the host default.
-export function setSystemModel(model: ModelAlias | null): Promise<ModelSetResult> {
-  return sendJSON('/api/system/model', 'POST', { model })
-}
-
 // Set or clear one repo's model override. Clearing falls back to the system default.
 export function setRepoModel(repoId: string, model: ModelAlias | null): Promise<ModelSetResult> {
   return sendJSON(`/api/repos/${encodeURIComponent(repoId)}/model`, 'POST', { model })
 }
 
 type EffortSetResult = { ok: boolean; effort: string | null; effective: string }
-
-// Set (low|medium|high) or clear (null) the system-wide default reasoning effort — the floor
-// below per-repo overrides. Clearing falls back to config/system.yaml, then "medium".
-export function setSystemEffort(effort: string | null): Promise<EffortSetResult> {
-  return sendJSON('/api/system/effort', 'POST', { effort })
-}
 
 // Set or clear one repo's reasoning-effort override. Clearing falls back to the system default.
 export function setRepoEffort(repoId: string, effort: string | null): Promise<EffortSetResult> {

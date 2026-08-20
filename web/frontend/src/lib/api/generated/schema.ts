@@ -383,46 +383,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/system/model": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Set System Model
-         * @description Set (or clear) the system-wide default model — the floor below per-repo overrides.
-         */
-        post: operations["set_system_model_system_model_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/system/effort": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Set System Effort
-         * @description Set (or clear) the system-wide default reasoning effort — the floor below per-repo overrides.
-         */
-        post: operations["set_system_effort_system_effort_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/system/agent-models": {
         parameters: {
             query?: never;
@@ -5930,34 +5890,6 @@ export interface components {
             /** Filed */
             filed: number;
         };
-        /** SystemEffortBody */
-        SystemEffortBody: {
-            /** Effort */
-            effort?: string | null;
-        };
-        /** SystemEffortResponse */
-        SystemEffortResponse: {
-            /** Ok */
-            ok: boolean;
-            /** Effort */
-            effort?: string | null;
-            /** Effective */
-            effective: string;
-        };
-        /** SystemModelBody */
-        SystemModelBody: {
-            /** Model */
-            model?: string | null;
-        };
-        /** SystemModelResponse */
-        SystemModelResponse: {
-            /** Ok */
-            ok: boolean;
-            /** Model */
-            model?: string | null;
-            /** Effective */
-            effective?: string | null;
-        };
         /**
          * SystemResponse
          * @description The System singleton: static config + the live half (in-flight runs) + the repo roster.
@@ -5969,14 +5901,8 @@ export interface components {
             version: number;
             /** Default Model */
             default_model?: string | null;
-            /** Default Model Static */
-            default_model_static?: string | null;
-            /** Default Model Overridden */
-            default_model_overridden: boolean;
             /** Default Effort */
             default_effort: string;
-            /** Default Effort Overridden */
-            default_effort_overridden: boolean;
             /** Policy Version */
             policy_version: number;
             /** Default Repo */
@@ -7192,72 +7118,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TokenTimeseriesResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    set_system_model_system_model_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SystemModelBody"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SystemModelResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    set_system_effort_system_effort_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SystemEffortBody"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SystemEffortResponse"];
                 };
             };
             /** @description Validation Error */

@@ -16,10 +16,10 @@ from ..deps import dev_root
 from ..schemas.system import (
     SystemResponse, RepoOverview, RepoConnectResponse, RepoDisconnectResponse,
     RunsResponse, RunTraceResponse,
-    SystemModelResponse, LearningResponse, RepoModelResponse, RepoLearningResponse,
+    LearningResponse, RepoModelResponse, RepoLearningResponse,
     RepoMetaResponse, RepoGitResponse, RepoBranchesResponse, RepoAutopilotResponse, TokenUsageResponse, TokenTimeseriesResponse, SweepConfigBody, SweepConfigResponse,
     CompactionConfigBody, CompactionConfigResponse, DeputyConfigResponse,
-    SystemEffortResponse, RepoEffortResponse, AgentModelsResponse, RepoAttention,
+    RepoEffortResponse, AgentModelsResponse, RepoAttention,
 )
 from ...core.models import AGENT_MODEL_FEATURES
 from ...core import git_layer
@@ -34,20 +34,12 @@ log = logging.getLogger("superme-agent")
 _EFFORT_LEVELS = ("low", "medium", "high")
 
 
-class SystemModelBody(BaseModel):
-    model: str | None = None  # null/"" clears the system default (fall back to YAML/host)
-
-
 class RepoModelBody(BaseModel):
-    model: str | None = None  # null/"" clears this repo's override (fall back to system default)
-
-
-class SystemEffortBody(BaseModel):
-    effort: str | None = None  # null/"" clears the system default (fall back to YAML/"medium")
+    model: str | None = None  # null/"" clears this repo's override (fall back to the default)
 
 
 class RepoEffortBody(BaseModel):
-    effort: str | None = None  # null/"" clears this repo's override (fall back to system default)
+    effort: str | None = None  # null/"" clears this repo's override (fall back to the default)
 
 
 class LearningBody(BaseModel):
@@ -327,22 +319,6 @@ async def token_timeseries(tz_offset: int = 0, spine: SystemSpine = Depends(get_
     """Per-day token usage for the trend graph. `tz_offset` is minutes to ADD to UTC to reach the
     caller's local time (the FE sends `-getTimezoneOffset()`), so days bucket on the owner's day."""
     return spine.token_timeseries(tz_offset)
-
-
-@router.post("/system/model", response_model=SystemModelResponse)
-async def set_system_model(body: SystemModelBody, spine: SystemSpine = Depends(get_spine)) -> dict:
-    """Set (or clear) the system-wide default model — the floor below per-repo overrides."""
-    model = _norm_model(body.model)
-    spine.set_system_model(model)
-    return {"ok": True, "model": model, "effective": spine.effective_system_model()}
-
-
-@router.post("/system/effort", response_model=SystemEffortResponse)
-async def set_system_effort(body: SystemEffortBody, spine: SystemSpine = Depends(get_spine)) -> dict:
-    """Set (or clear) the system-wide default reasoning effort — the floor below per-repo overrides."""
-    effort = _norm_effort(body.effort)
-    spine.set_system_effort(effort)
-    return {"ok": True, "effort": effort, "effective": spine.effective_system_effort()}
 
 
 @router.get("/system/agent-models", response_model=AgentModelsResponse)

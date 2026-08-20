@@ -108,9 +108,7 @@
     "POST /system/agent-models/{feature}",
     "POST /system/compaction",
     "POST /system/deputy",
-    "POST /system/effort",
     "POST /system/learning",
-    "POST /system/model",
     "POST /system/sweep",
     "PUT /dev/general/{name}",
     "PUT /dev/harness/constitution-file",
@@ -8762,114 +8760,12 @@
           "title": "SweptItem",
           "type": "object"
         },
-        "SystemEffortBody": {
-          "properties": {
-            "effort": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Effort"
-            }
-          },
-          "title": "SystemEffortBody",
-          "type": "object"
-        },
-        "SystemEffortResponse": {
-          "properties": {
-            "effective": {
-              "title": "Effective",
-              "type": "string"
-            },
-            "effort": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Effort"
-            },
-            "ok": {
-              "title": "Ok",
-              "type": "boolean"
-            }
-          },
-          "required": [
-            "ok",
-            "effective"
-          ],
-          "title": "SystemEffortResponse",
-          "type": "object"
-        },
-        "SystemModelBody": {
-          "properties": {
-            "model": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Model"
-            }
-          },
-          "title": "SystemModelBody",
-          "type": "object"
-        },
-        "SystemModelResponse": {
-          "properties": {
-            "effective": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Effective"
-            },
-            "model": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Model"
-            },
-            "ok": {
-              "title": "Ok",
-              "type": "boolean"
-            }
-          },
-          "required": [
-            "ok"
-          ],
-          "title": "SystemModelResponse",
-          "type": "object"
-        },
         "SystemResponse": {
           "description": "The System singleton: static config + the live half (in-flight runs) + the repo roster.",
           "properties": {
             "default_effort": {
               "title": "Default Effort",
               "type": "string"
-            },
-            "default_effort_overridden": {
-              "title": "Default Effort Overridden",
-              "type": "boolean"
             },
             "default_model": {
               "anyOf": [
@@ -8881,21 +8777,6 @@
                 }
               ],
               "title": "Default Model"
-            },
-            "default_model_overridden": {
-              "title": "Default Model Overridden",
-              "type": "boolean"
-            },
-            "default_model_static": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Default Model Static"
             },
             "default_repo": {
               "title": "Default Repo",
@@ -8963,9 +8844,7 @@
           "required": [
             "identity",
             "version",
-            "default_model_overridden",
             "default_effort",
-            "default_effort_overridden",
             "policy_version",
             "default_repo",
             "learning_enabled",
@@ -15914,45 +15793,6 @@
           "summary": "Set System Deputy"
         }
       },
-      "/system/effort": {
-        "post": {
-          "description": "Set (or clear) the system-wide default reasoning effort \u2014 the floor below per-repo overrides.",
-          "operationId": "set_system_effort_system_effort_post",
-          "requestBody": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SystemEffortBody"
-                }
-              }
-            },
-            "required": true
-          },
-          "responses": {
-            "200": {
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "$ref": "#/components/schemas/SystemEffortResponse"
-                  }
-                }
-              },
-              "description": "Successful Response"
-            },
-            "422": {
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "$ref": "#/components/schemas/HTTPValidationError"
-                  }
-                }
-              },
-              "description": "Validation Error"
-            }
-          },
-          "summary": "Set System Effort"
-        }
-      },
       "/system/inventory": {
         "get": {
           "description": "A live snapshot of every SuperMe SQLite table (columns + row counts) and every agent-facing\ntool (surface + params). Read-only; introspected fresh on each call so it can't go stale.",
@@ -16009,45 +15849,6 @@
             }
           },
           "summary": "Set System Learning"
-        }
-      },
-      "/system/model": {
-        "post": {
-          "description": "Set (or clear) the system-wide default model \u2014 the floor below per-repo overrides.",
-          "operationId": "set_system_model_system_model_post",
-          "requestBody": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SystemModelBody"
-                }
-              }
-            },
-            "required": true
-          },
-          "responses": {
-            "200": {
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "$ref": "#/components/schemas/SystemModelResponse"
-                  }
-                }
-              },
-              "description": "Successful Response"
-            },
-            "422": {
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "$ref": "#/components/schemas/HTTPValidationError"
-                  }
-                }
-              },
-              "description": "Validation Error"
-            }
-          },
-          "summary": "Set System Model"
         }
       },
       "/system/sweep": {

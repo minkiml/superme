@@ -2060,31 +2060,18 @@ class SystemSpine:
             return {r["repo_id"]: r["model"]
                     for r in c.execute("SELECT repo_id, model FROM model_override").fetchall()}
 
-    # --- system-wide model default (the floor below per-repo overrides) ----------
-    def get_system_model(self) -> str | None:
-        """The runtime-set system default model (None = fall back to the YAML/host default)."""
-        with self._conn() as c:
-            r = c.execute("SELECT value FROM system_setting WHERE key='default_model'").fetchone()
-            return r["value"] if r and r["value"] else None
-
-    def set_system_model(self, model: str | None) -> None:
-        """Set (or clear, with model=None) the system-wide default model override."""
-        with self._conn() as c:
-            if model is None:
-                c.execute("DELETE FROM system_setting WHERE key='default_model'")
-            else:
-                c.execute(
-                    "INSERT INTO system_setting (key,value,updated_at) VALUES ('default_model',?,?)"
-                    " ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at",
-                    (model, _now()),
-                )
-
+    # --- the model FLOOR below per-repo overrides --------------------------------
+    # There is no owner-settable system default. There was one, and in practice every repo overrode
+    # it — three projects independently choosing the same value, which is what a default IS, held one
+    # tier too low. A settable floor under a per-repo choice that is always made is a knob whose only
+    # effect is to be shadowed. What remains is a declared default: the YAML if it names one, else
+    # the built-in.
     def effective_system_model(self) -> str:
-        """The system default model the resolver should use — ALWAYS a concrete, known id (never the
-        opaque host/CLI default): the runtime override, else the static `config/system.yaml` default,
-        else the built-in floor. Any tier alias is resolved to its latest concrete id."""
+        """The default model a repo with no override runs — ALWAYS a concrete, known id (never the
+        opaque host/CLI default): `config/system.yaml` if it declares one, else the built-in floor.
+        Any tier alias is resolved to its latest concrete id."""
         from .models import DEFAULT_MODEL, normalize_model
-        return normalize_model(self.get_system_model() or self.system_config().default_model) or DEFAULT_MODEL
+        return normalize_model(self.system_config().default_model) or DEFAULT_MODEL
 
     def effective_model(self, repo_id: str, *, per_call: str | None = None,
                         item_model: str | None = None) -> str:
@@ -2252,27 +2239,10 @@ class SystemSpine:
             return {r["repo_id"]: r["effort"]
                     for r in c.execute("SELECT repo_id, effort FROM effort_override").fetchall()}
 
-    def get_system_effort(self) -> str | None:
-        """The runtime-set system default effort (None = fall back to the YAML default)."""
-        with self._conn() as c:
-            r = c.execute("SELECT value FROM system_setting WHERE key='default_effort'").fetchone()
-            return r["value"] if r and r["value"] else None
-
-    def set_system_effort(self, effort: str | None) -> None:
-        """Set (or clear, with effort=None) the system-wide default reasoning effort."""
-        with self._conn() as c:
-            if effort is None:
-                c.execute("DELETE FROM system_setting WHERE key='default_effort'")
-            else:
-                c.execute(
-                    "INSERT INTO system_setting (key,value,updated_at) VALUES ('default_effort',?,?)"
-                    " ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at",
-                    (effort, _now()),
-                )
-
     def effective_system_effort(self) -> str:
-        """System default effort: runtime override → YAML default → the built-in 'medium' floor."""
-        return self.get_system_effort() or self.system_config().default_effort or self.DEFAULT_EFFORT
+        """The default effort a repo with no override runs: the YAML default, else the built-in
+        floor. Owner-settable only per repo — see effective_system_model for why."""
+        return self.system_config().default_effort or self.DEFAULT_EFFORT
 
     def effective_effort(self, repo_id: str, *, per_call: str | None = None,
                          item_effort: str | None = None) -> str:
@@ -2675,11 +2645,9 @@ class SystemSpine:
         return {
             "identity": cfg.identity,
             "version": cfg.version,
-            "default_model": self.effective_system_model(),  # runtime override else YAML
-            "default_model_static": cfg.default_model,        # the YAML floor (for the config UI)
-            "default_model_overridden": self.get_system_model() is not None,
-            "default_effort": self.effective_system_effort(),  # runtime override else YAML else "medium"
-            "default_effort_overridden": self.get_system_effort() is not None,
+            # What a repo with NO override runs. Not settable here — a repo sets its own.
+            "default_model": self.effective_system_model(),
+            "default_effort": self.effective_system_effort(),
             "policy_version": cfg.policy_version,
             "default_repo": cfg.default_repo,
             "learning_enabled": self.get_learning_enabled(),  # auto-sweep master switch (WI-8)
