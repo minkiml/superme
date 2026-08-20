@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Hammer, ArrowLeft, ArrowRight, Boxes, Inbox, Circle, Clock, Check, Bot, Archive, Shield, ChevronRight, OctagonAlert, Lock, PackageCheck, type LucideIcon } from 'lucide-react'
+import { Hammer, ArrowLeft, ArrowRight, Boxes, Inbox, ArrowDown, Circle, Clock, Check, Bot, Archive, Shield, ChevronRight, OctagonAlert, Lock, PackageCheck, type LucideIcon } from 'lucide-react'
 import PageHeader from '@/ui/PageHeader'
 import Modal from '@/ui/Modal'
 import ConfirmDialog from '@/ui/ConfirmDialog'
@@ -323,23 +323,27 @@ function EnvMap({ data, selected, onSelect }: { data: DevData; selected: Zoom; o
   const g = data.glance
   const openInbox = data.inbox.filter((e) => e.status === 'open')
   const activeCount = data.work_items.filter(isActive).length
+  // The two stores and the arrow between them are one sentence, and a sentence that wraps in the
+  // middle stops being one. `flex-wrap` left the arrow stranded beside the first card, pointing at
+  // white space, with the second card on a line of its own below it. Below the width where the
+  // three fit in a row, the whole sentence TURNS: both stores go full width and the arrow points
+  // down, between them, where the flow it describes actually goes.
+  const [ref, w] = useContainerWidth<HTMLDivElement>()
+  const down = w > 0 && w < 460
   return (
-    // The two stores and the arrow between them read as one sentence, so they wrap together rather
-    // than being squeezed: below the width where both fit, the second store drops to its own line
-    // and the arrow goes with it.
-    <div className="flex flex-wrap items-stretch gap-2">
+    <div ref={ref} className={`flex gap-2 ${down ? 'flex-col' : 'flex-wrap items-stretch'}`}>
       <StoreCard
-        className="flex-1" icon={Inbox} label="Inbox" subtitle="capture queue"
+        className={down ? 'w-full' : 'flex-1'} icon={Inbox} label="Inbox" subtitle="capture queue"
         selected={selected === 'inbox'} onClick={() => onSelect('inbox')}
       >
         <Metric n={g.inbox_open ?? 0} unit="open" tone="text-fg" />
         <KindBreakdown entries={openInbox} />
       </StoreCard>
 
-      <Connector label="push" />
+      <Connector label="push" down={down} />
 
       <StoreCard
-        className="flex-1" icon={Bot} label="Workspace" subtitle="the living plan · worktree"
+        className={down ? 'w-full' : 'flex-1'} icon={Bot} label="Workspace" subtitle="the living plan · worktree"
         selected={selected === 'workspace'} onClick={() => onSelect('workspace')}
       >
         <StatusDots item={g.by_status} total={activeCount} done={g.shipped ?? 0} />
@@ -382,7 +386,18 @@ function StoreCard({
 }
 
 // The labelled arrow between two pipeline stages.
-function Connector({ label }: { label: string }) {
+function Connector({ label, down }: { label: string; down?: boolean }) {
+  if (down) {
+    return (
+      <div className="flex items-center justify-center gap-1.5 py-0.5">
+        <span className="flex flex-col items-center text-faint">
+          <span className="h-4 w-px bg-line" />
+          <ArrowDown size={14} className="-mt-1.5" />
+        </span>
+        <span className="text-[10.5px] text-muted">{label}</span>
+      </div>
+    )
+  }
   return (
     <div className="flex shrink-0 flex-col items-center justify-center gap-1 self-center px-1">
       <span className="text-[10.5px] text-muted">{label}</span>
