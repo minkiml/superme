@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Hammer, ArrowLeft, ArrowRight, Boxes, Inbox, Circle, Clock, Check, Bot, Archive, Shield, ChevronRight } from 'lucide-react'
+import { Hammer, ArrowLeft, ArrowRight, Boxes, Inbox, Circle, Clock, Check, Bot, Archive, Shield, ChevronRight, OctagonAlert, Lock, PackageCheck, type LucideIcon } from 'lucide-react'
 import PageHeader from '@/ui/PageHeader'
 import Modal from '@/ui/Modal'
 import ConfirmDialog from '@/ui/ConfirmDialog'
@@ -8,6 +8,7 @@ import { invalidate, useLive } from '@/lib/live'
 import { K, topicRepo } from '@/lib/live/keys'
 import { navigate, useRoute } from '@/lib/router'
 import { fmtLocalDate } from '@/lib/format'
+import { useContainerWidth, PANE } from '@/lib/layout'
 import { WorkspaceKanban, InboxView, isActive } from './panels'
 import WorkGraphView from './WorkGraphView'
 import { STATUS_LABEL, primaryStatus } from './common'
@@ -278,26 +279,36 @@ const TIER_STYLE: Record<string, { dot: string; label: string }> = {
 }
 
 function AttentionStrip({ attn, onOpen }: { attn: AttentionData; onOpen: (id: string) => void }) {
+  const [ref, w] = useContainerWidth<HTMLDivElement>()
+  // Narrow, a row is one thing: WHICH item. The reason ("at the review gate") is the half that
+  // costs the most width and says the least — the tier label above already gives the state, and
+  // the reason is still one hover away. Keeping both truncated the title to "Housekeepi…", which
+  // is the one part of the row you cannot act without.
+  const tight = w > 0 && w < PANE.narrow
   const tiers = (['error', 'needs_you', 'deputy_working', 'running', 'unread'] as const)
     .map((t) => ({ tier: t, rows: attn.buckets?.[t] ?? [] }))
     .filter((x) => x.rows.length > 0)
   if (tiers.length === 0) return null
   return (
-    <div className="space-y-1.5 rounded-xl border border-line bg-surface px-3 py-2.5">
+    <div ref={ref} className="space-y-1.5 rounded-xl border border-line bg-surface px-3 py-2.5">
       {tiers.map(({ tier, rows }) => (
-        <div key={tier} className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <span className="flex w-20 shrink-0 items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted">
-            <span className={`h-2 w-2 rounded-full ${TIER_STYLE[tier].dot}`} /> {TIER_STYLE[tier].label}
+        <div key={tier} className={`flex gap-x-3 gap-y-1 ${tight ? 'flex-col items-stretch' : 'flex-wrap items-center'}`}>
+          <span className={`flex shrink-0 items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted ${tight ? '' : 'w-20'}`}>
+            <span className={`h-2 w-2 rounded-full ${TIER_STYLE[tier].dot}`} />
+            {TIER_STYLE[tier].label}
+            {tight && <span className="tabular-nums text-faint">{rows.length}</span>}
           </span>
           {rows.map((r) => (
             <button
               key={r.id}
               onClick={() => onOpen(r.id)}
-              title={r.reason}
-              className="max-w-[16rem] truncate rounded-md border border-line bg-sunken px-2 py-0.5 text-left text-[12px] text-fg hover:bg-hover"
+              title={`${r.title} — ${r.reason}`}
+              className={`truncate rounded-md border border-line bg-sunken px-2 py-0.5 text-left text-[12px] text-fg hover:bg-hover ${
+                tight ? 'w-full' : 'max-w-[16rem]'
+              }`}
             >
               {r.title}
-              <span className="ml-1.5 text-[10px] text-faint">{r.reason}</span>
+              {!tight && <span className="ml-1.5 text-[10px] text-faint">{r.reason}</span>}
             </button>
           ))}
         </div>
@@ -448,6 +459,8 @@ function StatusDots({ item, total, done }: {
 function WorkspaceStats({ items, buckets, shipped, onShowShipped }: {
   items: WorkItem[]; buckets: Record<string, string>; shipped: number; onShowShipped: () => void
 }) {
+  const [ref, w] = useContainerWidth<HTMLDivElement>()
+  const tight = w > 0 && w < PANE.narrow
   const n = (want: string) =>
     items.filter((it) => !it.done_at && primaryStatus(it, buckets[it.id]) === want).length
   const cell = (label: string, n: number, tone = 'text-fg') => (
@@ -456,8 +469,37 @@ function WorkspaceStats({ items, buckets, shipped, onShowShipped }: {
       <span className="mt-1 text-[10px] uppercase tracking-wide text-muted">{label}</span>
     </div>
   )
+  // Five captions do not fit a narrow pane, and wrapping them into a ragged block is worse than
+  // not showing them: the numbers stop being a row you read across. Narrow, each stat keeps its
+  // MARK and its number and loses its words — the icon carries the meaning, the tooltip spells it
+  // out, and five figures stay on one line where they can still be compared at a glance.
+  const chip = (Icon: LucideIcon, label: string, n: number, tone: string) => (
+    <span title={`${n} ${label}`} className={`inline-flex items-center gap-1 ${n > 0 ? tone : 'text-faint'}`}>
+      <Icon size={13} />
+      <span className="text-[15px] font-semibold tabular-nums">{n}</span>
+    </span>
+  )
+  if (tight) {
+    return (
+      <div ref={ref} className="mb-4 flex items-center justify-between gap-2 rounded-xl bg-sunken px-3 py-2.5">
+        {chip(OctagonAlert, STATUS_LABEL.error, n('error'), 'text-danger')}
+        {chip(Circle, STATUS_LABEL.active, n('active'), 'text-accent-text')}
+        {chip(Clock, STATUS_LABEL.awaiting_human, n('awaiting_human'), 'text-warn')}
+        {chip(Lock, STATUS_LABEL.awaiting_child, n('awaiting_child'), 'text-muted')}
+        <button
+          onClick={onShowShipped}
+          disabled={shipped === 0}
+          title={`${shipped} shipped — view completed work`}
+          className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-success enabled:hover:bg-hover disabled:text-faint"
+        >
+          <PackageCheck size={13} />
+          <span className="text-[15px] font-semibold tabular-nums">{shipped}</span>
+        </button>
+      </div>
+    )
+  }
   return (
-    <div className="mb-4 flex flex-wrap items-center gap-x-7 gap-y-3 rounded-xl bg-sunken px-4 py-3">
+    <div ref={ref} className="mb-4 flex flex-wrap items-center gap-x-7 gap-y-3 rounded-xl bg-sunken px-4 py-3">
       {/* Stopped work leads the row and is ALWAYS rendered, greyed at zero (owner, 2026-08-14).
           It used to appear only when non-zero, on the reasoning that a permanent "0 stopped" tile
           trains the eye to skip it — but a row that changes width between visits is worse: every

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 
 // ── The app's ONE responsive rule ────────────────────────────────────────────────────────────
 // Every page is the same three-band frame: the nav rail, the main surface, the chat rail. Only the
@@ -77,25 +77,35 @@ export const PANE = {
   mid: 720, // below this a pane stops trying to hold two full-width things side by side
 }
 
-// A CALLBACK ref, not a `useRef` + `useEffect` pair. The pair only ever looked at `ref.current`
-// once, on mount — so a container that mounts LATER (the common case: a table that renders after
-// its first fetch resolves, a pane behind a loading state) was never observed at all, and the
-// width stayed 0. Every consumer reads 0 as "not measured yet" and falls back to the widest
-// layout, which is how a narrow table ended up clipping its own right-hand columns instead of
-// shedding them. A callback ref fires on every attach and detach, so late mounts are ordinary.
+// The measured element is held in STATE, and the measuring happens in an effect keyed to it.
+//
+// Two bugs came out of the obvious `useRef` + `useEffect([])` version, and both are the same bug:
+// the hook only ever looked at the element ONCE, at a moment of its own choosing. A container that
+// mounts later — the common case of a table rendered after its first fetch resolves — was never
+// observed at all, and one measured from inside the ref callback could be read before layout and
+// come back 0. Every consumer treats 0 as "not measured yet" and falls back to the widest layout,
+// so the widest layout is what a narrow pane got.
+//
+// State + an effect fixes both by construction: the effect re-runs whenever the node changes, and
+// it runs after layout, so the first measurement is a real one. The window listener is redundant
+// with the observer in theory and cheap in practice; it is here because a stuck width silently
+// misrenders a whole surface, and this is the failure mode that has already happened twice.
 export function useContainerWidth<T extends HTMLElement>(): [(node: T | null) => void, number] {
+  const [node, setNode] = useState<T | null>(null)
   const [w, setW] = useState(0)
-  const ro = useRef<ResizeObserver | null>(null)
-  const attach = useCallback((node: T | null) => {
-    ro.current?.disconnect()
-    ro.current = null
+  useEffect(() => {
     if (!node) return
-    ro.current = new ResizeObserver(([e]) => setW(e.contentRect.width))
-    ro.current.observe(node)
-    setW(node.getBoundingClientRect().width)
-  }, [])
-  useEffect(() => () => ro.current?.disconnect(), [])
-  return [attach, w]
+    const measure = () => setW(node.getBoundingClientRect().width)
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(node)
+    window.addEventListener('resize', measure)
+    return () => {
+      ro.disconnect()
+      window.removeEventListener('resize', measure)
+    }
+  }, [node])
+  return [setNode, w]
 }
 
 // A tab rail sheds its LABELS before it sheds anything else, and the active tab keeps its word —

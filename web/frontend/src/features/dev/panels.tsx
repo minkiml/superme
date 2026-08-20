@@ -151,7 +151,13 @@ export function WorkspaceKanban({ items, onOpen, onResume, running, boundItemId,
   // 4 → 2 → 1, and never 3: `auto-fit` would have packed three lanes and left `Close` alone on a
   // second row, which reads as a wrap accident rather than a layout. Halving keeps the rows even
   // and keeps the pairs meaningful — intake beside work, then review beside close.
-  const lanes = boardW === 0 || boardW >= 716 ? 4 : boardW >= 392 ? 2 : 1
+  const lanes = boardW === 0 || boardW >= 716 ? 4 : boardW >= 552 ? 2 : 1
+  // A card in a 170px lane cannot carry four rows of prose; it carried them anyway, one word per
+  // line. The board knows how wide a lane came out, so it is the board that tells the card how
+  // much of itself to say. (2 lanes wait for 552 for the same reason: two 190px lanes are two
+  // unreadable columns, and one readable one beats them.)
+  const laneW = lanes ? (boardW - 12 * (lanes - 1)) / lanes : 0
+  const tightCards = laneW > 0 && laneW < 215
   return (
     <div ref={boardRef}>
       <div
@@ -164,7 +170,7 @@ export function WorkspaceKanban({ items, onOpen, onResume, running, boundItemId,
           <div key={g.key} className="flex min-h-[7rem] flex-col rounded-xl bg-sunken p-2">
             <div className="mb-2 flex items-center gap-2 px-1">
               <span className="h-1.5 w-1.5 rounded-full bg-line" />
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-fg">{g.label}</span>
+              <span className="truncate text-[11px] font-semibold uppercase tracking-wide text-fg" title={g.label}>{g.label}</span>
               <span className="ml-auto rounded-full bg-hover px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-muted">{col.length}</span>
             </div>
             <div className="space-y-2">
@@ -180,6 +186,7 @@ export function WorkspaceKanban({ items, onOpen, onResume, running, boundItemId,
                     bound={boundItemId === it.id}
                     bucket={buckets?.[it.id]}
                     onResume={onResume}
+                    tight={tightCards}
                   />
                 ))
               )}
@@ -193,7 +200,7 @@ export function WorkspaceKanban({ items, onOpen, onResume, running, boundItemId,
 }
 
 function WorkCard({
-  it, onOpen, planning, bound, bucket, onResume,
+  it, onOpen, planning, bound, bucket, onResume, tight,
 }: {
   it: WorkItem
   onOpen?: (it: WorkItem) => void
@@ -201,6 +208,7 @@ function WorkCard({
   bound?: boolean
   bucket?: string // attention tier (S7): error | needs_you | deputy_working | running | unread — tints the card ring
   onResume?: (it: WorkItem) => void // R4: only ever called for a STOPPED card (see below)
+  tight?: boolean // the lane is too narrow for the full four rows — see below
 }) {
   const clickable = !!onOpen
   const running = !!planning || !!it.running
@@ -246,7 +254,7 @@ function WorkCard({
             status it sits beside and said nothing (implementation is the default). The FAMILY is
             the half that carries information, so that is the half the card spends its width on;
             the drilldown header states both in full. */}
-        {researchKindLabel(it.research_kind) && (
+        {!tight && researchKindLabel(it.research_kind) && (
           <span className="min-w-0 truncate rounded bg-kind-research/10 px-1 py-px text-[9.5px] font-medium uppercase tracking-wide text-kind-research">
             {researchKindLabel(it.research_kind)}
           </span>
@@ -255,8 +263,33 @@ function WorkCard({
       </div>
       {/* 2 · name — one line, ellipsis when long */}
       <div className="truncate text-[12.5px] leading-snug text-fg" title={it.title}>{it.title}</div>
+      {/* 3 + 4, NARROW · one unlabelled row: fill, spend, age. The model name is the first thing to
+          go (it is the same on nearly every card and changes nothing you'd do next), then the
+          words — "ctx", "tok", "ago" are three labels for figures whose units are already obvious
+          from their shape. What survives is what a glance is FOR: how full it is, what it cost,
+          how stale it is. Every dropped label is in the drilldown. */}
+      {tight && (ctx != null || hasTokens || agoLabel(it.last_run?.ended_at)) && (
+        <div className="flex items-center gap-1.5 whitespace-nowrap text-[10.5px] text-muted">
+          {running && <Loader2 size={10} className="animate-spin text-accent-text" />}
+          {ctx != null && <span className="tabular-nums" title={`Context ${ctx}% full`}>{ctx}%</span>}
+          {hasTokens && (
+            <>
+              {ctx != null && <span className="text-faint">·</span>}
+              <span className="tabular-nums" title="Tokens used (3-type basis)">{fmtTokens(tokens ?? 0)}</span>
+            </>
+          )}
+          {running
+            ? <><span className="text-faint">·</span><LiveTimer startedAt={it.run_started_at} /></>
+            : agoLabel(it.last_run?.ended_at) && (
+              <>
+                <span className="text-faint">·</span>
+                <span className="text-faint" title="When this item's last run finished">{agoLabel(it.last_run?.ended_at)}</span>
+              </>
+            )}
+        </div>
+      )}
       {/* 3 · model · ctx */}
-      {(model || ctx != null) && (
+      {!tight && (model || ctx != null) && (
         <div className="flex items-center gap-1.5 text-[10.5px] text-muted">
           {model && <span className="truncate">{fmtModel(model)}</span>}
           {model && ctx != null && <span className="text-faint">·</span>}
@@ -264,7 +297,7 @@ function WorkCard({
         </div>
       )}
       {/* 4 · tokens · time — always on once this phase's run has started */}
-      {showMeter && (
+      {!tight && showMeter && (
         <div className="flex items-center gap-1.5 text-[10.5px] text-faint">
           {running && <Loader2 size={10} className="animate-spin text-accent-text" />}
           <span className="tabular-nums" title="Tokens used (3-type basis) — this run while live, else the item total">

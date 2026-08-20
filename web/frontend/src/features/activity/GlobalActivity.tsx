@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
-import { Activity, RefreshCw, Loader2, ChevronDown, Link2Off } from 'lucide-react'
+import { Activity, Loader2, ChevronDown, Link2Off } from 'lucide-react'
 import { colorFor, featureColor, featureLabel } from '@/lib/palette'
 import { RepoIcon } from '@/lib/repoIcons'
 import { fmtTokens, fmtLocal, fmtAge, fmtModel, fmtDuration } from '@/lib/format'
@@ -101,7 +101,6 @@ export default function GlobalActivity({
     [stats.hub, stats.nodes, stats.archived],
   )
 
-  const load = feed.refresh
 
   return (
     <div className="h-full overflow-y-auto">
@@ -110,14 +109,6 @@ export default function GlobalActivity({
           <Activity size={18} className="text-dev" />
           <h1 className="text-[17px] font-semibold text-fg">Activity</h1>
           <span className="text-[13px] text-faint">SuperMe agent runs · all repos · both scopes</span>
-          <button
-            onClick={() => load()}
-            title="Refresh"
-            aria-label="Refresh"
-            className="ml-auto rounded-md border border-line bg-surface p-1.5 text-muted hover:bg-hover hover:text-fg"
-          >
-            {loading ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
-          </button>
         </header>
 
         {err ? (
