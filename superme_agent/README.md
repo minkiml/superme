@@ -61,8 +61,8 @@ superme_agent/
 ├─ harness/         the UNIVERSAL portable brain (SELF, charters, constitution, plugins, tools, policy, forge_kit)
 ├─ local-harness/   per-host local harness — <id>/<mode>/
 ├─ config/          repos.yaml (registered repos) · system.yaml
-├─ scripts/         check_fast.sh (the gate) · parity · sweep/E2E tests
 └─ validators/
+scripts/            check_fast.sh (the gate) · parity · sweep/E2E tests (gitignored)
 web/                bff/ (reverse proxy) · frontend/ (cockpit) · dev.sh (launch all three)
 superme-knowledge/  the knowledge repo (sibling, gitignored) — see its README
 ```

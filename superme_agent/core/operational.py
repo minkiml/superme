@@ -214,6 +214,20 @@ def _is_foundational(meta: dict) -> bool:
     return str(meta.get("foundational", "false")).strip().lower() in ("true", "1", "yes", "on")
 
 
+def _title_of(body: str, slug: str) -> str:
+    """The artifact's own H1 if it has one, else the slug read as words. The H1 is what the
+    author named the thing, so it keeps real hyphens ('Dev-knowledge structure') that a blanket
+    dash-to-space rule on the slug would flatten. One writer: every surface reads this key."""
+    for line in body.splitlines():
+        t = line.strip()
+        if t.startswith("# "):
+            return t[2:].strip()
+        if t and not t.startswith("#"):
+            break                       # prose before any heading → the file has no H1
+    words = slug.replace("-", " ").replace("_", " ").strip()
+    return words[:1].upper() + words[1:]
+
+
 def read_constitution_dir(directory: Path, *, origin: str) -> list[dict]:
     """Read one constitution home into a list of items (newest filename last → stable order).
     `origin` tags where it came from ('universal' | 'repo'). Missing dir → []."""
@@ -227,8 +241,10 @@ def read_constitution_dir(directory: Path, *, origin: str) -> list[dict]:
         meta, body = parse_frontmatter(p.read_text())
         if not body.strip():
             continue
+        slug = meta.get("name") or p.stem
         out.append({
-            "slug": meta.get("name") or p.stem,
+            "slug": slug,
+            "title": _title_of(body, slug),  # display name; see _title_of
             "enabled": _is_enabled(meta),
             "foundational": _is_foundational(meta),  # charter-pinned → not disable-able
             "description": meta.get("description"),  # the always-resident catalog line (directive / when-to-apply)

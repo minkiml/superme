@@ -122,7 +122,7 @@ async def dev_harness_foundation() -> dict:
             constitutions.append({
                 "mode": mode, "slug": it["slug"], "enabled": it["enabled"],
                 "foundational": it.get("foundational", False),
-                "title": it["slug"].replace("-", " "), "body": it["body"],
+                "title": it["title"], "body": it["body"],
                 "source": it.get("source"), "created": it.get("created"),
             })
     return {"files": files, "constitutions": constitutions}
@@ -285,7 +285,7 @@ async def dev_harness_constitutions(context_id: str = "global") -> dict:
             out.append({
                 "slug": it["slug"], "scope": scope, "mode": mode, "origin": it["origin"],
                 "enabled": it["enabled"], "foundational": it.get("foundational", False),
-                "title": it["slug"].replace("-", " "),
+                "title": it["title"],
                 "description": it.get("description"), "body": it["body"],
                 "source": it.get("source"), "created": it.get("created"),
                 "updated": it.get("updated"),
@@ -401,7 +401,7 @@ async def dev_harness_assets(context_id: str = "global") -> dict:
     from ....runtime.config import LOCAL_HARNESS_DIR
     states = repo_asset_states(local_harness_root(context_id) / "constitution")
     out = [{
-        "slug": it["slug"], "title": it["slug"].replace("-", " "),
+        "slug": it["slug"], "title": it["title"],
         "description": it.get("description"), "body": it["body"],
         "adopted": it["slug"] in states, "enabled": states.get(it["slug"], False),
     } for it in read_asset_pool()]
