@@ -3207,6 +3207,10 @@ export interface components {
             strictness?: {
                 [key: string]: string;
             } | null;
+            /** Model */
+            model?: string | null;
+            /** Effort */
+            effort?: string | null;
         };
         /**
          * DeputyConfigResponse
@@ -3222,6 +3226,14 @@ export interface components {
             deputy_strictness: {
                 [key: string]: string;
             };
+            /** Deputy Model */
+            deputy_model?: string | null;
+            /** Deputy Effort */
+            deputy_effort?: string | null;
+            /** Deputy Effective Model */
+            deputy_effective_model?: string | null;
+            /** Deputy Effective Effort */
+            deputy_effective_effort?: string | null;
         };
         /** DeputyMandateBody */
         DeputyMandateBody: {
@@ -3870,6 +3882,14 @@ export interface components {
             autopilot: boolean;
             /** Work Kind */
             work_kind?: string | null;
+            /** Vet Model */
+            vet_model?: string | null;
+            /** Vet Effort */
+            vet_effort?: string | null;
+            /** Deputy Model */
+            deputy_model?: string | null;
+            /** Deputy Effort */
+            deputy_effort?: string | null;
         };
         /** InboxBriefBody */
         InboxBriefBody: {
@@ -3929,6 +3949,14 @@ export interface components {
             autopilot?: boolean | null;
             /** Work Kind */
             work_kind?: string | null;
+            /** Vet Model */
+            vet_model?: string | null;
+            /** Vet Effort */
+            vet_effort?: string | null;
+            /** Deputy Model */
+            deputy_model?: string | null;
+            /** Deputy Effort */
+            deputy_effort?: string | null;
         };
         /** InboxPushBody */
         InboxPushBody: {
@@ -3999,6 +4027,14 @@ export interface components {
             autopilot: boolean;
             /** Work Kind */
             work_kind?: ("implementation" | "research") | null;
+            /** Vet Model */
+            vet_model?: string | null;
+            /** Vet Effort */
+            vet_effort?: string | null;
+            /** Deputy Model */
+            deputy_model?: string | null;
+            /** Deputy Effort */
+            deputy_effort?: string | null;
         };
         /** InjectBody */
         InjectBody: {
@@ -5328,6 +5364,11 @@ export interface components {
         RepoEffortBody: {
             /** Effort */
             effort?: string | null;
+            /**
+             * Role
+             * @default default
+             */
+            role: string;
         };
         /** RepoEffortResponse */
         RepoEffortResponse: {
@@ -5335,6 +5376,11 @@ export interface components {
             ok: boolean;
             /** Repo Id */
             repo_id: string;
+            /**
+             * Role
+             * @default default
+             */
+            role: string;
             /** Effort */
             effort?: string | null;
             /** Effective */
@@ -5398,6 +5444,11 @@ export interface components {
         RepoModelBody: {
             /** Model */
             model?: string | null;
+            /**
+             * Role
+             * @default default
+             */
+            role: string;
         };
         /** RepoModelResponse */
         RepoModelResponse: {
@@ -5405,6 +5456,11 @@ export interface components {
             ok: boolean;
             /** Repo Id */
             repo_id: string;
+            /**
+             * Role
+             * @default default
+             */
+            role: string;
             /** Model */
             model?: string | null;
             /** Effective */
@@ -5424,6 +5480,10 @@ export interface components {
             model_override?: string | null;
             /** Effort Override */
             effort_override?: string | null;
+            /** Vet Model */
+            vet_model?: string | null;
+            /** Vet Effort */
+            vet_effort?: string | null;
             /**
              * Learning Enabled
              * @default true
@@ -5918,6 +5978,14 @@ export interface components {
             deputy_strictness?: {
                 [key: string]: string;
             };
+            /** Deputy Model */
+            deputy_model?: string | null;
+            /** Deputy Effort */
+            deputy_effort?: string | null;
+            /** Deputy Effective Model */
+            deputy_effective_model?: string | null;
+            /** Deputy Effective Effort */
+            deputy_effective_effort?: string | null;
             /** Sweep Idle Seconds */
             sweep_idle_seconds: number;
             /** Sweep Poll Seconds */

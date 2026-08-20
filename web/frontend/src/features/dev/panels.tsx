@@ -28,6 +28,12 @@ export const RUN_EFFORTS = EFFORT_CATALOG.map((e) => ({ value: e.key, label: e.l
 export const DEFAULT_RUN_EFFORT = DEFAULT_EFFORT
 // The PROPOSED work-item kind. "Undecided" is a first-class option, not a placeholder — leaving it
 // there is a real answer (triage judges alone), so it leads the list rather than sitting under one.
+// The role pickers DO carry an empty option, unlike the two above: a role's fallback is a chain the
+// owner set elsewhere (the project's vet tier, the system deputy tier), so "follow it" is a real
+// answer and the common one. Naming the resolved value here would mean plumbing two more settings
+// into this panel to print them; the row hint says where it comes from instead.
+export const ROLE_MODELS = [{ value: '', label: 'Default' }, ...RUN_MODELS]
+export const ROLE_EFFORTS = [{ value: '', label: 'Default' }, ...RUN_EFFORTS]
 export const WORK_KIND_OPTS = [
   { value: '', label: 'Undecided' },
   { value: 'implementation', label: 'Implementation' },
@@ -45,6 +51,13 @@ type InboxConfigPatch = {
   effort: string
   autopilot: boolean
   work_kind: string
+  // The two roles that do NOT run on this item's model: `vet` checks what build produced, the
+  // `deputy` judges the gates. "" = follow the project's vet tier / the system deputy tier, which
+  // is why these carry an empty option and `model`/`effort` above do not.
+  vet_model: string
+  vet_effort: string
+  deputy_model: string
+  deputy_effort: string
 }
 
 // Shared dev-knowledge store views — the bodies for Workspace (work-items) and Inbox. Rendered
@@ -656,6 +669,10 @@ function InboxItemModal({
     effort: e.effort ?? repoEffort ?? DEFAULT_RUN_EFFORT,
     autopilot: !!e.autopilot,
     work_kind: e.work_kind ?? '',
+    vet_model: toModelKey(e.vet_model) ?? '',
+    vet_effort: e.vet_effort ?? '',
+    deputy_model: toModelKey(e.deputy_model) ?? '',
+    deputy_effort: e.deputy_effort ?? '',
   }
   const row = useEditGate<InboxConfigPatch>({
     saved,
@@ -768,7 +785,7 @@ function InboxItemModal({
             <section className="rounded-md border border-line bg-sunken px-3 py-2.5">
               <SectionHeader>Setting</SectionHeader>
               <div className="mt-1 text-[11px] leading-snug text-faint">
-                Set here while the row is open — push freezes all three onto the work-item.
+                Set here while the row is open. Push freezes them onto the work-item.
               </div>
               {row.editing ? (
                 <div className="mt-2.5 space-y-2.5">
@@ -784,6 +801,18 @@ function InboxItemModal({
                   <ConfigRow label="Effort" hint="How much reasoning each run spends.">
                     <Dropdown value={d.effort} options={RUN_EFFORTS} onChange={(v) => set({ effort: v })} width="w-36" align="right" />
                   </ConfigRow>
+                  <ConfigRow label="Vet model" hint="Vet checks the work. Default follows the project's vet setting.">
+                    <Dropdown value={d.vet_model} options={ROLE_MODELS} onChange={(v) => set({ vet_model: v })} width="w-36" align="right" />
+                  </ConfigRow>
+                  <ConfigRow label="Vet effort" hint="How hard vet thinks about this one.">
+                    <Dropdown value={d.vet_effort} options={ROLE_EFFORTS} onChange={(v) => set({ vet_effort: v })} width="w-36" align="right" />
+                  </ConfigRow>
+                  <ConfigRow label="Deputy model" hint="The gate judge. Default follows the system deputy setting.">
+                    <Dropdown value={d.deputy_model} options={ROLE_MODELS} onChange={(v) => set({ deputy_model: v })} width="w-36" align="right" />
+                  </ConfigRow>
+                  <ConfigRow label="Deputy effort" hint="How hard the deputy thinks at each gate.">
+                    <Dropdown value={d.deputy_effort} options={ROLE_EFFORTS} onChange={(v) => set({ deputy_effort: v })} width="w-36" align="right" />
+                  </ConfigRow>
                 </div>
               ) : (
                 <dl className="mt-2 space-y-1.5">
@@ -791,6 +820,8 @@ function InboxItemModal({
                   <MetaRow label="Work kind">{optLabel(WORK_KIND_OPTS, saved.work_kind)}</MetaRow>
                   <MetaRow label="Model">{optLabel(RUN_MODELS, saved.model)}</MetaRow>
                   <MetaRow label="Effort">{optLabel(RUN_EFFORTS, saved.effort)}</MetaRow>
+                  <MetaRow label="Vet">{roleLabel(saved.vet_model, saved.vet_effort, 'project')}</MetaRow>
+                  <MetaRow label="Deputy">{roleLabel(saved.deputy_model, saved.deputy_effort, 'system')}</MetaRow>
                 </dl>
               )}
             </section>
@@ -838,6 +869,15 @@ function InboxItemModal({
 // A picker's own word for a stored value — so the read view says "Sonnet 5", not `sonnet-5`.
 function optLabel(opts: { value: string; label: string }[], value: string): string {
   return opts.find((o) => o.value === value)?.label ?? value ?? '—'
+}
+
+// A role's two picks read as one line, because they are one decision: who checks this. Neither set
+// means the row follows its chain, and the row says WHICH chain rather than the bare word "default"
+// — this is the read-only view, so there is no picker beside it to explain itself.
+function roleLabel(model: string, effort: string, follows: string): string {
+  if (!model && !effort) return `Follows the ${follows} setting`
+  return [optLabel(RUN_MODELS, model) , effort && optLabel(RUN_EFFORTS, effort)]
+    .filter(Boolean).join(' · ') || `Follows the ${follows} setting`
 }
 
 function stripFrontmatter(text: string): string {

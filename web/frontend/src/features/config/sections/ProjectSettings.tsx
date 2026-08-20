@@ -38,9 +38,14 @@ export default function ProjectSettings({ repo }: { repo: OrbitRepo }) {
     <>
       <PaneHead
         title="Settings"
-        lede={`What ${name} runs on and how its work lands. Leave a picker on Default to follow the default.`}
+        lede={`What ${name} runs on, what checks it, and how its work lands. Leave a picker on Default to follow the default.`}
       />
       <Inheritance repo={repo} name={name} />
+      <SectionLabel
+        title="Vet"
+        hint="Vet checks what build produced. It runs on its own model, not this project's."
+      />
+      <Vet repo={repo} name={name} />
       <SectionLabel
         title="Landing"
         hint="How this project's work lands, and where."
@@ -95,6 +100,47 @@ function Inheritance({ repo, name }: { repo: OrbitRepo; name: string }) {
         <Toggle
           on={learning}
           onChange={(v) => { setLearning(v); setRepoLearning(repo.id, v).then(after).catch(() => {}) }}
+        />
+      </ConfigRow>
+    </Card>
+  )
+}
+
+// The VET role's own tier. Deliberately NOT under Inheritance: everything there is what this
+// project runs, and vet is the check ON what this project runs. Inheriting made the reviewer a
+// function of the reviewed — move a project to Opus and its own judge moved with it, so the one
+// pairing worth configuring (cheap builder, sharp judge, or the reverse) could not be expressed.
+// Default here therefore means the FLOOR, and the picker says so rather than leaving you to guess.
+function Vet({ repo, name }: { repo: OrbitRepo; name: string }) {
+  const sys = useLive(K.systemOverview, getSystem, 0)
+  const [model, setModel] = useState(toModelKey(repo.vetModel))
+  const [effort, setEffort] = useState(repo.vetEffort ?? '')
+  useEffect(() => {
+    setModel(toModelKey(repo.vetModel))
+    setEffort(repo.vetEffort ?? '')
+  }, [repo.id, repo.vetModel, repo.vetEffort])
+  const after = () => invalidate(K.repos)
+  return (
+    <Card>
+      <ConfigRow title="Model" hint="The model vet runs on when it checks this project's work.">
+        <Dropdown
+          value={model}
+          options={modelOptions(sys.data?.default_model ?? '')}
+          onChange={(v) => { setModel(v); setRepoModel(repo.id, (v || null) as ModelAlias | null, 'vet').then(after).catch(() => {}) }}
+          align="right"
+          width={W_WIDE}
+          title={`${name} vet model`}
+        />
+      </ConfigRow>
+      <Divider />
+      <ConfigRow title="Reasoning effort" hint="How hard vet thinks about what it is checking.">
+        <Dropdown
+          value={effort}
+          options={effortOptions(sys.data?.default_effort ?? 'medium')}
+          onChange={(v) => { setEffort(v); setRepoEffort(repo.id, v || null, 'vet').then(after).catch(() => {}) }}
+          align="right"
+          width={W_WIDE}
+          title={`${name} vet reasoning effort`}
         />
       </ConfigRow>
     </Card>

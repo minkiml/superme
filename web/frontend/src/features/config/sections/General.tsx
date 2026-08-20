@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import Toggle from '@/ui/Toggle'
+import Dropdown from '@/ui/Dropdown'
+import { MODELS as MODEL_CATALOG, EFFORTS as EFFORT_CATALOG, fmtModel, toModelKey } from '@/lib/format'
 import { invalidate, useLive } from '@/lib/live'
 import { K } from '@/lib/live/keys'
 import {
@@ -7,7 +9,7 @@ import {
   type SystemOverview, type CompactionConfig,
 } from '@/lib/api'
 import {
-  ApplyBar, Card, ConfigRow, Divider, GaugeBar, Loading, NumberField, PaneHead, SectionLabel,
+  ApplyBar, Card, ConfigRow, Divider, GaugeBar, Loading, NumberField, PaneHead, SectionLabel, W_WIDE,
 } from '../controls'
 
 // System › General — the settings that are genuinely system-shaped: who judges the autopilot gates
@@ -21,6 +23,17 @@ import {
 // The deputy escalation dial is set PER GATE, because a project can want a light touch at triage
 // and a cautious hand at review. The refusal floor holds at every level; this only moves the
 // discretionary band.
+// The inherit option NAMES the value it inherits, so "Default" never sends you elsewhere to find
+// out what it means. Same rule the per-project pickers follow.
+const modelOptions = (fallback: string) => [
+  { value: '', label: `Default · ${fmtModel(fallback)}` },
+  ...MODEL_CATALOG.map((m) => ({ value: m.key, label: m.label })),
+]
+const effortOptions = (fallback: string) => [
+  { value: '', label: `Default · ${EFFORT_CATALOG.find((e) => e.key === fallback)?.label ?? fallback}` },
+  ...EFFORT_CATALOG.map((e) => ({ value: e.key, label: e.label })),
+]
+
 const DEPUTY_GATES = [
   { key: 'triage', label: 'Triage' },
   { key: 'plan', label: 'Plan' },
@@ -55,9 +68,13 @@ function Defaults({ sys }: { sys: SystemOverview }) {
   // Held locally so a pick answers immediately; the cache it came from refreshes on its own clock.
   const [deputy, setDeputy] = useState(sys.deputy_enabled ?? true)
   const [strict, setStrict] = useState<Record<string, string>>(sys.deputy_strictness ?? {})
+  const [dModel, setDModel] = useState(toModelKey(sys.deputy_model ?? null))
+  const [dEffort, setDEffort] = useState(sys.deputy_effort ?? '')
   useEffect(() => {
     setDeputy(sys.deputy_enabled ?? true)
     setStrict(sys.deputy_strictness ?? {})
+    setDModel(toModelKey(sys.deputy_model ?? null))
+    setDEffort(sys.deputy_effort ?? '')
   }, [sys])
 
   const after = () => invalidate(K.systemOverview)
@@ -69,6 +86,31 @@ function Defaults({ sys }: { sys: SystemOverview }) {
           <Toggle
             on={deputy}
             onChange={(v) => { setDeputy(v); setSystemDeputy({ enabled: v }).then(after).catch(() => {}) }}
+          />
+        </ConfigRow>
+        {/* The deputy's OWN tier. It sits here, at system scope, because there is one deputy across
+            every project — and it never follows a project's model, because a judge promoted
+            alongside the thing it judges has stopped being a second opinion. Default is the floor. */}
+        <Divider />
+        <ConfigRow title="Deputy model" hint="The model the deputy judges on. Never the project's.">
+          <Dropdown
+            value={dModel}
+            options={modelOptions(sys.deputy_effective_model ?? sys.default_model ?? '')}
+            onChange={(v) => { setDModel(v); setSystemDeputy({ model: v || '' }).then(after).catch(() => {}) }}
+            align="right"
+            width={W_WIDE}
+            title="Deputy model"
+          />
+        </ConfigRow>
+        <Divider />
+        <ConfigRow title="Deputy effort" hint="How hard it thinks about each gate.">
+          <Dropdown
+            value={dEffort}
+            options={effortOptions(sys.deputy_effective_effort ?? 'medium')}
+            onChange={(v) => { setDEffort(v); setSystemDeputy({ effort: v || '' }).then(after).catch(() => {}) }}
+            align="right"
+            width={W_WIDE}
+            title="Deputy reasoning effort"
           />
         </ConfigRow>
       </Card>

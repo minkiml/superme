@@ -476,6 +476,12 @@ class DevStore:
                 raise ValueError(f"work_kind must be one of {sorted(KIND_PROFILES)}")
         if "autopilot" in sets:
             sets["autopilot"] = int(bool(sets["autopilot"]))
+        # A role pick is CLEARABLE — "Default" means fall through to the repo/system chain, and the
+        # picker sends "" for it. Store that as NULL, so "never set" and "set back to default" are
+        # one state in the column rather than two that every reader would have to know about.
+        for col in _ROLE_COLS:
+            if sets.get(col) == "":
+                sets[col] = None
         with self._conn() as c:
             if sets:
                 sets["updated_at"] = _now()

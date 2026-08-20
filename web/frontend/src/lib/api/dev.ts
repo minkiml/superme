@@ -545,13 +545,14 @@ export function addInbox(
 }
 
 // Edit an inbox item: title, text, kind, tag, status, or the per-item setting (model, effort,
-// autopilot, work_kind) that push locks into the work-item. An absent field is left alone.
-// `work_kind` is the one field with a meaningful cleared state: '' puts it back to undecided,
-// which is why it is typed wider here than the row's own union.
+// autopilot, work_kind, and the two roles that run on their own tier) that push locks into the
+// work-item. An absent field is left alone. `work_kind` is the one field with a meaningful cleared
+// state: '' puts it back to undecided, which is why it is typed wider here than the row's own union.
 export function updateInbox(
   id: number,
   patch: Partial<Pick<InboxEntry,
-    'status' | 'kind' | 'tag' | 'text' | 'title' | 'routed_to' | 'model' | 'effort' | 'autopilot'>>
+    'status' | 'kind' | 'tag' | 'text' | 'title' | 'routed_to' | 'model' | 'effort' | 'autopilot'
+    | 'vet_model' | 'vet_effort' | 'deputy_model' | 'deputy_effort'>>
     & { work_kind?: string },
 ): Promise<InboxEntry> {
   return sendJSON(`/api/dev/inbox/${id}`, 'PATCH', patch)

@@ -21,6 +21,10 @@ export type OrbitRepo = {
   scopes: Record<string, ScopeStatus>
   modelOverride: string | null
   effortOverride: string | null
+  // The `vet` role's own tier for this repo (null = unset → the floor). Separate from the two
+  // above on purpose: vet checks what build produced and does not inherit the project's tier.
+  vetModel: string | null
+  vetEffort: string | null
   learningEnabled: boolean
   reviewMode: string // 'fast' | 'strict' — whether the diff gets its own review gate before landing
   anchorBranch: string | null // the branch every git site targets (null = the repo's own default)
@@ -98,6 +102,8 @@ export function useCommandStats(pollMs = 5000): CommandStats {
         scopes: r.scopes ?? {},
         modelOverride: r.model_override ?? null,
         effortOverride: r.effort_override ?? null,
+        vetModel: r.vet_model ?? null,
+        vetEffort: r.vet_effort ?? null,
         learningEnabled: r.learning_enabled ?? true,
         reviewMode: r.review_mode ?? 'fast',
         anchorBranch: r.anchor_branch ?? null,

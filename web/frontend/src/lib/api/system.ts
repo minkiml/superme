@@ -129,16 +129,17 @@ export function getRunTrace(runId: number): Promise<RunTrace> {
 
 type ModelSetResult = { ok: boolean; model: string | null; effective: string | null }
 
-// Set or clear one repo's model override. Clearing falls back to the system default.
-export function setRepoModel(repoId: string, model: ModelAlias | null): Promise<ModelSetResult> {
-  return sendJSON(`/api/repos/${encodeURIComponent(repoId)}/model`, 'POST', { model })
+// Set or clear one repo's model override, for one ROLE. Omit `role` for the project's own tier;
+// `vet` is the reviewer's, which resolves on its own chain and never inherits the project's.
+export function setRepoModel(repoId: string, model: ModelAlias | null, role = 'default'): Promise<ModelSetResult> {
+  return sendJSON(`/api/repos/${encodeURIComponent(repoId)}/model`, 'POST', { model, role })
 }
 
 type EffortSetResult = { ok: boolean; effort: string | null; effective: string }
 
-// Set or clear one repo's reasoning-effort override. Clearing falls back to the system default.
-export function setRepoEffort(repoId: string, effort: string | null): Promise<EffortSetResult> {
-  return sendJSON(`/api/repos/${encodeURIComponent(repoId)}/effort`, 'POST', { effort })
+// Set or clear one repo's reasoning-effort override, for one ROLE — see setRepoModel.
+export function setRepoEffort(repoId: string, effort: string | null, role = 'default'): Promise<EffortSetResult> {
+  return sendJSON(`/api/repos/${encodeURIComponent(repoId)}/effort`, 'POST', { effort, role })
 }
 
 // Opt one repo in/out of automatic capture (the global master switch still gates everything).
@@ -156,8 +157,11 @@ export function setSystemLearning(enabled: boolean): Promise<{ ok: boolean; lear
 // readily it escalates PER GATE (triage/plan/review, each low·medium·high·extra). Partial — send
 // only what changes; `strictness` is a partial map (only the gates that moved).
 export function setSystemDeputy(
-  patch: { enabled?: boolean; strictness?: Record<string, string> },
-): Promise<{ ok: boolean; deputy_enabled: boolean; deputy_strictness: Record<string, string> }> {
+  // `model`/`effort` are the deputy's OWN tier — one judge across every project, so it is set
+  // here rather than per repo, and "" clears it back to the floor. It never follows a project's.
+  patch: { enabled?: boolean; strictness?: Record<string, string>; model?: string | null; effort?: string | null },
+): Promise<{ ok: boolean; deputy_enabled: boolean; deputy_strictness: Record<string, string>
+             deputy_model: string | null; deputy_effort: string | null }> {
   return sendJSON('/api/system/deputy', 'POST', patch)
 }
 
