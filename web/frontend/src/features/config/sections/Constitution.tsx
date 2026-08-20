@@ -82,7 +82,7 @@ export default function Constitution() {
     <>
       <PaneHead
         title="Constitution"
-        lede="Always-on rules, grouped by the mode that loads them. Toggle to control what loads."
+        lede="Always-on rules, by the mode that loads them. Toggle to control what loads."
       />
       {err ? (
         <div className="text-sm text-danger">Couldn’t load the constitution — {err}</div>

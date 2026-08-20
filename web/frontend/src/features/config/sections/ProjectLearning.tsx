@@ -16,7 +16,7 @@ export default function ProjectLearning({ contextId, repoLabel }: { contextId: s
     <>
       <PaneHead
         title="Learning"
-        lede="Captured → distilled → forged → published. The two gates are yours; nothing is published without you."
+        lede="The two gates are yours. Nothing is published without you."
       />
       <TabBar
         className="mb-5"

@@ -30,7 +30,7 @@ export default function LearningConfig() {
     <>
       <PaneHead
         title="Auto-learning"
-        lede="Everything that governs how SuperMe learns on its own: whether it runs, when it fires, and who does the work. What each project actually learned is under that project."
+        lede="How SuperMe learns on its own. What each project learned lives under that project."
       />
       {sys.error && !sys.data ? (
         <div className="text-sm text-danger">Couldn’t load system config — {String(sys.error)}</div>
@@ -41,14 +41,14 @@ export default function LearningConfig() {
           <MasterSwitch sys={sys.data} />
           <SectionLabel
             title="Capture sweep"
-            hint="When (and how eagerly) the automatic sweep runs. Only fires while the switch above is on."
+            hint="When the automatic sweep runs. Only fires while the switch above is on."
           />
           <Sweep sys={sys.data} />
         </>
       )}
       <SectionLabel
         title="Learning agents"
-        hint="The tier each agent runs on when the daemon fires it autonomously. Pick a tier — it auto-tracks that tier’s latest version. Writes the agent’s own .md."
+        hint="The tier each agent runs on. A tier always tracks its own latest version."
       />
       <Agents />
     </>
@@ -60,7 +60,7 @@ function MasterSwitch({ sys }: { sys: SystemOverview }) {
   useEffect(() => { setOn(sys.learning_enabled) }, [sys])
   return (
     <Card>
-      <ConfigRow title="Auto-learning" hint="Master switch — off suspends learning for every repo, and nothing below fires">
+      <ConfigRow title="Auto-learning" hint="Off suspends learning for every project. Nothing below fires.">
         <Toggle
           on={on}
           onChange={(v) => { setOn(v); setSystemLearning(v).then(() => invalidate(K.systemOverview)).catch(() => {}) }}
@@ -95,15 +95,15 @@ function Sweep({ sys }: { sys: SystemOverview }) {
 
   return (
     <Card>
-      <ConfigRow title="Idle time" hint="A dev session quiet this long — with new content — gets swept">
+      <ConfigRow title="Idle time" hint="How long a dev session sits quiet before it is swept.">
         <NumberField value={draft.idle} min={1} max={240} unit="min" onChange={(v) => setDraft((d) => ({ ...d, idle: v }))} />
       </ConfigRow>
       <Divider />
-      <ConfigRow title="Heartbeat" hint="How often the daemon scans for idle sessions">
+      <ConfigRow title="Heartbeat" hint="How often the daemon scans for idle sessions.">
         <NumberField value={draft.poll} min={1} max={60} unit="min" onChange={(v) => setDraft((d) => ({ ...d, poll: v }))} />
       </ConfigRow>
       <Divider />
-      <ConfigRow title="Min conversation" hint="Only sweep once this many new user messages have accrued">
+      <ConfigRow title="Min conversation" hint="How many new messages must accrue before a sweep.">
         <NumberField value={draft.msgs} min={0} max={50} unit="msgs" onChange={(v) => setDraft((d) => ({ ...d, msgs: v }))} />
       </ConfigRow>
       <ApplyBar dirty={dirty} saving={saving} onReset={() => setDraft(saved)} onApply={apply} />

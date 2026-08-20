@@ -38,12 +38,12 @@ export default function ProjectSettings({ repo }: { repo: OrbitRepo }) {
     <>
       <PaneHead
         title="Settings"
-        lede={`What ${name} runs on, and how its work lands. A picker left on its Default option follows the declared default rather than pinning a value here.`}
+        lede={`What ${name} runs on and how its work lands. Leave a picker on Default to follow the default.`}
       />
       <Inheritance repo={repo} name={name} />
       <SectionLabel
         title="Landing"
-        hint="How this project's work reaches the anchor, and which branch that is."
+        hint="How this project's work lands, and where."
       />
       <Landing repo={repo} />
     </>
@@ -69,7 +69,7 @@ function Inheritance({ repo, name }: { repo: OrbitRepo; name: string }) {
 
   return (
     <Card>
-      <ConfigRow title="Model" hint="The model this project's turns run on">
+      <ConfigRow title="Model" hint="The model this project runs on.">
         <Dropdown
           value={model}
           options={modelOptions(sys.data?.default_model ?? '')}
@@ -80,7 +80,7 @@ function Inheritance({ repo, name }: { repo: OrbitRepo; name: string }) {
         />
       </ConfigRow>
       <Divider />
-      <ConfigRow title="Reasoning effort" hint="How hard it thinks on this project">
+      <ConfigRow title="Reasoning effort" hint="How hard it thinks on this project.">
         <Dropdown
           value={effort}
           options={effortOptions(sys.data?.default_effort ?? 'medium')}
@@ -91,7 +91,7 @@ function Inheritance({ repo, name }: { repo: OrbitRepo; name: string }) {
         />
       </ConfigRow>
       <Divider />
-      <ConfigRow title="Auto-learning" hint="Also needs the system master switch on">
+      <ConfigRow title="Auto-learning" hint="Also needs the system master switch on.">
         <Toggle
           on={learning}
           onChange={(v) => { setLearning(v); setRepoLearning(repo.id, v).then(after).catch(() => {}) }}
@@ -127,7 +127,7 @@ function Landing({ repo }: { repo: OrbitRepo }) {
     <Card>
       <ConfigRow
         title="Review mode"
-        hint="Fast: approving an item merges it. Strict: approving opens a PR, and you merge from the PR page."
+        hint="Fast merges an item when you approve it. Strict opens a PR for you to merge."
       >
         <Dropdown
           value={mode}
@@ -142,8 +142,8 @@ function Landing({ repo }: { repo: OrbitRepo }) {
       <ConfigRow
         title="Anchor branch"
         hint={repo.anchorError
-          ? `Not found: ${repo.anchorError}`
-          : 'What every git site targets: branch-from base, sync source, merge target'}
+          ? `Branch not found. ${repo.anchorError}`
+          : 'The branch every git action targets.'}
       >
         {options.length > 0 ? (
           <Dropdown

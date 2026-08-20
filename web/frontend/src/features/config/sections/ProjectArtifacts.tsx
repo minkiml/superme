@@ -67,7 +67,7 @@ export default function ProjectArtifacts({ contextId, repoLabel }: { contextId: 
     <>
       <PaneHead
         title="Artifacts"
-        lede="This host's own local operational artifacts — enable or disable what loads, and preview or edit any of it."
+        lede="This project's own artifacts. Toggle what loads, or open one to edit."
       />
     <ArtifactTabs
         className="mb-5"
@@ -95,7 +95,7 @@ export default function ProjectArtifacts({ contextId, repoLabel }: { contextId: 
                 note: 'Forged for this host',
                 tint: 'dev',
                 icon: ScrollText,
-                empty: 'No local constitutions yet — forge one, and it lands here.',
+                empty: 'No local constitutions yet. Forge one and it lands here.',
                 groups: [{ cards: consts.map((c) => constitutionCard(c, contextId, load, setOpenConst)) }],
               },
               {
@@ -125,8 +125,8 @@ export default function ProjectArtifacts({ contextId, repoLabel }: { contextId: 
       {sub === 'verification' && (
         <div className="space-y-6">
           <p className="text-[12px] text-faint">
-            Checks this repo has proven. <b className="text-muted">Standing</b> entries are attached to every plan;
-            the rest are cited by name when they fit. Vet nominates, close writes — promoting is yours.
+            Checks this project has proven. <b className="text-muted">Standing</b> ones are attached to every plan.
+            The rest are cited by name when they fit. Promoting is yours.
           </p>
           {(['standing', 'available'] as const).map((tier) => (
             <section key={tier}>
@@ -137,8 +137,8 @@ export default function ProjectArtifacts({ contextId, repoLabel }: { contextId: 
               <ListOrState
                 list={library ? library.filter((e) => e.tier === tier) : null}
                 empty={tier === 'standing'
-                  ? 'Nothing standing — no check is charged to every item here yet.'
-                  : 'Nothing yet — entries land here when close writes in what vet nominated.'}
+                  ? 'Nothing standing yet. No check is charged to every item here.'
+                  : 'Nothing yet. Entries land here when close writes in what vet nominated.'}
               >
                 {(items) => (
                   <div className="space-y-2">
@@ -153,13 +153,12 @@ export default function ProjectArtifacts({ contextId, repoLabel }: { contextId: 
       {sub === 'decisions' && (
         <div className="space-y-4">
           <p className="text-[12px] text-faint">
-            Calls YOU ruled on, newest first. Recorded by the kernel the moment you answer at a
-            gate — so every entry here is yours, never an agent's. Later runs read this before
-            asking, which is what stops the same question coming back.
+            Calls you ruled on, newest first. Every entry here is yours, never an agent's.
+            Later runs read this before asking, so the same question stops coming back.
           </p>
           <ListOrState
             list={decisions}
-            empty="Nothing ruled yet — a decision lands here the first time you answer a question at a review gate."
+            empty="Nothing ruled yet. A decision lands here when you answer at a gate."
           >
             {(items) => (
               <div className="space-y-2">
@@ -225,7 +224,7 @@ function assetCard(a: AssetItem, contextId: string, reload: () => void): ScopeCa
       <span className="flex items-center gap-1.5">
         <button
           onClick={() => act('drop')}
-          title="Drop — un-adopt for this repo"
+          title="Drop. Un-adopts it for this project."
           className="rounded p-1 text-faint hover:bg-hover hover:text-danger"
         >
           <Trash2 size={13} />
@@ -430,7 +429,7 @@ function LibraryRow({ e, contextId, onChanged }: { e: LibraryEntry; contextId: s
         <button
           onClick={() => act(() => moveLibraryEntry(e.id, standing ? 'available' : 'standing', contextId))}
           disabled={busy}
-          title={standing ? 'Demote to available' : 'Promote to standing — every later plan will carry it'}
+          title={standing ? 'Demote to available' : 'Promote to standing. Every later plan carries it.'}
           className="flex shrink-0 items-center gap-1 rounded-md border border-line px-2 py-1 text-[11px] text-muted hover:bg-hover hover:text-fg disabled:opacity-50"
         >
           {busy ? <Loader2 size={11} className="animate-spin" /> : <Move size={11} />}
@@ -439,7 +438,7 @@ function LibraryRow({ e, contextId, onChanged }: { e: LibraryEntry; contextId: s
         <button
           onClick={() => act(() => dropLibraryEntry(e.id, contextId))}
           disabled={busy}
-          title="Drop — it didn't generalise"
+          title="Drop. It did not generalise."
           className="shrink-0 rounded-md border border-line p-1 text-faint hover:border-danger hover:text-danger disabled:opacity-50"
         >
           <Trash2 size={12} />

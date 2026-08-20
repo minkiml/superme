@@ -45,7 +45,7 @@ export default function Identity() {
     <>
       <PaneHead
         title="Identity &amp; charters"
-        lede="Hand-authored system-prompt sources. An edit takes effect on the next turn."
+        lede="The system prompts you write by hand. An edit takes effect on the next turn."
       />
       {err ? (
         <div className="text-sm text-danger">Couldn’t load foundation files — {err}</div>

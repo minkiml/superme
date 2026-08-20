@@ -33,7 +33,7 @@ export default function General() {
     <>
       <PaneHead
         title="General"
-        lede="System-wide behaviour: who judges the autopilot gates on your behalf, and when a long session compacts itself. A project’s own model and effort are set on that project."
+        lede="Settings that apply everywhere. Each project sets its own model and effort."
       />
       {sys.error && !sys.data ? (
         <div className="text-sm text-danger">Couldn’t load system config — {String(sys.error)}</div>
@@ -44,7 +44,7 @@ export default function General() {
       )}
       <SectionLabel
         title="Compaction"
-        hint="When a work-item session auto-compacts. System-wide — the runtime honours this number as given."
+        hint="When a work-item session auto-compacts. Applies everywhere."
       />
       <Compaction />
     </>
@@ -65,7 +65,7 @@ function Defaults({ sys }: { sys: SystemOverview }) {
   return (
     <>
       <Card>
-        <ConfigRow title="Deputy" hint="Judges autopilot gates on your behalf — off runs autopilot unsupervised">
+        <ConfigRow title="Deputy" hint="Judges autopilot gates for you. Off runs autopilot unsupervised.">
           <Toggle
             on={deputy}
             onChange={(v) => { setDeputy(v); setSystemDeputy({ enabled: v }).then(after).catch(() => {}) }}
@@ -77,7 +77,7 @@ function Defaults({ sys }: { sys: SystemOverview }) {
         <>
           <SectionLabel
             title="Deputy strictness"
-            hint="Per gate — how readily it calls you. Low delegates most, extra calls you soonest."
+            hint="How readily it calls you, per gate. Low delegates most. Extra calls you soonest."
           />
           <Card>
             {DEPUTY_GATES.map((g, i) => (
@@ -160,8 +160,8 @@ function Compaction() {
       <ConfigRow
         title="Min gain"
         hint={draft.auto
-          ? 'Auto: a compaction must reclaim ≥50% of what the session could shed'
-          : 'Manual: a compaction shrinking less than this flat % counts as ineffective'}
+          ? 'Auto reclaims at least half of what the session can shed.'
+          : 'A compaction shrinking less than this counts as ineffective.'}
       >
         <span className="text-[12px] text-faint">Auto</span>
         <Toggle on={draft.auto} onChange={(v) => setDraft((d) => ({ ...d, auto: v }))} />

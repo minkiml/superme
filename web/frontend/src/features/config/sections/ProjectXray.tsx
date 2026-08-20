@@ -51,7 +51,7 @@ export default function ProjectXray({ contextId, repoLabel }: { contextId: strin
     <>
       <PaneHead
         title="Prompt X-ray"
-        lede="Firing a probe spins up a throwaway work-item that runs the real pipeline (triage → plan → build → vet → review → close) on autopilot, captures each phase's input, then destroys itself — nothing is merged and no knowledge is written. Only the captured input pages and the run trace remain."
+        lede="Runs one throwaway work-item through the whole pipeline and captures each phase's input. Nothing is merged and no knowledge is written."
       />
 
       <div className="mb-5 flex items-center gap-3">
@@ -82,7 +82,7 @@ export default function ProjectXray({ contextId, repoLabel }: { contextId: strin
         Captured inputs {links.length > 0 && <span className="text-faint">· {links.length}</span>}
       </div>
       {links.length === 0 ? (
-        <Empty>{running ? 'Waiting for the first phase to run…' : 'No probe captured yet — fire one above.'}</Empty>
+        <Empty>{running ? 'Waiting for the first phase to run…' : 'No probe captured yet. Fire one above.'}</Empty>
       ) : (
         <div className="overflow-hidden rounded-lg border border-line">
           {links.map((l, i) => (

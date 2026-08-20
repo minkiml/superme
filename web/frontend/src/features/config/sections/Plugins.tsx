@@ -88,7 +88,7 @@ export default function Plugins({ only }: { only: 'skill' | 'agent' }) {
     <>
       <PaneHead
         title={only === 'skill' ? 'Skills' : 'Agents'}
-        lede={`SuperMe's own universal ${noun}, grouped by the scope that loads them. Click any to preview or edit.`}
+        lede={`SuperMe's own ${noun}, by the scope that loads them. Click one to preview or edit.`}
       />
       {err ? (
         <div className="text-sm text-danger">Couldn’t load the harness — {err}</div>
