@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  Sparkles, Check, X, Trash2, Loader2, RefreshCw, Brain,
+  Sparkles, Check, X, Trash2, Loader2, Brain,
   Bot, Pencil, Save, FileText, Layers, Send, FileCode, Gauge, Terminal,
 } from 'lucide-react'
 import Markdown from '@/ui/Markdown'
@@ -31,9 +31,9 @@ import { Empty } from '@/features/dev/common'
 // frontmatter flag; skill/agent = moved into a `.disabled/` shadow); delete removes it for good.
 // Effective on the next dev turn.
 const PUB_FORM_META: Record<PublishedForm, { label: string; icon: typeof Bot; blurb: string }> = {
-  constitution: { label: 'Constitution', icon: FileText, blurb: 'always-on rules in the system prompt' },
-  skill: { label: 'Skills', icon: Sparkles, blurb: 'loaded via the dev plugin' },
-  agent: { label: 'Agents', icon: Bot, blurb: 'delegate workers' },
+  constitution: { label: 'Constitution', icon: FileText, blurb: 'Always-on rules in the system prompt.' },
+  skill: { label: 'Skills', icon: Sparkles, blurb: 'Loaded via the dev plugin.' },
+  agent: { label: 'Agents', icon: Bot, blurb: 'Delegate workers.' },
 }
 const pubScopeLabel = (s: string) =>
   s === 'universal_dev' ? 'universal' : s === 'repo_dev' ? 'repo' : s
@@ -52,6 +52,18 @@ export function PublishedInventory({ contextId }: { contextId: string }) {
       .catch((e) => setErr(String(e)))
   }, [contextId])
   useEffect(() => { load() }, [load])
+
+  // Publishing happens at gate 2 in the sibling Review tab, and a background dev turn can retire
+  // an artifact. With no manual refresh, returning to the window is the refresh.
+  useEffect(() => {
+    const onVisible = () => document.visibilityState === 'visible' && load()
+    window.addEventListener('focus', load)
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      window.removeEventListener('focus', load)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [load])
 
   async function toggle(it: PublishedItem) {
     setBusy(it.proposal_id); setErr(null)
@@ -72,22 +84,13 @@ export function PublishedInventory({ contextId }: { contextId: string }) {
   const rows = present.filter((i) => i.form === form)
   return (
     <div className="space-y-4">
-      <div className="flex items-start justify-between gap-3">
-        <p className="text-sm text-muted">
-          Artifacts the learning loop has published into the live harness. Click one to preview or
-          edit it; disable to suspend it, or delete to remove it from everywhere — each takes effect
-          on the next dev turn.
-        </p>
-        <button
-          onClick={load}
-          className="flex shrink-0 items-center gap-1 rounded-md border border-line px-2 py-1 text-xs text-muted hover:bg-hover hover:text-fg"
-        >
-          <RefreshCw size={13} /> Refresh
-        </button>
-      </div>
+      <p className="text-sm text-muted">
+        What the learning loop published into the live harness. Click one to preview or edit.
+        Disable suspends it, delete removes it for good. Both take effect on the next dev turn.
+      </p>
       {err && <div className="text-sm text-danger">{err}</div>}
       {present.length === 0 ? (
-        <Empty>Nothing published yet — approve a forged artifact at gate 2 and it lands here.</Empty>
+        <Empty>Nothing published yet. Approve a forged artifact at gate 2 and it lands here.</Empty>
       ) : (
         // Constitution · Skills · Agents as tabs (matches Foundations + the Artifacts tab).
         <>
@@ -256,7 +259,6 @@ export function MemoryGovernance({ contextId }: { contextId: string }) {
   const [props, setProps] = useState<MemoryProposal[]>([])
   const [stats, setStats] = useState<MemoryStats | null>(null)
   const [err, setErr] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
   const [distilling, setDistilling] = useState(false)
   const [popup, setPopup] = useState<null | 'candidates' | 'knowledge'>(null)
   const poll = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -287,7 +289,6 @@ export function MemoryGovernance({ contextId }: { contextId: string }) {
   }, [contextId])
 
   const load = useCallback(() => {
-    setLoading(true)
     Promise.all([getProposals(contextId), getMemoryStats(contextId)])
       .then(([p, s]) => {
         // Keep every OPEN proposal in the queue — proposed (gate 1), writing (write run in flight),
@@ -301,7 +302,6 @@ export function MemoryGovernance({ contextId }: { contextId: string }) {
         else setDistilling(false)
       })
       .catch((e) => setErr(String(e)))
-      .finally(() => setLoading(false))
   }, [contextId, startPolling])
 
   useEffect(() => { loadRef.current = load }, [load])
@@ -326,9 +326,9 @@ export function MemoryGovernance({ contextId }: { contextId: string }) {
     }
   }
 
-  // Refetch when the owner returns to the tab/window — proposals can land from a background
-  // distill turn (or the daemon) while this surface stays mounted, so the mount-only fetch
-  // would otherwise show a stale queue until a manual Refresh.
+  // Refetch when the owner returns to the tab/window. Proposals can land from a background
+  // distill turn (or the daemon) while this surface stays mounted, and there is no manual
+  // refresh: returning to the window is the refresh.
   useEffect(() => {
     const refetch = () => load()
     const onVisible = () => document.visibilityState === 'visible' && load()
@@ -385,13 +385,6 @@ export function MemoryGovernance({ contextId }: { contextId: string }) {
           ) : (
             <><Sparkles size={13} /> Run distill</>
           )}
-        </button>
-        <button
-          onClick={load}
-          title="Refresh"
-          className="rounded p-1.5 text-muted transition hover:bg-hover hover:text-fg"
-        >
-          {loading ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
         </button>
       </div>
 
@@ -495,7 +488,7 @@ function StatPopup({
               </div>
               <Chips counts={stats.candidates.by_form} />
               {stats.candidates.items.length === 0 ? (
-                <Empty>The capture pool is empty — nothing to distill.</Empty>
+                <Empty>The capture pool is empty. Nothing to distill.</Empty>
               ) : (
                 <div className="space-y-1.5">
                   {stats.candidates.items.map((c) => (
@@ -969,7 +962,7 @@ function ProposalModal({
             <span className="text-[11px] text-faint">Review the staged artifact, then publish it to its live home.</span>
           ) : proposed ? (
             <span className="text-[11px] text-faint">
-              Gate 1 — approve the intent to author the {cur.output_form}.
+              Gate 1. Approve the intent to author the {cur.output_form}.
               {blockingUnanswered && ' Answer the blocking question(s) first.'}
             </span>
           ) : (
@@ -981,7 +974,7 @@ function ProposalModal({
               <button
                 onClick={approve}
                 disabled={busy !== null || blockingUnanswered}
-                title="Gate 1 — approve the intent; the write phase authors the artifact."
+                title="Approve the intent. The write phase authors the artifact."
                 className="inline-flex items-center gap-1 rounded-md bg-accent px-2.5 py-1 text-[12px] font-medium text-on-accent transition hover:opacity-90 disabled:opacity-50"
               >
                 {busy === 'approve' ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
@@ -992,7 +985,7 @@ function ProposalModal({
               <button
                 onClick={publish}
                 disabled={busy !== null || editingArtifact}
-                title={editingArtifact ? 'Save or cancel your edit first.' : 'Gate 2 — write the staged artifact to its live operational home.'}
+                title={editingArtifact ? 'Save or cancel your edit first.' : 'Write the staged artifact to its live operational home.'}
                 className="inline-flex items-center gap-1 rounded-md bg-accent px-2.5 py-1 text-[12px] font-medium text-on-accent transition hover:opacity-90 disabled:opacity-50"
               >
                 {busy === 'publish' ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
@@ -1004,7 +997,7 @@ function ProposalModal({
                 <button
                   onClick={() => act('reject')}
                   disabled={busy !== null}
-                  title="The framing is off — re-queues the candidates for a later distill pass."
+                  title="The framing is off. Re-queues the candidates for a later distill pass."
                   className="inline-flex items-center gap-1 rounded-md border border-line px-2.5 py-1 text-[12px] text-muted transition hover:bg-hover hover:text-fg disabled:opacity-50"
                 >
                   {busy === 'reject' ? <Loader2 size={12} className="animate-spin" /> : <X size={12} />}
@@ -1013,7 +1006,7 @@ function ProposalModal({
                 <button
                   onClick={() => act('drop')}
                   disabled={busy !== null}
-                  title="Noise — drop it and its candidates, stop suggesting it."
+                  title="Noise. Drops it and its candidates, and stops suggesting it."
                   className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[12px] text-faint transition hover:bg-danger/10 hover:text-danger disabled:opacity-50"
                 >
                   {busy === 'drop' ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
@@ -1193,7 +1186,7 @@ function EvalReportView({ report }: { report: EvalReport }) {
           </div>
           {m.capped && !m.error && m.kind === 'run' && (
             <div className="font-mono text-[10px] text-warn">
-              floor — trial hit the turn cap ({m.capped}); a full run costs more
+              Floor only. Trial hit the turn cap ({m.capped}), so a full run costs more.
             </div>
           )}
         </div>
@@ -1215,7 +1208,7 @@ function EvalReportView({ report }: { report: EvalReport }) {
         </PSection>
       )}
       {issues.length > 0 && (
-        <PSection title="Issues — fix before publishing">
+        <PSection title="Issues to fix before publishing">
           <ul className="space-y-2">
             {[...issues].sort((a, b) => (a.severity === 'high' ? -1 : 1) - (b.severity === 'high' ? -1 : 1)).map((it, i) => (
               <li key={i} className="rounded-md border border-line bg-app px-2.5 py-2 text-[12px]">
