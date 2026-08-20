@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import Dropdown from '@/ui/Dropdown'
 import Toggle from '@/ui/Toggle'
-import { MODELS as MODEL_CATALOG, EFFORTS as EFFORT_CATALOG, fmtModel, toModelKey } from '@/lib/format'
+import { MODELS as MODEL_CATALOG, EFFORTS as EFFORT_CATALOG, DEFAULT_MODEL, DEFAULT_EFFORT, toModelKey } from '@/lib/format'
 import { invalidate, useLive } from '@/lib/live'
 import { K } from '@/lib/live/keys'
 import { getSystem, setRepoModel, setRepoEffort, setRepoLearning, type ModelAlias } from '@/lib/api'
@@ -13,17 +13,12 @@ import { Card, ConfigRow, Divider, PaneHead, SectionLabel, W_WIDE } from '../con
 // and how its work lands. "" means inherit, so the per-repo pickers carry a System-default option
 // the system-level ones cannot have.
 
-// The inherit option NAMES the value it inherits. "System default" was a pointer to a setting that
-// no longer exists — a repo that picks nothing runs the declared default, and the picker should say
-// which one that is rather than making you go somewhere else to find out.
-const modelOptions = (fallback: string) => [
-  { value: '', label: `Default · ${fmtModel(fallback)}` },
-  ...MODEL_CATALOG.map((m) => ({ value: m.key, label: m.label })),
-]
-const effortOptions = (fallback: string) => [
-  { value: '', label: `Default · ${EFFORT_CATALOG.find((e) => e.key === fallback)?.label ?? fallback}` },
-  ...EFFORT_CATALOG.map((e) => ({ value: e.key, label: e.label })),
-]
+// A picker shows the value IN FORCE, never an "inherit" row beside the value it inherits. The row
+// said "Default · Sonnet 5" while Sonnet 5 also sat two lines below it — one answer wearing two
+// labels, and picking either did the same thing. What an unset setting runs is the default, so the
+// default is what the control shows; choosing it explicitly just writes down what was already true.
+const MODEL_OPTS = MODEL_CATALOG.map((m) => ({ value: m.key, label: m.label }))
+const EFFORT_OPTS = EFFORT_CATALOG.map((e) => ({ value: e.key, label: e.label }))
 
 // HOW this repo's work lands (workflow-renovation-v2 §2.2): does the diff get its own review gate
 // before it lands. Every repo starts on `fast`.
@@ -38,7 +33,7 @@ export default function ProjectSettings({ repo }: { repo: OrbitRepo }) {
     <>
       <PaneHead
         title="Settings"
-        lede={`What ${name} runs on, what checks it, and how its work lands. Leave a picker on Default to follow the default.`}
+        lede={`What ${name} runs on, what checks it, and how its work lands.`}
       />
       <Inheritance repo={repo} name={name} />
       <SectionLabel
@@ -59,16 +54,20 @@ function Inheritance({ repo, name }: { repo: OrbitRepo; name: string }) {
   // What this repo runs if it overrides nothing. Same cached key General reads, so naming it here
   // costs no extra request.
   const sys = useLive(K.systemOverview, getSystem, 0)
-  const [model, setModel] = useState(toModelKey(repo.modelOverride))
-  const [effort, setEffort] = useState(repo.effortOverride ?? '')
+  // Unset shows what unset RUNS. `??` on the resolved value, not `||` on a blank: an empty pick and
+  // an unresolved default are different states, and only the second may fall through to the floor.
+  const fallbackModel = toModelKey(sys.data?.default_model) || DEFAULT_MODEL
+  const fallbackEffort = sys.data?.default_effort || DEFAULT_EFFORT
+  const [model, setModel] = useState(toModelKey(repo.modelOverride) || fallbackModel)
+  const [effort, setEffort] = useState(repo.effortOverride || fallbackEffort)
   const [learning, setLearning] = useState(repo.learningEnabled)
   // The controls follow the repo: without this, switching projects in the sidebar would show the
   // previous one's overrides.
   useEffect(() => {
-    setModel(toModelKey(repo.modelOverride))
-    setEffort(repo.effortOverride ?? '')
+    setModel(toModelKey(repo.modelOverride) || fallbackModel)
+    setEffort(repo.effortOverride || fallbackEffort)
     setLearning(repo.learningEnabled)
-  }, [repo.id, repo.modelOverride, repo.effortOverride, repo.learningEnabled])
+  }, [repo.id, repo.modelOverride, repo.effortOverride, repo.learningEnabled, fallbackModel, fallbackEffort])
 
   const after = () => invalidate(K.repos)
 
@@ -77,8 +76,8 @@ function Inheritance({ repo, name }: { repo: OrbitRepo; name: string }) {
       <ConfigRow title="Model" hint="The model this project runs on.">
         <Dropdown
           value={model}
-          options={modelOptions(sys.data?.default_model ?? '')}
-          onChange={(v) => { setModel(v); setRepoModel(repo.id, (v || null) as ModelAlias | null).then(after).catch(() => {}) }}
+          options={MODEL_OPTS}
+          onChange={(v) => { setModel(v); setRepoModel(repo.id, v as ModelAlias).then(after).catch(() => {}) }}
           align="right"
           width={W_WIDE}
           title={`${name} model`}
@@ -88,8 +87,8 @@ function Inheritance({ repo, name }: { repo: OrbitRepo; name: string }) {
       <ConfigRow title="Reasoning effort" hint="How hard it thinks on this project.">
         <Dropdown
           value={effort}
-          options={effortOptions(sys.data?.default_effort ?? 'medium')}
-          onChange={(v) => { setEffort(v); setRepoEffort(repo.id, v || null).then(after).catch(() => {}) }}
+          options={EFFORT_OPTS}
+          onChange={(v) => { setEffort(v); setRepoEffort(repo.id, v).then(after).catch(() => {}) }}
           align="right"
           width={W_WIDE}
           title={`${name} reasoning effort`}
@@ -113,20 +112,22 @@ function Inheritance({ repo, name }: { repo: OrbitRepo; name: string }) {
 // Default here therefore means the FLOOR, and the picker says so rather than leaving you to guess.
 function Vet({ repo, name }: { repo: OrbitRepo; name: string }) {
   const sys = useLive(K.systemOverview, getSystem, 0)
-  const [model, setModel] = useState(toModelKey(repo.vetModel))
-  const [effort, setEffort] = useState(repo.vetEffort ?? '')
+  const fallbackModel = toModelKey(sys.data?.default_model) || DEFAULT_MODEL
+  const fallbackEffort = sys.data?.default_effort || DEFAULT_EFFORT
+  const [model, setModel] = useState(toModelKey(repo.vetModel) || fallbackModel)
+  const [effort, setEffort] = useState(repo.vetEffort || fallbackEffort)
   useEffect(() => {
-    setModel(toModelKey(repo.vetModel))
-    setEffort(repo.vetEffort ?? '')
-  }, [repo.id, repo.vetModel, repo.vetEffort])
+    setModel(toModelKey(repo.vetModel) || fallbackModel)
+    setEffort(repo.vetEffort || fallbackEffort)
+  }, [repo.id, repo.vetModel, repo.vetEffort, fallbackModel, fallbackEffort])
   const after = () => invalidate(K.repos)
   return (
     <Card>
       <ConfigRow title="Model" hint="The model vet runs on when it checks this project's work.">
         <Dropdown
           value={model}
-          options={modelOptions(sys.data?.default_model ?? '')}
-          onChange={(v) => { setModel(v); setRepoModel(repo.id, (v || null) as ModelAlias | null, 'vet').then(after).catch(() => {}) }}
+          options={MODEL_OPTS}
+          onChange={(v) => { setModel(v); setRepoModel(repo.id, v as ModelAlias, 'vet').then(after).catch(() => {}) }}
           align="right"
           width={W_WIDE}
           title={`${name} vet model`}
@@ -136,8 +137,8 @@ function Vet({ repo, name }: { repo: OrbitRepo; name: string }) {
       <ConfigRow title="Reasoning effort" hint="How hard vet thinks about what it is checking.">
         <Dropdown
           value={effort}
-          options={effortOptions(sys.data?.default_effort ?? 'medium')}
-          onChange={(v) => { setEffort(v); setRepoEffort(repo.id, v || null, 'vet').then(after).catch(() => {}) }}
+          options={EFFORT_OPTS}
+          onChange={(v) => { setEffort(v); setRepoEffort(repo.id, v, 'vet').then(after).catch(() => {}) }}
           align="right"
           width={W_WIDE}
           title={`${name} vet reasoning effort`}

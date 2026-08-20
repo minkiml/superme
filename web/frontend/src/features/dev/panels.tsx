@@ -7,7 +7,7 @@ import SectionHeader from '@/ui/SectionHeader'
 import TabBar from '@/ui/TabBar'
 import Toggle from '@/ui/Toggle'
 import { useEditGate, EditActions } from '@/ui/EditGate'
-import { addInbox, updateInbox, deleteInbox, pushInbox, getRepos, getInboxBrief, saveInboxBrief,
+import { addInbox, updateInbox, deleteInbox, pushInbox, getRepos, getSystem, getInboxBrief, saveInboxBrief,
          type WorkItem, type InboxEntry, type InboxKind, type InboxBrief } from '@/lib/api'
 import { useLive } from '@/lib/live'
 import { K } from '@/lib/live/keys'
@@ -28,12 +28,22 @@ export const RUN_EFFORTS = EFFORT_CATALOG.map((e) => ({ value: e.key, label: e.l
 export const DEFAULT_RUN_EFFORT = DEFAULT_EFFORT
 // The PROPOSED work-item kind. "Undecided" is a first-class option, not a placeholder — leaving it
 // there is a real answer (triage judges alone), so it leads the list rather than sitting under one.
-// The role pickers DO carry an empty option, unlike the two above: a role's fallback is a chain the
-// owner set elsewhere (the project's vet tier, the system deputy tier), so "follow it" is a real
-// answer and the common one. Naming the resolved value here would mean plumbing two more settings
-// into this panel to print them; the row hint says where it comes from instead.
-export const ROLE_MODELS = [{ value: '', label: 'Default' }, ...RUN_MODELS]
-export const ROLE_EFFORTS = [{ value: '', label: 'Default' }, ...RUN_EFFORTS]
+// WHO runs, as data. A row's run config is not one model and one effort any more — it is a model
+// and an effort PER ROLE, because vet and the deputy deliberately do not run on what the work runs
+// on. Listing each role's two pickers by hand made the tab six near-identical rows and would make
+// it eight the next time a role appears; this is the list, and the Setting tab is a loop over it.
+// A new role is an entry here plus its two columns on the row.
+export const RUN_ROLES = [
+  { key: '', label: 'Work', hint: 'Every phase run of this item' },
+  { key: 'vet', label: 'Vet', hint: 'Checks what build produced' },
+  { key: 'deputy', label: 'Deputy', hint: 'Judges the gates' },
+] as const
+export type RunRole = (typeof RUN_ROLES)[number]['key']
+/** A role's field name on the row: the work role owns the bare keys, the rest are prefixed. */
+export const roleField = (role: RunRole, f: 'model' | 'effort') =>
+  (role ? `${role}_${f}` : f) as 'model' | 'effort' | 'vet_model' | 'vet_effort' | 'deputy_model' | 'deputy_effort'
+/** What each role runs when this row says nothing — the chain's answer, resolved by the caller. */
+export type RoleDefaults = Partial<Record<RunRole, { model: string; effort: string }>>
 export const WORK_KIND_OPTS = [
   { value: '', label: 'Undecided' },
   { value: 'implementation', label: 'Implementation' },
@@ -401,6 +411,18 @@ export function InboxView({
   // ("Repo default — Sonnet 5") instead of showing a blank that looks like nothing is configured.
   const repos = useLive(K.repos, getRepos).data
   const repo = repos?.find((r) => r.id === contextId)
+  const sys = useLive(K.systemOverview, getSystem, 0).data
+  // What each role ALREADY runs for this repo, so an untouched picker states the answer instead of
+  // deferring it one level. Each role reads its OWN chain — the work role the repo's tier, vet the
+  // repo's vet tier, the deputy the system's — which is the same precedence the daemon resolves.
+  const roleDefaults: RoleDefaults = {
+    '': { model: toModelKey(repo?.model_override) || DEFAULT_RUN_MODEL,
+          effort: repo?.effort_override || DEFAULT_RUN_EFFORT },
+    vet: { model: toModelKey(repo?.vet_model) || DEFAULT_RUN_MODEL,
+           effort: repo?.vet_effort || DEFAULT_RUN_EFFORT },
+    deputy: { model: toModelKey(sys?.deputy_effective_model) || DEFAULT_RUN_MODEL,
+              effort: sys?.deputy_effective_effort || DEFAULT_RUN_EFFORT },
+  }
 
   const open = entries.filter((e) => e.status === 'open')
 
@@ -473,8 +495,7 @@ export function InboxView({
                     <InboxCard
                       key={e.id}
                       e={e}
-                      repoModel={repo?.model_override}
-                      repoEffort={repo?.effort_override}
+                      roleDefaults={roleDefaults}
                       onPush={() => pushInbox(e.id, contextId).then(onChanged)}
                       onDiscuss={onDiscussNote && (() => onDiscussNote(e.id, e.title || e.text.slice(0, 60)))}
                       onSave={async (patch) => { await updateInbox(e.id, patch); onChanged() }}
@@ -493,16 +514,14 @@ export function InboxView({
 
 function InboxCard({
   e,
-  repoModel,
-  repoEffort,
+  roleDefaults,
   onPush,
   onDiscuss,
   onSave,
   onDelete,
 }: {
   e: InboxEntry
-  repoModel?: string | null
-  repoEffort?: string | null
+  roleDefaults: RoleDefaults
   onPush: () => void
   onDiscuss?: () => void
   onSave: (patch: InboxConfigPatch) => Promise<void>
@@ -622,8 +641,7 @@ function InboxCard({
     {editing && (
       <InboxItemModal
         e={e}
-        repoModel={repoModel}
-        repoEffort={repoEffort}
+        roleDefaults={roleDefaults}
         onClose={() => setEditing(false)}
         onSave={onSave}
       />
@@ -643,36 +661,37 @@ function InboxCard({
 // looking at and nothing else.
 function InboxItemModal({
   e,
-  repoModel,
-  repoEffort,
+  roleDefaults,
   onSave,
   onClose,
 }: {
   e: InboxEntry
-  repoModel?: string | null   // the repo's Quick-config default — what an unset row starts at
-  repoEffort?: string | null
+  roleDefaults: RoleDefaults   // per role, what an unset row already runs — its picker's start
   onSave: (patch: InboxConfigPatch) => Promise<void>
   onClose: () => void
 }) {
   const [tab, setTab] = useState<'content' | 'brief' | 'setting'>('content')
 
-  // Model/effort are always a CONCRETE pick — three options each, no "inherit" row (owner,
-  // 2026-08-02). A row that has never been touched shows the repo's Quick-config value as its
-  // starting position, so the picker states the answer instead of deferring it one level.
+  // Every model/effort pick is CONCRETE — three options each, no "inherit" row (owner, 2026-08-02,
+  // extended to the roles 2026-08-20). A picker that has never been touched shows what that role
+  // ALREADY runs, so it states the answer instead of deferring it one level, and an "inherit" row
+  // beside the value it inherits would be one answer wearing two labels.
   // `work_kind` is the exception: "" is a real value, not an empty control — nobody has judged,
   // and triage then decides alone, which is what every row did before the field.
+  const roleSaved = Object.fromEntries(RUN_ROLES.flatMap((r) => {
+    const d = roleDefaults[r.key] ?? { model: DEFAULT_RUN_MODEL, effort: DEFAULT_RUN_EFFORT }
+    return [
+      [roleField(r.key, 'model'), toModelKey(e[roleField(r.key, 'model')]) || d.model],
+      [roleField(r.key, 'effort'), e[roleField(r.key, 'effort')] || d.effort],
+    ]
+  })) as Pick<InboxConfigPatch, 'model' | 'effort' | 'vet_model' | 'vet_effort' | 'deputy_model' | 'deputy_effort'>
   const saved: InboxConfigPatch = {
     title: e.title ?? '',
     text: e.text,
     kind: e.kind,
-    model: toModelKey(e.model) || toModelKey(repoModel) || DEFAULT_RUN_MODEL,
-    effort: e.effort ?? repoEffort ?? DEFAULT_RUN_EFFORT,
     autopilot: !!e.autopilot,
     work_kind: e.work_kind ?? '',
-    vet_model: toModelKey(e.vet_model) ?? '',
-    vet_effort: e.vet_effort ?? '',
-    deputy_model: toModelKey(e.deputy_model) ?? '',
-    deputy_effort: e.deputy_effort ?? '',
+    ...roleSaved,
   }
   const row = useEditGate<InboxConfigPatch>({
     saved,
@@ -795,34 +814,16 @@ function InboxItemModal({
                   <ConfigRow label="Work kind" hint="Implementation changes code; research answers a question. Triage confirms it.">
                     <Dropdown value={d.work_kind} options={WORK_KIND_OPTS} onChange={(v) => set({ work_kind: v })} width="w-36" align="right" />
                   </ConfigRow>
-                  <ConfigRow label="Model" hint="Which model this item's runs use.">
-                    <Dropdown value={d.model} options={RUN_MODELS} onChange={(v) => set({ model: v })} width="w-36" align="right" />
-                  </ConfigRow>
-                  <ConfigRow label="Effort" hint="How much reasoning each run spends.">
-                    <Dropdown value={d.effort} options={RUN_EFFORTS} onChange={(v) => set({ effort: v })} width="w-36" align="right" />
-                  </ConfigRow>
-                  <ConfigRow label="Vet model" hint="Vet checks the work. Default follows the project's vet setting.">
-                    <Dropdown value={d.vet_model} options={ROLE_MODELS} onChange={(v) => set({ vet_model: v })} width="w-36" align="right" />
-                  </ConfigRow>
-                  <ConfigRow label="Vet effort" hint="How hard vet thinks about this one.">
-                    <Dropdown value={d.vet_effort} options={ROLE_EFFORTS} onChange={(v) => set({ vet_effort: v })} width="w-36" align="right" />
-                  </ConfigRow>
-                  <ConfigRow label="Deputy model" hint="The gate judge. Default follows the system deputy setting.">
-                    <Dropdown value={d.deputy_model} options={ROLE_MODELS} onChange={(v) => set({ deputy_model: v })} width="w-36" align="right" />
-                  </ConfigRow>
-                  <ConfigRow label="Deputy effort" hint="How hard the deputy thinks at each gate.">
-                    <Dropdown value={d.deputy_effort} options={ROLE_EFFORTS} onChange={(v) => set({ deputy_effort: v })} width="w-36" align="right" />
-                  </ConfigRow>
+                  <RoleGrid draft={d} onSet={set} />
                 </div>
               ) : (
-                <dl className="mt-2 space-y-1.5">
-                  <MetaRow label="Autopilot">{saved.autopilot ? 'On' : 'Off'}</MetaRow>
-                  <MetaRow label="Work kind">{optLabel(WORK_KIND_OPTS, saved.work_kind)}</MetaRow>
-                  <MetaRow label="Model">{optLabel(RUN_MODELS, saved.model)}</MetaRow>
-                  <MetaRow label="Effort">{optLabel(RUN_EFFORTS, saved.effort)}</MetaRow>
-                  <MetaRow label="Vet">{roleLabel(saved.vet_model, saved.vet_effort, 'project')}</MetaRow>
-                  <MetaRow label="Deputy">{roleLabel(saved.deputy_model, saved.deputy_effort, 'system')}</MetaRow>
-                </dl>
+                <>
+                  <dl className="mt-2 space-y-1.5">
+                    <MetaRow label="Autopilot">{saved.autopilot ? 'On' : 'Off'}</MetaRow>
+                    <MetaRow label="Work kind">{optLabel(WORK_KIND_OPTS, saved.work_kind)}</MetaRow>
+                  </dl>
+                  <RoleGrid draft={saved} />
+                </>
               )}
             </section>
             )}
@@ -871,13 +872,48 @@ function optLabel(opts: { value: string; label: string }[], value: string): stri
   return opts.find((o) => o.value === value)?.label ?? value ?? '—'
 }
 
-// A role's two picks read as one line, because they are one decision: who checks this. Neither set
-// means the row follows its chain, and the row says WHICH chain rather than the bare word "default"
-// — this is the read-only view, so there is no picker beside it to explain itself.
-function roleLabel(model: string, effort: string, follows: string): string {
-  if (!model && !effort) return `Follows the ${follows} setting`
-  return [optLabel(RUN_MODELS, model) , effort && optLabel(RUN_EFFORTS, effort)]
-    .filter(Boolean).join(' · ') || `Follows the ${follows} setting`
+// The run config, as a TABLE: one row per role, two columns, one header. Read as a list of eight
+// labelled controls it was six near-identical rows saying "model" and "effort" over and over, and
+// the thing that actually varies — WHO — was buried in the prefix of each label. As a table the
+// question is asked once per column and answered once per row, and a new role is one more row.
+// Same grid renders read-only, so the tab does not change shape when you open it.
+function RoleGrid({ draft, onSet }: {
+  draft: InboxConfigPatch
+  onSet?: (patch: Partial<InboxConfigPatch>) => void
+}) {
+  const cell = 'grid grid-cols-[1fr_auto_auto] items-center gap-x-2'
+  return (
+    <div className="mt-3 border-t border-line pt-2.5">
+      <div className={`${cell} pb-1 text-[10px] font-semibold uppercase tracking-wide text-faint`}>
+        <span>Runs on</span>
+        <span className="w-28 pl-2">Model</span>
+        <span className="w-[6.5rem] pl-2">Effort</span>
+      </div>
+      {RUN_ROLES.map((r) => {
+        const mKey = roleField(r.key, 'model')
+        const eKey = roleField(r.key, 'effort')
+        return (
+          <div key={r.key || 'work'} className={`${cell} py-1`}>
+            <div className="min-w-0">
+              <div className="text-[12.5px] leading-tight text-fg">{r.label}</div>
+              <div className="text-[10.5px] leading-tight text-faint">{r.hint}</div>
+            </div>
+            {onSet ? (
+              <>
+                <Dropdown value={draft[mKey]} options={RUN_MODELS} onChange={(v) => onSet({ [mKey]: v })} width="w-28" align="right" />
+                <Dropdown value={draft[eKey]} options={RUN_EFFORTS} onChange={(v) => onSet({ [eKey]: v })} width="w-[6.5rem]" align="right" />
+              </>
+            ) : (
+              <>
+                <span className="w-28 pl-2 text-[12px] text-muted">{optLabel(RUN_MODELS, draft[mKey])}</span>
+                <span className="w-[6.5rem] pl-2 text-[12px] text-muted">{optLabel(RUN_EFFORTS, draft[eKey])}</span>
+              </>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
 }
 
 function stripFrontmatter(text: string): string {
