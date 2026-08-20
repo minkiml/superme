@@ -81,6 +81,14 @@ def push_inbox_item(store, dev: DevKnowledgeService, dev_root: Path, row: dict, 
             dev.set_work_item_model(dev_root, wi["id"], row["model"])
         if row.get("effort"):
             dev.set_work_item_effort(dev_root, wi["id"], row["effort"])
+        # The two roles that run on their own tier travel the same way — chosen on the row, frozen
+        # onto the item at push. Unset stays unset, so the item falls through to the repo's vet tier
+        # / the system deputy tier rather than to its own model.
+        for role in dev.ROLE_FIELDS:
+            if row.get(f"{role}_model"):
+                dev.set_work_item_role_model(dev_root, wi["id"], role, row[f"{role}_model"])
+            if row.get(f"{role}_effort"):
+                dev.set_work_item_role_effort(dev_root, wi["id"], role, row[f"{role}_effort"])
     # Content folder → the item's preliminary/ (move, not delete; absent for bare FE captures).
     src = inbox_content_dir(dev_root, inbox_id)
     moved = False

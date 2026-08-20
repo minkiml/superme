@@ -36,10 +36,14 @@ _EFFORT_LEVELS = ("low", "medium", "high")
 
 class RepoModelBody(BaseModel):
     model: str | None = None  # null/"" clears this repo's override (fall back to the default)
+    # Which ROLE's tier this sets. Omitted = the project's own. `vet` is the reviewer of what build
+    # produced and resolves on its own chain, so setting it here does not touch the project's.
+    role: str = "default"
 
 
 class RepoEffortBody(BaseModel):
     effort: str | None = None  # null/"" clears this repo's override (fall back to the default)
+    role: str = "default"
 
 
 class LearningBody(BaseModel):
@@ -51,6 +55,11 @@ class DeputyConfigBody(BaseModel):
     # per-gate map {gate: level} — send only the gates that changed (e.g. {"review": "high"}).
     enabled: bool | None = None
     strictness: dict[str, str] | None = None  # {triage|plan|review: low·medium·high·extra}
+    # The deputy's own tier — one judge across every project, so one answer, set here rather than
+    # per repo. Send "" to clear back to the floor. It is never the project's tier: a judge that
+    # rises with what it judges is not a second opinion.
+    model: str | None = None
+    effort: str | None = None
 
 
 class AgentModelBody(BaseModel):
@@ -264,6 +273,10 @@ async def repos_overview(spine: SystemSpine = Depends(get_spine)) -> list[dict]:
             "id": rc.id, "label": rc.label, "cwd": str(rc.cwd), "layer": rc.layer,
             "model_override": spine.get_model_override(rc.id),
             "effort_override": spine.get_effort_override(rc.id),
+            # The vet role's own tier. Unset means the floor, NOT the two lines above — vet is the
+            # check on the work and does not inherit the tier of the thing it checks.
+            "vet_model": spine.get_model_override(rc.id, "vet"),
+            "vet_effort": spine.get_effort_override(rc.id, "vet"),
             "learning_enabled": spine.get_repo_learning(rc.id),
             "autopilot_concurrency": spine.get_autopilot_concurrency(rc.id),
             "tag_color": meta["color"], "icon": meta["icon"],
@@ -365,10 +378,17 @@ async def set_system_deputy(body: DeputyConfigBody, spine: SystemSpine = Depends
                 spine.set_deputy_strictness(gate, level)
         except ValueError as e:
             raise HTTPException(status_code=422, detail=str(e))
-    log.info("deputy: enabled=%s strictness=%s", spine.get_deputy_enabled(),
-             spine.deputy_strictness_map())
+    if body.model is not None:
+        spine.set_deputy_model(_norm_model(body.model))
+    if body.effort is not None:
+        spine.set_deputy_effort(_norm_effort(body.effort))
+    log.info("deputy: enabled=%s strictness=%s tier=%s/%s", spine.get_deputy_enabled(),
+             spine.deputy_strictness_map(), spine.get_deputy_model(), spine.get_deputy_effort())
+    d_model, d_effort = spine.deputy_params()
     return {"ok": True, "deputy_enabled": spine.get_deputy_enabled(),
-            "deputy_strictness": spine.deputy_strictness_map()}
+            "deputy_strictness": spine.deputy_strictness_map(),
+            "deputy_model": spine.get_deputy_model(), "deputy_effort": spine.get_deputy_effort(),
+            "deputy_effective_model": d_model, "deputy_effective_effort": d_effort}
 
 
 @router.post("/system/sweep", response_model=SweepConfigResponse)
@@ -421,9 +441,11 @@ async def set_repo_model(repo_id: str, body: RepoModelBody, spine: SystemSpine =
     """Set (or clear) one repo's model override. Clearing falls back to the system default."""
     if repo_id not in spine.repos():
         raise HTTPException(status_code=404, detail=f"unknown repo '{repo_id}'")
+    if body.role not in spine.ROLES:
+        raise HTTPException(status_code=400, detail=f"role must be one of {sorted(spine.ROLES)}")
     model = _norm_model(body.model)
-    spine.set_model_override(repo_id, model)
-    return {"ok": True, "repo_id": repo_id, "model": model,
+    spine.set_model_override(repo_id, model, body.role)
+    return {"ok": True, "repo_id": repo_id, "role": body.role, "model": model,
             "effective": normalize_model(model) or spine.effective_system_model()}
 
 
@@ -432,9 +454,11 @@ async def set_repo_effort(repo_id: str, body: RepoEffortBody, spine: SystemSpine
     """Set (or clear) one repo's reasoning-effort override. Clearing falls back to the system default."""
     if repo_id not in spine.repos():
         raise HTTPException(status_code=404, detail=f"unknown repo '{repo_id}'")
+    if body.role not in spine.ROLES:
+        raise HTTPException(status_code=400, detail=f"role must be one of {sorted(spine.ROLES)}")
     effort = _norm_effort(body.effort)
-    spine.set_effort_override(repo_id, effort)
-    return {"ok": True, "repo_id": repo_id, "effort": effort,
+    spine.set_effort_override(repo_id, effort, body.role)
+    return {"ok": True, "repo_id": repo_id, "role": body.role, "effort": effort,
             "effective": effort or spine.effective_system_effort()}
 
 

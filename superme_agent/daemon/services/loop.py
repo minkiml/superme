@@ -261,10 +261,21 @@ def _loop_ctx(ctx, item: dict):
 
 
 def _resolve_run_params(context_id: str, item: dict) -> tuple[str, str]:
-    """(model, effort) for a loop run — the same precedence every other item run resolves through
+    """(model, effort) for a BUILD run — the same precedence every other item run resolves through
     (item's configured value → repo → system)."""
     return (_spine.effective_model(context_id, item_model=item.get("model")),
             _spine.effective_effort(context_id, item_effort=item.get("effort")))
+
+
+def _resolve_vet_params(context_id: str, item: dict) -> tuple[str, str]:
+    """(model, effort) for a VET run — its own chain, NOT the item's or the project's.
+
+    Vet is the check on what build produced. Inheriting build's tier made the check move with the
+    thing it checks: raise a project to Opus and its reviewer silently rose too, so the one pairing
+    you might deliberately want (cheap builder, expensive judge, or the reverse) was unreachable.
+    The item may still name a vet tier of its own; nothing else feeds this."""
+    return (_spine.role_model(context_id, "vet", item_model=item.get("vet_model")),
+            _spine.role_effort(context_id, "vet", item_effort=item.get("vet_effort")))
 
 
 def _dev_mcp(ctx, wt: Path, main_repo_dir: Path, item_id: str, *, scope: str) -> dict:
@@ -389,7 +400,7 @@ def start_vet_run(ctx, context_id: str, item_id: str) -> tuple[bool, str]:
     if lc is None:
         return False, "item has no live worktree — nothing to vet"
     reset_vet_thread(ctx, item)   # fresh per cycle (no-op when the slot is already clear)
-    model, effort = _resolve_run_params(context_id, item)
+    model, effort = _resolve_vet_params(context_id, item)
     if not _begin_run(ctx, context_id, item_id, "vet", model, phase="vet"):
         return False, "a run is already in progress for this item"
     # A paged item the owner just re-launched is active again (the launch IS the answer);

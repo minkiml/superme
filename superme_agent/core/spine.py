@@ -316,6 +316,30 @@ class SystemSpine:
             if name not in have:
                 c.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
 
+    @staticmethod
+    def _add_role_key(c: sqlite3.Connection, table: str, value_col: str) -> None:
+        """One-time widening of an override table's key from (repo_id) to (repo_id, role).
+        No-op once the column exists. SQLite cannot ALTER a PRIMARY KEY, so this is the standard
+        rebuild: create beside, copy every existing row in as the `default` role, swap the names."""
+        have = {r[1] for r in c.execute(f"PRAGMA table_info({table})").fetchall()}
+        if "role" in have or not have:
+            return
+        c.execute(
+            f"""CREATE TABLE {table}_roles (
+                    repo_id TEXT NOT NULL,
+                    role TEXT NOT NULL DEFAULT 'default',
+                    {value_col} TEXT,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY (repo_id, role)
+                )"""
+        )
+        c.execute(
+            f"INSERT INTO {table}_roles (repo_id, role, {value_col}, updated_at)"
+            f" SELECT repo_id, 'default', {value_col}, updated_at FROM {table}"
+        )
+        c.execute(f"DROP TABLE {table}")
+        c.execute(f"ALTER TABLE {table}_roles RENAME TO {table}")
+
     # --- token-usage accounting helpers (token-usage-tracking-spec) --------------
     @staticmethod
     def _usage_parts(usage: dict | None) -> tuple[int, int, int, int]:
@@ -492,22 +516,36 @@ class SystemSpine:
             # MODEL_OVERRIDE — per-repo runtime model preference. Replaces `.context_models.json`
             # ({context_id: model} → {repo_id: model}). A runtime preference, not static config,
             # so it's a DB row not a YAML edit.
+            #
+            # Keyed by (repo, ROLE). `default` is the project's own tier — what its work runs on.
+            # A named role is a job that must NOT inherit that tier: `vet` judges the work, and a
+            # judge running whatever the worker runs cannot be a check on it. So a role resolves on
+            # its OWN chain (item's role pick → this row → the floor) and the project's default is
+            # deliberately not in it. Absent row = the floor, never the project's model.
             c.execute(
                 """CREATE TABLE IF NOT EXISTS model_override (
-                       repo_id TEXT PRIMARY KEY,
+                       repo_id TEXT NOT NULL,
+                       role TEXT NOT NULL DEFAULT 'default',
                        model TEXT,
-                       updated_at TEXT NOT NULL
+                       updated_at TEXT NOT NULL,
+                       PRIMARY KEY (repo_id, role)
                    )"""
             )
             # EFFORT_OVERRIDE — per-repo runtime reasoning-effort preference (low|medium|high),
-            # mirroring model_override. A runtime preference, not static config.
+            # mirroring model_override, roles and all.
             c.execute(
                 """CREATE TABLE IF NOT EXISTS effort_override (
-                       repo_id TEXT PRIMARY KEY,
+                       repo_id TEXT NOT NULL,
+                       role TEXT NOT NULL DEFAULT 'default',
                        effort TEXT,
-                       updated_at TEXT NOT NULL
+                       updated_at TEXT NOT NULL,
+                       PRIMARY KEY (repo_id, role)
                    )"""
             )
+            # Both tables were keyed by repo_id ALONE before roles existed, and a PRIMARY KEY cannot
+            # be widened in place. Rebuild once, stamping every existing row as the `default` role.
+            self._add_role_key(c, "model_override", "model")
+            self._add_role_key(c, "effort_override", "effort")
             # REPO_LEARNING — per-repo participation in automatic capture. The global master switch
             # (system_setting.learning_enabled) gates ALL learning; this row lets the owner opt a
             # single repo out even when the master is on. Absent = participate (default on).
@@ -2038,27 +2076,33 @@ class SystemSpine:
                 "onboarding_running": onboarding_running}
 
     # --- model overrides --------------------------------------------------------
-    def get_model_override(self, repo_id: str) -> str | None:
+    # ROLES (workflow-renovation): 'default' is the project's tier; every other role is a job that
+    # runs on its own, whatever the project runs on. See the table comment in _ensure_schema.
+    ROLES: tuple[str, ...] = ("default", "vet")
+
+    def get_model_override(self, repo_id: str, role: str = "default") -> str | None:
         with self._conn() as c:
-            r = c.execute("SELECT model FROM model_override WHERE repo_id=?", (repo_id,)).fetchone()
+            r = c.execute("SELECT model FROM model_override WHERE repo_id=? AND role=?",
+                          (repo_id, role)).fetchone()
             return r["model"] if r else None
 
-    def set_model_override(self, repo_id: str, model: str | None) -> None:
-        """Set (or clear, with model=None) a repo's runtime model preference."""
+    def set_model_override(self, repo_id: str, model: str | None, role: str = "default") -> None:
+        """Set (or clear, with model=None) one repo-role's runtime model preference."""
         with self._conn() as c:
             if model is None:
-                c.execute("DELETE FROM model_override WHERE repo_id=?", (repo_id,))
+                c.execute("DELETE FROM model_override WHERE repo_id=? AND role=?", (repo_id, role))
             else:
                 c.execute(
-                    "INSERT INTO model_override (repo_id,model,updated_at) VALUES (?,?,?)"
-                    " ON CONFLICT(repo_id) DO UPDATE SET model=excluded.model, updated_at=excluded.updated_at",
-                    (repo_id, model, _now()),
+                    "INSERT INTO model_override (repo_id,role,model,updated_at) VALUES (?,?,?,?)"
+                    " ON CONFLICT(repo_id,role) DO UPDATE SET model=excluded.model, updated_at=excluded.updated_at",
+                    (repo_id, role, model, _now()),
                 )
 
     def all_model_overrides(self) -> dict[str, str]:
+        """Every repo's DEFAULT tier — the roster view. Roles are per-repo detail, read by name."""
         with self._conn() as c:
-            return {r["repo_id"]: r["model"]
-                    for r in c.execute("SELECT repo_id, model FROM model_override").fetchall()}
+            return {r["repo_id"]: r["model"] for r in
+                    c.execute("SELECT repo_id, model FROM model_override WHERE role='default'").fetchall()}
 
     # --- the model FLOOR below per-repo overrides --------------------------------
     # There is no owner-settable system default. There was one, and in practice every repo overrode
@@ -2086,6 +2130,16 @@ class SystemSpine:
         (e.g. the chat's per-session model) and passes it in; it NEVER writes the repo default."""
         return (per_call or item_model or self.get_model_override(repo_id)
                 or self.effective_system_model())
+
+    def role_model(self, repo_id: str, role: str, *, item_model: str | None = None) -> str:
+        """The model a named ROLE runs on: the item's own pick for that role → this repo's tier for
+        that role → the floor. The project's default tier is deliberately absent from this chain.
+
+        A role exists because its job is not the work: `vet` judges what build produced, and a judge
+        that automatically inherits the worker's tier is not an independent check — raising a
+        project to Opus would silently raise its own reviewer with it, which is the one place you
+        might want the tiers to differ. Unset therefore means the FLOOR, not the project's model."""
+        return item_model or self.get_model_override(repo_id, role) or self.effective_system_model()
 
     # --- per-agent model (the autonomous background sub-agents; owner-tunable) ------------------
     # SOURCE OF TRUTH = each sub-agent's own `.md` frontmatter `model:` field (two-way sync with the
@@ -2176,11 +2230,11 @@ class SystemSpine:
                 if alias and alias != row["value"]:
                     c.execute("UPDATE system_setting SET value=?, updated_at=? WHERE key='default_model'",
                               (alias, _now()))
-            for r in c.execute("SELECT repo_id, model FROM model_override").fetchall():
+            for r in c.execute("SELECT repo_id, role, model FROM model_override").fetchall():
                 alias = model_family(r["model"])
                 if alias and alias != r["model"]:
-                    c.execute("UPDATE model_override SET model=?, updated_at=? WHERE repo_id=?",
-                              (alias, _now(), r["repo_id"]))
+                    c.execute("UPDATE model_override SET model=?, updated_at=? WHERE repo_id=? AND role=?",
+                              (alias, _now(), r["repo_id"], r["role"]))
 
     def reconcile_agent_models(self) -> None:
         """Normalize every learning sub-agent's `.md` model to its TIER ALIAS (`sonnet`) — the canonical
@@ -2217,27 +2271,29 @@ class SystemSpine:
     # --- reasoning effort (mirrors model: per-repo override + system default, floor "medium") ----
     DEFAULT_EFFORT = "medium"
 
-    def get_effort_override(self, repo_id: str) -> str | None:
+    def get_effort_override(self, repo_id: str, role: str = "default") -> str | None:
         with self._conn() as c:
-            r = c.execute("SELECT effort FROM effort_override WHERE repo_id=?", (repo_id,)).fetchone()
+            r = c.execute("SELECT effort FROM effort_override WHERE repo_id=? AND role=?",
+                          (repo_id, role)).fetchone()
             return r["effort"] if r else None
 
-    def set_effort_override(self, repo_id: str, effort: str | None) -> None:
-        """Set (or clear, with effort=None) a repo's runtime reasoning-effort preference."""
+    def set_effort_override(self, repo_id: str, effort: str | None, role: str = "default") -> None:
+        """Set (or clear, with effort=None) one repo-role's runtime reasoning-effort preference."""
         with self._conn() as c:
             if effort is None:
-                c.execute("DELETE FROM effort_override WHERE repo_id=?", (repo_id,))
+                c.execute("DELETE FROM effort_override WHERE repo_id=? AND role=?", (repo_id, role))
             else:
                 c.execute(
-                    "INSERT INTO effort_override (repo_id,effort,updated_at) VALUES (?,?,?)"
-                    " ON CONFLICT(repo_id) DO UPDATE SET effort=excluded.effort, updated_at=excluded.updated_at",
-                    (repo_id, effort, _now()),
+                    "INSERT INTO effort_override (repo_id,role,effort,updated_at) VALUES (?,?,?,?)"
+                    " ON CONFLICT(repo_id,role) DO UPDATE SET effort=excluded.effort, updated_at=excluded.updated_at",
+                    (repo_id, role, effort, _now()),
                 )
 
     def all_effort_overrides(self) -> dict[str, str]:
+        """Every repo's DEFAULT effort — see all_model_overrides."""
         with self._conn() as c:
-            return {r["repo_id"]: r["effort"]
-                    for r in c.execute("SELECT repo_id, effort FROM effort_override").fetchall()}
+            return {r["repo_id"]: r["effort"] for r in
+                    c.execute("SELECT repo_id, effort FROM effort_override WHERE role='default'").fetchall()}
 
     def effective_system_effort(self) -> str:
         """The default effort a repo with no override runs: the YAML default, else the built-in
@@ -2252,6 +2308,10 @@ class SystemSpine:
         session/item context just pass repo_id (→ repo → system → floor)."""
         return (per_call or item_effort or self.get_effort_override(repo_id)
                 or self.effective_system_effort())
+
+    def role_effort(self, repo_id: str, role: str, *, item_effort: str | None = None) -> str:
+        """The effort a named ROLE runs at — mirrors role_model, project default excluded."""
+        return item_effort or self.get_effort_override(repo_id, role) or self.effective_system_effort()
 
     # --- build⟷vet loop (build-vet-loop §5) ---------------------------------------
     # Token budget = the PRIMARY breaker (§5.2): the loop stops when an item's build+vet spend
@@ -2451,6 +2511,52 @@ class SystemSpine:
                 " ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at",
                 ("true" if enabled else "false", _now()),
             )
+
+    # The deputy's own tier. SYSTEM-scope, where the rest of its configuration is: the deputy is one
+    # judge across every project, so its tier is one answer, not one per project. It never inherits a
+    # project's tier for the same reason `vet` does not — a reviewer promoted alongside the thing it
+    # reviews has stopped being a second opinion. Unset = the floor. A work-item may still name its
+    # own (`deputy_model` / `deputy_effort` in its frontmatter) when one job needs a sharper judge.
+    def get_deputy_model(self) -> str | None:
+        with self._conn() as c:
+            r = c.execute("SELECT value FROM system_setting WHERE key='deputy_model'").fetchone()
+            return (r["value"] or None) if r else None
+
+    def set_deputy_model(self, model: str | None) -> None:
+        from .models import model_family
+        alias = model_family(model) if model else None
+        with self._conn() as c:
+            if alias is None:
+                c.execute("DELETE FROM system_setting WHERE key='deputy_model'")
+            else:
+                c.execute(
+                    "INSERT INTO system_setting (key,value,updated_at) VALUES ('deputy_model',?,?)"
+                    " ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at",
+                    (alias, _now()),
+                )
+
+    def get_deputy_effort(self) -> str | None:
+        with self._conn() as c:
+            r = c.execute("SELECT value FROM system_setting WHERE key='deputy_effort'").fetchone()
+            return (r["value"] or None) if r else None
+
+    def set_deputy_effort(self, effort: str | None) -> None:
+        with self._conn() as c:
+            if effort is None:
+                c.execute("DELETE FROM system_setting WHERE key='deputy_effort'")
+            else:
+                c.execute(
+                    "INSERT INTO system_setting (key,value,updated_at) VALUES ('deputy_effort',?,?)"
+                    " ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at",
+                    (effort, _now()),
+                )
+
+    def deputy_params(self, *, item_model: str | None = None,
+                      item_effort: str | None = None) -> tuple[str, str]:
+        """(model, effort) for a deputy turn: the item's own deputy pick → the system deputy tier →
+        the floor. The project's tier is not in this chain — see get_deputy_model."""
+        return (item_model or self.get_deputy_model() or self.effective_system_model(),
+                item_effort or self.get_deputy_effort() or self.effective_system_effort())
 
     def deputy_strictness_map(self) -> dict:
         """Per-gate escalation dial: {triage, plan, review} → low·medium·high·extra (design §6).
@@ -2653,6 +2759,13 @@ class SystemSpine:
             "learning_enabled": self.get_learning_enabled(),  # auto-sweep master switch (WI-8)
             "deputy_enabled": self.get_deputy_enabled(),       # autopilot gate judge (slice 4)
             "deputy_strictness": self.deputy_strictness_map(),  # {gate: low·medium·high·extra}
+            # The deputy's OWN tier: what the owner set (None = unset) beside what it resolves to.
+            # Both, because "unset" and "unset, which means Sonnet" are different answers and the
+            # picker needs the first while the caption needs the second.
+            "deputy_model": self.get_deputy_model(),
+            "deputy_effort": self.get_deputy_effort(),
+            "deputy_effective_model": self.deputy_params()[0],
+            "deputy_effective_effort": self.deputy_params()[1],
             "live_runs": live,
             "running": len(live),
         }

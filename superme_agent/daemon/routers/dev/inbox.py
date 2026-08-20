@@ -37,6 +37,13 @@ class InboxBody(BaseModel):
     # §4.1: the PROPOSED work-item kind (implementation | research). None = undecided, which is
     # what every capture was before the field — triage then judges alone.
     work_kind: str | None = None
+    # The two roles that run on their OWN tier rather than this item's: `vet` checks what build
+    # produced, `deputy` judges the gates. NULL = fall through to the repo's vet tier / the system
+    # deputy tier — never to this item's model, which is the coupling the roles exist to break.
+    vet_model: str | None = None
+    vet_effort: str | None = None
+    deputy_model: str | None = None
+    deputy_effort: str | None = None
 
 
 class InboxPatch(BaseModel):
@@ -52,10 +59,24 @@ class InboxPatch(BaseModel):
     autopilot: bool | None = None
     # "" clears it back to undecided; None means the caller didn't touch the field.
     work_kind: str | None = None
+    # The two roles that run on their OWN tier rather than this item's: `vet` checks what build
+    # produced, `deputy` judges the gates. NULL = fall through to the repo's vet tier / the system
+    # deputy tier — never to this item's model, which is the coupling the roles exist to break.
+    vet_model: str | None = None
+    vet_effort: str | None = None
+    deputy_model: str | None = None
+    deputy_effort: str | None = None
 
 
 class InboxPushBody(BaseModel):
     context_id: str = "global"
+
+
+def _role_config(body) -> dict:
+    """The four per-role fields off a capture/patch body, in one place so add and patch cannot
+    diverge on which of them they carry."""
+    return {f"{role}_{k}": getattr(body, f"{role}_{k}")
+            for role in ("vet", "deputy") for k in ("model", "effort")}
 
 
 @router.post("/dev/inbox", response_model=InboxRow)
@@ -66,7 +87,7 @@ async def dev_inbox_add(body: InboxBody, dev_store: DevStore = Depends(get_dev_s
             body.context_id, body.text, body.kind, body.tag,
             title=body.title, origin=body.origin, spawned_from=body.spawned_from,
             model=body.model, effort=body.effort, autopilot=body.autopilot,
-            work_kind=body.work_kind,
+            work_kind=body.work_kind, role_config=_role_config(body),
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -95,7 +116,7 @@ async def dev_inbox_update(item_id: int, body: InboxPatch, dev_store: DevStore =
             item_id, status=body.status, kind=body.kind, tag=body.tag,
             text=body.text, title=body.title, routed_to=body.routed_to,
             model=body.model, effort=body.effort, autopilot=body.autopilot,
-            work_kind=body.work_kind,
+            work_kind=body.work_kind, **_role_config(body),
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

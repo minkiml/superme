@@ -166,10 +166,14 @@ async def run_deputy_gate(context_id: str, item_id: str) -> None:
 
 
 def _resolve_deputy_params(context_id: str, item: dict) -> tuple[str, str]:
-    """The deputy runs on the item/repo/system model + effort — one judge, same tier as the work."""
-    model = _spine.effective_model(context_id, item_model=item.get("model"))
-    effort = _spine.effective_effort(context_id, item_effort=item.get("effort"))
-    return model, effort
+    """The deputy's own tier: this item's deputy pick → the system deputy setting → the floor.
+
+    It used to run on whatever the work ran on, which made the judge a function of the judged: a
+    project moved to Opus moved its own reviewer with it, and no setting could hold one steady
+    while the other changed. The deputy is one judge across every project, so its tier is
+    configured once, at system scope, beside the rest of its configuration."""
+    return _spine.deputy_params(item_model=item.get("deputy_model"),
+                                item_effort=item.get("deputy_effort"))
 
 
 async def _judge(ctx, context_id: str, item_id: str, item: dict, gate: str, dev_root: Path,

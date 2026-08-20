@@ -50,6 +50,10 @@ class SystemResponse(BaseModel):
     learning_enabled: bool
     deputy_enabled: bool = True            # autopilot gate judge on/off (slice 4)
     deputy_strictness: dict[str, str] = Field(default_factory=dict)  # {gate: low·medium·high·extra}
+    deputy_model: str | None = None            # the deputy's own tier (None = unset → the floor)
+    deputy_effort: str | None = None
+    deputy_effective_model: str | None = None  # what an unset picker actually resolves to
+    deputy_effective_effort: str | None = None
     sweep_idle_seconds: int      # a dev session idle this long, with enough new content, gets swept
     sweep_poll_seconds: int      # how often the idle heartbeat scans (latency knob)
     sweep_min_user_msgs: int     # min new user turns past the watermark before a sweep fires (0 = off)
@@ -80,6 +84,11 @@ class RepoOverview(BaseModel):
     layer: str
     model_override: str | None = None
     effort_override: str | None = None  # owner-set reasoning-effort override (None = inherit system)
+    # The `vet` ROLE's tier for this repo (None = unset → the floor). Not covered by the two above:
+    # a reviewer that rises with what it reviews is not an independent check, so vet resolves on its
+    # own chain and the project's tier is deliberately not in it.
+    vet_model: str | None = None
+    vet_effort: str | None = None
     learning_enabled: bool = True
     autopilot_concurrency: int = 4  # per-repo autopilot build⟷vet cap (slice 3)
     tag_color: str | None = None   # owner-set visual tag color (None = hashed-palette default)
@@ -233,6 +242,7 @@ class CompactionConfigResponse(BaseModel):
 class RepoModelResponse(BaseModel):
     ok: bool
     repo_id: str
+    role: str = "default"
     model: str | None = None
     effective: str | None = None
 
@@ -240,6 +250,7 @@ class RepoModelResponse(BaseModel):
 class RepoEffortResponse(BaseModel):
     ok: bool
     repo_id: str
+    role: str = "default"
     effort: str | None = None
     effective: str
 
@@ -262,6 +273,12 @@ class DeputyConfigResponse(BaseModel):
     ok: bool
     deputy_enabled: bool
     deputy_strictness: dict[str, str]  # {gate: low·medium·high·extra}
+    # The deputy's OWN tier, and what it resolves to. `deputy_model`/`deputy_effort` are what the
+    # owner set (None = unset); the `effective_` pair is what a turn would actually run on.
+    deputy_model: str | None = None
+    deputy_effort: str | None = None
+    deputy_effective_model: str | None = None
+    deputy_effective_effort: str | None = None
 
 
 class RepoGitResponse(BaseModel):

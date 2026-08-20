@@ -32,6 +32,13 @@ class InboxRow(BaseModel):
     # §4.1: which machinery this row becomes when pushed (implementation | research). NULL = nobody
     # has judged yet, and triage decides alone — the behaviour every row had before the field.
     work_kind: WorkKind | None = None
+    # The two roles that run on their own tier rather than this item's — `vet` checks what build
+    # produced, `deputy` judges the gates. NULL = fall through to the repo's vet tier / the system
+    # deputy tier, never to `model` above.
+    vet_model: str | None = None
+    vet_effort: str | None = None
+    deputy_model: str | None = None
+    deputy_effort: str | None = None
 
 
 class InboxPushResponse(BaseModel):

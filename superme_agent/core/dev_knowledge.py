@@ -1055,59 +1055,72 @@ class DevKnowledgeService:
         (adir / name).write_text(text)
         return True
 
-    def set_work_item_model(self, dev_root: Path, item_id: str, model: str) -> bool:
-        """Set a work-item's configured `model` (the agent model its runs use — plan + bound
-        chat), stored as its TIER ALIAS (`sonnet`) — the canonical on-disk form; the concrete latest
-        is resolved at consumption (the run normalizes), so the pick auto-tracks a MODEL_TIERS bump.
-        Reconfigurable anytime. Inserts the field if absent (older items predate it). Line-based
-        rewrite preserving frontmatter shape, bumping `updated_at`. Returns True if the file changed."""
-        from .models import model_family
-        model = model_family(model) or model
+    def _set_item_field(self, dev_root: Path, item_id: str, key: str, value: str,
+                        after: tuple[str, ...] = ()) -> bool:
+        """Write ONE frontmatter field on a work-item, in place. Inserts the key after the first of
+        `after` that the file already has (so related keys stay together), else appends it. Bumps
+        `updated_at`. Line-based, so the frontmatter's shape and comments survive. Returns True if
+        the file changed.
+
+        The four run-config setters below are the same rewrite with a different key; when it was
+        written out per key, two of them drifted on where the field lands."""
         item = Path(dev_root) / "work-items" / item_id / "item.md"
         if not item.exists():
             return False
         text = item.read_text()
         meta, body = _parse_md(text)
-        if str(meta.get("model")) == str(model):
+        if str(meta.get(key)) == str(value):
             return False
         m = _FRONTMATTER.match(text)
         if not m:
             return False
         fm = m.group(1)
-        if re.search(r"(?m)^model:", fm):
-            fm = re.sub(r"(?m)^model:.*$", f"model: {model}", fm)
-        elif re.search(r"(?m)^status:", fm):
-            fm = re.sub(r"(?m)^(status:.*)$", rf"\1\nmodel: {model}", fm)  # sits next to status
+        if re.search(rf"(?m)^{key}:", fm):
+            fm = re.sub(rf"(?m)^{key}:.*$", f"{key}: {value}", fm)
         else:
-            fm = fm.rstrip() + f"\nmodel: {model}"
+            anchor = next((a for a in after if re.search(rf"(?m)^{a}:", fm)), None)
+            if anchor:
+                fm = re.sub(rf"(?m)^({anchor}:.*)$", rf"\1\n{key}: {value}", fm)
+            else:
+                fm = fm.rstrip() + f"\n{key}: {value}"
         fm = re.sub(r"(?m)^updated_at:.*$", f"updated_at: {date.today().isoformat()}", fm)
         item.write_text(f"---\n{fm}\n---\n{body}")
         return True
 
+    def set_work_item_model(self, dev_root: Path, item_id: str, model: str) -> bool:
+        """Set a work-item's configured `model` (the agent model its runs use — plan + bound
+        chat), stored as its TIER ALIAS (`sonnet`) — the canonical on-disk form; the concrete latest
+        is resolved at consumption (the run normalizes), so the pick auto-tracks a MODEL_TIERS bump.
+        Reconfigurable anytime. Inserts the field if absent (older items predate it)."""
+        from .models import model_family
+        return self._set_item_field(dev_root, item_id, "model",
+                                    model_family(model) or model, after=("status",))
+
     def set_work_item_effort(self, dev_root: Path, item_id: str, effort: str) -> bool:
         """Set a work-item's configured reasoning `effort` (low|medium|high) — used by its runs
-        (plan + bound chat). Mirrors `set_work_item_model`: inserts the field if absent, line-based
-        rewrite preserving frontmatter shape, bumps `updated_at`. Returns True if the file changed."""
-        item = Path(dev_root) / "work-items" / item_id / "item.md"
-        if not item.exists():
-            return False
-        text = item.read_text()
-        meta, body = _parse_md(text)
-        if str(meta.get("effort")) == str(effort):
-            return False
-        m = _FRONTMATTER.match(text)
-        if not m:
-            return False
-        fm = m.group(1)
-        if re.search(r"(?m)^effort:", fm):
-            fm = re.sub(r"(?m)^effort:.*$", f"effort: {effort}", fm)
-        elif re.search(r"(?m)^model:", fm):
-            fm = re.sub(r"(?m)^(model:.*)$", rf"\1\neffort: {effort}", fm)  # sits next to model
-        else:
-            fm = fm.rstrip() + f"\neffort: {effort}"
-        fm = re.sub(r"(?m)^updated_at:.*$", f"updated_at: {date.today().isoformat()}", fm)
-        item.write_text(f"---\n{fm}\n---\n{body}")
-        return True
+        (plan + bound chat)."""
+        return self._set_item_field(dev_root, item_id, "effort", effort, after=("model", "status"))
+
+    # The two roles that do NOT run on the item's own tier: `vet` checks what build produced and the
+    # `deputy` judges the gates. Both resolve on their own chain (item → repo-role / system → floor),
+    # so these fields are the item-scoped end of it. Absent = fall through to that chain; there is no
+    # value meaning "same as this item", because that is the coupling the roles exist to break.
+    ROLE_FIELDS: tuple[str, ...] = ("vet", "deputy")
+
+    def set_work_item_role_model(self, dev_root: Path, item_id: str, role: str, model: str) -> bool:
+        """Set this item's model for one ROLE (`vet_model` / `deputy_model`), as a tier alias."""
+        from .models import model_family
+        if role not in self.ROLE_FIELDS:
+            raise ValueError(f"unknown run role '{role}'")
+        return self._set_item_field(dev_root, item_id, f"{role}_model",
+                                    model_family(model) or model, after=("effort", "model", "status"))
+
+    def set_work_item_role_effort(self, dev_root: Path, item_id: str, role: str, effort: str) -> bool:
+        """Set this item's reasoning effort for one ROLE (`vet_effort` / `deputy_effort`)."""
+        if role not in self.ROLE_FIELDS:
+            raise ValueError(f"unknown run role '{role}'")
+        return self._set_item_field(dev_root, item_id, f"{role}_effort", effort,
+                                    after=(f"{role}_model", "effort", "model", "status"))
 
     def set_work_item_session(self, dev_root: Path, item_id: str, session_id: str | None,
                               slot: str = "triage") -> bool:

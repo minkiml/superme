@@ -35,6 +35,11 @@ _ORIGINS = {"user", "agent"}
 # gate the parent's completion) · spawn = provenance-only follow-up (owner-pushed).
 _SPAWN_RELATIONS = {"blocking", "parallel", "spawn"}
 
+# The per-role run config a row can carry, in column order. `vet` and `deputy` each resolve on their
+# own chain and never on the item's own model, so each needs its own pair of columns rather than a
+# flag on the existing one.
+_ROLE_COLS = ("vet_model", "vet_effort", "deputy_model", "deputy_effort")
+
 
 # --- event observers (the dashboard push channel's one instrumentation point) --------------------
 # Every state change worth showing the owner already funnels through `log_event` — 78 call sites
@@ -327,6 +332,13 @@ class DevStore:
             # every row had before this column: triage decides alone. Deliberately NOT named `kind`
             # — that column already means the ticket's FLAVOUR (note|idea|todo|question), and two
             # `kind`s on one row is the exact shape of the data-model audit's wrong-field bugs.
+            # The two roles that run on their OWN tier rather than the item's: `vet` checks what
+            # build produced, `deputy` judges the gates. Picking one here is the item-scoped end of
+            # a chain that otherwise reads the repo (vet) or the system (deputy) — never the item's
+            # own model, which is the coupling these roles exist to break. NULL = use that chain.
+            for col in ("vet_model", "vet_effort", "deputy_model", "deputy_effort"):
+                if col not in cols:
+                    c.execute(f"ALTER TABLE inbox ADD COLUMN {col} TEXT")
             if "work_kind" not in cols:
                 c.execute("ALTER TABLE inbox ADD COLUMN work_kind TEXT")
             # note/idea/todo/question -> `item`, ALL of them, INCLUDING the old "note". Free notes
@@ -348,7 +360,8 @@ class DevStore:
                   title: str | None = None, origin="user",
                   spawned_from: dict | None = None,
                   model: str | None = None, effort: str | None = None,
-                  autopilot: bool = True, work_kind: str | None = None) -> dict:
+                  autopilot: bool = True, work_kind: str | None = None,
+                  role_config: dict | None = None) -> dict:
         """`spawned_from` (D3) = the provenance edge a branch-off item carries from birth:
         {item, relation: blocking|parallel|spawn, note?}. Validated here; NULL for plain captures.
         `model`/`effort` (F3) = the run config chosen at capture, locked into the work-item at push;
@@ -363,6 +376,7 @@ class DevStore:
         text = (text or "").strip()
         if not text:
             raise ValueError("empty inbox text")
+        roles = {k: (v or None) for k, v in (role_config or {}).items() if k in _ROLE_COLS}
         if work_kind is not None:
             from .kind_profiles import KIND_PROFILES
             if work_kind not in KIND_PROFILES:
@@ -378,13 +392,16 @@ class DevStore:
         with self._conn() as c:
             cur = c.execute(
                 "INSERT INTO inbox (context_id,kind,text,title,tag,status,origin,spawned_from,"
-                "model,effort,autopilot,work_kind,created_at,updated_at) "
-                "VALUES (?,?,?,?,?,'open',?,?,?,?,?,?,?,?)",
+                "model,effort,autopilot,work_kind,vet_model,vet_effort,deputy_model,deputy_effort,"
+                "created_at,updated_at) "
+                "VALUES (?,?,?,?,?,'open',?,?,?,?,?,?,?,?,?,?,?,?)",
                 (context_id, kind, text, (title or None), (tag or None),
                  json.dumps(origins),
                  json.dumps(spawned_from) if spawned_from else None,
                  (model or None), (effort or None), int(bool(autopilot)),
-                 (work_kind or None), now, now),
+                 (work_kind or None),
+                 *(roles.get(c_) for c_ in _ROLE_COLS),
+                 now, now),
             )
             return self._get(c, cur.lastrowid)
 
@@ -436,7 +453,7 @@ class DevStore:
     def update_inbox(self, item_id: int, **fields) -> dict | None:
         sets = {k: v for k, v in fields.items()
                 if k in {"kind", "text", "tag", "status", "routed_to", "title",
-                         "model", "effort", "autopilot", "work_kind"}
+                         "model", "effort", "autopilot", "work_kind", *_ROLE_COLS}
                 and v is not None}
         if sets.get("kind") not in _KINDS:
             sets.pop("kind", None)
