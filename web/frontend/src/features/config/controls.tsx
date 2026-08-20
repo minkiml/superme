@@ -24,12 +24,17 @@ export const W_WIDE = 'w-44'
  */
 export function ConfigRow({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-4">
-      <div className="min-w-0">
+    // The control WRAPS below the label rather than squeezing it. Without a floor on the label,
+    // a narrow pane crushed it to one word per line while the control kept its full width, which
+    // is the sideways-scrollbar mistake in miniature: the layout adapted by making the content
+    // unreadable. `ml-auto` keeps the control on the right edge on both one line and two, so the
+    // pane still reads down that edge.
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+      <div className="min-w-[9rem] flex-1">
         <div className="text-[14px] text-fg">{title}</div>
         {hint && <div className="text-[12px] text-faint">{hint}</div>}
       </div>
-      <div className="flex shrink-0 items-center gap-2">{children}</div>
+      <div className="ml-auto flex shrink-0 items-center gap-2">{children}</div>
     </div>
   )
 }

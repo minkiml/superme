@@ -355,7 +355,9 @@ export function MemoryGovernance({ contextId }: { contextId: string }) {
   return (
     <div>
       {/* Stat tiles — pipeline gauges. Click a tile for the drill-down popup. */}
-      <div className="mb-4 grid grid-cols-2 gap-3">
+      {/* Two tiles side by side, one above the other when the pane is too narrow to hold both —
+          a tile squeezed until its label truncates to a letter is not a smaller tile. */}
+      <div className="mb-4 grid grid-cols-[repeat(auto-fit,minmax(210px,1fr))] gap-3">
         <StatTile
           icon={Sparkles}
           label="Candidates to distill"

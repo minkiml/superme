@@ -2,7 +2,7 @@ import { useCallback, useMemo, useRef, useState } from 'react'
 import { Activity, RefreshCw, Loader2, ChevronDown, Link2Off } from 'lucide-react'
 import { colorFor, featureColor, featureLabel } from '@/lib/palette'
 import { RepoIcon } from '@/lib/repoIcons'
-import { fmtTokens, fmtLocal, fmtModel, fmtDuration } from '@/lib/format'
+import { fmtTokens, fmtLocal, fmtAge, fmtModel, fmtDuration } from '@/lib/format'
 import { useContainerWidth } from '@/lib/layout'
 import { getRuns, type Run } from '@/lib/api'
 import { useLive } from '@/lib/live'
@@ -28,10 +28,14 @@ const PAGE = 30
 // feed for), then `Model`. What never goes: which repo, what ran, how much it cost, and when.
 type Density = 'full' | 'mid' | 'tight'
 
+// Every flexible column is `minmax(0, …)`: a bare `fr` floors at its content, so a repo whose name
+// does not fit pushes the grid wider than its container and the right-hand columns get CLIPPED —
+// shedding turns into hiding, which is the failure this whole scheme exists to avoid. With a zero
+// floor the cell truncates instead, and the columns that are meant to survive always do.
 const COLS: Record<Density, string> = {
-  full: 'grid grid-cols-[1.4fr_72px_48px_1fr_84px_64px_100px] items-center gap-3',
-  mid: 'grid grid-cols-[1.4fr_72px_1fr_84px_100px] items-center gap-3',
-  tight: 'grid grid-cols-[1.4fr_72px_72px_86px] items-center gap-2',
+  full: 'grid grid-cols-[minmax(0,1.4fr)_72px_48px_minmax(0,1fr)_84px_64px_112px] items-center gap-3',
+  mid: 'grid grid-cols-[minmax(0,1.4fr)_72px_minmax(0,1fr)_84px_112px] items-center gap-3',
+  tight: 'grid grid-cols-[20px_minmax(0,1fr)_60px_52px] items-center gap-2',
 }
 
 function densityFor(w: number): Density {
@@ -128,7 +132,7 @@ export default function GlobalActivity({
           <div ref={tableRef} className="overflow-hidden rounded-xl border border-line">
             {/* column header */}
             <div className={`${COLS[density]} border-b border-line bg-surface/60 px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-faint`}>
-              <span>Repo</span>
+              {density === 'tight' ? <span /> : <span>Repo</span>}
               <span>Op</span>
               {density === 'full' && <span>Scope</span>}
               {density !== 'tight' && <span>Model</span>}
@@ -179,7 +183,13 @@ function RunRow({ r, meta, density, last, onOpen }: { r: Run; meta: { label: str
       title="View trace"
       className={`${COLS[density]} w-full bg-surface px-4 py-2.5 text-left transition hover:bg-hover ${last ? '' : 'border-b border-line'}`}
     >
-      <span className="flex min-w-0 items-center gap-2">
+      {/* Tight keeps the repo's MARK and drops its name: a label truncated to one letter identifies
+          nothing, while the colour still does and the tooltip still says it in full. The
+          disconnected-origin marker sheds with the name — it is a footnote on a row you can open. */}
+      <span
+        className="flex min-w-0 items-center gap-2"
+        title={meta.archived ? `${meta.label} — disconnected project` : meta.label}
+      >
         {meta.icon && !isHub ? (
           <RepoIcon name={meta.icon} size={14} color={meta.color} className="shrink-0" />
         ) : (
@@ -188,19 +198,20 @@ function RunRow({ r, meta, density, last, onOpen }: { r: Run; meta: { label: str
             style={isHub ? { backgroundImage: 'var(--grad-iris)' } : { backgroundColor: meta.color }}
           />
         )}
-        <span
-          className={`truncate text-[13px] ${meta.archived ? 'text-muted italic' : 'text-fg'}`}
-          title={meta.archived ? `${meta.label} — disconnected project` : meta.label}
-        >
-          {meta.label}
-        </span>
-        {r.session_fate && (
-          <span
-            className="shrink-0 text-faint"
-            title={`Origin session ${r.session_fate} — this run's trace is preserved`}
-          >
-            <Link2Off size={12} />
-          </span>
+        {density !== 'tight' && (
+          <>
+            <span className={`truncate text-[13px] ${meta.archived ? 'text-muted italic' : 'text-fg'}`}>
+              {meta.label}
+            </span>
+            {r.session_fate && (
+              <span
+                className="shrink-0 text-faint"
+                title={`Origin session ${r.session_fate} — this run's trace is preserved`}
+              >
+                <Link2Off size={12} />
+              </span>
+            )}
+          </>
         )}
       </span>
       {/* Op = the feature chip + the work-item PHASE beneath it. An interactive triage/build/review
@@ -226,7 +237,12 @@ function RunRow({ r, meta, density, last, onOpen }: { r: Run; meta: { label: str
           how the two surfaces drift apart. */}
       <span className="text-right font-mono text-[11px] text-muted">{fmtTokens(r.tokens)}</span>
       {density === 'full' && <span className="text-right font-mono text-[11px] text-faint">{took(r)}</span>}
-      <span className="text-right font-mono text-[11px] text-faint">{fmtLocal(r.started_at)}</span>
+      {/* Tight trades the stamp for an AGE ("4m", "3d"): at this width a full date wraps to two
+          lines, and a feed is read for how recent a run is more than for the minute it started.
+          The stamp stays in the tooltip. */}
+      <span className="truncate text-right font-mono text-[11px] text-faint" title={fmtLocal(r.started_at)}>
+        {density === 'tight' ? fmtAge(r.started_at) : fmtLocal(r.started_at)}
+      </span>
     </button>
   )
 }

@@ -41,7 +41,7 @@ export default function Modal({
   const downOnScrim = useRef(false)
   return (
     <div
-      className={`${contain ? 'absolute' : 'fixed'} inset-0 ${z} grid place-items-center ${scrim} p-6 backdrop-blur-sm`}
+      className={`${contain ? 'absolute' : 'fixed'} inset-0 ${z} grid place-items-center ${scrim} p-3 backdrop-blur-sm sm:p-6`}
       onMouseDown={(e) => { downOnScrim.current = e.target === e.currentTarget }}
       onMouseUp={(e) => {
         if (dismissable && downOnScrim.current && e.target === e.currentTarget) onClose()

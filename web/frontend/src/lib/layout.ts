@@ -1,4 +1,4 @@
-import { type RefObject, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 // ── The app's ONE responsive rule ────────────────────────────────────────────────────────────
 // Every page is the same three-band frame: the nav rail, the main surface, the chat rail. Only the
@@ -77,18 +77,25 @@ export const PANE = {
   mid: 720, // below this a pane stops trying to hold two full-width things side by side
 }
 
-export function useContainerWidth<T extends HTMLElement>(): [RefObject<T>, number] {
-  const ref = useRef<T>(null)
+// A CALLBACK ref, not a `useRef` + `useEffect` pair. The pair only ever looked at `ref.current`
+// once, on mount — so a container that mounts LATER (the common case: a table that renders after
+// its first fetch resolves, a pane behind a loading state) was never observed at all, and the
+// width stayed 0. Every consumer reads 0 as "not measured yet" and falls back to the widest
+// layout, which is how a narrow table ended up clipping its own right-hand columns instead of
+// shedding them. A callback ref fires on every attach and detach, so late mounts are ordinary.
+export function useContainerWidth<T extends HTMLElement>(): [(node: T | null) => void, number] {
   const [w, setW] = useState(0)
-  useEffect(() => {
-    const el = ref.current
-    if (!el) return
-    const ro = new ResizeObserver(([e]) => setW(e.contentRect.width))
-    ro.observe(el)
-    setW(el.getBoundingClientRect().width)
-    return () => ro.disconnect()
+  const ro = useRef<ResizeObserver | null>(null)
+  const attach = useCallback((node: T | null) => {
+    ro.current?.disconnect()
+    ro.current = null
+    if (!node) return
+    ro.current = new ResizeObserver(([e]) => setW(e.contentRect.width))
+    ro.current.observe(node)
+    setW(node.getBoundingClientRect().width)
   }, [])
-  return [ref, w]
+  useEffect(() => () => ro.current?.disconnect(), [])
+  return [attach, w]
 }
 
 // A tab rail sheds its LABELS before it sheds anything else, and the active tab keeps its word —

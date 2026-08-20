@@ -15,6 +15,24 @@ export function fmtLocal(iso?: string | null): string {
   })
 }
 
+/**
+ * How long ago, e.g. "4m", "5h", "3d" — and a plain date once it is older than a week, since by
+ * then "9d" is harder to place than "Jun 19". For narrow surfaces where a full timestamp costs
+ * more width than it carries; pair it with the full stamp in a `title`.
+ */
+export function fmtAge(iso?: string | null): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ''
+  const mins = Math.floor((Date.now() - d.getTime()) / 60_000)
+  if (mins < 1) return 'now'
+  if (mins < 60) return `${mins}m`
+  if (mins < 60 * 24) return `${Math.floor(mins / 60)}h`
+  const days = Math.floor(mins / (60 * 24))
+  if (days < 7) return `${days}d`
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+}
+
 /** A local date only, e.g. "Jun 19, 2026". */
 export function fmtLocalDate(iso?: string | null): string {
   if (!iso) return ''

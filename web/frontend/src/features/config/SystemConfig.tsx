@@ -5,6 +5,7 @@ import Dropdown from '@/ui/Dropdown'
 import { RepoIcon } from '@/lib/repoIcons'
 import type { OrbitRepo } from '@/features/shell/useCommandStats'
 import { CONFIG_SECTIONS, useParam, setParam, type ConfigSection } from '@/lib/router'
+import { useContainerWidth } from '@/lib/layout'
 import { useLive } from '@/lib/live'
 import { K } from '@/lib/live/keys'
 import { getMemoryStats } from '@/lib/api'
@@ -116,26 +117,44 @@ export default function SystemConfig({ repos, initialRepoId, onClose }: {
 
   function name(r: OrbitRepo) { return r.id === 'global' ? 'SuperMe Hub' : r.label }
 
+  // The popup measures ITSELF, not the window: it lives inside the frame's main band, so the width
+  // it actually got is the only honest input. Two steps, in the app's own order — the rail yields
+  // before the content does. Tight, it is an ICON STRIP: every row keeps its icon and its tooltip,
+  // and the group headings become hairlines, since a heading is the first thing a strip cannot hold.
+  const [bodyRef, bodyW] = useContainerWidth<HTMLDivElement>()
+  const railIcons = bodyW > 0 && bodyW < 520
+  const railNarrow = bodyW > 0 && bodyW < 760
+
+  // The project picker rides with the sections it governs. In the strip there is no room for it, so
+  // it moves to the top of the pane — the same control, still next to what it changes.
+  const picker = repo && (
+    <Dropdown
+      value={repo.id}
+      options={repos.map((r) => ({ value: r.id, label: name(r) }))}
+      onChange={setRepoId}
+      width="w-full"
+      title="Which project these sections configure"
+    />
+  )
+
   return (
     <Modal onClose={onClose} title="System config" maxW="max-w-5xl" column fill>
-      <div className="flex min-h-0 flex-1">
-        <nav className="w-56 shrink-0 overflow-y-auto border-r border-line bg-sidebar px-2.5 py-3">
-          {GROUPS.map((g) => (
+      <div ref={bodyRef} className="flex min-h-0 flex-1">
+        <nav
+          className={`shrink-0 overflow-y-auto border-r border-line bg-sidebar py-3 ${
+            railIcons ? 'w-[52px] px-1.5' : railNarrow ? 'w-44 px-2' : 'w-56 px-2.5'
+          }`}
+        >
+          {GROUPS.map((g, gi) => (
             <div key={g.name}>
-              <div className="px-2.5 pb-1.5 pt-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-faint first:pt-0.5">
-                {g.name}
-              </div>
-              {g.project && repo && (
-                <div className="px-1 pb-1.5">
-                  <Dropdown
-                    value={repo.id}
-                    options={repos.map((r) => ({ value: r.id, label: name(r) }))}
-                    onChange={setRepoId}
-                    width="w-full"
-                    title="Which project these sections configure"
-                  />
+              {railIcons ? (
+                gi > 0 && <div className="mx-1.5 my-2 h-px bg-line" />
+              ) : (
+                <div className="px-2.5 pb-1.5 pt-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-faint first:pt-0.5">
+                  {g.name}
                 </div>
               )}
+              {g.project && picker && !railIcons && <div className="px-1 pb-1.5">{picker}</div>}
               {g.rows.map((r) => {
                 const Icon = r.icon
                 const on = section === r.id
@@ -143,22 +162,34 @@ export default function SystemConfig({ repos, initialRepoId, onClose }: {
                   <button
                     key={r.id}
                     onClick={() => setParam('config', r.id)}
-                    className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-left text-[13.5px] transition-colors ${
-                      on ? 'bg-hover font-medium text-fg' : 'text-muted hover:bg-hover/60 hover:text-fg'
-                    }`}
+                    title={railIcons ? r.label : undefined}
+                    className={`flex w-full items-center rounded-lg text-left text-[13.5px] transition-colors ${
+                      railIcons ? 'justify-center px-0 py-2' : 'gap-2.5 px-2.5 py-[7px]'
+                    } ${on ? 'bg-hover font-medium text-fg' : 'text-muted hover:bg-hover/60 hover:text-fg'}`}
                   >
-                    <Icon size={15} className={on ? 'text-fg' : 'text-faint'} />
-                    <span className="min-w-0 flex-1 truncate">{r.label}</span>
-                    {!!badges[r.id] && (
-                      <span
-                        title={`${badges[r.id]} waiting at a gate`}
-                        className="shrink-0 rounded-full bg-warn px-1.5 text-[10px] font-bold text-on-accent"
-                      >
-                        {badges[r.id]}
-                      </span>
-                    )}
-                    {g.project && repo && repo.id !== 'global' && repo.icon && (
-                      <RepoIcon name={repo.icon} size={12} color={repo.color} className="shrink-0 opacity-70" />
+                    <span className="relative shrink-0">
+                      <Icon size={15} className={on ? 'text-fg' : 'text-faint'} />
+                      {/* In the strip the count has nowhere to sit, so it becomes a dot on the icon:
+                          the point of the badge is that something is waiting, not how many. */}
+                      {railIcons && !!badges[r.id] && (
+                        <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-warn" />
+                      )}
+                    </span>
+                    {!railIcons && (
+                      <>
+                        <span className="min-w-0 flex-1 truncate">{r.label}</span>
+                        {!!badges[r.id] && (
+                          <span
+                            title={`${badges[r.id]} waiting at a gate`}
+                            className="shrink-0 rounded-full bg-warn px-1.5 text-[10px] font-bold text-on-accent"
+                          >
+                            {badges[r.id]}
+                          </span>
+                        )}
+                        {g.project && repo && repo.id !== 'global' && repo.icon && (
+                          <RepoIcon name={repo.icon} size={12} color={repo.color} className="shrink-0 opacity-70" />
+                        )}
+                      </>
                     )}
                   </button>
                 )
@@ -167,13 +198,18 @@ export default function SystemConfig({ repos, initialRepoId, onClose }: {
           ))}
         </nav>
 
-        <div className="min-w-0 flex-1 overflow-y-auto px-6 py-5">
+        <div className={`min-w-0 flex-1 overflow-y-auto py-5 ${railIcons ? 'px-4' : 'px-6'}`}>
           {/* A project section with no roster yet has nothing to configure — the picker above it is
               empty for the same reason, so say so rather than rendering controls bound to nothing. */}
           {PROJECT_SECTIONS.has(section) && !repo ? (
             <p className="py-8 text-center text-[13px] text-faint">No projects connected yet.</p>
           ) : (
-            PANES[section](repo as OrbitRepo, repo ? name(repo) : '')
+            <>
+              {railIcons && PROJECT_SECTIONS.has(section) && picker && (
+                <div className="mb-4">{picker}</div>
+              )}
+              {PANES[section](repo as OrbitRepo, repo ? name(repo) : '')}
+            </>
           )}
         </div>
       </div>
