@@ -51,21 +51,15 @@ export function SectionLabel({ title, hint }: { title: string; hint?: string }) 
   )
 }
 
-/** The pane's own header: what you are configuring, and at what scope. */
-export function PaneHead({ title, scope, lede }: { title: string; scope: string; lede: string }) {
-  const system = scope === 'System' || scope === 'System artifacts'
+/**
+ * The pane's own header. Title and one line, no scope chip: the sidebar group already names the
+ * scope and the picker already names the project, so a chip repeating either was the same fact
+ * written twice on one screen.
+ */
+export function PaneHead({ title, lede }: { title: string; lede: string }) {
   return (
     <>
-      <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-        <h2 className="text-[17px] font-semibold text-fg">{title}</h2>
-        <span
-          className={`rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider ${
-            system ? 'bg-hover text-muted' : 'bg-dev/15 text-dev'
-          }`}
-        >
-          {scope}
-        </span>
-      </div>
+      <h2 className="text-[17px] font-semibold text-fg">{title}</h2>
       <p className="mb-5 mt-1 text-[12.5px] leading-relaxed text-faint">{lede}</p>
     </>
   )

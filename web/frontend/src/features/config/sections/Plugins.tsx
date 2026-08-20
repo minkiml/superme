@@ -88,7 +88,6 @@ export default function Plugins({ only }: { only: 'skill' | 'agent' }) {
     <>
       <PaneHead
         title={only === 'skill' ? 'Skills' : 'Agents'}
-        scope="System artifacts"
         lede={`SuperMe's own universal ${noun}, grouped by the scope that loads them. Click any to preview or edit.`}
       />
       {err ? (

@@ -194,11 +194,11 @@ def list_harness_plugins(*, dev_dir: Path, core_dir: Path, shared_dir: Path) -> 
     (`local-harness/<id>/<mode>`) is deliberately excluded — this is the universal harness only."""
     return [
         {"scope": "dev", "label": "Dev", "plugin": "superme-dev",
-         "note": "loaded in dev mode", **_read_plugin(dev_dir)},
+         "note": "Loaded in dev mode", **_read_plugin(dev_dir)},
         {"scope": "core", "label": "Core", "plugin": "superme-core",
-         "note": "loaded in core mode", **_read_plugin(core_dir)},
+         "note": "Loaded in core mode", **_read_plugin(core_dir)},
         {"scope": "shared", "label": "Shared", "plugin": "superme-shared",
-         "note": "loaded in every mode", **_read_plugin(shared_dir)},
+         "note": "Loaded in every mode", **_read_plugin(shared_dir)},
     ]
 
 

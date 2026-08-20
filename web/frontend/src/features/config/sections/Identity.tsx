@@ -45,7 +45,6 @@ export default function Identity() {
     <>
       <PaneHead
         title="Identity &amp; charters"
-        scope="System artifacts"
         lede="Hand-authored system-prompt sources. An edit takes effect on the next turn."
       />
       {err ? (

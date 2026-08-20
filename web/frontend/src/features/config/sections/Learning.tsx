@@ -30,7 +30,6 @@ export default function LearningConfig() {
     <>
       <PaneHead
         title="Auto-learning"
-        scope="System"
         lede="Everything that governs how SuperMe learns on its own: whether it runs, when it fires, and who does the work. What each project actually learned is under that project."
       />
       {sys.error && !sys.data ? (
@@ -61,7 +60,7 @@ function MasterSwitch({ sys }: { sys: SystemOverview }) {
   useEffect(() => { setOn(sys.learning_enabled) }, [sys])
   return (
     <Card>
-      <ConfigRow title="Auto-learning" hint="master switch — off suspends learning for every repo, and nothing below fires">
+      <ConfigRow title="Auto-learning" hint="Master switch — off suspends learning for every repo, and nothing below fires">
         <Toggle
           on={on}
           onChange={(v) => { setOn(v); setSystemLearning(v).then(() => invalidate(K.systemOverview)).catch(() => {}) }}
@@ -96,15 +95,15 @@ function Sweep({ sys }: { sys: SystemOverview }) {
 
   return (
     <Card>
-      <ConfigRow title="Idle time" hint="a dev session quiet this long — with new content — gets swept">
+      <ConfigRow title="Idle time" hint="A dev session quiet this long — with new content — gets swept">
         <NumberField value={draft.idle} min={1} max={240} unit="min" onChange={(v) => setDraft((d) => ({ ...d, idle: v }))} />
       </ConfigRow>
       <Divider />
-      <ConfigRow title="Heartbeat" hint="how often the daemon scans for idle sessions (latency, not frequency)">
+      <ConfigRow title="Heartbeat" hint="How often the daemon scans for idle sessions">
         <NumberField value={draft.poll} min={1} max={60} unit="min" onChange={(v) => setDraft((d) => ({ ...d, poll: v }))} />
       </ConfigRow>
       <Divider />
-      <ConfigRow title="Min conversation" hint="only sweep once this many new user messages have accrued (0 = any new content)">
+      <ConfigRow title="Min conversation" hint="Only sweep once this many new user messages have accrued">
         <NumberField value={draft.msgs} min={0} max={50} unit="msgs" onChange={(v) => setDraft((d) => ({ ...d, msgs: v }))} />
       </ConfigRow>
       <ApplyBar dirty={dirty} saving={saving} onReset={() => setDraft(saved)} onApply={apply} />
@@ -142,7 +141,7 @@ function Agents() {
               <span className="text-[14px] text-fg">{a.label}</span>
               <span className="text-[12px] capitalize text-faint">– {a.scope}</span>
             </div>
-            <div className="text-[12px] text-faint">runs on {fmtModel(a.model)}</div>
+            <div className="text-[12px] text-faint">Runs on {fmtModel(a.model)}</div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <Dropdown

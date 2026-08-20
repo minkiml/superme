@@ -33,7 +33,6 @@ export default function General() {
     <>
       <PaneHead
         title="General"
-        scope="System"
         lede="System-wide behaviour: who judges the autopilot gates on your behalf, and when a long session compacts itself. A project’s own model and effort are set on that project."
       />
       {sys.error && !sys.data ? (
@@ -66,7 +65,7 @@ function Defaults({ sys }: { sys: SystemOverview }) {
   return (
     <>
       <Card>
-        <ConfigRow title="Deputy" hint="judges autopilot gates on your behalf — off runs autopilot unsupervised">
+        <ConfigRow title="Deputy" hint="Judges autopilot gates on your behalf — off runs autopilot unsupervised">
           <Toggle
             on={deputy}
             onChange={(v) => { setDeputy(v); setSystemDeputy({ enabled: v }).then(after).catch(() => {}) }}
@@ -153,7 +152,7 @@ function Compaction() {
           near the floor and one exchange puts it straight back over, so it re-fires every turn. */}
       <ConfigRow
         title="Trigger"
-        hint={`context fill that fires auto-compaction (min ${cfg.min_pct}% — the incompressible floor is ${cfg.floor_pct}%, plus room to work)`}
+        hint="Context fill that fires auto-compaction"
       >
         <NumberField value={draft.trigger} min={cfg.min_pct} max={95} unit="%" onChange={(v) => setDraft((d) => ({ ...d, trigger: v }))} />
       </ConfigRow>
@@ -161,8 +160,8 @@ function Compaction() {
       <ConfigRow
         title="Min gain"
         hint={draft.auto
-          ? 'auto: a compaction must reclaim ≥50% of what the session could shed (its fill beyond the incompressible preload) — two strikes parks the session'
-          : 'manual: a compaction shrinking less than this flat % counts as ineffective (two strikes parks the session)'}
+          ? 'Auto: a compaction must reclaim ≥50% of what the session could shed'
+          : 'Manual: a compaction shrinking less than this flat % counts as ineffective'}
       >
         <span className="text-[12px] text-faint">Auto</span>
         <Toggle on={draft.auto} onChange={(v) => setDraft((d) => ({ ...d, auto: v }))} />

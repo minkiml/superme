@@ -67,7 +67,6 @@ export default function ProjectArtifacts({ contextId, repoLabel }: { contextId: 
     <>
       <PaneHead
         title="Artifacts"
-        scope={repoLabel}
         lede="This host's own local operational artifacts — enable or disable what loads, and preview or edit any of it."
       />
     <ArtifactTabs
@@ -93,7 +92,7 @@ export default function ProjectArtifacts({ contextId, repoLabel }: { contextId: 
               {
                 key: 'local',
                 name: 'Local',
-                note: 'forged for this host',
+                note: 'Forged for this host',
                 tint: 'dev',
                 icon: ScrollText,
                 empty: 'No local constitutions yet — forge one, and it lands here.',
@@ -102,7 +101,7 @@ export default function ProjectArtifacts({ contextId, repoLabel }: { contextId: 
               {
                 key: 'expertise',
                 name: 'Expertise',
-                note: 'adopted for this repo from the shared pool',
+                note: 'Adopted for this repo from the shared pool',
                 tint: 'universal',
                 icon: Package,
                 empty: 'No expertise adopted for this repo yet.',
@@ -133,7 +132,7 @@ export default function ProjectArtifacts({ contextId, repoLabel }: { contextId: 
             <section key={tier}>
               <SectionLabel
                 title={tier === 'standing' ? 'Standing' : 'Available'}
-                hint={tier === 'standing' ? 'attached to every plan in this repo' : 'cited by name when it fits'}
+                hint={tier === 'standing' ? 'Attached to every plan in this repo' : 'Cited by name when it fits'}
               />
               <ListOrState
                 list={library ? library.filter((e) => e.tier === tier) : null}

@@ -43,17 +43,3 @@ repos:
     onboarding: project-init
     review_mode: strict
     anchor_branch: main
-  dummy9:
-    label: dummy9
-    cwd: /Users/cooma/Developer/my_docs/dummy9
-    layer: local
-    persona_append: ''
-    extra_mcp: []
-    onboarding: retrofit
-  superme-addon-1:
-    label: superme-addon-1
-    cwd: /Users/cooma/Developer/my_docs/repo-pulse
-    layer: local
-    persona_append: ''
-    extra_mcp: []
-    onboarding: project-init

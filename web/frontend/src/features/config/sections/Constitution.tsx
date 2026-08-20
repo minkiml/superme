@@ -68,7 +68,7 @@ export default function Constitution() {
     return {
       key: mode,
       name: mode === 'dev' ? 'Dev' : 'Core',
-      note: `loaded in ${mode} mode`,
+      note: `Loaded in ${mode} mode`,
       tint: mode,
       icon: ScrollText,
       groups: [
@@ -82,7 +82,6 @@ export default function Constitution() {
     <>
       <PaneHead
         title="Constitution"
-        scope="System artifacts"
         lede="Always-on rules, grouped by the mode that loads them. Toggle to control what loads."
       />
       {err ? (

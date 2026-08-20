@@ -38,7 +38,6 @@ export default function ProjectSettings({ repo }: { repo: OrbitRepo }) {
     <>
       <PaneHead
         title="Settings"
-        scope={name}
         lede={`What ${name} runs on, and how its work lands. A picker left on its Default option follows the declared default rather than pinning a value here.`}
       />
       <Inheritance repo={repo} name={name} />
@@ -70,7 +69,7 @@ function Inheritance({ repo, name }: { repo: OrbitRepo; name: string }) {
 
   return (
     <Card>
-      <ConfigRow title="Model" hint="the model this project's turns run on">
+      <ConfigRow title="Model" hint="The model this project's turns run on">
         <Dropdown
           value={model}
           options={modelOptions(sys.data?.default_model ?? '')}
@@ -81,7 +80,7 @@ function Inheritance({ repo, name }: { repo: OrbitRepo; name: string }) {
         />
       </ConfigRow>
       <Divider />
-      <ConfigRow title="Reasoning effort" hint="how hard it thinks on this project">
+      <ConfigRow title="Reasoning effort" hint="How hard it thinks on this project">
         <Dropdown
           value={effort}
           options={effortOptions(sys.data?.default_effort ?? 'medium')}
@@ -92,7 +91,7 @@ function Inheritance({ repo, name }: { repo: OrbitRepo; name: string }) {
         />
       </ConfigRow>
       <Divider />
-      <ConfigRow title="Auto-learning" hint="also needs the system master switch on">
+      <ConfigRow title="Auto-learning" hint="Also needs the system master switch on">
         <Toggle
           on={learning}
           onChange={(v) => { setLearning(v); setRepoLearning(repo.id, v).then(after).catch(() => {}) }}
@@ -144,7 +143,7 @@ function Landing({ repo }: { repo: OrbitRepo }) {
         title="Anchor branch"
         hint={repo.anchorError
           ? `Not found: ${repo.anchorError}`
-          : 'what every git site targets: branch-from base, sync source, merge target'}
+          : 'What every git site targets: branch-from base, sync source, merge target'}
       >
         {options.length > 0 ? (
           <Dropdown

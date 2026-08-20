@@ -51,7 +51,6 @@ export default function ProjectXray({ contextId, repoLabel }: { contextId: strin
     <>
       <PaneHead
         title="Prompt X-ray"
-        scope={repoLabel}
         lede="Firing a probe spins up a throwaway work-item that runs the real pipeline (triage → plan → build → vet → review → close) on autopilot, captures each phase's input, then destroys itself — nothing is merged and no knowledge is written. Only the captured input pages and the run trace remain."
       />
 
