@@ -1604,10 +1604,17 @@ class SystemSpine:
         return {"runs": int(runs or 0), "events": int(events or 0)}
 
     def release_item_runs(self, repo_id: str, item_id: str) -> int:
-        """When a work-item is hard-deleted, close out any run still in flight for it (so it can't
-        linger as a ghost 'running') but KEEP every run row and its events/artifacts — they are the
-        permanent activity + token record and outlive the item (an orphaned item_id is harmless; no
-        read path joins a work-item table). Returns the number of live runs closed out.
+        """Close out any run row still in flight for an item (so it can't linger as a ghost
+        'running') but KEEP every row and its events/artifacts — they are the permanent activity +
+        token record and outlive the item (an orphaned item_id is harmless; no read path joins a
+        work-item table). Returns the number of live runs closed out.
+
+        THE ROW HALF ONLY. This says the run is over; it does not make it be over. The coroutine
+        driving the turn is in-process state this layer cannot see, and a turn that outlives its own
+        item can still write into a folder its caller is about to remove. Anything DISPOSING of an
+        item wants `daemon.services.runs.stop_item_work`, which cancels the task first and then
+        calls this. Reaching for this alone is right only where no task can exist — at boot, where
+        the registry is empty because a task cannot outlive the daemon that owned it.
 
         (Was delete_item_runs, which wiped the whole trail — the same never-delete-logs violation as
         the old session cascade; see delete_session_record.)"""

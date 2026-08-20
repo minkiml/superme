@@ -131,8 +131,9 @@ def clear_item(context_id: str, item_id: str, *, actor: str = "daemon",
                                  cause="completed")
     # An item clearing out of the pipeline frees an autopilot slot — pump the queue.
     gates.pump_autopilot_slots(context_id)
-    # 3. reclaim disk: release_item_runs is STATUS-ONLY (rows are permanent — never-delete-logs;
-    #    it just closes any live row); the session transcript is reclaimed AFTER a final capture
+    # 3. reclaim disk: `stop_item_work` cancels the item's task and then closes any live run row
+    #    (the rows themselves are permanent — never-delete-logs); the session transcript is
+    #    reclaimed AFTER a final capture
     #    sweep (WI-8) — the sweep must read the transcript before it's purged, so the purge is
     #    chained behind the background sweep. When auto-learning is OFF we skip the sweep but
     #    STILL purge (disk reclamation is not a learning concern).
@@ -143,7 +144,8 @@ def clear_item(context_id: str, item_id: str, *, actor: str = "daemon",
             _fire_sweep_bg(ctx, sid, then_delete="retired")
         else:
             _sessions.delete(ctx, sid, cause="retired")  # workflow done → retired
-    runs_freed = _spine.release_item_runs(context_id, item_id)
+    from .runs import stop_item_work   # lazy: runs.py drives clearance
+    runs_freed, _ = stop_item_work(context_id, item_id)
     _dev_store.log_event(context_id, "item.complete",
                          f"Cleared: {item.get('title') or item_id}",
                          item_id=item_id, actor=actor,

@@ -330,6 +330,9 @@ def _reconcile_close_steps() -> None:
                                                      _render_execution_md(rid, item_id, it))
                         log.info("close reconcile [%s]: re-snapshot execution.md for %s",
                                  rid, item_id)
+                    # The ROW half alone is right here: this is boot, so the task registry is
+                    # empty by construction and there is nothing to cancel. Every other disposal
+                    # path goes through `runs.stop_item_work`.
                     freed = app_state.spine.release_item_runs(rid, item_id)
                     if freed:
                         log.info("close reconcile [%s]: released %d run(s) for terminal %s",

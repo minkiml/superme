@@ -106,14 +106,23 @@ def release(key: tuple[str, str] | None) -> None:
         _TASKS.pop(key, None)
 
 
-def cancel(repo_id: str, item_id: str) -> bool:
+def cancel(repo_id: str, item_id: str, *, expect_live: bool = True) -> bool:
     """Cancel the task holding this item's run. True if one was found and asked to stop.
 
     Asked, not made to: cancellation lands at the task's next suspension point, so the caller must
-    not treat this as "the run has stopped" — it closes the run row itself (see watchdog)."""
+    not treat this as "the run has stopped" — it closes the run row itself (see watchdog).
+
+    `expect_live` is whether a task SHOULD be here. The watchdog only calls after detecting a live
+    run, so an empty slot is an anomaly and gets shouted about. A disposal path (abandon, clearance,
+    probe teardown) usually runs on an item that finished by itself, so nothing to cancel is the
+    normal case and warning about it would bury the real ones."""
     key = (str(repo_id), str(item_id))
     task = _TASKS.get(key)
     if task is None or task.done():
+        if not expect_live:
+            log.debug("no live task to cancel for %s/%s (%s)", key[0], key[1],
+                      _how_it_ended(task) if task is not None else "never registered")
+            return False
         # Say WHICH — a bare False cannot distinguish "nobody registered" from "it already
         # finished", and those call for opposite fixes. When it IS done, say HOW it ended: a task
         # that is `done` while its registration is still present never ran its own `finally`, so

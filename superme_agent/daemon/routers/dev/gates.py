@@ -187,7 +187,8 @@ async def dev_work_item_abandon(item_id: str, body: AbandonBody,
 
     # 1. end live work: free run rows (history kept), retire the session (transcript reclaimed,
     #    trace preserved + labeled). No capture sweep — an abandon writes nothing anywhere.
-    runs_freed = spine.release_item_runs(body.context_id, item_id)
+    from ...services.runs import stop_item_work
+    runs_freed, _ = stop_item_work(body.context_id, item_id)
     for sid in dev.work_item_session_ids(item):   # ALL role threads (intake/build/vet + legacy)
         sessions.delete(ctx, sid, cause="retired")
     # 2. worktree dir removed, branch KEPT (D4 terminal cleanup). Never blocks the abandon.

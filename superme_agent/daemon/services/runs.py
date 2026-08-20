@@ -38,6 +38,32 @@ log = logging.getLogger("superme-agent")
 DEFAULT_RUN_MODEL = MODEL_TIERS["sonnet"]
 
 
+def stop_item_work(context_id: str, item_id: str, *, expect_live: bool = False) -> tuple[int, bool]:
+    """End an item's work for real — cancel the TASK, then close its run ROWS. Returns
+    `(runs_freed, task_cancelled)`.
+
+    The two halves answer different questions and neither is sufficient alone.
+    `spine.release_item_runs` only marks rows `aborted`: the row stops claiming to be running, but
+    the coroutine underneath keeps going, and a turn that outlives its own item can still write into
+    a folder the caller is about to remove — which is how a disposed item comes back as an orphan
+    artifacts/ shell that no `item.md` explains and no terminal event accounts for.
+
+    ORDER IS THE GUARD. The task first, so the run-lock does not open while a live turn still holds
+    it; the rows second, and unconditionally, because cancellation only lands at the task's next
+    suspension point and one frozen inside a syscall may never reach one. A zombie that finishes
+    later finds no running row and no-ops. Same reasoning as the stall watchdog, which is where this
+    pairing was first written.
+
+    `expect_live=False` because disposal usually meets an item that already finished; pass True from
+    a caller that has established a run IS in flight, and an empty slot will be shouted about."""
+    cancelled = run_tasks.cancel(context_id, item_id, expect_live=expect_live)
+    freed = _spine.release_item_runs(context_id, item_id)
+    if cancelled:
+        log.info("stopped live task for %s/%s before releasing %d run row(s)",
+                 context_id, item_id, freed)
+    return freed, cancelled
+
+
 def mark_item_error(ctx, context_id: str, item_id: str, reason: str, *, phase: str = "") -> bool:
     """Stop an item at `error` with the reason its work stopped (recovery-resilience R2).
 

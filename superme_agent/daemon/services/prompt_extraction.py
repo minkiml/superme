@@ -104,11 +104,15 @@ def teardown(context_id: str, item_id: str, *, reason: str = "") -> None:
                 git_layer.delete_branch(ctx.cwd, str(branch))
             except Exception:  # noqa: BLE001
                 log.exception("probe teardown: branch delete failed %s", branch)
-        # 3. release any run rows to a terminal status (KEEPS the rows + their event/input trails).
+        # 3. end the work: cancel the task, then release its run rows to a terminal status (KEEPS
+        #    the rows + their event/input trails). The task half matters HERE most of all — step 4
+        #    removes the folder, and a turn still running would recreate it as an artifacts-only
+        #    shell that nothing accounts for.
         try:
-            spine.release_item_runs(context_id, item_id)
+            from .runs import stop_item_work
+            stop_item_work(context_id, item_id)
         except Exception:  # noqa: BLE001
-            log.exception("probe teardown: release_item_runs failed %s", item_id)
+            log.exception("probe teardown: stop_item_work failed %s", item_id)
         # 4. the knowledge folder (item.md + artifacts) — the last on-disk trace.
         try:
             dev.delete_work_item(dev_root, item_id)
