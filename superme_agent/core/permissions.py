@@ -647,7 +647,7 @@ def kills_the_host(command: str) -> bool:
     Matched by a kill verb plus a HOST reference — one of the host ports, or the module name a
     `pkill -f` would sweep. The port test is deliberately narrow: `kill $(lsof -ti:8801)` is a
     vet-env teardown and must stay allowed, so only the host's own ports count."""
-    from ..runtime.config import DAEMON_PORT
+    from ..paths import DAEMON_PORT
     toks = [t.strip("'\"") for t in shlex_split_safe(command)]
     if not any(Path(t).name in _KILL_VERBS for t in toks):
         return False

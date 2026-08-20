@@ -116,7 +116,7 @@ def _collect_tools() -> list[ToolInfo]:
 async def system_inventory() -> InventoryResponse:
     """A live snapshot of every SuperMe SQLite table (columns + row counts) and every agent-facing
     tool (surface + params). Read-only; introspected fresh on each call so it can't go stale."""
-    from ...runtime.config import SYSTEM_DB_FILE, DEV_DB_FILE
+    from ...paths import SYSTEM_DB_FILE, DEV_DB_FILE
     databases = [
         _read_db("system  ·  .system.db", SYSTEM_DB_FILE),
         _read_db("dev  ·  .dev.db", DEV_DB_FILE),

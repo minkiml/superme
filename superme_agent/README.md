@@ -61,14 +61,12 @@ superme_agent/
 ├─ harness/         the UNIVERSAL portable brain (SELF, charters, constitution, plugins, tools, policy, forge_kit)
 ├─ local-harness/   per-host local harness — <id>/<mode>/
 ├─ config/          repos.yaml (registered repos) · system.yaml
+├─ paths.py         where everything is — paths, .env, the daemon's address
 └─ validators/
 scripts/            check_fast.sh (the gate) · parity · sweep/E2E tests (gitignored)
 web/                bff/ (reverse proxy) · frontend/ (cockpit) · dev.sh (launch all three)
 superme-knowledge/  the knowledge repo (sibling, gitignored) — see its README
 ```
-
-> **Legacy:** `runtime/` and `__main__.py` are the retired Slack-era app (`python -m superme_agent`),
-> superseded by the daemon and unreferenced by it. Pending removal.
 
 ## Run
 

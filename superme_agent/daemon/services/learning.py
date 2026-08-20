@@ -24,7 +24,7 @@ from ...core import kernel_speech
 from ...core import Init, Usage, Result, Status, TextDelta, ToolResult, deny_all, learning_write_approve
 from ...gateway import contexts
 from ...harness.tools.dev_tools import make_dev_mcp_server
-from ...runtime.config import HARNESS_DIR, CONSTITUTION_DIR
+from ...paths import HARNESS_DIR, CONSTITUTION_DIR
 
 log = logging.getLogger("superme-agent")
 

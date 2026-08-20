@@ -1,7 +1,7 @@
 """Permission policy — part of the agent's portable harness.
 
 Decides which tool calls auto-run vs. need human approval. The approval
-*mechanism* lives in runtime/permissions.py; the *policy* (what's safe) lives here
+*mechanism* lives in core/permissions.py; the *policy* (what's safe) lives here
 so it travels with the agent regardless of workspace. Future per-path / per-workspace
 write rules belong here too.
 """
@@ -46,8 +46,6 @@ SAFE_TOOLS = {
     # endings of kernel-fired runs — a prompt here would park every background run on a human.
     "mcp__run__report_completion",
     "mcp__deputy__deputy_verdict",
-    # The agent's read-only Slack readers (in-process MCP tools).
-    "mcp__slack__read_channel", "mcp__slack__read_thread",
     # The dev agent's read-only dev event-log reader (PRD §4.9).
     "mcp__dev__read_dev_log",
     # The dev agent's read-only inbox reader (context-model-spec §5) — scoped to its own queue.

@@ -27,7 +27,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from ..harness.tools.run_tools import DEPUTY_DECISIONS
-from ..runtime.config import LOCAL_HARNESS_DIR
+from ..paths import LOCAL_HARNESS_DIR
 
 # Below this, the item's early-gate advances (triage/plan) are cheap and machine-checked; the
 # send-back CAP (design §5.2 open-question 2, settled: max 3) bounds the deputy's own bouncing so a

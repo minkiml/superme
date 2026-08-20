@@ -25,7 +25,7 @@ path — `{constitution, skill, agent}` (one coarse `constitution` bucket for al
 / rules / conventions / contracts; no sub-types yet).
 
 > **Status: placeholder (relocation pending).** Today the per-repo procedural cell still lives at
-> `<knowledge-home>/practice/<mode>` (loaded via `runtime/config.plugins_for`). The renovation's
+> `<knowledge-home>/practice/<mode>` (loaded via `paths.plugins_for`). The renovation's
 > relocation pass moves it here, and `config.py` / `agent_service.py` path resolution switches to
 > this tree. The empty `.gitkeep`s mark the target shape; nothing loads from here yet.
 

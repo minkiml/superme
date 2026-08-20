@@ -1,9 +1,12 @@
-"""Configuration, paths, and shared setup for the SuperMe agent.
+"""Where everything is: the process-level facts every layer reads.
 
-Surface-neutral: this module holds paths, .env loading, and logging only. It must NOT
-require any surface's credentials (e.g. Slack tokens), so the Core can import it
-without a Slack environment. Slack-specific config lives in the Slack adapter
-(runtime/slack_app.py, runtime/permissions.py).
+Paths first — this is the one place that knows where the code, the stores, the harness and
+the knowledge home sit on disk. Three things ride along that are not paths: the single
+`load_dotenv` call, the shared logger, and the daemon's own address. They stay here because
+loading `.env` is ONE side effect the whole process depends on; splitting it into a second
+module would let something import the daemon knobs without ever triggering it.
+
+Surface-neutral by rule: no surface's credentials, so every layer can import it.
 
 Path model (the host-app vs workspace split):
   APP_DIR   = the host application itself (this package). Holds the spine (.system.db,
@@ -20,8 +23,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-# config.py lives at superme_agent/runtime/config.py
-APP_DIR = Path(__file__).resolve().parent.parent       # superme_agent/
+# this file lives at superme_agent/paths.py
+APP_DIR = Path(__file__).resolve().parent               # superme_agent/
 ROOT_DIR = APP_DIR.parent                               # repo root = default workspace
 
 # .env loading (must precede any os.environ reads below): ONE repo-root .env is the single
@@ -68,7 +71,6 @@ def plugins_for(mode: str, op_home: Path | None = None) -> list[str]:
         if (Path(op_home) / ".claude-plugin" / "plugin.json").is_file():
             paths.append(str(op_home))
     return paths
-REGISTRY_FILE = APP_DIR / "config" / "registry.yaml"
 # --- System spine (PRD §4.11.3 — the System/Repo/Session/Run keystone) -----------
 # Static-meta lives in git-tracked, hand-editable YAML; live-status lives in a SQLite
 # DB. The spine LOADS the YAML + OWNS the DB, presenting one authoritative API. (These
@@ -96,13 +98,6 @@ LOCAL_HARNESS_DIR = APP_DIR / "local-harness"
 # activate for itself (per-repo opt-in, no body copy). Distinct from the universal harness/constitution
 # (always-on) and from the plugins' doc-authoring `references/`. One shared folder, all repos draw from it.
 ASSET_DIR = LOCAL_HARNESS_DIR / "asset"
-# Channel→workspace state {channel: {workspace, locked}}, managed live from Slack
-# (not committed; per-environment).
-CHANNELS_FILE = APP_DIR / ".channel_workspaces.json"
-# Channel→model override {channel: "haiku"|"sonnet"|"opus"}, set live from Slack
-# (`@bot /model …`). Unset channels use the CLI default model.
-MODELS_FILE = APP_DIR / ".channel_models.json"
-
 # --- Shared command layer + "/" palette (1.5) -----------------------------------
 # (Per-context model overrides moved to the spine's `model_override` table in WI-3.)
 # Cached slash-command lists per context, so the web "/" palette is available on

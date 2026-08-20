@@ -7,7 +7,7 @@ Localhost only. Surfaces (web BFF, Slack in B2) connect to ws://HOST:PORT/ws/age
 
 import uvicorn
 
-from ..runtime.config import DAEMON_HOST, DAEMON_PORT, log, warn_on_conflicting_auth
+from ..paths import DAEMON_HOST, DAEMON_PORT, log, warn_on_conflicting_auth
 
 
 def main() -> None:

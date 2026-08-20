@@ -17,7 +17,7 @@ import json
 import logging
 from datetime import datetime, timezone
 
-from ..runtime.config import CLAUDE_PROJECTS_DIR
+from ..paths import CLAUDE_PROJECTS_DIR
 from .context import Context
 from .spine import SystemSpine, get_spine
 

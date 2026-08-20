@@ -123,7 +123,7 @@ def vet_env_script() -> str:
     script lives in the install, not in the repo being vetted, so nothing relative resolves from the
     worktree, and `${CLAUDE_PLUGIN_ROOT}` is a substitution we have never proved fires in a run.
     A path the kernel resolved is a fact; a placeholder is a hope."""
-    from ..runtime.config import DEV_PLUGIN_DIR
+    from ..paths import DEV_PLUGIN_DIR
     p = DEV_PLUGIN_DIR / "skills" / "vet" / "scripts" / "vet_env.sh"
     return str(p) if p.is_file() else ""
 

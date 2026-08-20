@@ -36,7 +36,7 @@ from pathlib import Path
 
 import yaml
 
-from ..runtime.config import (
+from ..paths import (
     KNOWLEDGE_REPO_DIR,
     LOCAL_HARNESS_DIR,
     REPOS_CONFIG_FILE,
@@ -2095,7 +2095,7 @@ class SystemSpine:
     @staticmethod
     def _agent_md_path(feature: str):
         from .models import AGENT_MD_NAME
-        from ..runtime.config import DEV_PLUGIN_DIR
+        from ..paths import DEV_PLUGIN_DIR
         name = AGENT_MD_NAME.get(feature)
         return (DEV_PLUGIN_DIR / "agents" / f"{name}.md") if name else None
 

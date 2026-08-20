@@ -100,7 +100,7 @@ def skill_template(name: str) -> str:
     """The template body for `name`, read from its authoring skill's `templates/` folder. Cached
     for the process lifetime (templates change only with a deploy)."""
     if name not in _template_cache:
-        from ..runtime.config import DEV_PLUGIN_DIR
+        from ..paths import DEV_PLUGIN_DIR
         skill, fname = _TEMPLATE_HOMES[name]
         _template_cache[name] = (
             DEV_PLUGIN_DIR / "skills" / skill / "templates" / fname).read_text()

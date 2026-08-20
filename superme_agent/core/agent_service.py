@@ -22,7 +22,7 @@ from claude_agent_sdk import (
     UserMessage,
 )
 
-from ..runtime.config import (
+from ..paths import (
     SELF_FILE, CHARTER_FILES, HARNESS_DIR, LOCAL_HARNESS_DIR, CONSTITUTION_DIR, plugins_for,
 )
 from .models import normalize_model

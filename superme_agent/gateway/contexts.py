@@ -26,9 +26,9 @@ GLOBAL_ID = "global"
 # nesting was dropped in the renovation (§4.11.2); dev-knowledge is `<base>/dev` now.
 CORE_SUBDIR = "core"
 
-# The repo registry now lives in the system spine (config/repos.yaml), not registry.yaml —
-# WI-3 cutover. The Context shape is unchanged: only its SOURCE moved. (Slack's separate
-# runtime/workspaces.py still reads registry.yaml until the Slack rebuild folds it in.)
+# The repo registry lives in the system spine (config/repos.yaml). The Context shape is
+# unchanged from the WI-3 cutover: only its SOURCE moved. registry.yaml and its lone reader
+# were deleted with the Slack app.
 
 
 def _context_from_repo(rc: RepoConfig, mode: str) -> Context:
@@ -69,7 +69,7 @@ def resolve(context_id: str | None, mode: str = "core") -> Context:
             log.warning("unknown context_id %r; falling back to global", cid)
         rc = repos.get(GLOBAL_ID)
     if rc is None:  # repos.yaml empty/missing — synthesize a minimal global so we never crash
-        from ..runtime.config import ROOT_DIR
+        from ..paths import ROOT_DIR
         rc = RepoConfig(id=GLOBAL_ID, label="SuperMe hub", cwd=ROOT_DIR, layer="global")
     return _context_from_repo(rc, mode)
 

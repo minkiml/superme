@@ -10,7 +10,7 @@ import logging
 from fastapi import HTTPException
 
 from ..gateway import contexts
-from ..runtime.config import LOCAL_HARNESS_DIR, SLASH_COMMANDS_FILE
+from ..paths import LOCAL_HARNESS_DIR, SLASH_COMMANDS_FILE
 
 log = logging.getLogger("superme-agent")
 

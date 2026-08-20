@@ -12,7 +12,7 @@ from ..core import (
     AgentService, KnowledgeService, DevKnowledgeService, DevStore, SessionStore, CommandLayer,
 )
 from ..core.spine import get_spine as _spine_factory, SystemSpine
-from ..runtime.config import DEV_DB_FILE
+from ..paths import DEV_DB_FILE
 
 # --- the singletons (shared across every connection) ---
 agent: AgentService = AgentService()

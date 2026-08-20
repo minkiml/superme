@@ -47,7 +47,7 @@ from ...core.kernel_speech import (
     work_item_preamble, general_preamble, onboarding_preamble, diagnosis_preamble,
     diagnosis_trace_block, compaction_notice,
 )
-from ...runtime.config import DAEMON_APPROVAL_TIMEOUT
+from ...paths import DAEMON_APPROVAL_TIMEOUT
 
 log = logging.getLogger("superme-agent")
 

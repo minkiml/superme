@@ -269,7 +269,7 @@ def read_constitution_dir(directory: Path, *, origin: str) -> list[dict]:
 
 def read_asset_pool(asset_dir: Path | None = None) -> list[dict]:
     """The asset pool: opt-in items in the shared `local-harness/asset/`, tagged origin='asset'."""
-    from ..runtime.config import ASSET_DIR
+    from ..paths import ASSET_DIR
     return read_constitution_dir(Path(asset_dir or ASSET_DIR), origin="asset")
 
 
@@ -467,7 +467,7 @@ def slugify(name: str) -> str:
 
 def _homes():
     # Imported lazily to keep this module's import graph light + avoid any cycle.
-    from ..runtime.config import CONSTITUTION_DIR, LOCAL_HARNESS_DIR, DEV_PLUGIN_DIR
+    from ..paths import CONSTITUTION_DIR, LOCAL_HARNESS_DIR, DEV_PLUGIN_DIR
     return CONSTITUTION_DIR, LOCAL_HARNESS_DIR, DEV_PLUGIN_DIR
 
 

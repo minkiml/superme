@@ -8,7 +8,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 
-from ...runtime.config import ROOT_DIR
+from ...paths import ROOT_DIR
 from ..schemas.docs import DocsListResponse, DocResponse
 
 router = APIRouter()

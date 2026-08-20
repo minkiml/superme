@@ -528,7 +528,7 @@ def _authored_extras(ctx, item: dict, phase: str | None, mcp: list[str]) -> dict
     from ...harness.tools.dev_tools import dev_tool_specs
     from ...harness.tools.registry import describe_specs
     from ...harness.tools.run_tools import DEPUTY_VERDICT_TOOL, REPORT_COMPLETION_TOOL
-    from ...runtime.config import DEV_PLUGIN_DIR
+    from ...paths import DEV_PLUGIN_DIR
 
     skills: list[dict] = []
     contract = kernel_speech.phase_contract(item.get("kind"), str(phase or ""))

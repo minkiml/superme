@@ -1,1 +1,1 @@
-"""SuperMe — Slack-hosted Claude agent (host application package)."""
+"""SuperMe — the host application package: core engine, daemon, harness, knowledge."""

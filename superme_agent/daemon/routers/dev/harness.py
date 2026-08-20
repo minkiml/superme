@@ -37,7 +37,7 @@ async def dev_harness_plugins() -> dict:
     Manage-Harness "Skills & Agents" tab. Read straight from the harness plugin frontmatter; this
     is the universal harness only (per-repo operational artifacts are out of scope here)."""
     from ....core.operational import list_harness_plugins
-    from ....runtime.config import DEV_PLUGIN_DIR, CORE_PLUGIN_DIR, SHARED_PLUGIN_DIR
+    from ....paths import DEV_PLUGIN_DIR, CORE_PLUGIN_DIR, SHARED_PLUGIN_DIR
     return {"scopes": list_harness_plugins(
         dev_dir=DEV_PLUGIN_DIR, core_dir=CORE_PLUGIN_DIR, shared_dir=SHARED_PLUGIN_DIR)}
 
@@ -48,14 +48,14 @@ async def dev_harness_local_plugins(context_id: str = "global") -> dict:
     """This host's OWN local-harness skills + agents (its `local-harness/<id>/dev` plugin tree) — the
     per-repo Artifacts tab. Flat: the dev workspace is already dev-scoped, so no scope split."""
     from ....core.operational import _read_plugin
-    from ....runtime.config import LOCAL_HARNESS_DIR
+    from ....paths import LOCAL_HARNESS_DIR
     plug = _read_plugin(local_harness_root(context_id))
     return {"context_id": context_id, "skills": plug["skills"], "agents": plug["agents"]}
 
 
 def _resolve_plugin_file(scope: str, kind: str, name: str, context_id: str = "global"):
     from ....core.operational import resolve_plugin_file
-    from ....runtime.config import DEV_PLUGIN_DIR, CORE_PLUGIN_DIR, SHARED_PLUGIN_DIR, LOCAL_HARNESS_DIR
+    from ....paths import DEV_PLUGIN_DIR, CORE_PLUGIN_DIR, SHARED_PLUGIN_DIR, LOCAL_HARNESS_DIR
     p = resolve_plugin_file(scope, kind, name, dev_dir=DEV_PLUGIN_DIR,
                             core_dir=CORE_PLUGIN_DIR, shared_dir=SHARED_PLUGIN_DIR,
                             local_dir=local_harness_root(context_id))
@@ -94,7 +94,7 @@ async def dev_harness_plugin_file_save(body: PluginFileBody) -> dict:
 
 # --- Foundations: SuperMe's universal identity + charters + learned constitution -------------
 def _foundation_specs():
-    from ....runtime.config import SELF_FILE, CHARTER_FILES
+    from ....paths import SELF_FILE, CHARTER_FILES
     return [
         ("self", "SELF", "universal", SELF_FILE),
         ("dev-charter", "Dev charter", "dev", CHARTER_FILES["dev"]),
@@ -108,7 +108,7 @@ async def dev_harness_foundation() -> dict:
     (all modes); the per-mode charters are WHAT-MODE (hand-authored, editable). Plus the LEARNED
     universal constitution (always-on rules the learning loop published), per mode."""
     from ....core.operational import read_constitution_dir
-    from ....runtime.config import CONSTITUTION_DIR
+    from ....paths import CONSTITUTION_DIR
     files = []
     for key, label, scope, path in _foundation_specs():
         present = path.is_file()
@@ -199,7 +199,7 @@ async def dev_palette(context_id: str = "global", mode: str = "dev") -> dict:
     plugin set (category not in the hidden set), computed live from disk, merged with the context's
     cached external/native commands."""
     from ....core.operational import list_palette_skills
-    from ....runtime.config import plugins_for, LOCAL_HARNESS_DIR
+    from ....paths import plugins_for, LOCAL_HARNESS_DIR
     op_home = local_harness_root(context_id, mode) if context_id else None
     skills = list_palette_skills([Path(p) for p in plugins_for(mode, op_home)])
     visible = [s["command"] for s in skills
@@ -277,7 +277,7 @@ async def dev_harness_constitutions(context_id: str = "global") -> dict:
     """Every constitution in this context's scope: universal-dev + this host's local (`repo_dev`),
     each with live `enabled` state. Core is deferred (no core constitutions yet)."""
     from ....core.operational import read_constitution_dir
-    from ....runtime.config import CONSTITUTION_DIR, LOCAL_HARNESS_DIR
+    from ....paths import CONSTITUTION_DIR, LOCAL_HARNESS_DIR
     out = []
 
     def collect(items: list, scope: str, mode: str) -> None:
@@ -343,7 +343,7 @@ def _resolve_constitution_file(scope: str, slug: str, context_id: str) -> Path:
     `constitution/<mode>/`; a host's local under `local-harness/<ctx>/<mode>/constitution/`. Matches
     on the item's slug (frontmatter `name` or filename stem), not a bare `<slug>.md` guess."""
     from ....core.operational import read_constitution_dir
-    from ....runtime.config import CONSTITUTION_DIR, LOCAL_HARNESS_DIR
+    from ....paths import CONSTITUTION_DIR, LOCAL_HARNESS_DIR
     if scope.startswith("universal_"):
         mode = scope.split("_", 1)[1]
         home, origin = CONSTITUTION_DIR / mode, "universal"
@@ -398,7 +398,7 @@ async def dev_harness_assets(context_id: str = "global") -> dict:
     whether THIS repo has ADOPTED and ENABLED it. The pool is shared; adoption is per-repo (no body
     copy). Onboarding auto-adopts the confidently-relevant ones; the owner curates from here."""
     from ....core.operational import read_asset_pool, repo_asset_states
-    from ....runtime.config import LOCAL_HARNESS_DIR
+    from ....paths import LOCAL_HARNESS_DIR
     states = repo_asset_states(local_harness_root(context_id) / "constitution")
     out = [{
         "slug": it["slug"], "title": it["title"],
@@ -419,7 +419,7 @@ async def dev_harness_asset_action(slug: str, body: AssetActionBody,
     """Per-repo asset curation: `adopt` (+ Add), `enable`/`disable` (toggle, keeps adoption), or `drop`
     (un-adopt). Writes the repo's `.assets` list — no body copy. Takes effect on the next dev turn."""
     from ....core.operational import read_asset_pool, set_repo_asset, drop_repo_asset
-    from ....runtime.config import LOCAL_HARNESS_DIR
+    from ....paths import LOCAL_HARNESS_DIR
     if slug not in {it["slug"] for it in read_asset_pool()}:
         raise HTTPException(status_code=404, detail="asset not found in the pool")
     home = local_harness_root(body.context_id) / "constitution"
