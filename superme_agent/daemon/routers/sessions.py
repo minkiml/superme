@@ -16,34 +16,58 @@ router = APIRouter()
 async def sessions_list(context_id: str = "global", mode: str | None = None,
                         sessions: SessionStore = Depends(get_sessions),
                         dev: DevKnowledgeService = Depends(get_dev)) -> list[dict]:
-    """SuperMe's own past sessions for a context, newest first. `mode` (core|dev) scopes. A session
-    stamped to a work-item carries its `item_id` + resolved `item_title`, so the chat rail can show
-    (and clear) the work-item indicator straight from the session, not client-held binding state."""
+    """SuperMe's own past CHANNELS for a context, newest first. `mode` (core|dev) scopes.
+
+    ONE ROW PER WORK-ITEM, not per session. An item runs several threads — one per phase, plus the
+    headless build/vet pair — but the owner has a single channel to each item: the whole item is
+    what they address, and the phase decides which agent answers (`ws.resolve_item_session` picks
+    the current phase's thread and redirects any other into it). Listing threads instead of channels
+    put an item on screen once per phase under one identical title, and since the body a work-item
+    row opens is the item's TIMELINE — every phase, already merged — those rows differed in nothing
+    the owner could see or act on. They were duplicates.
+
+    A channel's `id` is an ADDRESS for the item, not a claim about which thread takes the next turn:
+    the daemon resolves the talker from the phase when the turn is sent. `message_count` is the
+    item's total across its threads; `updated_at` is its most recent word.
+    """
     ctx = contexts.resolve(context_id, mode or "core")
     rows = sessions.list(ctx, mode=mode)
-    # Resolve each work-item session's title once (cache by id — the list is small, localhost).
-    if ctx.internal_root:
-        dev_root, titles, gone = ctx.internal_root / "dev", {}, {}
-        for r in rows:
-            iid = r.get("item_id")
-            if not iid:
-                continue
-            if iid not in titles:
-                item = dev.read_work_item(dev_root, iid) or {}
-                titles[iid] = item.get("title") or iid
-                gone[iid] = not item
-            r["item_title"] = titles[iid]
-            # A session can outlive its item when the folder leaves out of band (a reset, a hand
-            # delete). The startup reconciler retires those, but a folder can vanish while the
-            # daemon is up — so the surface says so rather than offering a live composer over a
-            # thread with nothing behind it. Stated as a FIELD, not inferred from the title
-            # falling back to the id, because that fallback is also what a title-less item shows.
-            r["item_gone"] = gone[iid]
-            # Upgrade the preset to the item's TITLE + its short id (keeps same-titled items apart) —
-            # but never over an owner rename.
-            if not r.get("has_override"):
-                r["title"] = f"Work-item · {titles[iid]} · {short_item_id(iid)}"
-    return rows
+    if not ctx.internal_root:
+        return rows
+    dev_root = ctx.internal_root / "dev"
+    out: list[dict] = []
+    channels: dict[str, dict] = {}
+    for r in rows:
+        iid = r.get("item_id")
+        if not iid:
+            r["thread_ids"] = [r["id"]]
+            out.append(r)
+            continue
+        chan = channels.get(iid)
+        if chan is not None:      # another thread of an item already on screen — fold it in
+            chan["thread_ids"].append(r["id"])
+            chan["message_count"] += r.get("message_count") or 0
+            if (r.get("updated_at") or "") > (chan.get("updated_at") or ""):
+                chan["updated_at"] = r["updated_at"]
+            continue
+        item = dev.read_work_item(dev_root, iid) or {}
+        title = item.get("title") or iid
+        chan = dict(r)
+        chan["thread_ids"] = [r["id"]]
+        chan["item_title"] = title
+        # A channel can outlive its item when the folder leaves out of band (a reset, a hand
+        # delete). The startup reconciler retires those, but a folder can vanish while the daemon
+        # is up — so the surface says so rather than offering a live composer over a thread with
+        # nothing behind it. Stated as a FIELD, not inferred from the title falling back to the id,
+        # because that fallback is also what a title-less item shows.
+        chan["item_gone"] = not item
+        # The item's TITLE + its short id (keeps same-titled items apart) — but never over an
+        # owner rename. The newest thread's rename is the channel's, since it is the channel.
+        if not r.get("has_override"):
+            chan["title"] = f"Work-item · {title} · {short_item_id(iid)}"
+        channels[iid] = chan
+        out.append(chan)
+    return out
 
 
 @router.get("/sessions/{session_id}", response_model=SessionDetail)
@@ -78,10 +102,11 @@ async def session_rename(session_id: str, body: SessionRenameBody,
 @router.delete("/sessions/{session_id}", response_model=SessionDeleteResponse)
 async def session_delete(session_id: str, context_id: str = "global",
                          sessions: SessionStore = Depends(get_sessions)) -> dict:
-    """Delete a session (session-deletion-trace-model). One tier only: a hard delete of the
-    session's resumable material — its spine row AND its transcript JSONL on disk — so it leaves the
-    picker and can't be reworked. Its runs + token trace are PRESERVED (never deleted) and stamped
+    """Delete a CHANNEL (session-deletion-trace-model) — the row as the owner sees it, so a
+    work-item drops all of its phase threads and a general chat drops itself. One tier only: a hard
+    delete of the resumable material — spine row AND transcript JSONL on disk — so it leaves the
+    picker and can't be reworked. Runs + token trace are PRESERVED (never deleted) and stamped
     `session_fate='deleted'` so the activity log shows the origin session is gone. Irreversible."""
     ctx = contexts.resolve(context_id)
-    removed = sessions.delete(ctx, session_id, cause="deleted")
-    return {"ok": True, "id": session_id, "purged": removed}
+    removed = sessions.delete_channel(ctx, session_id, cause="deleted")
+    return {"ok": True, "id": session_id, "purged": bool(removed)}

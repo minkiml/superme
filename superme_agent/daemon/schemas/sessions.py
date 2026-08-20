@@ -29,6 +29,11 @@ class SessionSummary(BaseModel):
     # Durable session KIND (session-kinds-diagnose): 'diagnosis' | 'onboarding' | 'work_item' |
     # 'general' | null. The chat picker derives the category chip from this (+ item_id).
     kind: str | None = None
+    # Every thread this row stands for. A work-item channel collapses one thread per phase, and the
+    # daemon answers a turn from whichever the phase names — so the id that comes back from a run is
+    # often NOT `id`. The rail matches the active session against this list to know it is still on
+    # the same channel. A general chat is its own single thread.
+    thread_ids: list[str] = []
 
 
 class SessionDetail(BaseModel):

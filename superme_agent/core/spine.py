@@ -2021,10 +2021,15 @@ class SystemSpine:
     # --- counts (for repo×scope summaries on the monitor dashboard) -------------
     def session_count(self, repo_id: str, mode: str | None = None, *,
                       include_agent_threads: bool = False) -> int:
-        """How many sessions this repo (× mode) has. Counts CONVERSATIONS by default — the threads
-        the owner can open and take a turn in — so the number agrees with the session picker.
-        `include_agent_threads` adds the headless build/vet threads (kind_profiles.AGENT_THREAD_KINDS)
-        for a genuine total. A NULL kind is a legacy pre-roles session: a conversation."""
+        """How many CHANNELS this repo (× mode) has — the rows the owner sees in the picker, so the
+        tile and the list can never disagree.
+
+        A channel is one addressable conversation, not one thread. A work-item runs a thread per
+        phase but is ONE channel (the router collapses them; the phase decides which agent answers),
+        so its threads count once — hence COUNT(DISTINCT item_id), with each item-less session
+        standing for itself. `include_agent_threads` adds the headless build/vet threads
+        (kind_profiles.AGENT_THREAD_KINDS) for a genuine thread total; those fold into their item's
+        channel either way. A NULL kind is a legacy pre-roles session: a conversation."""
         where = ["repo_id=?"]
         args: list = [repo_id]
         if mode is not None:
@@ -2034,8 +2039,9 @@ class SystemSpine:
             where.append(f"(kind IS NULL OR kind NOT IN ({','.join('?' * len(AGENT_THREAD_KINDS))}))")
             args.extend(AGENT_THREAD_KINDS)
         with self._conn() as c:
-            return c.execute(f"SELECT COUNT(*) FROM session WHERE {' AND '.join(where)}",
-                             args).fetchone()[0]
+            return c.execute(
+                f"SELECT COUNT(DISTINCT COALESCE(item_id, id)) FROM session"
+                f" WHERE {' AND '.join(where)}", args).fetchone()[0]
 
     def run_count(self, repo_id: str, mode: str | None = None) -> int:
         where = ["repo_id=?"]

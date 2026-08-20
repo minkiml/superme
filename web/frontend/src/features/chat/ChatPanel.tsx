@@ -114,7 +114,12 @@ export default function ChatPanel({
   // opened (work-item card OR picker) and clears when you switch to a general session. `binding` is
   // only an OPTIMISTIC fallback for a just-clicked card whose session isn't listed yet (or an item
   // that has no session at all yet).
-  const activeSess = sessions.sessions.find((s) => s.id === sessions.activeId)
+  // Matched against the channel's THREADS, not just its row id: a work-item row stands for one
+  // thread per phase, and a finished turn hands back whichever thread the phase named — so an id
+  // that is not the row's own is still this same channel, and the timeline must not blink out.
+  const activeSess = sessions.sessions.find(
+    (s) => s.id === sessions.activeId || (s.thread_ids ?? []).includes(sessions.activeId ?? ''),
+  )
   const stampedItem = activeSess?.item_id
     ? { id: activeSess.item_id, title: activeSess.item_title || activeSess.item_id }
     : null

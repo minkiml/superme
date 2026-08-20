@@ -91,6 +91,38 @@ def _reconcile_orphaned_sessions() -> None:
         log.exception("orphaned-session reconciliation failed (non-fatal)")
 
 
+def _reconcile_expired_transcripts() -> None:
+    """Retire sessions whose TRANSCRIPT is gone — the other way a row outlives what it points at.
+
+    The CLI garbage-collects its own transcripts on a retention clock (`cleanupPeriodDays`, 30 by
+    default), so this is not an anomaly to heal but a deadline every session eventually meets: at
+    day 30 the JSONL leaves and the row keeps standing. Nothing read it, so the row became a
+    counted-but-unopenable ghost — the repo tile counted it, the picker silently dropped it at the
+    missing-transcript check, and because it never appeared in a list the owner had no way to
+    remove it.
+
+    Retired, not deleted-by-the-owner: nobody chose to drop the conversation, its resume material
+    simply expired. `sessions.delete` preserves the run trace and stamps it `session_fate=retired`
+    (never-delete-logs), so the activity log still shows what the session did.
+
+    Only ever acts on a MISSING file. A read failure is not a missing file, so a permissions blip
+    or an unmounted home can never be mistaken for expiry."""
+    try:
+        for rid in app_state.spine.repos():
+            ctx = contexts.resolve(rid, "dev")
+            for s in app_state.spine.sessions_for_repo(rid):
+                sid = str(s.get("id") or "")
+                if not sid or app_state.sessions.has_transcript(ctx, sid):
+                    continue
+                try:
+                    app_state.sessions.delete(ctx, sid, cause="retired")
+                    log.info("retired session %s — its transcript has expired", sid[:8])
+                except Exception:
+                    log.exception("expired-transcript retire failed %s", sid)
+    except Exception:
+        log.exception("expired-transcript reconciliation failed (non-fatal)")
+
+
 def _reconcile_worktrees() -> None:
     """Startup reconciliation (workspace-workflow S4/D4, nimbalyst punch-list): recorded
     worktrees vs disk vs branches, per repo. Heals a kill-mid-create (branch exists, dir missing
@@ -335,6 +367,10 @@ async def lifespan(app: FastAPI):
     # the backfill so a session that was merely UNSTAMPED is claimed by its item first, and never
     # mistaken for an orphan.
     _reconcile_orphaned_sessions()
+    # …and the third way a session row outlives its subject: the CLI's transcript retention clock
+    # expired the JSONL out from under it. Runs after both passes above so a row is only ever
+    # judged on its transcript once its item question is settled.
+    _reconcile_expired_transcripts()
     # S4 git layer: heal recorded-worktree drift (kill-mid-create, deleted dirs, dropped terminal
     # cleanups) before any run can touch a tree.
     _reconcile_worktrees()

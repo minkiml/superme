@@ -20,11 +20,30 @@ from datetime import datetime, timezone
 from ..paths import CLAUDE_PROJECTS_DIR
 from .context import Context
 from .spine import SystemSpine, get_spine
+from .kind_profiles import is_conversation
 
 log = logging.getLogger("superme-agent")
 
 # Transcript record types that carry conversational text.
 _ROLE = {"user": "you", "assistant": "superme"}
+
+
+def _turn_count(messages: list[dict]) -> int:
+    """How many MESSAGES a transcript holds, counted the way the owner reads them: one turn is one
+    message, however many bubbles it renders as.
+
+    A single agent turn emits a text block per stretch of work — read the file, write the report,
+    report completion — and each lands as its own transcript record. Counting records made a
+    four-bubble reply read as "4 msgs" when the owner had been spoken to once. So consecutive
+    records from the same speaker are one message, which is exactly the grouping the timeline
+    already draws."""
+    turns = 0
+    prev: str | None = None
+    for m in messages:
+        if m["role"] != prev:
+            turns += 1
+            prev = m["role"]
+    return turns
 
 # Local-command echo artifacts the CLI injects (compact continuation, /command wrappers).
 # These aren't real conversation — skip them when replaying a session in the UI. Also the
@@ -170,6 +189,29 @@ class SessionStore:
         self._spine.delete_session_record(session_id, cause=cause)
         return self.discard_transcript(ctx, session_id, cwd=cwd)
 
+    def delete_channel(self, ctx: Context, session_id: str, *, cause: str = "deleted") -> int:
+        """Delete a whole CHANNEL — every thread the picker showed as one row. Returns how many.
+
+        A work-item is one conversation to the owner and several threads underneath (one per
+        phase), so dropping the row has to drop all of them: deleting only the one whose id the row
+        carried would leave the channel standing with a thread fewer, which reads as a delete that
+        did not work. A general chat is its own single thread and this is just `delete`.
+
+        Scoped to CONVERSATIONS. The item's headless build/vet threads are not part of what the
+        owner is dropping — they are the agents' working memory, never shown and never opened, and
+        the item's own disposal (close clearance, abandon) is what takes those."""
+        rec = self._spine.get_session(session_id) or {}
+        item_id = rec.get("item_id") or None
+        targets = [session_id]
+        if item_id:
+            targets = [str(r["id"]) for r in self._spine.sessions_for_repo(ctx.id)
+                       if r.get("item_id") == item_id and is_conversation(r.get("kind"))]
+            if session_id not in targets:
+                targets.append(session_id)
+        for sid in targets:
+            self.delete(ctx, sid, cause=cause)
+        return len(targets)
+
     def discard_transcript(self, ctx: Context, session_id: str, cwd=None) -> bool:
         """Delete a session's transcript JSONL from disk WITHOUT touching the index — for
         session-disposable runs (distill, …) whose session was never recorded, so there is no
@@ -197,6 +239,13 @@ class SessionStore:
         if cwd is None:
             cwd = (self._spine.get_session(session_id) or {}).get("cwd")
         return self._projects / _encode_cwd(cwd or ctx.cwd) / f"{session_id}.jsonl"
+
+    def has_transcript(self, ctx: Context, session_id: str) -> bool:
+        """Whether the session's resume material still exists on disk. The CLI expires transcripts
+        on its own retention clock, so a spine row can outlive its JSONL; the startup reaper asks
+        this before retiring one. Same path resolution as `_scan`, so the two can never disagree
+        about whether a session is openable."""
+        return self._transcript(ctx, session_id).exists()
 
     def _scan(self, ctx: Context, session_id: str) -> dict | None:
         """Parse a transcript into {title, messages, updated_at, message_count}.
@@ -239,7 +288,7 @@ class SessionStore:
             "title": title,
             "messages": messages,
             "updated_at": updated_at,
-            "message_count": len(messages),
+            "message_count": _turn_count(messages),
         }
 
     def transcript_mtime(self, ctx: Context, session_id: str) -> float | None:
@@ -276,6 +325,12 @@ class SessionStore:
             sid = rec["id"]
             sess_mode = rec.get("mode", "core")
             if mode and sess_mode != mode:
+                continue
+            # Agent threads are not conversations (kind_profiles.AGENT_THREAD_KINDS): build and vet
+            # are headless working memory the owner cannot open or answer in. `session_count` has
+            # always excluded them; this reader never did, so the picker offered rows the tile did
+            # not count and the two disagreed on every repo that had run a build.
+            if not is_conversation(rec.get("kind")):
                 continue
             scan = self._scan(ctx, sid)
             if scan is None:

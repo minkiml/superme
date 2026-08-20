@@ -112,9 +112,12 @@ export function useSessions(contextId: string, mode: ChatMode = 'core') {
   // A finished turn may mint a brand-new session id — claim it (and list it if new). `persist`
   // is false for bound (work-item) turns so they don't overwrite the general session.
   function claimSession(id: string, persist = true) {
-    const wasNew = !sessionRef.current
+    // Refresh when the list has never heard of this id — a first session, or a work-item channel
+    // whose phase just moved and answered from a thread minted this turn. Without it the row stays
+    // stale and the rail cannot tell the new thread belongs to a channel it is already showing.
+    const known = sessions.some((s) => s.id === id || (s.thread_ids ?? []).includes(id))
     setSession(id, persist)
-    if (wasNew) refreshSessions()
+    if (!sessionRef.current || !known) refreshSessions()
   }
 
   function appendMessage(m: Msg) {

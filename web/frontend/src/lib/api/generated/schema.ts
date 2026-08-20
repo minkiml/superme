@@ -154,9 +154,19 @@ export interface paths {
         };
         /**
          * Sessions List
-         * @description SuperMe's own past sessions for a context, newest first. `mode` (core|dev) scopes. A session
-         *     stamped to a work-item carries its `item_id` + resolved `item_title`, so the chat rail can show
-         *     (and clear) the work-item indicator straight from the session, not client-held binding state.
+         * @description SuperMe's own past CHANNELS for a context, newest first. `mode` (core|dev) scopes.
+         *
+         *     ONE ROW PER WORK-ITEM, not per session. An item runs several threads — one per phase, plus the
+         *     headless build/vet pair — but the owner has a single channel to each item: the whole item is
+         *     what they address, and the phase decides which agent answers (`ws.resolve_item_session` picks
+         *     the current phase's thread and redirects any other into it). Listing threads instead of channels
+         *     put an item on screen once per phase under one identical title, and since the body a work-item
+         *     row opens is the item's TIMELINE — every phase, already merged — those rows differed in nothing
+         *     the owner could see or act on. They were duplicates.
+         *
+         *     A channel's `id` is an ADDRESS for the item, not a claim about which thread takes the next turn:
+         *     the daemon resolves the talker from the phase when the turn is sent. `message_count` is the
+         *     item's total across its threads; `updated_at` is its most recent word.
          */
         get: operations["sessions_list_sessions_get"];
         put?: never;
@@ -5829,6 +5839,11 @@ export interface components {
             item_gone: boolean;
             /** Kind */
             kind?: string | null;
+            /**
+             * Thread Ids
+             * @default []
+             */
+            thread_ids: string[];
         };
         /**
          * SpawnedFrom
