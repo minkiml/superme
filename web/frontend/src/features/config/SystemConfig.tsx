@@ -5,6 +5,9 @@ import Dropdown from '@/ui/Dropdown'
 import { RepoIcon } from '@/lib/repoIcons'
 import type { OrbitRepo } from '@/features/shell/useCommandStats'
 import { CONFIG_SECTIONS, useParam, setParam, type ConfigSection } from '@/lib/router'
+import { useLive } from '@/lib/live'
+import { K } from '@/lib/live/keys'
+import { getMemoryStats } from '@/lib/api'
 import General from './sections/General'
 import LearningConfig from './sections/Learning'
 import Identity from './sections/Identity'
@@ -37,7 +40,7 @@ const GROUPS: Group[] = [
     name: 'System',
     rows: [
       { id: 'general', label: 'General', icon: SlidersHorizontal },
-      { id: 'learning', label: 'Learning', icon: Brain },
+      { id: 'learning', label: 'Auto-learning', icon: Brain },
     ],
   },
   {
@@ -103,6 +106,14 @@ export default function SystemConfig({ repos, initialRepoId, onClose }: {
   const [repoId, setRepoId] = useState(initialRepoId ?? 'global')
   const repo = repos.find((r) => r.id === repoId) ?? repos.find((r) => r.id === 'global') ?? repos[0] ?? null
 
+  // What is waiting on YOU in the picked repo — proposals at gate 1 plus drafts at gate 2. It is
+  // read by the SHELL rather than the pane, because the point of a badge is to be seen before you
+  // click: a queue you only discover by opening it is a queue you forget. Same cache key the
+  // Learning pane subscribes to, so the two cost one request between them.
+  const mem = useLive(repo ? K.memoryStats(repo.id) : null, () => getMemoryStats(repo!.id), 0)
+  const gateCount = (mem.data?.candidates.pending_proposals ?? 0) + (mem.data?.candidates.drafted_proposals ?? 0)
+  const badges: Partial<Record<ConfigSection, number>> = { plearning: gateCount }
+
   function name(r: OrbitRepo) { return r.id === 'global' ? 'SuperMe Hub' : r.label }
 
   return (
@@ -138,6 +149,14 @@ export default function SystemConfig({ repos, initialRepoId, onClose }: {
                   >
                     <Icon size={15} className={on ? 'text-fg' : 'text-faint'} />
                     <span className="min-w-0 flex-1 truncate">{r.label}</span>
+                    {!!badges[r.id] && (
+                      <span
+                        title={`${badges[r.id]} waiting at a gate`}
+                        className="shrink-0 rounded-full bg-warn px-1.5 text-[10px] font-bold text-on-accent"
+                      >
+                        {badges[r.id]}
+                      </span>
+                    )}
                     {g.project && repo && repo.id !== 'global' && repo.icon && (
                       <RepoIcon name={repo.icon} size={12} color={repo.color} className="shrink-0 opacity-70" />
                     )}

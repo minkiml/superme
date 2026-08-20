@@ -4,10 +4,8 @@ import { colorFor } from '@/lib/palette'
 import { RepoIcon } from '@/lib/repoIcons'
 import type { OrbitRepo } from '@/features/shell/useCommandStats'
 import { getProjectStatus, getAttention, type AttentionBadge, type WorkItem } from '@/lib/api'
-import { setRepoGit, getRepoBranches } from '@/lib/api/system'
-import { invalidate, useLive } from '@/lib/live'
+import { useLive } from '@/lib/live'
 import { K } from '@/lib/live/keys'
-import Dropdown from '@/ui/Dropdown'
 import DevDashboard from './DevDashboard'
 import RoadmapTab from './RoadmapTab'
 import ActivityLog from './ActivityLog'
@@ -19,8 +17,9 @@ import { useContainerWidth, railTight } from '@/lib/layout'
 // ("Open dev workspace"). It takes over the main area (the shell owns the header + tabs) and holds
 // this repo's WORK: the plan→build pipeline, the general knowledge behind it, and its activity log.
 //
-// Its learning queue, local artifacts and prompt probe left for System config · Project, where the
-// repo picker governs all four at once. What stays here is what you watch while work is moving.
+// Its learning queue, local artifacts, prompt probe and both landing knobs left for System config ·
+// Project, where the repo picker governs them all at once. What stays here is what you watch while
+// work is moving — and the only control is the one that moves you to another project's board.
 
 // Graph is no longer a tab — it's the Kanban⇄Graph toggle inside the Pipeline workspace panel
 // (same population, two projections).
@@ -31,20 +30,6 @@ import { useContainerWidth, railTight } from '@/lib/layout'
 // `workspace` is Pipeline's other PANE, not a seventh tab: it addresses the board where `pipeline`
 // addresses the capture queue. Both light the same rail entry — see `pipelineTab` below.
 type Tab = 'pipeline' | 'workspace' | 'project' | 'activity'
-// HOW this repo's work lands (workflow-renovation-v2 §2.2): does the diff get its own review gate
-// before it lands. Every repo starts on `fast`. Both landing knobs live in THIS header, beside the
-// repo they govern, rather than in the system-wide Quick config — the place you decide them is the
-// place you watch that project's work reach the review gate.
-//
-// The options are bare words. The meaning ("approve merges" / "approve opens a PR") moved to the
-// trigger's tooltip: in a header the picker has to read at a glance, and a sentence per option makes
-// the two look alike at exactly the width where they must not.
-const REVIEW_MODES = [
-  { value: 'fast', label: 'Fast' },
-  { value: 'strict', label: 'Strict' },
-]
-const REVIEW_MODE_HELP = 'How work lands · Fast: approving an item merges it. '
-  + 'Strict: approving opens a PR and you merge from the PR page.'
 
 const TABS: { id: Exclude<Tab, 'workspace'>; label: string; icon: typeof GitBranch }[] = [
   { id: 'pipeline', label: 'Pipeline', icon: GitBranch },
@@ -96,27 +81,6 @@ export default function DevWorkspace({
   // rather than the two they used to fire on separate clocks.
   const attn = useLive(K.devAttention(repo.id), () => getAttention(repo.id))
   const badge: AttentionBadge | null = attn.data?.badge ?? null
-
-  // The two landing knobs. Held locally so a pick answers immediately (the roster they come from
-  // refreshes on its own clock), and re-seeded whenever the header points at a different repo —
-  // otherwise a quick-switch would show the previous project's settings.
-  const [mode, setMode] = useState(repo.reviewMode)
-  useEffect(() => { setMode(repo.reviewMode) }, [repo.id, repo.reviewMode])
-  // The anchor shows what git actually targets — the RESOLVED branch, not the stored setting, which
-  // is null until someone pins one. Options come from the repo's real branches: the anchor refuses
-  // on a branch that doesn't exist, so a free-text field could only ever store a future failure.
-  const branches = useLive(K.repoBranches(repo.id), () => getRepoBranches(repo.id), 0)
-  const [anchor, setAnchor] = useState<string>('')
-  useEffect(() => {
-    setAnchor(repo.anchorBranch ?? branches.data?.anchor ?? repo.resolvedAnchor ?? '')
-  }, [repo.id, repo.anchorBranch, repo.resolvedAnchor, branches.data?.anchor])
-  // The list is fetched once (branches change rarely), so it can be older than the anchor the
-  // server just told us about — a branch created or deleted outside this tab is not in it. Keep the
-  // CURRENT anchor in the options whatever the list says: a dropdown showing a value it cannot
-  // offer is a one-way door, since picking anything else loses the way back until a reload.
-  const anchorOptions = Array.from(
-    new Set([...(branches.data?.branches ?? []), ...(anchor ? [anchor] : [])]),
-  ).map((b) => ({ value: b, label: b }))
 
   // Onboarding gate (S5·B): a repo whose project memory isn't established yet (PRD defines no
   // deliverables) shows the onboarding front door instead of the work tabs — you can't take on work
@@ -194,39 +158,6 @@ export default function DevWorkspace({
           {/* The cluster wraps INSIDE itself once even its own line is too narrow — the pickers keep
               their widths (each names a value, and a squeezed picker names nothing) and stack. */}
           <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
-            {/* The landing pair — HOW the work lands (review bar) and WHERE (anchor branch), decided
-                where the work is watched. Hidden behind the onboarding gate for the same reason the
-                tabs are: a project with no memory has no work to land yet. No labels — each picker
-                names its own value, and a header earns its width back by trusting the tooltips. */}
-            {established === true && (
-              <>
-                <Dropdown
-                  value={mode}
-                  options={REVIEW_MODES}
-                  onChange={(v) => { setMode(v); setRepoGit(repo.id, { review_mode: v }).catch(() => {}) }}
-                  align="right"
-                  width="w-24"
-                  title={REVIEW_MODE_HELP}
-                />
-                {anchorOptions.length > 0 && (
-                  <Dropdown
-                    value={anchor}
-                    options={anchorOptions}
-                    onChange={(v) => {
-                      setAnchor(v)
-                      setRepoGit(repo.id, { anchor_branch: v })
-                        .then(() => invalidate(K.repoBranches(repo.id)))
-                        .catch(() => {})
-                    }}
-                    align="right"
-                    width="w-40"
-                    title={repo.anchorError
-                      ? `Anchor branch not found: ${repo.anchorError}`
-                      : 'Anchor branch — what every git site targets: branch-from base, sync source, merge target'}
-                  />
-                )}
-              </>
-            )}
             {onSwitch && others.length > 0 && (
               <RepoSwitcher current={repo} others={others} onSwitch={onSwitch} />
             )}

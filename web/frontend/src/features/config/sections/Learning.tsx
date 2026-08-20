@@ -29,9 +29,9 @@ export default function LearningConfig() {
   return (
     <>
       <PaneHead
-        title="Learning"
+        title="Auto-learning"
         scope="System"
-        lede="Everything that governs how SuperMe learns: whether it runs, when it fires, and who does the work."
+        lede="Everything that governs how SuperMe learns on its own: whether it runs, when it fires, and who does the work. What each project actually learned is under that project."
       />
       {sys.error && !sys.data ? (
         <div className="text-sm text-danger">Couldn’t load system config — {String(sys.error)}</div>
