@@ -15,12 +15,12 @@ from ...app_state import (
     get_dev, get_dev_store, get_sessions, get_spine,
 )
 from ...deps import dev_root as _dev_root
-from ....core import artifacts, kind_profiles, status_router
+from ....core import artifacts, status_router
 from ....gateway import contexts
 from ...services.runs import (
     DEFAULT_RUN_MODEL, _begin_run, _run_background_plan, build_item_timeline,
 )
-from ...services import scheduler, gates, clearance
+from ...services import gates
 from ...schemas.dev.work_items import (AuthorizeBody, AutopilotBody, DocEditBody, PlanBody,
                                        PlanResponse, PromptExtractionStatusResponse, ScaffoldBody,
                                        WorkItemAdvanceResponse, WorkItemArtifactsResponse,
