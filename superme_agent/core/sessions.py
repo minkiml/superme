@@ -1,15 +1,10 @@
 """SessionStore — list and replay past conversations for a Context.
 
-The Claude Agent SDK already writes a full transcript JSONL per session (the same file
-`resume` reads from), keyed by cwd under ~/.claude/projects/<encoded-cwd>/<id>.jsonl.
-That file is the source of truth for history — we never keep a parallel message log.
+The SDK already writes a transcript JSONL per session, keyed by cwd. That file is the source of
+truth for history; we never keep a parallel message log.
 
-But that projects folder is shared: SuperMe's sessions and the owner's own Claude Code
-sessions land there together (same cwd). So *which* sessions are SuperMe's comes from the
-system spine's session table (which replaced the cross-surface `.sessions.json` in WI-3);
-here we only turn those ids into titles and replayable bubbles by reading their transcripts.
-
-Surface-agnostic: a Context carries its cwd, which is all we need to find its transcripts.
+The projects folder is shared with the owner's own Claude Code sessions, so WHICH sessions are
+SuperMe's comes from the spine. Here we only turn those ids into titles and bubbles.
 """
 
 import re
@@ -29,14 +24,11 @@ _ROLE = {"user": "you", "assistant": "superme"}
 
 
 def _turn_count(messages: list[dict]) -> int:
-    """How many MESSAGES a transcript holds, counted the way the owner reads them: one turn is one
-    message, however many bubbles it renders as.
+    """How many MESSAGES a transcript holds, counted the way the owner reads them: one turn is
+    one message, however many bubbles it renders as.
 
-    A single agent turn emits a text block per stretch of work — read the file, write the report,
-    report completion — and each lands as its own transcript record. Counting records made a
-    four-bubble reply read as "4 msgs" when the owner had been spoken to once. So consecutive
-    records from the same speaker are one message, which is exactly the grouping the timeline
-    already draws."""
+    An agent turn emits a text block per stretch of work, each its own record, so counting records
+    read a four-bubble reply as "4 msgs". Consecutive records from one speaker are one message."""
     turns = 0
     prev: str | None = None
     for m in messages:
@@ -45,9 +37,7 @@ def _turn_count(messages: list[dict]) -> int:
             prev = m["role"]
     return turns
 
-# Local-command echo artifacts the CLI injects (compact continuation, /command wrappers).
-# These aren't real conversation — skip them when replaying a session in the UI. Also the
-# internal background-run trigger (orchestrator plumbing, not something the owner typed).
+# CLI echo artifacts and the internal background-run trigger — plumbing, not conversation.
 _NOISE_PREFIXES = (
     "This session is being continued from a previous conversation",
     "<command-name>",
@@ -55,24 +45,16 @@ _NOISE_PREFIXES = (
     "<command-args>",
     "<local-command-stdout>",
     "<local-command-caveat>",
-    # `kernel_speech.intake_trigger` — ONE PER INTAKE SKILL, and the list must cover every skill
-    # `_background_intake_run` can be fired with. It carried only plan + triage for months, because
-    # those were the only background intake runners when it was written; `investigate`, `review`,
-    # `close` and `itemize` grew their own runners later and nobody came back here. The result was
-    # visible to the owner: opening one of those sessions showed the kernel's order to itself as
-    # THEIR first message (measured 2026-08-13 on 9a78970264d1 — the triage thread opened clean and
-    # the investigate thread opened with "Run superme-dev:investigate for work-item …" attributed
-    # to "you"). Prefix match, so the re-entry delta block appended after this sentence is dropped
-    # with it.
+    # ONE PER INTAKE SKILL — every skill `_background_intake_run` can fire. Miss one and the
+    # kernel's order to itself opens that session as the OWNER's first message.
     "Run superme-dev:plan for work-item",
     "Run superme-dev:triage for work-item",
     "Run superme-dev:investigate for work-item",
     "Run superme-dev:review for work-item",
     "Run superme-dev:close for work-item",
     "Run superme-dev:itemize for work-item",
-    # The pre-compaction handoff trigger (compaction.run_handoff_turn) — kernel plumbing on the
-    # item's own thread, and the turn right before the transcript is replaced. Replaying it would
-    # show the owner a machine asking for a checkpoint in the middle of their conversation.
+    # The pre-compaction handoff trigger: replaying it shows a machine asking itself for a
+    # checkpoint mid-conversation.
     "This session is about to be compacted",
 )
 
@@ -84,10 +66,8 @@ def _is_noise(record: dict, text: str) -> bool:
     return text.lstrip().startswith(_NOISE_PREFIXES)
 
 
-# Kernel-injected birth blocks prepended to a session's FIRST user prompt (`<block>\n\n---\n\n<real
-# prompt>`): the work-item orient block and the diagnosis subject-run trace. On replay we show only
-# the real prompt — the block is plumbing, and dropping the whole record would hide what the user
-# actually typed on an interactive birth turn.
+# Prepended to a session's FIRST user prompt. Replay shows only the real prompt after them;
+# dropping the whole record would hide what the owner typed.
 _BIRTH_BLOCK_HEADERS = (
     "### Work-item orientation",
     "### Subject activity-run trace",
@@ -95,9 +75,8 @@ _BIRTH_BLOCK_HEADERS = (
 
 
 def _strip_birth_block(text: str) -> str:
-    """Cut a kernel-injected birth block off the front of a prompt, keeping the real message after
-    the `---` separator (empty when the turn was pure plumbing — e.g. a background plan trigger,
-    which then falls to the noise filter)."""
+    """Cut a kernel-injected birth block off a prompt, keeping the real message after the `---`.
+    Empty when the turn was pure plumbing, which then falls to the noise filter."""
     if not text.lstrip().startswith(_BIRTH_BLOCK_HEADERS):
         return text
     parts = text.split("\n\n---\n\n", 1)
@@ -110,16 +89,13 @@ def _short_id(sid: str) -> str:
 
 
 def short_item_id(item_id: str | None) -> str:
-    """The distinguishing tail of a work-item id — `...-536a40` → `536a40`, or the whole opaque token
-    when it has no hyphens — so same-titled items stay distinguishable in a session title."""
+    """The distinguishing tail of a work-item id, so same-titled items stay apart in a title."""
     return (item_id or "").split("-")[-1] or (item_id or "")
 
 
 def _preset_title(kind: str, item_id: str | None, subject_run_id, sid: str) -> str:
-    """The computed DEFAULT title for a session when the owner hasn't set an override — a consistent,
-    identity-bearing preset by kind (session-kinds-diagnose). work_item falls back to the item's short
-    id here; the router upgrades it to the item's TITLE + short id (which it resolves). Always editable:
-    an owner override wins over this in list()/read()."""
+    """The DEFAULT title when the owner has set no override — a consistent, identity-bearing
+    preset by kind. The router upgrades a work-item one to the item's real title."""
     if kind in ("intake", "build", "vet"):   # role-stamped item sessions (build-vet-loop §1.3)
         return f"Work-item · {short_item_id(item_id) if item_id else _short_id(sid)} · {kind}"
     if kind == "work_item":                  # legacy pre-roles item sessions (kind derived)
@@ -160,28 +136,20 @@ class SessionStore:
         self._projects = CLAUDE_PROJECTS_DIR
 
     def record(self, ctx: Context, session_id: str | None) -> None:
-        """Claim a web-created session for this context's workspace (idempotent). The
-        session inherits the Context's mode (core|dev) so the picker can scope by it."""
+        """Claim a web-created session for this workspace (idempotent). It inherits the Context's
+        mode, so the picker can scope by it."""
         if not session_id:
             return
         self._spine.record_session(session_id, ctx.cwd, surface="web", mode=ctx.mode,
                                    repo_id=ctx.id)
 
     def delete(self, ctx: Context, session_id: str, *, cause: str = "deleted") -> bool:
-        """The single session deletion (session-deletion-trace-model). Hard-deletes the session's
-        resumable material — its spine row + its transcript JSONL on disk — so it leaves the picker
-        and can't be reworked (deletion means "won't rework this conversation"). Its RUNS +
-        run_events + run_artifacts (the activity + token trace) are PRESERVED and stamped
-        `session_fate=cause` — 'deleted' (owner drop) · 'retired' (natural workflow end). Dev-activity
-        events and knowledge are untouched. Returns True if the transcript file was removed.
+        """The single session deletion. Hard-deletes the resumable material — spine row and
+        transcript — so it leaves the picker. Runs, events and artifacts are PRESERVED and stamped
+        `session_fate=cause`. Returns True if the transcript file went.
 
-        This is the ONLY deletion — the former forget (index-only) / purge (index+transcript) two-tier
-        is gone; every delete is a full hard delete now.
-
-        The transcript is located by the SESSION'S recorded cwd, not the caller's: role sessions
-        (build/vet) live under their WORKTREE's encoded projects folder, and a repo-cwd caller
-        (abandon/complete/delete routes) would otherwise miss them (bv-s3 live finding). Read
-        before the row is deleted; falls back to ctx.cwd when the row is already gone."""
+        Located by the SESSION'S recorded cwd, not the caller's: role sessions live under their
+        worktree's projects folder and a repo-cwd caller would otherwise miss them."""
         if not session_id:
             return False
         rec = self._spine.get_session(session_id)
@@ -192,14 +160,9 @@ class SessionStore:
     def delete_channel(self, ctx: Context, session_id: str, *, cause: str = "deleted") -> int:
         """Delete a whole CHANNEL — every thread the picker showed as one row. Returns how many.
 
-        A work-item is one conversation to the owner and several threads underneath (one per
-        phase), so dropping the row has to drop all of them: deleting only the one whose id the row
-        carried would leave the channel standing with a thread fewer, which reads as a delete that
-        did not work. A general chat is its own single thread and this is just `delete`.
-
-        Scoped to CONVERSATIONS. The item's headless build/vet threads are not part of what the
-        owner is dropping — they are the agents' working memory, never shown and never opened, and
-        the item's own disposal (close clearance, abandon) is what takes those."""
+        A work-item is one conversation with several threads underneath, so dropping the row drops all
+        of them; leaving one behind reads as a delete that did not work. Scoped to CONVERSATIONS: the
+        headless build/vet threads go with the item's own disposal, not with this."""
         rec = self._spine.get_session(session_id) or {}
         item_id = rec.get("item_id") or None
         targets = [session_id]
@@ -213,12 +176,8 @@ class SessionStore:
         return len(targets)
 
     def discard_transcript(self, ctx: Context, session_id: str, cwd=None) -> bool:
-        """Delete a session's transcript JSONL from disk WITHOUT touching the index — for
-        session-disposable runs (distill, …) whose session was never recorded, so there is no
-        index entry to forget. Completes their disposability: the throwaway conversation leaves
-        no resumable trace on disk (the run is still logged in the spine's `run` table).
-        `cwd` overrides the projects-folder key when the session lived at a different cwd than
-        the caller's Context (worktree-born role sessions)."""
+        """Delete a transcript from disk WITHOUT touching the index — for disposable runs whose
+        session was never recorded. `cwd` overrides the projects-folder key for worktree-born sessions."""
         if not session_id:
             return False
         path = self._transcript(ctx, session_id, cwd=cwd)
@@ -232,19 +191,15 @@ class SessionStore:
 
     # --- transcript access ------------------------------------------------------
     def _transcript(self, ctx: Context, session_id: str, cwd=None):
-        """The session's transcript path. Keyed by the SESSION'S recorded cwd when the spine knows
-        it (role sessions born in a worktree live under the worktree's encoded projects folder —
-        a repo-cwd caller would miss them; bv-s3 live finding), else the caller's Context cwd
-        (unrecorded/disposable sessions). `cwd` short-circuits the lookup when already known."""
+        """The session's transcript path, keyed by the SESSION'S recorded cwd when the spine knows
+        it (worktree-born role sessions would otherwise be missed), else the caller's."""
         if cwd is None:
             cwd = (self._spine.get_session(session_id) or {}).get("cwd")
         return self._projects / _encode_cwd(cwd or ctx.cwd) / f"{session_id}.jsonl"
 
     def has_transcript(self, ctx: Context, session_id: str) -> bool:
-        """Whether the session's resume material still exists on disk. The CLI expires transcripts
-        on its own retention clock, so a spine row can outlive its JSONL; the startup reaper asks
-        this before retiring one. Same path resolution as `_scan`, so the two can never disagree
-        about whether a session is openable."""
+        """Whether the session's resume material still exists. The CLI expires transcripts on its
+        own clock, so a row can outlive its JSONL. Same path resolution as `_scan`."""
         return self._transcript(ctx, session_id).exists()
 
     def _scan(self, ctx: Context, session_id: str) -> dict | None:
@@ -292,8 +247,7 @@ class SessionStore:
         }
 
     def transcript_mtime(self, ctx: Context, session_id: str) -> float | None:
-        """The session transcript's last-modified epoch seconds, or None if missing — the idle
-        sweep's activity proxy (a session is idle when no message has landed for a while)."""
+        """The transcript's last-modified epoch seconds, or None — the idle sweep's activity proxy."""
         path = self._transcript(ctx, session_id)
         try:
             return path.stat().st_mtime if path.exists() else None
@@ -301,20 +255,17 @@ class SessionStore:
             return None
 
     def transcript_messages(self, ctx: Context, session_id: str) -> list[dict]:
-        """The session's ordered chat messages (oldest first), tools/thinking/noise dropped — the
-        raw material the capture sweep reads. Returns [] if the transcript is missing. Same parse
-        as the picker (`_scan`), so the watermark counts the same units the sweep consumes."""
+        """The session's ordered chat messages, tools and noise dropped — what the capture sweep
+        reads. Same parse as `_scan`, so the watermark counts the units the sweep consumes."""
         scan = self._scan(ctx, session_id)
         return scan["messages"] if scan else []
 
     def _workspace_rows(self, ctx: Context) -> list[dict]:
-        """This workspace's resumable session rows — the one membership answer `list`, `read` and
-        `rename` all use, so a thread cannot be listable but unreadable, or readable but unnameable.
+        """This workspace's resumable rows — the one membership answer `list`, `read` and `rename`
+        all use, so a thread cannot be listable but unreadable.
 
-        Scoped by REPO, not by cwd. A phase run executes with its cwd swapped to the item's worktree
-        (`~/.superme/worktrees/<repo>/<item>`) while `record` still stamps `repo_id=ctx.id` — so a
-        cwd match silently dropped every work-item thread from the picker, which is how a whole
-        research sweep could run and leave no conversation the owner could open."""
+        Scoped by REPO, not cwd: a phase run swaps its cwd to the item's worktree, so a cwd match
+        silently dropped every work-item thread from the picker."""
         return self._spine.sessions_for_repo(ctx.id, resumable_only=True)
 
     def list(self, ctx: Context, mode: str | None = None) -> list[dict]:
@@ -326,10 +277,8 @@ class SessionStore:
             sess_mode = rec.get("mode", "core")
             if mode and sess_mode != mode:
                 continue
-            # Agent threads are not conversations (kind_profiles.AGENT_THREAD_KINDS): build and vet
-            # are headless working memory the owner cannot open or answer in. `session_count` has
-            # always excluded them; this reader never did, so the picker offered rows the tile did
-            # not count and the two disagreed on every repo that had run a build.
+            # Build and vet are headless working memory the owner cannot open. `session_count` has
+            # always excluded them; this reader must too, or the tile and the list disagree.
             if not is_conversation(rec.get("kind")):
                 continue
             scan = self._scan(ctx, sid)
@@ -340,21 +289,17 @@ class SessionStore:
             override = rec.get("title")
             out.append({
                 "id": sid,
-                # Owner override wins; else a consistent identity preset by kind. (The transcript-
-                # derived scan title is no longer the default — owner picked preset-by-kind.)
+                # Owner override wins, else the preset by kind.
                 "title": override or _preset_title(eff_kind, item_id, rec.get("subject_run_id"), sid),
-                # Internal (dropped by the response_model): lets the router upgrade a NON-overridden
-                # work-item title to the item's resolved TITLE without clobbering an owner rename.
+                # Internal: lets the router upgrade a non-overridden title without clobbering a rename.
                 "has_override": bool(override),
                 "surface": rec.get("surface", "web"),
                 "mode": sess_mode,
                 "updated_at": scan["updated_at"],
                 "message_count": scan["message_count"],
-                # The durable work-item stamp (work-item-session-recognition-prd): non-null ⇒ this is
-                # a WORK-ITEM session. The title is resolved by the router (it has the dev service).
+                # Non-null ⇒ a work-item session. The router resolves its title.
                 "item_id": item_id,
-                # The session's durable KIND (session-kinds-diagnose): 'diagnosis' | 'onboarding' |
-                # 'work_item' | 'general' (NULL ⇒ general). Lets the chat picker label its category.
+                # The durable kind; NULL reads as general. Labels the picker's category.
                 "kind": rec.get("kind") or None,
             })
         out.sort(key=lambda s: s["updated_at"], reverse=True)

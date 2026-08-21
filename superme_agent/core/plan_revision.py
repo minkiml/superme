@@ -1,47 +1,19 @@
-"""The revision grammar of `artifacts/plan.md` (workflow-renovation-v2 §3-bis).
+"""The revision grammar of `artifacts/plan.md`.
 
-A `revise` sends review's conversation back to the plan phase — the ONLY way back, and plan is the
-only writer of this file. Regenerating plan.md wholesale re-creates solved problems every round and
-silently discards the `- [x]` progress build earned, so a revision instead **appends a block** and
-makes only the surgical edits it names. Untouched sections are provably untouched because nothing
-wrote them.
+A `revise` sends review back to plan, the only writer of this file. Regenerating it wholesale
+re-creates solved problems and discards the `- [x]` progress build earned, so a revision APPENDS
+a block and makes only the surgical edits it names.
 
-The document has three zones, in reading order — what we intended → how it changed → what is true
-now:
+    ## Intent · Design · Decisions      frozen prose
+    ## Revision log                     code-owned index
+    ## Revision r1 · r2 …               history, appended, never edited
+    ## Tasks · Verification plan        LIVE — always last, mutated in place
 
-    ## Intent · ## Design · ## Decisions & clarifications   frozen prose (Q&A stays append-only)
-    ## Revision log                                         CODE-OWNED mechanical index
-    ## Revision r1 — <ts> · ## Revision r2 — <ts>            HISTORY, appended, never edited
-    ## Tasks · ## Verification plan                          LIVE — always last, mutated in place
+The ordering IS the guarantee: nothing below `## Tasks` can contradict it.
 
-**The ordering IS the guarantee**: the live zone is pinned last, so nothing below `## Tasks` can
-contradict it. `_pin_live_zone` enforces that on every revision (and migrates a plan authored
-before this grammar), and the insert lands new blocks above it.
-
-The rules, all refusals rather than warnings:
-
-- **Scope is per CHANGE, not per revision.** One review conversation carries several concerns at
-  once — redesign the caching approach WHILE resuming the CLI tasks. A revision-level scope would
-  have to take the max of them, and `redesign` voids tasks, so the parts that were fine would lose
-  progress they earned. A revision is a SET of changes, each with its own reach.
-- **`resume` may not touch the plan.** This is the proportionality guard: an agent handed *"keep
-  going, you're close"* records that without editing anything. If it judges a real edit is needed
-  it must say `targeted` and trace it — so the scope is a CLAIM about how far the plan moved, not
-  decoration. (A `resume` change with ops is refused, and so is a `targeted`/`redesign` change with
-  none — the empty-op refusal that used to apply to every revision is what manufactured the
-  over-editing this grammar prevents.)
-- **`## Tasks` takes task-level ops** (add / edit one / remove one). A checkbox is real progress; a
-  section-level rewrite is legal only at `redesign` scope, where the old tasks are void.
-- **`## Decisions & clarifications` is append-only** — an answered question is a fact, not a draft.
-- **`## Revision log` and the `## Revision r<n>` blocks are CODE-OWNED**: the agent never writes
-  them and no op may target them. The log holds NO prose, so it can never become a second version
-  of the truth; it exists so a reader can see the shape of the history without scrolling it.
-
-`concerns` are sourced from CODE (the loop's typed exit, the authorization ledger) — never guessed
-by the agent — which is what makes the history queryable. `spend_at` records the meter reading at
-revision time: a revision opens a **generation**, and the loop's budget and recurrence guards read
-since the current revision, so another generation starts fresh. Only a revision opens a generation
-and only a human triggers a revision, so total spend stays owner-bounded.
+Scope is per CHANGE, not per revision — one conversation carries several concerns, and a
+revision-level scope would take the max, voiding tasks that were fine. `resume` may not touch
+the plan at all: it is the proportionality guard.
 """
 
 from __future__ import annotations
@@ -56,7 +28,7 @@ PLAN_FILE = "plan.md"
 LOG = "Revision log"
 TASKS = "Tasks"
 VET_PLAN = "Verification plan"
-LIVE = (TASKS, VET_PLAN)          # pinned last, in this order; `Tasks` first — build reads it more
+LIVE = (TASKS, VET_PLAN)  # pinned last, `Tasks` first — build reads it more
 APPEND_ONLY = ("Decisions & clarifications",)
 LEGACY_LOG = "Revisions"          # pre-§3-bis: one section holding `### r<n>` entries
 
@@ -64,19 +36,16 @@ SECTION_OPS = ("update", "append")
 TASK_OPS = ("add_task", "edit_task", "remove_task")
 OPS = (*SECTION_OPS, *TASK_OPS)
 SCOPES = ("resume", "targeted", "redesign")
-# Closed vocabulary (§3-bis.3). Code assigns these; `owner_judgment` covers the case where the
-# driver is purely the owner's read of the work.
+# Closed vocabulary, assigned by code. `owner_judgment` is the owner's own read.
 CONCERNS = ("vet_failure", "budget", "not_converging", "no_progress",
             "authorization_denied", "authorization_granted", "owner_judgment")
 
-# `- [ ] t3 — do the thing` → (prefix, state, id, dash, text). The template's grammar; a plan whose
-# tasks don't carry ids can still be revised by section op at redesign scope.
+# `- [ ] t3 — do the thing` → (prefix, state, id, dash, text).
 _TASK = re.compile(r"(?m)^(\s*[-*]\s+\[)([ xX])(\]\s*)(t\d+)(\s*—\s*)(.*)$")
 _REV_HEAD = re.compile(r"(?m)^##\s+Revision\s+(r\d+)\b(?:\s*—\s*(\S+))?")
 _LEGACY_REV = re.compile(r"(?m)^###\s+(r\d+)\b")
 _SPEND_AT = re.compile(r"(?m)^-\s*spend_at:\s*(\d+)")
-# `    - Tasks — t3 removed` in a revision block: an id the plan has USED, even if it no longer
-# appears in the live list. Read by `task_high_water` so numbers never get recycled.
+# An id the plan has USED, even if gone from the live list. Keeps numbers from recycling.
 _RETIRED_TASK = re.compile(r"(?m)^\s+-\s+" + TASKS + r"\s+—\s+t(\d+)\s")
 _HEADING = re.compile(r"^##\s+(.+?)\s*$")
 
@@ -99,9 +68,8 @@ def _read(item_dir: Path) -> str:
 
 
 def revision_ids(text: str) -> list[str]:
-    """Every recorded revision id in a plan's text, oldest first. Pre-§3-bis plans kept them as
-    `### r<n>` inside one `## Revisions` section — those still count, so an in-flight item's gate
-    check doesn't go red retroactively AND a new block never reuses a legacy number."""
+    """Every recorded revision id, oldest first. Legacy `### r<n>` entries still count, so an
+    in-flight item's gate does not go red retroactively and a new block never reuses a number."""
     ids = [m.group(1) for m in _REV_HEAD.finditer(text)]
     legacy = _LEGACY_REV.findall(_split_sections(text).get(LEGACY_LOG, ""))
     return [r for r in legacy if r not in ids] + ids
@@ -130,17 +98,15 @@ def _last_block(text: str) -> str:
 
 def spend_at(item_dir: Path) -> int:
     """The build+vet meter reading when the CURRENT revision opened — the boundary the loop
-    subtracts so each generation gets the whole budget. 0 for a plan never revised (and for
-    pre-§3-bis blocks, which recorded no reading: the item then meters from birth, as it did)."""
+    subtracts so each generation gets the whole budget. 0 for a plan never revised."""
     m = _SPEND_AT.search(_last_block(_read(item_dir)))
     return int(m.group(1)) if m else 0
 
 
 def derive_concerns(item_dir: Path) -> list[str]:
-    """What drove this revision, read off the record — never asserted by the agent (§3-bis.3): the
-    loop's typed exit and the evidence verdict from the generation that just ended, plus every
-    authorization resolved since the last revision. Falls back to `owner_judgment` when nothing
-    mechanical explains it — the owner simply wants something different."""
+    """What drove this revision, read off the record, never asserted by the agent: the loop's
+    typed exit, the evidence verdict, and authorizations resolved since the last revision. Falls
+    back to `owner_judgment` when nothing mechanical explains it."""
     from .artifacts import authorization_entries, read_cycle_outcomes
     item_dir = Path(item_dir)
     found: list[str] = []
@@ -163,8 +129,6 @@ def derive_concerns(item_dir: Path) -> list[str]:
     ordered = list(dict.fromkeys(found))          # de-duped, first-seen order
     return ordered or ["owner_judgment"]
 
-
-# --------------------------------------------------------------------------- validation
 
 def _validate_op(op, *, tag: str, scope: str, sections: dict, ids: list[str]) -> list[str]:
     if not isinstance(op, dict):
@@ -258,11 +222,8 @@ def validate(plan_text: str, changes: list) -> list[str]:
     return issues
 
 
-# --------------------------------------------------------------------------- section machinery
-
 def _replace_section(text: str, section: str, body: str) -> str:
-    # `[ \t]*\n` not `\s*\n`: a greedy `\s*` swallows the blank lines BELOW the heading into the
-    # heading group, so a body rewrite could never clear them.
+    # `[ \t]*\n` not `\s*\n`: a greedy `\s*` swallows the blank lines below the heading.
     m = re.search(rf"(?ms)^(##\s+{re.escape(section)}[ \t]*\n)(.*?)(?=^##\s|\Z)", text)
     if not m:
         raise ValueError(f"section '## {section}' vanished from plan.md — re-read it and restage")
@@ -274,8 +235,8 @@ def _section_body(text: str, section: str) -> str:
 
 
 def _blocks(text: str) -> tuple[str, list[tuple[str, list[str]]]]:
-    """(preamble, [(heading, its lines including the heading)]) — the document as an ordered list
-    of `##` sections, so they can be reordered without touching their contents."""
+    """(preamble, [(heading, its lines)]) — the document as ordered `##` sections, so they can be
+    reordered without touching their contents."""
     lines = text.splitlines()
     starts = [i for i, ln in enumerate(lines) if _HEADING.match(ln)]
     if not starts:
@@ -289,10 +250,9 @@ def _blocks(text: str) -> tuple[str, list[tuple[str, list[str]]]]:
 
 
 def _pin_live_zone(text: str) -> str:
-    """Move `## Tasks` then `## Verification plan` to the end of the document, in that order.
-    Idempotent, and lossless — sections are moved whole, never rewritten. This is what makes the
-    reading guarantee real ("nothing below Tasks can contradict it") for plans authored before this
-    grammar, whose Tasks sat mid-document."""
+    """Move `## Tasks` then `## Verification plan` to the end, in that order. Idempotent and
+    lossless — sections are moved whole. This is what makes the reading guarantee real for plans
+    authored before this grammar."""
     pre, blocks = _blocks(text)
     if not blocks:
         return text
@@ -318,11 +278,9 @@ def _insert_before_live(text: str, chunk: str) -> str:
 
 
 def task_high_water(text: str) -> int:
-    """The highest task number the plan has EVER reached — the live list plus every id the revision
-    history names. A new task counts up from here, never into a number a removed task used:
-    `SuperMe-Task: t3` trailers on already-landed commits are permanent, so reusing `t3` would
-    silently re-attribute another task's history to the new one. (Same failure as
-    work-item-id-identity's freed-slug reclamation.)"""
+    """The highest task number the plan has EVER reached, live list plus revision history. A new
+    task counts up from here: `SuperMe-Task: t3` trailers on landed commits are permanent, so
+    reusing an id would re-attribute another task's history."""
     live = [int(t[1:]) for t in _task_ids(text)]
     retired = [int(n) for n in _RETIRED_TASK.findall(text)]
     return max([0, *live, *retired])
@@ -336,10 +294,8 @@ def _apply_task_op(text: str, op: dict, *, new_id: str = "") -> tuple[str, str]:
     if kind == "add_task":
         body = body.rstrip() + f"\n- [ ] {new_id} — {content}"
         return _replace_section(text, TASKS, body), f"{new_id} added"
-    # A task is a BLOCK, not a line: the template wraps long tasks across continuation lines, so
-    # everything up to the next `- [ ] t<n>` belongs to the task above it. Live-gate finding
-    # (2026-07-28): a line-wise remove dropped `- [ ] t3 —` and left its three wrapped lines glued
-    # onto t2, silently changing what t2 said. Edit replaces the whole block for the same reason.
+    # A task is a BLOCK, not a line: long tasks wrap, so everything up to the next `- [ ] t<n>`
+    # belongs to the task above. A line-wise remove would glue orphaned lines onto its predecessor.
     lines: list[str] = []
     skipping = False
     for line in body.splitlines():
@@ -348,9 +304,7 @@ def _apply_task_op(text: str, op: dict, *, new_id: str = "") -> tuple[str, str]:
             skipping = m.group(4) == task
             if skipping:
                 if kind == "edit_task":
-                    # The checkbox STATE survives an edit — build ticked it against work it
-                    # actually did; whether that work still counts is the revision block's
-                    # business, not this line's.
+                    # The checkbox STATE survives an edit: build ticked it against work it did.
                     lines.append(f"{m.group(1)}{m.group(2)}{m.group(3)}{m.group(4)}"
                                  f"{m.group(5)}{content}")
                 continue
@@ -362,8 +316,8 @@ def _apply_task_op(text: str, op: dict, *, new_id: str = "") -> tuple[str, str]:
 
 
 def _tidy_tasks(text: str) -> str:
-    """Collapse the blank lines a removal leaves behind. The live zone is read at every gate and by
-    every build cycle, so it does not accumulate holes."""
+    """Collapse the blank lines a removal leaves. The live zone is read at every gate, so it does
+    not accumulate holes."""
     kept: list[str] = []
     for ln in _section_body(text, TASKS).splitlines():
         if ln.strip() or (kept and kept[-1].strip()):
@@ -374,15 +328,12 @@ def _tidy_tasks(text: str) -> str:
 def _apply_section_op(text: str, op: dict) -> tuple[str, str]:
     section, kind = str(op["section"]), str(op["op"])
     content = str(op["content"]).rstrip()
-    # Forgiving writer (knowledge_delta precedent): agents routinely re-include the `## Heading`
-    # at the top of a body. The heading stays in place, so a re-included one would double it.
+    # Agents routinely re-include the `## Heading`; it stays in place, so one would double it.
     content = re.sub(rf"(?ms)\A\s*##\s+{re.escape(section)}\s*\n+", "", content).rstrip()
     body = (_section_body(text, section).rstrip() + "\n\n" + content) if kind == "append" \
         else content
     return _replace_section(text, section, body), f"{section} ({kind})"
 
-
-# --------------------------------------------------------------------------- the write
 
 _LOG_NOTE = ("<!-- CODE-OWNED index, written by `revise_plan`: the shape of the history, with no "
              "prose, so it can never disagree with the blocks below. Never hand-edit. -->")
@@ -395,9 +346,9 @@ def _ensure_log(text: str) -> str:
 
 
 def _append_log_line(text: str, line: str) -> str:
-    """Add one index row to `## Revision log`, after the last row already there. Positional rather
-    than end-of-section: the section's BODY runs to the next `##`, so it swallows the `---` rule
-    that opens the first revision block — appending at the end would file the row under it."""
+    """Add one index row to `## Revision log`, after the last row already there. Positional
+    because the section's body runs to the next `##`, so appending at the end would file the row
+    under the revision block below it."""
     body = _section_body(text, LOG).splitlines()
     at = max((i for i, ln in enumerate(body) if ln.startswith("- r")),
              default=max((i for i, ln in enumerate(body) if ln.strip()), default=-1))
@@ -426,12 +377,11 @@ def _render_block(*, rev: str, ts: str, concerns: list[str], spend: int, feedbac
 def revise(item_dir: Path, *, changes: list, feedback: str, directive: str = "",
            still_in_force: str = "", concerns: list[str] | None = None,
            spend: int = 0) -> dict:
-    """Apply one revision to plan.md, atomically: the named edits, then the appended block that
-    explains them, inserted above the pinned live zone.
+    """Apply one revision to plan.md atomically: the named edits, then the block explaining them,
+    inserted above the pinned live zone.
 
-    The caller validates first (`validate`) and supplies `concerns` from the record; this function
-    trusts its input and fails loud on a section that vanished mid-flight.
-    Returns {revision, ops, changed, path}."""
+    The caller validates first and supplies `concerns`; this trusts its input and fails loud on a
+    section that vanished. Returns {revision, ops, changed, path}."""
     path = plan_path(item_dir)
     text = _pin_live_zone(path.read_text())
     applied: list[dict] = []

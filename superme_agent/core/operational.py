@@ -1,18 +1,9 @@
-"""Operational-learning artifacts on disk (WI-8) — read/assemble + write/publish.
+"""Operational-learning artifacts on disk — read, assemble, publish.
 
-The self-learning loop publishes OPERATIONAL content (constitution / skill / agent) into the
-operational tree (`harness/` universal, `local-harness/<id>/<mode>/` per-repo). This module is the
-file layer for those artifacts:
+  constitution   one file per item, assembled into the system prompt every turn. Always-on.
+  skill / agent  files inside the operational plugin; they load via the plugin channel.
 
-- **constitution** — one file per item (frontmatter carries `enabled`), assembled into the system
-  prompt every turn for the active scope×mode (always-on). Universal home: `harness/constitution/
-  <mode>/`; per-repo home: `local-harness/<id>/<mode>/constitution/`.
-- **skill / agent** — files inside the operational *plugin* (universal `superme-dev`; per-repo
-  `local-harness/<id>/<mode>` with a bootstrapped manifest); they load via the plugin channel, not
-  the prompt.
-
-Disk holds only PUBLISHED, live artifacts (drafts stage in the DB — see dev_store). See
-general_docs/learning-workflow-spec.md.
+Disk holds only PUBLISHED artifacts. Drafts stage in the DB (see `dev_store`).
 """
 
 from __future__ import annotations
@@ -39,9 +30,8 @@ def parse_frontmatter(text: str) -> tuple[dict, str]:
 
 
 def set_frontmatter_field(path: Path, key: str, value: str) -> None:
-    """Update (or insert) a single scalar frontmatter `key: value` in a `.md`, preserving every
-    other line + the body verbatim (line-level edit, not a re-dump). Used to two-way-sync an agent's
-    `model:` from the config UI into its own `.md` — the artifact stays the source of truth."""
+    """Update or insert one scalar frontmatter field, preserving every other line and the body.
+    A line-level edit, not a re-dump — the artifact stays the source of truth."""
     text = path.read_text()
     m = _FM.match(text)
     if not m:  # no frontmatter yet — prepend a minimal block
@@ -99,11 +89,8 @@ def _read_plugin(plugin_dir: Path) -> dict:
 def resolve_plugin_file(scope: str, kind: str, name: str, *,
                         dev_dir: Path, core_dir: Path, shared_dir: Path,
                         local_dir: Path | None = None) -> Path | None:
-    """Map (scope, kind, name) → the on-disk artifact path, or None if it doesn't resolve safely.
-    Path-traversal-safe: `name` may not contain separators, and the result must sit inside the
-    scope's plugin dir. `kind` is 'skill' (`skills/<name>/SKILL.md`) or 'agent' (`agents/<name>.md`).
-    `scope='local'` (with `local_dir` = a host's `local-harness/<id>/<mode>`) resolves that host's own
-    plugin tree."""
+    """Map (scope, kind, name) → the on-disk artifact path, or None. Path-traversal-safe: `name`
+    may hold no separators and the result must sit inside the scope's plugin dir."""
     base = {"dev": dev_dir, "core": core_dir, "shared": shared_dir, "local": local_dir}.get(scope)
     if base is None:
         return None
@@ -132,10 +119,8 @@ def _plugin_namespace(plugin_dir: Path) -> str:
 
 
 def list_palette_skills(plugin_dirs: list[Path]) -> list[dict]:
-    """Every skill across these plugin dirs as `{command, category, namespace}` — `command` is the
-    `<namespace>:<skill>` slug the chat "/" palette shows. Disabled skills (moved to `.disabled/`) are
-    naturally excluded (only `skills/<name>/SKILL.md` is scanned). The caller filters by category and
-    merges native commands."""
+    """Every skill across these plugin dirs as `{command, category, namespace}`. Disabled skills
+    are naturally excluded, since only `skills/<name>/SKILL.md` is scanned."""
     out: list[dict] = []
     for d in plugin_dirs:
         p = Path(d)
@@ -148,9 +133,8 @@ def list_palette_skills(plugin_dirs: list[Path]) -> list[dict]:
 
 
 def silent_skill_names(plugin_dirs: list[Path]) -> set[str]:
-    """Skills marked `access: silent` across these plugin dirs — internal machinery that the
-    user-facing turn must never invoke directly (only their owning sub-run may). Returns BOTH the
-    namespaced `<ns>:<name>` and the bare `<name>` so a permission check can match either form."""
+    """Skills marked `access: silent` — machinery the user-facing turn must never invoke, only
+    their owning sub-run. Returns both namespaced and bare forms so a check matches either."""
     out: set[str] = set()
     for d in plugin_dirs:
         p = Path(d)
@@ -165,15 +149,11 @@ def silent_skill_names(plugin_dirs: list[Path]) -> set[str]:
 
 
 def skills_in_category(plugin_dirs: list[Path], category: str) -> set[str]:
-    """Skill names in `category` across these plugin dirs, in BOTH the namespaced `<ns>:<name>` and
-    bare `<name>` forms (same contract as `silent_skill_names` — a permission check may see either).
+    """Skill names in `category`, in both namespaced and bare forms.
 
-    Unlike `access: silent` (which is a permanent property of a skill), a category block is a
-    property of the SESSION: the caller decides when a category is off-limits. Today that's the
-    `onboarding` category — project-init/retrofit exist to establish a project's memory, so once it
-    IS established they can only do harm (retrofit re-derives the anchor docs from the code and
-    would overwrite the owner's approved ones). They're one-shot per repo, and nothing else expires
-    like that, so the kernel — not the skill's own prose — is what enforces it."""
+    Unlike `access: silent`, which is permanent, a category block is a property of the SESSION.
+    Today that is `onboarding`: those skills establish a project's memory, so once it IS
+    established they can only overwrite it. The kernel enforces the expiry, not the skill's prose."""
     out: set[str] = set()
     want = (category or "").strip().lower()
     for d in plugin_dirs:
@@ -215,9 +195,8 @@ def _is_foundational(meta: dict) -> bool:
 
 
 def _title_of(body: str, slug: str) -> str:
-    """The artifact's own H1 if it has one, else the slug read as words. The H1 is what the
-    author named the thing, so it keeps real hyphens ('Dev-knowledge structure') that a blanket
-    dash-to-space rule on the slug would flatten. One writer: every surface reads this key."""
+    """The artifact's own H1 if it has one, else the slug read as words. The H1 keeps real
+    hyphens that a blanket dash-to-space rule would flatten."""
     for line in body.splitlines():
         t = line.strip()
         if t.startswith("# "):
@@ -259,12 +238,8 @@ def read_constitution_dir(directory: Path, *, origin: str) -> list[dict]:
     return out
 
 
-# --- ASSET pool (opt-in constitutional knowledge, activated per repo) ------------------------
-# `local-harness/asset/` (config.ASSET_DIR) holds constitutional KNOWLEDGE (e.g. sql-expert) that is
-# NOT universal — any repo can EQUIP it for itself. A repo activates slugs by reference (no body copy):
-# the active set is a plain slug list at `<repo constitution home>/.assets`. Default empty ⇒ a new repo
-# carries zero assets. One shared pool, all repos draw from it. (Distinct from the plugins'
-# doc-authoring `references/`, which are the "how to write each general doc" guides.)
+# One shared pool of constitutional knowledge that is NOT universal. A repo activates slugs BY
+# REFERENCE in `.assets` — no body is ever copied. New repos carry none.
 
 
 def read_asset_pool(asset_dir: Path | None = None) -> list[dict]:
@@ -393,8 +368,7 @@ def constitution_catalog(mode: str, universal_dir: Path, repo_dir: Path | None, 
     return header + "\n\n" + "\n".join(lines)
 
 
-# Tiny stopword set for the relevance ranker — enough to keep matches meaningful without a
-# dependency. Not exhaustive; the goal is signal, not linguistics.
+# Enough to keep matches meaningful without a dependency. Signal, not linguistics.
 _STOP = frozenset((
     "the a an and or of to in on for with is are be this that these those it its as at by from "
     "you your we our they their he she i me my not no do does done can will would should may might "
@@ -452,9 +426,7 @@ def resolve_constitution(mode: str, universal_dir: Path, repo_dir: Path | None, 
     return None
 
 
-# --------------------------------------------------------------------------- publish (gate-2)
-# `target_scope` encodes BOTH the universal-vs-repo axis AND the mode: repo_dev / universal_dev are
-# dev-mode operational content; `core` is reserved (core-mode internals deferred, §4.11.6 #3).
+# `target_scope` encodes both the universal-vs-repo axis and the mode. `core` is reserved.
 
 class ReservedScope(Exception):
     """Raised when an apply targets a not-yet-built home (core)."""
@@ -522,9 +494,7 @@ def publish_artifact(output_form: str, target_scope: str, repo_id: str | None, *
     if output_form == "constitution":
         home = constitution_home(target_scope, repo_id)
         home.mkdir(parents=True, exist_ok=True)
-        # Stamp the server-side frontmatter onto the agent's frontmatter-first artifact (the
-        # `description` + optional body it authored), same with_frontmatter_default path skill/agent
-        # use. `enabled` frontmatter lets runtime on/off be a flag flip, not a delete.
+        # `enabled` frontmatter lets runtime on/off be a flag flip, not a delete.
         content = with_frontmatter_default(content, "name", slug)
         content = with_frontmatter_default(content, "enabled", "true")
         content = with_frontmatter_default(content, "scope", target_scope)
@@ -541,16 +511,13 @@ def publish_artifact(output_form: str, target_scope: str, repo_id: str | None, *
         root = plugin_root(target_scope, repo_id)
         if target_scope == "repo_dev":
             ensure_plugin_manifest(root, f"{repo_id}-dev")
-        # Every learned artifact is stamped `category: learned` — the provenance marker that
-        # separates learning-loop output (visible) from shipped machinery (`category: learning`,
-        # hidden from the palette). Injected only if the forge phase didn't already set a category.
+        # `category: learned` separates loop output (visible) from shipped machinery (hidden).
         content = with_frontmatter_default(content, "category", "learned")
         if output_form == "skill":
             path = root / "skills" / slug / "SKILL.md"
         else:
             path = root / "agents" / f"{slug}.md"
-            # Every forged agent gets a default reasoning effort (owner-tunable later); a background
-            # runner reads this field. Injected only if the forge phase didn't already set one.
+            # A background runner reads this field. Injected only if forge did not set one.
             content = with_frontmatter_default(content, "effort", "medium")
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content if content.endswith("\n") else content + "\n")
@@ -558,12 +525,9 @@ def publish_artifact(output_form: str, target_scope: str, repo_id: str | None, *
     raise ValueError(f"unknown output_form: {output_form}")
 
 
-# --------------------------------------------------------------------------- runtime management (#6)
-# Post-publish, the owner governs live artifacts. Constitution carries an `enabled` frontmatter flag
-# the loader already honors (the catalog + pull_constitution filter on it). Skills/agents load via Claude
-# Code's OWN plugin scanner, which only looks in `<plugin>/skills/` + `<plugin>/agents/` and ignores
-# frontmatter — so "disable" there means moving the artifact into a `.disabled/` shadow at the plugin
-# root (a sibling the scanner never descends into). Enable moves it back; delete removes it outright.
+# A constitution disables by frontmatter flag. Skills and agents load via the CLI's own plugin
+# scanner, which ignores frontmatter — so disabling one means moving it into `.disabled/`, a
+# sibling the scanner never descends into.
 
 _DISABLED = ".disabled"
 
