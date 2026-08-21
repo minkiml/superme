@@ -12,7 +12,7 @@ import { addInbox, updateInbox, deleteInbox, pushInbox, getRepos, getSystem, get
 import { useLive } from '@/lib/live'
 import { K } from '@/lib/live/keys'
 import { fmtLocal, fmtTokens, fmtDuration, fmtModel, toModelKey, MODELS as MODEL_CATALOG, DEFAULT_MODEL, EFFORTS as EFFORT_CATALOG, DEFAULT_EFFORT } from '@/lib/format'
-import { PHASE_LABEL, PHASE_VERB, STATUS_COLOR, STATUS_LABEL, STATUS_STRIPE, primaryStatus,
+import { PHASE_VERB, STATUS_COLOR, STATUS_LABEL, STATUS_STRIPE, primaryStatus,
          agoLabel, researchKindLabel, KIND_TEXT, workKindLabel } from './common'
 import { useContainerWidth } from '@/lib/layout'
 
@@ -847,6 +847,3 @@ function MetaRow({ label, children }: { label: string; children: ReactNode }) {
     </div>
   )
 }
-
-// Note: `PHASE_LABEL` is re-exported for consumers that label a single phase.
-export { PHASE_LABEL }
