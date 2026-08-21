@@ -16,6 +16,12 @@ from superme_agent.core import artifacts as _arts
 from superme_agent.core import kind_profiles as _kp
 from superme_agent.core.dev_knowledge import DevKnowledgeService
 
+
+def _artifacts_source() -> str:
+    """The artifact package's whole source, so an assertion about it survives a re-split."""
+    root = Path("superme_agent/core/artifacts")
+    return "".join(p.read_text() for p in sorted(root.glob("*.py")))
+
 _GUIDES = (Path(__file__).resolve().parents[1] / "superme_agent/harness/plugins"
            / "superme-dev/skills/investigate/references")
 
@@ -617,8 +623,8 @@ ok("…and every derived guide path exists on disk",
 ok("…and every derived template resolves through the artifact router",
    all(_arts._template_name("investigation", "research", f.slug) == _kp.family_template(f.slug)
        for f in _kp.RESEARCH_FAMILIES))
-ok("artifacts.py routes templates off the registry, with no family list of its own",
-   "for f in _kp.RESEARCH_FAMILIES" in Path("superme_agent/core/artifacts.py").read_text())
+ok("the artifact package routes templates off the registry, with no family list of its own",
+   "for f in _kp.RESEARCH_FAMILIES" in _artifacts_source())
 ok("the gate's guide needle is built from the registry too",
    "family_guide(fam)" in Path("superme_agent/daemon/services/drilldown.py").read_text())
 

@@ -16,6 +16,12 @@ from superme_agent.core import plan_revision as PR
 from superme_agent.daemon.services import runs as R
 from superme_agent.harness.tools.dev_tools import _revise_plan
 
+
+def _artifacts_source() -> str:
+    """The artifact package's whole source, so an assertion about it survives a re-split."""
+    root = Path("superme_agent/core/artifacts")
+    return "".join(p.read_text() for p in sorted(root.glob("*.py")))
+
 PASS = 0
 
 
@@ -790,8 +796,7 @@ def test_hold_and_compaction_hooks() -> None:
     ok("...and it never falls through to the CLI as a second compaction",
        "await send(result_frame(_compact_reply(compact_verdict)))" in ws)
     ok("session memory is one agent-written file per session — no writer, no spine pointer column",
-       "def session_memory_path(" in (arts := Path(
-           "superme_agent/core/artifacts.py").read_text())
+       "def session_memory_path(" in (arts := _artifacts_source())
        and "def write_session_memory(" not in arts
        and "session_memory" not in Path("superme_agent/core/spine.py").read_text())
     # One vocabulary: headings, parameters and the worked example share tokens. Where prose and
