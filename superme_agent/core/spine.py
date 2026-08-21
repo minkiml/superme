@@ -1,30 +1,17 @@
-"""SystemSpine — the authoritative System / Repo / Session / Run data model (PRD §4.11.3).
+"""SystemSpine — the authoritative System / Repo / Session / Run data model.
 
-The keystone of the renovation: the first-class model of the system that didn't exist
-before. It absorbs state previously smeared across `registry.yaml`, `.sessions.json`,
-`.context_models.json`, the `.dev.db:runs` table, and the daemon's in-memory
-`_planning`/`_distilling` dicts into one coherent, queryable spine — both the data behind
-the monitor dashboard AND (later) the agent's self-model.
+Substrate split:
+  STATIC-meta   hand-editable, git-tracked YAML, loaded and validated here. Repo home paths are
+                derived by convention, so a relocation edits the convention, not every entry.
+  LIVE-status   a SQLite DB this module OWNS: session, run, model_override. Repo live-status is
+                COMPUTED from runs, never stored.
 
-Substrate split (decision 2):
-  • STATIC-meta  — hand-editable, git-tracked YAML (`config/system.yaml`, `config/repos.yaml`),
-                   LOADED + validated here. The repo HOME paths are derived by convention
-                   (the WI-3 relocation pass edits the convention, not every entry).
-  • LIVE-status  — a SQLite DB (`.system.db`) this module OWNS: `session`, `run`,
-                   `model_override`. Repo live-status (active/idle, last activity, current
-                   item) is COMPUTED from runs, not stored.
+FOUR entities, not three. A Session is a durable, resumable container; a Run is one execution
+carrying telemetry. One session has many runs, and a standalone workflow pass is a run with
+`session_id=NULL` — so it structurally cannot reach the resumable picker, which lists sessions.
+That dissolves a class of defect rather than guarding against it.
 
-Four entities, not three (decision 3): Session = a durable, resumable container (chat
-threads + resumable work); Run = an execution (a turn, or a standalone workflow pass)
-carrying telemetry + live status. One Session has many Runs. A workflow pass (distill) is
-a standalone Run with `session_id=NULL` — so it *structurally* cannot reach the resumable
-picker (which lists Sessions). That dissolves the old distill defects rather than guarding
-against them.
-
-Lattice note: in this codebase the {core, dev} SCOPE axis ≡ `mode`. So Session/Run key on
-(repo_id × mode), and the distill run-guard keys on (repo_id, mode, feature).
-
-Localhost, single-owner: short-lived connections per call are plenty (mirrors DevStore).
+The {core, dev} SCOPE axis is `mode`, so sessions and runs key on (repo_id × mode).
 """
 
 import json
@@ -50,25 +37,18 @@ log = logging.getLogger("superme-agent")
 
 # The {core, dev} scope lattice axis (≡ Context.mode in this codebase).
 MODES = ("core", "dev")
-# SESSION-DISPOSABLE features: standalone, sessionless workflow passes (distill, …) whose SDK
-# transcript is THROWAWAY — no resumable session is needed after the job, so the caller deletes
-# the transcript on finish. The Run ROW is always KEPT regardless (it is the durable run log /
-# telemetry); only the on-disk conversation transcript is disposed. Durable features (chat, plan)
-# keep their transcript (resumable). Transcript deletion is a daemon concern (it holds the
-# Context + SessionStore); the spine just exposes the set.
+# Sessionless workflow passes whose transcript is THROWAWAY: the caller deletes it on finish.
+# The run ROW is always kept — it is the durable telemetry. The spine only exposes the set.
 DISPOSABLE_FEATURES = {"distill", "sweep", "write"}
 # Run features that are explicit LEARNING agent jobs (sessionless; counted as "agents" only while
 # running). Work-item jobs are counted separately (via their item-bound runs). See agent_counts().
 LEARNING_FEATURES = {"distill", "sweep", "capture", "write"}
 _RUN_STATUSES = {"running", "done", "aborted", "waiting"}
-# Statuses a run holds when it ENDED without ever returning a final usage, so its `tokens` scalar is
-# the live in-flight estimate and not a measurement. Every display that would otherwise fall back to
-# that scalar reads this set and reports 0 instead — measured usage only, unmeasured is 0, never an
-# estimate wearing the measured column's name.
+# Runs that ENDED without a final usage, so their scalar is an estimate. Every display reports
+# 0 instead: measured usage only, never an estimate wearing the measured column's name.
 #
-# `running` is deliberately NOT here. An in-flight row carries the same estimate, but it is read by
-# `live_run` to show a run's progress AS it happens, labelled live and never summed into a total.
-# Zeroing it would blank a working card to protect a total it was never part of.
+# `running` is deliberately absent — an in-flight row is labelled live and never summed, so
+# zeroing it would blank a working card to protect a total it was never part of.
 _UNRECONCILED_STATUSES = {"aborted"}
 
 
@@ -81,9 +61,8 @@ def _norm(p) -> str:
     return str(Path(p).resolve())
 
 
-# Shell commands that put a file's CONTENTS into the run's context. `ls`, `find`, `stat` and `wc`
-# name a path without opening it, so they are deliberately absent — naming the guide is not reading
-# it. Used by `read_hits`, where the question is whether a directed read actually happened.
+# Commands that put a file's CONTENTS into context. `ls` and `find` name a path without
+# opening it, so they are absent: naming the guide is not reading it.
 _FILE_OPENERS = frozenset({"cat", "bat", "head", "tail", "less", "more", "sed", "awk", "grep",
                            "egrep", "fgrep", "rg", "nl", "strings"})
 
@@ -175,10 +154,8 @@ class RepoConfig:
         elif self.vet_env is not None and not isinstance(self.vet_env, dict):
             log.warning("repo %r: vet_env must be a mapping; ignoring it", self.id)
             self.vet_env = None
-        # Every entry is checked HERE, once, so no consumer has to re-derive what is safe: a path
-        # that escapes the repo would copy something the owner never named into a tree an agent
-        # reads. Dropped loudly rather than sanitised — a silently-rewritten path is a path nobody
-        # can find again in the config they wrote.
+        # Checked HERE once, so no consumer re-derives what is safe. Dropped loudly rather than
+        # sanitised: a silently-rewritten path is one nobody can find in the config they wrote.
         clean: list[str] = []
         for raw in (self.source_ignored or []):
             # Absoluteness is tested on the RAW value: stripping the leading slash first would
@@ -360,24 +337,14 @@ class SystemSpine:
 
     @staticmethod
     def _display_tokens(row) -> int:
-        """The reconciling per-run token amount for DISPLAY (activity log, run cards): the THREE main
-        typed columns — input + cache_creation + output — EXCLUDING cache_read (cheap re-reads of
-        already-cached context, which otherwise dwarf the number ~1000× and drown the real "new work"
-        signal). This is the SAME 3-type definition the token dashboard's default (`total`) sums, so a
-        run's number reconciles across surfaces; the full 4-type volume is behind the dashboard toggle.
+        """The per-run token amount for DISPLAY: input + cache_creation + output, EXCLUDING
+        cache_read, which otherwise dwarfs the number ~1000× and drowns the real signal. The same 3-type
+        definition the dashboard sums, so a run reconciles across surfaces.
 
-        Two DIFFERENT populations have zero in all four typed columns, and only one of them may use
-        the legacy `tokens` scalar as a fallback:
-
-        - a pre-migration row, which ENDED normally and whose scalar is itself a measured 3-type sum;
-        - a run that never returned a final usage — aborted, killed, errored — whose scalar is the
-          live in-flight estimate, and an over-counting one (it sums the cumulative-per-turn Usage
-          snapshots). That is not a measurement, and the token dashboard already refuses to fold it
-          in. Without the status test the item card folded it in anyway, so the same run read as
-          372k on the card and 0 on the dashboard — an estimate wearing the measured column's name.
-
-        A row that reaches here without a `status` (a projection that did not select it) is treated
-        as ended, which is the pre-migration reading and the historical behaviour."""
+        Two populations have zero in all four typed columns, and only one may fall back to the legacy
+        scalar: a pre-migration row, whose scalar is itself a measured sum; and a run that never returned
+        a final usage, whose scalar is an over-counting live estimate. Without the status test the card
+        read 372k where the dashboard read 0 — an estimate wearing the measured column's name."""
         typed = ((row["tok_input"] or 0) + (row["tok_cache_creation"] or 0)
                  + (row["tok_output"] or 0))
         if typed > 0:
@@ -415,20 +382,12 @@ class SystemSpine:
                        updated_at TEXT NOT NULL
                    )"""
             )
-            # `item_id` is the durable, IMMUTABLE identity stamp (work-item-session-recognition-prd):
-            # non-NULL ⇒ this is a WORK-ITEM session, permanently tied to one primary work-item;
-            # NULL ⇒ a GENERAL (free-discussion) session. Set once by an actual work-item workflow
-            # (never minted manually), it is the SINGLE source of truth the daemon reads to center
-            # the agent + drive the write-sandbox / run-lock / telemetry. Additive ALTER below.
+            # The durable, IMMUTABLE identity stamp: non-NULL means a work-item session. Set once by a
+            # real workflow, and the single source of truth for centering the agent.
             self._ensure_columns(c, "session", {"item_id": "TEXT"})
-            # `kind` is the session's AGENT IDENTITY (session-kinds-diagnose): one of
-            # general | work_item | diagnosis (onboarding is a transient persona of general, not a
-            # stamped kind). It selects which per-turn agent preamble the daemon assembles
-            # (kernel_speech.py) and how the turn is centered/gated. `subject_run_id`
-            # is the READ-ONLY pointer a subject-bearing kind carries — v1: a diagnosis session points
-            # at the run it inspects (an Activity row). Both stamped write-once at the session's birth
-            # (mirrors item_id). NULL kind ⇒ inferred from item_id (work_item) else general, so pre-
-            # existing sessions keep working without a backfill. Additive ALTERs below.
+            # `kind` is the session's AGENT IDENTITY, selecting which preamble the daemon assembles.
+            # `subject_run_id` is the read-only pointer a subject-bearing kind carries.
+            # Both write-once at birth. A NULL kind is inferred, so pre-existing sessions need no backfill.
             self._ensure_columns(c, "session", {"kind": "TEXT", "subject_run_id": "INTEGER"})
             # An owner-set TITLE override — NULL ⇒ the title is derived from the transcript (the SDK
             # `ai-title` bubble, else the first user line). When set, it wins in list/read so the
@@ -437,11 +396,8 @@ class SystemSpine:
             c.execute("CREATE INDEX IF NOT EXISTS idx_session_repo ON session(repo_id, mode)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_session_cwd ON session(cwd)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_session_item ON session(item_id)")
-            # RUN — an execution: a turn within a session, OR a standalone workflow pass.
-            # Written at START (status=running) so live + historical live in ONE table, ONE
-            # query (decision 4). `session_id` is NULL for standalone workflow runs (distill),
-            # so they never reach the resumable picker. The run-guard keys on (repo_id, mode,
-            # feature). Disposable features purge their row on done; aborted rows are kept.
+            # RUN — a turn within a session, or a standalone workflow pass. Written at START, so live and
+            # historical share one table and one query. A NULL `session_id` never reaches the picker.
             c.execute(
                 """CREATE TABLE IF NOT EXISTS run (
                        id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -465,23 +421,18 @@ class SystemSpine:
                        discarded_at TEXT
                    )"""
             )
-            # Token accounting (token-usage-tracking-spec): the four Anthropic usage fields kept
-            # SEPARATE (not fused into `tokens`) so both breakdowns — semantic (by feature) and
-            # systematic (by token type) — reconcile against the SAME rows, and cache_read is NEVER
-            # dropped. `raw_usage` preserves the complete SDK usage dict (forward-compat: a new usage
-            # field is retained even before it earns a typed column). The legacy `tokens` scalar is
-            # KEPT and still populated (= input+output+cache_creation) for back-compat with existing
-            # telemetry/guard UIs, and it is what the LIVE in-flight counter bumps — so a run that
-            # never returns a final usage carries it with four zero typed columns. The usage tables
-            # simply skip those rows (measured only); the loop's budget breaker still counts them,
-            # because a spend that happened is a spend. Additive ALTERs migrate an existing .system.db.
-            # `discarded_at` — the re-run SOFT delete (owner, 2026-07-31). A re-run throws the
-            # attempt away but never the rows: they are stamped, not deleted ([[never-delete-logs]]),
-            # and the readers split. ITEM-SCOPED reads (this item's trace, its card totals, its loop
-            # budget) filter to `discarded_at IS NULL` — the current attempt; AGGREGATE reads (repo
-            # and system token totals, the Activity feed, run history) count everything, because the
-            # discarded attempt really was paid for. So a repo total is legitimately larger than the
-            # sum of its cards, and that is the honest number, not a bug.
+            # The four usage fields kept SEPARATE, so both breakdowns reconcile against the same rows and
+            # cache_read is never dropped. `raw_usage` keeps the whole SDK dict, so a new field survives
+            # before it earns a column.
+            #
+            # The legacy `tokens` scalar stays and is what the LIVE counter bumps, so a run that never
+            # returned a final usage carries it with four zero columns. The usage tables skip those; the
+            # budget breaker still counts them, because a spend that happened is a spend.
+            #
+            # `discarded_at` is the re-run SOFT delete: rows are stamped, never deleted, and the readers
+            # split. ITEM-scoped reads filter to the current attempt; AGGREGATE reads count everything,
+            # because the discarded attempt really was paid for. So a repo total is legitimately larger
+            # than the sum of its cards.
             self._ensure_columns(c, "run", {
                 "discarded_at": "TEXT",
                 "tok_input": "INTEGER NOT NULL DEFAULT 0",
@@ -493,35 +444,25 @@ class SystemSpine:
                 # run open so a work-item's tokens can be accumulated per-phase. NULL for chat/background
                 # (non-item) runs and for item runs opened before this column existed.
                 "phase": "TEXT",
-                # The fate of this run's origin session (session-deletion-trace-model): NULL while the
-                # session is live; 'deleted' (owner drop) or 'retired' (natural workflow end) once the
-                # session is hard-deleted. The RUN itself is never deleted — this labels the trace whose
-                # session is gone, so activity can show a "session deleted/retired" badge.
+                # The fate of this run's origin session. The RUN is never deleted; this labels the trace whose
+                # session is gone.
                 "session_fate": "TEXT",
-                # Per-run terminal OUTCOME (workspace-workflow D2, declared S1 / persisted S5): how a
-                # BACKGROUND run's structured completion report ended — success | clean_noop | blocked |
-                # approval_required | exhausted | stagnated. NULL for interactive turns (no report)
-                # and pre-S5 rows. Feeds the status router + the attention engine (S7).
+                # How a BACKGROUND run's completion report ended. NULL for interactive turns, which file
+                # none. Feeds the status router and the attention engine.
                 "outcome": "TEXT",
             })
             c.execute("CREATE INDEX IF NOT EXISTS idx_run_guard ON run(repo_id, mode, feature, status)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_run_item ON run(repo_id, item_id)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_run_session ON run(session_id)")
-            # The per-item run-lock, enforced by the DB: at most one RUNNING row per (repo, item).
-            # NULL item_ids (chat/distill/sweep runs) are distinct under SQLite's unique rules, so
-            # only item-bound runs are constrained. Makes start_item_run provably atomic (a racing
-            # second insert raises IntegrityError) rather than relying on a check-then-insert. (R5)
+            # The per-item run-lock, enforced by the DB. NULL item_ids are distinct under SQLite's rules,
+            # so only item-bound runs are constrained. Makes `start_item_run` provably atomic.
             c.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_run_one_live"
                       " ON run(repo_id, item_id) WHERE status='running' AND item_id IS NOT NULL")
-            # MODEL_OVERRIDE — per-repo runtime model preference. Replaces `.context_models.json`
-            # ({context_id: model} → {repo_id: model}). A runtime preference, not static config,
-            # so it's a DB row not a YAML edit.
+            # Per-repo runtime model preference — a preference, not static config, so a DB row.
             #
-            # Keyed by (repo, ROLE). `default` is the project's own tier — what its work runs on.
-            # A named role is a job that must NOT inherit that tier: `vet` judges the work, and a
-            # judge running whatever the worker runs cannot be a check on it. So a role resolves on
-            # its OWN chain (item's role pick → this row → the floor) and the project's default is
-            # deliberately not in it. Absent row = the floor, never the project's model.
+            # Keyed by (repo, ROLE). `default` is the project's own tier. A named role must NOT inherit
+            # it: a judge running whatever the worker runs cannot be a check on it. So a role resolves on
+            # its own chain, and an absent row means the FLOOR, never the project's model.
             c.execute(
                 """CREATE TABLE IF NOT EXISTS model_override (
                        repo_id TEXT NOT NULL,
@@ -556,10 +497,8 @@ class SystemSpine:
                        updated_at TEXT NOT NULL
                    )"""
             )
-            # REPO_AUTOPILOT — per-project autopilot tuning (workspace-workflow autopilot slice 3).
-            # `concurrency` = max autopilot items in the build⟷vet loop at once for this repo
-            # (the launch breaker; absent row = the default in get_autopilot_concurrency). Per-repo
-            # by owner decision — the right width depends on the project, no global default.
+            # Max autopilot items in the loop at once for this repo — the launch breaker. Per-repo,
+            # because the right width depends on the project.
             c.execute(
                 """CREATE TABLE IF NOT EXISTS repo_autopilot (
                        repo_id TEXT PRIMARY KEY,
@@ -746,12 +685,11 @@ class SystemSpine:
         return rc
 
     def update_repo(self, repo_id: str, **fields) -> RepoConfig:
-        """Edit scalar fields on an EXISTING repos.yaml entry, in place and line-by-line — so the
-        header comments, the other entries, and this entry's own untouched lines keep their exact
-        bytes (a whole-file yaml.safe_dump would flatten all three). A field set to None deletes its
-        line; a field absent from `fields` is left alone. Validates by re-loading before returning,
-        so a malformed write can never go live silently. Raises ValueError on an unknown repo or an
-        unknown/invalid field."""
+        """Edit scalar fields on an existing repos.yaml entry, line by line, so header comments and
+        every untouched line keep their exact bytes — a whole-file dump would flatten all of it.
+
+        None deletes a line; an absent field is left alone. Validates by re-loading before returning, so
+        a malformed write cannot go live silently."""
         rc = self.repos().get(repo_id)
         if rc is None:
             raise ValueError(f"unknown repo id '{repo_id}'")
@@ -810,12 +748,9 @@ class SystemSpine:
         return updated
 
     def remove_repo(self, repo_id: str) -> RepoConfig:
-        """Deregister a repo (disconnect): surgically drop its entry block from config/repos.yaml —
-        a line-level edit, so header comments + every other entry keep their exact formatting — and
-        delete its runtime kv rows (model/effort/learning/meta overrides). This only forgets the
-        REGISTRATION; the knowledge home, harness cell, sessions and worktrees are the disconnect
-        route's concern. Refuses 'global' (the hub is not disconnectable) and unknown ids.
-        Like add_repo, goes live at once — repos() re-reads the file every call."""
+        """Deregister a repo: surgically drop its entry block from repos.yaml and delete its runtime
+        kv rows. This forgets the REGISTRATION only — the knowledge home, harness cell, sessions and
+        worktrees are the disconnect route's concern. Refuses `global`."""
         if repo_id == "global":
             raise ValueError("the hub repo cannot be disconnected")
         rc = self.repos().get(repo_id)
@@ -863,15 +798,11 @@ class SystemSpine:
 
     # --- startup reconcile ------------------------------------------------------
     def reconcile(self) -> list[dict]:
-        """On daemon startup, flip orphaned `running` runs → `aborted` (the daemon that owned
-        them is gone). Leaves an auditable trace instead of a silent vanish.
+        """On startup, flip orphaned `running` runs to `aborted` — the daemon that owned them is gone.
 
-        Returns one row per orphan — `{run_id, repo_id, item_id, phase, feature}` — so the caller
-        can heal the OTHER half. Healing the run row alone left the work-item at `active` with no
-        run and nothing that would ever start one: permanently wedged, and silent until the
-        attention engine learned to page for it (dogfood D2/D3, 2026-07-29). The rows are read
-        BEFORE the update, because the flip is what destroys the evidence of which ones they were.
-        `len()` is the old count, so a caller that only wanted the number still works."""
+        Returns one row per orphan so the caller can heal the OTHER half: healing the run alone left the
+        item `active` with no run and nothing that would start one. Rows are read BEFORE the update,
+        because the flip destroys the evidence of which ones they were."""
         with self._conn() as c:
             orphans = [dict(r) for r in c.execute(
                 "SELECT id AS run_id, repo_id, item_id, phase, feature FROM run"
@@ -1043,14 +974,10 @@ class SystemSpine:
             return [dict(r) for r in rows]
 
     def sessions_for_repo(self, repo_id: str, *, resumable_only: bool = False) -> list[dict]:
-        """Every session row bound to a repo — the WORKSPACE's threads, wherever they ran.
+        """Every session row bound to a repo — the workspace's threads, wherever they ran.
 
-        `repo_id` is the identity that survives a worktree: a phase run executes with its cwd
-        swapped to `~/.superme/worktrees/<repo>/<item>`, but it is still this workspace's thread, so
-        anything asking "what has been said in this workspace" must ask by repo and not by cwd.
-
-        Default is EVERY row, resumable or not — the disconnect cascade walks these to hard-delete
-        each through the session-deletion-trace-model. The picker passes `resumable_only`."""
+        `repo_id` is the identity that survives a worktree: a phase run swaps its cwd, but the thread is
+        still this workspace's, so "what has been said here" must ask by repo and not by cwd."""
         where = ["repo_id=?"]
         if resumable_only:
             where.append("resumable=1")
@@ -1074,18 +1001,13 @@ class SystemSpine:
             return r["id"] if r else None
 
     def delete_session_record(self, session_id: str, *, cause: str = "deleted") -> bool:
-        """The one db-layer session removal (session-deletion-trace-model). Hard-deletes the
-        session's resume STATE — the `session` row + its transient `sweep_watermark` — and LABELS the
-        trace it leaves behind. The session's runs and their run_events + run_artifacts are the
-        permanent activity + token record and are **preserved** (monitoring logs are never deleted):
-        each run is stamped `session_fate=cause` so the activity log can show its origin session is
-        gone and why. Any still-live run is closed out (`running→aborted`, the boot reconciler's
-        terminal status) so nothing lingers as a ghost. KNOWLEDGE is never touched (general docs /
-        work-items / memory are repo/item-keyed — operational ⟂ knowledge). Orphaned `session_id` on
-        a preserved run is harmless: no read path joins `session`, so orphaned runs still surface in
-        the activity log + token stats. `cause`: 'deleted' (owner drop) | 'retired' (natural workflow
-        end). Idempotent; returns True if a session row existed. (Transcript-FILE deletion lives in
-        SessionStore — the spine owns only the db.)"""
+        """The one db-layer session removal. Hard-deletes the resume STATE — the row and its
+        watermark — and LABELS the trace left behind.
+
+        Runs, events and artifacts are PRESERVED and stamped `session_fate`, so the activity log can show
+        the origin session is gone and why. Any still-live run is closed out so nothing lingers as a
+        ghost. Knowledge is never touched. Orphaned `session_id` is harmless: no read path joins
+        `session`. Transcript-FILE deletion lives in SessionStore; the spine owns only the db."""
         if not session_id:
             return False
         now = _now()
@@ -1142,11 +1064,11 @@ class SystemSpine:
 
     def start_item_run(self, repo_id: str, *, mode: str = "dev", feature: str = "plan",
                        item_id: str, model: str | None = None, phase: str | None = None) -> int | None:
-        """Atomically open a run for a work-item IFF none is already in flight for it — the per-item
-        run-lock enforced at the data layer (R5). The cheap SELECT short-circuits the common case, but
-        the guarantee is the `idx_run_one_live` UNIQUE index: a racing second insert raises
-        IntegrityError and we return None, so two running rows for one item are impossible regardless
-        of interleaving. Returns the new run id, or None if the item was already running."""
+        """Atomically open a run for an item IFF none is in flight — the per-item run-lock, enforced
+        at the data layer.
+
+        The SELECT short-circuits the common case, but the guarantee is the UNIQUE index: a racing insert
+        raises and returns None, so two running rows for one item are impossible."""
         import sqlite3
         with self._conn() as c:
             busy = c.execute(
@@ -1183,14 +1105,11 @@ class SystemSpine:
     def finish_run(self, run_id: int, *, status: str = "done", tokens: int | None = None,
                    usage: dict | None = None, ctx_pct: int | None = None,
                    model: str | None = None, session_id: str | None = None) -> None:
-        """Close a run row (status done|aborted) — ALWAYS kept, as the durable run log/telemetry.
-        For session-disposable features the throwaway *transcript* is deleted by the caller (the
-        run record itself stays). status falls back to 'done' if unknown. `model` records the model
-        the SDK actually resolved for the run (background features don't request one up front).
+        """Close a run row — ALWAYS kept, as the durable telemetry. For session-disposable features the
+        caller deletes the throwaway transcript; the record stays.
 
-        `usage` is the whole-turn final SDK usage dict — the AUTHORITATIVE per-type accounting for
-        the run (one run == one turn). finish sets the four typed columns absolutely from it and
-        reconciles the legacy `tokens` scalar to match. Per-step bumps are a live estimate only."""
+        `usage` is the whole-turn final SDK usage, the authoritative per-type accounting. Per-step bumps
+        are a live estimate only."""
         status = status if status in _RUN_STATUSES else "done"
         sets = ["status=?", "ended_at=?"]
         args: list = [status, _now()]
@@ -1212,16 +1131,12 @@ class SystemSpine:
             self._finish_usage_apply(c, run_id, usage)
 
     def _finish_usage_apply(self, c: sqlite3.Connection, run_id: int, usage: dict | None) -> None:
-        """Write the per-type accounting at finish. Set the four typed columns absolutely from
-        `usage`, store the raw blob, and reconcile the legacy `tokens` scalar to match. No-op when
-        no usage arrived (e.g. an errored turn) — whatever the row accumulated is kept.
+        """Write the per-type accounting at finish: set the four typed columns absolutely, store the
+        raw blob, reconcile the legacy scalar. No-op when no usage arrived.
 
-        **`usage` MUST be the whole turn's — parent AND subagents.** Callers pass the accumulated
-        per-message total (`services/runs._LiveTokens.usage`), NOT `Result.usage`. That was the bug
-        here until 2026-08-14: `Result.usage` covers the parent conversation's calls only, so
-        overwriting with it silently REPLACED a full count with a partial one — measured 8.3x
-        smaller on a fully-delegated turn and ~3x on two real research sweeps. The word
-        "authoritative" was doing the damage: it made the smaller number look like the truth."""
+        `usage` MUST be the whole turn's — parent AND subagents. `Result.usage` covers the parent
+        conversation only, so overwriting with it silently replaces a full count with a partial one,
+        measured 8.3× smaller on a fully-delegated turn. The word "authoritative" was doing the damage."""
         if not usage:
             return
         i, cc, cr, o = self._usage_parts(usage)
@@ -1258,19 +1173,12 @@ class SystemSpine:
             return [self._run_dict(r) for r in rows]
 
     def live_item_runs_quiet_since(self) -> list[dict]:
-        """Every in-flight WORK-ITEM run with the timestamp of its most recent sign of life —
-        `{run, quiet_since}`, where `quiet_since` is the last `run_event` for that run, or the run's
-        own `started_at` when it has emitted nothing at all.
+        """Every in-flight ITEM run with the timestamp of its most recent sign of life — the last
+        `run_event`, or `started_at` when it has emitted nothing.
 
-        The substrate of the stall watchdog (daemon/services/watchdog.py). ONE query rather than an
-        events-per-run walk, because this is polled: `events_for_run` returns a run's whole trail,
-        and a 300-event investigation would be re-read every tick to learn one timestamp.
-
-        Item runs only. A chat turn is watched by the person who started it; an item run is the
-        unattended kind, and the one that went silent for 24 minutes on 2026-08-14 with nobody the
-        wiser. Timestamps are the ISO strings both tables already store — comparable as text
-        because `_now()` writes one format, which is also why this returns them raw and leaves the
-        threshold to the caller (the RULE is the watchdog's; the READ is the spine's)."""
+        The stall watchdog's substrate. ONE query rather than a per-run walk, because this is polled and
+        a 300-event trail would be re-read every tick to learn one timestamp. Item runs only: a chat turn
+        is watched by the person who started it."""
         with self._conn() as c:
             rows = c.execute(
                 "SELECT r.*, COALESCE(MAX(e.created_at), r.started_at) AS quiet_since"
@@ -1756,13 +1664,11 @@ class SystemSpine:
             return [dict(r) for r in rows]
 
     def events_for_item(self, repo_id: str, item_id: str) -> list[dict]:
-        """Every trail row an item's runs recorded, oldest-first within each run, newest run first —
-        the feed behind the drilldown's Runs pane and the `execution.md` snapshot.
+        """Every trail row an item's runs recorded, oldest-first within each run, newest run first.
 
-        Replaced `artifacts_for_item`, which read `run_artifact`: that table was written only by the
-        item-run path, so a deputy run (20+ real calls) or a compaction run produced no rows there
-        and the pane silently skipped it — 17 of one item's 34 runs were missing, including every
-        deputy judgment. `run_event` is a strict superset, item-tagged on every row."""
+        Replaced a reader of `run_artifact`, which only the item-run path wrote — so deputy and
+        compaction runs produced no rows and the pane silently skipped them. `run_event` is a strict
+        superset, item-tagged on every row."""
         with self._conn() as c:
             rows = c.execute(
                 "SELECT id, run_id, seq, kind, name, description, tool_id, parent_tool_id, created_at"
@@ -1772,14 +1678,11 @@ class SystemSpine:
             return [dict(r) for r in rows]
 
     def run_stats(self, repo_id: str, *, mode: str | None = None) -> dict[str, dict]:
-        """Per-item accumulated telemetry over FINISHED item runs (the card totals): {item_id:
-        {total_tokens, runs, last_tokens, last_duration_ms, last_model, last_ctx_pct}}.
-        Running rows are excluded (their live figures come from live_run).
+        """Per-item accumulated telemetry over FINISHED runs. Running rows are excluded; their live
+        figures come from `live_run`.
 
-        Discarded runs are excluded too: this is what the card and the drilldown header print, and
-        an item that reads "Σ 1.6M tok" over work it no longer contains is the exact confusion the
-        soft delete exists to end. The repo and system totals still count them — see the schema
-        note on `run.discarded_at`."""
+        Discarded runs are excluded too: an item reading "Σ 1.6M tok" over work it no longer contains is
+        the exact confusion the soft delete exists to end. Repo and system totals still count them."""
         where = ["repo_id=?", "status!='running'", "item_id IS NOT NULL", "discarded_at IS NULL"]
         args: list = [repo_id]
         if mode is not None:
@@ -1827,21 +1730,15 @@ class SystemSpine:
             return [self._run_dict(r) for r in rows]
 
     def token_usage(self) -> dict:
-        """System-wide token aggregation with FULL visibility (token-usage-tracking-spec).
+        """System-wide token aggregation with full visibility.
 
-        Every token is attributable along TWO axes that reconcile to the same total by construction
-        (same rows, same columns, summed two ways):
-          • Breakdown 1 — SEMANTIC (`by_category` → features): what tokens were spent on.
-          • Breakdown 2 — SYSTEMATIC (`by_type`): input / cache_creation / cache_read / output.
+        Every token is attributable along TWO axes that reconcile to the same total by construction:
+        SEMANTIC (`by_category`) and SYSTEMATIC (`by_type`).
 
-        Per row, the accounted amount = input + cache_creation + output (3-type, EXCLUDES cache_read).
-        A row whose four typed columns are all zero contributes NOTHING: it never returned a final
-        usage (aborted, killed, errored), so its `tokens` scalar is the live in-flight estimate rather
-        than a measurement, and this table carries measured usage only (2026-08-11 — the `legacy`
-        bucket that used to fold it in is gone). `total` and every by_* bucket sum this 3-type amount — cache_read is kept in `by_type`
-        (never lost) so the full 4-type volume = `total + by_type["cache_read"]` (the dashboard toggle).
-        Sums EVERY run row, so in-flight spend is included. SuperMe-context only. Back-compat:
-        `total`/`by_scope`/`by_feature` are retained. (v1 caveat: forge-eval spend isn't in the spine.)"""
+        Per row the accounted amount is input + cache_creation + output. A row with four zero columns
+        contributes NOTHING: it never returned a final usage, so its scalar is a live estimate, and this
+        table carries measured usage only. cache_read is kept in `by_type` and never lost, so the full
+        4-type volume is `total + by_type["cache_read"]`."""
         from .token_taxonomy import (
             category_for, display_feature, CATEGORY_ORDER, CATEGORY_LABELS, COLLAPSED_CATEGORIES,
         )
@@ -1944,14 +1841,10 @@ class SystemSpine:
         }
 
     def token_timeseries(self, tz_offset: int = 0) -> dict:
-        """Per-day token usage for the trend graph (token-usage-tracking-spec, decision 7).
+        """Per-day token usage for the trend graph.
 
-        Buckets by LOCAL day: `started_at` is stored UTC, and `tz_offset` (minutes to ADD to UTC to
-        reach the owner's local time, e.g. +540 for JST — the FE sends `-getTimezoneOffset()`) shifts
-        it so "which day" matches the owner's day, not UTC. Each day carries the four token types and a
-        `total`; `cumulative` is the running total of daily totals, so the
-        same series renders as per-day bars, a cumulative line, or a stacked breakdown. Derived on the
-        fly from the durable run rows — no materialized rollup."""
+        Buckets by LOCAL day: `started_at` is UTC, and `tz_offset` shifts it so "which day" matches the
+        owner's. Derived on the fly from the durable run rows — no materialized rollup."""
         modifier = f"{int(tz_offset):+d} minutes"
         with self._conn() as c:
             rows = c.execute(
@@ -2061,13 +1954,11 @@ class SystemSpine:
                              args).fetchone()[0]
 
     def live_agent_runs(self, repo_id: str, mode: str) -> dict:
-        """The RUN-based half of the agent metric (the "running now" pieces): how many work-items
-        are executing a turn right now, and how many learning jobs (distill/sweep) are running.
+        """The RUN-based half of the agent metric: how many items are executing a turn now, and how
+        many learning jobs are running.
 
-        It deliberately does NOT count idle in_progress work-items — those have no live run, so a
-        live-but-paused item (e.g. plan done, awaiting the owner) must be counted from the work-item
-        STORE by status, not from here. The caller combines: agents = active-items-by-status +
-        learn_running; running = items_running + learn_running."""
+        Deliberately does NOT count idle in-progress items — those have no live run, so a paused item is
+        counted from the work-item STORE by status, not here."""
         learn = tuple(sorted(LEARNING_FEATURES))
         qmarks = ",".join("?" * len(learn))
         with self._conn() as c:
@@ -2132,15 +2023,13 @@ class SystemSpine:
 
     def effective_model(self, repo_id: str, *, per_call: str | None = None,
                         item_model: str | None = None) -> str:
-        """THE model-precedence resolver — the ONE choke every interactive/plan run resolves through
-        so the tiers can't drift apart (session-model-precedence). Most-specific first:
-          per_call (an explicit per-turn/session pick — the surface's runtime override)
-            → item_model (a work-item's configured model, for its bound runs)
-            → this repo's persisted default (`model_override[repo_id]`, set only by repo config)
-            → the system default (which itself floors to DEFAULT_MODEL, so this never returns None).
-        Aliases are kept — the concrete latest is resolved at consumption (agent_service normalizes),
-        so a pick auto-tracks a MODEL_TIERS bump. `per_call` is the session tier: the surface holds it
-        (e.g. the chat's per-session model) and passes it in; it NEVER writes the repo default."""
+        """THE model-precedence resolver — the one choke every interactive and plan run passes
+        through, so the tiers cannot drift apart. Most specific first:
+
+            per_call → item_model → this repo's persisted default → the system default
+
+        Aliases are kept and resolved to concrete at consumption, so a pick auto-tracks a tier bump.
+        `per_call` is the session tier and NEVER writes the repo default."""
         return (per_call or item_model or self.get_model_override(repo_id)
                 or self.effective_system_model())
 
@@ -2148,10 +2037,9 @@ class SystemSpine:
         """The model a named ROLE runs on: the item's own pick for that role → this repo's tier for
         that role → the floor. The project's default tier is deliberately absent from this chain.
 
-        A role exists because its job is not the work: `vet` judges what build produced, and a judge
-        that automatically inherits the worker's tier is not an independent check — raising a
-        project to Opus would silently raise its own reviewer with it, which is the one place you
-        might want the tiers to differ. Unset therefore means the FLOOR, not the project's model."""
+        A role exists because its job is not the work. A judge that inherits the worker's tier is not an
+        independent check — raising a project to Opus would silently raise its own reviewer with it.
+        Unset therefore means the FLOOR, not the project's model."""
         return item_model or self.get_model_override(repo_id, role) or self.effective_system_model()
 
     # --- per-agent model (the autonomous background sub-agents; owner-tunable) ------------------
@@ -2336,26 +2224,17 @@ class SystemSpine:
 
     def item_phase_tokens(self, repo_id: str, item_id: str,
                           phases: tuple[str, ...] = ("build", "vet")) -> int:
-        """An item's accumulated 3-type token spend over the given phases (every run — live and
-        finished, interactive and background: the loop's meter reads what the item actually cost in
-        those phases, whoever spent it). Rows with no typed usage fall back to `tokens`.
+        """An item's accumulated 3-type spend over the given phases, every run, live and finished.
+        Rows with no typed usage fall back to `tokens`.
 
-        THAT FALLBACK IS DELIBERATE HERE, and it is the opposite of what `_display_tokens` does —
-        two readers, two questions:
+        THAT FALLBACK IS DELIBERATE, and the opposite of `_display_tokens`. Two readers, two questions:
+        that one answers "what did we MEASURE", so an estimate is excluded; this answers "what has this
+        item COST", and an aborted run's tokens were really spent. Zeroing a crashed attempt would let an
+        item that aborts repeatedly burn without limit, which is the failure the breaker is FOR. Do not
+        "fix" the disagreement.
 
-        - `_display_tokens` answers "what did we MEASURE", so an aborted run's in-flight estimate is
-          excluded: a number shown as measured must be one.
-        - this answers "what has this item COST", and an aborted run's tokens were really spent. The
-          breaker exists to stop runaway cost; zeroing a crashed attempt would let an item that
-          aborts repeatedly burn without limit, which is the failure the breaker is FOR.
-
-        So do not "fix" the disagreement by making these match. Changing either one changes which
-        question it answers.
-
-        DISCARDED RUNS ARE EXCLUDED, and this is the reason the filter matters most: this feeds the
-        loop's BUDGET BREAKER. Counting a re-run's thrown-away attempt would hand the fresh attempt
-        a budget that is already spent, and it would die on its first vet with `budget` — the exact
-        failure the plan-revision generation window was invented to work around."""
+        DISCARDED RUNS ARE EXCLUDED: this feeds the budget breaker, and counting a thrown-away attempt
+        would hand the fresh one a budget already spent."""
         ph = ",".join("?" for _ in phases)
         with self._conn() as c:
             r = c.execute(

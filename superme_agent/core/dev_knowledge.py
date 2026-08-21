@@ -1,17 +1,12 @@
 """DevKnowledgeService — read the durable, file-based part of a context's `dev/` subtree.
 
-Dev knowledge is a reserved, canonically-structured category of a Context's knowledge
-(see the internal/dev README + D-018 — the contract). This service is the dedicated BE
-consumer of the *file* structure: it walks `work-items/` (the v2 model — each folder is a
-work-item, nesting is the branch-off tree) and parses the markdown + YAML frontmatter into
-the item tree the dashboard renders, computing the derived view (blocked, root/children,
-"glance") — never stored.
+Walks `work-items/` and parses markdown plus YAML frontmatter into the item tree the dashboard
+renders, computing the derived view (blocked, root/children, glance) — never stored.
 
-The inbox is no longer a file — it's an operational triage queue in DevStore (D-013/
-D-014). The caller passes the current inbox rows into `read_all` so the glance and the
-dashboard see one combined picture.
+The inbox is not a file; it is a queue in DevStore, and the caller passes its rows into
+`read_all` so the glance sees one combined picture.
 
-Surface-agnostic: it operates on a `dev_root` Path and never knows who's calling.
+Surface-agnostic: it operates on a `dev_root` Path and never knows who is calling.
 """
 
 import re
@@ -36,13 +31,10 @@ _KNOWLEDGE_IGNORE = """\
 
 
 def _ensure_knowledge_ignore(dev_root: Path) -> None:
-    """Write the knowledge home's `.gitignore` if it has none. `dev_root` is
-    `<knowledge-root>/<repo-id>-knowledge/dev`, so the root is two levels up.
+    """Write the knowledge home's `.gitignore` if it has none.
 
     At the ROOT rather than per item: a knowledge home may be given its own remote, and the rule
-    belongs once where that remote would read it — not as a marker file in every item folder,
-    which is a file the owner has to look at for every item that will never use the directory.
-    Never raises; an ignore rule is not worth failing a mint over, and the next mint retries."""
+    belongs once where that remote would read it. Never raises — the next mint retries."""
     try:
         root = Path(dev_root).parent.parent
         marker = root / ".gitignore"
@@ -65,17 +57,12 @@ _FRONTMATTER = re.compile(r"^---\s*\n(.*?)\n---\s*\n?(.*)$", re.DOTALL)
 
 
 def _session_fields(meta: dict) -> tuple[dict, str | None]:
-    """A work-item's session slots (per-phase sessions): frontmatter keys `session_<slot>` →
-    `{slot: sid}`, plus the COMPUTED `session_id` — the session for the item's CURRENT phase, so
-    every single-session consumer (FE binding, compaction, phase-close sweep) keeps reading "the
-    item's thread" and it follows the phase.
+    """A work-item's session slots (`session_<slot>`) plus the COMPUTED `session_id` — the
+    session for the item's CURRENT phase, so every single-session consumer keeps reading "the item's
+    thread" and it follows the phase.
 
-    TWO LEGACY FALLBACKS, in order, both self-healing on the next slot write:
-    1. `session_intake` — the shared slot the five intake phases used before the per-phase split.
-       An item in flight at the cutover keeps its thread instead of silently minting a fresh one.
-    2. the bare `session_id` key — pre-roles items (ws.py adopts it into a real slot on the next
-       turn).
-    Neither is ever written again."""
+    Two legacy fallbacks, both self-healing on the next slot write: the shared `session_intake` slot,
+    and the bare `session_id` of a pre-roles item. Neither is written again."""
     from .kind_profiles import (INTAKE_PHASES, LEGACY_INTAKE_SLOT, SESSION_SLOTS, session_slot)
     keys = (*SESSION_SLOTS, LEGACY_INTAKE_SLOT)
     sessions = {s: str(meta[f"session_{s}"]) for s in keys if meta.get(f"session_{s}")}
@@ -91,30 +78,28 @@ def _session_fields(meta: dict) -> tuple[dict, str | None]:
     return sessions, computed
 
 
-# Display order for the work-item lifecycle (workspace-workflow D1/D2). phase = the per-kind
-# pipeline stage (union of both kinds' pipelines; see core/kind_profiles.py); the mid-pipeline
-# research stages (investigate/report) rank beside their implementation counterparts. status ranks
-# put what NEEDS THE OWNER first (awaiting_human), then runnable work, then routed waits, then done.
+# Display order. Research's mid-pipeline stages rank beside their implementation counterparts.
+# Status ranks put what NEEDS THE OWNER first, then runnable work, then routed waits, then done.
 _PHASE_RANK = {"triage": 0, "plan": 1, "build": 2, "investigate": 2,
                "vet": 3, "review": 4, "close": 5}
 # `error` outranks even awaiting_human: an item whose work STOPPED is a louder claim than one
 # resting at a gate by design (recovery-resilience R2).
 _STATUS_RANK = {"error": 0, "awaiting_human": 1, "active": 2, "awaiting_child": 3,
                 "awaiting_upstream": 4, "awaiting_slot": 4, "done": 5}
-# Statuses that read as "this item is live" (non-terminal). A parked-on-a-peer or queued-for-a-slot
-# item IS live — nothing is asked of the owner, but the work is real and queued, so it belongs in
-# the board. `error` is live too, and emphatically so: it is not terminal, it is work waiting to be
-# resumed or re-run — a dead-end item is exactly what this status exists to prevent.
+# Non-terminal. A parked item IS live: nothing is asked of the owner, but the work is queued.
+# `error` is live too — it is work waiting to be resumed, and a dead-end item is what that
+# status exists to prevent.
 _LIVE_STATUSES = ("active", "awaiting_child", "awaiting_upstream", "awaiting_slot",
                   "awaiting_human", "error")
 _SPAWN_RELATIONS = ("blocking", "parallel", "spawn")
 
 
 def _toposort_keys(specs: list[dict]) -> list[str]:
-    """Order batch keys so every intra-batch `after` dependency comes BEFORE its dependent (used by
-    itemize_launch to create upstreams first). Cross-batch refs to already-existing item ids impose
-    no order here (they exist on disk already). Raises ValueError naming the cycle if the edges are
-    not a DAG — a launch with a circular dependency can never make progress, so refuse it loudly."""
+    """Order batch keys so every intra-batch `after` dependency comes BEFORE its dependent.
+    Cross-batch refs impose no order — they exist on disk already.
+
+    Raises naming the cycle if the edges are not a DAG: a launch with a circular dependency can never
+    make progress."""
     keys = {s["key"] for s in specs}
     deps = {s["key"]: [a for a in s["after"] if a in keys] for s in specs}
     order: list[str] = []
@@ -139,11 +124,9 @@ def _toposort_keys(specs: list[dict]) -> list[str]:
 
 
 def _norm_artifact(a) -> dict:
-    """Normalize one `artifacts` frontmatter entry to the single `{type, path}` shape (R5).
-
-    Agents have historically written EITHER a bare path string ("artifacts/plan.md") OR a structured
-    `{type, path}` dict; this collapses both at the read boundary so the wire contract is one object
-    union, never a string-or-object mix. `type` defaults to the filename stem (plan.md → "plan")."""
+    """Normalize one `artifacts` entry to the single `{type, path}` shape. Agents have written
+    either a bare path or the dict, so this collapses both at the read boundary. `type` defaults to
+    the filename stem."""
     def _stem(p: str) -> str:
         name = str(p or "").rsplit("/", 1)[-1]
         return name.rsplit(".", 1)[0] or "file"
@@ -175,30 +158,23 @@ def _parse_md(text: str) -> tuple[dict, str]:
     return meta, m.group(2)
 
 
-# --- general/ anchor docs: parse the readable deliverable/wave lists -------------
-# The anchor docs carry NO frontmatter (see the dev-knowledge-structure constitution). Deliverables
-# and waves live as clean id-tagged lists in the body: `- **<id>** — Title` under project-prd.md's
-# `## Deliverables`, and `**<id>** — Title` under each `## <deliverable-id> …` heading in roadmap.md.
-# A wave line may carry a curated status glyph (✓ done · ▸ active · · planned). These parsers are
-# deliberately forgiving; example snippets inside ``` fences are skipped so they don't parse as data.
-# The doc set is split by the QUESTION each answers, one owner per fact (see
-# general_docs/general-knowledge-content-design.md §3):
-#   project-prd    what is this · who for · why · goals + non-goals · deliverables as value
-#   architecture   how it's built · stack · invariants · what's deliberately not here
-#   capabilities   what it can do RIGHT NOW (present tense only — never the plan)
+# The anchor docs carry NO frontmatter. Deliverables and waves live as id-tagged lists in the
+# body. These parsers are forgiving, and ``` fences are skipped so examples do not parse as data.
+#
+# The set is split by the QUESTION each answers, one owner per fact:
+#   project-prd    what is this · who for · why · deliverables as value
+#   architecture   how it is built · stack · invariants · what is deliberately absent
+#   capabilities   what it can do RIGHT NOW — present tense only, never the plan
 #   decisions      why we chose what we chose (append-only + supersede)
-#   roadmap        what's coming (forward-only)
+#   roadmap        what is coming (forward-only)
 #   resources      where the external things are
-# `spec` was RETIRED into architecture: stack/approach/constraints ARE current-state architecture,
-# and keeping both guaranteed the duplication we measured on repo-pulse (D-001/2/3 each stated
-# twice — as a Stack bullet and as a decision record — so changing one meant remembering the other).
-# It stays readable via LEGACY_DOCS so existing repos keep their content until it's folded in.
+#
+# `spec` was retired into architecture: keeping both guaranteed duplication. It stays readable
+# via LEGACY_DOCS until existing repos fold it in.
 ANCHOR_DOCS = ("project-prd", "architecture", "capabilities",
                "decisions", "roadmap", "verification")   # + resources/index.md
-# `verification` — the repo's VERIFICATION LIBRARY (verification-model §8): proven checks later
-# items inherit. An anchor doc so the owner reads and edits it exactly where they read the others;
-# exempt from the lint's missing/stale rules because an empty library is the correct starting state
-# and a settled one is not decaying (see core/verification_library.py).
+# The repo's verification library. An anchor doc so the owner edits it where they read the
+# others, but exempt from the lint: an empty library is the correct starting state.
 _LIBRARY_DOC = "verification"
 LEGACY_DOCS = ("spec",)                            # readable, lint-flagged, never re-created
 _DELIVERABLE_RE = re.compile(r"^-\s+\*\*(?P<id>[^*]+?)\*\*\s*[—–-]\s*(?P<title>.+?)\s*$", re.M)
@@ -237,13 +213,11 @@ def _deemph(s: str) -> str:
     return re.sub(r"[*_`]", "", s).strip()
 
 
-# --- portrait parsing: the small, forgiving readers behind the Project view ------
-# Anchor docs are prose an agent writes, not a form it fills, so every reader here degrades to an
-# empty result rather than raising. A band the docs don't answer simply doesn't render.
+# Anchor docs are prose an agent writes, not a form it fills, so every reader here degrades to
+# an empty result. A band the docs do not answer simply does not render.
 _KV_RE = re.compile(r"^\s*-\s+\*\*(?P<k>[^*]+?)\*\*\s*[:—–-]\s*(?P<v>.+?)\s*$")
-# Colon-only, for deciding what is STRUCTURE vs a sentence that merely opens in bold. `- **Stack**:
-# Python` is a field; `- **No CSS framework** — breaks offline rendering` is prose with a bold lead,
-# and treating the second as a field would silently drop it from its band.
+# Colon-only, to tell STRUCTURE from a sentence that merely opens in bold. Treating prose with
+# a bold lead as a field would silently drop it from its band.
 _KV_STRICT_RE = re.compile(r"^\s*-\s+\*\*[^*]+?\*\*\s*:\s*.+$")
 _PLAIN_BULLET_RE = re.compile(r"^\s*-\s+(?P<v>.+?)\s*$")
 
@@ -277,10 +251,8 @@ def _project_name(prd_text: str) -> str | None:
     return re.split(r"\s+[—–-]\s+", _deemph(m.group(1)))[0] if m else None
 
 
-# A deliverable may carry OPTIONAL indented sub-fields under its line — `**Value**:` (what the owner
-# can do once it lands) and `**Needs**:` (the deliverables it depends on). Kept as sub-bullets rather
-# than folded into the title line so the machine-parsed `- **d-x** — Title` format is byte-identical
-# to before: `project_established` and every existing PRD keep working untouched.
+# Optional indented sub-fields. Kept as sub-bullets rather than folded into the title line, so
+# the machine-parsed format stays byte-identical and every existing PRD keeps working.
 _D_FIELD_RE = re.compile(r"^\s+-\s+\*\*(?P<key>Value|Needs)\*\*\s*:\s*(?P<val>.+?)\s*$")
 
 
@@ -307,10 +279,8 @@ def _parse_deliverables(prd_text: str) -> list[dict]:
     return out
 
 
-# An open question is an ADDRESSABLE record, not prose: `- **q-<slug>** — <question> — [OPEN]`, and
-# once answered `… — [RESOLVED <date>] <answer>`. The id is what lets the agent say "answer q-window"
-# and the owner answer it from the dashboard instead of opening the file in an IDE — the whole point
-# of the typed shape (general-knowledge-redesign-input.md §5·B).
+# An open question is an ADDRESSABLE record, not prose. The id is what lets the owner answer it
+# from the dashboard instead of opening the file in an IDE.
 def _parse_waves(roadmap_text: str) -> list[dict]:
     """roadmap.md → [{id, title, deliverable, status}] — waves grouped under each `## <d-id> …`."""
     waves, current = [], None
@@ -395,26 +365,20 @@ class DevKnowledgeService:
 
     def enrich_work_items(self, dev_root: Path, items: list[dict],
                           live_by_item: dict[str, dict], stats: dict[str, dict]) -> None:
-        """Attach run telemetry to each work-item, in place (R5 push-down, decision #7).
+        """Attach run telemetry to each work-item, in place.
 
-        The daemon owns the spine, so it passes the run data in as plain dicts — `live_by_item`
-        (item_id → live running row) and `stats` (item_id → accumulated run stats) — keeping this
-        service free of any spine dependency. Adds the live (time/tokens while running) + accumulated
-        (total tokens, last run) + display (model, ctx_pct, tasks-progress) fields the cards show.
-        """
+        The daemon owns the spine and passes the run data in as plain dicts, keeping this service free of
+        any spine dependency."""
         for it in items:
             wid = it.get("id")
             s = stats.get(wid, {})
             it["total_tokens"] = s.get("total_tokens", 0)
-            # Per-phase token accumulation (Stage D), BOTH bases recorded: `phase_tokens` = 3-type
-            # (input+cache_write+output — what the card shows for its current phase) and
-            # `phase_tokens_4type` = full volume (3-type + cache_read) behind it.
+            # Both bases recorded: `phase_tokens` is the 3-type figure the card shows, `_4type` the full
+            # volume behind it.
             by_phase = dict(s.get("by_phase", {}))
             by_phase_cr = dict(s.get("by_phase_cr", {}))
-            # Legacy runs (made before the phase column existed) carry no phase → the "unknown" bucket.
-            # Attribute them to the item's CURRENT phase: an item rarely leaves its first phase, and every
-            # NEW run is stamped, so this only ever re-homes legacy spend (and is exact for the common
-            # never-advanced case — e.g. an item that's lived entirely in one phase shows its full total).
+            # Legacy runs carry no phase. Attribute them to the item's CURRENT one: every new run is
+            # stamped, so this only ever re-homes legacy spend, and is exact for a never-advanced item.
             cur = it.get("phase")
             if cur:
                 u = by_phase.pop("unknown", 0)
@@ -442,9 +406,8 @@ class DevKnowledgeService:
             # The live run's role (triage/plan/build/vet/review/close/deputy) — lets the chat label
             # the incoming indicator by what's actually running ("Building…" vs "Deputy reviewing…").
             it["run_feature"] = info.get("feature") if info else None
-            # The model to show: the live run's, else the item's CONFIGURED model (frontmatter — what
-            # its runs use), else the last run's. Configured wins over telemetry so a reconfigured-
-            # but-not-yet-rerun item shows what it WILL use.
+            # Live run's, else the item's CONFIGURED model, else the last run's. Configured beats
+            # telemetry, so a reconfigured item shows what it WILL use.
             configured = it.get("model")
             it["model"] = (info.get("model") if info else None) or configured or s.get("last_model")
             it["ctx_pct"] = info.get("ctx_pct") if info else s.get("last_ctx_pct")
@@ -468,44 +431,24 @@ class DevKnowledgeService:
         research_kind: str | None = None,
         born_at: str | None = None,
     ) -> dict:
-        """Stamp a new top-level work-item from a pushed inbox item.
+        """Stamp a new top-level work-item from a pushed inbox row, entering at triage/active.
 
-        Creates `work-items/<id>/{item.md, artifacts/}`, entering at phase=triage, status=active
-        (workspace-workflow D1/D2: every item passes triage; kind is a PROPOSAL until the
-        triage-exit gate confirms it). `kind` is validated against KIND_PROFILES — an unknown kind
-        raises loud (ValueError) with NO folder created, and it is REQUIRED with no default: the
-        profile table's own rule is that an unknown kind never resolves silently, and a default
-        here broke that one file away — every ordinary ticket got an implementation pipeline
-        because nobody was asked. `proposed_kind` = what the FILER said this was, when they said
-        anything; it is birth provenance like `inbox_id`, never routed on, and triage reads it once
-        to tell "nobody judged yet" apart from "someone judged and I disagree".
-        `spawned_from` = the D3 provenance edge
-        `{item, relation: blocking|parallel|spawn, note?}` (child-side single write; parent views
-        are derived by scan); relation is validated. `inbox_id` = the originating inbox row (D5
-        trace; the row itself also stays, with `routed_to` as the reverse pointer). `after` = PEER
-        sequencing — ids this item may not start before (populated at itemization from the PRD's
-        `Needs` edges). An item created with any non-terminal upstream enters at
-        `awaiting_upstream` instead of `active`, and the status router releases it automatically
-        when the last one completes; peers are validated to EXIST here, because a typo'd id that
-        silently parks work forever is the worst failure this edge can have.
+        `kind` is validated and REQUIRED with no default: an unknown kind must never resolve silently,
+        and a default here gave every ordinary ticket an implementation pipeline because nobody was
+        asked. `proposed_kind` is birth provenance, never routed on — triage reads it once to tell
+        "nobody judged" from "someone judged and I disagree".
 
-        The id is an OPAQUE token (12-hex), fully DECOUPLED from the title — identity
-        is a stable meaningless key, the human label lives only in the `title` field (best-practice
-        data modeling; cf. git object hashes — the UI surfaces meaning, not the folder name). The
-        folder name IS the id, so the work-graph's parent_id/root_id (derived from folder path parts
-        in `_read_work_items`) stay single-sourced and drift-free. Because identity carries nothing
-        from the title, a deleted item's id is never regenerated, so a later same-title item can
-        NEVER adopt its orphaned (permanent, never-delete-logs) runs/dev-events — the 305k-token
-        ghost post-mortem, 2026-07-13. Returns {id, folder}.
-        """
+        `spawned_from` is the provenance edge, written child-side only. `after` is peer sequencing, and
+        an item with any non-terminal upstream enters `awaiting_upstream`. Peers are validated to EXIST:
+        a typo'd id that silently parks work forever is the worst failure this edge can have.
+
+        The id is an OPAQUE token, fully decoupled from the title."""
         from .kind_profiles import DEFAULT_SCALE, KIND_PROFILES, RESEARCH_KINDS, get_profile
         profile = get_profile(kind)  # loud KeyError on unknown kind, before any disk write
-        # A BUTTON-LAUNCHED STANDING SWEEP is born already classified and already past triage: the
-        # button IS the classification (the family is which button was pressed), and there is no
-        # ticket for triage to read. Every other mint point leaves both null and enters at phase 0,
-        # because a kind is a PROPOSAL until triage confirms it — this is the one case where the
-        # owner did the confirming, by choosing. Both are validated here, before any disk write, so
-        # a caller cannot mint an item into a phase its kind does not have.
+        # A button-launched sweep is born classified and past triage: the button IS the
+        # classification, and there is no ticket to read. Every other mint point enters at phase 0,
+        # because a kind is a PROPOSAL until triage confirms it.
+        # Validated before any disk write, so a caller cannot mint into a phase the kind lacks.
         if proposed_kind is not None and proposed_kind not in KIND_PROFILES:
             raise ValueError(f"proposed_kind must be one of {sorted(KIND_PROFILES)}")
         if research_kind is not None:
@@ -529,10 +472,9 @@ class DevKnowledgeService:
         missing = [a for a in after_ids if not (wi / a / "item.md").exists()]
         if missing:
             raise ValueError(f"after references unknown work-item(s): {', '.join(missing)}")
-        # The FLOOR under every mint point (core/titles): a title that already reads as a label is
-        # untouched; one that is really the ask — the owner pushing an inbox row with no title
-        # typed, where the whole body became the title — degrades to its first sentence. Agents are
-        # bounced instead, at their own tool, so they learn; a human cannot be.
+        # The FLOOR under every mint point: a title that already reads as a label is untouched; one
+        # that is really the ask degrades to its first sentence. Agents are bounced instead, at their
+        # own tool, so they learn — a human cannot be.
         title = normalize_title(title, description=description)
         wid = secrets.token_hex(6)                       # opaque 12-hex id == folder name (~2^48)
         while (wi / wid).exists():                       # vanishingly rare live clash → re-roll
@@ -617,22 +559,11 @@ class DevKnowledgeService:
 
     def itemize_launch(self, dev_root: Path, items: list[dict], *,
                        session_id: str | None = None, cohort: str | None = None) -> dict:
-        """Create a LAUNCH COHORT — the batch of autopilot work-items an onboarding settles into
-        (autopilot slice 4c). Every item is born `autopilot=true` and stamped with one shared
-        `cohort` id (aggregate-spend observability groups on it).
+        """Create a LAUNCH COHORT — the batch of autopilot items an onboarding settles into. Every
+        item is born `autopilot=true` under one shared `cohort` id.
 
-        `items` = `[{key, title, description, kind, after:[key|id]}]`. `key` is a caller-local
-        HANDLE used only to express edges within this batch — the real opaque ids are minted here,
-        so the caller (which doesn't know ids yet) can wire the PRD's `Needs` graph by key. Each
-        `after` entry is resolved: a batch key → that item's minted id; an existing on-disk id →
-        passed through (a cross-cohort dependency); anything else is a loud `ValueError` (a typo'd
-        edge that would park work forever is the worst failure this has). Items are created in
-        TOPOLOGICAL order so every upstream exists on disk before its dependent — a cycle raises.
-
-        Pure creation, no orchestration: the daemon's launch service fires the first triage run for
-        each item that starts `active`; items parked `awaiting_upstream` are kicked by the scheduler
-        when their upstreams complete. Returns `{cohort, created:[{id,key,title,after,status}],
-        running:[id…], waiting:[id…]}`."""
+        `key` is a caller-local HANDLE for expressing edges within the batch; the real opaque ids are
+        minted here, so a caller that does not know ids yet can still wire the PRD's `Needs` graph."""
         if not items:
             raise ValueError("itemize_launch needs at least one item")
         specs: list[dict] = []
@@ -1234,16 +1165,11 @@ class DevKnowledgeService:
         return True
 
     def set_work_item_error(self, dev_root: Path, item_id: str, reason: str) -> bool:
-        """Stop an item at `error` with the reason it stopped (recovery-resilience R2).
+        """Stop an item at `error` with the reason it stopped.
 
-        `error` is NOT `system_fault` and the two must not merge (owner, 2026-07-31): a system fault
-        is a run that COMPLETED while our machinery misbehaved — review's business, the work still
-        advanced. `error` is a run that STOPPED — a crash, an outage that outlasted the retry ladder,
-        a daemon restart — so the item stays where it died, labelled, until the owner resumes or
-        re-runs it. Neither is terminal and neither is a verdict on the work.
-
-        The reason is owner-facing prose, one line, written where the item stopped. Terminal items
-        are refused, same as every other status write."""
+        `error` is NOT `system_fault`: a system fault is a run that COMPLETED while our machinery
+        misbehaved, and the work still advanced. This is a run that STOPPED, so the item stays where it
+        died until the owner resumes it. Neither is terminal, and neither is a verdict on the work."""
         item = Path(dev_root) / "work-items" / item_id / "item.md"
         if not item.exists():
             return False
@@ -1267,10 +1193,8 @@ class DevKnowledgeService:
         return True
 
     def set_work_item_autopilot(self, dev_root: Path, item_id: str, on: bool) -> bool:
-        """Flip the per-item autopilot policy. Written as a bare `autopilot: true` line, REMOVED
-        when off (so the frontmatter never carries a dead `autopilot: false`, matching how the
-        flag is minted). Bumps `updated_at`. Returns True if the file changed. Callers gate WHEN
-        this is allowed (the route restricts it to pre-build — the inbox-stage decision)."""
+        """Flip the per-item autopilot policy. Written as a bare `autopilot: true`, REMOVED when off,
+        so the frontmatter never carries a dead `false`. Callers gate when this is allowed."""
         item = Path(dev_root) / "work-items" / item_id / "item.md"
         if not item.exists():
             return False
@@ -1355,10 +1279,8 @@ class DevKnowledgeService:
     })
 
     def set_work_item_git(self, dev_root: Path, item_id: str, **fields) -> bool:
-        """Upsert the item's git record (S4): branch/worktree at build entry, merge commit +
-        backup ref at review. Only the known `_GIT_FIELDS` keys are accepted (loud ValueError
-        otherwise); string values are JSON-quoted (paths survive the line parser), None writes
-        `null`. Bumps `updated_at`. Returns True if the file changed."""
+        """Upsert the item's git record. Only known `_GIT_FIELDS` keys are accepted (loud otherwise);
+        strings are JSON-quoted so paths survive the line parser."""
         bad = set(fields) - self._GIT_FIELDS
         if bad:
             raise ValueError(f"unknown git record fields: {sorted(bad)}")
@@ -1413,11 +1335,11 @@ class DevKnowledgeService:
         return p.read_text() if (p and p.exists()) else None
 
     def deliverable_success_signal(self, dev_root: Path, deliverable_id: str) -> str | None:
-        """The PRD `## Success signals` lines that cite `deliverable_id`, verbatim — the owner's own
-        words for "what good looks like" for this deliverable (the deputy's review acceptance test,
-        autopilot §2b). Returns the matching bullet(s), or None when the PRD, the section, or a line
-        citing the id can't be found. Free-form prose, so it matches by id mention, not a fixed shape
-        — a best-effort read, never a raise (the deputy escalates when a signal can't be confirmed)."""
+        """The PRD success-signal lines citing `deliverable_id`, verbatim — the owner's own words
+        for what good looks like, and the deputy's review acceptance test.
+
+        Free-form prose, so it matches by id mention rather than a fixed shape. Never raises: the deputy
+        escalates when a signal cannot be confirmed."""
         if not deliverable_id:
             return None
         prd = self.read_general_doc(dev_root, "project-prd")
@@ -1429,11 +1351,10 @@ class DevKnowledgeService:
         return "\n".join(hits) if hits else None
 
     def project_established(self, dev_root: Path) -> bool:
-        """True once this project's memory exists — the PRD defines at least one deliverable (the
-        spine the roadmap and work-items point at). A blank/missing general/ is 'not established':
-        the dev workspace routes such a repo to onboarding (project-init / retrofit) as a hard front
-        door before any work surfaces open. Keying on deliverables (not file presence) means a fresh
-        repo — whose general/ doesn't exist yet — reads as un-established until onboarding fills it."""
+        """True once this project's memory exists — the PRD defines at least one deliverable.
+
+        Keyed on deliverables rather than file presence, so a fresh repo reads as un-established until
+        onboarding fills it, and the workspace routes it to the onboarding front door."""
         prd = self.read_general_doc(dev_root, "project-prd")
         return bool(prd and _parse_deliverables(prd))
 
@@ -1520,14 +1441,13 @@ class DevKnowledgeService:
 
     def read_portrait(self, dev_root: Path) -> dict:
         """The PORTRAIT — what this project IS, assembled from the anchor docs into the six bands the
-        Project view renders (identity · goals · capabilities · build · deliverables · resources).
+        Project view renders.
 
-        Deliberately excludes everything the dashboard already answers: decisions (volatile, often
-        work-item specific), work in motion, lint findings, status. Reading this end to end should
-        tell you what the project is in under a minute — that's the only test it has to pass.
+        Deliberately excludes everything the dashboard already answers. Reading it end to end should tell
+        you what the project is in under a minute; that is the only test it has to pass.
 
         Every band maps to exactly ONE doc, so the view can never become a place knowledge secretly
-        lives: it renders what the docs say or it renders nothing."""
+        lives: it renders what the docs say, or nothing."""
         root = Path(dev_root)
         prd = _strip_fences(self.read_general_doc(root, "project-prd") or "")
         arch = _strip_fences(self.read_general_doc(root, "architecture") or "")
@@ -1552,8 +1472,7 @@ class DevKnowledgeService:
                 "direction": _bullets(_section(prd, "Direction")),
                 "non_goals": _bullets(_section(prd, "Non-goals")),
             },
-            # Present tense ONLY. An empty list is the honest answer for a project that hasn't
-            # shipped — never a placeholder, never the plan restated (that's the roadmap's job).
+            # Present tense ONLY. An empty list is the honest answer for a project that has not shipped.
             "capabilities": [
                 {"name": _deemph(m.group("id")), "detail": _deemph(m.group("title"))}
                 for m in (_DELIVERABLE_RE.match(ln) for ln in
@@ -1573,11 +1492,8 @@ class DevKnowledgeService:
         }
 
     def roadmap_board(self, dev_root: Path, items: list[dict] | None = None) -> dict:
-        """Join the anchor scaffold (project-prd deliverables + roadmap waves) with the live
-        work-items (grouped by each item's own `wave:`/`deliverable:` pointer) into the board tree:
-        deliverable → wave → its item views + rollup. Status/date come from the items; the wave's
-        curated glyph comes from the roadmap. `orphans` surfaces referential-integrity breaks
-        (a pointer to an id the anchor docs don't define)."""
+        """Join the anchor scaffold with the live work-items into the board tree: deliverable → wave →
+        items plus rollup. `orphans` surfaces referential-integrity breaks."""
         root = Path(dev_root)
         deliverables = _parse_deliverables(self.read_general_doc(dev_root, "project-prd") or "")
         waves = _parse_waves(self.read_general_doc(dev_root, "roadmap") or "")
@@ -1622,13 +1538,11 @@ class DevKnowledgeService:
 
     def orient_digest(self, dev_root: Path, items: list[dict] | None = None, *,
                       in_progress: bool = True) -> str | None:
-        """The thin always-on ORIENT line for the dev preamble — what this project is, which waves are
-        active, and what's in progress — generated from the anchor docs + live work-items. Kept tiny
-        (it's a permanent per-turn cost); None when there's nothing yet (no general/ docs).
+        """The thin always-on ORIENT line: what this project is, which waves are active, what is in
+        progress. Kept tiny — it is a permanent per-turn cost. None when there is nothing yet.
 
-        `in_progress=False` drops the other-items line for a turn already bound to one item — see
-        `agent_service._context_preamble`. The project line and active waves still ride: those
-        describe the project, not the queue."""
+        `in_progress=False` drops the other-items line for a turn already bound to one item. The project
+        line still rides: it describes the project, not the queue."""
         prd = self.read_general_doc(dev_root, "project-prd")
         line = _first_para(prd) if prd else None
         board = self.roadmap_board(dev_root, items)
@@ -1636,15 +1550,13 @@ class DevKnowledgeService:
                   for w in d["waves"] if w.get("status") == "active"]
         if items is None:
             items = self._read_work_items(Path(dev_root) / "work-items")
-        # "In progress" = genuinely being worked. A `close`-phase item is done-pending-owner (it rests
-        # at the close gate awaiting the owner's completion), so it's excluded — otherwise a finished
-        # cohort piles up here and drowns the real signal.
+        # A `close`-phase item is done-pending-owner, so it is excluded: otherwise a finished cohort
+        # piles up here and drowns the real signal.
         inprog = [it for it in items
                   if it.get("status") in _LIVE_STATUSES and not it.get("done_at")
                   and str(it.get("phase")) != "close"]
         if not (line or active or inprog):
-            # Cold start: no project memory yet. Make the empty state VISIBLE (not silence) so the
-            # charter's "Before there is any memory" rule fires — establish it before building.
+            # Make the empty state VISIBLE, not silent, so the charter's no-memory rule fires.
             return ("**No project memory yet.** Establishing it is your first task — project-init for a "
                     "new/empty repo, retrofit for existing code (see the charter). Don't build until it exists.")
         out: list[str] = []
@@ -1667,46 +1579,32 @@ class DevKnowledgeService:
         shutil.rmtree(folder)
         return True
 
-    # --- re-run: reset the item in place (recovery-resilience R5) -----------------
+    # A re-run keeps the item and throws away its WORK, so this is a KEEPLIST: a field nobody
+    # classified is DROPPED, which is the safe direction. A clear-list would let a field added
+    # next month silently survive, and the item would come back carrying half its old life.
     #
-    # A re-run keeps the item and throws away its WORK. Which fields survive that is the whole
-    # decision, so it is written as a KEEPLIST rather than a list of things to clear: a field
-    # nobody classified is DROPPED, which is the safe direction. The alternative (clear-list)
-    # fails the other way — a lifecycle field added next month would silently survive a re-run
-    # and the item would come back carrying half of its old life.
-    #
-    # KEEP = who this item is (identity), what it hangs off (relations), what was asked for
-    # (the original intent), and how the owner configured it. Everything else is produced BY the
-    # lifecycle and is exactly what the re-run is throwing away.
+    # KEEP = identity, relations, the original ask, and the owner's configuration.
     _RERUN_KEEP = (
-        # identity — the id never changes on a re-run; that is the point (a new id would mean
-        # re-pointing every edge, and would orphan the permanent run/event trace).
+        # identity — a new id would re-point every edge and orphan the permanent run trace.
         "id", "root_id", "parent_id", "title", "kind", "created_at",
         # relations — the work-graph edges. Losing one of these wedges the scheduler.
         "spawned_from", "after", "cohort", "wave", "deliverable", "inbox_id",
         # the owner's configuration of this item, which a re-run is not a decision to revisit
         "autopilot", "prompt_extraction", "model", "effort",
-        # the code line. The branch is KEPT (it is code, not data — same rule as Drop); only the
-        # worktree DIR is torn down, and `create_worktree` re-adds one to the existing branch.
+        # the code line. The branch is KEPT; only the worktree dir is torn down and re-added.
         "git_branch", "git_base",
     )
 
     def reset_work_item(self, dev_root: Path, item_id: str) -> dict | None:
-        """Reset a work-item to its entry phase, keeping identity/relations/ask — the file half of
-        a re-run. Returns `{phase, status, removed:[…]}`, or None if there is no item.
+        """Reset a work-item to its entry phase, keeping identity, relations and the ask — the file
+        half of a re-run.
 
-        Three acts, in order:
-          1. `item.md` is REBUILT from `_RERUN_KEEP` (body — the original ask — untouched), with
-             phase/status back at the kind profile's entry.
-          2. The produced folders go: `artifacts/`, `reports/`, `checkpoints/`, `deputy-log.jsonl`.
-             `preliminary/` STAYS — it is the pushed input, not work this item did.
-          3. Nothing else. Runs, run events and dev-activity are permanent trace and are not this
-             function's business (see [[never-delete-logs]]); the caller handles sessions and the
-             worktree, which are not files under the item.
+        `item.md` is rebuilt from the keeplist with the body untouched; the produced folders go;
+        `preliminary/` STAYS, because it is the pushed input rather than work this item did. Runs and
+        events are permanent trace and are not this function's business.
 
-        `status` comes back `awaiting_upstream` when any `after` peer is still open — the same
-        rule `create_work_item` applies at birth, because a reset item must no more start against
-        unlanded work than a new one."""
+        `status` comes back `awaiting_upstream` when any peer is still open — a reset item must no more
+        start against unlanded work than a new one."""
         from .kind_profiles import get_profile
         folder = Path(dev_root) / "work-items" / item_id
         item_md = folder / "item.md"
@@ -1736,17 +1634,15 @@ class DevKnowledgeService:
             return str(val)
 
         lines = [f"{k}: {_render(v)}" for k, v in kept.items()]
-        # No re-run COUNTER is written (owner, 2026-07-31). A `generation: N` field only existed to
-        # explain why the item's files were younger than its run history — and the soft delete
-        # ended that mismatch: a re-run item now reads as a fresh item, because its discarded rows
-        # have left its own views. A number nobody needs is a number that goes stale.
+        # No re-run counter: it existed only to explain why an item's files were younger than its run
+        # history, and the soft delete ended that mismatch.
         lines += [f"phase: {phase}", f"status: {status}", "done_at: null", "artifacts: []",
                   "session_id: null", f"updated_at: {today}"]
         item_md.write_text("---\n" + "\n".join(lines) + "\n---\n" + body.lstrip("\n"))
 
         removed = []
-        # `scratch/` goes with them: it is a re-run's working space, and last attempt's half-built
-        # inventories are exactly the stale input a fresh run must not find lying around.
+        # `scratch/` goes too: last attempt's half-built inventories are exactly the stale input a
+        # fresh run must not find.
         for name in ("artifacts", "reports", "checkpoints", sandbox.SCRATCH_DIRNAME):
             sub = folder / name
             if sub.is_dir():
@@ -1764,11 +1660,6 @@ class DevKnowledgeService:
     # NOTE: the legacy `add_decision` (D-###.md scheme) was retired — decisions are now a
     # `memory` type in the §4.9 knowledge subsystem, not an orphan folder. See PRD §4.9.
 
-    # --- memory: RETIRED (WI-8) --------------------------------------------------
-    # The curated dev/`memory/` applied-fact store (index MEMORY.md + one-fact files) is gone.
-    # Learned operational content is now constitution/skill/agent in the harness, governed via the
-    # Published inventory; auto-accrued knowledge lives in the knowledge tree. The reader/writer
-    # methods (list_memory / read_memory_index / apply_fact / set_fact_enabled) were removed here.
 
     # --- internals --------------------------------------------------------------
 
@@ -1820,11 +1711,9 @@ class DevKnowledgeService:
         return {
             "by_status": by_status,
             "by_phase": by_phase,
-            # SHIPPED ≠ TERMINAL. `by_status["done"]` counts everything that ended, which includes
-            # the work that was abandoned or superseded — thrown away, never landed. Counting those
-            # as shipped inflates the one number that is supposed to mean "this got delivered"
-            # (owner, 2026-08-14). Outcome is the discriminator; a pre-outcome item that ended is
-            # counted as shipped, because before the field existed ending meant completing.
+            # SHIPPED ≠ TERMINAL: `done` counts everything that ended, abandoned work included, and
+            # counting those inflates the one number meaning "this got delivered". Outcome is the
+            # discriminator; a pre-outcome item that ended counts as shipped.
             "shipped": sum(1 for it in items
                            if it.get("done_at")
                            and str(it.get("outcome") or "completed") == "completed"),
