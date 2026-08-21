@@ -1,38 +1,17 @@
-"""Artifact machinery — the D5 playbook generalized to every work-item artifact kind (workspace-
-workflow PRD stage S2).
+"""Artifact machinery — one template plus a deterministic scaffolder per artifact kind.
 
-The convergent authoring standard (decision doc Research §5, all four benchmark codebases agree):
-**agent supplies content, code supplies form.**
-- One TEMPLATE + deterministic SCAFFOLDER per artifact kind — code owns frontmatter, section
-  order, ids, timestamps. The agent only fills `<fill:…>` prose slots.
-- A light SELF-CHECK validator (required sections present, no placeholder slots left) runs at the
-  phase gate that CONSUMES the doc — never at write time.
-- Reject-with-instructions, no state change: every validation failure returns an itemized issue
-  list; nothing is persisted on failure.
-- Claims verified against GROUND TRUTH where an artifact asserts facts (a staged knowledge op's
-  file references must exist) — a doc cannot acquire a dead pointer at accept time.
-- Evidence goes STALE on subsequent repo edits (repo fingerprint at record time vs now);
-  "validated" is earned, never asserted.
-- Append-only + atomic writes for the continuity channel (checkpoints).
+THE STANDARD: agent supplies content, code supplies form.
 
-Layout inside a work-item folder (`work-items/<id>/`):
-    artifacts/{brief,plan}.md                — the agent-facing spine docs (renovation §3.1)
-    artifacts/build-vet-<n>.md               — ONE report per build⟷vet cycle, staged writers:
-                                               build (§Built/§Validation) → vet's pen appends the
-                                               §Verification check fence → the loop driver appends
-                                               §Cycle outcome
-    artifacts/investigation.md               — research's work-segment record (the cycle report's
-                                               counterpart; findings.md is RETIRED — its verdicts
-                                               live in reports/report-review.md)
-    reports/                                 — user-facing reports (projections; §3.3)
-    checkpoints/<YYYYMMDD-HHMMSS>.md         — session continuity (append-only)
-    preliminary/                             — the pushed inbox folder (S3)
+- Code owns frontmatter, section order, ids and timestamps. The agent fills `<fill:…>` slots.
+- A light SELF-CHECK runs at the phase gate that CONSUMES the doc, never at write time.
+- Reject with instructions and no state change: nothing is persisted on failure.
+- Claims are verified against GROUND TRUTH, so a doc cannot acquire a dead pointer at accept.
+- Evidence goes STALE on later repo edits. "Validated" is earned, never asserted.
+- Append-only, atomic writes for checkpoints.
 
-Scaffold ownership (renovation §3.3, option 1): every scaffold with an authoring SKILL lives as one
-template file under `skills/<skill>/templates/` — this module READS those files (never embeds a
-copy) and derives the required-sections self-check from the template's own headings.
-
-Everything here is deterministic, file-based, and spine-free — unit-testable without a daemon.
+Inside a work-item folder: `artifacts/` holds the agent-facing spine docs and the per-cycle
+build⟷vet reports; `reports/` holds the owner-facing projection of each phase; `checkpoints/`
+holds continuity.
 """
 
 import hashlib
@@ -59,12 +38,9 @@ _FM_BLOCK = re.compile(r"\A---\n(.*?)\n---\n", re.DOTALL)
 _FM_RESEARCH_KIND = re.compile(r"(?m)^research_kind:\s*(\S+)\s*$")
 
 
-# --------------------------------------------------------------------------- templates
-# Skill-owned scaffolds (renovation §3.3 option 1): the template FILE under the authoring skill is
-# the single source — body, section order, and the required-sections check are all derived from it.
-# A section whose template body carries a `<fill:…>` slot must be FILLED; a comment-only section
-# (a pen's, the driver's, or a revision log) must merely EXIST. `handoff-brief` keeps an embedded
-# skeleton — it has no authoring skill of its own.
+# The template FILE under the authoring skill is the single source: body, section order and the
+# required-sections check all derive from it. A section with a `<fill:…>` slot must be FILLED;
+# a comment-only one must merely EXIST.
 
 _TEMPLATE_HOMES = {
     "brief":         ("triage", "brief-template.md"),
@@ -76,15 +52,12 @@ _TEMPLATE_HOMES = {
     # `self_check` judges a base-shaped file against this spec, so adding a section here would
     # retro-fail records already written correctly.
     "investigation": ("investigate", "investigation-template.md"),
-    # One shape per family (kind_profiles.RESEARCH_KINDS). They are NOT variations on a theme —
-    # each family is dedicated to a different question, so each owes a different record: an audit
-    # owes the surface it enumerated, housekeeping owes proof that nothing reaches what it wants to
-    # delete, security owes the path an attacker walks, refactoring owes the cost of the move,
-    # study owes the source pinned, deep-diagnosis owes what it ruled out. What they share is
-    # `## Follow-up work` — a research item's job is the investigation AND the work it implies.
-    # Read from the family REGISTRY, not from a literal list — the registry is the one place a
-    # family is declared, and a second copy here is a family that scaffolds the base shape because
-    # somebody added a row and did not know this line existed.
+    # One shape per family. NOT variations on a theme: each family answers a different question,
+    # so each owes a different record. What they share is `## Follow-up work` — a research item's
+    # job is the investigation AND the work it implies.
+    #
+    # Read from the REGISTRY, never a literal list: a second copy is a family that silently
+    # scaffolds the base shape because somebody added a row and missed this line.
     **{_kp.family_template(f.slug): ("investigate", f"{_kp.family_template(f.slug)}-template.md")
        for f in _kp.RESEARCH_FAMILIES},
     "review":          ("review", "review-template.md"),
@@ -157,17 +130,13 @@ _SPECS: dict[str, dict] = {
     # The research work-segment record — agent-facing, the counterpart of build-vet-<n>.md.
     # Sections derived from its template file.
     "investigation": {"file": "investigation.md", "required": (), "reader": "agent"},
-    # The review phase's own agent-facing record — review was the one phase with none, which is why
-    # its owner report had grown five machine-read fields nobody reading it wanted. This holds the
-    # record (what changed, what is settled, what is proven, what still risks) and the owner's
-    # report holds the judgment. Sections derived from its per-kind template.
+    # Review's own agent-facing record. Without one its owner report had grown five machine-read
+    # fields nobody reading it wanted. This holds the record; the report holds the judgment.
     "review":        {"file": "review.md",        "required": (), "reader": "agent"},
     "handoff-brief": {"file": "handoff-brief.md", "required": (), "reader": "agent"},
 }
-# Pre-renovation plan shapes, kept for READ-ONLY tolerance (a plan is judged against the shape it
-# was authored under; these die with their items). Oldest → newest: `## Validation criteria` (pre
-# vet-loop) · v1 vet-loop (Inner checks + Vet plan) · v2 gate-feed (adds Touches / Behavior
-# preview / Risks & assumptions) · old research shape (no Decisions & clarifications).
+# Legacy plan shapes, READ-ONLY: a plan is judged against the shape it was authored under, and
+# these die with their items.
 _PLAN_REQUIRED_LEGACY = ("Approach", "Tasks", "Validation criteria")
 _PLAN_FEED_SECTIONS = ("Touches", "Behavior preview", "Risks & assumptions")
 _PLAN_REQUIRED_V1 = ("Approach", "Tasks", "Inner checks", "Vet plan")
@@ -258,15 +227,12 @@ def _inject_checks(body: str, blocks: list[str]) -> str:
 def scaffold(item_dir: Path, artifact: str, *, title: str = "", item_kind: str | None = None,
              item_id: str | None = None, standing: list[str] | None = None,
              research_kind: str | None = None) -> dict:
-    """Deterministically scaffold one artifact skeleton into `item_dir/artifacts/`. Code owns
-    frontmatter + section order; the agent fills the `<fill:…>` slots only. NEVER overwrites —
-    an existing file returns {created: False} (fill happens by editing, re-scaffold is a no-op).
-    Unknown artifact kind fails loud (KeyError). Returns {path, created, sections}.
+    """Deterministically scaffold one artifact skeleton. NEVER overwrites — an existing file
+    returns `created: False`, since filling happens by editing. Unknown kinds fail loud.
 
-    `standing` are the repo verification library's standing entries (design §8), pre-written into a
-    plan's verification section. The KERNEL attaches them, not the planner: what a repo always owes
-    is not something anyone should have to remember, and a copied-by-hand entry is one reworded
-    entry away from no longer being the same check."""
+    `standing` are the repo library's standing checks, pre-written into a plan. The KERNEL attaches
+    them: what a repo always owes is not something anyone should have to remember, and a
+    copied-by-hand entry is one rewording away from no longer being the same check."""
     if artifact not in _SPECS:
         raise KeyError(f"unknown artifact kind {artifact!r} — known: {sorted(_SPECS)}")
     item_kind = get_profile(item_kind).kind  # validates + resolves null → implementation
@@ -290,13 +256,9 @@ def scaffold(item_dir: Path, artifact: str, *, title: str = "", item_kind: str |
           + f"created_at: {date.today().isoformat()}\n---\n")
     tmpl = _template(artifact, item_kind, research_kind)
     heading = title or (item_id or "work-item")
-    # The family is named ONCE in the heading. A research template opens `# Audit — {title}`, and a
-    # sweep-launched item's TITLE also opens with the family because the board card needs it there
-    # ("Audit — coverage in the whole repo") — rendered naively that gives
-    # `# Audit — Audit — coverage in the whole repo`. The prefix is read off the template itself
-    # rather than a table here, so a family added later gets this for free, and a COMMISSIONED item
-    # whose title doesn't name its family (`# Deep diagnosis — Sum shows the wrong total`) keeps the
-    # prefix that makes it readable.
+    # The family is named ONCE in the heading: the template opens with it and a sweep-launched
+    # title does too, so a naive render doubles it. Read off the template rather than a table, so
+    # a family added later gets this free and a commissioned item keeps its prefix.
     m = re.match(r"#[ \t]+(.+?)[ \t]+—[ \t]+\{title\}", tmpl)
     if m and heading.lower().startswith(m.group(1).lower() + " — "):
         heading = heading[len(m.group(1)) + 3:].lstrip()
@@ -316,12 +278,9 @@ def _split_sections(text: str) -> dict[str, str]:
         m = re.match(r"^##\s+(.+?)\s*$", line)
         if m:
             cur = m.group(1)
-            # CONCATENATE a repeated heading, never reset it. A cycle report that somehow carries
-            # two `## Verification` sections used to read as whatever the LAST one held — while
-            # `_append_to_section` writes into the FIRST. Caught live on 2026-08-03: a duplicated
-            # skeleton left twelve green verdicts in section one and an empty section two, the
-            # ledger read as 0 entries, and the loop burned three vet retries before exiting
-            # `system_fault` on an item where every check had actually passed.
+            # CONCATENATE a repeated heading, never reset it. A report carrying two `## Verification`
+            # sections read as whatever the LAST held, while the writer appends to the FIRST — so twelve
+            # green verdicts read as a ledger of zero and the loop exited `system_fault`.
             out.setdefault(cur, "")
         elif cur is not None:
             out[cur] += line + "\n"
@@ -334,13 +293,12 @@ def _section_filled(body: str) -> bool:
     return bool(cleaned.strip())
 
 
-# --------------------------------------------------------------------------- vet plan (build⟷vet §3)
-# The plan-authored contract the vet phase executes: a fresh agent with zero context must be able
-# to run it unambiguously. Line-oriented on purpose — check ids are the JOIN KEY into the evidence
-# ledger (`record_verification(check=…)` / `evidence_status()` already key on `check`), so plan and
-# ledger meet with no new store. HARD issues block the pre-main gate (mechanically decidable
-# structure); SOFT flags surface in the gate brief for the owner (judgment — a human is present,
-# the one place fail-open is correct).
+# The plan-authored contract vet executes: a fresh agent with zero context must run it
+# unambiguously. Check ids are the JOIN KEY into the evidence ledger, so plan and ledger meet
+# with no new store.
+#
+# HARD issues block the gate (mechanically decidable); SOFT flags surface for the owner, who
+# is present — the one place fail-open is correct.
 
 # Evidence PROVENANCE (design §4): who actually performed the check. `machine` = the kernel ran the
 # check's literal `run:` block in the sandbox; `agent` = a vetter did it and attested. Old entries
@@ -366,21 +324,18 @@ KIND_AUDIT = "audit"
 VALIDATION_FENCE = "runs"
 VERIFICATION_FENCE = "checks"
 
-# The standing lenses (design §3) — read independently of whatever the plan wrote, on every cycle.
-# They exist because the plan's checks can only defend what the planner thought of; these ask the
-# questions nobody has to remember to ask. Depth governs EXECUTION, lenses are a read, so
-# `depth: none` stops meaning "vet does nothing" and starts meaning "vet runs nothing".
+# Read on every cycle, independently of the plan: its checks can only defend what the planner
+# thought of. Depth governs EXECUTION, and a lens is a read — so `depth: none` means vet runs
+# nothing, not that vet does nothing.
 #
-# `performance` is deliberately not standing: it is only meaningful against a budget the plan named,
-# and a lens with no bar produces opinions. It is recordable, and never gates.
+# `performance` is not standing: it is meaningful only against a budget the plan named, and a
+# lens with no bar produces opinions.
 STANDING_LENSES = ("intent", "safety", "robustness")
 LENSES = STANDING_LENSES + ("performance",)
 SEVERITIES = ("low", "medium", "high")
 
-# Which findings send the item back to build. Intent and safety have no severity scale — anything
-# found is a gap in what the item is FOR or a way it can hurt someone, and both gate. Robustness
-# reports what was probed, so its low/medium findings are notes for the review reader; only `high`
-# gates. Performance never gates: "slower than I'd like" is not a verdict on the work.
+# Intent and safety have no severity scale: anything found is a gap in what the item is FOR or
+# a way it can hurt someone. Only `high` robustness gates, and performance never does.
 _LENS_GATES_AT = {"intent": SEVERITIES, "safety": SEVERITIES, "robustness": ("high",)}
 
 VET_DEPTHS = ("none", "checks", "scenarios")
@@ -393,20 +348,16 @@ _VET_FIELD = re.compile(
 # the next field of the check, and the bullet is what separates one criterion from the wrap of the
 # one before it — both matter, so both are required here.
 _RUBRIC_ITEM = re.compile(r"^\s+[-*]\s+\S")
-# `run:` — the optional literal command the KERNEL executes for this check (design §4). One line,
-# because a check is one exit code: several steps join with `&&`. A scenario that cannot be said in
-# one line is exactly the scenario that stays agent-attested, so there is nothing to bend here.
-# The same grammar `## Inner checks` already uses — a command whose exit status decides it.
+# The literal command the KERNEL runs. One line, because a check is one exit code — a scenario
+# that cannot be said in one line is exactly one that stays agent-attested.
 _VET_CHECK_HEAD = re.compile(r"^###\s+(.+?)\s*$")
 # Vagueness heuristic for `expect` (soft): non-falsifiable filler words, or too short to pin
 # an observable outcome. A banned-word list is too brittle to BLOCK on — hence soft.
 _VET_VAGUE = re.compile(r"\b(works|correctly|properly|as expected)\b", re.IGNORECASE)
 _VET_EXPECT_MIN = 40
-# `proves` is the one check field written FOR the owner, and its failure mode is a planner restating
-# the mechanism instead of the meaning — "exit code 0", "the suite passes". That sentence tells the
-# owner nothing they couldn't already see in `run:`, and tells a vetter nothing about whether a green
-# demonstrates the intent. Soft, never blocking: phrasing is a judgment, and a human is at the plan
-# gate to make it.
+# `proves` is written FOR the owner, and its failure mode is restating the mechanism instead of
+# the meaning. "exit code 0" tells nobody whether a green demonstrates the intent. Soft:
+# phrasing is a judgment, and a human is at the gate.
 _PROVES_MACHINE = re.compile(
     r"\bexit(?:s|ed)?[- ]?(?:code|status)\b|\bexit\s+(?:0|1|zero|non-?zero)\b|\bstdout\b|"
     r"\bstderr\b|\breturns?\s+(?:0|1|zero)\b|"
@@ -431,16 +382,11 @@ def parse_check_blocks(body: str) -> list[dict]:
         h = _VET_CHECK_HEAD.match(line)
         if h:
             last = ""
-            # `covers` = the plan task id(s) this check defends — the Proof view's join key (§4.2).
-            # NOT a hard issue when absent: requiring it would retroactively fail every in-flight
-            # plan's self-check, the same trap `## Revisions`-in-the-template was. An untagged check
-            # lands in Proof's item-wide row.
-            # `source` marks where the check came from: absent = authored for this item, `standing`
-            # = attached from the repo library, `library:<id>` = cited from it.
-            # `proves` = the one HUMAN field: what is true of the product when this check passes.
-            # Every other field serves executing or judging; none of them says what a green means,
-            # so both the owner's reports and the vetter were left inferring it from a shell
-            # command — separately, and drifting. Declared once by the plan, read by everyone.
+            # `covers` is the Proof view's join key. NOT hard when absent: requiring it would retroactively
+            # fail every in-flight plan. An untagged check lands in the item-wide row.
+            # `source` says where the check came from: authored here, attached, or cited.
+            # `proves` is the one HUMAN field. Every other serves executing or judging, so without it the
+            # reports and the vetter each infer what a green means — separately, and drifting.
             cur = {"id": _vet_value(h.group(1)), "proves": "", "traces": "", "covers": "",
                    "mode": "", "scenario": "", "run": "", "expect": "", "rubric": [], "source": ""}
             out.append(cur)
@@ -526,19 +472,13 @@ def is_whole_suite_run(cmd: str) -> bool:
 
 
 def vet_plan_hard_issues(vp: dict) -> list[str]:
-    """The gate-blocking structural rules (§3.4 HARD) — every one mechanically decidable:
-    depth legal · reason present (even for none — the owner can veto the judgment) · depth≠none ⇒
-    ≥1 check and depth=none ⇒ 0 checks (a "no vet" plan listing checks is exactly the ambiguity
-    fail-closed exists to kill) · every check fully fielded with a legal mode · `interaction`
-    drives the real thing so it needs an env recipe (the mechanical form of §3.4's "scenario
-    naming a runnable app"; `command`/`inspection` may run env-free) · ids unique + slug-shaped
-    (they are ledger join keys and fingerprint keys).
+    """The gate-blocking structural rules, every one mechanically decidable: legal depth · a
+    reason even for none · depth≠none implies ≥1 check and depth=none implies 0 · every check fully
+    fielded · `interaction` needs an env recipe · ids unique and slug-shaped.
 
-    `proves` is HARD, unlike `covers` — and the difference is who is left holding the gap. A missing
-    `covers` costs the Proof view a join and the check still lands in the item-wide row; a missing
-    `proves` means nobody downstream can say what a green MEANS, so the owner's report and the
-    vetter each re-derive it from the shell command, separately. It is one sentence, and the plan
-    gate is the only moment someone still knows the answer."""
+    `proves` is HARD where `covers` is not, and the difference is who holds the gap. A missing
+    `covers` costs a join; a missing `proves` means nobody downstream can say what a green MEANS, so
+    the owner's report and the vetter each re-derive it separately."""
     if not vp.get("present"):
         return ["missing required section '## Verification plan'"]
     issues: list[str] = []
@@ -566,11 +506,9 @@ def vet_plan_hard_issues(vp: dict) -> list[str]:
         seen.add(cid)
         for field_name in ("proves", "traces", "mode", "scenario"):
             if not c.get(field_name):
-                # The remedy travels with the complaint. `run:` ACCOMPANIES `scenario:`, it never
-                # replaces it — but a bare "missing `scenario`" reads as "`run:` was the wrong
-                # field", and the reviewer then tells the planner to swap one for the other. Caught
-                # live on 2026-08-02: three kernel-runnable checks lost their run blocks to that
-                # remedy, and the next revision carried "never `run:`" forward as standing law.
+                # The remedy travels with the complaint. `run:` ACCOMPANIES `scenario:`, but a bare "missing
+                # scenario" reads as "`run:` was the wrong field" — and three kernel-runnable checks lost
+                # their run blocks to that reading.
                 extra = (" — a check with `run:` still needs the prose scenario BESIDE it; add "
                          "the scenario, never drop the run block"
                          if field_name == "scenario" and c.get("run") else "")
@@ -578,12 +516,9 @@ def vet_plan_hard_issues(vp: dict) -> list[str]:
                     extra = (" — one plain sentence saying what is TRUE of the product when this "
                              "passes, in the owner's terms and not the command's")
                 issues.append(f"vet plan check {label!r}: missing `{field_name}`{extra}")
-        # The project's own test suite is BUILD's validation, and build's claim about it is audited
-        # by the kernel on vet's pass (design amendment 2026-08-07). As a vet-plan check it runs the
-        # suite a second time and files a validation result as the item's own proof — which is how
-        # `full-suite-green` came to sit in a VERIFICATION library as the only mechanically-executed
-        # thing in the loop. HARD, because a soft flag on the check the planner copied from the
-        # library is a row nobody reads twice.
+        # The suite is BUILD's validation, audited by the kernel on vet's pass. As a vet-plan check it
+        # runs the suite twice and files the result as the item's own proof. HARD, because a soft flag
+        # on a check copied from the library is a row nobody reads twice.
         if c.get("run") and is_whole_suite_run(str(c.get("run"))):
             issues.append(
                 f"vet plan check {label!r}: `run:` is the project's whole test suite — that is "
@@ -768,24 +703,15 @@ _TASK_LINE = re.compile(r"^\s*-\s*\[(?P<tick>[ xX])\]\s*(?P<id>t\d+)\b[\s—:-]*
 
 
 def parse_tasks(plan_text: str) -> list[dict]:
-    """plan.md's `## Tasks` → [{id, done, text, detail}], in plan order. The id is what the build's
-    commits carry in their `SuperMe-Task` trailer, so this is the join that lets the PR walkthrough
-    title a group with the task it implements instead of a bare `t3`. Tolerant by design: an
-    unparseable line is skipped, never raised — a walkthrough is a view, not a gate.
+    """plan.md's `## Tasks` → [{id, done, text, detail}], in plan order. The id is what build's
+    commits carry in their trailer, so this is the join that titles a walkthrough group. Tolerant: an
+    unparseable line is skipped, never raised.
 
-    A task is a BLOCK of two parts, and the split is the point (owner, 2026-08-08):
+    A task is a BLOCK of two parts, and the split is the point. `text` is the HEAD line — the task's
+    NAME, what the board shows. `detail` is the indented specification under it.
 
-      · `text` is the HEAD line — the task's NAME, a few words, what the board shows.
-      · `detail` is everything on the indented lines under it — the specification, which is written
-        for whoever implements the task and is not what a human scanning the Task tab wants first.
-
-    Both halves were already on disk in exactly this shape; the surface just had no way to tell them
-    apart. Reading the head line ALONE cut a wrapped task off mid-clause ("…positional `text`,
-    `--month`, `--from`,"), and merging the two into one string produced a 340-character paragraph
-    with eight code spans per row. Keeping them separate is what lets the name be a name.
-
-    The plan SKILL and template state the rule, because nothing here can check that a head line is
-    actually a name — only the writer can make it one."""
+    Reading the head alone cut a wrapped task off mid-clause; merging both produced a 340-character
+    paragraph. Keeping them separate is what lets the name be a name."""
     body = _split_sections(plan_text).get("Tasks", "")
     out: list[dict] = []
     cur: dict | None = None
@@ -834,15 +760,11 @@ _LABEL_LINE = re.compile(r"^\*\*[^*]+:\*\*")
 
 
 def _space_labels(text: str) -> str:
-    """Put a blank line before every `**Label:**` block that doesn't already have one.
+    """Put a blank line before every `**Label:**` block that lacks one.
 
-    Reports are agent-COPIED from a template, so their line spacing is prose, not structure — and
-    markdown is unforgiving about it: two label lines in a row fold into one paragraph ("…the print
-    path. **Key points:**"), and a label line under a bullet becomes a lazy continuation OF that
-    bullet. The templates now carry the blank lines, but a template is a suggestion to a model and
-    this is the read path both the owner's Reports tab and the deputy go through, so normalize here
-    rather than trust every future author. Fences are left alone — a blank line inside one is
-    content."""
+    Reports are agent-copied from a template, so their spacing is prose, not structure — and markdown
+    is unforgiving: two label lines in a row fold into one paragraph. A template is a suggestion to a
+    model, and this is the read path both the owner and the deputy go through. Fences are left alone."""
     out: list[str] = []
     fenced = False
     for line in text.split("\n"):
@@ -864,11 +786,8 @@ _HEADING = re.compile(r"^#{1,6}\s")
 def _dead_label(lines: list[str], i: int) -> bool:
     """Is the `**Label:**` at `lines[i]` a block with nothing under it?
 
-    The next NON-BLANK line decides, not the next line. A block whose content sits after a blank
-    line is the normal shape of a list under a label — and reading only `lines[i + 1]` called every
-    one of them dead, so `## From you` reached the owner as two orphan paragraphs with the labels
-    that said whose they were stripped off. What ends a block is the next label, the next heading,
-    or the end of the document."""
+    The next NON-BLANK line decides. Reading `lines[i + 1]` called every list-under-a-label dead, and
+    stripped the labels that said whose the paragraphs were."""
     if lines[i].split(":**", 1)[1].strip().lower() not in _DEAD_VALUES:
         return False
     for nxt in lines[i + 1:]:
@@ -888,17 +807,14 @@ def _live_body(lines: list[str]) -> bool:
 
 
 def _drop_dead_blocks(text: str) -> str:
-    """Delete `**Label:** none` blocks and an empty `## Changed since …` section on the READ path.
+    """Delete `**Label:** none` blocks and an empty `## Changed since` on the READ path.
 
-    A report is agent-copied from a template, and every template says to delete a block it has
-    nothing to put under. Two of them survived in the very first report the owner read ("Needs your
-    attention: none." and a "Changed since v<n>" holding "(first run — n/a)") — lines that exist
-    only to say nothing, in a document whose whole budget is half a screen. Instructions to a model
-    are a suggestion; this is the one read path both the Reports tab and the deputy go through, so
-    the hygiene lands here, same reasoning as `_space_labels`.
+    Every template says to delete a block it has nothing to put under, and two survived into the very
+    first report the owner read — lines that exist only to say nothing, in a document whose budget is
+    half a screen.
 
-    Deliberately literal: a block goes only when its value is one of a short list of dead tokens.
-    Anything with real content — even one word — is left exactly as written."""
+    Deliberately literal: a block goes only when its value is one of a few dead tokens. Anything with
+    real content is left exactly as written."""
     lines, out = text.split("\n"), []
     i, fenced = 0, False
     while i < len(lines):
@@ -939,17 +855,12 @@ def _drop_dead_blocks(text: str) -> str:
 
 
 def changed_since(item_dir: Path, since: str | None) -> list[str]:
-    """The item's records written since `since` (ISO-8601 UTC), newest first, as paths relative to
-    the item folder. Empty when `since` is None/unparseable or nothing moved.
+    """The item's records written since `since`, newest first. Empty when `since` is unparseable
+    or nothing moved.
 
-    Reads mtimes, not a change log, and that is deliberate: every writer of these files — the
-    agents' `Write`, the scaffolder, `revise_plan` — moves an mtime, and none of them can be
-    persuaded to keep a ledger honest. It is the same reasoning as `subagent_count`: ask the
-    filesystem, not the author.
-
-    Scope is the two folders a phase FORMS A JUDGMENT FROM — `artifacts/` (the agent-facing
-    records) and `reports/` (the owner-facing projections). Not `checkpoints/` (continuity, written
-    by every run including the asking one) and not `preliminary/` (the frozen inbox folder)."""
+    Reads mtimes, not a change log: every writer moves an mtime, and none can be persuaded to keep a
+    ledger honest. Scope is the two folders a phase FORMS A JUDGMENT FROM — not `checkpoints/`, which
+    every run writes, and not the frozen `preliminary/`."""
     try:
         cutoff = datetime.fromisoformat(str(since)).timestamp()
     except (TypeError, ValueError):
@@ -968,14 +879,11 @@ def changed_since(item_dir: Path, since: str | None) -> list[str]:
 
 
 def report_text(item_dir: Path, phase: str) -> dict | None:
-    """A phase's user-facing report, for the two surfaces that read it: the drilldown's Reports tab
-    and the deputy's prompt (§2.1 — the deputy reads what the owner reads). Returns
-    {phase, name, text, path, mtime, contract} or None when that phase hasn't written one.
+    """A phase's user-facing report, for the drilldown's Reports tab and the deputy's prompt.
 
-    `contract` is the RELATIVE path to the phase's full agent-facing artifact — §4.3's "Open full
-    contract", and the deputy's on-demand read. The report is the compact projection; the contract is
-    the whole thing, never pasted into it (§3.3 keeps them two documents). Review and close have no
-    separate contract: their report IS the record."""
+    `contract` is the relative path to the phase's full agent-facing artifact, read on demand. The
+    report is the compact projection; the contract is the whole thing, never pasted into it. Review
+    and close have no separate contract — their report IS the record."""
     path = Path(item_dir) / "reports" / f"report-{phase}.md"
     if not path.is_file():
         return None
@@ -1070,18 +978,9 @@ _OWNER_DECISION = re.compile(r"^\*\*Owner's decision:\*\*[^\S\n]*(.+?)\s*$", re.
 
 
 def owner_decision(item_dir: Path) -> str:
-    """The itemization outcome recorded into `artifacts/review.md` by `itemize` — what it filed
-    (with inbox ids), what it skipped as a duplicate, or that there was nothing to file. Empty
-    string when the line is absent or still an unfilled slot: in either case itemization never ran,
-    and a research item's proposals went nowhere.
-
-    The line does NOT mean the owner was asked. Itemize files without asking, because a `spawn`
-    only sits in the inbox until they push it — the inbox is the decision surface, and a background
-    run has no other one. (The heading still reads "Owner's decision" for the four suites and the
-    template that name it; the field means the itemization outcome.)
-
-    It lives in the AGENT-facing record, not the owner's report: the owner's report is prose they
-    read once and the line is a machine field the close gate reads back."""
+    """The itemization outcome `itemize` recorded into review.md: what it filed, what it skipped
+    as a duplicate, or that there was nothing. Empty when absent or still an unfilled slot — either
+    way itemization never ran, and the proposals went nowhere."""
     path = Path(item_dir) / "artifacts" / artifact_file("review")
     if not path.is_file():
         return ""
@@ -2874,11 +2773,9 @@ def _how_checked(c: dict) -> str:
 def _slot(text: str | None, heading: str) -> str:
     """A prose slot's body, with the section heading stripped when the author repeated it.
 
-    The TEMPLATE owns the headings and the agent owns the words under them — but an agent writing
-    a section naturally opens it with its own title, and the render then carries the heading twice.
-    That is what the owner reads: a vet report shipped with `## What this confirms`, `## What else
-    was looked at` and `## What I can't tell you` each printed twice (live, 2026-08-07). Structure
-    is code's to own, so code drops the echo instead of asking every author to remember not to."""
+    The template owns the headings and the agent owns the words, but an agent naturally opens a
+    section with its own title and the render then carries it twice. Structure is code's to own, so
+    code drops the echo instead of asking every author to remember."""
     body = (text or "").strip()
     first, _, rest = body.partition("\n")
     if first.startswith("#") and first.lstrip("#").strip().lower() == heading.strip().lower():
@@ -2892,34 +2789,25 @@ _LENS_LINE = re.compile(r"(?mi)^(\s*[-*]\s+)(" + "|".join(LENSES) + r")(\s*:)")
 def _bold_lenses(text: str) -> str:
     """Bold the lens name that OPENS a `## What else was looked at` bullet.
 
-    The lens vocabulary is code's (`LENSES`), not prose — each bullet is one standing reading, and
-    the name is the bullet's label, exactly what `**Label:**` means everywhere else in a report. Vet
-    writes them plain, so the four readings rendered as unbroken grey sentences with nothing to scan
-    (owner, 2026-08-07). Bolding here rather than in CSS keeps ONE rule for what a label looks like:
-    the report surface already tints a bullet's opening bold, so the labels inherit it."""
+    The lens vocabulary is code's, not prose: each bullet is one standing reading, and the name is its
+    label. Bolding here rather than in CSS keeps ONE rule for what a label looks like."""
     return _LENS_LINE.sub(lambda m: f"{m.group(1)}**{m.group(2)}{m.group(3).strip()}**", text)
 
 
 def write_plan_user_report(item_dir: Path, *, summary: str, approach: str = "",
                            confirm: str = "", decisions: str = "", assumptions: str = "",
                            item_kind: str | None = None) -> dict:
-    """Write `reports/report-plan.md` — the owner's answer to *what is being built, and what will
-    prove it* (design §10). The prose slots are the planner's; everything factual is DERIVED from
-    plan.md, because a hand-copied claim is a claim ABOUT the plan rather than a reading of it, and
-    the one thing this report exists to make visible is the gap.
+    """Write the owner's answer to *what is being built, and what will prove it*.
 
-    The centrepiece is the confirmation table, one row per check: its `proves:` line verbatim on
-    the left — the plan already said what a green MEANS, and re-deriving it here would be a second,
-    drifting account of the same exam — and on the right how the owner will know, read off the
-    check's mode and whether it carries a kernel-run `run:` block. A task nothing defends is called
-    out under the table by NAME, because a hole is worth seeing at the gate rather than three
-    cycles later.
+    The prose slots are the planner's; everything factual is DERIVED from plan.md, because a
+    hand-copied claim is a claim ABOUT the plan rather than a reading of it, and the gap is the one
+    thing this report exists to make visible.
 
-    Research items render the other template: no verification plan means no table, and what
-    replaces it is the planner's account of how an answer will be made trustworthy.
+    The centrepiece is the confirmation table: each check's `proves:` line verbatim, and how the
+    owner will know. A task nothing defends is named under the table, because a hole is worth seeing
+    at the gate rather than three cycles later.
 
-    Refuses on a plan with no tasks: there is nothing to report on, and an empty table would read
-    as "nothing needs proving". Returns {path, tasks, checks, uncovered}."""
+    Refuses on a plan with no tasks — an empty table would read as "nothing needs proving"."""
     # An OMITTED optional slot arrives as None, not "" — the tool layer's `_s` returns None for an
     # absent arg, and this report's own contract tells the planner to omit `decisions`/`assumptions`
     # when there were none. Taking the parameter at its type and calling `.strip()` on it turned
@@ -2984,27 +2872,19 @@ def write_plan_user_report(item_dir: Path, *, summary: str, approach: str = "",
 
 def write_vet_user_report(item_dir: Path, repo_dir: Path | None, *, summary: str = "",
                           confirms: str = "", looked_at: str = "", unknown: str = "") -> dict:
-    """Write `reports/report-vet.md` — HYBRID (human-report phase, slice 4). Vet writes the
-    narrative; code writes `## What didn't hold` off the evidence ledger and owns the refusals.
+    """Write the vet report. HYBRID: vet writes the narrative, code writes `## What didn't hold`
+    off the evidence ledger and owns the refusals.
 
-    It used to be projection all the way down, and that was one answer to a question nobody had
-    asked. Vet is not suspected of lying — it runs the checks and diagnoses them. What the code has
-    to guarantee is narrower and worth keeping:
+    Vet is not suspected of lying — it runs the checks. What code guarantees is narrower:
 
-    - **One-writer with the ledger.** The loop driver decides on the recorded entries, so a failure
-      must reach the owner whatever the prose says. `## What didn't hold` is machine-authored from
-      the ledger and its recorded diagnoses; vet cannot omit a red check by writing around it.
-    - **Completeness.** The refusals are a forcing function, not a trust measure: no report while a
-      plan check has no entry, a standing lens has no read this cycle, or a failing check has no
-      diagnosis. The last one is the diagnosis duty's teeth (design §5) — a cycle that says "3
-      failing" and nothing about WHERE sends the next build hunting.
+    - ONE-WRITER with the ledger. The driver decides on the recorded entries, so a failure reaches
+      the owner whatever the prose says. Vet cannot omit a red check by writing around it.
+    - COMPLETENESS. No report while a plan check has no entry, a standing lens has no read, or a
+      failing check has no diagnosis. The last is the diagnosis duty's teeth: a cycle that says
+      "3 failing" and nothing about WHERE sends the next build hunting.
 
-    The per-check table is GONE from this report (owner, 2026-08-07): the Task tab carries the
-    evidence per check, and a table here made build's self-report and vet's independent pass read
-    as the same list. Under `depth: none` there is nothing to project and refusing would strand the
-    cycle, so the machine block says the plan owed no checks and vet's narrative still carries.
-
-    Returns {path, verdict, failed} — `verdict` is the ledger's status, not vet's sentence."""
+    The per-check table is gone: the Task tab carries evidence per check, and a table here made
+    build's self-report and vet's independent pass read as the same list."""
     item_dir = Path(item_dir)
     plan_path = item_dir / "artifacts" / artifact_file("plan")
     plan_ids = [c["id"] for c in parse_vet_plan(plan_path.read_text()).get("checks", [])] \
@@ -3182,14 +3062,11 @@ def _bullets(body: str) -> list[str]:
 
 def _note_fields(body: str) -> dict:
     """`look: … · deviated: …` → its labelled parts. Split on the separator FIRST and the label
-    second, so a `·` inside prose after the last label cannot start a phantom field.
+    second, so a `·` in prose cannot start a phantom field.
 
-    A value whose FIRST SENTENCE is `none` is nothing, however much follows it. Observed on the
-    first live run (2026-08-09): build wrote `look: none. Predicate exactly matches plan: …` —
-    it had nothing to point at and then justified saying so. Read literally that put a restatement
-    of the diff on the owner's page under a heading promising the thing the diff cannot show, which
-    is worse than an empty row. The declaration is the answer; the justification is for the record,
-    not the reader."""
+    A value whose FIRST SENTENCE is `none` is nothing, however much follows: build wrote "none" and
+    then justified it, which put a restatement of the diff under a heading promising what the diff
+    cannot show. The declaration is the answer; the justification is for the record."""
     out: dict = {}
     for part in re.split(r"\s+·\s+", body):
         if m := re.match(r"^(look|deviated)\s*:\s*(.*)$", part.strip(), re.I):
@@ -3222,15 +3099,13 @@ def pr_task_notes(item_dir: Path) -> dict:
 
 
 def pr_task_guide(item_dir: Path) -> dict:
-    """Everything the PR page shows per task → `{task_id: {needed, look, deviated, cycle, checks}}`.
+    """Everything the PR page shows per task.
 
-    `needed` is the covering check's `proves:` line — what must be TRUE, which is the requirement
-    stated for a person. Never the plan's task spec: that is build instructions (file names,
-    argparse calls, branch placement), and handing it to a reviewer is giving them the recipe when
-    they asked what the dish is.
+    `needed` is the covering check's `proves:` line — what must be TRUE, stated for a person. Never
+    the plan's task spec: that is build instructions, and handing it to a reviewer is giving them the
+    recipe when they asked what the dish is.
 
-    `checks` is `[{id, passed, ran, how}]` for the checks whose `covers:` names this task — the
-    proof, joined at read time, never re-transcribed."""
+    `checks` is the proof, joined at read time, never re-transcribed."""
     out: dict[str, dict] = {}
     notes = pr_task_notes(item_dir)
     plan_path = Path(item_dir) / "artifacts" / artifact_file("plan")
@@ -3305,18 +3180,13 @@ def convergence_fingerprint(item_dir: Path, *, extra: list[str] | None = None) -
 
 def write_checkpoint(item_dir: Path, repo_dir: Path | None, *, working_on: str, decisions: str,
                      remaining: str, notes: str = "", role: str | None = None) -> str:
-    """Bank one continuity checkpoint (gstack 4-section + git-state header) to
-    `checkpoints/<YYYYMMDD-HHMMSS>.md`. APPEND-ONLY (a new timestamped file every time, never
-    overwrite; filename IS the canonical order) + atomic. Content rule (D11): conversation-native
-    reasoning — decisions, leans, tried-and-failed; reference artifacts BY PATH, never duplicate
-    them. Returns the file path.
+    """Bank one continuity checkpoint. APPEND-ONLY and atomic — a new timestamped file every
+    time, and the filename IS the canonical order. Reference artifacts BY PATH, never duplicate them.
 
-    `role` is the SESSION ROLE that banked it (intake|build|vet). An item has three threads and
-    they all bank into this one folder, so without the stamp "the latest checkpoint" is whichever
-    thread wrote last. That is harmless for the item-state readers (a gate brief wants the item's
-    newest state, from any thread) but WRONG for continuity: handing a compacted intake thread the
-    build thread's checkpoint tells it "this is what you were doing" about work it never did, and
-    a confidently-wrong recovered memory is worse than none. See `latest_checkpoint(role=…)`."""
+    `role` is the SESSION ROLE that banked it. An item's three threads all bank into one folder, so
+    without the stamp "the latest checkpoint" is whichever wrote last. Harmless for item-state
+    readers, WRONG for continuity: handing a compacted intake thread the build thread's checkpoint
+    tells it "this is what you were doing" about work it never did."""
     if not (working_on.strip() and remaining.strip()):
         raise ValueError("a checkpoint needs at least working_on and remaining")
     cdir = Path(item_dir) / "checkpoints"
