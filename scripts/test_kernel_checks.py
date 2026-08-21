@@ -17,6 +17,7 @@ from superme_agent.core import artifacts as _arts
 from superme_agent.core.kernel_speech import vet_trigger
 from superme_agent.core.sandbox import kernel_command
 from superme_agent.daemon.services import checks as _checks
+from scripts.sources import src
 
 PASS = 0
 ROOT = Path(__file__).resolve().parents[1]
@@ -173,8 +174,8 @@ def test_the_vetter_is_told_what_is_already_done():
 # ── wiring ──────────────────────────────────────────────────────────────────────────────────────
 
 def test_the_loop_runs_them_before_the_session():
-    src = (ROOT / "superme_agent/daemon/services/loop.py").read_text()
-    vet = src.split("async def _run_background_vet")[1].split("async def ")[0]
+    loop_src = src("superme_agent/daemon/services/loop.py")
+    vet = loop_src.split("async def _run_background_vet")[1].split("async def ")[0]
     ok("vet's runner executes the kernel checks", "_checks.execute" in vet)
     ok("…off the event loop, since a suite is not instant", "asyncio.to_thread" in vet)
     ok("…before the trigger is built",
@@ -183,16 +184,16 @@ def test_the_loop_runs_them_before_the_session():
     ok("…and a broken executor never fails the run", "vet proceeds and performs them itself" in vet)
 
     ok("the surface can tell the two classes apart",
-       "by: str" in (ROOT / "superme_agent/daemon/schemas/dev/gates.py").read_text()
-       and "machine-run" in (ROOT / "web/frontend/src/features/dev/WorkItemModal.tsx").read_text())
+       "by: str" in src("superme_agent/daemon/schemas/dev/gates.py")
+       and "machine-run" in src("web/frontend/src/features/dev/WorkItemModal.tsx"))
 
-    vet_skill = " ".join((ROOT / "superme_agent/harness/plugins/superme-dev/skills/vet/SKILL.md").read_text().split())
+    vet_skill = " ".join(src("superme_agent/harness/plugins/superme-dev/skills/vet/SKILL.md").split())
     # The RULE, not the sentence: the vetter must be told the kernel already ran some checks and
     # that re-running them is refused.
     ok("the vet skill says kernel-run checks are already done, and not to redo them",
        "kernel already executed" in vet_skill.lower()
        and "refuses a second entry" in vet_skill.lower())
-    plan_skill = (ROOT / "superme_agent/harness/plugins/superme-dev/skills/plan/SKILL.md").read_text()
+    plan_skill = src("superme_agent/harness/plugins/superme-dev/skills/plan/SKILL.md")
     ok("the plan skill teaches when to write a run block, and when not to",
        "run:" in plan_skill and "judge it" in plan_skill)
     tmpl = (ROOT / "superme_agent/harness/plugins/superme-dev/skills/plan/templates/"

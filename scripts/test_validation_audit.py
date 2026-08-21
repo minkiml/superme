@@ -11,6 +11,7 @@ import tempfile
 from pathlib import Path
 
 from superme_agent.core import artifacts as A
+from scripts.sources import src
 
 ROOT = Path(__file__).resolve().parents[1]
 PASS = 0
@@ -174,16 +175,16 @@ def test_an_inherited_check_is_not_the_planner_s_prose() -> None:
 def test_plan_can_smoke_test_its_own_commands() -> None:
     print("plan dry-runs the `run:` blocks it just wrote")
     from superme_agent.daemon.services import checks as C
-    src = (ROOT / "superme_agent/daemon/services/checks.py").read_text()
-    _dr = src.split("def dry_run")[1].split("\ndef ")[0]
+    checks_src = src("superme_agent/daemon/services/checks.py")
+    _dr = checks_src.split("def dry_run")[1].split("\ndef ")[0]
     ok("the dry run records NOTHING — at plan time a red is the expected answer",
        "record" not in _dr.split('"""')[2])
-    ok("…and it runs only what the plan already committed to", "runnable_checks(item_dir)" in src)
-    tools = (ROOT / "superme_agent/harness/tools/dev_tools.py").read_text()
+    ok("…and it runs only what the plan already committed to", "runnable_checks(item_dir)" in checks_src)
+    tools = src("superme_agent/harness/tools/dev_tools.py")
     ok("the tool exists and is item-bound", '"dry_run_checks"' in tools and "_bound_err" in tools)
-    policy = (ROOT / "superme_agent/harness/policy.py").read_text()
+    policy = src("superme_agent/harness/policy.py")
     ok("…and never prompts a human mid-run", "mcp__dev__dry_run_checks" in policy)
-    skill = (ROOT / "superme_agent/harness/plugins/superme-dev/skills/plan/SKILL.md").read_text()
+    skill = src("superme_agent/harness/plugins/superme-dev/skills/plan/SKILL.md")
     ok("the plan skill tells the planner to use it", "dry_run_checks" in skill)
     ok("…and that a failing assertion is the EXPECTED answer", "EXPECTED" in skill)
     ok("…and forbids the suite as a check, with the narrowing remedy",
@@ -192,7 +193,7 @@ def test_plan_can_smoke_test_its_own_commands() -> None:
 
 def test_the_contract_is_stated_where_build_reads_it() -> None:
     print("build is TOLD to record, and told why")
-    skill = (ROOT / "superme_agent/harness/plugins/superme-dev/skills/build/SKILL.md").read_text()
+    skill = src("superme_agent/harness/plugins/superme-dev/skills/build/SKILL.md")
     ok("the build skill names the pen", "record_validation" in skill)
     ok("…and says the command must be re-runnable verbatim, because vet re-executes it",
        "verbatim and re-runnable" in skill or "verbatim" in skill and "re-execut" in skill)

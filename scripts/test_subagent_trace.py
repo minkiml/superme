@@ -13,9 +13,9 @@ from tempfile import TemporaryDirectory
 from superme_agent.core import spine as spine_mod
 from superme_agent.core.events import Status, ToolResult
 from superme_agent.daemon.services import runs as runs_svc
+from scripts.sources import src
 
 PASS = 0
-ROOT = Path(__file__).resolve().parents[1]
 
 
 def _spine_at(db: Path) -> spine_mod.SystemSpine:
@@ -44,12 +44,12 @@ def test_events_carry_the_field() -> None:
        r.parent_tool_id == "spawn_1")
     ok("...and defaults to None", ToolResult("Read", "body").parent_tool_id is None)
     # The translation seam: the SDK field is read off the MESSAGE, not the block, in both branches.
-    src = (ROOT / "superme_agent/core/agent_service.py").read_text()
+    agent_service_src = src("superme_agent/core/agent_service.py")
     ok("the turn loop reads `parent_tool_use_id` for tool-use blocks",
-       "parent_tuid = getattr(message, \"parent_tool_use_id\", None)" in src
-       and "parent_tool_id=parent_tuid" in src)
+       "parent_tuid = getattr(message, \"parent_tool_use_id\", None)" in agent_service_src
+       and "parent_tool_id=parent_tuid" in agent_service_src)
     ok("...and for tool results as well",
-       src.count('getattr(message, "parent_tool_use_id", None)') >= 2)
+       agent_service_src.count('getattr(message, "parent_tool_use_id", None)') >= 2)
 
 
 # ── the label ───────────────────────────────────────────────────────────────────────────────────
@@ -130,18 +130,18 @@ def test_capture_path_threads_it(tmp: Path) -> None:
 
 def test_renders_indent() -> None:
     print("every render nests the child under its spawn")
-    md = (ROOT / "superme_agent/daemon/services/runs.py").read_text()
+    md = src("superme_agent/daemon/services/runs.py")
     ok("the archived execution.md indents a parented row",
        'indent = "    " if a.get("parent_tool_id") else ""' in md)
-    diag = (ROOT / "superme_agent/harness/tools/dev_tools.py").read_text()
+    diag = src("superme_agent/harness/tools/dev_tools.py")
     ok("the diagnosis-tool trace indents it too — whose call was denied IS the diagnosis",
        'if e.get("parent_tool_id")' in diag)
-    trace = (ROOT / "web/frontend/src/lib/trace.ts").read_text()
+    trace = src("web/frontend/src/lib/trace.ts")
     ok("the FE pairing hands each row a depth off the same field",
        "depth: e.parent_tool_id ? 1 : 0" in trace)
     ok("...and depth is typed as the two levels it is, not an open number",
        "depth: 0 | 1" in trace)
-    rows = (ROOT / "web/frontend/src/features/dev/ExecutionTrace.tsx").read_text()
+    rows = src("web/frontend/src/features/dev/ExecutionTrace.tsx")
     ok("a nested row is visually indented behind a rail",
        "const nested = depth === 1" in rows and "border-l border-line" in rows)
     ok("numbering stays continuous across levels (the order is the point)",
@@ -152,7 +152,7 @@ def test_renders_indent() -> None:
 
 def test_trace_tab_panes() -> None:
     print("Trace is two peer panes, and the Timeline is not a window")
-    modal = (ROOT / "web/frontend/src/features/dev/WorkItemModal.tsx").read_text()
+    modal = src("web/frontend/src/features/dev/WorkItemModal.tsx")
     ok("Runs and Timeline are addressable subs of the Trace tab",
        "{ id: 'runs', label: 'Runs' }" in modal and "{ id: 'timeline', label: 'Timeline' }" in modal)
     ok("...wired into the tab's sub list", "tab === 'trace' ? TRACE_SUBS" in modal)
@@ -162,7 +162,7 @@ def test_trace_tab_panes() -> None:
        "limit: EVENT_CAP" in modal and "limit: 50 }" not in modal)
     ok("...and a cap that IS reached is stated rather than read as 'that's all'",
        "events.length >= EVENT_CAP" in modal)
-    router = (ROOT / "web/frontend/src/lib/router/index.ts").read_text()
+    router = src("web/frontend/src/lib/router/index.ts")
     ok("both subs are in the router's closed vocabulary",
        "'runs', 'timeline'" in router)
 
@@ -196,7 +196,7 @@ def test_runs_pane_sees_every_run(tmp: Path) -> None:
     from superme_agent.daemon.schemas.common import ArtifactKind
     ok("...which the wire type must allow, or the whole response 500s",
        "prompt" in ArtifactKind.__args__ and "reply" in ArtifactKind.__args__)
-    modal = (ROOT / "web/frontend/src/features/dev/WorkItemModal.tsx").read_text()
+    modal = src("web/frontend/src/features/dev/WorkItemModal.tsx")
     # A run number says nothing about what ran, so the header names the FEATURE and the phase.
     ok("the group header names WHAT the run was", "RUN_KIND" in modal
        and "deputy: 'deputy judgment'" in modal
@@ -218,10 +218,10 @@ def test_compacted_build_thread_reloads_its_skill() -> None:
     ok("after a compaction it names the cause and asks for the skill again",
        "COMPACTED" in after and "invoke the `superme-dev:build` skill again" in after)
     ok("...and still carries the work order", "--- build-vet-2.md ---" in after)
-    src = (ROOT / "superme_agent/daemon/services/loop.py").read_text()
+    loop_src = src("superme_agent/daemon/services/loop.py")
     ok("the runner derives the flag from the SAME signal the checkpoint pointer uses",
-       "compacted = compacted_checkpoint(ctx, item, prev_build)" in src
-       and "reload_skill=bool(compacted)" in src)
+       "compacted = compacted_checkpoint(ctx, item, prev_build)" in loop_src
+       and "reload_skill=bool(compacted)" in loop_src)
 
 
 def test_api_error_is_a_fault_not_a_success() -> None:
@@ -249,9 +249,9 @@ def test_api_error_is_a_fault_not_a_success() -> None:
        decide_after_build(live, outcome=None, turn_error=True)["klass"] == "infra")
     ok("...while a normal no-report cycle still advances (the loop never pages mid-build)",
        decide_after_build(live, outcome=None, turn_error=False)["klass"] == "advance")
-    src = (ROOT / "superme_agent/daemon/services/loop.py").read_text()
+    loop_src = src("superme_agent/daemon/services/loop.py")
     ok("the build runner reads its verdict off the shared classifier",
-       "turn_error = turn.fault.failed" in src)
+       "turn_error = turn.fault.failed" in loop_src)
 
 
 def main() -> None:

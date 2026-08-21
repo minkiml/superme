@@ -12,6 +12,7 @@ import shutil
 import sys
 from pathlib import Path
 from types import SimpleNamespace
+from scripts.sources import src
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -129,25 +130,25 @@ def test_triggers() -> None:
 # ------------------------------------------------------------------ runners mount the sink servers
 def test_runners_flip() -> None:
     print("runners — sink servers mounted, retired background kwarg gone")
-    src = {
-        "runs": (ROOT / "superme_agent/daemon/services/runs.py").read_text(),
-        "loop": (ROOT / "superme_agent/daemon/services/loop.py").read_text(),
-        "learning": (ROOT / "superme_agent/daemon/services/learning.py").read_text(),
-        "deputy": (ROOT / "superme_agent/daemon/services/deputy.py").read_text(),
+    runs_src = {
+        "runs": src("superme_agent/daemon/services/runs.py"),
+        "loop": src("superme_agent/daemon/services/loop.py"),
+        "learning": src("superme_agent/daemon/services/learning.py"),
+        "deputy": src("superme_agent/daemon/services/deputy.py"),
     }
     # The backstop that re-asks an undeclared run mounts the same sink, and pinning the count
     # lower made adding it read as a regression.
     ok("intake + feedback + close runners mount the report_completion sink",
-       src["runs"].count("make_run_report_server(sink)") == 4)
+       runs_src["runs"].count("make_run_report_server(sink)") == 4)
     ok("the completion backstop exists and re-asks through the same sink",
-       "async def ensure_completion" in src["runs"]
-       and src["runs"].count("await ensure_completion(") == 3
-       and src["loop"].count("await ensure_completion(") == 2)
+       "async def ensure_completion" in runs_src["runs"]
+       and runs_src["runs"].count("await ensure_completion(") == 3
+       and runs_src["loop"].count("await ensure_completion(") == 2)
     ok("vet + build runners mount the report_completion sink",
-       src["loop"].count("make_run_report_server(sink)") == 2)
+       runs_src["loop"].count("make_run_report_server(sink)") == 2)
     ok("deputy mounts its verdict sink",
-       src["deputy"].count("make_deputy_verdict_server(sink)") == 1)
-    for name, text in src.items():
+       runs_src["deputy"].count("make_deputy_verdict_server(sink)") == 1)
+    for name, text in runs_src.items():
         assert "background=True," not in text, f"FAIL: {name}.py still passes background=True to run_turn"
         assert "headless" not in text.lower(), f"FAIL: {name}.py still says headless"
         assert "parse_completion_report" not in text and "parse_deputy_verdict" not in text, \
@@ -174,7 +175,7 @@ def test_skills() -> None:
         for n in needles:
             assert n.lower() in section.lower(), f"FAIL: {name} background section lost delta {n!r}"
     ok("plan/vet/build/triage retitled + deltas intact + narration gone", True)
-    forge = (ROOT / "superme_agent/harness/plugins/superme-dev/agents/forge.md").read_text()
+    forge = src("superme_agent/harness/plugins/superme-dev/agents/forge.md")
     ok("forge.md lost the no-human clause",
        "no human" not in forge and "Don't stage more than once" in forge)
     hedge = KS.work_item_preamble("it1", {"phase": "plan", "kind": "implementation",

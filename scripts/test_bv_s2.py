@@ -11,8 +11,8 @@ from pathlib import Path
 
 from superme_agent.core import artifacts as A
 from superme_agent.core import gate_briefs as GB
+from scripts.sources import src
 
-ROOT = Path(__file__).resolve().parents[1]
 PASS = 0
 
 
@@ -211,14 +211,13 @@ def test_proves_is_the_human_field() -> None:
            plan_with("depth: checks\nreason: r\nenv: none\n",
                      CHECK_OK.replace("the deliverable behaves the way the brief said it would",
                                       "it is quiet"))))))
-    tmpl = (ROOT / "superme_agent/harness/plugins/superme-dev/skills/plan/templates/"
-            "plan-template.md").read_text()
+    tmpl = src("superme_agent/harness/plugins/superme-dev/skills/plan/templates/plan-template.md")
     ok("the template asks for it, in the owner's terms", "- proves: <fill:" in tmpl
        and "never \"exit code is 0\"" in tmpl)
-    skill = (ROOT / "superme_agent/harness/plugins/superme-dev/skills/plan/SKILL.md").read_text()
+    skill = src("superme_agent/harness/plugins/superme-dev/skills/plan/SKILL.md")
     ok("the plan skill gives the cover-the-block test", "`proves:`" in skill
        and "cover the rest of the block" in skill)
-    vet = (ROOT / "superme_agent/harness/plugins/superme-dev/skills/vet/SKILL.md").read_text()
+    vet = src("superme_agent/harness/plugins/superme-dev/skills/vet/SKILL.md")
     ok("the vet skill reads it before running anything",
        "`proves:` is the real bar" in vet)
     # The surface's row carries it, so the Task tab never re-derives the meaning from `run:`.

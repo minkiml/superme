@@ -11,6 +11,7 @@ from pathlib import Path
 
 from superme_agent.harness.policy import is_safe
 from superme_agent.harness.tools.dev_tools import DEV_TOOLS, TOOL_SCOPES
+from scripts.sources import src
 
 ROOT = Path(__file__).resolve().parents[1]
 SKILLS = ROOT / "superme_agent/harness/plugins/superme-dev/skills"
@@ -81,10 +82,10 @@ def test_a_background_scope_mounts_nothing_it_cannot_use():
 def test_every_report_the_reader_asks_for_has_a_writer():
     """The reader looks in exactly one place. Whoever writes the report has to agree with it, and
     the only way to guarantee that is for code to build the path."""
-    src = (ROOT / "superme_agent/harness/tools/dev_tools.py").read_text()
+    dev_tools_src = src("superme_agent/harness/tools/dev_tools.py")
     penned, prose = set(), set()
     for phase in REPORTED:
-        if f"file_{phase}_report" in src:
+        if f"file_{phase}_report" in dev_tools_src:
             penned.add(phase)
         if f"reports/report-{phase}.md" in skill_text(phase):
             prose.add(phase)

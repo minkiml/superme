@@ -18,6 +18,7 @@ from superme_agent.core.dev_knowledge import DevKnowledgeService
 from superme_agent.core.sessions import _is_noise, _preset_title
 from superme_agent.core.spine import SystemSpine
 from superme_agent.daemon.routers.ws import resolve_item_session
+from scripts.sources import src
 
 PASS = 0
 
@@ -281,15 +282,14 @@ def test_reentry_delta(tmp: Path) -> None:
        and "…and 3 more" in kernel_speech.intake_trigger("plan", wid, "T", many))
 
     # The wiring: the runner computes this only for a thread it is RESUMING.
-    src = (Path(__file__).resolve().parents[1]
-           / "superme_agent/daemon/services/runs.py").read_text()
-    guard = src.split("    changed: list[str] = []", 1)[-1].split("trigger =", 1)[0]
+    runs_src = src("superme_agent/daemon/services/runs.py")
+    guard = runs_src.split("    changed: list[str] = []", 1)[-1].split("trigger =", 1)[0]
     ok("the intake runner asks only when it has a prior thread",
        guard.lstrip().startswith("if prev_session:"))
     ok("...against THIS phase's clock, not the item's",
        "last_phase_run_end(context_id, item_id, phase=run_phase)" in guard)
     ok("...and hands the delta to the trigger",
-       "intake_trigger(skill, item_id, title, changed)" in src)
+       "intake_trigger(skill, item_id, title, changed)" in runs_src)
 
 
 def test_titles() -> None:

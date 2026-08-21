@@ -10807,7 +10807,7 @@
    "sig": "value:Logger"
   },
   "make_dev_mcp_server": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.scopes",
    "sig": "def(store, context_id: str, *, scope: str, **deps)"
   },
   "onboarding_preamble": {
@@ -13304,7 +13304,7 @@
    "sig": "value:Logger"
   },
   "make_dev_mcp_server": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.scopes",
    "sig": "def(store, context_id: str, *, scope: str, **deps)"
   },
   "run_sweep": {
@@ -13488,7 +13488,7 @@
    "sig": "value:Logger"
   },
   "make_dev_mcp_server": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.scopes",
    "sig": "def(store, context_id: str, *, scope: str, **deps)"
   },
   "make_run_report_server": {
@@ -13988,7 +13988,7 @@
    "sig": "value:Logger"
   },
   "make_dev_mcp_server": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.scopes",
    "sig": "def(store, context_id: str, *, scope: str, **deps)"
   },
   "make_run_report_server": {
@@ -14262,17 +14262,17 @@
  },
  "superme_agent.harness.tools.dev_tools": {
   "AppendInboxItemArgs": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.inbox",
    "methods": [],
    "sig": "class"
   },
   "ApplyKnowledgeDeltaArgs": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.revisions",
    "methods": [],
    "sig": "class"
   },
   "CreateInboxItemArgs": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.inbox",
    "methods": [],
    "sig": "class"
   },
@@ -14280,191 +14280,180 @@
    "sig": "value:list"
   },
   "DevLogArgs": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.learning",
    "methods": [],
    "sig": "class"
   },
   "DropCandidatesArgs": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.learning",
    "methods": [],
    "sig": "class"
   },
   "DryRunChecksArgs": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.verification",
    "methods": [],
    "sig": "class"
   },
   "FileCandidateArgs": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.learning",
    "methods": [],
    "sig": "class"
   },
   "FileInvestigateReportArgs": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.reports",
    "methods": [],
    "sig": "class"
   },
   "FilePhaseReportArgs": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.reports",
    "methods": [],
    "sig": "class"
   },
   "FilePlanReportArgs": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.reports",
    "methods": [],
    "sig": "class"
   },
   "FileVetReportArgs": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.reports",
    "methods": [],
    "sig": "class"
   },
   "InboxArgs": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.inbox",
    "methods": [],
    "sig": "class"
   },
   "ItemizeAndLaunchArgs": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.inbox",
    "methods": [],
    "sig": "class"
   },
   "ItemizeItemArgs": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.inbox",
    "methods": [],
    "sig": "class"
   },
   "KnowledgeOpArg": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.revisions",
    "methods": [],
    "sig": "class"
   },
-  "Literal": {
-   "sig": "value:_LiteralSpecialForm"
-  },
   "MergeProposalArgs": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.learning",
    "methods": [],
    "sig": "class"
   },
   "NominateCheckArgs": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.verification",
    "methods": [],
    "sig": "class"
   },
   "PlanChangeArg": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.revisions",
    "methods": [],
    "sig": "class"
   },
   "PlanOpArg": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.revisions",
    "methods": [],
    "sig": "class"
   },
   "ProposeMemoryArgs": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.learning",
    "methods": [],
    "sig": "class"
   },
   "PushInboxItemArgs": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.inbox",
    "methods": [],
    "sig": "class"
   },
   "ReadDecisionsArgs": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.records",
    "methods": [],
    "sig": "class"
   },
   "ReadResearchProposalsArgs": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.records",
    "methods": [],
    "sig": "class"
   },
   "ReadRunArgs": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.learning",
    "methods": [],
    "sig": "class"
   },
   "ReadVerificationLibraryArgs": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.verification",
    "methods": [],
    "sig": "class"
   },
   "RecordDiagnosisArgs": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.verification",
    "methods": [],
    "sig": "class"
   },
   "RecordLensArgs": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.verification",
    "methods": [],
    "sig": "class"
   },
   "RecordValidationArgs": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.verification",
    "methods": [],
    "sig": "class"
   },
   "RecordVerificationArgs": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.verification",
    "methods": [],
    "sig": "class"
   },
   "RequestAuthorizationArgs": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.records",
    "methods": [],
    "sig": "class"
   },
-  "Required": {
-   "sig": "value:_SpecialForm"
-  },
   "ReviewCandidatesArgs": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.learning",
    "methods": [],
    "sig": "class"
   },
   "ReviewProposalsArgs": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.learning",
    "methods": [],
    "sig": "class"
   },
   "RevisePlanArgs": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.revisions",
    "methods": [],
    "sig": "class"
   },
   "ScaffoldArtifactArgs": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.items",
    "methods": [],
    "sig": "class"
   },
   "SetTriageClassificationArgs": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.items",
    "methods": [],
    "sig": "class"
   },
   "StageArtifactArgs": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.learning",
    "methods": [],
    "sig": "class"
   },
   "SyncFromMainArgs": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.items",
    "methods": [],
    "sig": "class"
   },
   "TOOL_SCOPES": {
    "sig": "value:dict"
   },
-  "ToolSpec": {
-   "home": "superme_agent.harness.tools.registry",
-   "methods": [],
-   "sig": "class"
-  },
   "WriteCheckpointArgs": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.items",
    "methods": [],
    "sig": "class"
   },
@@ -14487,127 +14476,1034 @@
    "sig": "value:list"
   },
   "_append_inbox_item": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.inbox",
    "sig": "def(*, store, context_id, dev_root=None, **_)"
   },
   "_apply_knowledge_delta": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.revisions",
    "sig": "def(*, store, context_id, dev_root=None, repo_dir=None, bound_item_id=None, **_)"
   },
   "_artifact_name": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.render",
    "sig": "def(path: str | None) -> str | None"
   },
   "_bound_err": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.items",
    "sig": "def(item_id, bound_item_id) -> str | None"
   },
   "_brief_nudge": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.inbox",
    "sig": "def(args: dict, *, spawned: bool, repairable: bool) -> str"
   },
   "_create_inbox_item": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.inbox",
    "sig": "def(*, store, context_id, dev_root=None, fire_triage=None, **_)"
   },
   "_day_range": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.render",
    "sig": "def(day: str) -> tuple[str, str] | None"
   },
   "_dev_log": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.learning",
    "sig": "def(*, store, context_id, **_)"
   },
   "_drop_candidates": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.learning",
    "sig": "def(*, store, context_id, **_)"
   },
   "_dry_run_checks": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.verification",
    "sig": "def(*, store, context_id, dev_root=None, repo_dir=None, bound_item_id=None, **_)"
   },
   "_err": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.render",
    "sig": "def(text: str) -> dict"
   },
   "_event_refs": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.render",
    "sig": "def(meta: dict | None) -> str"
   },
   "_file_build_report": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.reports",
    "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
   },
   "_file_candidate": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.learning",
    "sig": "def(*, store, context_id, origin_session_id=None, capture_source='agent', **_)"
   },
   "_file_close_report": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.reports",
    "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
   },
   "_file_investigate_report": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.reports",
    "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
   },
   "_file_plan_report": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.reports",
    "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
   },
   "_file_review_report": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.reports",
    "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
   },
   "_file_triage_report": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.reports",
    "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
   },
   "_file_vet_report": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.reports",
    "sig": "def(*, store, context_id, dev_root=None, repo_dir=None, bound_item_id=None, **_)"
   },
   "_fmt": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.render",
    "sig": "def(events: list[dict]) -> str"
   },
   "_fmt_candidates": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.render",
    "sig": "def(rows: list[dict]) -> str"
   },
   "_fmt_inbox": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.inbox",
    "sig": "def(rows: list[dict]) -> str"
   },
   "_fmt_proposals": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.render",
    "sig": "def(rows: list[dict]) -> str"
   },
   "_fmt_run_list": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.render",
    "sig": "def(rows: list[dict]) -> str"
   },
   "_fmt_run_trace": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.render",
    "sig": "def(run: dict, events: list[dict]) -> str"
   },
   "_ids": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.render",
    "sig": "def(raw) -> list[int]"
   },
   "_item_dir": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.items",
    "sig": "def(dev_root, item_id: str)"
   },
   "_itemize_and_launch": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.inbox",
    "sig": "def(*, store, context_id, **_)"
   },
   "_list_inbox": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.inbox",
    "sig": "def(*, store, context_id, **_)"
   },
   "_merge_into_proposal": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.learning",
+   "sig": "def(*, store, context_id, **_)"
+  },
+  "_nominate_check": {
+   "home": "superme_agent.harness.tools.dev_tools.verification",
+   "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
+  },
+  "_ok": {
+   "home": "superme_agent.harness.tools.dev_tools.render",
+   "sig": "def(text: str) -> dict"
+  },
+  "_phase_report_pen": {
+   "home": "superme_agent.harness.tools.dev_tools.reports",
+   "sig": "def(phase: str)"
+  },
+  "_propose_memory": {
+   "home": "superme_agent.harness.tools.dev_tools.learning",
+   "sig": "def(*, store, context_id, **_)"
+  },
+  "_push_inbox_item": {
+   "home": "superme_agent.harness.tools.dev_tools.inbox",
+   "sig": "def(*, store, context_id, dev_root=None, fire_triage=None, bound_item_id=None, **_)"
+  },
+  "_qid": {
+   "home": "superme_agent.harness.tools.dev_tools.render",
+   "sig": "def(ns: str, ident) -> str"
+  },
+  "_read_decisions": {
+   "home": "superme_agent.harness.tools.dev_tools.records",
+   "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
+  },
+  "_read_research_proposals": {
+   "home": "superme_agent.harness.tools.dev_tools.records",
+   "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
+  },
+  "_read_run": {
+   "home": "superme_agent.harness.tools.dev_tools.learning",
+   "sig": "def(*, context_id, spine=None, **_)"
+  },
+  "_read_verification_library": {
+   "home": "superme_agent.harness.tools.dev_tools.verification",
+   "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
+  },
+  "_record_diagnosis": {
+   "home": "superme_agent.harness.tools.dev_tools.verification",
+   "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
+  },
+  "_record_lens": {
+   "home": "superme_agent.harness.tools.dev_tools.verification",
+   "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
+  },
+  "_record_validation": {
+   "home": "superme_agent.harness.tools.dev_tools.verification",
+   "sig": "def(*, store, context_id, dev_root=None, repo_dir=None, bound_item_id=None, **_)"
+  },
+  "_record_verification": {
+   "home": "superme_agent.harness.tools.dev_tools.verification",
+   "sig": "def(*, store, context_id, dev_root=None, repo_dir=None, bound_item_id=None, **_)"
+  },
+  "_request_authorization": {
+   "home": "superme_agent.harness.tools.dev_tools.records",
+   "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
+  },
+  "_review_candidates": {
+   "home": "superme_agent.harness.tools.dev_tools.learning",
+   "sig": "def(*, store, context_id, **_)"
+  },
+  "_review_proposals": {
+   "home": "superme_agent.harness.tools.dev_tools.learning",
+   "sig": "def(*, store, context_id, **_)"
+  },
+  "_revise_plan": {
+   "home": "superme_agent.harness.tools.dev_tools.revisions",
+   "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, spine=None, **_)"
+  },
+  "_s": {
+   "home": "superme_agent.harness.tools.dev_tools.render",
+   "sig": "def(args: dict, k: str) -> str | None"
+  },
+  "_scaffold_artifact": {
+   "home": "superme_agent.harness.tools.dev_tools.items",
+   "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
+  },
+  "_set_triage_classification": {
+   "home": "superme_agent.harness.tools.dev_tools.items",
+   "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
+  },
+  "_stage_artifact": {
+   "home": "superme_agent.harness.tools.dev_tools.learning",
+   "sig": "def(*, store, proposal_id=None, staged_path=None, **_)"
+  },
+  "_sync_from_main": {
+   "home": "superme_agent.harness.tools.dev_tools.items",
+   "sig": "def(*, store, context_id, dev_root=None, main_repo_dir=None, bound_item_id=None, spine=None, **_)"
+  },
+  "_wk_note": {
+   "home": "superme_agent.harness.tools.dev_tools.inbox",
+   "sig": "def(work_kind: str) -> str"
+  },
+  "_write_checkpoint": {
+   "home": "superme_agent.harness.tools.dev_tools.items",
+   "sig": "def(*, store, context_id, dev_root=None, repo_dir=None, bound_item_id=None, **_)"
+  },
+  "dev_tool_specs": {
+   "home": "superme_agent.harness.tools.dev_tools.scopes",
+   "sig": "def(scope: str) -> list[ToolSpec]"
+  },
+  "make_dev_mcp_server": {
+   "home": "superme_agent.harness.tools.dev_tools.scopes",
+   "sig": "def(store, context_id: str, *, scope: str, **deps)"
+  }
+ },
+ "superme_agent.harness.tools.dev_tools.inbox": {
+  "AppendInboxItemArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.inbox",
+   "methods": [],
+   "sig": "class"
+  },
+  "CreateInboxItemArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.inbox",
+   "methods": [],
+   "sig": "class"
+  },
+  "InboxArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.inbox",
+   "methods": [],
+   "sig": "class"
+  },
+  "ItemizeAndLaunchArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.inbox",
+   "methods": [],
+   "sig": "class"
+  },
+  "ItemizeItemArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.inbox",
+   "methods": [],
+   "sig": "class"
+  },
+  "Literal": {
+   "sig": "value:_LiteralSpecialForm"
+  },
+  "PushInboxItemArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.inbox",
+   "methods": [],
+   "sig": "class"
+  },
+  "Required": {
+   "sig": "value:_SpecialForm"
+  },
+  "_BRIEF_FIELDS": {
+   "sig": "value:tuple"
+  },
+  "_append_inbox_item": {
+   "home": "superme_agent.harness.tools.dev_tools.inbox",
+   "sig": "def(*, store, context_id, dev_root=None, **_)"
+  },
+  "_brief_nudge": {
+   "home": "superme_agent.harness.tools.dev_tools.inbox",
+   "sig": "def(args: dict, *, spawned: bool, repairable: bool) -> str"
+  },
+  "_create_inbox_item": {
+   "home": "superme_agent.harness.tools.dev_tools.inbox",
+   "sig": "def(*, store, context_id, dev_root=None, fire_triage=None, **_)"
+  },
+  "_err": {
+   "home": "superme_agent.harness.tools.dev_tools.render",
+   "sig": "def(text: str) -> dict"
+  },
+  "_fmt_inbox": {
+   "home": "superme_agent.harness.tools.dev_tools.inbox",
+   "sig": "def(rows: list[dict]) -> str"
+  },
+  "_itemize_and_launch": {
+   "home": "superme_agent.harness.tools.dev_tools.inbox",
+   "sig": "def(*, store, context_id, **_)"
+  },
+  "_list_inbox": {
+   "home": "superme_agent.harness.tools.dev_tools.inbox",
+   "sig": "def(*, store, context_id, **_)"
+  },
+  "_ok": {
+   "home": "superme_agent.harness.tools.dev_tools.render",
+   "sig": "def(text: str) -> dict"
+  },
+  "_push_inbox_item": {
+   "home": "superme_agent.harness.tools.dev_tools.inbox",
+   "sig": "def(*, store, context_id, dev_root=None, fire_triage=None, bound_item_id=None, **_)"
+  },
+  "_qid": {
+   "home": "superme_agent.harness.tools.dev_tools.render",
+   "sig": "def(ns: str, ident) -> str"
+  },
+  "_s": {
+   "home": "superme_agent.harness.tools.dev_tools.render",
+   "sig": "def(args: dict, k: str) -> str | None"
+  },
+  "_wk_note": {
+   "home": "superme_agent.harness.tools.dev_tools.inbox",
+   "sig": "def(work_kind: str) -> str"
+  }
+ },
+ "superme_agent.harness.tools.dev_tools.items": {
+  "Literal": {
+   "sig": "value:_LiteralSpecialForm"
+  },
+  "Required": {
+   "sig": "value:_SpecialForm"
+  },
+  "ScaffoldArtifactArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.items",
+   "methods": [],
+   "sig": "class"
+  },
+  "SetTriageClassificationArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.items",
+   "methods": [],
+   "sig": "class"
+  },
+  "SyncFromMainArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.items",
+   "methods": [],
+   "sig": "class"
+  },
+  "WriteCheckpointArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.items",
+   "methods": [],
+   "sig": "class"
+  },
+  "_bound_err": {
+   "home": "superme_agent.harness.tools.dev_tools.items",
+   "sig": "def(item_id, bound_item_id) -> str | None"
+  },
+  "_err": {
+   "home": "superme_agent.harness.tools.dev_tools.render",
+   "sig": "def(text: str) -> dict"
+  },
+  "_item_dir": {
+   "home": "superme_agent.harness.tools.dev_tools.items",
+   "sig": "def(dev_root, item_id: str)"
+  },
+  "_ok": {
+   "home": "superme_agent.harness.tools.dev_tools.render",
+   "sig": "def(text: str) -> dict"
+  },
+  "_s": {
+   "home": "superme_agent.harness.tools.dev_tools.render",
+   "sig": "def(args: dict, k: str) -> str | None"
+  },
+  "_scaffold_artifact": {
+   "home": "superme_agent.harness.tools.dev_tools.items",
+   "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
+  },
+  "_set_triage_classification": {
+   "home": "superme_agent.harness.tools.dev_tools.items",
+   "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
+  },
+  "_sync_from_main": {
+   "home": "superme_agent.harness.tools.dev_tools.items",
+   "sig": "def(*, store, context_id, dev_root=None, main_repo_dir=None, bound_item_id=None, spine=None, **_)"
+  },
+  "_write_checkpoint": {
+   "home": "superme_agent.harness.tools.dev_tools.items",
+   "sig": "def(*, store, context_id, dev_root=None, repo_dir=None, bound_item_id=None, **_)"
+  }
+ },
+ "superme_agent.harness.tools.dev_tools.learning": {
+  "DevLogArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.learning",
+   "methods": [],
+   "sig": "class"
+  },
+  "DropCandidatesArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.learning",
+   "methods": [],
+   "sig": "class"
+  },
+  "FileCandidateArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.learning",
+   "methods": [],
+   "sig": "class"
+  },
+  "Literal": {
+   "sig": "value:_LiteralSpecialForm"
+  },
+  "MergeProposalArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.learning",
+   "methods": [],
+   "sig": "class"
+  },
+  "ProposeMemoryArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.learning",
+   "methods": [],
+   "sig": "class"
+  },
+  "ReadRunArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.learning",
+   "methods": [],
+   "sig": "class"
+  },
+  "Required": {
+   "sig": "value:_SpecialForm"
+  },
+  "ReviewCandidatesArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.learning",
+   "methods": [],
+   "sig": "class"
+  },
+  "ReviewProposalsArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.learning",
+   "methods": [],
+   "sig": "class"
+  },
+  "StageArtifactArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.learning",
+   "methods": [],
+   "sig": "class"
+  },
+  "_LOG_LEVELS": {
+   "sig": "value:dict"
+  },
+  "_day_range": {
+   "home": "superme_agent.harness.tools.dev_tools.render",
+   "sig": "def(day: str) -> tuple[str, str] | None"
+  },
+  "_dev_log": {
+   "home": "superme_agent.harness.tools.dev_tools.learning",
+   "sig": "def(*, store, context_id, **_)"
+  },
+  "_drop_candidates": {
+   "home": "superme_agent.harness.tools.dev_tools.learning",
+   "sig": "def(*, store, context_id, **_)"
+  },
+  "_err": {
+   "home": "superme_agent.harness.tools.dev_tools.render",
+   "sig": "def(text: str) -> dict"
+  },
+  "_file_candidate": {
+   "home": "superme_agent.harness.tools.dev_tools.learning",
+   "sig": "def(*, store, context_id, origin_session_id=None, capture_source='agent', **_)"
+  },
+  "_fmt": {
+   "home": "superme_agent.harness.tools.dev_tools.render",
+   "sig": "def(events: list[dict]) -> str"
+  },
+  "_fmt_candidates": {
+   "home": "superme_agent.harness.tools.dev_tools.render",
+   "sig": "def(rows: list[dict]) -> str"
+  },
+  "_fmt_proposals": {
+   "home": "superme_agent.harness.tools.dev_tools.render",
+   "sig": "def(rows: list[dict]) -> str"
+  },
+  "_fmt_run_list": {
+   "home": "superme_agent.harness.tools.dev_tools.render",
+   "sig": "def(rows: list[dict]) -> str"
+  },
+  "_fmt_run_trace": {
+   "home": "superme_agent.harness.tools.dev_tools.render",
+   "sig": "def(run: dict, events: list[dict]) -> str"
+  },
+  "_ids": {
+   "home": "superme_agent.harness.tools.dev_tools.render",
+   "sig": "def(raw) -> list[int]"
+  },
+  "_merge_into_proposal": {
+   "home": "superme_agent.harness.tools.dev_tools.learning",
+   "sig": "def(*, store, context_id, **_)"
+  },
+  "_ok": {
+   "home": "superme_agent.harness.tools.dev_tools.render",
+   "sig": "def(text: str) -> dict"
+  },
+  "_propose_memory": {
+   "home": "superme_agent.harness.tools.dev_tools.learning",
+   "sig": "def(*, store, context_id, **_)"
+  },
+  "_qid": {
+   "home": "superme_agent.harness.tools.dev_tools.render",
+   "sig": "def(ns: str, ident) -> str"
+  },
+  "_read_run": {
+   "home": "superme_agent.harness.tools.dev_tools.learning",
+   "sig": "def(*, context_id, spine=None, **_)"
+  },
+  "_review_candidates": {
+   "home": "superme_agent.harness.tools.dev_tools.learning",
+   "sig": "def(*, store, context_id, **_)"
+  },
+  "_review_proposals": {
+   "home": "superme_agent.harness.tools.dev_tools.learning",
+   "sig": "def(*, store, context_id, **_)"
+  },
+  "_s": {
+   "home": "superme_agent.harness.tools.dev_tools.render",
+   "sig": "def(args: dict, k: str) -> str | None"
+  },
+  "_stage_artifact": {
+   "home": "superme_agent.harness.tools.dev_tools.learning",
+   "sig": "def(*, store, proposal_id=None, staged_path=None, **_)"
+  }
+ },
+ "superme_agent.harness.tools.dev_tools.records": {
+  "Literal": {
+   "sig": "value:_LiteralSpecialForm"
+  },
+  "ReadDecisionsArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.records",
+   "methods": [],
+   "sig": "class"
+  },
+  "ReadResearchProposalsArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.records",
+   "methods": [],
+   "sig": "class"
+  },
+  "RequestAuthorizationArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.records",
+   "methods": [],
+   "sig": "class"
+  },
+  "Required": {
+   "sig": "value:_SpecialForm"
+  },
+  "_bound_err": {
+   "home": "superme_agent.harness.tools.dev_tools.items",
+   "sig": "def(item_id, bound_item_id) -> str | None"
+  },
+  "_err": {
+   "home": "superme_agent.harness.tools.dev_tools.render",
+   "sig": "def(text: str) -> dict"
+  },
+  "_item_dir": {
+   "home": "superme_agent.harness.tools.dev_tools.items",
+   "sig": "def(dev_root, item_id: str)"
+  },
+  "_ok": {
+   "home": "superme_agent.harness.tools.dev_tools.render",
+   "sig": "def(text: str) -> dict"
+  },
+  "_read_decisions": {
+   "home": "superme_agent.harness.tools.dev_tools.records",
+   "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
+  },
+  "_read_research_proposals": {
+   "home": "superme_agent.harness.tools.dev_tools.records",
+   "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
+  },
+  "_request_authorization": {
+   "home": "superme_agent.harness.tools.dev_tools.records",
+   "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
+  },
+  "_s": {
+   "home": "superme_agent.harness.tools.dev_tools.render",
+   "sig": "def(args: dict, k: str) -> str | None"
+  }
+ },
+ "superme_agent.harness.tools.dev_tools.render": {
+  "_artifact_name": {
+   "home": "superme_agent.harness.tools.dev_tools.render",
+   "sig": "def(path: str | None) -> str | None"
+  },
+  "_day_range": {
+   "home": "superme_agent.harness.tools.dev_tools.render",
+   "sig": "def(day: str) -> tuple[str, str] | None"
+  },
+  "_err": {
+   "home": "superme_agent.harness.tools.dev_tools.render",
+   "sig": "def(text: str) -> dict"
+  },
+  "_event_refs": {
+   "home": "superme_agent.harness.tools.dev_tools.render",
+   "sig": "def(meta: dict | None) -> str"
+  },
+  "_fmt": {
+   "home": "superme_agent.harness.tools.dev_tools.render",
+   "sig": "def(events: list[dict]) -> str"
+  },
+  "_fmt_candidates": {
+   "home": "superme_agent.harness.tools.dev_tools.render",
+   "sig": "def(rows: list[dict]) -> str"
+  },
+  "_fmt_proposals": {
+   "home": "superme_agent.harness.tools.dev_tools.render",
+   "sig": "def(rows: list[dict]) -> str"
+  },
+  "_fmt_run_list": {
+   "home": "superme_agent.harness.tools.dev_tools.render",
+   "sig": "def(rows: list[dict]) -> str"
+  },
+  "_fmt_run_trace": {
+   "home": "superme_agent.harness.tools.dev_tools.render",
+   "sig": "def(run: dict, events: list[dict]) -> str"
+  },
+  "_ids": {
+   "home": "superme_agent.harness.tools.dev_tools.render",
+   "sig": "def(raw) -> list[int]"
+  },
+  "_ok": {
+   "home": "superme_agent.harness.tools.dev_tools.render",
+   "sig": "def(text: str) -> dict"
+  },
+  "_qid": {
+   "home": "superme_agent.harness.tools.dev_tools.render",
+   "sig": "def(ns: str, ident) -> str"
+  },
+  "_s": {
+   "home": "superme_agent.harness.tools.dev_tools.render",
+   "sig": "def(args: dict, k: str) -> str | None"
+  }
+ },
+ "superme_agent.harness.tools.dev_tools.reports": {
+  "FileInvestigateReportArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.reports",
+   "methods": [],
+   "sig": "class"
+  },
+  "FilePhaseReportArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.reports",
+   "methods": [],
+   "sig": "class"
+  },
+  "FilePlanReportArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.reports",
+   "methods": [],
+   "sig": "class"
+  },
+  "FileVetReportArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.reports",
+   "methods": [],
+   "sig": "class"
+  },
+  "Required": {
+   "sig": "value:_SpecialForm"
+  },
+  "_bound_err": {
+   "home": "superme_agent.harness.tools.dev_tools.items",
+   "sig": "def(item_id, bound_item_id) -> str | None"
+  },
+  "_err": {
+   "home": "superme_agent.harness.tools.dev_tools.render",
+   "sig": "def(text: str) -> dict"
+  },
+  "_file_build_report": {
+   "home": "superme_agent.harness.tools.dev_tools.reports",
+   "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
+  },
+  "_file_close_report": {
+   "home": "superme_agent.harness.tools.dev_tools.reports",
+   "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
+  },
+  "_file_investigate_report": {
+   "home": "superme_agent.harness.tools.dev_tools.reports",
+   "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
+  },
+  "_file_plan_report": {
+   "home": "superme_agent.harness.tools.dev_tools.reports",
+   "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
+  },
+  "_file_review_report": {
+   "home": "superme_agent.harness.tools.dev_tools.reports",
+   "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
+  },
+  "_file_triage_report": {
+   "home": "superme_agent.harness.tools.dev_tools.reports",
+   "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
+  },
+  "_file_vet_report": {
+   "home": "superme_agent.harness.tools.dev_tools.reports",
+   "sig": "def(*, store, context_id, dev_root=None, repo_dir=None, bound_item_id=None, **_)"
+  },
+  "_item_dir": {
+   "home": "superme_agent.harness.tools.dev_tools.items",
+   "sig": "def(dev_root, item_id: str)"
+  },
+  "_ok": {
+   "home": "superme_agent.harness.tools.dev_tools.render",
+   "sig": "def(text: str) -> dict"
+  },
+  "_phase_report_pen": {
+   "home": "superme_agent.harness.tools.dev_tools.reports",
+   "sig": "def(phase: str)"
+  },
+  "_s": {
+   "home": "superme_agent.harness.tools.dev_tools.render",
+   "sig": "def(args: dict, k: str) -> str | None"
+  }
+ },
+ "superme_agent.harness.tools.dev_tools.revisions": {
+  "ApplyKnowledgeDeltaArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.revisions",
+   "methods": [],
+   "sig": "class"
+  },
+  "KnowledgeOpArg": {
+   "home": "superme_agent.harness.tools.dev_tools.revisions",
+   "methods": [],
+   "sig": "class"
+  },
+  "Literal": {
+   "sig": "value:_LiteralSpecialForm"
+  },
+  "PlanChangeArg": {
+   "home": "superme_agent.harness.tools.dev_tools.revisions",
+   "methods": [],
+   "sig": "class"
+  },
+  "PlanOpArg": {
+   "home": "superme_agent.harness.tools.dev_tools.revisions",
+   "methods": [],
+   "sig": "class"
+  },
+  "Required": {
+   "sig": "value:_SpecialForm"
+  },
+  "RevisePlanArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.revisions",
+   "methods": [],
+   "sig": "class"
+  },
+  "_apply_knowledge_delta": {
+   "home": "superme_agent.harness.tools.dev_tools.revisions",
+   "sig": "def(*, store, context_id, dev_root=None, repo_dir=None, bound_item_id=None, **_)"
+  },
+  "_bound_err": {
+   "home": "superme_agent.harness.tools.dev_tools.items",
+   "sig": "def(item_id, bound_item_id) -> str | None"
+  },
+  "_err": {
+   "home": "superme_agent.harness.tools.dev_tools.render",
+   "sig": "def(text: str) -> dict"
+  },
+  "_item_dir": {
+   "home": "superme_agent.harness.tools.dev_tools.items",
+   "sig": "def(dev_root, item_id: str)"
+  },
+  "_ok": {
+   "home": "superme_agent.harness.tools.dev_tools.render",
+   "sig": "def(text: str) -> dict"
+  },
+  "_revise_plan": {
+   "home": "superme_agent.harness.tools.dev_tools.revisions",
+   "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, spine=None, **_)"
+  },
+  "_s": {
+   "home": "superme_agent.harness.tools.dev_tools.render",
+   "sig": "def(args: dict, k: str) -> str | None"
+  }
+ },
+ "superme_agent.harness.tools.dev_tools.scopes": {
+  "AppendInboxItemArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.inbox",
+   "methods": [],
+   "sig": "class"
+  },
+  "ApplyKnowledgeDeltaArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.revisions",
+   "methods": [],
+   "sig": "class"
+  },
+  "CreateInboxItemArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.inbox",
+   "methods": [],
+   "sig": "class"
+  },
+  "DEV_TOOLS": {
+   "sig": "value:list"
+  },
+  "DevLogArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.learning",
+   "methods": [],
+   "sig": "class"
+  },
+  "DropCandidatesArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.learning",
+   "methods": [],
+   "sig": "class"
+  },
+  "DryRunChecksArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.verification",
+   "methods": [],
+   "sig": "class"
+  },
+  "FileCandidateArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.learning",
+   "methods": [],
+   "sig": "class"
+  },
+  "FileInvestigateReportArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.reports",
+   "methods": [],
+   "sig": "class"
+  },
+  "FilePhaseReportArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.reports",
+   "methods": [],
+   "sig": "class"
+  },
+  "FilePlanReportArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.reports",
+   "methods": [],
+   "sig": "class"
+  },
+  "FileVetReportArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.reports",
+   "methods": [],
+   "sig": "class"
+  },
+  "InboxArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.inbox",
+   "methods": [],
+   "sig": "class"
+  },
+  "ItemizeAndLaunchArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.inbox",
+   "methods": [],
+   "sig": "class"
+  },
+  "MergeProposalArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.learning",
+   "methods": [],
+   "sig": "class"
+  },
+  "NominateCheckArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.verification",
+   "methods": [],
+   "sig": "class"
+  },
+  "ProposeMemoryArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.learning",
+   "methods": [],
+   "sig": "class"
+  },
+  "PushInboxItemArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.inbox",
+   "methods": [],
+   "sig": "class"
+  },
+  "ReadDecisionsArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.records",
+   "methods": [],
+   "sig": "class"
+  },
+  "ReadResearchProposalsArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.records",
+   "methods": [],
+   "sig": "class"
+  },
+  "ReadRunArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.learning",
+   "methods": [],
+   "sig": "class"
+  },
+  "ReadVerificationLibraryArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.verification",
+   "methods": [],
+   "sig": "class"
+  },
+  "RecordDiagnosisArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.verification",
+   "methods": [],
+   "sig": "class"
+  },
+  "RecordLensArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.verification",
+   "methods": [],
+   "sig": "class"
+  },
+  "RecordValidationArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.verification",
+   "methods": [],
+   "sig": "class"
+  },
+  "RecordVerificationArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.verification",
+   "methods": [],
+   "sig": "class"
+  },
+  "RequestAuthorizationArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.records",
+   "methods": [],
+   "sig": "class"
+  },
+  "ReviewCandidatesArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.learning",
+   "methods": [],
+   "sig": "class"
+  },
+  "ReviewProposalsArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.learning",
+   "methods": [],
+   "sig": "class"
+  },
+  "RevisePlanArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.revisions",
+   "methods": [],
+   "sig": "class"
+  },
+  "ScaffoldArtifactArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.items",
+   "methods": [],
+   "sig": "class"
+  },
+  "SetTriageClassificationArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.items",
+   "methods": [],
+   "sig": "class"
+  },
+  "StageArtifactArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.learning",
+   "methods": [],
+   "sig": "class"
+  },
+  "SyncFromMainArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.items",
+   "methods": [],
+   "sig": "class"
+  },
+  "TOOL_SCOPES": {
+   "sig": "value:dict"
+  },
+  "ToolSpec": {
+   "home": "superme_agent.harness.tools.registry",
+   "methods": [],
+   "sig": "class"
+  },
+  "WriteCheckpointArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.items",
+   "methods": [],
+   "sig": "class"
+  },
+  "_BY_NAME": {
+   "sig": "value:dict"
+  },
+  "_ITEM_DEV_TOOLS": {
+   "sig": "value:list"
+  },
+  "_LEARNING_DEV_TOOLS": {
+   "sig": "value:list"
+  },
+  "_MAIN_DEV_TOOLS": {
+   "sig": "value:list"
+  },
+  "_append_inbox_item": {
+   "home": "superme_agent.harness.tools.dev_tools.inbox",
+   "sig": "def(*, store, context_id, dev_root=None, **_)"
+  },
+  "_apply_knowledge_delta": {
+   "home": "superme_agent.harness.tools.dev_tools.revisions",
+   "sig": "def(*, store, context_id, dev_root=None, repo_dir=None, bound_item_id=None, **_)"
+  },
+  "_create_inbox_item": {
+   "home": "superme_agent.harness.tools.dev_tools.inbox",
+   "sig": "def(*, store, context_id, dev_root=None, fire_triage=None, **_)"
+  },
+  "_dev_log": {
+   "home": "superme_agent.harness.tools.dev_tools.learning",
+   "sig": "def(*, store, context_id, **_)"
+  },
+  "_drop_candidates": {
+   "home": "superme_agent.harness.tools.dev_tools.learning",
+   "sig": "def(*, store, context_id, **_)"
+  },
+  "_dry_run_checks": {
+   "home": "superme_agent.harness.tools.dev_tools.verification",
+   "sig": "def(*, store, context_id, dev_root=None, repo_dir=None, bound_item_id=None, **_)"
+  },
+  "_file_build_report": {
+   "home": "superme_agent.harness.tools.dev_tools.reports",
+   "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
+  },
+  "_file_candidate": {
+   "home": "superme_agent.harness.tools.dev_tools.learning",
+   "sig": "def(*, store, context_id, origin_session_id=None, capture_source='agent', **_)"
+  },
+  "_file_close_report": {
+   "home": "superme_agent.harness.tools.dev_tools.reports",
+   "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
+  },
+  "_file_investigate_report": {
+   "home": "superme_agent.harness.tools.dev_tools.reports",
+   "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
+  },
+  "_file_plan_report": {
+   "home": "superme_agent.harness.tools.dev_tools.reports",
+   "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
+  },
+  "_file_review_report": {
+   "home": "superme_agent.harness.tools.dev_tools.reports",
+   "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
+  },
+  "_file_triage_report": {
+   "home": "superme_agent.harness.tools.dev_tools.reports",
+   "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
+  },
+  "_file_vet_report": {
+   "home": "superme_agent.harness.tools.dev_tools.reports",
+   "sig": "def(*, store, context_id, dev_root=None, repo_dir=None, bound_item_id=None, **_)"
+  },
+  "_itemize_and_launch": {
+   "home": "superme_agent.harness.tools.dev_tools.inbox",
+   "sig": "def(*, store, context_id, **_)"
+  },
+  "_list_inbox": {
+   "home": "superme_agent.harness.tools.dev_tools.inbox",
+   "sig": "def(*, store, context_id, **_)"
+  },
+  "_merge_into_proposal": {
+   "home": "superme_agent.harness.tools.dev_tools.learning",
    "sig": "def(*, store, context_id, **_)"
   },
   "_missing": {
@@ -14617,106 +15513,86 @@
    "sig": "value:tuple"
   },
   "_nominate_check": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.verification",
    "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
   },
-  "_ok": {
-   "home": "superme_agent.harness.tools.dev_tools",
-   "sig": "def(text: str) -> dict"
-  },
-  "_phase_report_pen": {
-   "home": "superme_agent.harness.tools.dev_tools",
-   "sig": "def(phase: str)"
-  },
   "_propose_memory": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.learning",
    "sig": "def(*, store, context_id, **_)"
   },
   "_push_inbox_item": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.inbox",
    "sig": "def(*, store, context_id, dev_root=None, fire_triage=None, bound_item_id=None, **_)"
   },
-  "_qid": {
-   "home": "superme_agent.harness.tools.dev_tools",
-   "sig": "def(ns: str, ident) -> str"
-  },
   "_read_decisions": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.records",
    "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
   },
   "_read_research_proposals": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.records",
    "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
   },
   "_read_run": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.learning",
    "sig": "def(*, context_id, spine=None, **_)"
   },
   "_read_verification_library": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.verification",
    "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
   },
   "_record_diagnosis": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.verification",
    "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
   },
   "_record_lens": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.verification",
    "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
   },
   "_record_validation": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.verification",
    "sig": "def(*, store, context_id, dev_root=None, repo_dir=None, bound_item_id=None, **_)"
   },
   "_record_verification": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.verification",
    "sig": "def(*, store, context_id, dev_root=None, repo_dir=None, bound_item_id=None, **_)"
   },
   "_request_authorization": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.records",
    "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
   },
   "_review_candidates": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.learning",
    "sig": "def(*, store, context_id, **_)"
   },
   "_review_proposals": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.learning",
    "sig": "def(*, store, context_id, **_)"
   },
   "_revise_plan": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.revisions",
    "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, spine=None, **_)"
   },
-  "_s": {
-   "home": "superme_agent.harness.tools.dev_tools",
-   "sig": "def(args: dict, k: str) -> str | None"
-  },
   "_scaffold_artifact": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.items",
    "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
   },
   "_scope": {
    "sig": "value:str"
   },
   "_set_triage_classification": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.items",
    "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
   },
   "_stage_artifact": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.learning",
    "sig": "def(*, store, proposal_id=None, staged_path=None, **_)"
   },
   "_sync_from_main": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.items",
    "sig": "def(*, store, context_id, dev_root=None, main_repo_dir=None, bound_item_id=None, spine=None, **_)"
   },
-  "_wk_note": {
-   "home": "superme_agent.harness.tools.dev_tools",
-   "sig": "def(work_kind: str) -> str"
-  },
   "_write_checkpoint": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.items",
    "sig": "def(*, store, context_id, dev_root=None, repo_dir=None, bound_item_id=None, **_)"
   },
   "build_mcp_server": {
@@ -14724,12 +15600,100 @@
    "sig": "def(name: 'str', specs: 'list[ToolSpec]', *, version: 'str' = '1.0.0', **deps)"
   },
   "dev_tool_specs": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.scopes",
    "sig": "def(scope: str) -> list[ToolSpec]"
   },
   "make_dev_mcp_server": {
-   "home": "superme_agent.harness.tools.dev_tools",
+   "home": "superme_agent.harness.tools.dev_tools.scopes",
    "sig": "def(store, context_id: str, *, scope: str, **deps)"
+  }
+ },
+ "superme_agent.harness.tools.dev_tools.verification": {
+  "DryRunChecksArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.verification",
+   "methods": [],
+   "sig": "class"
+  },
+  "NominateCheckArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.verification",
+   "methods": [],
+   "sig": "class"
+  },
+  "ReadVerificationLibraryArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.verification",
+   "methods": [],
+   "sig": "class"
+  },
+  "RecordDiagnosisArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.verification",
+   "methods": [],
+   "sig": "class"
+  },
+  "RecordLensArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.verification",
+   "methods": [],
+   "sig": "class"
+  },
+  "RecordValidationArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.verification",
+   "methods": [],
+   "sig": "class"
+  },
+  "RecordVerificationArgs": {
+   "home": "superme_agent.harness.tools.dev_tools.verification",
+   "methods": [],
+   "sig": "class"
+  },
+  "Required": {
+   "sig": "value:_SpecialForm"
+  },
+  "_bound_err": {
+   "home": "superme_agent.harness.tools.dev_tools.items",
+   "sig": "def(item_id, bound_item_id) -> str | None"
+  },
+  "_dry_run_checks": {
+   "home": "superme_agent.harness.tools.dev_tools.verification",
+   "sig": "def(*, store, context_id, dev_root=None, repo_dir=None, bound_item_id=None, **_)"
+  },
+  "_err": {
+   "home": "superme_agent.harness.tools.dev_tools.render",
+   "sig": "def(text: str) -> dict"
+  },
+  "_item_dir": {
+   "home": "superme_agent.harness.tools.dev_tools.items",
+   "sig": "def(dev_root, item_id: str)"
+  },
+  "_nominate_check": {
+   "home": "superme_agent.harness.tools.dev_tools.verification",
+   "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
+  },
+  "_ok": {
+   "home": "superme_agent.harness.tools.dev_tools.render",
+   "sig": "def(text: str) -> dict"
+  },
+  "_read_verification_library": {
+   "home": "superme_agent.harness.tools.dev_tools.verification",
+   "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
+  },
+  "_record_diagnosis": {
+   "home": "superme_agent.harness.tools.dev_tools.verification",
+   "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
+  },
+  "_record_lens": {
+   "home": "superme_agent.harness.tools.dev_tools.verification",
+   "sig": "def(*, store, context_id, dev_root=None, bound_item_id=None, **_)"
+  },
+  "_record_validation": {
+   "home": "superme_agent.harness.tools.dev_tools.verification",
+   "sig": "def(*, store, context_id, dev_root=None, repo_dir=None, bound_item_id=None, **_)"
+  },
+  "_record_verification": {
+   "home": "superme_agent.harness.tools.dev_tools.verification",
+   "sig": "def(*, store, context_id, dev_root=None, repo_dir=None, bound_item_id=None, **_)"
+  },
+  "_s": {
+   "home": "superme_agent.harness.tools.dev_tools.render",
+   "sig": "def(args: dict, k: str) -> str | None"
   }
  },
  "superme_agent.harness.tools.registry": {
