@@ -41,46 +41,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/docs": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Docs List
-         * @description List the docs (slug + title), overview first, then alphabetical by title.
-         */
-        get: operations["docs_list_docs_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/docs/{slug}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Docs Read
-         * @description Return one doc's markdown. `overview` maps to README.md. Path-traversal-safe.
-         */
-        get: operations["docs_read_docs__slug__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/knowledge/tree": {
         parameters: {
             query?: never;
@@ -154,19 +114,10 @@ export interface paths {
         };
         /**
          * Sessions List
-         * @description SuperMe's own past CHANNELS for a context, newest first. `mode` (core|dev) scopes.
+         * @description SuperMe's own past CHANNELS for a context, newest first.
          *
-         *     ONE ROW PER WORK-ITEM, not per session. An item runs several threads — one per phase, plus the
-         *     headless build/vet pair — but the owner has a single channel to each item: the whole item is
-         *     what they address, and the phase decides which agent answers (`ws.resolve_item_session` picks
-         *     the current phase's thread and redirects any other into it). Listing threads instead of channels
-         *     put an item on screen once per phase under one identical title, and since the body a work-item
-         *     row opens is the item's TIMELINE — every phase, already merged — those rows differed in nothing
-         *     the owner could see or act on. They were duplicates.
-         *
-         *     A channel's `id` is an ADDRESS for the item, not a claim about which thread takes the next turn:
-         *     the daemon resolves the talker from the phase when the turn is sent. `message_count` is the
-         *     item's total across its threads; `updated_at` is its most recent word.
+         *     ONE ROW PER WORK-ITEM, not per session: the owner addresses the ITEM, and the phase decides which
+         *     agent answers. A channel's `id` is an ADDRESS.
          */
         get: operations["sessions_list_sessions_get"];
         put?: never;
@@ -186,19 +137,19 @@ export interface paths {
         };
         /**
          * Session Read
-         * @description One session's title + its most recent `limit` replayable bubbles (older ones skipped). The
-         *     chat's "See more" grows `limit` in steps of 10 to reveal older messages; `limit<=0` = the whole
-         *     transcript. The agent always resumes with full server-side context regardless.
+         * @description One session's title and its most recent `limit` replayable bubbles.
+         *
+         *     `limit<=0` is the whole transcript. The agent always resumes with full server-side context
+         *     regardless.
          */
         get: operations["session_read_sessions__session_id__get"];
         put?: never;
         post?: never;
         /**
          * Session Delete
-         * @description Delete a session (session-deletion-trace-model). One tier only: a hard delete of the
-         *     session's resumable material — its spine row AND its transcript JSONL on disk — so it leaves the
-         *     picker and can't be reworked. Its runs + token trace are PRESERVED (never deleted) and stamped
-         *     `session_fate='deleted'` so the activity log shows the origin session is gone. Irreversible.
+         * @description Delete a CHANNEL — the row as the owner sees it, so a work-item drops all its phase threads.
+         *
+         *     One tier only: a hard delete of the resumable material. Runs and token trace are PRESERVED.
          */
         delete: operations["session_delete_sessions__session_id__delete"];
         options?: never;
@@ -240,16 +191,17 @@ export interface paths {
         };
         /**
          * Repos Overview
-         * @description Every repo × scope: static meta + computed live status (active/idle, last activity,
-         *     current item) + session/run counts + the per-scope knowledge & operational home pointers.
+         * @description Every repo and scope: static meta, computed live status, session and run counts, and the per-scope
+         *     knowledge and operational home pointers.
          */
         get: operations["repos_overview_repos_get"];
         put?: never;
         /**
          * Connect Repo
-         * @description Connect a domain: register a new repo into the spine and seed its knowledge home. `kind`
-         *     (new|existing) is stored on the repo and selects its onboarding front door (project-init |
-         *     retrofit). New dirs are created (must be empty); existing dirs must already be a directory.
+         * @description Connect a domain: register a new repo into the spine and seed its knowledge home.
+         *
+         *     `kind` selects its onboarding front door. New dirs are created and must be empty; existing dirs
+         *     must already be a directory.
          */
         post: operations["connect_repo_repos_post"];
         delete?: never;
@@ -270,13 +222,11 @@ export interface paths {
         post?: never;
         /**
          * Disconnect Repo
-         * @description Disconnect a domain — forget the project from SuperMe entirely. IRREVERSIBLE: deletes the
-         *     registration (repos.yaml entry + kv overrides), the knowledge home, the per-repo harness cell,
-         *     the pipeline state (inbox + learning rows) and every session (row + transcript). The project
-         *     FOLDER itself is never touched; reconnecting later is simply a fresh connect (retrofit).
-         *     Preserved per never-delete-logs: run/run_event/run_artifact + dev-activity events — each
-         *     deleted session's runs are stamped session_fate='disconnected'. Guards: `?confirm=<repo id>`
-         *     must match (the UI's typed confirmation), the hub is refused, and live runs block with 409.
+         * @description Disconnect a domain — forget the project from SuperMe entirely. IRREVERSIBLE.
+         *
+         *     Deletes the registration, knowledge home, harness cell, pipeline state and every session. The
+         *     project FOLDER is never touched. Run rows and dev events are preserved and stamped
+         *     `session_fate='disconnected'`.
          */
         delete: operations["disconnect_repo_repos__repo_id__delete"];
         options?: never;
@@ -293,10 +243,10 @@ export interface paths {
         };
         /**
          * System Attention
-         * @description The top-of-SuperMe attention feed (Pass 2 · Q2): every `awaiting_human` hold across ALL
-         *     connected repos, grouped by repo and classified (escalation · paged · review · gate)
-         *     so the notification center can badge a count and offer the right quick actions. Only repos with
-         *     a hold appear; empty feed = nothing needs the owner.
+         * @description The top-of-SuperMe attention feed: every `awaiting_human` hold across all connected repos, grouped
+         *     by repo and classified.
+         *
+         *     Only repos with a hold appear; an empty feed means nothing needs the owner.
          */
         get: operations["system_attention_system_attention_get"];
         put?: never;
@@ -316,8 +266,8 @@ export interface paths {
         };
         /**
          * Runs Overview
-         * @description The run log: live (in-flight) + recent history. Scope to one repo with ?context_id=,
-         *     or omit for the system-wide log. `running` is the live count for a quick gauge.
+         * @description The run log: live plus recent history. Scope to one repo with `context_id`, or omit for the
+         *     system-wide log.
          */
         get: operations["runs_overview_runs_get"];
         put?: never;
@@ -337,9 +287,9 @@ export interface paths {
         };
         /**
          * Run Trace
-         * @description One run's event trail — the prompt that opened it, the assistant's reply text, and each
-         *     tool/skill/agent call, in order. Per-RUN (not per-session), so each Activity row has its own
-         *     thread; works for background runs too. Empty list when nothing was recorded.
+         * @description One run's event trail — the opening prompt, the assistant's reply, and each call, in order.
+         *
+         *     Per-RUN rather than per-session, so each Activity row has its own thread.
          */
         get: operations["run_trace_runs__run_id__trace_get"];
         put?: never;
@@ -359,9 +309,8 @@ export interface paths {
         };
         /**
          * Token Usage
-         * @description System-wide token usage: global total + two reconciling breakdowns (semantic `by_category`
-         *     tree + systematic `by_type`) + per-scope/per-feature splits, and the same per repo. Feeds the
-         *     observability strip + the orbit's per-repo signal. All SuperMe-context spend.
+         * @description System-wide token usage: the global total, two reconciling breakdowns, and per-scope and
+         *     per-feature splits, the same per repo.
          */
         get: operations["token_usage_tokens_get"];
         put?: never;
@@ -382,7 +331,7 @@ export interface paths {
         /**
          * Token Timeseries
          * @description Per-day token usage for the trend graph. `tz_offset` is minutes to ADD to UTC to reach the
-         *     caller's local time (the FE sends `-getTimezoneOffset()`), so days bucket on the owner's day.
+         *     caller's local time, so days bucket on the owner's day.
          */
         get: operations["token_timeseries_tokens_timeseries_get"];
         put?: never;
@@ -402,8 +351,8 @@ export interface paths {
         };
         /**
          * Get Agent Models
-         * @description The tunable background agents (sweep/distill/write) with their preset, override, and effective
-         *     model — the autonomous learning runners that pick up a model from config, not a per-turn choice.
+         * @description The tunable background agents with their preset, override and effective model — the autonomous
+         *     runners that take a model from config rather than a per-turn choice.
          */
         get: operations["get_agent_models_system_agent_models_get"];
         put?: never;
@@ -425,8 +374,8 @@ export interface paths {
         put?: never;
         /**
          * Set Agent Model
-         * @description Set a background sub-agent's model TIER and/or reasoning effort — written into its own `.md`
-         *     frontmatter (the source of truth). Send either field; both are applied when present.
+         * @description Set a background sub-agent's model tier and/or reasoning effort, written into its own `.md`
+         *     frontmatter. Send either field; both apply when present.
          */
         post: operations["set_agent_model_system_agent_models__feature__post"];
         delete?: never;
@@ -446,8 +395,8 @@ export interface paths {
         put?: never;
         /**
          * Set System Learning
-         * @description Flip the learning master switch (idle / phase / completion sweeps). Off by default — background
-         *     learning spends tokens unattended. Capture is fully automatic, so this governs all of it.
+         * @description Flip the learning master switch. Off by default, because background learning spends tokens
+         *     unattended.
          */
         post: operations["set_system_learning_system_learning_post"];
         delete?: never;
@@ -467,10 +416,11 @@ export interface paths {
         put?: never;
         /**
          * Set System Deputy
-         * @description The global deputy dial (Quick config): whether a deputy judges autopilot gates and how
-         *     readily it escalates PER GATE (triage/plan/review, each low·medium·high·extra). Partial —
-         *     omitted fields stay put; strictness sets only the gates it names. Rejects an unknown gate or
-         *     level (422) rather than silently defaulting.
+         * @description The global deputy dial: whether a deputy judges autopilot gates, and how readily it escalates PER
+         *     GATE.
+         *
+         *     Partial — omitted fields stay put. Rejects an unknown gate or level rather than silently
+         *     defaulting.
          */
         post: operations["set_system_deputy_system_deputy_post"];
         delete?: never;
@@ -490,9 +440,8 @@ export interface paths {
         put?: never;
         /**
          * Set System Sweep
-         * @description Tune the capture-sweep triggers: idle threshold, heartbeat cadence, and the min-new-user-message
-         *     gate. Any omitted field is left unchanged. Takes effect without a daemon restart (the heartbeat
-         *     reads the cadence each iteration).
+         * @description Tune the capture-sweep triggers. Any omitted field is left unchanged, and a change takes effect
+         *     without a restart.
          */
         post: operations["set_system_sweep_system_sweep_post"];
         delete?: never;
@@ -510,16 +459,16 @@ export interface paths {
         };
         /**
          * Get System Compaction
-         * @description The compaction runtime knobs (S8/D11): trigger fill %, per-kind overrides, and the
-         *     effectiveness threshold, plus the static incompressible floor the trigger may never sit
-         *     at/below (what makes the knob safe to expose).
+         * @description The compaction runtime knobs, plus the static incompressible floor the trigger may never sit at
+         *     or below — what makes the knob safe to expose.
          */
         get: operations["get_system_compaction_system_compaction_get"];
         put?: never;
         /**
          * Set System Compaction
-         * @description Tune the compaction runtime. Any omitted field is left unchanged. FLOOR-AWARE: a trigger
-         *     the incompressible floor alone would exceed is refused (409) — never stored, never fired.
+         * @description Tune the compaction runtime. Any omitted field is left unchanged.
+         *
+         *     FLOOR-AWARE: a trigger the incompressible floor alone would exceed is refused, never stored.
          */
         post: operations["set_system_compaction_system_compaction_post"];
         delete?: never;
@@ -579,8 +528,7 @@ export interface paths {
         put?: never;
         /**
          * Set Repo Learning
-         * @description Opt one repo in/out of automatic capture. The global master switch still gates everything;
-         *     this lets a single repo sit out even when the master is on.
+         * @description Opt one repo in or out of automatic capture. The global master switch still gates everything.
          */
         post: operations["set_repo_learning_repos__repo_id__learning_post"];
         delete?: never;
@@ -600,8 +548,8 @@ export interface paths {
         put?: never;
         /**
          * Set Repo Autopilot
-         * @description Set this repo's autopilot concurrency cap — the max autopilot items in the build⟷vet loop at
-         *     once (the slice-3 launch breaker). Per-project by owner decision; floored at 1.
+         * @description Set this repo's autopilot concurrency cap — the most autopilot items in the build⟷vet loop at
+         *     once. Floored at 1.
          */
         post: operations["set_repo_autopilot_repos__repo_id__autopilot_post"];
         delete?: never;
@@ -621,11 +569,10 @@ export interface paths {
         put?: never;
         /**
          * Set Repo Git
-         * @description Set this repo's review mode (`fast` | `strict`) and/or anchor branch — the two knobs that
-         *     govern how work lands (workflow-renovation-v2 §2.2). Both are read LIVE at every decision point,
-         *     so a change applies immediately, including to items already sitting at review. An anchor naming
-         *     a branch that doesn't exist is accepted and reported back as an `error`: the setting is the
-         *     owner's declaration, and every git site refuses rather than silently retargeting the default.
+         * @description Set this repo's review mode and/or anchor branch.
+         *
+         *     Both are read LIVE at every decision point. An anchor naming a branch that does not exist is
+         *     accepted and reported back as an `error`.
          */
         post: operations["set_repo_git_repos__repo_id__git_post"];
         delete?: never;
@@ -643,12 +590,10 @@ export interface paths {
         };
         /**
          * Get Repo Branches
-         * @description This repo's local branches — the anchor picker's option set. Read live off git rather than
-         *     stored: a branch can appear or vanish between two page loads, and the anchor REFUSES on a branch
-         *     that doesn't exist, so a stale list would offer a setting that fails at the next merge.
+         * @description This repo's local branches — the anchor picker's option set.
          *
-         *     A non-git repo answers with an empty list and no error — nothing to pick from is a fact about
-         *     the repo, not a failure of the request.
+         *     Read live off git: the anchor REFUSES on a branch that does not exist, so a stale list would offer
+         *     a setting that fails at the next merge.
          */
         get: operations["get_repo_branches_repos__repo_id__branches_get"];
         put?: never;
@@ -762,9 +707,10 @@ export interface paths {
         head?: never;
         /**
          * Dev Inbox Update
-         * @description Edit an inbox item: change status, kind, tag, text, or title. A PUSHED row is immutable
-         *     trace (its content already moved into the work-item's preliminary/): flipping it back to
-         *     `open` would let a second push mint a duplicate work-item over the same provenance.
+         * @description Edit an inbox item: status, kind, tag, text or title.
+         *
+         *     A PUSHED row is immutable trace, since its content already moved into the work-item — flipping it
+         *     back to `open` would let a second push mint a duplicate.
          */
         patch: operations["dev_inbox_update_dev_inbox__item_id__patch"];
         trace?: never;
@@ -780,13 +726,10 @@ export interface paths {
         put?: never;
         /**
          * Dev Inbox Push
-         * @description Push an inbox item to the workspace — the owner's push (the `spawn` relation waits for
-         *     exactly this; blocking/parallel children auto-pushed at branch-off time never reach here
-         *     open). One shared transaction (core/inbox_flow): creates `work-items/<id>/` at triage/active
-         *     carrying `spawned_from` + `inbox_id`, MOVES the inbox content folder (handoff brief + extras)
-         *     into the item as `preliminary/` (the row stays as trace), and pauses the parent when the
-         *     relation is blocking. Then fires the auto-triage run (#120 — no manual trigger). Returns the
-         *     new work-item + the row.
+         * @description Push an inbox item to the workspace — the owner's push.
+         *
+         *     One shared transaction: create the work-item at triage, MOVE the inbox content into it as
+         *     `preliminary/` while the row stays as trace, then fire the auto-triage run.
          */
         post: operations["dev_inbox_push_dev_inbox__item_id__push_post"];
         delete?: never;
@@ -804,7 +747,7 @@ export interface paths {
         };
         /**
          * Dev Inbox Brief
-         * @description One row's handoff brief (D5). Agent-filed rows carry one from birth; a bare capture has
+         * @description One row's handoff brief. Agent-filed rows carry one from birth; a bare capture has
          *     none, and `content: null` says so rather than 404-ing — an absent brief is the state the
          *     owner can still fill, not a missing resource.
          */
@@ -854,11 +797,9 @@ export interface paths {
         };
         /**
          * Dev Attention
-         * @description The attention engine (S7/D10): every item in at most one bucket, strict priority
-         *     needs_you (awaiting_human) > deputy_working (live deputy judgment) > running (live phase run)
-         *     > unread (terminal, never opened) — derived from durable state at read time. `badge` = the top
-         *     non-empty tier's color + count, or null when nothing claims attention. Powers the workspace
-         *     badge + kanban tinting.
+         * @description Every item in at most one bucket, by strict priority, derived from durable state at read time.
+         *
+         *     `badge` is the top non-empty tier's colour and count, or null when nothing claims attention.
          */
         get: operations["dev_attention_dev_attention_get"];
         put?: never;
@@ -878,11 +819,11 @@ export interface paths {
         };
         /**
          * Dev Workgraph
-         * @description The DERIVED WorkGraph projection (D3): repo root · roadmap deliverables · work-items ·
-         *     spawned-but-unpushed inbox rows, with contains / spawned_from(relation) / supersedes edges.
-         *     Assembled on demand from the authoritative feeds — nothing stored, nothing to sync. Cycles
-         *     (a hand-edited provenance loop) are REPORTED as data, never a 500. Git state joins as node
-         *     decoration in S4; the graph VIEW consumes this in S7.
+         * @description The DERIVED work-graph projection: repo root, deliverables, work-items and unpushed inbox rows,
+         *     with their edges.
+         *
+         *     Assembled on demand from the authoritative feeds — nothing stored. A cycle is REPORTED as data,
+         *     never a 500.
          */
         get: operations["dev_workgraph_dev_workgraph_get"];
         put?: never;
@@ -902,18 +843,10 @@ export interface paths {
         };
         /**
          * Dev Log
-         * @description The activity log — a SELECTIVE read over the events table (PRD §4.9), never a dump.
-         *     Filters: `item_id` (an item's own timeline), `scope`, `since`/`until` (ISO timestamps — e.g.
-         *     "what happened yesterday"). Newest first. Powers the dashboard activity view and the chat
-         *     "what was done…" queries.
+         * @description The activity log — a SELECTIVE read over the events table, never a dump.
          *
-         *     `scope` takes a stored scope (`item` | `dev`) or **`repo`** — the activity view's read: every
-         *     dev-native row plus the item-scoped kinds that are milestones of the PROJECT rather than steps
-         *     inside one item (`REPO_MILESTONE_KINDS`). Per-item traces belong to that item's drilldown.
-         *
-         *     Discarded rows (a re-run's soft-deleted attempt) follow the reader split: an ITEM read is the
-         *     drilldown asking "what is happening on this item", so it sees the current attempt only; a
-         *     REPO-WIDE read is the project's history, which includes the attempts that were thrown away.
+         *     `scope` takes a stored scope or `repo`, which adds the item-scoped kinds that are milestones of the
+         *     PROJECT rather than steps inside one item.
          */
         get: operations["dev_log_dev_log_get"];
         put?: never;
@@ -933,9 +866,8 @@ export interface paths {
         };
         /**
          * Dev Harness Plugins
-         * @description SuperMe's OWN universal skills + agents, grouped by scope (dev | core | shared) — the
-         *     Manage-Harness "Skills & Agents" tab. Read straight from the harness plugin frontmatter; this
-         *     is the universal harness only (per-repo operational artifacts are out of scope here).
+         * @description SuperMe's OWN universal skills and agents, grouped by scope, read straight from the plugin
+         *     frontmatter. Per-repo operational artifacts are out of scope here.
          */
         get: operations["dev_harness_plugins_dev_harness_plugins_get"];
         put?: never;
@@ -1264,16 +1196,10 @@ export interface paths {
         put?: never;
         /**
          * Dev Work Item Run
-         * @description The owner's manual RUN — fire the current phase's own background run (owner, 2026-07-31).
+         * @description The owner's manual RUN — fire the current phase's own background run.
          *
-         *     ONE route replacing `/plan` and `/vet`, which were two doors onto the same dispatcher with
-         *     hand-written per-phase guards that drifted from it (`/plan` refused anything outside `plan`,
-         *     `/vet` outside `vet`, and neither could reach triage/build/investigate at all). This is the
-         *     manual driver for a repo that is not on autopilot; on autopilot every phase fires itself.
-         *
-         *     409 when the item is terminal, stopped (that is Resume's), parked at a gate (that is Approve's),
-         *     at a phase with no run of its own, or already running — the same rule the drilldown's `run`
-         *     button reads, so a live-looking button can never 409.
+         *     The manual driver for a repo not on autopilot; on autopilot every phase fires itself. Refusals
+         *     follow the same rule the drilldown's button reads.
          */
         post: operations["dev_work_item_run_dev_work_items__item_id__run_post"];
         delete?: never;
@@ -1293,17 +1219,10 @@ export interface paths {
         put?: never;
         /**
          * Dev Work Item Resume
-         * @description The owner's RESUME on a work-item whose run STOPPED (recovery R4): re-fire the phase's own
-         *     background run. Nothing is rewound — the branch, the worktree and every artifact stand; only the
-         *     run is new, which is what makes this cheap enough to offer as a button.
+         * @description RESUME a work-item whose run STOPPED: re-fire the phase's own background run.
          *
-         *     Distinct from Re-run, which reads alike and does the opposite: Resume picks the run back up
-         *     that hit a wall it could not pass and carries the gap to review (the RUN succeeded, the work
-         *     stopped). Resume re-runs a run that never finished (the work is fine, the RUN stopped).
-         *
-         *     409 when the item isn't stopped, is terminal, has a run in flight, or sits at a phase with no
-         *     background run to re-fire — the same conditions the drilldown's button reads to stay inactive,
-         *     from the same function, so the tooltip can never disagree with the outcome.
+         *     Nothing is rewound — the branch, worktree and artifacts stand, only the run is new. Distinct from
+         *     Re-run, which throws the work away.
          */
         post: operations["dev_work_item_resume_dev_work_items__item_id__resume_post"];
         delete?: never;
@@ -1323,17 +1242,10 @@ export interface paths {
         put?: never;
         /**
          * Dev Work Item Rerun
-         * @description The owner's RE-RUN: throw this item's work away and start it over in place (recovery R5).
-         *     Destructive, and the only recovery act that is — artifacts, reports, checkpoints, the deputy's
-         *     log and every session are DELETED, the worktree dir is removed, and the item re-enters at its
-         *     kind's first phase with `generation` bumped.
+         * @description RE-RUN: throw this item's work away and start it over in place. Destructive.
          *
-         *     What it keeps is what makes it a re-run and not a new item: the id, the branch, every run and
-         *     dev-activity row (permanent trace), the inbox row, `preliminary/`, and every graph relation.
-         *
-         *     Distinct from `/resume`, which rewinds NOTHING and re-fires the run that died. Reach for this
-         *     only when there is no run worth re-firing. 409 when the item is terminal or has a run in
-         *     flight — the same rule the drilldown's button reads, from the same function.
+         *     Artifacts, reports, checkpoints and sessions are deleted and the worktree removed; the id, branch,
+         *     run rows and graph relations survive.
          */
         post: operations["dev_work_item_rerun_dev_work_items__item_id__rerun_post"];
         delete?: never;
@@ -1353,12 +1265,10 @@ export interface paths {
         put?: never;
         /**
          * Dev Work Item Authorize
-         * @description The owner's grant/deny on a deferred authorization at review. Both RECORD and route nothing
-         *     (renovation §2.1): the item stays at review so every pending request can be resolved in any
-         *     order, and one exit then fires — Approve (close applies the granted ops, skips the denied ones
-         *     and records the gap) or `revise` (they land as plan input). `denied` also waives the blocked
-         *     check. Unlike the deputy, the owner grants unconditionally — the delegated-authority floor
-         *     binds only the deputy. 409 when the request isn't in a decidable state.
+         * @description The owner's grant or deny on a deferred authorization at review.
+         *
+         *     Both RECORD and route nothing: the item stays at review so every request can be resolved in any
+         *     order. `denied` also waives the blocked check. The owner grants unconditionally.
          */
         post: operations["dev_work_item_authorize_dev_work_items__item_id__authorize_post"];
         delete?: never;
@@ -1378,11 +1288,10 @@ export interface paths {
         put?: never;
         /**
          * Dev Work Item Compact
-         * @description Compact NOW (S8, owner-fired): run the full compaction sequence on this item's bound
-         *     session — checkpoint FIRST, then /compact, then the effectiveness verdict. The automatic
-         *     trigger does the same on its own past `compaction_trigger_pct`; this is the manual handle
-         *     (and how the gate test drives the machinery deterministically). 409 without a session or
-         *     while a run is in flight (the sequence takes the item's run-lock itself).
+         * @description Compact NOW: run the full compaction sequence on this item's bound session — checkpoint first,
+         *     then `/compact`, then the verdict.
+         *
+         *     409 without a session or while a run is in flight, since the sequence takes the run-lock itself.
          */
         post: operations["dev_work_item_compact_dev_work_items__item_id__compact_post"];
         delete?: never;
@@ -1402,8 +1311,8 @@ export interface paths {
         put?: never;
         /**
          * Dev Work Item Scaffold
-         * @description Set a root work-item's anchor pointer — `wave` (resolves its deliverable) or `deliverable`
-         *     directly. Pass one; the other clears to null. 404 if the item is missing.
+         * @description Set a root work-item's anchor pointer — `wave` or `deliverable`. Pass one; the other clears to
+         *     null.
          */
         post: operations["dev_work_item_scaffold_dev_work_items__item_id__scaffold_post"];
         delete?: never;
@@ -1421,10 +1330,8 @@ export interface paths {
         };
         /**
          * Dev Work Item Detail
-         * @description A work-item's review payload: its frontmatter/body plus the rendered artifact content
-         *     the review popup shows — plan.md and prd.md as Markdown bodies, the plan's `## Tasks` as a
-         *     structured `{text, done}` checklist, and the COMPUTED per-artifact status map (S2: derived
-         *     from file existence + self-check + evidence freshness — never stored).
+         * @description A work-item's review payload: frontmatter and body, the rendered artifact content, the plan's
+         *     `## Tasks` as a structured checklist, and the computed per-artifact status map.
          */
         get: operations["dev_work_item_detail_dev_work_items__item_id__detail_get"];
         put?: never;
@@ -1446,8 +1353,8 @@ export interface paths {
         put?: never;
         /**
          * Dev Work Item Seen
-         * @description Stamp the item as SEEN (the owner opened its drilldown) — clears it from the attention
-         *     engine's `unread` bucket (S7). A read receipt: idempotent, never bumps updated_at.
+         * @description Stamp the item as SEEN, clearing it from the attention engine's `unread` bucket. A read receipt:
+         *     idempotent, never bumps `updated_at`.
          */
         post: operations["dev_work_item_seen_dev_work_items__item_id__seen_post"];
         delete?: never;
@@ -1465,13 +1372,10 @@ export interface paths {
         };
         /**
          * Dev Work Item Artifacts
-         * @description The call-trail: every tool / sub-agent / skill this work-item's runs invoked, grouped by
-         *     run (newest run first, calls in order within a run) — the drilldown's Runs pane.
+         * @description The call-trail: every tool, sub-agent and skill this item's runs invoked, grouped by run.
          *
-         *     `runs` rides along so each group can say WHAT that run was. Without it a group header reads
-         *     "Run #653" and the owner has to guess why it opened with a shell command instead of a phase
-         *     skill — the answer being that it was a chat turn, or a resumed build cycle, or the conflict
-         *     resolver. Naming the feature answers it on the row.
+         *     `runs` rides along so each group can say WHAT that run was — otherwise a header reads "Run #653"
+         *     and the owner has to guess.
          */
         get: operations["dev_work_item_artifacts_dev_work_items__item_id__artifacts_get"];
         put?: never;
@@ -1491,9 +1395,8 @@ export interface paths {
         };
         /**
          * Dev Work Item Timeline
-         * @description F2 unified timeline: every run of this item, oldest-first, phase/role-tagged with its ordered
-         *     turn events (prompt · reply · calls) — the read-only history the chat panel loads before
-         *     live-streaming new frames from the item's event broker. All phases in one chronological view.
+         * @description Every run of this item, oldest-first and phase-tagged with its ordered turn events — the
+         *     read-only history the chat panel loads before live-streaming new frames.
          */
         get: operations["dev_work_item_timeline_dev_work_items__item_id__timeline_get"];
         put?: never;
@@ -1513,9 +1416,8 @@ export interface paths {
         };
         /**
          * Dev Work Item Run Input
-         * @description Prompt inspector (A): the ACTUAL input a past run sent — the exact system prompt + prompt
-         *     body captured at send time — as a standalone HTML page. A friendly page renders when a run has
-         *     no capture (a pre-feature run, or a chat/deputy turn).
+         * @description The ACTUAL input a past run sent — the exact system prompt and body captured at send time — as a
+         *     standalone HTML page. A friendly page renders when a run has no capture.
          */
         get: operations["dev_work_item_run_input_dev_work_items__item_id__runs__run_id__input_html_get"];
         put?: never;
@@ -1535,9 +1437,10 @@ export interface paths {
         };
         /**
          * Dev Work Item Doc
-         * @description One of the item's AGENT-FACING artifacts (brief.md · plan.md · build-vet-<n>.md) as a
-         *     standalone page — what a report's "full contract" link opens. `path` is the report's own
-         *     relative pointer; anything outside the item's `artifacts/` folder is refused as missing.
+         * @description One of the item's AGENT-FACING artifacts as a standalone page.
+         *
+         *     `path` is the report's own relative pointer; anything outside the item's `artifacts/` folder is
+         *     refused as missing.
          */
         get: operations["dev_work_item_doc_dev_work_items__item_id__doc_html_get"];
         put?: never;
@@ -1558,18 +1461,10 @@ export interface paths {
         get?: never;
         /**
          * Dev Work Item Doc Edit
-         * @description The owner hand-edits `brief.md` or `plan.md` — the item's two statements of INTENT, and the
-         *     only artifacts they may write (`artifacts.OWNER_EDITABLE`). Everything else under `artifacts/`
-         *     is a record of what a run did; the edit mode never offers it and this route refuses it.
+         * @description The owner hand-edits `brief.md` or `plan.md` — the item's two statements of INTENT.
          *
-         *     Refused, each for its own reason: a LIVE run (a phase agent may be writing the same file — the
-         *     last writer would silently win) · a TERMINAL item (its work is merged and closed; editing the
-         *     plan now rewrites history rather than steering anything) · text that fails the artifact's own
-         *     self-check (returned as `issues` with nothing written, so a save can never leave the item in a
-         *     state the gate refuses and the owner can't see).
-         *
-         *     A successful save stamps `edited_by_owner` into the frontmatter. That stamp is the point: an
-         *     agent re-reading this plan next cycle is reading the OWNER's words, not its own.
+         *     Refused on a LIVE run, a TERMINAL item, or text failing the artifact's self-check. A save stamps
+         *     `edited_by_owner`.
          */
         put: operations["dev_work_item_doc_edit_dev_work_items__item_id__doc_put"];
         post?: never;
@@ -1590,10 +1485,10 @@ export interface paths {
         put?: never;
         /**
          * Dev Prompt Extraction Run
-         * @description Prompt X-ray: fire a THROWAWAY prompt-extraction probe on this repo — a disposable work-item
-         *     that runs the real lifecycle unattended to capture each phase's actual input prompt, then tears
-         *     itself down (folder + worktree + branch, keeping only the tagged run trace). One at a time per
-         *     repo. Returns the current probe state (running + captured links).
+         * @description Fire a THROWAWAY prompt-extraction probe: a disposable work-item that runs the real lifecycle
+         *     unattended to capture each phase's input, then tears itself down.
+         *
+         *     One at a time per repo. Returns the current probe state.
          */
         post: operations["dev_prompt_extraction_run_dev_prompt_extraction_run_post"];
         delete?: never;
@@ -1611,8 +1506,8 @@ export interface paths {
         };
         /**
          * Dev Prompt Extraction Status
-         * @description Prompt X-ray: the repo's current probe state — whether one is running, and the captured "A"
-         *     input-page links for the last probe (which survive its teardown).
+         * @description The repo's current probe state — whether one is running, and the captured input-page links for
+         *     the last probe, which survive its teardown.
          */
         get: operations["dev_prompt_extraction_status_dev_prompt_extraction_status_get"];
         put?: never;
@@ -1634,10 +1529,10 @@ export interface paths {
         put?: never;
         /**
          * Dev Work Item Advance
-         * @description Approve → advance a work-item to its kind's next phase (the owner's gate; sequencing
-         *     comes from KIND_PROFILES — triage→plan→… per kind). Refuses if the item is at its final
-         *     phase, terminal, or a run is in flight. The gate decision also rests the item at `active`
-         *     (an awaiting_human item just got its answer). The autopilot driver uses the same core.
+         * @description Approve → advance a work-item to its kind's next phase.
+         *
+         *     Refuses at the final phase, on a terminal item, or with a run in flight. The advance also rests
+         *     the item `active`. The autopilot driver uses the same core.
          */
         post: operations["dev_work_item_advance_dev_work_items__item_id__advance_post"];
         delete?: never;
@@ -1657,10 +1552,10 @@ export interface paths {
         put?: never;
         /**
          * Dev Work Item Autopilot
-         * @description Enrol / un-enrol a work-item in autopilot — the per-item policy that drives its gates without
-         *     a click. Allowed only PRE-BUILD (phase in triage/plan): the inbox-stage decision, and the last
-         *     moment before code exists that flipping it is cheap. 409 past that. The flag is durable; the
-         *     driver (services/gates.maybe_autopilot_advance) reads it when a run rests the item at a gate.
+         * @description Enrol or un-enrol a work-item in autopilot — the per-item policy that drives its gates without a
+         *     click.
+         *
+         *     Allowed only PRE-BUILD: the last moment before code exists that flipping it is cheap.
          */
         post: operations["dev_work_item_autopilot_dev_work_items__item_id__autopilot_post"];
         delete?: never;
@@ -1678,10 +1573,11 @@ export interface paths {
         };
         /**
          * Dev Work Item Git
-         * @description The item's live git state (derived at read time, never stored): branch/dir/registration
-         *     existence, dirty files, ahead/behind vs the repo's anchor (behind = freshness debt), merged.
-         *     Also echoes the repo's `review_mode`, so the rule governing the merge is visible where the
-         *     merge is — read live, never from the item, so a mode flip applies to items already at review.
+         * @description The item's live git state, derived at read time: branch and dir existence, dirty files, ahead and
+         *     behind versus the anchor, merged.
+         *
+         *     Also echoes the repo's `review_mode`, read live, so a mode flip applies to items already at
+         *     review.
          */
         get: operations["dev_work_item_git_dev_work_items__item_id__git_get"];
         put?: never;
@@ -1703,13 +1599,10 @@ export interface paths {
         put?: never;
         /**
          * Dev Work Item Git Merge
-         * @description The review-gate merge (owner-fired), as a raw route. Thin wrapper over
-         *     `services.git_ops.review_merge` — the SAME body `advance_item` runs when the owner (or deputy)
-         *     approves at review, so 'the review decision IS the merge' holds whether it's fired here or by
-         *     the Approve transition (B2). Routes by topology (D4): a BLOCKING child merges into its parent's
-         *     branch (light path), everything else to the trunk (heavy path — overlap refusal, backup ref,
-         *     never-merge-twice). Conflicts on the main path → 200 with the conflict list (sync + resolve,
-         *     then retry / approve again).
+         * @description The review-gate merge as a raw route — a thin wrapper over the SAME body `advance_item` runs.
+         *
+         *     Routes by topology: a blocking child merges into its parent's branch, everything else to the
+         *     trunk.
          */
         post: operations["dev_work_item_git_merge_dev_work_items__item_id__git_merge_post"];
         delete?: never;
@@ -1727,7 +1620,7 @@ export interface paths {
         };
         /**
          * Dev Work Item Pr
-         * @description The dedicated PR page (§4.4) — `strict`'s review surface, and readable in any mode. Read-only
+         * @description The dedicated PR page — `strict`'s review surface, and readable in any mode. Read-only
          *     by construction: the page's one action is the ordinary review Approve, which merges.
          */
         get: operations["dev_work_item_pr_dev_work_items__item_id__pr_get"];
@@ -1771,9 +1664,9 @@ export interface paths {
         put?: never;
         /**
          * Dev Work Item Git Revert
-         * @description Restore the trunk to its pre-merge state via the item's recorded backup ref — the
-         *     always-offered undo behind every main merge (D4 guardrail). Safe-only: refuses once anything
-         *     else has landed on top. Clears the item's merge record (the branch itself is untouched).
+         * @description Restore the trunk to its pre-merge state via the item's recorded backup ref.
+         *
+         *     Safe-only: refuses once anything else has landed on top. The branch itself is untouched.
          */
         post: operations["dev_work_item_git_revert_dev_work_items__item_id__git_revert_post"];
         delete?: never;
@@ -1793,11 +1686,11 @@ export interface paths {
         put?: never;
         /**
          * Dev Work Item Git Resolve
-         * @description Resolve-with-Agent (D4): the human decides WHETHER, the agent resolves — they never
-         *     hand-edit conflict markers. Re-runs the freshness sync leaving conflicts IN the worktree,
-         *     then fires a background resolution run (write-sandboxed to the worktree); the daemon completes
-         *     the merge mechanically and the item re-enters `vet`. 409 if the sync is clean (nothing
-         *     to resolve) or a run is in flight.
+         * @description Resolve-with-agent: the human decides WHETHER, the agent resolves, and nobody hand-edits conflict
+         *     markers.
+         *
+         *     Re-runs the sync leaving conflicts in the worktree, then fires a background resolution run. The
+         *     daemon completes the merge mechanically.
          */
         post: operations["dev_work_item_git_resolve_dev_work_items__item_id__git_resolve_post"];
         delete?: never;
@@ -1815,9 +1708,9 @@ export interface paths {
         };
         /**
          * Dev Work Item Report
-         * @description One phase's user-facing report (`reports/report-<phase>.md`) for the Reports tab — the markdown
-         *     1:1, plus the path to the full agent-facing contract behind it (§4.3). 404 when that phase hasn't
-         *     written one; the tab greys itself from `DrilldownResponse.reports` rather than probing.
+         * @description One phase's user-facing report for the Reports tab: the markdown 1:1, plus the path
+         *     to the agent-facing contract behind it. 404 when that phase wrote none — the tab greys
+         *     itself from the drilldown rather than probing.
          */
         get: operations["dev_work_item_report_dev_work_items__item_id__report__phase__get"];
         put?: never;
@@ -1837,18 +1730,18 @@ export interface paths {
         };
         /**
          * Dev Work Item Owner Input
-         * @description `reports/report-triage.md` § From you — what the owner has written into the one section of
-         *     the item that is theirs. Never 404s on a missing brief: `exists: false` is the editor's cue to
-         *     say triage hasn't written one yet, which is a different thing from a broken read.
+         * @description What the owner has written into the one section of the item that is theirs.
+         *
+         *     Never 404s on a missing brief: `exists: false` tells the editor triage has not written one yet,
+         *     which is not a broken read.
          */
         get: operations["dev_work_item_owner_input_dev_work_items__item_id__from_you_get"];
         /**
          * Dev Work Item Set Owner Input
-         * @description Save the owner's own section, replacing it whole and leaving the rest of the brief untouched.
+         * @description Save the owner's own section, replacing it whole and leaving the rest untouched.
          *
-         *     HUMAN-ONLY, like abandon: there is no agent tool behind it, because the value of the section is
-         *     precisely that an agent did not write it. Returns what is now on disk — the editor shows what
-         *     the plan phase will read, not what was typed.
+         *     HUMAN-ONLY: there is no agent tool behind it, because the value of the section is that an agent did
+         *     not write it.
          */
         put: operations["dev_work_item_set_owner_input_dev_work_items__item_id__from_you_put"];
         post?: never;
@@ -1867,13 +1760,10 @@ export interface paths {
         };
         /**
          * Dev Work Item Drilldown
-         * @description Everything the drilldown renders, computed once (§4): the live strip · the
-         *     WHAT-YOU-NEED-TO-DO card · at-a-glance · the gate's named check rows with `blocking` · every
-         *     control's activation + reason · the Proof rows · which phases have a report.
+         * @description Everything the drilldown renders, computed once.
          *
-         *     Server-computed activation is the point. The gate brief carried `approve_blocked_by` and no
-         *     component ever read it, so the greying rule lived in TypeScript beside the rule the backend
-         *     enforces.
+         *     Server-computed activation is the point: a greying rule that lives in the component sits beside the
+         *     rule the backend actually enforces.
          */
         get: operations["dev_work_item_drilldown_dev_work_items__item_id__drilldown_get"];
         put?: never;
@@ -1895,14 +1785,10 @@ export interface paths {
         put?: never;
         /**
          * Dev Work Item Abandon
-         * @description Abandon a work-item — HUMAN-ONLY (no agent-tool counterpart), legal from any non-terminal
-         *     phase (D8). Ordered, each step idempotent: end live runs/sessions · remove the worktree
-         *     (branch kept — near-free trace) · abandon note into reports/report-close.md · terminal status change
-         *     (`abandoned`, or `superseded` when `superseded_by` names the replacement) · resume a paused
-         *     parent whose last open blocking child this was. Dev-knowledge untouched — write-at-merge
-         *     means a pre-merge abandon wrote nothing, ever. The response is the abandon brief: blocking
-         *     children listed for YOUR disposal (they existed only for this parent); parallel children
-         *     continue untouched.
+         * @description Abandon a work-item — HUMAN-ONLY, legal from any non-terminal phase.
+         *
+         *     Ordered and each step idempotent: end live runs, remove the worktree, write the abandon note, set
+         *     the terminal status, resume a paused parent.
          */
         post: operations["dev_work_item_abandon_dev_work_items__item_id__abandon_post"];
         delete?: never;
@@ -1920,10 +1806,10 @@ export interface paths {
         };
         /**
          * Dev Sweep Families
-         * @description The launch bar's buttons — a projection of `kind_profiles.RESEARCH_FAMILIES`.
+         * @description The launch bar's buttons — a projection of the research-families registry.
          *
-         *     Read-only and repo-independent: which sweeps EXIST is a property of this harness, not of the
-         *     project. Adding a family is a row in that registry; this route grows a button with no edit.
+         *     Read-only and repo-independent: which sweeps exist is a property of this harness. Adding a family
+         *     is a row in that registry.
          */
         get: operations["dev_sweep_families_dev_research_sweeps_families_get"];
         put?: never;
@@ -1947,9 +1833,8 @@ export interface paths {
          * Dev Sweep Launch
          * @description Launch a standing sweep: mint the item at `investigate`, then fire its first run.
          *
-         *     Costs real money, so the surface confirms before calling this — but the refusal that matters is
-         *     here: an unknown family, or one that is not standing, is a 400 rather than a research item with
-         *     no button behind it.
+         *     An unknown family, or one that is not standing, is a 400 rather than a research item with no button
+         *     behind it.
          */
         post: operations["dev_sweep_launch_dev_research_sweeps_post"];
         delete?: never;
@@ -1967,11 +1852,9 @@ export interface paths {
         };
         /**
          * Dev Memory Stats
-         * @description Manage-Harness stat tiles (PRD §4.10.4): the two pipeline gauges + drill-down detail.
+         * @description The two pipeline gauges plus drill-down detail: `candidates` is the un-distilled capture pool,
+         *     `knowledge` what has been published.
          *
-         *     - `candidates` — the un-distilled capture pool (what a distill run would consume).
-         *     - `knowledge`  — what's been LEARNED + published: the live constitution/skill/agent artifacts
-         *       (proposal-driven, reconciled with on-disk enabled state — same source as the Published tab).
          *     Each carries enough detail to render a popup without a second round-trip.
          */
         get: operations["dev_memory_stats_dev_memory_stats_get"];
@@ -2016,10 +1899,10 @@ export interface paths {
         put?: never;
         /**
          * Dev Memory Distill
-         * @description The Manage-Harness "Run distill" button: fire a background distill pass over the candidate
-         *     pool (no need to open Dev chat). One pass per (repo × dev scope) at a time — guarded by a
-         *     server-truth spine query, not a shadow set. Returns immediately; poll `/dev/memory/stats`
-         *     (`distilling`) for completion, then refetch the review queue.
+         * @description Fire a background distill pass over the candidate pool.
+         *
+         *     One pass per repo and scope at a time, guarded by a spine query rather than a shadow set. Returns
+         *     immediately; poll the stats for completion.
          */
         post: operations["dev_memory_distill_dev_memory_distill_post"];
         delete?: never;
@@ -2039,10 +1922,11 @@ export interface paths {
         put?: never;
         /**
          * Dev Sweep
-         * @description Ops/debug hook: force a capture sweep over ONE named session, run to completion (so the
-         *     caller gets the result), with an optional `focus` steer. The everyday triggers are fully
-         *     automatic (phase/idle); this is the by-id escape hatch for debugging or a targeted re-sweep —
-         *     the ONLY remaining caller that supplies `focus`.
+         * @description Ops hook: force a capture sweep over ONE named session, run to completion so the caller gets the
+         *     result.
+         *
+         *     The everyday triggers are automatic; this is the by-id escape hatch, and the only caller that
+         *     supplies `focus`.
          */
         post: operations["dev_sweep_dev_sweep_post"];
         delete?: never;
@@ -2062,9 +1946,8 @@ export interface paths {
         put?: never;
         /**
          * Dev Sweep Idle Scan
-         * @description Ops hook: force an idle-scan pass now (the same pass the heartbeat runs every poll), with an
-         *     optional lower `idle_seconds`. Lets the owner trigger a "sweep everything quiet" on demand
-         *     instead of waiting out the threshold — handy while observing capture behaviour.
+         * @description Ops hook: force an idle-scan pass now — the same pass the heartbeat runs — with an optionally
+         *     lower `idle_seconds`.
          */
         post: operations["dev_sweep_idle_scan_dev_sweep_idle_scan_post"];
         delete?: never;
@@ -2082,10 +1965,10 @@ export interface paths {
         };
         /**
          * Memory Proposals
-         * @description The review queue — proposals awaiting (or past) the owner gate. `status` filters
-         *     (e.g. 'proposed' = still pending). Newest first. Each proposal is enriched with its source
-         *     `candidates` (signal + rationale + evidence + hints) so the review popup can show provenance
-         *     without a second round-trip.
+         * @description The review queue: proposals awaiting or past the owner gate, newest first.
+         *
+         *     Each is enriched with its source candidates, so the review popup can show provenance without a
+         *     second round-trip.
          */
         get: operations["memory_proposals_dev_memory_proposals_get"];
         put?: never;
@@ -2129,10 +2012,10 @@ export interface paths {
         put?: never;
         /**
          * Memory Proposal Approve
-         * @description GATE 1 — owner approves the proposal's INTENT (and answers distill's clarifying questions).
-         *     Validates the form/scope can actually be written today (core is reserved), records the answers,
-         *     moves the proposal to `writing`, and fires a background per-item WRITE run that authors the final
-         *     artifact and stages it (→ `drafted`) for gate-2. Returns immediately; poll the proposal status.
+         * @description GATE 1 — the owner approves the proposal's INTENT and answers distill's questions.
+         *
+         *     Validates the form and scope, records the answers, and fires a background WRITE run that authors
+         *     the artifact and stages it for gate 2.
          */
         post: operations["memory_proposal_approve_dev_memory_proposals__proposal_id__approve_post"];
         delete?: never;
@@ -2173,9 +2056,10 @@ export interface paths {
         put?: never;
         /**
          * Memory Proposal Publish
-         * @description GATE 2 — owner publishes the staged artifact: the single disk write into its live operational
-         *     home (constitution file / SKILL.md / agent.md). Promotes the source candidates, logs, and returns
-         *     the path. The proposal must be `drafted` (the write phase staged an artifact). Core is reserved.
+         * @description GATE 2 — the owner publishes the staged artifact: the single disk write into its live operational
+         *     home.
+         *
+         *     The proposal must be `drafted`. Core is reserved.
          */
         post: operations["memory_proposal_publish_dev_memory_proposals__proposal_id__publish_post"];
         delete?: never;
@@ -2195,10 +2079,10 @@ export interface paths {
         put?: never;
         /**
          * Memory Proposal Reject
-         * @description Owner REJECTS a proposal → this framing is wrong, but the underlying observation may still
-         *     matter: mark the proposal `rejected` and RE-QUEUE its source candidates (back to `candidate`)
-         *     so a later distill pass can reconsider/reframe them. To stop re-suggestion, use DROP instead.
-         *     Works at gate 1 (`proposed`) or gate 2 (`drafted` — a staged artifact the owner doesn't want).
+         * @description The owner REJECTS a proposal: this framing is wrong, but the observation may still matter.
+         *
+         *     Marks it `rejected` and re-queues its source candidates, so a later distill pass can reframe them.
+         *     To stop re-suggestion, use DROP.
          */
         post: operations["memory_proposal_reject_dev_memory_proposals__proposal_id__reject_post"];
         delete?: never;
@@ -2218,9 +2102,10 @@ export interface paths {
         put?: never;
         /**
          * Memory Proposal Drop
-         * @description Owner DROPS a proposal → this is noise, stop suggesting it: mark the proposal `dropped`
-         *     and its source candidates `dropped` (the negative signal for the learn-from-drops loop, PRD
-         *     §4.10). Unlike reject, dropped candidates are NOT re-queued.
+         * @description Owner DROPS a proposal — this is noise, stop suggesting it.
+         *
+         *     Marks the proposal and its source candidates `dropped`, the negative signal the learning
+         *     loop reads. Unlike reject, dropped candidates are never re-queued.
          */
         post: operations["memory_proposal_drop_dev_memory_proposals__proposal_id__drop_post"];
         delete?: never;
@@ -2304,7 +2189,7 @@ export interface paths {
         };
         /**
          * Dev Verification Library
-         * @description This repo's verification library (verification-model §8): the standing entries every
+         * @description This repo's verification library: the standing entries every
          *     implementation plan inherits, and the available ones a plan cites by id. A repo with no library
          *     reads as two empty lists — the correct starting state, never an error.
          */
@@ -2328,12 +2213,7 @@ export interface paths {
          * Dev Decisions
          * @description This repo's decision ledger — every call the owner has ruled on, newest FIRST.
          *
-         *     The file is append-only and reads chronologically (oldest first, per its own contract); a reader
-         *     scanning for what was decided lately wants the opposite, so the order is flipped here and only
-         *     here. Nothing is derived: the entries are the file's own headings and bodies.
-         *
-         *     A repo with no ledger reads as an empty list — the correct starting state for a project where
-         *     nobody has had to rule on anything yet, never an error.
+         *     The file is append-only and reads oldest-first, so the order is flipped here and only here.
          */
         get: operations["dev_decisions_dev_decisions_get"];
         put?: never;
@@ -2455,9 +2335,10 @@ export interface components {
         };
         /**
          * AbandonResponse
-         * @description The abandon brief (D8): what was torn down + the children triage list. Blocking children
-         *     existed only for this parent — the owner disposes each (abandon / promote to independent);
-         *     parallel children continue untouched.
+         * @description What was torn down, plus the children triage list.
+         *
+         *     Blocking children existed only for this parent, so the owner disposes each; parallel children
+         *     continue untouched.
          */
         AbandonResponse: {
             /** Ok */
@@ -2479,9 +2360,9 @@ export interface components {
         };
         /**
          * AboutRow
-         * @description One row of `About this work-item` — what this item IS, in the owner's own framing. A LIST of
-         *     these, not an object: the order (what it is → where it came from → what it's for) is the
-         *     meaning, and an empty row is dropped server-side rather than rendered blank.
+         * @description One row of `About this work-item` — what this item IS, in the owner's own framing.
+         *
+         *     A LIST, not an object: the order is the meaning, and an empty row is dropped server-side.
          */
         AboutRow: {
             /** Label */
@@ -2498,8 +2379,8 @@ export interface components {
         };
         /**
          * AgentModelRow
-         * @description One tunable background sub-agent: the TIER it tracks (sonnet/opus/haiku — the pick) and the
-         *     concrete model that tier currently resolves to (what actually runs), plus its label and scope.
+         * @description One tunable background sub-agent: the TIER it tracks, and the concrete model that tier currently
+         *     resolves to.
          */
         AgentModelRow: {
             /** Feature */
@@ -2541,8 +2422,8 @@ export interface components {
         };
         /**
          * ArchivedRepoTokens
-         * @description One disconnected project's preserved spend. `label` is the tombstoned display name (falls
-         *     back to the bare id for repos that left before tombstoning); `disconnected_at` is null there.
+         * @description One disconnected project's preserved spend. `label` is the tombstoned display name, falling back
+         *     to the bare id.
          */
         ArchivedRepoTokens: {
             /** Id */
@@ -2564,9 +2445,10 @@ export interface components {
         };
         /**
          * ArchivedTokens
-         * @description "Old projects" — spend belonging to repos that are no longer connected. Their runs are kept
-         *     forever, so they still count in `global.total`; this bucket keeps them ATTRIBUTABLE (the orbit
-         *     only renders live repos, so without it the visible nodes wouldn't sum to the header).
+         * @description Spend belonging to repos that are no longer connected.
+         *
+         *     Their runs are kept forever, so they still count in the global total; this bucket keeps them
+         *     attributable.
          */
         ArchivedTokens: {
             /**
@@ -2587,9 +2469,10 @@ export interface components {
         };
         /**
          * ArtifactCall
-         * @description One row of a work-item's run call-trail (tool / sub-agent / skill invocation, or its result).
-         *     `tool_id` pairs a `result` row back to its call (concurrent tools return out of order);
-         *     `parent_tool_id` names the sub-agent spawn the row happened inside (null = the parent itself).
+         * @description One row of a work-item's run call-trail.
+         *
+         *     `tool_id` pairs a `result` back to its call, and `parent_tool_id` names the sub-agent spawn the row
+         *     happened inside.
          */
         ArtifactCall: {
             /** Id */
@@ -2626,10 +2509,9 @@ export interface components {
         };
         /**
          * ArtifactRef
-         * @description A work-item design artifact, NORMALIZED on read (R5): legacy bare-string entries
-         *     ("artifacts/plan.md") and structured {type, path} entries both coerce to this one shape at the
-         *     daemon boundary (`DevKnowledgeService`), so the wire contract is a single object union, never a
-         *     string-or-object mix.
+         * @description A work-item design artifact, NORMALIZED on read: legacy bare-string and structured entries both
+         *     coerce to this shape at the daemon boundary, so the wire contract is never a string-or-object
+         *     mix.
          */
         ArtifactRef: {
             /** Type */
@@ -2639,8 +2521,8 @@ export interface components {
         };
         /**
          * ArtifactStatusRow
-         * @description COMPUTED status of one artifact kind (S2 — derived from file existence + self-check +
-         *     evidence freshness at read time; never stored in any doc, so it cannot drift).
+         * @description COMPUTED status of one artifact kind — derived at read time from file existence, self-check and
+         *     evidence freshness, so it cannot drift.
          */
         ArtifactStatusRow: {
             /** Required */
@@ -2732,7 +2614,7 @@ export interface components {
         };
         /**
          * AttentionBadge
-         * @description The global badge: the TOP non-empty tier only — one color, one count (D10).
+         * @description The global badge: the TOP non-empty tier only — one color, one count.
          */
         AttentionBadge: {
             /** Tier */
@@ -2744,10 +2626,10 @@ export interface components {
         };
         /**
          * AttentionCard
-         * @description §4.2's WHAT-YOU-NEED-TO-DO card — the drilldown's single most important element, and the answer
-         *     to "I opened this and don't know what's needed from me". Three connected parts: WHY (the back
-         *     story) · DO (the exact act + the one control that performs it) · BASIS (pointers to what decides
-         *     it). None when nothing needs the owner — the card is hidden entirely, never an empty shell.
+         * @description The what-you-need-to-do card, in three connected parts: WHY, DO (the exact act and the one
+         *     control that performs it), and BASIS.
+         *
+         *     None when nothing needs the owner — the card is hidden entirely, never an empty shell.
          */
         AttentionCard: {
             /** Kind */
@@ -2772,7 +2654,7 @@ export interface components {
         };
         /**
          * AttentionHold
-         * @description One parked (`awaiting_human`) work-item on the top-of-SuperMe attention center (Pass 2 · Q2).
+         * @description One parked work-item on the top-of-SuperMe attention center.
          */
         AttentionHold: {
             /** Id */
@@ -2837,9 +2719,10 @@ export interface components {
         };
         /**
          * AuthorizationRequest
-         * @description A contract change a work-item couldn't self-authorize (BV-A2), awaiting the owner's grant or
-         *     deny at the review gate. `delegable` = whether the deputy COULD have granted it (a sync-to-
-         *     reality scope) vs it being owner-reserved (why it reached you). The owner grants regardless.
+         * @description A contract change a work-item could not self-authorize, awaiting the owner's grant or deny at
+         *     review.
+         *
+         *     `delegable` says whether the deputy COULD have granted it. The owner grants regardless.
          */
         AuthorizationRequest: {
             /** Id */
@@ -2879,9 +2762,9 @@ export interface components {
         };
         /**
          * BlockingChild
-         * @description One open sub-item the parent is waiting on — resolved to something the owner can read and go
-         *     to. `close_readiness` reports these as a comma-joined string of ids, which names a thing without
-         *     saying what it is or how far along it got (owner, 2026-08-09).
+         * @description One open sub-item the parent is waiting on, resolved to something the owner can read and go to.
+         *
+         *     `close_readiness` reports these as joined ids, which names a thing without saying what it is.
          */
         BlockingChild: {
             /** Id */
@@ -2976,10 +2859,9 @@ export interface components {
         };
         /**
          * CategoryNode
-         * @description One node of Breakdown 1 — the semantic tree: a category total + its per-feature amounts,
-         *     plus how it should READ. `label` is the category's owner-facing name and `collapsed` says the
-         *     surface should draw it as one bar rather than one per feature — both are taxonomy decisions
-         *     (token_taxonomy), carried here so no renderer has to re-make them.
+         * @description One node of the semantic tree: a category total, its per-feature amounts, and how it should READ.
+         *
+         *     `label` and `collapsed` are taxonomy decisions carried here, so no renderer has to re-make them.
          */
         CategoryNode: {
             /**
@@ -3032,8 +2914,8 @@ export interface components {
         };
         /**
          * CompactionConfigBody
-         * @description Partial update of the compaction runtime (S8/D11) — omitted fields stay unchanged. The
-         *     route refuses (409) any trigger at/below the incompressible floor.
+         * @description Partial update of the compaction runtime; omitted fields stay unchanged. The route refuses any
+         *     trigger at or below the incompressible floor.
          */
         CompactionConfigBody: {
             /** Trigger Pct */
@@ -3357,40 +3239,11 @@ export interface components {
             text: string;
         };
         /**
-         * DocResponse
-         * @description One doc's full markdown.
-         */
-        DocResponse: {
-            /** Slug */
-            slug: string;
-            /** Title */
-            title: string;
-            /** Content */
-            content: string;
-        };
-        /**
-         * DocSummary
-         * @description A doc's index entry (slug + title) for the list view.
-         */
-        DocSummary: {
-            /** Slug */
-            slug: string;
-            /** Title */
-            title: string;
-        };
-        /** DocsListResponse */
-        DocsListResponse: {
-            /** Docs */
-            docs: components["schemas"]["DocSummary"][];
-        };
-        /**
          * DrilldownAction
-         * @description One control, with its activation decided SERVER-SIDE (§4's universal rule + the owner's slice-6
-         *     input). `reason` is populated either way: greyed it says what would make it live, live it says
-         *     what clicking does. `home` places it — `actions` (the frame's bar) or `git` (the Git tab).
+         * @description One control, with its activation decided SERVER-SIDE.
          *
-         *     Never hide a control: a `fast` repo with no PR button anywhere read as a missing feature, with
-         *     nothing on screen saying why.
+         *     `reason` is populated either way: greyed it says what would make it live, live it says what
+         *     clicking does. `home` places it. Never hide a control — an absent one explains nothing.
          */
         DrilldownAction: {
             /** Id */
@@ -3406,10 +3259,10 @@ export interface components {
         };
         /**
          * DrilldownResponse
-         * @description Everything the work-item drilldown renders, computed once per poll. One route instead of four,
-         *     because every tab reads the same item folder — and one computation of the gate's checks, shared
-         *     with the deputy's prompt, because two summaries of one gate is how the owner loses the ability to
-         *     check the deputy's call.
+         * @description Everything the work-item drilldown renders, computed once per poll.
+         *
+         *     One route instead of four, and one computation of the gate's checks — shared with the deputy, so
+         *     the owner can still check its call.
          */
         DrilldownResponse: {
             /** Id */
@@ -3479,9 +3332,10 @@ export interface components {
         };
         /**
          * EvalReport
-         * @description A proposal's gate-2 eval report (forge_kit/eval.py emits it as JSON, stored on the row).
-         *     Versioned via `schema_version` (1 = current); tolerant of pre-versioning / pre-metrics legacy
-         *     reports — every field optional, extra='allow' so an older or richer report never 500s a read.
+         * @description A proposal's gate-2 eval report, stored on the row.
+         *
+         *     Versioned via `schema_version`, and tolerant of legacy reports: every field is optional, so an older
+         *     or richer one never 500s a read.
          */
         EvalReport: {
             /** Schema Version */
@@ -3605,10 +3459,8 @@ export interface components {
          * GateCheck
          * @description One mechanical row of a gate's evaluation — computed from durable state, never a claim.
          *
-         *     `blocking` is the must-resolve marker (§2.1): a FAILING blocking check greys Approve, and every
-         *     other row is a named, visible fact the owner may act over with their eyes open. Both halves
-         *     matter — the old surface rendered checks as coloured dots with the reason hidden in a `title`
-         *     attribute, so a red gate looked identical whether it was fatal or advisory.
+         *     `blocking` is the must-resolve marker: a failing blocking check greys Approve, and every other row
+         *     is a named, visible fact.
          */
         GateCheck: {
             /** Criterion */
@@ -3775,7 +3627,7 @@ export interface components {
         /**
          * Glance
          * @description The dashboard glance summary (counts + bucketed item stubs). `awaiting_human` is the
-         *     attention bucket (D10: the only status that pages the owner).
+         *     attention bucket (the only status that pages the owner).
          */
         Glance: {
             /** By Status */
@@ -3833,9 +3685,8 @@ export interface components {
         };
         /**
          * HoldQuestion
-         * @description One question the grill carries to the owner — the four fields `report_completion` enforces,
-         *     so the card renders labelled rows instead of parsing prose. `recommend`/`why` are absent only
-         *     on a pre-typed report replayed from an older event.
+         * @description One question the grill carries to the owner — the four fields `report_completion` enforces, so the
+         *     card renders labelled rows instead of parsing prose.
          */
         HoldQuestion: {
             /** Question */
@@ -3908,10 +3759,10 @@ export interface components {
         };
         /**
          * InboxBriefResponse
-         * @description One row's handoff brief (D5) — the cold-start context the item it becomes reads first.
-         *     `content` is null when no brief was filed, which is a legal state and not an error. `editable`
-         *     is false once the row is pushed: the brief has moved into the item's `preliminary/`, which is
-         *     provenance.
+         * @description One row's handoff brief — the cold-start context the item it becomes reads first.
+         *
+         *     `content` is null when none was filed, which is legal. `editable` is false once pushed: the brief
+         *     has become provenance.
          */
         InboxBriefResponse: {
             /** Id */
@@ -3990,7 +3841,7 @@ export interface components {
         };
         /**
          * InboxRow
-         * @description One quick-capture triage-queue row. kind/status/origin are locked (R5): DevStore validates
+         * @description One quick-capture triage-queue row. kind/status/origin are locked: DevStore validates
          *     them against its own value-sets on write, so the Literal can't 500 on a real row.
          */
         InboxRow: {
@@ -4179,10 +4030,10 @@ export interface components {
         };
         /**
          * LensRead
-         * @description One standing lens's read of the current cycle. `probed` carries weight even with no
-         *     findings: it is the difference between "nothing is wrong here" and "nobody looked" — so it is a
-         *     LIST, one probe per entry, and the surface renders it as one. A paragraph hides how many
-         *     distinct things were actually tried, which is the only number a reader can judge it by.
+         * @description One standing lens's read of the current cycle.
+         *
+         *     `probed` separates "nothing is wrong" from "nobody looked", so it is a LIST, one probe per entry,
+         *     rendered as one.
          */
         LensRead: {
             /** Lens */
@@ -4338,12 +4189,10 @@ export interface components {
         };
         /**
          * NowStrip
-         * @description What is happening right now: the live phase + cycle, and what that phase concluded.
+         * @description What is happening right now: the live phase and cycle, and what that phase concluded.
          *
-         *     It also carried `last` — the newest event's own sentence. That line was cut (owner,
-         *     2026-08-08): every version of it restated something already on the card. "Deputy escalated the
-         *     review gate to you" sat one inch above the attention card that says the same thing in full, and
-         *     the phase name and the running dot answer "where is this" without it.
+         *     The phase name and the running dot already answer "where is this", so no event sentence rides
+         *     here.
          */
         NowStrip: {
             /** Phase */
@@ -4401,12 +4250,10 @@ export interface components {
         };
         /**
          * OwnerInputResponse
-         * @description `reports/report-triage.md` § From you — the one section of any report the OWNER writes, read
-         *     back from disk after every save so the surface shows what plan will actually read. `exists` is
-         *     whether the triage brief is on disk at all: before triage runs there is nothing to write into.
+         * @description The one section of any report the OWNER writes, read back from disk after every save.
          *
          *     SLOTS, not prose: one reference and one note per entry, so each can be added and removed on its
-         *     own and the plan phase's "one note, one check" rule matches what is on disk.
+         *     own.
          */
         OwnerInputResponse: {
             /** Exists */
@@ -4418,8 +4265,8 @@ export interface components {
         };
         /**
          * OwnerNote
-         * @description One thing the owner wants proven. Each becomes a check in the plan's `## Verification plan`,
-         *     its `proves:` written in their words — which is why it is one slot, not a paragraph.
+         * @description One thing the owner wants proven. Each becomes a check whose `proves:` is written in their words,
+         *     which is why it is one slot and not a paragraph.
          */
         OwnerNote: {
             /** Description */
@@ -4458,8 +4305,8 @@ export interface components {
         };
         /**
          * PagedNotice
-         * @description Why an item is parked for the owner when it isn't a plain gate wait — a deputy escalation, a
-         *     build⟷vet halt, or a blocked run. None ⇒ a normal gate.
+         * @description Why an item is parked for the owner when it is not a plain gate wait — an escalation, a build⟷vet
+         *     halt, or a blocked run. None means a normal gate.
          */
         PagedNotice: {
             /** Source */
@@ -4484,9 +4331,10 @@ export interface components {
         };
         /**
          * PhaseReportResponse
-         * @description One phase's user-facing report for the Reports tab — the markdown 1:1, plus the path to the
-         *     full agent-facing contract behind it (§4.3's "Open full contract"). The report is the compact
-         *     read; the contract is the whole thing, one click away, never pasted in.
+         * @description One phase's user-facing report for the Reports tab: the markdown 1:1, plus the path to the full
+         *     agent-facing contract behind it.
+         *
+         *     The report is the compact read; the contract is one click away, never pasted in.
          */
         PhaseReportResponse: {
             /** Phase */
@@ -4785,13 +4633,9 @@ export interface components {
         };
         /**
          * PrGroup
-         * @description One task's slice of the branch. `task` is null for commits that carry no `SuperMe-Task`
-         *     trailer — they are shown last rather than hidden.
+         * @description One task's slice of the branch. `task` is null for commits with no trailer; they are shown last.
          *
-         *     The four fields below the diff are the REVIEW NOTES (owner, 2026-08-09): what this task had to
-         *     make true, what build says to look at, where it left the plan, and what proves it. They sit here
-         *     rather than in a document of their own because a note is only useful beside the commits it
-         *     describes — and per TASK, not per file, so two tasks touching one module get two notes.
+         *     The four fields below the diff are the REVIEW NOTES, per TASK rather than per file.
          */
         PrGroup: {
             /** Task */
@@ -4855,7 +4699,7 @@ export interface components {
         };
         /**
          * PrViewResponse
-         * @description The dedicated PR page (§4.4): the review report on the left, the task-grouped diff
+         * @description The dedicated PR page: the review report on the left, the task-grouped diff
          *     walkthrough on the right. Entirely derived at read time — nothing here is stored.
          */
         PrViewResponse: {
@@ -4896,10 +4740,10 @@ export interface components {
         };
         /**
          * ProjectStatusResponse
-         * @description Whether this project's memory is established (PRD defines ≥1 deliverable). The dev workspace
-         *     gates on it: an un-established repo shows the onboarding front door instead of the work tabs.
-         *     `onboard_mode` is the connect-time choice (project-init | retrofit) the front door launches
-         *     directly; null ⇒ the repo predates connect-flow, so the landing offers both paths to pick.
+         * @description Whether this project's memory is established.
+         *
+         *     The dev workspace gates on it: an un-established repo shows the onboarding front door instead of the
+         *     work tabs. A null `onboard_mode` means the landing offers both paths.
          */
         ProjectStatusResponse: {
             /** Established */
@@ -4911,8 +4755,8 @@ export interface components {
         };
         /**
          * PromptExtractionLink
-         * @description One captured "A" page for the last Prompt X-ray probe's phase runs — survives the probe's
-         *     teardown (run_input rows are kept trace, keyed by the dangling item_id).
+         * @description One captured input page for the last probe's phase runs. Survives the probe's teardown, keyed by
+         *     the dangling item id.
          */
         PromptExtractionLink: {
             /** Run Id */
@@ -4947,10 +4791,10 @@ export interface components {
         };
         /**
          * ProofRow
-         * @description §4.2's connected view: one row per BUILT THING, each carrying its own validation →
-         *     verification. The join key is the plan task id — cycle §Built/§Validation bullets lead with it and
-         *     vet-plan checks name it in `covers:`. `task: ""` is the item-wide row, where untagged content
-         *     lands: nothing is dropped and nothing is guessed at.
+         * @description One row per BUILT THING, each carrying its own validation and verification.
+         *
+         *     The join key is the plan task id. `task: ""` is the item-wide row where untagged content lands, so
+         *     nothing is dropped and nothing is guessed at.
          */
         ProofRow: {
             /** Task */
@@ -4973,11 +4817,10 @@ export interface components {
         };
         /**
          * ProofVerdict
-         * @description One check of the plan's exam: what it will prove (`proves` in the owner's terms, `expect` in
-         *     the machine's), and where it stands. `ran` False ⇒ the loop hasn't reached it yet — the row
-         *     exists from the plan gate on, so the owner approving a plan can see the proof they are
-         *     approving. `result` is the vet's captured output, verbatim — a failing row IS the
-         *     expected-vs-actual.
+         * @description One check of the plan's exam: what it will prove, and where it stands.
+         *
+         *     `ran` False means the loop has not reached it, so an owner approving a plan sees the proof they
+         *     approve. `result` is verbatim.
          */
         ProofVerdict: {
             /** Check */
@@ -5055,10 +4898,10 @@ export interface components {
         };
         /**
          * Proposal
-         * @description A memory proposal (rich DB row with JSON columns). Declared fields document the stable shape;
-         *     extra='allow' carries anything else, and routes emit only the keys actually present. The
-         *     output_form/target_scope/status enums are locked (R5): their producer coerces/guards to these
-         *     exact sets, so the Literal can't 500 on a real row.
+         * @description A memory proposal — a rich DB row with JSON columns.
+         *
+         *     The declared fields document the stable shape; `extra='allow'` carries the rest. The enums are
+         *     locked, because their producer coerces to exactly those sets.
          */
         Proposal: {
             /** Id */
@@ -5307,9 +5150,10 @@ export interface components {
         };
         /**
          * RepoBranchesResponse
-         * @description The anchor picker's option set — this repo's local branches, most-recently-committed first,
-         *     with the work-item branches excluded. `anchor` is what the anchor resolves to right now, so the
-         *     picker can show the branch in USE even when nothing has been configured yet.
+         * @description The anchor picker's option set: this repo's local branches, newest-committed first, work-item
+         *     branches excluded.
+         *
+         *     `anchor` is what the anchor resolves to now, so the picker can show the branch in USE.
          */
         RepoBranchesResponse: {
             /** Repo Id */
@@ -5335,8 +5179,8 @@ export interface components {
         };
         /**
          * RepoConnectResponse
-         * @description A freshly connected repo — the new orbit node. `onboarding` is the connect-time choice
-         *     (project-init | retrofit) that its dev workspace launches until memory is established.
+         * @description A freshly connected repo. `onboarding` is the connect-time choice that its dev workspace launches
+         *     until memory is established.
          */
         RepoConnectResponse: {
             /** Id */
@@ -5350,9 +5194,8 @@ export interface components {
         };
         /**
          * RepoDisconnectResponse
-         * @description The receipt for a disconnect — what the cascade actually removed. Irreversible by design;
-         *     the project folder itself is never touched, and run traces + dev events are preserved
-         *     (never-delete-logs), stamped session_fate='disconnected'.
+         * @description The receipt for a disconnect — what the cascade removed. Irreversible; the project folder is never
+         *     touched, and run traces are preserved.
          */
         RepoDisconnectResponse: {
             /** Id */
@@ -5405,9 +5248,10 @@ export interface components {
         };
         /**
          * RepoGitResponse
-         * @description The repo's two git knobs after a write (workflow-renovation-v2 §2.2). `resolved_anchor` is
-         *     what `anchor_branch` actually points at now — None when the repo isn't a git repo; `error` when
-         *     the configured branch doesn't exist, which is a refusal at every git site, not a fallback.
+         * @description The repo's two git knobs after a write.
+         *
+         *     `resolved_anchor` is what `anchor_branch` points at now; `error` when the configured branch does
+         *     not exist, which every git site refuses rather than falling back.
          */
         RepoGitResponse: {
             /** Ok */
@@ -5609,11 +5453,9 @@ export interface components {
         };
         /**
          * RunEventRow
-         * @description One entry of a run's event trail: a prompt, an assistant reply block, a tool/skill/agent call,
-         *     or that call's `result`. `kind` ∈ prompt | reply | tool | mcp | skill | agent | subagent | result;
-         *     `name` is the label, `description` the body; `tool_id` pairs a result back to its call, and
-         *     `parent_tool_id` names the sub-agent spawn a row happened inside (null = the parent's own call),
-         *     so a fan-out reads as nested work rather than as the parent doing everything itself.
+         * @description One entry of a run's event trail: a prompt, a reply block, a call, or that call's result.
+         *
+         *     `tool_id` pairs a result back to its call; `parent_tool_id` names the spawn a row happened inside.
          */
         RunEventRow: {
             /** Id */
@@ -5635,9 +5477,9 @@ export interface components {
         };
         /**
          * RunHeader
-         * @description What one of an item's runs WAS — so a call-trail group can name itself. `feature` is the
-         *     answer to "why did this run open with a shell command instead of a phase skill": `chat` (an
-         *     owner turn), `resolve` (the conflict resolver), a resumed `build` cycle, `deputy`, `compact`.
+         * @description What one of an item's runs WAS, so a call-trail group can name itself.
+         *
+         *     `feature` answers why a run opened with a shell command instead of a phase skill.
          */
         RunHeader: {
             /** Id */
@@ -5660,8 +5502,8 @@ export interface components {
         };
         /**
          * RunRow
-         * @description One row of the spine `run` table (live or historical) — every run-returning route shares it.
-         *     mode/status are locked (R5: the spine writes exactly these); `feature` stays a free label.
+         * @description One row of the spine `run` table, live or historical — shared by every run-returning route.
+         *     `feature` stays a free label.
          */
         RunRow: {
             /** Id */
@@ -5811,9 +5653,10 @@ export interface components {
         };
         /**
          * SessionSummary
-         * @description A session's picker entry. `item_id`/`item_title` are set when the session is stamped to a
-         *     work-item (work-item-session-recognition-prd) — the chat rail derives its work-item indicator
-         *     from these, so it's correct however the session was opened (card or picker) and clears on switch.
+         * @description A session's picker entry.
+         *
+         *     `item_id` and `item_title` are set when the session is stamped to a work-item, so the chat rail's
+         *     indicator is correct however the session was opened.
          */
         SessionSummary: {
             /** Id */
@@ -5847,9 +5690,10 @@ export interface components {
         };
         /**
          * SpawnedFrom
-         * @description The D3 provenance edge, child-side: which item this one branched off and how. `blocking`/
-         *     `parallel` = real children (gate the parent's completion; blocking also pauses it);
-         *     `spawn` = provenance-only follow-up. Exactly one origin edge per item; parent views derived.
+         * @description The provenance edge, child-side: which item this one branched off and how.
+         *
+         *     `blocking` and `parallel` are real children that gate the parent's completion; `spawn` is
+         *     provenance only. Exactly one origin edge per item.
          */
         SpawnedFrom: {
             /** Item */
@@ -6037,8 +5881,8 @@ export interface components {
         };
         /**
          * TimelineEvent
-         * @description One event in a run's trail (F2 timeline): a prompt, an assistant reply block, a tool/skill
-         *     call (status), or that call's result — the same rows the Activity trace shows, per run.
+         * @description One event in a run's trail: a prompt, a reply block, a call, or that call's result — the same rows
+         *     the Activity trace shows.
          */
         TimelineEvent: {
             /** Id */
@@ -6083,9 +5927,8 @@ export interface components {
         };
         /**
          * TokenBucket
-         * @description A token total plus its splits. Two reconciling breakdowns: `by_category` (semantic — the
-         *     generic tree the FE renders) and `by_type` (systematic). `by_scope`/`by_feature` are retained
-         *     flat maps for back-compat. All maps are open (producer-supplied labels, not a locked enum).
+         * @description A token total plus its splits: `by_category` is semantic, `by_type` systematic, and the two
+         *     reconcile. All maps are open, not a locked enum.
          */
         TokenBucket: {
             /** Total */
@@ -6131,7 +5974,7 @@ export interface components {
         /**
          * TokenDay
          * @description One local-day bucket of the usage time-series: the four token types, the day total, and the
-         *     running `cumulative` total across days.
+         *     running cumulative.
          */
         TokenDay: {
             /** Day */
@@ -6190,9 +6033,8 @@ export interface components {
         };
         /**
          * TokenTypeSplit
-         * @description Breakdown 2 — the systematic (per token-type) split. A run that never returned a final usage
-         *     (aborted, killed, errored) has no typed split and contributes nothing here — measured usage only.
-         *     The four sum to the bucket total (reconciliation).
+         * @description The systematic, per-token-type split. A run that never returned a final usage contributes nothing
+         *     here — measured usage only. The four sum to the bucket total.
          */
         TokenTypeSplit: {
             /**
@@ -6218,8 +6060,8 @@ export interface components {
         };
         /**
          * TokenUsageResponse
-         * @description System-wide token usage: the global bucket + one bucket per repo (keyed by repo id) +
-         *     the "Old projects" roll-up of disconnected repos (also present in by_repo, by raw id).
+         * @description System-wide token usage: the global bucket, one bucket per repo, and the roll-up of disconnected
+         *     repos.
          */
         TokenUsageResponse: {
             global: components["schemas"]["TokenBucket"];
@@ -6303,8 +6145,8 @@ export interface components {
         };
         /**
          * WorkGraphNode
-         * @description One node of the derived WorkGraph (D3). `kind` ∈ repo_root | deliverable | work_item |
-         *     inbox_spawn; work_item nodes carry item_kind/phase/status/outcome (+ git decoration in S4).
+         * @description One node of the derived WorkGraph. `kind` ∈ repo_root | deliverable | work_item |
+         *     inbox_spawn; work_item nodes carry item_kind/phase/status/outcome.
          */
         WorkGraphNode: {
             /** Id */
@@ -6331,8 +6173,8 @@ export interface components {
         };
         /**
          * WorkItem
-         * @description A dev work-item. Base fields are always present; tree-walk + telemetry fields appear only on
-         *     the enriched /dev list (extra='allow' tolerates any future frontmatter key).
+         * @description A dev work-item. Base fields are always present; tree-walk and telemetry fields appear only on the
+         *     enriched list.
          */
         WorkItem: {
             /** Id */
@@ -6501,9 +6343,10 @@ export interface components {
         };
         /**
          * WorkItemDocEditResponse
-         * @description Owner edit of `brief.md` / `plan.md`. `saved` False means the text broke the artifact's
-         *     contract and NOTHING was written — `issues` are the same lines the gate would refuse on, so the
-         *     owner fixes them here rather than discovering them at a gate.
+         * @description Owner edit of `brief.md` or `plan.md`.
+         *
+         *     `saved` False means the text broke the artifact's contract and NOTHING was written; `issues` are
+         *     the lines the gate would refuse on.
          */
         WorkItemDocEditResponse: {
             /** Ok */
@@ -6524,8 +6367,8 @@ export interface components {
         };
         /**
          * WorkItemGitRecord
-         * @description The git record a build entry writes onto the item (S4): its branch, worktree dir, and the
-         *     base it branched from (the trunk, or the parent's branch for a blocking child).
+         * @description The git record a build entry writes onto the item: its branch, worktree dir, and the base it
+         *     branched from.
          */
         WorkItemGitRecord: {
             /** Branch */
@@ -6568,7 +6411,7 @@ export interface components {
         };
         /**
          * WorkItemSeenResponse
-         * @description Seen-stamp result (S7 read receipt). `changed` False = was already stamped just now.
+         * @description Seen-stamp result. `changed` False means it was already stamped.
          */
         WorkItemSeenResponse: {
             /** Ok */
@@ -6587,8 +6430,8 @@ export interface components {
         };
         /**
          * WorkItemTimelineResponse
-         * @description The F2 unified timeline: all of an item's runs oldest-first, each with its ordered events —
-         *     the read-only conversation the panel mirrors across every phase.
+         * @description All of an item's runs oldest-first, each with its ordered events — the read-only conversation the
+         *     panel mirrors across every phase.
          */
         WorkItemTimelineResponse: {
             /** Item Id */
@@ -6656,57 +6499,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ContextResponse"][];
-                };
-            };
-        };
-    };
-    docs_list_docs_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DocsListResponse"];
-                };
-            };
-        };
-    };
-    docs_read_docs__slug__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                slug: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DocResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

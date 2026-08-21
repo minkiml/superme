@@ -12,13 +12,13 @@ from .lifespan import lifespan
 
 log = logging.getLogger("superme-agent")
 
-# Swagger is off: the daemon is internal, and `/docs` belongs to the SuperMe Docs API.
+# Swagger is off: the daemon is localhost-only and its client is the BFF, not a browser.
 app = FastAPI(title="SuperMe Core daemon", docs_url=None, redoc_url=None, lifespan=lifespan)
 
 
 # --- router assembly: each surface is an APIRouter mounted behind its real path ------------------
 from .routers import (  # noqa: E402
-    health as _r_health, docs as _r_docs, knowledge as _r_knowledge,
+    health as _r_health, knowledge as _r_knowledge,
     sessions as _r_sessions, system as _r_system, ws as _r_ws, fs as _r_fs,
     inventory as _r_inventory,
 )
@@ -29,7 +29,6 @@ from .routers.dev import (  # noqa: E402
 )
 
 app.include_router(_r_health.router)
-app.include_router(_r_docs.router)
 app.include_router(_r_knowledge.router)
 app.include_router(_r_sessions.router)
 app.include_router(_r_system.router)

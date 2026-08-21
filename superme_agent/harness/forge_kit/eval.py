@@ -30,7 +30,7 @@ _RUBRIC = {
         "whether the description routes them correctly; call out over-broad or too-narrow wording.\n"
         "2) LOGIC — act as an agent that just loaded this skill to do a realistic task in its "
         "domain. Walk the body step by step and flag every point where the instructions are "
-        "ambiguous, missing, or force you to guess."
+        "ambiguous, missing, or force you to guess -- see, `./references/principle-for-skills.md`,the best practices for skills ."
     ),
     "agent": (
         "You are auditing a sub-agent definition (an agent.md) that another agent authored. Two "

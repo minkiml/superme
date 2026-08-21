@@ -47,8 +47,6 @@
     "GET /dev/work-items/{item_id}/runs/{run_id}/input.html",
     "GET /dev/work-items/{item_id}/timeline",
     "GET /dev/workgraph",
-    "GET /docs",
-    "GET /docs/{slug}",
     "GET /fs/browse",
     "GET /health",
     "GET /knowledge/file",
@@ -154,7 +152,7 @@
           "type": "object"
         },
         "AbandonResponse": {
-          "description": "The abandon brief (D8): what was torn down + the children triage list. Blocking children\nexisted only for this parent \u2014 the owner disposes each (abandon / promote to independent);\nparallel children continue untouched.",
+          "description": "What was torn down, plus the children triage list.\n\nBlocking children existed only for this parent, so the owner disposes each; parallel children\ncontinue untouched.",
           "properties": {
             "blocking_children": {
               "items": {
@@ -215,7 +213,7 @@
           "type": "object"
         },
         "AboutRow": {
-          "description": "One row of `About this work-item` \u2014 what this item IS, in the owner's own framing. A LIST of\nthese, not an object: the order (what it is \u2192 where it came from \u2192 what it's for) is the\nmeaning, and an empty row is dropped server-side rather than rendered blank.",
+          "description": "One row of `About this work-item` \u2014 what this item IS, in the owner's own framing.\n\nA LIST, not an object: the order is the meaning, and an empty row is dropped server-side.",
           "properties": {
             "label": {
               "title": "Label",
@@ -262,7 +260,7 @@
           "type": "object"
         },
         "AgentModelRow": {
-          "description": "One tunable background sub-agent: the TIER it tracks (sonnet/opus/haiku \u2014 the pick) and the\nconcrete model that tier currently resolves to (what actually runs), plus its label and scope.",
+          "description": "One tunable background sub-agent: the TIER it tracks, and the concrete model that tier currently\nresolves to.",
           "properties": {
             "effort": {
               "title": "Effort",
@@ -362,7 +360,7 @@
           "type": "object"
         },
         "ArchivedRepoTokens": {
-          "description": "One disconnected project's preserved spend. `label` is the tombstoned display name (falls\nback to the bare id for repos that left before tombstoning); `disconnected_at` is null there.",
+          "description": "One disconnected project's preserved spend. `label` is the tombstoned display name, falling back\nto the bare id.",
           "properties": {
             "disconnected_at": {
               "anyOf": [
@@ -402,7 +400,7 @@
           "type": "object"
         },
         "ArchivedTokens": {
-          "description": "\"Old projects\" \u2014 spend belonging to repos that are no longer connected. Their runs are kept\nforever, so they still count in `global.total`; this bucket keeps them ATTRIBUTABLE (the orbit\nonly renders live repos, so without it the visible nodes wouldn't sum to the header).",
+          "description": "Spend belonging to repos that are no longer connected.\n\nTheir runs are kept forever, so they still count in the global total; this bucket keeps them\nattributable.",
           "properties": {
             "repos": {
               "default": [],
@@ -427,7 +425,7 @@
           "type": "object"
         },
         "ArtifactCall": {
-          "description": "One row of a work-item's run call-trail (tool / sub-agent / skill invocation, or its result).\n`tool_id` pairs a `result` row back to its call (concurrent tools return out of order);\n`parent_tool_id` names the sub-agent spawn the row happened inside (null = the parent itself).",
+          "description": "One row of a work-item's run call-trail.\n\n`tool_id` pairs a `result` back to its call, and `parent_tool_id` names the sub-agent spawn the row\nhappened inside.",
           "properties": {
             "created_at": {
               "title": "Created At",
@@ -532,7 +530,7 @@
           "type": "object"
         },
         "ArtifactRef": {
-          "description": "A work-item design artifact, NORMALIZED on read (R5): legacy bare-string entries\n(\"artifacts/plan.md\") and structured {type, path} entries both coerce to this one shape at the\ndaemon boundary (`DevKnowledgeService`), so the wire contract is a single object union, never a\nstring-or-object mix.",
+          "description": "A work-item design artifact, NORMALIZED on read: legacy bare-string and structured entries both\ncoerce to this shape at the daemon boundary, so the wire contract is never a string-or-object\nmix.",
           "properties": {
             "path": {
               "title": "Path",
@@ -551,7 +549,7 @@
           "type": "object"
         },
         "ArtifactStatusRow": {
-          "description": "COMPUTED status of one artifact kind (S2 \u2014 derived from file existence + self-check +\nevidence freshness at read time; never stored in any doc, so it cannot drift).",
+          "description": "COMPUTED status of one artifact kind \u2014 derived at read time from file existence, self-check and\nevidence freshness, so it cannot drift.",
           "properties": {
             "evidence": {
               "anyOf": [
@@ -748,7 +746,7 @@
           "type": "object"
         },
         "AttentionBadge": {
-          "description": "The global badge: the TOP non-empty tier only \u2014 one color, one count (D10).",
+          "description": "The global badge: the TOP non-empty tier only \u2014 one color, one count.",
           "properties": {
             "color": {
               "title": "Color",
@@ -772,7 +770,7 @@
           "type": "object"
         },
         "AttentionCard": {
-          "description": "\u00a74.2's WHAT-YOU-NEED-TO-DO card \u2014 the drilldown's single most important element, and the answer\nto \"I opened this and don't know what's needed from me\". Three connected parts: WHY (the back\nstory) \u00b7 DO (the exact act + the one control that performs it) \u00b7 BASIS (pointers to what decides\nit). None when nothing needs the owner \u2014 the card is hidden entirely, never an empty shell.",
+          "description": "The what-you-need-to-do card, in three connected parts: WHY, DO (the exact act and the one\ncontrol that performs it), and BASIS.\n\nNone when nothing needs the owner \u2014 the card is hidden entirely, never an empty shell.",
           "properties": {
             "basis": {
               "items": {
@@ -830,7 +828,7 @@
           "type": "object"
         },
         "AttentionHold": {
-          "description": "One parked (`awaiting_human`) work-item on the top-of-SuperMe attention center (Pass 2 \u00b7 Q2).",
+          "description": "One parked work-item on the top-of-SuperMe attention center.",
           "properties": {
             "actor": {
               "title": "Actor",
@@ -1031,7 +1029,7 @@
           "type": "object"
         },
         "AuthorizationRequest": {
-          "description": "A contract change a work-item couldn't self-authorize (BV-A2), awaiting the owner's grant or\ndeny at the review gate. `delegable` = whether the deputy COULD have granted it (a sync-to-\nreality scope) vs it being owner-reserved (why it reached you). The owner grants regardless.",
+          "description": "A contract change a work-item could not self-authorize, awaiting the owner's grant or deny at\nreview.\n\n`delegable` says whether the deputy COULD have granted it. The owner grants regardless.",
           "properties": {
             "delegable": {
               "title": "Delegable",
@@ -1119,7 +1117,7 @@
           "type": "object"
         },
         "BlockingChild": {
-          "description": "One open sub-item the parent is waiting on \u2014 resolved to something the owner can read and go\nto. `close_readiness` reports these as a comma-joined string of ids, which names a thing without\nsaying what it is or how far along it got (owner, 2026-08-09).",
+          "description": "One open sub-item the parent is waiting on, resolved to something the owner can read and go to.\n\n`close_readiness` reports these as joined ids, which names a thing without saying what it is.",
           "properties": {
             "id": {
               "title": "Id",
@@ -1439,7 +1437,7 @@
           "type": "object"
         },
         "CategoryNode": {
-          "description": "One node of Breakdown 1 \u2014 the semantic tree: a category total + its per-feature amounts,\nplus how it should READ. `label` is the category's owner-facing name and `collapsed` says the\nsurface should draw it as one bar rather than one per feature \u2014 both are taxonomy decisions\n(token_taxonomy), carried here so no renderer has to re-make them.",
+          "description": "One node of the semantic tree: a category total, its per-feature amounts, and how it should READ.\n\n`label` and `collapsed` are taxonomy decisions carried here, so no renderer has to re-make them.",
           "properties": {
             "collapsed": {
               "default": false,
@@ -1532,7 +1530,7 @@
           "type": "object"
         },
         "CompactionConfigBody": {
-          "description": "Partial update of the compaction runtime (S8/D11) \u2014 omitted fields stay unchanged. The\nroute refuses (409) any trigger at/below the incompressible floor.",
+          "description": "Partial update of the compaction runtime; omitted fields stay unchanged. The route refuses any\ntrigger at or below the incompressible floor.",
           "properties": {
             "by_kind": {
               "anyOf": [
@@ -1964,6 +1962,17 @@
         },
         "DeputyConfigBody": {
           "properties": {
+            "effort": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Effort"
+            },
             "enabled": {
               "anyOf": [
                 {
@@ -1974,6 +1983,17 @@
                 }
               ],
               "title": "Enabled"
+            },
+            "model": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Model"
             },
             "strictness": {
               "anyOf": [
@@ -1996,9 +2016,53 @@
         "DeputyConfigResponse": {
           "description": "The global deputy dial: whether a deputy judges autopilot gates + how readily it escalates\nper gate (triage/plan/review, each low\u00b7medium\u00b7high\u00b7extra).",
           "properties": {
+            "deputy_effective_effort": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Deputy Effective Effort"
+            },
+            "deputy_effective_model": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Deputy Effective Model"
+            },
+            "deputy_effort": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Deputy Effort"
+            },
             "deputy_enabled": {
               "title": "Deputy Enabled",
               "type": "boolean"
+            },
+            "deputy_model": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Deputy Model"
             },
             "deputy_strictness": {
               "additionalProperties": {
@@ -2289,67 +2353,8 @@
           "title": "DocEditBody",
           "type": "object"
         },
-        "DocResponse": {
-          "description": "One doc's full markdown.",
-          "properties": {
-            "content": {
-              "title": "Content",
-              "type": "string"
-            },
-            "slug": {
-              "title": "Slug",
-              "type": "string"
-            },
-            "title": {
-              "title": "Title",
-              "type": "string"
-            }
-          },
-          "required": [
-            "slug",
-            "title",
-            "content"
-          ],
-          "title": "DocResponse",
-          "type": "object"
-        },
-        "DocSummary": {
-          "description": "A doc's index entry (slug + title) for the list view.",
-          "properties": {
-            "slug": {
-              "title": "Slug",
-              "type": "string"
-            },
-            "title": {
-              "title": "Title",
-              "type": "string"
-            }
-          },
-          "required": [
-            "slug",
-            "title"
-          ],
-          "title": "DocSummary",
-          "type": "object"
-        },
-        "DocsListResponse": {
-          "properties": {
-            "docs": {
-              "items": {
-                "$ref": "#/components/schemas/DocSummary"
-              },
-              "title": "Docs",
-              "type": "array"
-            }
-          },
-          "required": [
-            "docs"
-          ],
-          "title": "DocsListResponse",
-          "type": "object"
-        },
         "DrilldownAction": {
-          "description": "One control, with its activation decided SERVER-SIDE (\u00a74's universal rule + the owner's slice-6\ninput). `reason` is populated either way: greyed it says what would make it live, live it says\nwhat clicking does. `home` places it \u2014 `actions` (the frame's bar) or `git` (the Git tab).\n\nNever hide a control: a `fast` repo with no PR button anywhere read as a missing feature, with\nnothing on screen saying why.",
+          "description": "One control, with its activation decided SERVER-SIDE.\n\n`reason` is populated either way: greyed it says what would make it live, live it says what\nclicking does. `home` places it. Never hide a control \u2014 an absent one explains nothing.",
           "properties": {
             "active": {
               "title": "Active",
@@ -2383,7 +2388,7 @@
           "type": "object"
         },
         "DrilldownResponse": {
-          "description": "Everything the work-item drilldown renders, computed once per poll. One route instead of four,\nbecause every tab reads the same item folder \u2014 and one computation of the gate's checks, shared\nwith the deputy's prompt, because two summaries of one gate is how the owner loses the ability to\ncheck the deputy's call.",
+          "description": "Everything the work-item drilldown renders, computed once per poll.\n\nOne route instead of four, and one computation of the gate's checks \u2014 shared with the deputy, so\nthe owner can still check its call.",
           "properties": {
             "about": {
               "items": {
@@ -2643,7 +2648,7 @@
         },
         "EvalReport": {
           "additionalProperties": true,
-          "description": "A proposal's gate-2 eval report (forge_kit/eval.py emits it as JSON, stored on the row).\nVersioned via `schema_version` (1 = current); tolerant of pre-versioning / pre-metrics legacy\nreports \u2014 every field optional, extra='allow' so an older or richer report never 500s a read.",
+          "description": "A proposal's gate-2 eval report, stored on the row.\n\nVersioned via `schema_version`, and tolerant of legacy reports: every field is optional, so an older\nor richer one never 500s a read.",
           "properties": {
             "checks": {
               "anyOf": [
@@ -2981,7 +2986,7 @@
           "type": "object"
         },
         "GateCheck": {
-          "description": "One mechanical row of a gate's evaluation \u2014 computed from durable state, never a claim.\n\n`blocking` is the must-resolve marker (\u00a72.1): a FAILING blocking check greys Approve, and every\nother row is a named, visible fact the owner may act over with their eyes open. Both halves\nmatter \u2014 the old surface rendered checks as coloured dots with the reason hidden in a `title`\nattribute, so a red gate looked identical whether it was fatal or advisory.",
+          "description": "One mechanical row of a gate's evaluation \u2014 computed from durable state, never a claim.\n\n`blocking` is the must-resolve marker: a failing blocking check greys Approve, and every other row\nis a named, visible fact.",
           "properties": {
             "blocking": {
               "default": false,
@@ -3509,7 +3514,7 @@
         },
         "Glance": {
           "additionalProperties": true,
-          "description": "The dashboard glance summary (counts + bucketed item stubs). `awaiting_human` is the\nattention bucket (D10: the only status that pages the owner).",
+          "description": "The dashboard glance summary (counts + bucketed item stubs). `awaiting_human` is the\nattention bucket (the only status that pages the owner).",
           "properties": {
             "active": {
               "items": {
@@ -3630,7 +3635,7 @@
           "type": "object"
         },
         "HoldQuestion": {
-          "description": "One question the grill carries to the owner \u2014 the four fields `report_completion` enforces,\nso the card renders labelled rows instead of parsing prose. `recommend`/`why` are absent only\non a pre-typed report replayed from an older event.",
+          "description": "One question the grill carries to the owner \u2014 the four fields `report_completion` enforces, so the\ncard renders labelled rows instead of parsing prose.",
           "properties": {
             "instead": {
               "anyOf": [
@@ -3709,6 +3714,28 @@
               "title": "Context Id",
               "type": "string"
             },
+            "deputy_effort": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Deputy Effort"
+            },
+            "deputy_model": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Deputy Model"
+            },
             "effort": {
               "anyOf": [
                 {
@@ -3779,6 +3806,28 @@
               ],
               "title": "Title"
             },
+            "vet_effort": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Vet Effort"
+            },
+            "vet_model": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Vet Model"
+            },
             "work_kind": {
               "anyOf": [
                 {
@@ -3811,7 +3860,7 @@
           "type": "object"
         },
         "InboxBriefResponse": {
-          "description": "One row's handoff brief (D5) \u2014 the cold-start context the item it becomes reads first.\n`content` is null when no brief was filed, which is a legal state and not an error. `editable`\nis false once the row is pushed: the brief has moved into the item's `preliminary/`, which is\nprovenance.",
+          "description": "One row's handoff brief \u2014 the cold-start context the item it becomes reads first.\n\n`content` is null when none was filed, which is legal. `editable` is false once pushed: the brief\nhas become provenance.",
           "properties": {
             "content": {
               "anyOf": [
@@ -3893,6 +3942,28 @@
                 }
               ],
               "title": "Autopilot"
+            },
+            "deputy_effort": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Deputy Effort"
+            },
+            "deputy_model": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Deputy Model"
             },
             "effort": {
               "anyOf": [
@@ -3982,6 +4053,28 @@
               ],
               "title": "Title"
             },
+            "vet_effort": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Vet Effort"
+            },
+            "vet_model": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Vet Model"
+            },
             "work_kind": {
               "anyOf": [
                 {
@@ -4038,7 +4131,7 @@
           "type": "object"
         },
         "InboxRow": {
-          "description": "One quick-capture triage-queue row. kind/status/origin are locked (R5): DevStore validates\nthem against its own value-sets on write, so the Literal can't 500 on a real row.",
+          "description": "One quick-capture triage-queue row. kind/status/origin are locked: DevStore validates\nthem against its own value-sets on write, so the Literal can't 500 on a real row.",
           "properties": {
             "autopilot": {
               "default": true,
@@ -4052,6 +4145,28 @@
             "created_at": {
               "title": "Created At",
               "type": "string"
+            },
+            "deputy_effort": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Deputy Effort"
+            },
+            "deputy_model": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Deputy Model"
             },
             "effort": {
               "anyOf": [
@@ -4157,6 +4272,28 @@
             "updated_at": {
               "title": "Updated At",
               "type": "string"
+            },
+            "vet_effort": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Vet Effort"
+            },
+            "vet_model": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Vet Model"
             },
             "work_kind": {
               "anyOf": [
@@ -4512,7 +4649,7 @@
           "type": "object"
         },
         "LensRead": {
-          "description": "One standing lens's read of the current cycle. `probed` carries weight even with no\nfindings: it is the difference between \"nothing is wrong here\" and \"nobody looked\" \u2014 so it is a\nLIST, one probe per entry, and the surface renders it as one. A paragraph hides how many\ndistinct things were actually tried, which is the only number a reader can judge it by.",
+          "description": "One standing lens's read of the current cycle.\n\n`probed` separates \"nothing is wrong\" from \"nobody looked\", so it is a LIST, one probe per entry,\nrendered as one.",
           "properties": {
             "cycle": {
               "anyOf": [
@@ -4836,7 +4973,7 @@
           "type": "object"
         },
         "NowStrip": {
-          "description": "What is happening right now: the live phase + cycle, and what that phase concluded.\n\nIt also carried `last` \u2014 the newest event's own sentence. That line was cut (owner,\n2026-08-08): every version of it restated something already on the card. \"Deputy escalated the\nreview gate to you\" sat one inch above the attention card that says the same thing in full, and\nthe phase name and the running dot answer \"where is this\" without it.",
+          "description": "What is happening right now: the live phase and cycle, and what that phase concluded.\n\nThe phase name and the running dot already answer \"where is this\", so no event sentence rides\nhere.",
           "properties": {
             "cycle": {
               "title": "Cycle",
@@ -4948,7 +5085,7 @@
           "type": "object"
         },
         "OwnerInputResponse": {
-          "description": "`reports/report-triage.md` \u00a7 From you \u2014 the one section of any report the OWNER writes, read\nback from disk after every save so the surface shows what plan will actually read. `exists` is\nwhether the triage brief is on disk at all: before triage runs there is nothing to write into.\n\nSLOTS, not prose: one reference and one note per entry, so each can be added and removed on its\nown and the plan phase's \"one note, one check\" rule matches what is on disk.",
+          "description": "The one section of any report the OWNER writes, read back from disk after every save.\n\nSLOTS, not prose: one reference and one note per entry, so each can be added and removed on its\nown.",
           "properties": {
             "exists": {
               "title": "Exists",
@@ -4978,7 +5115,7 @@
           "type": "object"
         },
         "OwnerNote": {
-          "description": "One thing the owner wants proven. Each becomes a check in the plan's `## Verification plan`,\nits `proves:` written in their words \u2014 which is why it is one slot, not a paragraph.",
+          "description": "One thing the owner wants proven. Each becomes a check whose `proves:` is written in their words,\nwhich is why it is one slot and not a paragraph.",
           "properties": {
             "description": {
               "title": "Description",
@@ -5038,7 +5175,7 @@
           "type": "object"
         },
         "PagedNotice": {
-          "description": "Why an item is parked for the owner when it isn't a plain gate wait \u2014 a deputy escalation, a\nbuild\u27f7vet halt, or a blocked run. None \u21d2 a normal gate.",
+          "description": "Why an item is parked for the owner when it is not a plain gate wait \u2014 an escalation, a build\u27f7vet\nhalt, or a blocked run. None means a normal gate.",
           "properties": {
             "detail": {
               "title": "Detail",
@@ -5112,7 +5249,7 @@
           "type": "object"
         },
         "PhaseReportResponse": {
-          "description": "One phase's user-facing report for the Reports tab \u2014 the markdown 1:1, plus the path to the\nfull agent-facing contract behind it (\u00a74.3's \"Open full contract\"). The report is the compact\nread; the contract is the whole thing, one click away, never pasted in.",
+          "description": "One phase's user-facing report for the Reports tab: the markdown 1:1, plus the path to the full\nagent-facing contract behind it.\n\nThe report is the compact read; the contract is one click away, never pasted in.",
           "properties": {
             "contract": {
               "anyOf": [
@@ -5789,7 +5926,7 @@
           "type": "object"
         },
         "PrGroup": {
-          "description": "One task's slice of the branch. `task` is null for commits that carry no `SuperMe-Task`\ntrailer \u2014 they are shown last rather than hidden.\n\nThe four fields below the diff are the REVIEW NOTES (owner, 2026-08-09): what this task had to\nmake true, what build says to look at, where it left the plan, and what proves it. They sit here\nrather than in a document of their own because a note is only useful beside the commits it\ndescribes \u2014 and per TASK, not per file, so two tasks touching one module get two notes.",
+          "description": "One task's slice of the branch. `task` is null for commits with no trailer; they are shown last.\n\nThe four fields below the diff are the REVIEW NOTES, per TASK rather than per file.",
           "properties": {
             "checks": {
               "default": [],
@@ -5938,7 +6075,7 @@
           "type": "object"
         },
         "PrViewResponse": {
-          "description": "The dedicated PR page (\u00a74.4): the review report on the left, the task-grouped diff\nwalkthrough on the right. Entirely derived at read time \u2014 nothing here is stored.",
+          "description": "The dedicated PR page: the review report on the left, the task-grouped diff\nwalkthrough on the right. Entirely derived at read time \u2014 nothing here is stored.",
           "properties": {
             "base": {
               "anyOf": [
@@ -6071,7 +6208,7 @@
           "type": "object"
         },
         "ProjectStatusResponse": {
-          "description": "Whether this project's memory is established (PRD defines \u22651 deliverable). The dev workspace\ngates on it: an un-established repo shows the onboarding front door instead of the work tabs.\n`onboard_mode` is the connect-time choice (project-init | retrofit) the front door launches\ndirectly; null \u21d2 the repo predates connect-flow, so the landing offers both paths to pick.",
+          "description": "Whether this project's memory is established.\n\nThe dev workspace gates on it: an un-established repo shows the onboarding front door instead of the\nwork tabs. A null `onboard_mode` means the landing offers both paths.",
           "properties": {
             "docs": {
               "items": {
@@ -6104,7 +6241,7 @@
           "type": "object"
         },
         "PromptExtractionLink": {
-          "description": "One captured \"A\" page for the last Prompt X-ray probe's phase runs \u2014 survives the probe's\nteardown (run_input rows are kept trace, keyed by the dangling item_id).",
+          "description": "One captured input page for the last probe's phase runs. Survives the probe's teardown, keyed by\nthe dangling item id.",
           "properties": {
             "phase": {
               "anyOf": [
@@ -6211,7 +6348,7 @@
           "type": "object"
         },
         "ProofRow": {
-          "description": "\u00a74.2's connected view: one row per BUILT THING, each carrying its own validation \u2192\nverification. The join key is the plan task id \u2014 cycle \u00a7Built/\u00a7Validation bullets lead with it and\nvet-plan checks name it in `covers:`. `task: \"\"` is the item-wide row, where untagged content\nlands: nothing is dropped and nothing is guessed at.",
+          "description": "One row per BUILT THING, each carrying its own validation and verification.\n\nThe join key is the plan task id. `task: \"\"` is the item-wide row where untagged content lands, so\nnothing is dropped and nothing is guessed at.",
           "properties": {
             "built": {
               "items": {
@@ -6264,7 +6401,7 @@
           "type": "object"
         },
         "ProofVerdict": {
-          "description": "One check of the plan's exam: what it will prove (`proves` in the owner's terms, `expect` in\nthe machine's), and where it stands. `ran` False \u21d2 the loop hasn't reached it yet \u2014 the row\nexists from the plan gate on, so the owner approving a plan can see the proof they are\napproving. `result` is the vet's captured output, verbatim \u2014 a failing row IS the\nexpected-vs-actual.",
+          "description": "One check of the plan's exam: what it will prove, and where it stands.\n\n`ran` False means the loop has not reached it, so an owner approving a plan sees the proof they\napprove. `result` is verbatim.",
           "properties": {
             "by": {
               "default": "agent",
@@ -6380,7 +6517,7 @@
         },
         "Proposal": {
           "additionalProperties": true,
-          "description": "A memory proposal (rich DB row with JSON columns). Declared fields document the stable shape;\nextra='allow' carries anything else, and routes emit only the keys actually present. The\noutput_form/target_scope/status enums are locked (R5): their producer coerces/guards to these\nexact sets, so the Literal can't 500 on a real row.",
+          "description": "A memory proposal \u2014 a rich DB row with JSON columns.\n\nThe declared fields document the stable shape; `extra='allow'` carries the rest. The enums are\nlocked, because their producer coerces to exactly those sets.",
           "properties": {
             "apply_target": {
               "anyOf": [
@@ -7155,7 +7292,7 @@
           "type": "object"
         },
         "RepoBranchesResponse": {
-          "description": "The anchor picker's option set \u2014 this repo's local branches, most-recently-committed first,\nwith the work-item branches excluded. `anchor` is what the anchor resolves to right now, so the\npicker can show the branch in USE even when nothing has been configured yet.",
+          "description": "The anchor picker's option set: this repo's local branches, newest-committed first, work-item\nbranches excluded.\n\n`anchor` is what the anchor resolves to now, so the picker can show the branch in USE.",
           "properties": {
             "anchor": {
               "anyOf": [
@@ -7228,7 +7365,7 @@
           "type": "object"
         },
         "RepoConnectResponse": {
-          "description": "A freshly connected repo \u2014 the new orbit node. `onboarding` is the connect-time choice\n(project-init | retrofit) that its dev workspace launches until memory is established.",
+          "description": "A freshly connected repo. `onboarding` is the connect-time choice that its dev workspace launches\nuntil memory is established.",
           "properties": {
             "cwd": {
               "title": "Cwd",
@@ -7263,7 +7400,7 @@
           "type": "object"
         },
         "RepoDisconnectResponse": {
-          "description": "The receipt for a disconnect \u2014 what the cascade actually removed. Irreversible by design;\nthe project folder itself is never touched, and run traces + dev events are preserved\n(never-delete-logs), stamped session_fate='disconnected'.",
+          "description": "The receipt for a disconnect \u2014 what the cascade removed. Irreversible; the project folder is never\ntouched, and run traces are preserved.",
           "properties": {
             "harness_removed": {
               "title": "Harness Removed",
@@ -7318,6 +7455,11 @@
                 }
               ],
               "title": "Effort"
+            },
+            "role": {
+              "default": "default",
+              "title": "Role",
+              "type": "string"
             }
           },
           "title": "RepoEffortBody",
@@ -7346,6 +7488,11 @@
             },
             "repo_id": {
               "title": "Repo Id",
+              "type": "string"
+            },
+            "role": {
+              "default": "default",
+              "title": "Role",
               "type": "string"
             }
           },
@@ -7386,7 +7533,7 @@
           "type": "object"
         },
         "RepoGitResponse": {
-          "description": "The repo's two git knobs after a write (workflow-renovation-v2 \u00a72.2). `resolved_anchor` is\nwhat `anchor_branch` actually points at now \u2014 None when the repo isn't a git repo; `error` when\nthe configured branch doesn't exist, which is a refusal at every git site, not a fallback.",
+          "description": "The repo's two git knobs after a write.\n\n`resolved_anchor` is what `anchor_branch` points at now; `error` when the configured branch does\nnot exist, which every git site refuses rather than falling back.",
           "properties": {
             "anchor_branch": {
               "anyOf": [
@@ -7545,6 +7692,11 @@
                 }
               ],
               "title": "Model"
+            },
+            "role": {
+              "default": "default",
+              "title": "Role",
+              "type": "string"
             }
           },
           "title": "RepoModelBody",
@@ -7580,6 +7732,11 @@
             },
             "repo_id": {
               "title": "Repo Id",
+              "type": "string"
+            },
+            "role": {
+              "default": "default",
+              "title": "Role",
               "type": "string"
             }
           },
@@ -7706,6 +7863,28 @@
                 }
               ],
               "title": "Tag Color"
+            },
+            "vet_effort": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Vet Effort"
+            },
+            "vet_model": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Vet Model"
             }
           },
           "required": [
@@ -7881,7 +8060,7 @@
           "type": "object"
         },
         "RunEventRow": {
-          "description": "One entry of a run's event trail: a prompt, an assistant reply block, a tool/skill/agent call,\nor that call's `result`. `kind` \u2208 prompt | reply | tool | mcp | skill | agent | subagent | result;\n`name` is the label, `description` the body; `tool_id` pairs a result back to its call, and\n`parent_tool_id` names the sub-agent spawn a row happened inside (null = the parent's own call),\nso a fan-out reads as nested work rather than as the parent doing everything itself.",
+          "description": "One entry of a run's event trail: a prompt, a reply block, a call, or that call's result.\n\n`tool_id` pairs a result back to its call; `parent_tool_id` names the spawn a row happened inside.",
           "properties": {
             "created_at": {
               "title": "Created At",
@@ -7948,7 +8127,7 @@
           "type": "object"
         },
         "RunHeader": {
-          "description": "What one of an item's runs WAS \u2014 so a call-trail group can name itself. `feature` is the\nanswer to \"why did this run open with a shell command instead of a phase skill\": `chat` (an\nowner turn), `resolve` (the conflict resolver), a resumed `build` cycle, `deputy`, `compact`.",
+          "description": "What one of an item's runs WAS, so a call-trail group can name itself.\n\n`feature` answers why a run opened with a shell command instead of a phase skill.",
           "properties": {
             "feature": {
               "anyOf": [
@@ -8022,7 +8201,7 @@
           "type": "object"
         },
         "RunRow": {
-          "description": "One row of the spine `run` table (live or historical) \u2014 every run-returning route shares it.\nmode/status are locked (R5: the spine writes exactly these); `feature` stays a free label.",
+          "description": "One row of the spine `run` table, live or historical \u2014 shared by every run-returning route.\n`feature` stays a free label.",
           "properties": {
             "ctx_pct": {
               "anyOf": [
@@ -8399,7 +8578,7 @@
           "type": "object"
         },
         "SessionSummary": {
-          "description": "A session's picker entry. `item_id`/`item_title` are set when the session is stamped to a\nwork-item (work-item-session-recognition-prd) \u2014 the chat rail derives its work-item indicator\nfrom these, so it's correct however the session was opened (card or picker) and clears on switch.",
+          "description": "A session's picker entry.\n\n`item_id` and `item_title` are set when the session is stamped to a work-item, so the chat rail's\nindicator is correct however the session was opened.",
           "properties": {
             "id": {
               "title": "Id",
@@ -8455,6 +8634,14 @@
               "title": "Surface",
               "type": "string"
             },
+            "thread_ids": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Thread Ids",
+              "type": "array"
+            },
             "title": {
               "title": "Title",
               "type": "string"
@@ -8476,7 +8663,7 @@
           "type": "object"
         },
         "SpawnedFrom": {
-          "description": "The D3 provenance edge, child-side: which item this one branched off and how. `blocking`/\n`parallel` = real children (gate the parent's completion; blocking also pauses it);\n`spawn` = provenance-only follow-up. Exactly one origin edge per item; parent views derived.",
+          "description": "The provenance edge, child-side: which item this one branched off and how.\n\n`blocking` and `parallel` are real children that gate the parent's completion; `spawn` is\nprovenance only. Exactly one origin edge per item.",
           "properties": {
             "item": {
               "title": "Item",
@@ -8782,10 +8969,54 @@
               "title": "Default Repo",
               "type": "string"
             },
+            "deputy_effective_effort": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Deputy Effective Effort"
+            },
+            "deputy_effective_model": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Deputy Effective Model"
+            },
+            "deputy_effort": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Deputy Effort"
+            },
             "deputy_enabled": {
               "default": true,
               "title": "Deputy Enabled",
               "type": "boolean"
+            },
+            "deputy_model": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Deputy Model"
             },
             "deputy_strictness": {
               "additionalProperties": {
@@ -8921,7 +9152,7 @@
           "type": "object"
         },
         "TimelineEvent": {
-          "description": "One event in a run's trail (F2 timeline): a prompt, an assistant reply block, a tool/skill\ncall (status), or that call's result \u2014 the same rows the Activity trace shows, per run.",
+          "description": "One event in a run's trail: a prompt, a reply block, a call, or that call's result \u2014 the same rows\nthe Activity trace shows.",
           "properties": {
             "created_at": {
               "title": "Created At",
@@ -9071,7 +9302,7 @@
           "type": "object"
         },
         "TokenBucket": {
-          "description": "A token total plus its splits. Two reconciling breakdowns: `by_category` (semantic \u2014 the\ngeneric tree the FE renders) and `by_type` (systematic). `by_scope`/`by_feature` are retained\nflat maps for back-compat. All maps are open (producer-supplied labels, not a locked enum).",
+          "description": "A token total plus its splits: `by_category` is semantic, `by_type` systematic, and the two\nreconcile. All maps are open, not a locked enum.",
           "properties": {
             "by_category": {
               "additionalProperties": {
@@ -9126,7 +9357,7 @@
           "type": "object"
         },
         "TokenDay": {
-          "description": "One local-day bucket of the usage time-series: the four token types, the day total, and the\nrunning `cumulative` total across days.",
+          "description": "One local-day bucket of the usage time-series: the four token types, the day total, and the\nrunning cumulative.",
           "properties": {
             "cache_creation": {
               "default": 0,
@@ -9195,7 +9426,7 @@
           "type": "object"
         },
         "TokenTypeSplit": {
-          "description": "Breakdown 2 \u2014 the systematic (per token-type) split. A run that never returned a final usage\n(aborted, killed, errored) has no typed split and contributes nothing here \u2014 measured usage only.\nThe four sum to the bucket total (reconciliation).",
+          "description": "The systematic, per-token-type split. A run that never returned a final usage contributes nothing\nhere \u2014 measured usage only. The four sum to the bucket total.",
           "properties": {
             "cache_creation": {
               "default": 0,
@@ -9222,7 +9453,7 @@
           "type": "object"
         },
         "TokenUsageResponse": {
-          "description": "System-wide token usage: the global bucket + one bucket per repo (keyed by repo id) +\nthe \"Old projects\" roll-up of disconnected repos (also present in by_repo, by raw id).",
+          "description": "System-wide token usage: the global bucket, one bucket per repo, and the roll-up of disconnected\nrepos.",
           "properties": {
             "archived": {
               "$ref": "#/components/schemas/ArchivedTokens",
@@ -9416,7 +9647,7 @@
         },
         "WorkGraphNode": {
           "additionalProperties": true,
-          "description": "One node of the derived WorkGraph (D3). `kind` \u2208 repo_root | deliverable | work_item |\ninbox_spawn; work_item nodes carry item_kind/phase/status/outcome (+ git decoration in S4).",
+          "description": "One node of the derived WorkGraph. `kind` \u2208 repo_root | deliverable | work_item |\ninbox_spawn; work_item nodes carry item_kind/phase/status/outcome.",
           "properties": {
             "id": {
               "title": "Id",
@@ -9501,7 +9732,7 @@
         },
         "WorkItem": {
           "additionalProperties": true,
-          "description": "A dev work-item. Base fields are always present; tree-walk + telemetry fields appear only on\nthe enriched /dev list (extra='allow' tolerates any future frontmatter key).",
+          "description": "A dev work-item. Base fields are always present; tree-walk and telemetry fields appear only on the\nenriched list.",
           "properties": {
             "after": {
               "anyOf": [
@@ -10313,7 +10544,7 @@
           "type": "object"
         },
         "WorkItemDocEditResponse": {
-          "description": "Owner edit of `brief.md` / `plan.md`. `saved` False means the text broke the artifact's\ncontract and NOTHING was written \u2014 `issues` are the same lines the gate would refuse on, so the\nowner fixes them here rather than discovering them at a gate.",
+          "description": "Owner edit of `brief.md` or `plan.md`.\n\n`saved` False means the text broke the artifact's contract and NOTHING was written; `issues` are\nthe lines the gate would refuse on.",
           "properties": {
             "edited_by_owner": {
               "anyOf": [
@@ -10361,7 +10592,7 @@
           "type": "object"
         },
         "WorkItemGitRecord": {
-          "description": "The git record a build entry writes onto the item (S4): its branch, worktree dir, and the\nbase it branched from (the trunk, or the parent's branch for a blocking child).",
+          "description": "The git record a build entry writes onto the item: its branch, worktree dir, and the base it\nbranched from.",
           "properties": {
             "base": {
               "title": "Base",
@@ -10505,7 +10736,7 @@
           "type": "object"
         },
         "WorkItemSeenResponse": {
-          "description": "Seen-stamp result (S7 read receipt). `changed` False = was already stamped just now.",
+          "description": "Seen-stamp result. `changed` False means it was already stamped.",
           "properties": {
             "changed": {
               "title": "Changed",
@@ -10547,7 +10778,7 @@
           "type": "object"
         },
         "WorkItemTimelineResponse": {
-          "description": "The F2 unified timeline: all of an item's runs oldest-first, each with its ordered events \u2014\nthe read-only conversation the panel mirrors across every phase.",
+          "description": "All of an item's runs oldest-first, each with its ordered events \u2014 the read-only conversation the\npanel mirrors across every phase.",
           "properties": {
             "item_id": {
               "title": "Item Id",
@@ -10665,7 +10896,7 @@
       },
       "/dev/attention": {
         "get": {
-          "description": "The attention engine (S7/D10): every item in at most one bucket, strict priority\nneeds_you (awaiting_human) > deputy_working (live deputy judgment) > running (live phase run)\n> unread (terminal, never opened) \u2014 derived from durable state at read time. `badge` = the top\nnon-empty tier's color + count, or null when nothing claims attention. Powers the workspace\nbadge + kanban tinting.",
+          "description": "Every item in at most one bucket, by strict priority, derived from durable state at read time.\n\n`badge` is the top non-empty tier's colour and count, or null when nothing claims attention.",
           "operationId": "dev_attention_dev_attention_get",
           "parameters": [
             {
@@ -10706,7 +10937,7 @@
       },
       "/dev/decisions": {
         "get": {
-          "description": "This repo's decision ledger \u2014 every call the owner has ruled on, newest FIRST.\n\nThe file is append-only and reads chronologically (oldest first, per its own contract); a reader\nscanning for what was decided lately wants the opposite, so the order is flipped here and only\nhere. Nothing is derived: the entries are the file's own headings and bodies.\n\nA repo with no ledger reads as an empty list \u2014 the correct starting state for a project where\nnobody has had to rule on anything yet, never an error.",
+          "description": "This repo's decision ledger \u2014 every call the owner has ruled on, newest FIRST.\n\nThe file is append-only and reads oldest-first, so the order is flipped here and only here.",
           "operationId": "dev_decisions_dev_decisions_get",
           "parameters": [
             {
@@ -11444,7 +11675,7 @@
       },
       "/dev/harness/plugins": {
         "get": {
-          "description": "SuperMe's OWN universal skills + agents, grouped by scope (dev | core | shared) \u2014 the\nManage-Harness \"Skills & Agents\" tab. Read straight from the harness plugin frontmatter; this\nis the universal harness only (per-repo operational artifacts are out of scope here).",
+          "description": "SuperMe's OWN universal skills and agents, grouped by scope, read straight from the plugin\nfrontmatter. Per-repo operational artifacts are out of scope here.",
           "operationId": "dev_harness_plugins_dev_harness_plugins_get",
           "responses": {
             "200": {
@@ -11777,7 +12008,7 @@
           "summary": "Dev Inbox Delete"
         },
         "patch": {
-          "description": "Edit an inbox item: change status, kind, tag, text, or title. A PUSHED row is immutable\ntrace (its content already moved into the work-item's preliminary/): flipping it back to\n`open` would let a second push mint a duplicate work-item over the same provenance.",
+          "description": "Edit an inbox item: status, kind, tag, text or title.\n\nA PUSHED row is immutable trace, since its content already moved into the work-item \u2014 flipping it\nback to `open` would let a second push mint a duplicate.",
           "operationId": "dev_inbox_update_dev_inbox__item_id__patch",
           "parameters": [
             {
@@ -11827,7 +12058,7 @@
       },
       "/dev/inbox/{item_id}/brief": {
         "get": {
-          "description": "One row's handoff brief (D5). Agent-filed rows carry one from birth; a bare capture has\nnone, and `content: null` says so rather than 404-ing \u2014 an absent brief is the state the\nowner can still fill, not a missing resource.",
+          "description": "One row's handoff brief. Agent-filed rows carry one from birth; a bare capture has\nnone, and `content: null` says so rather than 404-ing \u2014 an absent brief is the state the\nowner can still fill, not a missing resource.",
           "operationId": "dev_inbox_brief_dev_inbox__item_id__brief_get",
           "parameters": [
             {
@@ -11915,7 +12146,7 @@
       },
       "/dev/inbox/{item_id}/push": {
         "post": {
-          "description": "Push an inbox item to the workspace \u2014 the owner's push (the `spawn` relation waits for\nexactly this; blocking/parallel children auto-pushed at branch-off time never reach here\nopen). One shared transaction (core/inbox_flow): creates `work-items/<id>/` at triage/active\ncarrying `spawned_from` + `inbox_id`, MOVES the inbox content folder (handoff brief + extras)\ninto the item as `preliminary/` (the row stays as trace), and pauses the parent when the\nrelation is blocking. Then fires the auto-triage run (#120 \u2014 no manual trigger). Returns the\nnew work-item + the row.",
+          "description": "Push an inbox item to the workspace \u2014 the owner's push.\n\nOne shared transaction: create the work-item at triage, MOVE the inbox content into it as\n`preliminary/` while the row stays as trace, then fire the auto-triage run.",
           "operationId": "dev_inbox_push_dev_inbox__item_id__push_post",
           "parameters": [
             {
@@ -12006,7 +12237,7 @@
       },
       "/dev/log": {
         "get": {
-          "description": "The activity log \u2014 a SELECTIVE read over the events table (PRD \u00a74.9), never a dump.\nFilters: `item_id` (an item's own timeline), `scope`, `since`/`until` (ISO timestamps \u2014 e.g.\n\"what happened yesterday\"). Newest first. Powers the dashboard activity view and the chat\n\"what was done\u2026\" queries.\n\n`scope` takes a stored scope (`item` | `dev`) or **`repo`** \u2014 the activity view's read: every\ndev-native row plus the item-scoped kinds that are milestones of the PROJECT rather than steps\ninside one item (`REPO_MILESTONE_KINDS`). Per-item traces belong to that item's drilldown.\n\nDiscarded rows (a re-run's soft-deleted attempt) follow the reader split: an ITEM read is the\ndrilldown asking \"what is happening on this item\", so it sees the current attempt only; a\nREPO-WIDE read is the project's history, which includes the attempts that were thrown away.",
+          "description": "The activity log \u2014 a SELECTIVE read over the events table, never a dump.\n\n`scope` takes a stored scope or `repo`, which adds the item-scoped kinds that are milestones of the\nPROJECT rather than steps inside one item.",
           "operationId": "dev_log_dev_log_get",
           "parameters": [
             {
@@ -12121,7 +12352,7 @@
       },
       "/dev/memory/distill": {
         "post": {
-          "description": "The Manage-Harness \"Run distill\" button: fire a background distill pass over the candidate\npool (no need to open Dev chat). One pass per (repo \u00d7 dev scope) at a time \u2014 guarded by a\nserver-truth spine query, not a shadow set. Returns immediately; poll `/dev/memory/stats`\n(`distilling`) for completion, then refetch the review queue.",
+          "description": "Fire a background distill pass over the candidate pool.\n\nOne pass per repo and scope at a time, guarded by a spine query rather than a shadow set. Returns\nimmediately; poll the stats for completion.",
           "operationId": "dev_memory_distill_dev_memory_distill_post",
           "parameters": [
             {
@@ -12162,7 +12393,7 @@
       },
       "/dev/memory/proposals": {
         "get": {
-          "description": "The review queue \u2014 proposals awaiting (or past) the owner gate. `status` filters\n(e.g. 'proposed' = still pending). Newest first. Each proposal is enriched with its source\n`candidates` (signal + rationale + evidence + hints) so the review popup can show provenance\nwithout a second round-trip.",
+          "description": "The review queue: proposals awaiting or past the owner gate, newest first.\n\nEach is enriched with its source candidates, so the review popup can show provenance without a\nsecond round-trip.",
           "operationId": "memory_proposals_dev_memory_proposals_get",
           "parameters": [
             {
@@ -12219,7 +12450,7 @@
       },
       "/dev/memory/proposals/{proposal_id}/approve": {
         "post": {
-          "description": "GATE 1 \u2014 owner approves the proposal's INTENT (and answers distill's clarifying questions).\nValidates the form/scope can actually be written today (core is reserved), records the answers,\nmoves the proposal to `writing`, and fires a background per-item WRITE run that authors the final\nartifact and stages it (\u2192 `drafted`) for gate-2. Returns immediately; poll the proposal status.",
+          "description": "GATE 1 \u2014 the owner approves the proposal's INTENT and answers distill's questions.\n\nValidates the form and scope, records the answers, and fires a background WRITE run that authors\nthe artifact and stages it for gate 2.",
           "operationId": "memory_proposal_approve_dev_memory_proposals__proposal_id__approve_post",
           "parameters": [
             {
@@ -12319,7 +12550,7 @@
       },
       "/dev/memory/proposals/{proposal_id}/drop": {
         "post": {
-          "description": "Owner DROPS a proposal \u2192 this is noise, stop suggesting it: mark the proposal `dropped`\nand its source candidates `dropped` (the negative signal for the learn-from-drops loop, PRD\n\u00a74.10). Unlike reject, dropped candidates are NOT re-queued.",
+          "description": "Owner DROPS a proposal \u2014 this is noise, stop suggesting it.\n\nMarks the proposal and its source candidates `dropped`, the negative signal the learning\nloop reads. Unlike reject, dropped candidates are never re-queued.",
           "operationId": "memory_proposal_drop_dev_memory_proposals__proposal_id__drop_post",
           "parameters": [
             {
@@ -12419,7 +12650,7 @@
       },
       "/dev/memory/proposals/{proposal_id}/publish": {
         "post": {
-          "description": "GATE 2 \u2014 owner publishes the staged artifact: the single disk write into its live operational\nhome (constitution file / SKILL.md / agent.md). Promotes the source candidates, logs, and returns\nthe path. The proposal must be `drafted` (the write phase staged an artifact). Core is reserved.",
+          "description": "GATE 2 \u2014 the owner publishes the staged artifact: the single disk write into its live operational\nhome.\n\nThe proposal must be `drafted`. Core is reserved.",
           "operationId": "memory_proposal_publish_dev_memory_proposals__proposal_id__publish_post",
           "parameters": [
             {
@@ -12469,7 +12700,7 @@
       },
       "/dev/memory/proposals/{proposal_id}/reject": {
         "post": {
-          "description": "Owner REJECTS a proposal \u2192 this framing is wrong, but the underlying observation may still\nmatter: mark the proposal `rejected` and RE-QUEUE its source candidates (back to `candidate`)\nso a later distill pass can reconsider/reframe them. To stop re-suggestion, use DROP instead.\nWorks at gate 1 (`proposed`) or gate 2 (`drafted` \u2014 a staged artifact the owner doesn't want).",
+          "description": "The owner REJECTS a proposal: this framing is wrong, but the observation may still matter.\n\nMarks it `rejected` and re-queues its source candidates, so a later distill pass can reframe them.\nTo stop re-suggestion, use DROP.",
           "operationId": "memory_proposal_reject_dev_memory_proposals__proposal_id__reject_post",
           "parameters": [
             {
@@ -12538,7 +12769,7 @@
       },
       "/dev/memory/stats": {
         "get": {
-          "description": "Manage-Harness stat tiles (PRD \u00a74.10.4): the two pipeline gauges + drill-down detail.\n\n- `candidates` \u2014 the un-distilled capture pool (what a distill run would consume).\n- `knowledge`  \u2014 what's been LEARNED + published: the live constitution/skill/agent artifacts\n  (proposal-driven, reconciled with on-disk enabled state \u2014 same source as the Published tab).\nEach carries enough detail to render a popup without a second round-trip.",
+          "description": "The two pipeline gauges plus drill-down detail: `candidates` is the un-distilled capture pool,\n`knowledge` what has been published.\n\nEach carries enough detail to render a popup without a second round-trip.",
           "operationId": "dev_memory_stats_dev_memory_stats_get",
           "parameters": [
             {
@@ -12712,7 +12943,7 @@
       },
       "/dev/prompt-extraction/run": {
         "post": {
-          "description": "Prompt X-ray: fire a THROWAWAY prompt-extraction probe on this repo \u2014 a disposable work-item\nthat runs the real lifecycle unattended to capture each phase's actual input prompt, then tears\nitself down (folder + worktree + branch, keeping only the tagged run trace). One at a time per\nrepo. Returns the current probe state (running + captured links).",
+          "description": "Fire a THROWAWAY prompt-extraction probe: a disposable work-item that runs the real lifecycle\nunattended to capture each phase's input, then tears itself down.\n\nOne at a time per repo. Returns the current probe state.",
           "operationId": "dev_prompt_extraction_run_dev_prompt_extraction_run_post",
           "parameters": [
             {
@@ -12753,7 +12984,7 @@
       },
       "/dev/prompt-extraction/status": {
         "get": {
-          "description": "Prompt X-ray: the repo's current probe state \u2014 whether one is running, and the captured \"A\"\ninput-page links for the last probe (which survive its teardown).",
+          "description": "The repo's current probe state \u2014 whether one is running, and the captured input-page links for\nthe last probe, which survive its teardown.",
           "operationId": "dev_prompt_extraction_status_dev_prompt_extraction_status_get",
           "parameters": [
             {
@@ -12794,7 +13025,7 @@
       },
       "/dev/research/sweeps": {
         "post": {
-          "description": "Launch a standing sweep: mint the item at `investigate`, then fire its first run.\n\nCosts real money, so the surface confirms before calling this \u2014 but the refusal that matters is\nhere: an unknown family, or one that is not standing, is a 400 rather than a research item with\nno button behind it.",
+          "description": "Launch a standing sweep: mint the item at `investigate`, then fire its first run.\n\nAn unknown family, or one that is not standing, is a 400 rather than a research item with no button\nbehind it.",
           "operationId": "dev_sweep_launch_dev_research_sweeps_post",
           "requestBody": {
             "content": {
@@ -12833,7 +13064,7 @@
       },
       "/dev/research/sweeps/families": {
         "get": {
-          "description": "The launch bar's buttons \u2014 a projection of `kind_profiles.RESEARCH_FAMILIES`.\n\nRead-only and repo-independent: which sweeps EXIST is a property of this harness, not of the\nproject. Adding a family is a row in that registry; this route grows a button with no edit.",
+          "description": "The launch bar's buttons \u2014 a projection of the research-families registry.\n\nRead-only and repo-independent: which sweeps exist is a property of this harness. Adding a family\nis a row in that registry.",
           "operationId": "dev_sweep_families_dev_research_sweeps_families_get",
           "responses": {
             "200": {
@@ -12893,7 +13124,7 @@
       },
       "/dev/sweep": {
         "post": {
-          "description": "Ops/debug hook: force a capture sweep over ONE named session, run to completion (so the\ncaller gets the result), with an optional `focus` steer. The everyday triggers are fully\nautomatic (phase/idle); this is the by-id escape hatch for debugging or a targeted re-sweep \u2014\nthe ONLY remaining caller that supplies `focus`.",
+          "description": "Ops hook: force a capture sweep over ONE named session, run to completion so the caller gets the\nresult.\n\nThe everyday triggers are automatic; this is the by-id escape hatch, and the only caller that\nsupplies `focus`.",
           "operationId": "dev_sweep_dev_sweep_post",
           "parameters": [
             {
@@ -12959,7 +13190,7 @@
       },
       "/dev/sweep/idle-scan": {
         "post": {
-          "description": "Ops hook: force an idle-scan pass now (the same pass the heartbeat runs every poll), with an\noptional lower `idle_seconds`. Lets the owner trigger a \"sweep everything quiet\" on demand\ninstead of waiting out the threshold \u2014 handy while observing capture behaviour.",
+          "description": "Ops hook: force an idle-scan pass now \u2014 the same pass the heartbeat runs \u2014 with an optionally\nlower `idle_seconds`.",
           "operationId": "dev_sweep_idle_scan_dev_sweep_idle_scan_post",
           "parameters": [
             {
@@ -13000,7 +13231,7 @@
       },
       "/dev/verification": {
         "get": {
-          "description": "This repo's verification library (verification-model \u00a78): the standing entries every\nimplementation plan inherits, and the available ones a plan cites by id. A repo with no library\nreads as two empty lists \u2014 the correct starting state, never an error.",
+          "description": "This repo's verification library: the standing entries every\nimplementation plan inherits, and the available ones a plan cites by id. A repo with no library\nreads as two empty lists \u2014 the correct starting state, never an error.",
           "operationId": "dev_verification_library_dev_verification_get",
           "parameters": [
             {
@@ -13139,7 +13370,7 @@
       },
       "/dev/work-items/{item_id}/abandon": {
         "post": {
-          "description": "Abandon a work-item \u2014 HUMAN-ONLY (no agent-tool counterpart), legal from any non-terminal\nphase (D8). Ordered, each step idempotent: end live runs/sessions \u00b7 remove the worktree\n(branch kept \u2014 near-free trace) \u00b7 abandon note into reports/report-close.md \u00b7 terminal status change\n(`abandoned`, or `superseded` when `superseded_by` names the replacement) \u00b7 resume a paused\nparent whose last open blocking child this was. Dev-knowledge untouched \u2014 write-at-merge\nmeans a pre-merge abandon wrote nothing, ever. The response is the abandon brief: blocking\nchildren listed for YOUR disposal (they existed only for this parent); parallel children\ncontinue untouched.",
+          "description": "Abandon a work-item \u2014 HUMAN-ONLY, legal from any non-terminal phase.\n\nOrdered and each step idempotent: end live runs, remove the worktree, write the abandon note, set\nthe terminal status, resume a paused parent.",
           "operationId": "dev_work_item_abandon_dev_work_items__item_id__abandon_post",
           "parameters": [
             {
@@ -13189,7 +13420,7 @@
       },
       "/dev/work-items/{item_id}/advance": {
         "post": {
-          "description": "Approve \u2192 advance a work-item to its kind's next phase (the owner's gate; sequencing\ncomes from KIND_PROFILES \u2014 triage\u2192plan\u2192\u2026 per kind). Refuses if the item is at its final\nphase, terminal, or a run is in flight. The gate decision also rests the item at `active`\n(an awaiting_human item just got its answer). The autopilot driver uses the same core.",
+          "description": "Approve \u2192 advance a work-item to its kind's next phase.\n\nRefuses at the final phase, on a terminal item, or with a run in flight. The advance also rests\nthe item `active`. The autopilot driver uses the same core.",
           "operationId": "dev_work_item_advance_dev_work_items__item_id__advance_post",
           "parameters": [
             {
@@ -13239,7 +13470,7 @@
       },
       "/dev/work-items/{item_id}/artifacts": {
         "get": {
-          "description": "The call-trail: every tool / sub-agent / skill this work-item's runs invoked, grouped by\nrun (newest run first, calls in order within a run) \u2014 the drilldown's Runs pane.\n\n`runs` rides along so each group can say WHAT that run was. Without it a group header reads\n\"Run #653\" and the owner has to guess why it opened with a shell command instead of a phase\nskill \u2014 the answer being that it was a chat turn, or a resumed build cycle, or the conflict\nresolver. Naming the feature answers it on the row.",
+          "description": "The call-trail: every tool, sub-agent and skill this item's runs invoked, grouped by run.\n\n`runs` rides along so each group can say WHAT that run was \u2014 otherwise a header reads \"Run #653\"\nand the owner has to guess.",
           "operationId": "dev_work_item_artifacts_dev_work_items__item_id__artifacts_get",
           "parameters": [
             {
@@ -13289,7 +13520,7 @@
       },
       "/dev/work-items/{item_id}/authorize": {
         "post": {
-          "description": "The owner's grant/deny on a deferred authorization at review. Both RECORD and route nothing\n(renovation \u00a72.1): the item stays at review so every pending request can be resolved in any\norder, and one exit then fires \u2014 Approve (close applies the granted ops, skips the denied ones\nand records the gap) or `revise` (they land as plan input). `denied` also waives the blocked\ncheck. Unlike the deputy, the owner grants unconditionally \u2014 the delegated-authority floor\nbinds only the deputy. 409 when the request isn't in a decidable state.",
+          "description": "The owner's grant or deny on a deferred authorization at review.\n\nBoth RECORD and route nothing: the item stays at review so every request can be resolved in any\norder. `denied` also waives the blocked check. The owner grants unconditionally.",
           "operationId": "dev_work_item_authorize_dev_work_items__item_id__authorize_post",
           "parameters": [
             {
@@ -13339,7 +13570,7 @@
       },
       "/dev/work-items/{item_id}/autopilot": {
         "post": {
-          "description": "Enrol / un-enrol a work-item in autopilot \u2014 the per-item policy that drives its gates without\na click. Allowed only PRE-BUILD (phase in triage/plan): the inbox-stage decision, and the last\nmoment before code exists that flipping it is cheap. 409 past that. The flag is durable; the\ndriver (services/gates.maybe_autopilot_advance) reads it when a run rests the item at a gate.",
+          "description": "Enrol or un-enrol a work-item in autopilot \u2014 the per-item policy that drives its gates without a\nclick.\n\nAllowed only PRE-BUILD: the last moment before code exists that flipping it is cheap.",
           "operationId": "dev_work_item_autopilot_dev_work_items__item_id__autopilot_post",
           "parameters": [
             {
@@ -13399,7 +13630,7 @@
       },
       "/dev/work-items/{item_id}/compact": {
         "post": {
-          "description": "Compact NOW (S8, owner-fired): run the full compaction sequence on this item's bound\nsession \u2014 checkpoint FIRST, then /compact, then the effectiveness verdict. The automatic\ntrigger does the same on its own past `compaction_trigger_pct`; this is the manual handle\n(and how the gate test drives the machinery deterministically). 409 without a session or\nwhile a run is in flight (the sequence takes the item's run-lock itself).",
+          "description": "Compact NOW: run the full compaction sequence on this item's bound session \u2014 checkpoint first,\nthen `/compact`, then the verdict.\n\n409 without a session or while a run is in flight, since the sequence takes the run-lock itself.",
           "operationId": "dev_work_item_compact_dev_work_items__item_id__compact_post",
           "parameters": [
             {
@@ -13449,7 +13680,7 @@
       },
       "/dev/work-items/{item_id}/detail": {
         "get": {
-          "description": "A work-item's review payload: its frontmatter/body plus the rendered artifact content\nthe review popup shows \u2014 plan.md and prd.md as Markdown bodies, the plan's `## Tasks` as a\nstructured `{text, done}` checklist, and the COMPUTED per-artifact status map (S2: derived\nfrom file existence + self-check + evidence freshness \u2014 never stored).",
+          "description": "A work-item's review payload: frontmatter and body, the rendered artifact content, the plan's\n`## Tasks` as a structured checklist, and the computed per-artifact status map.",
           "operationId": "dev_work_item_detail_dev_work_items__item_id__detail_get",
           "parameters": [
             {
@@ -13499,7 +13730,7 @@
       },
       "/dev/work-items/{item_id}/doc": {
         "put": {
-          "description": "The owner hand-edits `brief.md` or `plan.md` \u2014 the item's two statements of INTENT, and the\nonly artifacts they may write (`artifacts.OWNER_EDITABLE`). Everything else under `artifacts/`\nis a record of what a run did; the edit mode never offers it and this route refuses it.\n\nRefused, each for its own reason: a LIVE run (a phase agent may be writing the same file \u2014 the\nlast writer would silently win) \u00b7 a TERMINAL item (its work is merged and closed; editing the\nplan now rewrites history rather than steering anything) \u00b7 text that fails the artifact's own\nself-check (returned as `issues` with nothing written, so a save can never leave the item in a\nstate the gate refuses and the owner can't see).\n\nA successful save stamps `edited_by_owner` into the frontmatter. That stamp is the point: an\nagent re-reading this plan next cycle is reading the OWNER's words, not its own.",
+          "description": "The owner hand-edits `brief.md` or `plan.md` \u2014 the item's two statements of INTENT.\n\nRefused on a LIVE run, a TERMINAL item, or text failing the artifact's self-check. A save stamps\n`edited_by_owner`.",
           "operationId": "dev_work_item_doc_edit_dev_work_items__item_id__doc_put",
           "parameters": [
             {
@@ -13549,7 +13780,7 @@
       },
       "/dev/work-items/{item_id}/doc.html": {
         "get": {
-          "description": "One of the item's AGENT-FACING artifacts (brief.md \u00b7 plan.md \u00b7 build-vet-<n>.md) as a\nstandalone page \u2014 what a report's \"full contract\" link opens. `path` is the report's own\nrelative pointer; anything outside the item's `artifacts/` folder is refused as missing.",
+          "description": "One of the item's AGENT-FACING artifacts as a standalone page.\n\n`path` is the report's own relative pointer; anything outside the item's `artifacts/` folder is\nrefused as missing.",
           "operationId": "dev_work_item_doc_dev_work_items__item_id__doc_html_get",
           "parameters": [
             {
@@ -13608,7 +13839,7 @@
       },
       "/dev/work-items/{item_id}/drilldown": {
         "get": {
-          "description": "Everything the drilldown renders, computed once (\u00a74): the live strip \u00b7 the\nWHAT-YOU-NEED-TO-DO card \u00b7 at-a-glance \u00b7 the gate's named check rows with `blocking` \u00b7 every\ncontrol's activation + reason \u00b7 the Proof rows \u00b7 which phases have a report.\n\nServer-computed activation is the point. The gate brief carried `approve_blocked_by` and no\ncomponent ever read it, so the greying rule lived in TypeScript beside the rule the backend\nenforces.",
+          "description": "Everything the drilldown renders, computed once.\n\nServer-computed activation is the point: a greying rule that lives in the component sits beside the\nrule the backend actually enforces.",
           "operationId": "dev_work_item_drilldown_dev_work_items__item_id__drilldown_get",
           "parameters": [
             {
@@ -13658,7 +13889,7 @@
       },
       "/dev/work-items/{item_id}/from-you": {
         "get": {
-          "description": "`reports/report-triage.md` \u00a7 From you \u2014 what the owner has written into the one section of\nthe item that is theirs. Never 404s on a missing brief: `exists: false` is the editor's cue to\nsay triage hasn't written one yet, which is a different thing from a broken read.",
+          "description": "What the owner has written into the one section of the item that is theirs.\n\nNever 404s on a missing brief: `exists: false` tells the editor triage has not written one yet,\nwhich is not a broken read.",
           "operationId": "dev_work_item_owner_input_dev_work_items__item_id__from_you_get",
           "parameters": [
             {
@@ -13706,7 +13937,7 @@
           "summary": "Dev Work Item Owner Input"
         },
         "put": {
-          "description": "Save the owner's own section, replacing it whole and leaving the rest of the brief untouched.\n\nHUMAN-ONLY, like abandon: there is no agent tool behind it, because the value of the section is\nprecisely that an agent did not write it. Returns what is now on disk \u2014 the editor shows what\nthe plan phase will read, not what was typed.",
+          "description": "Save the owner's own section, replacing it whole and leaving the rest untouched.\n\nHUMAN-ONLY: there is no agent tool behind it, because the value of the section is that an agent did\nnot write it.",
           "operationId": "dev_work_item_set_owner_input_dev_work_items__item_id__from_you_put",
           "parameters": [
             {
@@ -13756,7 +13987,7 @@
       },
       "/dev/work-items/{item_id}/git": {
         "get": {
-          "description": "The item's live git state (derived at read time, never stored): branch/dir/registration\nexistence, dirty files, ahead/behind vs the repo's anchor (behind = freshness debt), merged.\nAlso echoes the repo's `review_mode`, so the rule governing the merge is visible where the\nmerge is \u2014 read live, never from the item, so a mode flip applies to items already at review.",
+          "description": "The item's live git state, derived at read time: branch and dir existence, dirty files, ahead and\nbehind versus the anchor, merged.\n\nAlso echoes the repo's `review_mode`, read live, so a mode flip applies to items already at\nreview.",
           "operationId": "dev_work_item_git_dev_work_items__item_id__git_get",
           "parameters": [
             {
@@ -13806,7 +14037,7 @@
       },
       "/dev/work-items/{item_id}/git/merge": {
         "post": {
-          "description": "The review-gate merge (owner-fired), as a raw route. Thin wrapper over\n`services.git_ops.review_merge` \u2014 the SAME body `advance_item` runs when the owner (or deputy)\napproves at review, so 'the review decision IS the merge' holds whether it's fired here or by\nthe Approve transition (B2). Routes by topology (D4): a BLOCKING child merges into its parent's\nbranch (light path), everything else to the trunk (heavy path \u2014 overlap refusal, backup ref,\nnever-merge-twice). Conflicts on the main path \u2192 200 with the conflict list (sync + resolve,\nthen retry / approve again).",
+          "description": "The review-gate merge as a raw route \u2014 a thin wrapper over the SAME body `advance_item` runs.\n\nRoutes by topology: a blocking child merges into its parent's branch, everything else to the\ntrunk.",
           "operationId": "dev_work_item_git_merge_dev_work_items__item_id__git_merge_post",
           "parameters": [
             {
@@ -13856,7 +14087,7 @@
       },
       "/dev/work-items/{item_id}/git/resolve": {
         "post": {
-          "description": "Resolve-with-Agent (D4): the human decides WHETHER, the agent resolves \u2014 they never\nhand-edit conflict markers. Re-runs the freshness sync leaving conflicts IN the worktree,\nthen fires a background resolution run (write-sandboxed to the worktree); the daemon completes\nthe merge mechanically and the item re-enters `vet`. 409 if the sync is clean (nothing\nto resolve) or a run is in flight.",
+          "description": "Resolve-with-agent: the human decides WHETHER, the agent resolves, and nobody hand-edits conflict\nmarkers.\n\nRe-runs the sync leaving conflicts in the worktree, then fires a background resolution run. The\ndaemon completes the merge mechanically.",
           "operationId": "dev_work_item_git_resolve_dev_work_items__item_id__git_resolve_post",
           "parameters": [
             {
@@ -13906,7 +14137,7 @@
       },
       "/dev/work-items/{item_id}/git/revert": {
         "post": {
-          "description": "Restore the trunk to its pre-merge state via the item's recorded backup ref \u2014 the\nalways-offered undo behind every main merge (D4 guardrail). Safe-only: refuses once anything\nelse has landed on top. Clears the item's merge record (the branch itself is untouched).",
+          "description": "Restore the trunk to its pre-merge state via the item's recorded backup ref.\n\nSafe-only: refuses once anything else has landed on top. The branch itself is untouched.",
           "operationId": "dev_work_item_git_revert_dev_work_items__item_id__git_revert_post",
           "parameters": [
             {
@@ -13956,7 +14187,7 @@
       },
       "/dev/work-items/{item_id}/pr": {
         "get": {
-          "description": "The dedicated PR page (\u00a74.4) \u2014 `strict`'s review surface, and readable in any mode. Read-only\nby construction: the page's one action is the ordinary review Approve, which merges.",
+          "description": "The dedicated PR page \u2014 `strict`'s review surface, and readable in any mode. Read-only\nby construction: the page's one action is the ordinary review Approve, which merges.",
           "operationId": "dev_work_item_pr_dev_work_items__item_id__pr_get",
           "parameters": [
             {
@@ -14081,7 +14312,7 @@
       },
       "/dev/work-items/{item_id}/report/{phase}": {
         "get": {
-          "description": "One phase's user-facing report (`reports/report-<phase>.md`) for the Reports tab \u2014 the markdown\n1:1, plus the path to the full agent-facing contract behind it (\u00a74.3). 404 when that phase hasn't\nwritten one; the tab greys itself from `DrilldownResponse.reports` rather than probing.",
+          "description": "One phase's user-facing report for the Reports tab: the markdown 1:1, plus the path\nto the agent-facing contract behind it. 404 when that phase wrote none \u2014 the tab greys\nitself from the drilldown rather than probing.",
           "operationId": "dev_work_item_report_dev_work_items__item_id__report__phase__get",
           "parameters": [
             {
@@ -14140,7 +14371,7 @@
       },
       "/dev/work-items/{item_id}/rerun": {
         "post": {
-          "description": "The owner's RE-RUN: throw this item's work away and start it over in place (recovery R5).\nDestructive, and the only recovery act that is \u2014 artifacts, reports, checkpoints, the deputy's\nlog and every session are DELETED, the worktree dir is removed, and the item re-enters at its\nkind's first phase with `generation` bumped.\n\nWhat it keeps is what makes it a re-run and not a new item: the id, the branch, every run and\ndev-activity row (permanent trace), the inbox row, `preliminary/`, and every graph relation.\n\nDistinct from `/resume`, which rewinds NOTHING and re-fires the run that died. Reach for this\nonly when there is no run worth re-firing. 409 when the item is terminal or has a run in\nflight \u2014 the same rule the drilldown's button reads, from the same function.",
+          "description": "RE-RUN: throw this item's work away and start it over in place. Destructive.\n\nArtifacts, reports, checkpoints and sessions are deleted and the worktree removed; the id, branch,\nrun rows and graph relations survive.",
           "operationId": "dev_work_item_rerun_dev_work_items__item_id__rerun_post",
           "parameters": [
             {
@@ -14190,7 +14421,7 @@
       },
       "/dev/work-items/{item_id}/resume": {
         "post": {
-          "description": "The owner's RESUME on a work-item whose run STOPPED (recovery R4): re-fire the phase's own\nbackground run. Nothing is rewound \u2014 the branch, the worktree and every artifact stand; only the\nrun is new, which is what makes this cheap enough to offer as a button.\n\nDistinct from Re-run, which reads alike and does the opposite: Resume picks the run back up\nthat hit a wall it could not pass and carries the gap to review (the RUN succeeded, the work\nstopped). Resume re-runs a run that never finished (the work is fine, the RUN stopped).\n\n409 when the item isn't stopped, is terminal, has a run in flight, or sits at a phase with no\nbackground run to re-fire \u2014 the same conditions the drilldown's button reads to stay inactive,\nfrom the same function, so the tooltip can never disagree with the outcome.",
+          "description": "RESUME a work-item whose run STOPPED: re-fire the phase's own background run.\n\nNothing is rewound \u2014 the branch, worktree and artifacts stand, only the run is new. Distinct from\nRe-run, which throws the work away.",
           "operationId": "dev_work_item_resume_dev_work_items__item_id__resume_post",
           "parameters": [
             {
@@ -14240,7 +14471,7 @@
       },
       "/dev/work-items/{item_id}/run": {
         "post": {
-          "description": "The owner's manual RUN \u2014 fire the current phase's own background run (owner, 2026-07-31).\n\nONE route replacing `/plan` and `/vet`, which were two doors onto the same dispatcher with\nhand-written per-phase guards that drifted from it (`/plan` refused anything outside `plan`,\n`/vet` outside `vet`, and neither could reach triage/build/investigate at all). This is the\nmanual driver for a repo that is not on autopilot; on autopilot every phase fires itself.\n\n409 when the item is terminal, stopped (that is Resume's), parked at a gate (that is Approve's),\nat a phase with no run of its own, or already running \u2014 the same rule the drilldown's `run`\nbutton reads, so a live-looking button can never 409.",
+          "description": "The owner's manual RUN \u2014 fire the current phase's own background run.\n\nThe manual driver for a repo not on autopilot; on autopilot every phase fires itself. Refusals\nfollow the same rule the drilldown's button reads.",
           "operationId": "dev_work_item_run_dev_work_items__item_id__run_post",
           "parameters": [
             {
@@ -14290,7 +14521,7 @@
       },
       "/dev/work-items/{item_id}/runs/{run_id}/input.html": {
         "get": {
-          "description": "Prompt inspector (A): the ACTUAL input a past run sent \u2014 the exact system prompt + prompt\nbody captured at send time \u2014 as a standalone HTML page. A friendly page renders when a run has\nno capture (a pre-feature run, or a chat/deputy turn).",
+          "description": "The ACTUAL input a past run sent \u2014 the exact system prompt and body captured at send time \u2014 as a\nstandalone HTML page. A friendly page renders when a run has no capture.",
           "operationId": "dev_work_item_run_input_dev_work_items__item_id__runs__run_id__input_html_get",
           "parameters": [
             {
@@ -14349,7 +14580,7 @@
       },
       "/dev/work-items/{item_id}/scaffold": {
         "post": {
-          "description": "Set a root work-item's anchor pointer \u2014 `wave` (resolves its deliverable) or `deliverable`\ndirectly. Pass one; the other clears to null. 404 if the item is missing.",
+          "description": "Set a root work-item's anchor pointer \u2014 `wave` or `deliverable`. Pass one; the other clears to\nnull.",
           "operationId": "dev_work_item_scaffold_dev_work_items__item_id__scaffold_post",
           "parameters": [
             {
@@ -14399,7 +14630,7 @@
       },
       "/dev/work-items/{item_id}/seen": {
         "post": {
-          "description": "Stamp the item as SEEN (the owner opened its drilldown) \u2014 clears it from the attention\nengine's `unread` bucket (S7). A read receipt: idempotent, never bumps updated_at.",
+          "description": "Stamp the item as SEEN, clearing it from the attention engine's `unread` bucket. A read receipt:\nidempotent, never bumps `updated_at`.",
           "operationId": "dev_work_item_seen_dev_work_items__item_id__seen_post",
           "parameters": [
             {
@@ -14449,7 +14680,7 @@
       },
       "/dev/work-items/{item_id}/timeline": {
         "get": {
-          "description": "F2 unified timeline: every run of this item, oldest-first, phase/role-tagged with its ordered\nturn events (prompt \u00b7 reply \u00b7 calls) \u2014 the read-only history the chat panel loads before\nlive-streaming new frames from the item's event broker. All phases in one chronological view.",
+          "description": "Every run of this item, oldest-first and phase-tagged with its ordered turn events \u2014 the\nread-only history the chat panel loads before live-streaming new frames.",
           "operationId": "dev_work_item_timeline_dev_work_items__item_id__timeline_get",
           "parameters": [
             {
@@ -14499,7 +14730,7 @@
       },
       "/dev/workgraph": {
         "get": {
-          "description": "The DERIVED WorkGraph projection (D3): repo root \u00b7 roadmap deliverables \u00b7 work-items \u00b7\nspawned-but-unpushed inbox rows, with contains / spawned_from(relation) / supersedes edges.\nAssembled on demand from the authoritative feeds \u2014 nothing stored, nothing to sync. Cycles\n(a hand-edited provenance loop) are REPORTED as data, never a 500. Git state joins as node\ndecoration in S4; the graph VIEW consumes this in S7.",
+          "description": "The DERIVED work-graph projection: repo root, deliverables, work-items and unpushed inbox rows,\nwith their edges.\n\nAssembled on demand from the authoritative feeds \u2014 nothing stored. A cycle is REPORTED as data,\nnever a 500.",
           "operationId": "dev_workgraph_dev_workgraph_get",
           "parameters": [
             {
@@ -14536,65 +14767,6 @@
             }
           },
           "summary": "Dev Workgraph"
-        }
-      },
-      "/docs": {
-        "get": {
-          "description": "List the docs (slug + title), overview first, then alphabetical by title.",
-          "operationId": "docs_list_docs_get",
-          "responses": {
-            "200": {
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "$ref": "#/components/schemas/DocsListResponse"
-                  }
-                }
-              },
-              "description": "Successful Response"
-            }
-          },
-          "summary": "Docs List"
-        }
-      },
-      "/docs/{slug}": {
-        "get": {
-          "description": "Return one doc's markdown. `overview` maps to README.md. Path-traversal-safe.",
-          "operationId": "docs_read_docs__slug__get",
-          "parameters": [
-            {
-              "in": "path",
-              "name": "slug",
-              "required": true,
-              "schema": {
-                "title": "Slug",
-                "type": "string"
-              }
-            }
-          ],
-          "responses": {
-            "200": {
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "$ref": "#/components/schemas/DocResponse"
-                  }
-                }
-              },
-              "description": "Successful Response"
-            },
-            "422": {
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "$ref": "#/components/schemas/HTTPValidationError"
-                  }
-                }
-              },
-              "description": "Validation Error"
-            }
-          },
-          "summary": "Docs Read"
         }
       },
       "/fs/browse": {
@@ -14825,7 +14997,7 @@
       },
       "/repos": {
         "get": {
-          "description": "Every repo \u00d7 scope: static meta + computed live status (active/idle, last activity,\ncurrent item) + session/run counts + the per-scope knowledge & operational home pointers.",
+          "description": "Every repo and scope: static meta, computed live status, session and run counts, and the per-scope\nknowledge and operational home pointers.",
           "operationId": "repos_overview_repos_get",
           "responses": {
             "200": {
@@ -14846,7 +15018,7 @@
           "summary": "Repos Overview"
         },
         "post": {
-          "description": "Connect a domain: register a new repo into the spine and seed its knowledge home. `kind`\n(new|existing) is stored on the repo and selects its onboarding front door (project-init |\nretrofit). New dirs are created (must be empty); existing dirs must already be a directory.",
+          "description": "Connect a domain: register a new repo into the spine and seed its knowledge home.\n\n`kind` selects its onboarding front door. New dirs are created and must be empty; existing dirs\nmust already be a directory.",
           "operationId": "connect_repo_repos_post",
           "requestBody": {
             "content": {
@@ -14885,7 +15057,7 @@
       },
       "/repos/{repo_id}": {
         "delete": {
-          "description": "Disconnect a domain \u2014 forget the project from SuperMe entirely. IRREVERSIBLE: deletes the\nregistration (repos.yaml entry + kv overrides), the knowledge home, the per-repo harness cell,\nthe pipeline state (inbox + learning rows) and every session (row + transcript). The project\nFOLDER itself is never touched; reconnecting later is simply a fresh connect (retrofit).\nPreserved per never-delete-logs: run/run_event/run_artifact + dev-activity events \u2014 each\ndeleted session's runs are stamped session_fate='disconnected'. Guards: `?confirm=<repo id>`\nmust match (the UI's typed confirmation), the hub is refused, and live runs block with 409.",
+          "description": "Disconnect a domain \u2014 forget the project from SuperMe entirely. IRREVERSIBLE.\n\nDeletes the registration, knowledge home, harness cell, pipeline state and every session. The\nproject FOLDER is never touched. Run rows and dev events are preserved and stamped\n`session_fate='disconnected'`.",
           "operationId": "disconnect_repo_repos__repo_id__delete",
           "parameters": [
             {
@@ -14935,7 +15107,7 @@
       },
       "/repos/{repo_id}/autopilot": {
         "post": {
-          "description": "Set this repo's autopilot concurrency cap \u2014 the max autopilot items in the build\u27f7vet loop at\nonce (the slice-3 launch breaker). Per-project by owner decision; floored at 1.",
+          "description": "Set this repo's autopilot concurrency cap \u2014 the most autopilot items in the build\u27f7vet loop at\nonce. Floored at 1.",
           "operationId": "set_repo_autopilot_repos__repo_id__autopilot_post",
           "parameters": [
             {
@@ -14985,7 +15157,7 @@
       },
       "/repos/{repo_id}/branches": {
         "get": {
-          "description": "This repo's local branches \u2014 the anchor picker's option set. Read live off git rather than\nstored: a branch can appear or vanish between two page loads, and the anchor REFUSES on a branch\nthat doesn't exist, so a stale list would offer a setting that fails at the next merge.\n\nA non-git repo answers with an empty list and no error \u2014 nothing to pick from is a fact about\nthe repo, not a failure of the request.",
+          "description": "This repo's local branches \u2014 the anchor picker's option set.\n\nRead live off git: the anchor REFUSES on a branch that does not exist, so a stale list would offer\na setting that fails at the next merge.",
           "operationId": "get_repo_branches_repos__repo_id__branches_get",
           "parameters": [
             {
@@ -15075,7 +15247,7 @@
       },
       "/repos/{repo_id}/git": {
         "post": {
-          "description": "Set this repo's review mode (`fast` | `strict`) and/or anchor branch \u2014 the two knobs that\ngovern how work lands (workflow-renovation-v2 \u00a72.2). Both are read LIVE at every decision point,\nso a change applies immediately, including to items already sitting at review. An anchor naming\na branch that doesn't exist is accepted and reported back as an `error`: the setting is the\nowner's declaration, and every git site refuses rather than silently retargeting the default.",
+          "description": "Set this repo's review mode and/or anchor branch.\n\nBoth are read LIVE at every decision point. An anchor naming a branch that does not exist is\naccepted and reported back as an `error`.",
           "operationId": "set_repo_git_repos__repo_id__git_post",
           "parameters": [
             {
@@ -15125,7 +15297,7 @@
       },
       "/repos/{repo_id}/learning": {
         "post": {
-          "description": "Opt one repo in/out of automatic capture. The global master switch still gates everything;\nthis lets a single repo sit out even when the master is on.",
+          "description": "Opt one repo in or out of automatic capture. The global master switch still gates everything.",
           "operationId": "set_repo_learning_repos__repo_id__learning_post",
           "parameters": [
             {
@@ -15275,7 +15447,7 @@
       },
       "/runs": {
         "get": {
-          "description": "The run log: live (in-flight) + recent history. Scope to one repo with ?context_id=,\nor omit for the system-wide log. `running` is the live count for a quick gauge.",
+          "description": "The run log: live plus recent history. Scope to one repo with `context_id`, or omit for the\nsystem-wide log.",
           "operationId": "runs_overview_runs_get",
           "parameters": [
             {
@@ -15332,7 +15504,7 @@
       },
       "/runs/{run_id}/trace": {
         "get": {
-          "description": "One run's event trail \u2014 the prompt that opened it, the assistant's reply text, and each\ntool/skill/agent call, in order. Per-RUN (not per-session), so each Activity row has its own\nthread; works for background runs too. Empty list when nothing was recorded.",
+          "description": "One run's event trail \u2014 the opening prompt, the assistant's reply, and each call, in order.\n\nPer-RUN rather than per-session, so each Activity row has its own thread.",
           "operationId": "run_trace_runs__run_id__trace_get",
           "parameters": [
             {
@@ -15372,7 +15544,7 @@
       },
       "/sessions": {
         "get": {
-          "description": "SuperMe's own past sessions for a context, newest first. `mode` (core|dev) scopes. A session\nstamped to a work-item carries its `item_id` + resolved `item_title`, so the chat rail can show\n(and clear) the work-item indicator straight from the session, not client-held binding state.",
+          "description": "SuperMe's own past CHANNELS for a context, newest first.\n\nONE ROW PER WORK-ITEM, not per session: the owner addresses the ITEM, and the phase decides which\nagent answers. A channel's `id` is an ADDRESS.",
           "operationId": "sessions_list_sessions_get",
           "parameters": [
             {
@@ -15433,7 +15605,7 @@
       },
       "/sessions/{session_id}": {
         "delete": {
-          "description": "Delete a session (session-deletion-trace-model). One tier only: a hard delete of the\nsession's resumable material \u2014 its spine row AND its transcript JSONL on disk \u2014 so it leaves the\npicker and can't be reworked. Its runs + token trace are PRESERVED (never deleted) and stamped\n`session_fate='deleted'` so the activity log shows the origin session is gone. Irreversible.",
+          "description": "Delete a CHANNEL \u2014 the row as the owner sees it, so a work-item drops all its phase threads.\n\nOne tier only: a hard delete of the resumable material. Runs and token trace are PRESERVED.",
           "operationId": "session_delete_sessions__session_id__delete",
           "parameters": [
             {
@@ -15481,7 +15653,7 @@
           "summary": "Session Delete"
         },
         "get": {
-          "description": "One session's title + its most recent `limit` replayable bubbles (older ones skipped). The\nchat's \"See more\" grows `limit` in steps of 10 to reveal older messages; `limit<=0` = the whole\ntranscript. The agent always resumes with full server-side context regardless.",
+          "description": "One session's title and its most recent `limit` replayable bubbles.\n\n`limit<=0` is the whole transcript. The agent always resumes with full server-side context\nregardless.",
           "operationId": "session_read_sessions__session_id__get",
           "parameters": [
             {
@@ -15608,7 +15780,7 @@
       },
       "/system/agent-models": {
         "get": {
-          "description": "The tunable background agents (sweep/distill/write) with their preset, override, and effective\nmodel \u2014 the autonomous learning runners that pick up a model from config, not a per-turn choice.",
+          "description": "The tunable background agents with their preset, override and effective model \u2014 the autonomous\nrunners that take a model from config rather than a per-turn choice.",
           "operationId": "get_agent_models_system_agent_models_get",
           "responses": {
             "200": {
@@ -15627,7 +15799,7 @@
       },
       "/system/agent-models/{feature}": {
         "post": {
-          "description": "Set a background sub-agent's model TIER and/or reasoning effort \u2014 written into its own `.md`\nfrontmatter (the source of truth). Send either field; both are applied when present.",
+          "description": "Set a background sub-agent's model tier and/or reasoning effort, written into its own `.md`\nfrontmatter. Send either field; both apply when present.",
           "operationId": "set_agent_model_system_agent_models__feature__post",
           "parameters": [
             {
@@ -15677,7 +15849,7 @@
       },
       "/system/attention": {
         "get": {
-          "description": "The top-of-SuperMe attention feed (Pass 2 \u00b7 Q2): every `awaiting_human` hold across ALL\nconnected repos, grouped by repo and classified (escalation \u00b7 paged \u00b7 review \u00b7 gate)\nso the notification center can badge a count and offer the right quick actions. Only repos with\na hold appear; empty feed = nothing needs the owner.",
+          "description": "The top-of-SuperMe attention feed: every `awaiting_human` hold across all connected repos, grouped\nby repo and classified.\n\nOnly repos with a hold appear; an empty feed means nothing needs the owner.",
           "operationId": "system_attention_system_attention_get",
           "responses": {
             "200": {
@@ -15700,7 +15872,7 @@
       },
       "/system/compaction": {
         "get": {
-          "description": "The compaction runtime knobs (S8/D11): trigger fill %, per-kind overrides, and the\neffectiveness threshold, plus the static incompressible floor the trigger may never sit\nat/below (what makes the knob safe to expose).",
+          "description": "The compaction runtime knobs, plus the static incompressible floor the trigger may never sit at\nor below \u2014 what makes the knob safe to expose.",
           "operationId": "get_system_compaction_system_compaction_get",
           "responses": {
             "200": {
@@ -15717,7 +15889,7 @@
           "summary": "Get System Compaction"
         },
         "post": {
-          "description": "Tune the compaction runtime. Any omitted field is left unchanged. FLOOR-AWARE: a trigger\nthe incompressible floor alone would exceed is refused (409) \u2014 never stored, never fired.",
+          "description": "Tune the compaction runtime. Any omitted field is left unchanged.\n\nFLOOR-AWARE: a trigger the incompressible floor alone would exceed is refused, never stored.",
           "operationId": "set_system_compaction_system_compaction_post",
           "requestBody": {
             "content": {
@@ -15756,7 +15928,7 @@
       },
       "/system/deputy": {
         "post": {
-          "description": "The global deputy dial (Quick config): whether a deputy judges autopilot gates and how\nreadily it escalates PER GATE (triage/plan/review, each low\u00b7medium\u00b7high\u00b7extra). Partial \u2014\nomitted fields stay put; strictness sets only the gates it names. Rejects an unknown gate or\nlevel (422) rather than silently defaulting.",
+          "description": "The global deputy dial: whether a deputy judges autopilot gates, and how readily it escalates PER\nGATE.\n\nPartial \u2014 omitted fields stay put. Rejects an unknown gate or level rather than silently\ndefaulting.",
           "operationId": "set_system_deputy_system_deputy_post",
           "requestBody": {
             "content": {
@@ -15814,7 +15986,7 @@
       },
       "/system/learning": {
         "post": {
-          "description": "Flip the learning master switch (idle / phase / completion sweeps). Off by default \u2014 background\nlearning spends tokens unattended. Capture is fully automatic, so this governs all of it.",
+          "description": "Flip the learning master switch. Off by default, because background learning spends tokens\nunattended.",
           "operationId": "set_system_learning_system_learning_post",
           "requestBody": {
             "content": {
@@ -15853,7 +16025,7 @@
       },
       "/system/sweep": {
         "post": {
-          "description": "Tune the capture-sweep triggers: idle threshold, heartbeat cadence, and the min-new-user-message\ngate. Any omitted field is left unchanged. Takes effect without a daemon restart (the heartbeat\nreads the cadence each iteration).",
+          "description": "Tune the capture-sweep triggers. Any omitted field is left unchanged, and a change takes effect\nwithout a restart.",
           "operationId": "set_system_sweep_system_sweep_post",
           "requestBody": {
             "content": {
@@ -15892,7 +16064,7 @@
       },
       "/tokens": {
         "get": {
-          "description": "System-wide token usage: global total + two reconciling breakdowns (semantic `by_category`\ntree + systematic `by_type`) + per-scope/per-feature splits, and the same per repo. Feeds the\nobservability strip + the orbit's per-repo signal. All SuperMe-context spend.",
+          "description": "System-wide token usage: the global total, two reconciling breakdowns, and per-scope and\nper-feature splits, the same per repo.",
           "operationId": "token_usage_tokens_get",
           "responses": {
             "200": {
@@ -15911,7 +16083,7 @@
       },
       "/tokens/timeseries": {
         "get": {
-          "description": "Per-day token usage for the trend graph. `tz_offset` is minutes to ADD to UTC to reach the\ncaller's local time (the FE sends `-getTimezoneOffset()`), so days bucket on the owner's day.",
+          "description": "Per-day token usage for the trend graph. `tz_offset` is minutes to ADD to UTC to reach the\ncaller's local time, so days bucket on the owner's day.",
           "operationId": "token_timeseries_tokens_timeseries_get",
           "parameters": [
             {
