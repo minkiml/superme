@@ -22,7 +22,7 @@ class TextDelta:
 class Status:
     tool_name: str
     tool_input: dict
-    tool_id: str | None = None   # pairs this call with its result
+    tool_id: str | None = None
     # A fan-out interleaves its children into one stream; without this the trail is
     # unattributable.
     parent_tool_id: str | None = None
@@ -35,8 +35,8 @@ class ToolResult:
     tool_name: str
     content: str
     is_error: bool = False
-    tool_id: str | None = None  # the call this result answers
-    parent_tool_id: str | None = None  # the sub-agent spawn it came back inside
+    tool_id: str | None = None
+    parent_tool_id: str | None = None
 
 
 @dataclass
@@ -47,8 +47,8 @@ class Usage:
     total_tokens: int = 0
     input_tokens: int = 0
     output_tokens: int = 0
-    ctx_pct: int | None = None  # context-window fill so far (approx)
-    usage: dict | None = None  # raw per-step SDK usage (all four token types)
+    ctx_pct: int | None = None
+    usage: dict | None = None
     # The API call this step belongs to. Steps share it, so a live counter must dedupe by it.
     message_id: str | None = None
 
@@ -60,8 +60,8 @@ class Result:
     ctx_pct: int | None = None
     context_window: int | None = None
     session_id: str | None = None
-    tokens: int | None = None  # final total for this run
-    usage: dict | None = None  # whole-turn SDK usage (finish-time fallback)
+    tokens: int | None = None
+    usage: dict | None = None
 
 
 TurnEvent = Init | TextDelta | Status | ToolResult | Usage | Result

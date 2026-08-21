@@ -860,8 +860,8 @@ def deputy_brief_block(item_id: str, title: str, gate: str, *,
 # intake NARRATES: at review it answers from the record. The watermark counts promoted ledger
 # entries — a stable cursor.
 
-_HANDOFF_TOTAL_CAP = 12_000   # the whole block (O10: bounded handoffs, always)
-_HANDOFF_REPORT_CAP = 8_000   # the LATEST new cycle's report, verbatim; older cycles = one line
+_HANDOFF_TOTAL_CAP = 12_000
+_HANDOFF_REPORT_CAP = 8_000
 
 def _cycle_verdict_summary(item_dir: Path, cycle: int) -> str:
     """One line summarizing a cycle's recorded check verdicts, from the same
@@ -932,7 +932,7 @@ def _format_trace(run: dict, events: list[dict]) -> str:
         if kind not in _TRACE_KINDS:
             continue
         name = (ev.get("name") or "").strip()
-        desc = " ".join((ev.get("description") or "").split())  # collapse whitespace/newlines
+        desc = " ".join((ev.get("description") or "").split())
         if len(desc) > 600:
             desc = desc[:600] + " …"
         if kind == "prompt":

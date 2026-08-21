@@ -117,9 +117,9 @@ def _read_roots(ctx: Context) -> list[Path]:
     harness. The hub's cwd contains all four."""
     roots = [ctx.cwd, HARNESS_DIR]
     if ctx.internal_root:
-        roots.append(ctx.internal_root)          # this host's <id>-knowledge tree
+        roots.append(ctx.internal_root)
     if ctx.id:
-        roots.append(LOCAL_HARNESS_DIR / ctx.id)  # this host's local harness (both modes)
+        roots.append(LOCAL_HARNESS_DIR / ctx.id)
     return roots
 
 
@@ -316,54 +316,37 @@ class AgentService:
         sandbox_writes: list[Path] | None = None,
         item_bound: bool = False,
     ) -> ClaudeAgentOptions:
-        # Assembled through the SAME helper the input-preview endpoint calls, so a preview is
-        # byte-for-byte what this turn sends.
         op_home, const_universal, const_repo, activated_assets = self._resolve_scope(ctx)
         append = self._assemble_append(
             ctx, op_home=op_home, const_universal=const_universal, const_repo=const_repo,
             activated_assets=activated_assets, system_append=system_append, item_bound=item_bound)
-        # User-facing turns may not invoke `access: silent` skills; the owning sub-run still can.
         turn_plugins = [Path(p) for p in plugins_for(ctx.mode, op_home)]
-        # name → the deny message for THAT block, the agent's only feedback.
+        # skill name → the deny message for that block, which is the agent's only feedback.
         blocked: dict[str, str] = {}
         if enforce_silent:
             blocked.update({n: self._SILENT_SKILL_DENY for n in silent_skill_names(turn_plugins)})
-        # The caller decides the block; Core resolves it — only Core knows where the skills live.
         for cat in (block_categories or ()):
             msg = self._CATEGORY_DENY.get(cat, self._CATEGORY_DENY_DEFAULT.format(category=cat))
             blocked.update({n: msg for n in skills_in_category(turn_plugins, cat)})
         return ClaudeAgentOptions(
-            cwd=str(ctx.cwd),                       # the Context (cwd / workspace)
-            # Without this the SDK pipes no stderr, so a launch failure points at output nobody
-            # captured.
+            cwd=str(ctx.cwd),
+            # Without this the SDK pipes no stderr, so a launch failure points at output nobody kept.
             stderr=_cli_stderr,
-            resume=resume,                          # continuous session (surface-owned)
-            # The ONE execution choke, so a tier alias never silently runs a lagging version.
-            model=normalize_model(model),           # surface-resolved override (None = default)
-            effort=effort,                          # surface-resolved reasoning effort (None = SDK default)
+            resume=resume,
+            model=normalize_model(model),
+            effort=effort,
             system_prompt={"type": "preset", "preset": "claude_code", "append": append},
-            # Layers the owner's own ~/.claude and project settings under SuperMe's carried harness.
             setting_sources=ctx.setting_sources,
-            # Per-mode plugins: shared + (core|dev). The other mode's skills are simply absent —
-            # folder-as-scope.
             plugins=[{"type": "local", "path": p} for p in plugins_for(ctx.mode, op_home)],
-            # SuperMe's own skills are mode-scoped by the plugins above; "all" keeps the owner's
-            # native commands available alongside them.
+            # The plugins above already mode-scope SuperMe's skills; "all" keeps the owner's own.
             skills="all",
-
-            # `superme` is pull_constitution, bound to THIS host's homes so it serves only in-scope
-            # items.
             mcp_servers={
                 "superme": make_base_mcp_server(ctx.mode, const_universal, const_repo,
                                                 activated=activated_assets),
                 **(extra_mcp_servers or {}),
             },
             permission_mode="default",
-            # Surface-supplied SDK hooks — the PreCompact checkpoint on work-item sessions. None
-            # on every other turn.
             hooks=hooks,
-            # Keeps reads inside the host's scope. Background runs opt out: the guard would deny
-            # their own scratch.
             can_use_tool=build_can_use_tool(
                 approve, blocked_skills=blocked,
                 # `cwd` does two INDEPENDENT jobs: resolving relative reads, and pinning the shell
@@ -373,15 +356,13 @@ class AgentService:
                 gate_general_mutations=gate_general_mutations,
                 general_write_root=general_write_root,
                 write_boundary=write_boundary,
-                shell_roots=shell_roots,   # nameable by the shell, never by the write tools
-                deny_write_tools=deny_write_tools,   # vet read-only (build-vet-loop §4/§8·O4)
-                protected_paths=protected_paths,      # review read-only on plan.md (§2.1)
+                shell_roots=shell_roots,
+                deny_write_tools=deny_write_tools,
+                protected_paths=protected_paths,
                 protected_nudge=protected_nudge,
             ),
-            # SuperMe owns its memory subsystem. The CLI's native auto-memory is on by default and
-            # not gated by setting_sources.
+            # The CLI's native auto-memory is on by default and is not gated by setting_sources.
             env={"CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1"},
-            # Empty on an unsandboxed run. `core.sandbox` owns the policy.
             **sandbox_options(sandbox_writes),
         )
 
@@ -467,7 +448,7 @@ class AgentService:
                     # A live token snapshot, so a surface can show a running counter mid-turn.
                     step_usage = getattr(message, "usage", None)
                     if step_usage:
-                        last_step_usage = dict(step_usage)  # fullest single prompt so far
+                        last_step_usage = dict(step_usage)
                         cu = _context_usage(step_usage, None, resolved_model,
                                             window_hint=self._window_by_model.get(resolved_model))
                         yield Usage(
@@ -485,7 +466,7 @@ class AgentService:
                     content = getattr(message, "content", None)
                     if isinstance(content, list):
                         for block in content:
-                            if not hasattr(block, "content"):  # not a tool_result block
+                            if not hasattr(block, "content"):
                                 continue
                             tuid = getattr(block, "tool_use_id", None)
                             name = tool_names.get(tuid or "", "tool")

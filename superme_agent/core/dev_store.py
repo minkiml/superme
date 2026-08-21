@@ -18,8 +18,8 @@ _KINDS = {"item", "note"}
 _STATUSES = {"open", "pushed"}
 # A LIST: a row accrues origins over its life. Stored as JSON; legacy scalars are coerced on read.
 _ORIGINS = {"user", "agent"}
-# Branch-off relation vocabulary (workspace-workflow D3): blocking/parallel = children (auto-push,
-# gate the parent's completion) · spawn = provenance-only follow-up (owner-pushed).
+# Branch-off relations: `blocking`/`parallel` are children that gate the parent; `spawn` is
+# provenance-only follow-up.
 _SPAWN_RELATIONS = {"blocking", "parallel", "spawn"}
 
 # vet and deputy each resolve on their own chain, never the item's, so each needs its own pair.
@@ -69,7 +69,7 @@ def _norm_origins(value, *, default: str = "user") -> list[str]:
     return out or [default]
 # The capture end of capture→distill→ratify→write→publish. A candidate is a behaviour-shaping
 # observation the owner reviews later; nothing is applied here.
-_MEM_SOURCES = {"agent", "user"}          # who captured (user-injected still gets reviewed)
+_MEM_SOURCES = {"agent", "user"}
 # The operational form the agent GUESSES a candidate should become (advisory; distill decides).
 _MEM_FORM_HINTS = {"constitution", "skill", "agent"}
 _MEM_CAND_STATUSES = {"candidate", "processed", "promoted", "rejected", "dropped"}
@@ -184,7 +184,7 @@ class DevStore:
             c.execute("CREATE INDEX IF NOT EXISTS idx_memcand_ctx "
                       "ON memory_candidate(context_id, status, captured_at)")
             cand_cols = {r[1] for r in c.execute("PRAGMA table_info(memory_candidate)").fetchall()}
-            for col in ("form_hint", "rationale"):  # WI-8 richer candidate (idempotent on old DBs)
+            for col in ("form_hint", "rationale"):  # richer candidate columns; idempotent on old DBs
                 if col not in cand_cols:
                     c.execute(f"ALTER TABLE memory_candidate ADD COLUMN {col} TEXT")
             # `form_hint` supersedes the legacy `kind_hint`. Preserve it into form_hint FIRST,
@@ -221,7 +221,7 @@ class DevStore:
             c.execute("CREATE INDEX IF NOT EXISTS idx_memprop_ctx "
                       "ON memory_proposal(context_id, status, created_at)")
             prop_cols = {r[1] for r in c.execute("PRAGMA table_info(memory_proposal)").fetchall()}
-            # WI-8 two-gate lifecycle columns (idempotent on pre-WI-8 DBs).
+            # Two-gate lifecycle columns; idempotent on older DBs.
             for col in ("summary", "fields", "clarifications", "clarification_answers",
                         "staged_artifact", "staged_path", "eval_report"):
                 if col not in prop_cols:
@@ -359,7 +359,7 @@ class DevStore:
             out = []
             for r in rows:
                 d = dict(r)
-                d["origin"] = _norm_origins(d.get("origin"))  # always a list to callers
+                d["origin"] = _norm_origins(d.get("origin"))
                 d["spawned_from"] = _parse_spawned_from(d.get("spawned_from"))
                 d["autopilot"] = bool(d.get("autopilot"))
                 out.append(d)
@@ -414,7 +414,7 @@ class DevStore:
         if r is None:
             return None
         d = dict(r)
-        d["origin"] = _norm_origins(d.get("origin"))  # always a list to callers
+        d["origin"] = _norm_origins(d.get("origin"))
         d["spawned_from"] = _parse_spawned_from(d.get("spawned_from"))
         d["autopilot"] = bool(d.get("autopilot"))     # SQLite 0/1 → bool at the store boundary
         return d
@@ -426,7 +426,7 @@ class DevStore:
             return self._get(c, item_id)
 
 
-    # --- event log (PRD §4.9) ---------------------------------------------------
+    # --- event log ---
 
     def log_event(self, context_id: str, kind: str, summary: str, *,
                   item_id: str | None = None, scope: str | None = None,
@@ -509,7 +509,7 @@ class DevStore:
     def _get_event(self, c: sqlite3.Connection, event_id: int) -> dict:
         return self._row_event(c.execute("SELECT * FROM events WHERE id=?", (event_id,)).fetchone())
 
-    # --- tier-C memory candidate pool (PRD §4.10) -------------------------------
+    # --- learning candidate pool ---
 
     def add_memory_candidate(self, context_id: str, signal: str, *,
                              source: str = "agent", form_hint: str | None = None,
@@ -588,7 +588,7 @@ class DevStore:
         return self._row_candidate(
             c.execute("SELECT * FROM memory_candidate WHERE id=?", (cand_id,)).fetchone())
 
-    # --- tier-C memory proposals (PRD §4.10.2) ----------------------------------
+    # --- learning proposals ---
 
     def add_memory_proposal(self, context_id: str, title: str, body: str, *,
                             candidate_ids: list[int], output_form: str = "constitution",

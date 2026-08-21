@@ -134,7 +134,8 @@ def entry_issues(block: str) -> list[str]:
     return issues
 
 
-# Line-level surgery, not a re-render: the doc is the owner's to write in.
+# Line-level surgery, not a re-render — a read-modify-render round trip would delete hand-written
+# prose.
 
 def _blocks(body_lines: list[str]) -> list[tuple[str, list[str]]]:
     """A section's lines → [(entry-id or "", its lines)] — leading prose comes back under `""`."""
@@ -200,8 +201,8 @@ def _rewrite(dev_root: Path, entry_id: str, tier: str | None) -> bool:
 
 
 def move_entry(dev_root: Path, entry_id: str, tier: str) -> bool:
-    """Promote to standing or demote to available. The owner's call — nothing in the loop may tax
-    every future item."""
+    """Promote to standing or demote to available. The only path to standing, since nothing in the
+    loop may tax every future item."""
     if tier not in TIERS:
         raise ValueError(f"tier must be one of {'/'.join(TIERS)} (got {tier!r})")
     return _rewrite(dev_root, entry_id, tier)

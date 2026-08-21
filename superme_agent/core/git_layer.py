@@ -206,7 +206,7 @@ def _dirty_files(cwd: Path) -> list[str]:
 
 
 def check_git_state(cwd: Path) -> dict:
-    """Pre-flight state probe (D4 merge mechanics): refuse to operate mid-merge/mid-rebase.
+    """Pre-flight state probe: refuse to operate mid-merge or mid-rebase.
     Returns {ok, branch, head, dirty, in_merge, in_rebase, reason}."""
     if not is_git_repo(cwd):
         return {"ok": False, "reason": f"not a git repository: {cwd}", "dirty": [],
@@ -440,7 +440,7 @@ def stop_vet_env(wt: Path) -> list[int]:
             try:
                 os.kill(pid, signal.SIGTERM)
             except OSError:
-                continue      # already gone
+                continue
         stopped.append(pid)
     if stopped:
         log.info("stopped vet-env server(s) %s in %s", stopped, wt)
@@ -532,8 +532,8 @@ def worktree_health(repo_dir: Path, repo_id: str, item_id: str, branch: str | No
                       f"{trunk}...{branch}", check=False)
         if counts.returncode == 0 and counts.stdout.strip():
             behind, ahead = counts.stdout.split()
-            health["ahead"] = int(ahead)    # branch commits not on trunk
-            health["behind"] = int(behind)  # trunk commits not on branch (freshness debt)
+            health["ahead"] = int(ahead)
+            health["behind"] = int(behind)
         # Read from GIT, never a doc. Three dots = merge base, the same range the merge will
         # squash.
         stat = _git(repo_dir, "diff", "--shortstat", f"{trunk}...{branch}", check=False)

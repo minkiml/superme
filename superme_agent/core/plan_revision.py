@@ -19,7 +19,7 @@ TASKS = "Tasks"
 VET_PLAN = "Verification plan"
 LIVE = (TASKS, VET_PLAN)  # pinned last, `Tasks` first — build reads it more
 APPEND_ONLY = ("Decisions & clarifications",)
-LEGACY_LOG = "Revisions"          # pre-§3-bis: one section holding `### r<n>` entries
+LEGACY_LOG = "Revisions"  # legacy: one section holding `### r<n>` entries
 
 SECTION_OPS = ("update", "append")
 TASK_OPS = ("add_task", "edit_task", "remove_task")
@@ -114,7 +114,7 @@ def derive_concerns(item_dir: Path) -> list[str]:
         status = str(a.get("status") or "")
         if status in ("granted", "denied"):
             found.append(f"authorization_{status}")
-    ordered = list(dict.fromkeys(found))          # de-duped, first-seen order
+    ordered = list(dict.fromkeys(found))
     return ordered or ["owner_judgment"]
 
 

@@ -9,18 +9,15 @@ from dataclasses import dataclass, field
 @dataclass(frozen=True)
 class KindProfile:
     kind: str
-    # Ordered; first is triage, last is close.
+    # Ordered: first is triage, last is close.
     phases: tuple[str, ...]
-    # Does this kind LAND code? Research: False.
+    # Does this kind LAND code?
     worktree: bool
-    # Writes anchor docs at merge. Research: never.
     knowledge_writes: bool
     # Detached read-only checkout: isolation without a landing.
     scratch_worktree: bool = False
-    # phase → artifacts it emits.
     emits: dict[str, tuple[str, ...]] = field(default_factory=dict)
     required_artifacts: tuple[str, ...] = ()
-    # Declarative slugs, not code.
     close_criteria: tuple[str, ...] = ()
 
 
@@ -80,7 +77,6 @@ def item_scale(item: dict | None) -> str:
     return scale if scale in ITEM_SCALES else DEFAULT_SCALE
 
 
-# Which family of investigation. No default: an unjudged item was never told what an answer is.
 @dataclass(frozen=True)
 class ResearchFamily:
     """One row of the registry. The slug drives guide, template, gate rows and launch bar."""
@@ -90,7 +86,6 @@ class ResearchFamily:
     # "Is this sound?" means nothing until you say sound in WHAT.
     asks_interest: bool
     icon: str
-    # Owner-facing, for the launch button.
     blurb: str
 
 
@@ -115,7 +110,6 @@ FAMILY_BY_SLUG: dict[str, ResearchFamily] = {f.slug: f for f in RESEARCH_FAMILIE
 # Two mirrors this table cannot drive, pinned in `test_research_kind`:
 # `dev_tools.TriageFacts.research_kind` (a Literal) and `skills/triage/SKILL.md`.
 
-# Derived, never hand-maintained.
 RESEARCH_KINDS: tuple[str, ...] = tuple(f.slug for f in RESEARCH_FAMILIES)
 
 

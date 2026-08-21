@@ -98,17 +98,16 @@ class RepoConfig:
     layer: str = "local"          # "global" | "local"
     persona_append: str = ""
     extra_mcp: list = field(default_factory=list)
-    # The connect-time onboarding front door, until memory is established. None = let the owner pick.
-    onboarding: str | None = None  # "project-init" | "retrofit"
+    onboarding: str | None = None  # "project-init" | "retrofit"; None = let the owner pick
     # `fast` = approving the item merges it; `strict` = the diff gets its own review gate first.
-    review_mode: str = REVIEW_MODE_DEFAULT  # not `mode` — `Context.mode` already means core|dev
+    review_mode: str = REVIEW_MODE_DEFAULT
     # The branch every git site targets: branch-from base, sync source, merge target.
-    anchor_branch: str | None = None  # None = derive the repo's own default branch
+    anchor_branch: str | None = None
     # Gitignored paths that are nonetheless SOURCE, copied read-only into a research scratch tree.
-    source_ignored: list = field(default_factory=list)  # repo-relative, no globs, never absolute
-    # How to boot a server running an ITEM WORKTREE's code, so another instance cannot answer a
-    # check.
-    vet_env: dict | None = None  # keys: `cmd` · `port_env` · `ready` · `url_env`; None = no vet env
+    source_ignored: list = field(default_factory=list)
+    # How to boot a server running an ITEM WORKTREE's code, so another instance cannot answer
+    # a check.
+    vet_env: dict | None = None   # keys: `cmd` · `port_env` · `ready` · `url_env`
 
     def __post_init__(self):
         if not self.label:
@@ -144,13 +143,12 @@ class RepoConfig:
 
     # --- home conventions (the relocation pass edits THESE, not the YAML) -----------
     def _knowledge_base(self) -> Path:
-        """This repo's knowledge sub-home in the central knowledge repo (renovation §4.11.2):
-        superme-knowledge/<id>-knowledge/ — for global AND local repos alike."""
+        """This repo's sub-home in the central knowledge repo: `superme-knowledge/<id>-knowledge/`,
+        for global and local repos alike."""
         return KNOWLEDGE_REPO_DIR / f"{self.id}-knowledge"
 
     def knowledge_home(self, scope: str) -> Path:
-        """The knowledge home for a scope (renovation §4.11.2):
-        core → <base>/core; dev → <base>/dev (the `internal/` nesting is dropped)."""
+        """The knowledge home for a scope: core → `<base>/core`, dev → `<base>/dev`."""
         return self._knowledge_base() / scope
 
     def operational_home(self, scope: str) -> Path:
@@ -285,7 +283,7 @@ class SystemSpine:
         c.execute(f"DROP TABLE {table}")
         c.execute(f"ALTER TABLE {table}_roles RENAME TO {table}")
 
-    # --- token-usage accounting helpers (token-usage-tracking-spec) --------------
+    # --- token-usage accounting helpers ---
     @staticmethod
     def _usage_parts(usage: dict | None) -> tuple[int, int, int, int]:
         """Split a raw SDK usage dict into (input, cache_creation, cache_read, output) ints."""
@@ -600,7 +598,7 @@ class SystemSpine:
             raise ValueError(f"cannot update {sorted(unknown)} — editable fields: {sorted(allowed)}")
         if "review_mode" in fields and fields["review_mode"] not in REVIEW_MODES:
             raise ValueError(f"review_mode must be one of {list(REVIEW_MODES)}")
-        # Normalize: "" clears a field (the UI's empty input), and clearing means "drop the line".
+        # An empty string clears a field, and clearing means dropping its line.
         patch = {k: (v.strip() if isinstance(v, str) else v) or None for k, v in fields.items()}
         # A field set back to its DEFAULT is stored as absence, so setting and unsetting leaves
         # the file byte-identical.
@@ -612,7 +610,7 @@ class SystemSpine:
 
         path = Path(self._repos_config_path)
         text = path.read_text()
-        if text and not text.endswith("\n"):   # else an appended key would join the last line
+        if text and not text.endswith("\n"):   # else an appended key joins the last line
             text += "\n"
         lines = text.splitlines(keepends=True)
         out: list[str] = []
@@ -623,7 +621,6 @@ class SystemSpine:
             i += 1
             if not (ln.rstrip().startswith(f"  {repo_id}:") and not ln.startswith("   ")):
                 continue
-            # Inside the entry: rewrite matching keys, keep everything else verbatim.
             seen: set[str] = set()
             while i < n and lines[i].startswith("    "):
                 key = lines[i].split(":", 1)[0].strip()
@@ -631,11 +628,10 @@ class SystemSpine:
                     seen.add(key)
                     if patch[key] is not None:
                         out.append(_line(key, patch[key]))
-                    # else: drop the line — the field is cleared
                 else:
                     out.append(lines[i])
                 i += 1
-            for key, val in patch.items():          # keys the entry didn't carry yet
+            for key, val in patch.items():
                 if key not in seen and val is not None:
                     out.append(_line(key, val))
         path.write_text("".join(out))
@@ -660,9 +656,9 @@ class SystemSpine:
                 dropping = True
                 continue
             if dropping:
-                if ln.startswith("    "):  # the entry's nested fields (safe_dump indents them to 4)
+                if ln.startswith("    "):
                     continue
-                dropping = False  # anything shallower ends the block — keep it
+                dropping = False            # anything shallower ends the block
             out.append(ln)
         path.write_text("".join(out))
         with self._conn() as c:
@@ -1211,18 +1207,18 @@ class SystemSpine:
             tokens = row["tokens"] or fallback_tokens or 0
             sets = ["status=?", "ended_at=?", "tokens=?"]
             args: list = [run_status, _now(), int(tokens)]
-            if ctx_pct is not None:  # authoritative Result fill overrides the live-bump estimate
+            if ctx_pct is not None:  # the authoritative fill, overriding the live-bump estimate
                 sets.append("ctx_pct=?")
                 args.append(int(ctx_pct))
-            if outcome:  # a background run's structured completion outcome (S5; validated by caller)
+            if outcome:
                 sets.append("outcome=?")
                 args.append(str(outcome))
-            if session_id:  # attach origin session so session_fate labeling can reach this row
+            if session_id:  # so `session_fate` labeling can reach this row
                 sets.append("session_id=?")
                 args.append(str(session_id))
             args.append(row["id"])
             c.execute(f"UPDATE run SET {', '.join(sets)} WHERE id=?", args)
-            self._finish_usage_apply(c, row["id"], usage)  # authoritative per-type + reconciled tokens
+            self._finish_usage_apply(c, row["id"], usage)
             return row["id"]
 
     def session_ctx_pct(self, session_id: str | None) -> int | None:
@@ -1306,10 +1302,9 @@ class SystemSpine:
                 (_now(), repo_id, item_id))
             return cur.rowcount
 
-    # `log_artifact` is RETIRED: a poorer copy of what `log_run_event` records. Its rows STAY as
-    # frozen history.
+    # --- run events: the per-RUN trail of prompt · reply · tool/skill/agent calls -------------
 
-    # --- run events (the per-RUN observability trail: prompt · reply · tool/skill/agent calls) ---
+    # `run_artifact` has no writer any more; `run_event` supersedes it.
     def log_run_event(self, *, repo_id: str, kind: str, name: str, description: str | None = None,
                       run_id: int | None = None, item_id: str | None = None,
                       tool_id: str | None = None, parent_tool_id: str | None = None,
@@ -1454,7 +1449,7 @@ class SystemSpine:
                                               "last_duration_ms": None, "last_model": None,
                                               "last_ctx_pct": None, "last_ended_at": None,
                                               "by_phase": {}, "by_phase_cr": {}})
-            toks = self._display_tokens(r)  # 3-type (excl cache_read), matches the dashboard default
+            toks = self._display_tokens(r)
             s["total_tokens"] += toks
             s["runs"] += 1
             # Per-phase accumulation, BOTH bases: `by_phase` is 3-type, `by_phase_cr` is
@@ -1509,12 +1504,12 @@ class SystemSpine:
         total = 0
         by_scope: dict[str, int] = {}
         by_feature: dict[str, int] = {}
-        by_feature_cr: dict[str, int] = {}  # per-feature cache_read, so "By operation" can render 4-type
+        by_feature_cr: dict[str, int] = {}   # so "By operation" can render the 4th type
         by_type = _blank_type()
         by_category: dict[str, dict] = {}
         by_repo: dict[str, dict] = {}
         for r in rows:
-            amt = _add_type(by_type, r)  # the row-group's accounted (3-type) amount
+            amt = _add_type(by_type, r)
             total += amt
             # Retired feature names report under the live name that absorbed them; the DB row
             # keeps its own spelling.
@@ -1685,8 +1680,8 @@ class SystemSpine:
                 f"SELECT COUNT(*) FROM run WHERE repo_id=? AND mode=? AND item_id IS NULL "
                 f"AND status='running' AND feature IN ({qmarks})",
                 (repo_id, mode, *learn)).fetchone()[0]
-            # Onboarding (project-init/retrofit) is a workflow agent too (session-agent-lifecycle-prd):
-            # an unestablished repo's general dev turn runs as feature='onboarding'. Count it running.
+            # An unestablished repo's general dev turn runs as feature='onboarding', and that is
+            # a workflow agent like any other.
             onboarding_running = c.execute(
                 "SELECT COUNT(*) FROM run WHERE repo_id=? AND mode=? AND item_id IS NULL "
                 "AND status='running' AND feature='onboarding'",
@@ -1907,7 +1902,7 @@ class SystemSpine:
         """The effort a named ROLE runs at — mirrors role_model, project default excluded."""
         return item_effort or self.get_effort_override(repo_id, role) or self.effective_system_effort()
 
-    # --- build⟷vet loop (build-vet-loop §5) ---------------------------------------
+    # --- build⟷vet loop ---
 
     # Token budget is the PRIMARY breaker: measured spend, not a cycle count. An item's own
     # `loop_budget` wins over this default.
@@ -1961,10 +1956,7 @@ class SystemSpine:
             pass
         return self.get_loop_budget()
 
-    # `loop_autorun` is RETIRED: it rested items at `awaiting_human` INSIDE a human-free stretch.
-    # The token budget is the loop's ceiling.
-
-    # --- delegated deputy authority (BV-A2.2) ------------------------------------
+    # --- delegated deputy authority ---
 
     # The deputy may authorize changes that SYNC the contract to reality; the owner reserves
     # changes that DEFINE intent.
@@ -2027,7 +2019,7 @@ class SystemSpine:
         """Effective capture gate for a repo: the master switch AND this repo's participation."""
         return self.get_learning_enabled() and self.get_repo_learning(repo_id)
 
-    # --- autopilot concurrency (per-project launch breaker, slice 3) --------------
+    # --- autopilot concurrency: the per-project launch breaker ---
     AUTOPILOT_CONCURRENCY_DEFAULT = 4
 
     def get_autopilot_concurrency(self, repo_id: str) -> int:
@@ -2052,7 +2044,7 @@ class SystemSpine:
             )
         return n
 
-    # --- deputy (autopilot gate judge, slice 4) -----------------------------------
+    # --- deputy: the autopilot gate judge ---
 
     # GLOBAL, unlike the per-repo concurrency cap: a deputy behaves the same on every project.
     DEPUTY_STRICTNESS_LEVELS = ("low", "medium", "high", "extra")
@@ -2212,7 +2204,7 @@ class SystemSpine:
                 )
         return self.get_sweep_config()
 
-    # --- compaction runtime tuning (workspace-workflow S8/D11) --------------------
+    # --- compaction runtime tuning ---
 
     # `min_gain_pct` defaults to "auto": judged against RECLAIMABLE space, not a flat %, so
     # preload-heavy sessions are not false-failed.
@@ -2311,9 +2303,9 @@ class SystemSpine:
             "default_effort": self.effective_system_effort(),
             "policy_version": cfg.policy_version,
             "default_repo": cfg.default_repo,
-            "learning_enabled": self.get_learning_enabled(),  # auto-sweep master switch (WI-8)
-            "deputy_enabled": self.get_deputy_enabled(),       # autopilot gate judge (slice 4)
-            "deputy_strictness": self.deputy_strictness_map(),  # {gate: low·medium·high·extra}
+            "learning_enabled": self.get_learning_enabled(),
+            "deputy_enabled": self.get_deputy_enabled(),
+            "deputy_strictness": self.deputy_strictness_map(),
             # "Unset" and "unset, which means Sonnet" are different answers: the picker needs
             # the first, the caption the second.
             "deputy_model": self.get_deputy_model(),

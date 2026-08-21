@@ -7,17 +7,17 @@ from dataclasses import dataclass, field
 
 @dataclass
 class Context:
-    layer: str  # "global" (the root SuperMe) | "local" (a project sub-SuperMe)
+    layer: str
     id: str
     cwd: Path
     # ORTHOGONAL to layer, and not a knowledge sandbox: it picks the charter and the plugins.
-    mode: str = "core"  # "core" (the twin) | "dev" (builds SuperMe itself)
-    knowledge_root: Path | None = None  # dashboard-browsable knowledge
-    internal_root: Path | None = None   # dev-knowledge; never browsable in the dashboards
+    mode: str = "core"
+    knowledge_root: Path | None = None
+    # Dev-knowledge. Never browsable in the knowledge dashboards.
+    internal_root: Path | None = None
     persona_append: str = ""
     extra_mcp: list = field(default_factory=list)
     label: str = ""
-    # Which Claude Code setting layers load, so the owner keeps their native environment.
     setting_sources: list[str] = field(default_factory=lambda: ["user", "project", "local"])
 
     def __post_init__(self):

@@ -59,7 +59,7 @@ def _session_fields(meta: dict) -> tuple[dict, str | None]:
     try:
         slot = session_slot(phase)
     except KeyError:
-        slot = "triage"  # unknown/legacy phase label — never blow up a read
+        slot = "triage"
     legacy_intake = sessions.get(LEGACY_INTAKE_SLOT) if slot in INTAKE_PHASES else None
     legacy_id = meta.get("session_id")
     computed = (sessions.get(slot) or legacy_intake
@@ -144,10 +144,10 @@ def _parse_md(text: str) -> tuple[dict, str]:
 # One owner per fact: PRD what, architecture how, capabilities now, decisions why, roadmap next,
 # resources where.
 ANCHOR_DOCS = ("project-prd", "architecture", "capabilities",
-               "decisions", "roadmap", "verification")   # + resources/index.md
+               "decisions", "roadmap", "verification")
 # An anchor doc so the owner edits it where they read the others, but exempt from the lint.
 _LIBRARY_DOC = "verification"
-LEGACY_DOCS = ("spec",)                            # readable, lint-flagged, never re-created
+LEGACY_DOCS = ("spec",)
 _DELIVERABLE_RE = re.compile(r"^-\s+\*\*(?P<id>[^*]+?)\*\*\s*[—–-]\s*(?P<title>.+?)\s*$", re.M)
 _WAVE_RE = re.compile(r"\*\*(?P<id>[^*]+?)\*\*\s*[—–-]\s*(?P<title>.+?)\s*$")
 _HEADING_RE = re.compile(r"^#{2,6}\s+(?P<id>\S+)")
@@ -399,7 +399,7 @@ class DevKnowledgeService:
         `kind` is REQUIRED with no default — a default gave every ticket an implementation pipeline.
         `proposed_kind` is birth provenance, never routed on. Peers are validated to EXIST."""
         from .kind_profiles import DEFAULT_SCALE, KIND_PROFILES, RESEARCH_KINDS, get_profile
-        profile = get_profile(kind)  # loud KeyError on unknown kind, before any disk write
+        profile = get_profile(kind)
         # A button-launched sweep is born classified: the button IS the classification. Every
         # other mint point enters at phase 0.
         if proposed_kind is not None and proposed_kind not in KIND_PROFILES:
@@ -429,7 +429,7 @@ class DevKnowledgeService:
         # learn.
         title = normalize_title(title, description=description)
         wid = secrets.token_hex(6)                       # opaque 12-hex id == folder name (~2^48)
-        while (wi / wid).exists():                       # vanishingly rare live clash → re-roll
+        while (wi / wid).exists():
             wid = secrets.token_hex(6)
         folder = wi / wid
         # BOTH homes exist from birth: an item's own folders are the kernel's to make, not an
@@ -466,7 +466,7 @@ class DevKnowledgeService:
             extra += f"cohort: {json.dumps(str(cohort))}\n"
         status = "active"
         if after_ids:
-            extra += f"after: {json.dumps(after_ids)}\n"   # JSON is valid YAML flow sequence
+            extra += f"after: {json.dumps(after_ids)}\n"
             # Park immediately: an item must never spend even one scheduler tick `active` against
             # work that hasn't landed.
             unfinished = [a for a in after_ids
@@ -523,19 +523,19 @@ class DevKnowledgeService:
                           "kind": item_kind,
                           "after": [str(a) for a in (it.get("after") or []) if a]})
         keys = {s["key"] for s in specs}
-        for s in specs:                                   # validate every edge BEFORE any write
+        for s in specs:
             for a in s["after"]:
                 if a in keys or (Path(dev_root) / "work-items" / a / "item.md").exists():
                     continue
                 raise ValueError(f"item {s['key']!r} lists after={a!r}, which is neither another "
                                  f"item in this batch nor an existing work-item")
-        order = _toposort_keys(specs)                     # deps-first; raises on a cycle
+        order = _toposort_keys(specs)
         cohort_id = str(cohort) if cohort else secrets.token_hex(4)
         key_to_id: dict[str, str] = {}
         created: list[dict] = []
         for key in order:
             s = next(x for x in specs if x["key"] == key)
-            after_ids = [key_to_id.get(a, a) for a in s["after"]]   # batch key → id; existing id passes
+            after_ids = [key_to_id.get(a, a) for a in s["after"]]
             # The caller's kind is both what it runs as and what it proposed — these skip the
             # inbox, not triage.
             wi = self.create_work_item(dev_root, s["title"], s["description"],
@@ -565,14 +565,14 @@ class DevKnowledgeService:
         for k in ("root_id", "parent_id", "superseded_by"):
             if meta.get(k) is not None:
                 it[k] = str(meta[k])
-        if isinstance(meta.get("after"), (list, tuple)):   # same int-coercion trap, per element
+        if isinstance(meta.get("after"), (list, tuple)):
             it["after"] = [str(a) for a in meta["after"] if a]
-        it["autopilot"] = bool(meta.get("autopilot"))   # absent → False
-        it["prompt_extraction"] = bool(meta.get("prompt_extraction"))   # throwaway probe, absent → False
-        it["cohort"] = str(meta["cohort"]) if meta.get("cohort") else None  # launch cohort (4c)
+        it["autopilot"] = bool(meta.get("autopilot"))
+        it["prompt_extraction"] = bool(meta.get("prompt_extraction"))
+        it["cohort"] = str(meta["cohort"]) if meta.get("cohort") else None
         it["description"] = body.strip()
-        it["sessions"], it["session_id"] = _session_fields(meta)  # role slots + current-role sid
-        it["artifacts"] = _norm_artifacts(meta.get("artifacts"))  # legacy str → {type,path} (R5)
+        it["sessions"], it["session_id"] = _session_fields(meta)
+        it["artifacts"] = _norm_artifacts(meta.get("artifacts"))  # legacy str → {type,path}
         return it
 
     def _task_lines(self, dev_root: Path, item_id: str) -> list[str]:
@@ -671,7 +671,7 @@ class DevKnowledgeService:
         """Record a work-item's `kind` — triage's surface. Validated against
         KIND_PROFILES, loud on unknown."""
         from .kind_profiles import get_profile
-        get_profile(kind)  # loud on unknown kind, before any write
+        get_profile(kind)
         item = Path(dev_root) / "work-items" / item_id / "item.md"
         if not item.exists():
             return False
@@ -834,7 +834,7 @@ class DevKnowledgeService:
         text = item.read_text()
         meta, body = _parse_md(text)
         if meta.get("done_at") or str(meta.get("status")) == "done":
-            return False  # already terminal
+            return False
         m = _FRONTMATTER.match(text)
         if not m:
             return False
@@ -947,7 +947,7 @@ class DevKnowledgeService:
         meta, body = _parse_md(text)
         key = f"session_{slot}"
         if str(meta.get(key)) == str(session_id) and not meta.get("session_id"):
-            return False  # unchanged (and no legacy key left to clear) — skip the write
+            return False
         m = _FRONTMATTER.match(text)
         if not m:
             return False
@@ -958,9 +958,9 @@ class DevKnowledgeService:
             fm = re.sub(rf"(?m)^{key}:.*$", f"{key}: {sid}", fm)
         else:  # insert the slot next to its siblings — right before created_at (always present)
             fm = re.sub(r"(?m)^created_at:", f"{key}: {sid}\ncreated_at:", fm, count=1)
-        fm = re.sub(r"(?m)^session_id:.*$", "session_id: null", fm)  # slot owns the thread now
-        if key != "session_intake":   # …and so does the retired pre-split shared slot,
-            fm = re.sub(r"(?m)^session_intake:.*$", "session_intake: null", fm)  # adopted once
+        fm = re.sub(r"(?m)^session_id:.*$", "session_id: null", fm)
+        if key != "session_intake":
+            fm = re.sub(r"(?m)^session_intake:.*$", "session_intake: null", fm)
         fm = re.sub(r"(?m)^updated_at:.*$", f"updated_at: {today}", fm)
         item.write_text(f"---\n{fm}\n---\n{body}")
         return True
@@ -1249,8 +1249,7 @@ class DevKnowledgeService:
                     f"{name}.md is retired — fold its content into architecture.md and delete it",
                     name)
 
-        # A deliverable nothing is working toward is the owner's call — a finding rather than a
-        # fix.
+        # A deliverable nothing is working toward is reported, never auto-fixed.
         claimed = {w["deliverable"] for w in waves} | {
             it.get("deliverable") for it in items if it.get("deliverable")}
         for d in deliverables:
@@ -1262,7 +1261,7 @@ class DevKnowledgeService:
                     add("error", "broken-needs",
                         f"{d['id']} needs '{n}', which no deliverable defines", d["id"])
 
-        # Success-signal integrity, both directions (the alirezarezvani AC↔FR invariant).
+        # Success-signal integrity, both directions.
         signals = _section(_strip_fences(prd), "Success signals")
         cited = {i for i in re.findall(r"\bd-[a-z0-9-]+", signals)}
         for d in deliverables:
@@ -1458,7 +1457,7 @@ class DevKnowledgeService:
             if isinstance(val, bool):
                 return "true" if val else "false"
             if isinstance(val, (dict, list)):
-                return json.dumps(val)     # JSON is valid YAML flow syntax
+                return json.dumps(val)
             if isinstance(val, str):
                 return json.dumps(val)
             return str(val)
@@ -1478,8 +1477,8 @@ class DevKnowledgeService:
             if sub.is_dir():
                 shutil.rmtree(sub)
                 removed.append(name + "/")
-        for name in ("artifacts", "reports"):    # exactly as `create_work_item` leaves it —
-            (folder / name).mkdir(parents=True, exist_ok=True)   # `scratch/` waits for a run
+        for name in ("artifacts", "reports"):
+            (folder / name).mkdir(parents=True, exist_ok=True)
 
         log_file = folder / "deputy-log.jsonl"
         if log_file.exists():
@@ -1508,14 +1507,14 @@ class DevKnowledgeService:
             it["parent_id"] = rel.parts[-2] if len(rel.parts) >= 2 else None
             it["depth"] = len(rel.parts) - 1
             it["description"] = body.strip()
-            it["status"] = meta.get("status")  # may be None (completed/unset)
-            if isinstance(meta.get("after"), (list, tuple)):   # peer edges: ids stay strings
+            it["status"] = meta.get("status")
+            if isinstance(meta.get("after"), (list, tuple)):
                 it["after"] = [str(a) for a in meta["after"] if a]
-            it["autopilot"] = bool(meta.get("autopilot"))   # per-item policy, absent → False
-            it["prompt_extraction"] = bool(meta.get("prompt_extraction"))  # throwaway probe, absent → False
-            it["cohort"] = str(meta["cohort"]) if meta.get("cohort") else None  # launch cohort (4c)
-            it["artifacts"] = _norm_artifacts(meta.get("artifacts"))  # legacy str → {type,path} (R5)
-            it["sessions"], it["session_id"] = _session_fields(meta)  # role slots + current-role sid
+            it["autopilot"] = bool(meta.get("autopilot"))
+            it["prompt_extraction"] = bool(meta.get("prompt_extraction"))
+            it["cohort"] = str(meta["cohort"]) if meta.get("cohort") else None
+            it["artifacts"] = _norm_artifacts(meta.get("artifacts"))  # legacy str → {type,path}
+            it["sessions"], it["session_id"] = _session_fields(meta)
             it["folder"] = str(rel)
             out.append(it)
         return out
@@ -1531,7 +1530,7 @@ class DevKnowledgeService:
             by_status[key] = by_status.get(key, 0) + 1
             if it.get("status") == "active":
                 active.append({"id": it.get("id"), "title": it.get("title")})
-            # The attention list (D10): awaiting_human is the only status that pages the owner.
+            # The attention list: awaiting_human is the only status that pages the owner.
             if it.get("status") == "awaiting_human":
                 awaiting_human.append({"id": it.get("id"), "title": it.get("title")})
         return {

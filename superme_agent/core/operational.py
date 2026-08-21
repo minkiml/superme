@@ -216,14 +216,14 @@ def read_constitution_dir(directory: Path, *, origin: str) -> list[dict]:
         slug = meta.get("name") or p.stem
         out.append({
             "slug": slug,
-            "title": _title_of(body, slug),  # display name; see _title_of
+            "title": _title_of(body, slug),
             "enabled": _is_enabled(meta),
             "foundational": _is_foundational(meta),  # charter-pinned → not disable-able
             "description": meta.get("description"),  # the always-resident catalog line (directive / when-to-apply)
             "scope": meta.get("scope"),
             "source": meta.get("source"),
             "created": meta.get("created"),
-            "updated": meta.get("updated"),  # last-edited stamp; evolving constitutions bump it
+            "updated": meta.get("updated"),
             "origin": origin,
             "path": str(p),
             "body": body.strip(),

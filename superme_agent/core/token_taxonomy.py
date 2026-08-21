@@ -28,31 +28,23 @@ FEATURE_CATEGORY = {
     "plan": "workitem",
     "build": "workitem",
     "close": "workitem",
-    # Runs per item at that item's gates, so its spend belongs with the phases it judges.
     "deputy": "workitem",
-    # A research item's own work — same bucket as the implementation phases.
     "investigate": "workitem",
     "itemize": "workitem",
-    # The review-entry run, every kind.
     "review": "workitem",
-    # Historical, and folded into `review` for display — see FEATURE_ALIAS.
+    # Historical; folded into `review` for display — see FEATURE_ALIAS.
     "report": "workitem",
     "research-report": "workitem",
-    # The loop's fresh-eyes verification runs, same bucket as the builds they gate.
     "vet": "workitem",
     "forge": "workitem",
-    # Background conflict resolution on an item's worktree — an autonomous build op.
     "resolve": "workitem",
-    # Interactive (owner-driven turns; bound chat still tags item_id for attribution).
     "chat": "interactive",
     # Meta and one-off, not the main interactive spend.
     "onboarding": "other",
     "diagnosis": "other",
-    # A throwaway probe: real tokens, but meta rather than dev spend.
     "prompt-extraction": "other",
     # Reports ZERO usage: the CLI summarizes internally. Not free — UNMEASURED.
     "compact": "other",
-    # System / on-behalf features register here as they appear (e.g. "autotitle": "system").
 }
 
 # Anything unmapped lands here, KEEPING its own feature name as a sub-bucket.
@@ -61,7 +53,6 @@ UNCLASSIFIED = "other"
 # Retired feature → the one that absorbed it. Presentation only: rows keep their spelling, amounts
 # untouched.
 FEATURE_ALIAS = {
-    # Both were absorbed into the one shared `review` run.
     "report": "review",
     "research-report": "review",
 }

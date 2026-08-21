@@ -12,7 +12,7 @@ from . import plan_revision
 from . import status_router
 from .kind_profiles import get_profile, item_fanout, research_kind
 
-# The four briefed human gates, keyed by the phase whose EXIT they guard (D2/D10).
+# The four briefed human gates, keyed by the phase whose EXIT they guard.
 GATE_FOR_PHASE = {"triage": "triage-exit", "plan": "pre-main", "review": "review",
                   "close": "close"}
 _GATE_LABEL = {"triage-exit": "Triage exit", "pre-main": "Pre-main (plan approval)",
@@ -291,7 +291,7 @@ def _page_reason(item: dict, events: list[dict]) -> dict | None:
                     if str(e.get("kind")) == "run.report"
                     and str((e.get("meta") or {}).get("outcome")) in ("blocked", "failed", "unverified")),
                    None)
-    for e in window:  # newest-first, this phase only
+    for e in window:
         kind = str(e.get("kind") or "")
         meta = e.get("meta") or {}
         summary = str(e.get("summary") or "")
@@ -346,8 +346,8 @@ def gate_state(item: dict, item_dir: Path, dev_root: Path,
     checks: list[dict] = []
     authorizations: list[dict] = []
     if gate == "triage-exit":
-        # brief.md is triage's product (renovation §3.1); pre-renovation items sharpened the item
-        # body instead — read whichever exists.
+        # brief.md is triage's product; older items sharpened the item body instead. Read
+        # whichever exists.
         item_body = (_strip_fm(_artifact_text(item_dir, "brief") or "").strip()
                      or str(item.get("description") or "").strip())
         # Ready = the `triaged_at` stamp. `kind set + body filled` would be a tautology: an inbox
@@ -467,7 +467,7 @@ def gate_state(item: dict, item_dir: Path, dev_root: Path,
             checks.append({"criterion": "no_pending_authorizations", "ok": False,
                            "detail": f"{len(pend_auth)} authorization(s) awaiting your grant/deny: "
                                      + "; ".join(a["what"] for a in authorizations[:3])})
-    else:  # close
+    else:
         checks = close_readiness(item, item_dir, all_items)["checks"]
 
     return {"id": item["id"], "gate": gate, "gate_label": _GATE_LABEL[gate],

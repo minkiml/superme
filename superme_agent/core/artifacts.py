@@ -203,7 +203,7 @@ def scaffold(item_dir: Path, artifact: str, *, title: str = "", item_kind: str |
     different check."""
     if artifact not in _SPECS:
         raise KeyError(f"unknown artifact kind {artifact!r} — known: {sorted(_SPECS)}")
-    item_kind = get_profile(item_kind).kind  # validates + resolves null → implementation
+    item_kind = get_profile(item_kind).kind
     from .kind_profiles import RESEARCH_KINDS
     if research_kind not in RESEARCH_KINDS:
         research_kind = None  # forgiving, like kind_profiles.research_kind — unjudged is a state
@@ -344,9 +344,9 @@ def parse_check_blocks(body: str) -> list[dict]:
             if last == "rubric":
                 text = _vet_value(re.sub(r"^\s*[-*]\s*", "", line))
                 if _RUBRIC_ITEM.match(line):
-                    cur["rubric"].append(text)          # a new criterion
+                    cur["rubric"].append(text)
                 elif cur["rubric"] and text:
-                    cur["rubric"][-1] += " " + text     # …or the wrap of the last one
+                    cur["rubric"][-1] += " " + text
                 continue
             # A wrapped field — markdown folds it, so we do too. `expect:` is exactly the field
             # long enough to wrap.
@@ -542,7 +542,7 @@ def _is_legacy_plan(sections: dict) -> bool:
     return "Validation criteria" in sections and "Vet plan" not in sections
 
 
-# ------------------------------------------------------------------- gate feeds (renovation §2)
+# gate feeds
 
 # The three plan sections whose STRUCTURED content feeds the gate's answer forms. Absent sections
 # return empty.
@@ -625,11 +625,11 @@ def parse_tasks(plan_text: str) -> list[dict]:
             cur = {"id": m.group("id"), "done": m.group("tick").lower() == "x",
                    "text": m.group("text").strip(), "detail": ""}
             out.append(cur)
-        elif not line.strip():                      # a blank line ends the block
+        elif not line.strip():
             cur = None
         elif line[:1].isspace() and cur is not None:
             cur["detail"] = (cur["detail"] + " " + line.strip()).strip()
-        else:                                       # any unindented line starts something else
+        else:
             cur = None
     return out
 
@@ -716,7 +716,7 @@ def _drop_dead_blocks(text: str) -> str:
             if _dead_label(lines, i):
                 i += 2                      # drop the label line and its trailing blank
                 while out and not out[-1].strip():
-                    out.pop()               # …and the blank that preceded it
+                    out.pop()
                 out.append("")
                 continue
         if not fenced and _HEADING.match(line) and "changed since" in line.lower():
@@ -725,7 +725,7 @@ def _drop_dead_blocks(text: str) -> str:
             # "first run" has a family of phrasings that all mean the same nothing, so it gets a
             # prefix match.
             if joined in _DEAD_VALUES or joined.startswith("first run"):
-                break                       # nothing after it but the dead section
+                break
         if not fenced and _HEADING.match(line):
             # A bare heading reads as a section that failed to render, so it goes.
             j = i + 1
@@ -1200,10 +1200,9 @@ def self_check(item_dir: Path, artifact: str, *, item_kind: str | None = None,
     return issues
 
 
-# --- owner edits (2026-08-09) ------------------------------------------------------------------
+# owner edits
 
-# THE OWNER MAY HAND-EDIT EXACTLY TWO ARTIFACTS: the brief and the plan. Both state INTENT, which
-# is theirs to state.
+# Only the brief and the plan are owner-editable, because both state INTENT.
 OWNER_EDITABLE: tuple[str, ...] = ("brief", "plan")
 
 _EDITED_LINE = re.compile(r"(?m)^edited_by_owner:.*\n?")
@@ -1256,7 +1255,7 @@ def owner_edit(item_dir: Path, artifact: str, text: str, *,
     return []
 
 
-# --------------------------------------------------------------------------- handoff brief (D5)
+# handoff brief
 
 _BRIEF_SECTIONS = (("Background & why raised", "background"),
                    ("Discussion summary", "discussion"),
@@ -1770,7 +1769,7 @@ def diagnoses(item_dir: Path) -> dict[str, dict]:
     return out
 
 
-# --- Proof: the connected view (renovation v2 §4.2) ------------------------------------------
+# Proof: the connected view
 
 # One row per BUILT THING, carrying its own validation → verification. Joined on the plan's `##
 # Tasks` id.
@@ -1913,13 +1912,8 @@ def verdict_rows(item_dir: Path) -> list[dict]:
             for c, e in latest.items()]
 
 
-# --- assumptions: RETIRED (workflow-renovation-v2 §3.1 demolition, 2026-07-27) --------------
 
-# `assumptions.md` and its tools are gone. The signal survives as a `## Assumptions` section in
-# the phase's own record.
-
-
-# --- the authorization ledger (BV-A2) -------------------------------------------
+# the authorization ledger
 
 # A work-item may PROPOSE a contract change, but changes that DEFINE intent are owner-reserved.
 # Build requests and DEFERS.
@@ -2161,7 +2155,7 @@ def evidence_status(item_dir: Path, repo_dir: Path | None, *, scope_to_plan: boo
 # review.md` already said.
 
 
-# --------------------------------------------------------------------------- cycle reports (renovation §3.1)
+# cycle reports
 
 # ONE report per cycle, with strictly sequential writers: build, then vet's fence, then the
 # driver's outcome.
@@ -2266,7 +2260,7 @@ def _append_to_section(path: Path, heading: str, entry: str, *, fence: str = "")
     _atomic_write(path, "\n".join(lines) + "\n")
 
 
-# --- §Cycle outcome — the driver's trail (replaces the retired attempts.md ledger) --------------
+# §Cycle outcome — the driver's trail
 
 _OUTCOME_HEAD = re.compile(r"^### (?P<ts>\S+) — (?P<decision>\S+)$", re.MULTILINE)
 
@@ -2641,7 +2635,7 @@ def pr_task_guide(item_dir: Path) -> dict:
     return out
 
 
-# --------------------------------------------------------------------------- convergence guard (build-vet-loop §5)
+# convergence guard
 
 # Normalize the failure signature so incidental variation — case, punctuation, timestamps, ids —
 # cannot hide a no-progress cycle.
@@ -2766,7 +2760,7 @@ def latest_checkpoint(item_dir: Path, *, char_cap: int = 6000,
             "truncated": len(text) > char_cap}
 
 
-# --- session memory: the non-work-item thread's checkpoint (compaction-redesign §13.4 / T5) ---
+# session memory: the non-work-item thread's checkpoint
 
 # A general session has no item folder, so a compaction loses the conversation outright. ONE file
 # per session, overwritten.
@@ -2793,7 +2787,7 @@ def artifact_status(item: dict, item_dir: Path, repo_dir: Path | None = None) ->
     out: dict[str, dict] = {}
     for kind in ARTIFACT_KINDS:
         if kind == "handoff-brief":
-            continue  # lives in preliminary/ (S3), not artifacts/
+            continue  # lives in preliminary/, not artifacts/
         present = (Path(item_dir) / "artifacts" / artifact_file(kind)).exists()
         row: dict = {"required": kind in profile.required_artifacts, "present": present}
         if present:

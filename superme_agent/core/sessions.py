@@ -90,7 +90,7 @@ def short_item_id(item_id: str | None) -> str:
 def _preset_title(kind: str, item_id: str | None, subject_run_id, sid: str) -> str:
     """The DEFAULT title when the owner set no override. The router upgrades a
     work-item one to the item's title."""
-    if kind in ("intake", "build", "vet"):   # role-stamped item sessions (build-vet-loop §1.3)
+    if kind in ("intake", "build", "vet"):  # role-stamped item sessions
         return f"Work-item · {short_item_id(item_id) if item_id else _short_id(sid)} · {kind}"
     if kind == "work_item":                  # legacy pre-roles item sessions (kind derived)
         return f"Work-item · {short_item_id(item_id) if item_id else _short_id(sid)}"

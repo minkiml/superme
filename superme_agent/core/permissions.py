@@ -158,9 +158,9 @@ def _segment_read_only(seg: list[str]) -> bool:
     if head == "find":
         return not any(tok in _FIND_MUTATORS for tok in seg)
     if head in ("sed", "awk", "gawk"):
-        return not any(t == "-i" or t.startswith("-i") for t in seg)   # in-place edit
+        return not any(t == "-i" or t.startswith("-i") for t in seg)
     if head == "sort":
-        return "-o" not in seg          # `sort -o` writes a file
+        return "-o" not in seg
     return head in _READONLY_BASH_CMDS
 
 
@@ -404,7 +404,7 @@ def _seg_path_tokens(seg: list[str]) -> list[str]:
     while i < len(seg):
         bare = seg[i].strip("'\"")
         if bare in _PATTERN_OPTS:
-            pattern_taken = True                       # the pattern is this option's value
+            pattern_taken = True
             i += 2
             continue
         if bare.startswith("-"):
@@ -412,7 +412,7 @@ def _seg_path_tokens(seg: list[str]) -> list[str]:
             i += 1
             continue
         if not pattern_taken:
-            pattern_taken = True                       # the first bare word is the pattern
+            pattern_taken = True
             i += 1
             continue
         out.append(seg[i])
@@ -618,7 +618,7 @@ def build_can_use_tool(approve: ApproveFn, *, blocked_skills: dict[str, str] | N
 
     `write_boundary` is accident-prevention, not security — a run passing `sandbox_writes` hands the
     same roots to `core.sandbox`, where an escape fails as a syscall."""
-    spawned = 0   # this turn's subagent tally — see `subagent_cap` above
+    spawned = 0
 
     async def can_use_tool(
         tool_name: str, input_data: dict, context: ToolPermissionContext
@@ -657,7 +657,7 @@ def build_can_use_tool(approve: ApproveFn, *, blocked_skills: dict[str, str] | N
                 and _target_in_any(input_data, protected_paths):
             log.info("protected path denied %s", tool_name)
             return PermissionResultDeny(message=protected_nudge or _FREEZE_NUDGE)
-        # Build-phase freeze boundary (S4): writes live-or-die on the worktree/item roots.
+        # Build-phase freeze boundary: writes live or die on the worktree and item roots.
         if write_boundary and tool_name in _WRITE_TOOLS:
             if _target_in_any(input_data, write_boundary):
                 return PermissionResultAllow()
@@ -706,7 +706,7 @@ def build_can_use_tool(approve: ApproveFn, *, blocked_skills: dict[str, str] | N
                     roots=", ".join(f"`{r}`" for r in reachable), first=reachable[0])
                 if scratch := _scratch_in(write_boundary):
                     bash_boundary_miss += _BASH_SCRATCH_HINT.format(scratch=scratch)
-        # L2 read-guard: keep reads inside the host's scope (before the safe-tool auto-allow).
+        # Keep reads inside the host's scope, before the safe-tool auto-allow.
         if read_roots and cwd is not None and tool_name in _READ_TOOLS:
             target = _read_target(input_data)
             if target and not path_in_scope(target, cwd, read_roots):
