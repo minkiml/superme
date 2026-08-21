@@ -7,13 +7,12 @@ item is born at `investigate`, because the button IS the classification.
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
 
 from ...app_state import (
     DevKnowledgeService, DevStore, SystemSpine, get_dev, get_dev_store, get_spine,
 )
 from ...deps import dev_root
-from ...schemas.dev.sweeps import SweepFamiliesResponse, SweepLaunchResponse
+from ...schemas.dev.sweeps import SweepFamiliesResponse, SweepLaunchBody, SweepLaunchResponse
 from ...services.runs import fire_first_investigate
 from ....core import kind_profiles
 
@@ -32,16 +31,6 @@ async def dev_sweep_families() -> dict:
         {"family": f.slug, "icon": f.icon, "blurb": f.blurb, "asks_interest": f.asks_interest}
         for f in kind_profiles.standing_families()
     ]}
-
-
-class SweepLaunchBody(BaseModel):
-    family: str
-    context_id: str = "global"
-    # Empty means the whole repo, which is the honest default: the record has to say which breadth
-    # it got.
-    area: str = ""
-    # No typed field for interest: one that only leans is unreliable, so it rides the description.
-    interest: str = ""
 
 
 @router.post("/dev/research/sweeps", response_model=SweepLaunchResponse)

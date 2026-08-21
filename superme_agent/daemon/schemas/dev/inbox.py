@@ -1,4 +1,4 @@
-"""Response schemas for the inbox routes (routers/dev/inbox.py)."""
+"""Schemas for the inbox routes (routers/dev/inbox.py)."""
 
 from pydantic import BaseModel
 
@@ -71,3 +71,51 @@ class InboxBriefBody(BaseModel):
 class InboxBriefSaveResponse(BaseModel):
     ok: bool
     id: int
+
+
+class InboxBody(BaseModel):
+    text: str
+    title: str | None = None  # short headline, entered manually on capture
+    kind: str = "item"  # item (becomes a work-item on push) | note (the owner's own)
+    tag: str | None = None
+    origin: str = "user"  # user (manual) | agent (branch-off proposal)
+    context_id: str = "global"
+    # The provenance edge a branch-off row carries from birth: {item, relation: blocking|parallel|spawn}.
+    spawned_from: dict | None = None
+    # Run config chosen at capture — locked into the work-item at push. NULL = inherit default.
+    model: str | None = None
+    effort: str | None = None
+    autopilot: bool = True     # drives its own gates after push; the card's toggle opts out
+    # The PROPOSED kind. None means undecided, and triage then judges alone.
+    work_kind: str | None = None
+    # Roles that run on their OWN tier, never this item's model. Breaking that coupling is the
+    # point.
+    vet_model: str | None = None
+    vet_effort: str | None = None
+    deputy_model: str | None = None
+    deputy_effort: str | None = None
+
+
+class InboxPatch(BaseModel):
+    status: str | None = None  # open | pushed  (no 'dropped' state — dropping an inbox item is a hard delete)
+    kind: str | None = None
+    tag: str | None = None
+    text: str | None = None
+    title: str | None = None
+    routed_to: str | None = None
+    # The per-item config, editable for as long as the row is open (push freezes all three).
+    model: str | None = None
+    effort: str | None = None
+    autopilot: bool | None = None
+    # "" clears it back to undecided; None means the caller didn't touch the field.
+    work_kind: str | None = None
+    # Roles that run on their OWN tier, never this item's model. Breaking that coupling is the
+    # point.
+    vet_model: str | None = None
+    vet_effort: str | None = None
+    deputy_model: str | None = None
+    deputy_effort: str | None = None
+
+
+class InboxPushBody(BaseModel):
+    context_id: str = "global"

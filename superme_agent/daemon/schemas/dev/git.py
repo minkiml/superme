@@ -1,4 +1,4 @@
-"""Response schemas for the work-item git routes (routers/dev/git.py)."""
+"""Schemas for the work-item git routes (routers/dev/git.py)."""
 
 from __future__ import annotations
 
@@ -147,3 +147,7 @@ class GitResolveResponse(BaseModel):
     status: str
     id: str
     conflicts: list[str] | None = None
+
+
+class GitBody(BaseModel):
+    context_id: str = "global"

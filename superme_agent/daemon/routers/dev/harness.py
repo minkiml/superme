@@ -6,19 +6,22 @@ import logging
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
 
 from ...app_state import DevStore, get_dev_store
 from ...deps import load_slash_cache, local_harness_root, published_ident
-from ...schemas.dev.harness import (
-    FoundationResponse, FoundationFileSaveResponse, HarnessPluginsResponse, PaletteResponse,
-    PluginFileResponse, PluginFileSaveResponse, PublishedResponse, PublishedToggleResponse,
-    PublishedDeleteResponse, PublishedFileResponse, PublishedFileSaveResponse,
-    ConstitutionsResponse, ConstitutionToggleResponse, LocalPluginsResponse,
-    ConstitutionFileResponse, ConstitutionFileSaveResponse,
-    AssetsResponse, AssetActionResponse,
-    DeputyMandateResponse, DeputyMandateSaveResponse,
-)
+from ...schemas.dev.harness import (AssetActionBody, AssetActionResponse, AssetsResponse,
+                                    ConstitutionFileBody, ConstitutionFileResponse,
+                                    ConstitutionFileSaveResponse, ConstitutionToggleBody,
+                                    ConstitutionToggleResponse, ConstitutionsResponse,
+                                    DeputyMandateBody, DeputyMandateResponse,
+                                    DeputyMandateSaveResponse, FoundationFileBody,
+                                    FoundationFileSaveResponse, FoundationResponse,
+                                    HarnessPluginsResponse, LocalPluginsResponse, PaletteResponse,
+                                    PluginFileBody, PluginFileResponse, PluginFileSaveResponse,
+                                    PublishedDeleteResponse, PublishedFileBody,
+                                    PublishedFileResponse, PublishedFileSaveResponse,
+                                    PublishedResponse, PublishedToggleBody,
+                                    PublishedToggleResponse)
 
 log = logging.getLogger("superme-agent")
 
@@ -65,14 +68,6 @@ async def dev_harness_plugin_file(scope: str, kind: str, name: str, context_id: 
     reads this host's own `local-harness/<context_id>/dev` tree."""
     p = _resolve_plugin_file(scope, kind, name, context_id)
     return {"scope": scope, "kind": kind, "name": name, "path": str(p), "content": p.read_text()}
-
-
-class PluginFileBody(BaseModel):
-    scope: str
-    kind: str
-    name: str
-    content: str
-    context_id: str = "global"
 
 
 @router.put("/dev/harness/plugin-file", response_model=PluginFileSaveResponse)
@@ -123,11 +118,6 @@ async def dev_harness_foundation() -> dict:
     return {"files": files, "constitutions": constitutions}
 
 
-class FoundationFileBody(BaseModel):
-    key: str
-    content: str
-
-
 @router.put("/dev/harness/foundation", response_model=FoundationFileSaveResponse)
 async def dev_harness_foundation_save(body: FoundationFileBody) -> dict:
     """Save edits to an identity/charter file (SELF.md / dev-charter / core-charter). These are the
@@ -152,11 +142,6 @@ async def dev_harness_deputy(context_id: str = "global") -> dict:
     root = deputy_core.deputy_root(context_id)
     content = deputy_core.read_mandate(root)
     return {"context_id": context_id, "path": str(deputy_core.mandate_path(root)), "content": content}
-
-
-class DeputyMandateBody(BaseModel):
-    content: str
-    context_id: str = "global"
 
 
 @router.put("/dev/harness/deputy", response_model=DeputyMandateSaveResponse)
@@ -225,11 +210,6 @@ async def dev_harness_published(context_id: str = "global",
     return {"context_id": context_id, "published": rows}
 
 
-class PublishedToggleBody(BaseModel):
-    enabled: bool
-    context_id: str = "global"
-
-
 @router.patch("/dev/harness/published/{proposal_id}", response_model=PublishedToggleResponse,
                response_model_exclude_unset=True)
 async def dev_harness_published_toggle(proposal_id: int, body: PublishedToggleBody,
@@ -281,12 +261,6 @@ async def dev_harness_constitutions(context_id: str = "global") -> dict:
     collect(read_constitution_dir(local_harness_root(context_id) / "constitution",
                                   origin="repo"), "repo_dev", "dev")
     return {"context_id": context_id, "constitutions": out}
-
-
-class ConstitutionToggleBody(BaseModel):
-    enabled: bool
-    scope: str                       # universal_dev | repo_dev
-    context_id: str = "global"
 
 
 @router.patch("/dev/harness/constitutions/{slug}", response_model=ConstitutionToggleResponse,
@@ -352,13 +326,6 @@ async def dev_harness_constitution_file(slug: str, scope: str, context_id: str =
     return {"slug": slug, "scope": scope, "path": str(p), "content": p.read_text()}
 
 
-class ConstitutionFileBody(BaseModel):
-    slug: str
-    scope: str                       # universal_dev | repo_dev (| _core)
-    content: str
-    context_id: str = "global"
-
-
 @router.put("/dev/harness/constitution-file", response_model=ConstitutionFileSaveResponse)
 async def dev_harness_constitution_file_save(body: ConstitutionFileBody,
                                              dev_store: DevStore = Depends(get_dev_store)) -> dict:
@@ -392,11 +359,6 @@ async def dev_harness_assets(context_id: str = "global") -> dict:
         "adopted": it["slug"] in states, "enabled": states.get(it["slug"], False),
     } for it in read_asset_pool()]
     return {"context_id": context_id, "assets": out}
-
-
-class AssetActionBody(BaseModel):
-    action: str  # 'adopt' | 'enable' | 'disable' | 'drop'
-    context_id: str = "global"
 
 
 @router.patch("/dev/harness/assets/{slug}", response_model=AssetActionResponse)
@@ -468,11 +430,6 @@ async def dev_harness_published_file(proposal_id: int, context_id: str = "global
     _, form, scope, slug, path = _published_prop(proposal_id, context_id, dev_store)
     return {"proposal_id": proposal_id, "form": form, "scope": scope, "slug": slug,
             "path": str(path), "content": path.read_text()}
-
-
-class PublishedFileBody(BaseModel):
-    content: str
-    context_id: str = "global"
 
 
 @router.put("/dev/harness/published/{proposal_id}/file", response_model=PublishedFileSaveResponse)

@@ -8,50 +8,13 @@ import sqlite3
 from pathlib import Path
 
 from fastapi import APIRouter
-from pydantic import BaseModel
+
+from ..schemas.inventory import (ColumnInfo, DatabaseInfo, InventoryResponse, TableInfo, ToolInfo,
+                                 ToolParam)
 
 log = logging.getLogger("superme-agent")
 
 router = APIRouter()
-
-
-# --- response shapes -------------------------------------------------------------------------
-class ColumnInfo(BaseModel):
-    name: str
-    type: str
-    pk: bool
-    notnull: bool
-
-
-class TableInfo(BaseModel):
-    name: str
-    columns: list[ColumnInfo]
-    sql: str | None = None
-    rows: int | None = None
-
-
-class DatabaseInfo(BaseModel):
-    name: str
-    path: str
-    present: bool
-    tables: list[TableInfo]
-
-
-class ToolParam(BaseModel):
-    name: str
-    required: bool
-
-
-class ToolInfo(BaseModel):
-    name: str
-    description: str
-    surface: str
-    params: list[ToolParam]
-
-
-class InventoryResponse(BaseModel):
-    databases: list[DatabaseInfo]
-    tools: list[ToolInfo]
 
 
 # --- DB introspection ------------------------------------------------------------------------

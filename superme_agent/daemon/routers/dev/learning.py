@@ -7,7 +7,6 @@ The pipeline machinery lives in `services/learning.py`; these routes are the thi
 import asyncio
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
 
 from ...app_state import DevStore, SystemSpine, get_dev_store, get_spine
 from ...deps import proposal_slug as _proposal_slug, published_ident as _published_ident
@@ -16,11 +15,11 @@ from ...services.learning import (
     _run_background_distill, _run_background_write, run_sweep, _sweep_idle_sessions,
     SWEEP_IDLE_SECONDS, _WRITE_FORMS, _WRITE_SCOPES, _has_answer,
 )
-from ...schemas.dev.learning import (
-    MemoryStatsResponse, DistillResponse, SweepResponse, IdleScanResponse,
-    ProposalsResponse, ProposalExecutionResponse, ApproveResponse,
-    ProposalActionResponse, PublishResponse, LearningRollupResponse,
-)
+from ...schemas.dev.learning import (ApproveBody, ApproveResponse, ArtifactEditBody,
+                                     DistillResponse, IdleScanResponse, LearningRollupResponse,
+                                     MemoryStatsResponse, ProposalActionBody,
+                                     ProposalActionResponse, ProposalExecutionResponse,
+                                     ProposalsResponse, PublishResponse, SweepResponse)
 
 router = APIRouter()
 
@@ -188,18 +187,6 @@ async def dev_sweep_idle_scan(idle_seconds: int = SWEEP_IDLE_SECONDS) -> dict:
 
 # --- the review queue and owner gate --- Apply is deterministic and daemon-side, not an agent
 # turn.
-class ProposalActionBody(BaseModel):
-    context_id: str = "global"
-    type: str | None = None         # recall-loading tier override: rule|convention|decision|reference
-    description: str | None = None  # one-line index hook override (else derived from the body)
-
-
-class ApproveBody(BaseModel):
-    context_id: str = "global"
-    # The owner's answers at gate 1. Stored on the proposal and handed to the write phase.
-    answers: dict | list | None = None
-
-
 @router.get("/dev/memory/proposals", response_model=ProposalsResponse, response_model_exclude_unset=True)
 async def memory_proposals(context_id: str = "global", status: str | None = None,
                            dev_store: DevStore = Depends(get_dev_store)) -> dict:
@@ -282,11 +269,6 @@ async def memory_proposal_approve(proposal_id: int, body: ApproveBody,
         scope="dev", actor="owner", meta={"proposal_id": proposal_id})
     asyncio.create_task(_run_background_write(ctx, body.context_id, proposal_id, run_id))
     return {"status": "writing", "proposal_id": proposal_id}
-
-
-class ArtifactEditBody(BaseModel):
-    content: str
-    context_id: str = "global"
 
 
 @router.patch("/dev/memory/proposals/{proposal_id}/artifact", response_model=ProposalActionResponse, response_model_exclude_unset=True)

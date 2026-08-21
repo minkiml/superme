@@ -5,26 +5,13 @@ Me/Domains/Manage-Knowledge dashboards consume) — distinct from dev-knowledge.
 """
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
 
 from ..app_state import KnowledgeService, get_knowledge
 from ..deps import knowledge_root
-from ..schemas.knowledge import KnowledgeNode, KnowledgeFileResponse, KnowledgeOkResponse
+from ..schemas.knowledge import (InjectBody, KnowledgeFileResponse, KnowledgeNode,
+                                 KnowledgeOkResponse, WriteBody)
 
 router = APIRouter()
-
-
-class WriteBody(BaseModel):
-    path: str
-    content: str
-    context_id: str = "global"
-
-
-class InjectBody(BaseModel):
-    title: str
-    content: str
-    folder: str = "knowledge"
-    context_id: str = "global"
 
 
 @router.get("/knowledge/tree", response_model=KnowledgeNode, response_model_exclude_none=True)

@@ -1,4 +1,4 @@
-"""Response schemas for the dev work-item routes.
+"""Schemas for the dev work-item routes.
 
 `WorkItem` covers both the base shape and the enriched list shape. All non-core fields are optional
 and routes use `response_model_exclude_unset=True`, so each emits exactly the keys it returns.
@@ -311,3 +311,31 @@ class WorkItemScaffoldResponse(BaseModel):
     id: str
     wave: str | None = None
     deliverable: str | None = None
+
+
+class PlanBody(BaseModel):
+    context_id: str = "global"
+    model: str | None = None   # per-run model choice; None -> DEFAULT_RUN_MODEL
+    effort: str | None = None  # per-run reasoning effort; None -> item/repo/system default
+
+
+class AuthorizeBody(BaseModel):
+    context_id: str = "global"
+    auth_id: str                    # the pending authorization request's id (from authorizations.md)
+    decision: str                   # "granted" | "denied"
+
+
+class ScaffoldBody(BaseModel):
+    context_id: str = "global"
+    wave: str | None = None         # the roadmap wave this item instances (resolves its deliverable)
+    deliverable: str | None = None  # …or a deliverable directly when no wave applies
+
+
+class DocEditBody(BaseModel):
+    context_id: str = "global"
+    path: str            # the report's own relative pointer, e.g. "artifacts/plan.md"
+    text: str
+
+
+class AutopilotBody(BaseModel):
+    on: bool

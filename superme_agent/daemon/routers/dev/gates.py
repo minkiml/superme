@@ -8,7 +8,6 @@ import logging
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
 
 from ...app_state import (
     DevKnowledgeService, DevStore, SessionStore, SystemSpine,
@@ -18,9 +17,9 @@ from ....core import artifacts, git_layer, kind_profiles, status_router
 from ....core.artifacts import _atomic_write
 from ...services import drilldown, git_ops, scheduler
 from ....gateway import contexts
-from ...schemas.dev.gates import (
-    AbandonResponse, DrilldownResponse, OwnerInputResponse, PhaseReportResponse,
-)
+from ...schemas.dev.gates import (AbandonBody, AbandonResponse, DrilldownResponse, OwnerInputBody,
+                                  OwnerInputResponse, OwnerNoteBody, OwnerReferenceBody,
+                                  PhaseReportResponse)
 
 log = logging.getLogger("superme-agent")
 
@@ -49,23 +48,6 @@ async def dev_work_item_report(item_id: str, phase: str, context_id: str = "glob
     if report is None:
         raise HTTPException(status_code=404, detail=f"no report-{phase}.md for this item")
     return report
-
-
-class OwnerReferenceBody(BaseModel):
-    source: str = ""
-    description: str = ""
-
-
-class OwnerNoteBody(BaseModel):
-    description: str = ""
-
-
-class OwnerInputBody(BaseModel):
-    """The owner's § From you, whole. Add and delete are both a PUT of the full slot lists — the
-    owner is the section's only writer, so there is no concurrent edit for a delta to protect."""
-    context_id: str = "global"
-    references: list[OwnerReferenceBody] = []
-    notes: list[OwnerNoteBody] = []
 
 
 @router.get("/dev/work-items/{item_id}/from-you", response_model=OwnerInputResponse)
@@ -134,12 +116,6 @@ async def dev_work_item_drilldown(item_id: str, context_id: str = "global",
                                    review_mode=review_mode, inbox_origin=inbox_origin,
                                    **drilldown.gate_counters(spine, context_id, item, dev_root,
                                                              git_ops.repo_anchor(ctx, spine)))
-
-
-class AbandonBody(BaseModel):
-    context_id: str = "global"
-    reason: str = ""
-    superseded_by: str | None = None  # set → outcome `superseded` (no dangling supersedes)
 
 
 @router.post("/dev/work-items/{item_id}/abandon", response_model=AbandonResponse)

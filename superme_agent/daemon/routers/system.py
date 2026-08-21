@@ -9,18 +9,19 @@ import re
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
 
 from ..app_state import SystemSpine, get_spine, dev as _dev
 from ..deps import dev_root
-from ..schemas.system import (
-    SystemResponse, RepoOverview, RepoConnectResponse, RepoDisconnectResponse,
-    RunsResponse, RunTraceResponse,
-    LearningResponse, RepoModelResponse, RepoLearningResponse,
-    RepoMetaResponse, RepoGitResponse, RepoBranchesResponse, RepoAutopilotResponse, TokenUsageResponse, TokenTimeseriesResponse, SweepConfigBody, SweepConfigResponse,
-    CompactionConfigBody, CompactionConfigResponse, DeputyConfigResponse,
-    RepoEffortResponse, AgentModelsResponse, RepoAttention,
-)
+from ..schemas.system import (AgentModelBody, AgentModelsResponse, AutopilotConcurrencyBody,
+                              CompactionConfigBody, CompactionConfigResponse, DeputyConfigBody,
+                              DeputyConfigResponse, LearningBody, LearningResponse, RepoAttention,
+                              RepoAutopilotResponse, RepoBranchesResponse, RepoConnectBody,
+                              RepoConnectResponse, RepoDisconnectResponse, RepoEffortBody,
+                              RepoEffortResponse, RepoGitBody, RepoGitResponse,
+                              RepoLearningResponse, RepoMetaBody, RepoMetaResponse, RepoModelBody,
+                              RepoModelResponse, RepoOverview, RunTraceResponse, RunsResponse,
+                              SweepConfigBody, SweepConfigResponse, SystemResponse,
+                              TokenTimeseriesResponse, TokenUsageResponse)
 from ...core.models import AGENT_MODEL_FEATURES
 from ...core import git_layer
 from ...core.spine import MODES, RepoConfig
@@ -32,44 +33,6 @@ log = logging.getLogger("superme-agent")
 # Model hierarchy, most-specific first: turn → repo → system → host. A null model clears that
 # level.
 _EFFORT_LEVELS = ("low", "medium", "high")
-
-
-class RepoModelBody(BaseModel):
-    model: str | None = None  # null/"" clears this repo's override (fall back to the default)
-    # Which role's tier this sets; omitted means the project's own. `vet` resolves on its own
-    # chain.
-    role: str = "default"
-
-
-class RepoEffortBody(BaseModel):
-    effort: str | None = None  # null/"" clears this repo's override (fall back to the default)
-    role: str = "default"
-
-
-class LearningBody(BaseModel):
-    enabled: bool
-
-
-class DeputyConfigBody(BaseModel):
-    # Partial update: `strictness` is a per-gate map, so send only the gates that changed.
-    enabled: bool | None = None
-    strictness: dict[str, str] | None = None  # {triage|plan|review: low·medium·high·extra}
-    # One judge across every project, so one answer, set here rather than per repo. Never the
-    # project's tier.
-    model: str | None = None
-    effort: str | None = None
-
-
-class AgentModelBody(BaseModel):
-    # Either/both may be sent. model = a TIER (`sonnet`) or concrete id; effort = low|medium|high.
-    model: str | None = None
-    effort: str | None = None
-
-
-class RepoMetaBody(BaseModel):
-    # None = leave the field unchanged; "" = clear it (back to defaults).
-    color: str | None = None
-    icon: str | None = None
 
 
 def _norm_model(m: str | None) -> str | None:
@@ -117,12 +80,6 @@ async def system_overview(spine: SystemSpine = Depends(get_spine)) -> dict:
     data["sweep_poll_seconds"] = cfg["poll_seconds"]
     data["sweep_min_user_msgs"] = cfg["min_user_msgs"]
     return data
-
-
-class RepoConnectBody(BaseModel):
-    path: str                    # absolute dir to link (created if kind=new)
-    label: str | None = None     # display name (defaults to the dir name)
-    kind: str                    # "new" (greenfield → project-init) | "existing" (code → retrofit)
 
 
 def _slug(s: str) -> str:
@@ -461,10 +418,6 @@ async def set_repo_learning(repo_id: str, body: LearningBody, spine: SystemSpine
     return {"ok": True, "repo_id": repo_id, "learning_enabled": spine.get_repo_learning(repo_id)}
 
 
-class AutopilotConcurrencyBody(BaseModel):
-    concurrency: int
-
-
 @router.post("/repos/{repo_id}/autopilot", response_model=RepoAutopilotResponse)
 async def set_repo_autopilot(repo_id: str, body: AutopilotConcurrencyBody,
                              spine: SystemSpine = Depends(get_spine)) -> dict:
@@ -474,12 +427,6 @@ async def set_repo_autopilot(repo_id: str, body: AutopilotConcurrencyBody,
         raise HTTPException(status_code=404, detail=f"unknown repo '{repo_id}'")
     n = spine.set_autopilot_concurrency(repo_id, body.concurrency)
     return {"ok": True, "repo_id": repo_id, "autopilot_concurrency": n}
-
-
-class RepoGitBody(BaseModel):
-    # None = leave unchanged; "" clears anchor_branch back to "derive the repo's default branch".
-    review_mode: str | None = None
-    anchor_branch: str | None = None
 
 
 def _anchor_state(rc) -> dict:

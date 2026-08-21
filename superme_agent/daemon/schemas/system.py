@@ -1,4 +1,4 @@
-"""Response schemas for the system spine routes (system.py).
+"""Schemas for the system spine routes (system.py).
 
 The Monitor/System dashboard read surface: the System singleton, the repo roster, and the run log,
 plus the model-config + learning-switch write results.
@@ -386,3 +386,57 @@ class TokenTimeseriesResponse(BaseModel):
     """Per-day token usage for the trend graph, bucketed by the caller's local day."""
     days: list[TokenDay] = []
     total: int = 0
+
+
+class RepoModelBody(BaseModel):
+    model: str | None = None  # null/"" clears this repo's override (fall back to the default)
+    # Which role's tier this sets; omitted means the project's own. `vet` resolves on its own
+    # chain.
+    role: str = "default"
+
+
+class RepoEffortBody(BaseModel):
+    effort: str | None = None  # null/"" clears this repo's override (fall back to the default)
+    role: str = "default"
+
+
+class LearningBody(BaseModel):
+    enabled: bool
+
+
+class DeputyConfigBody(BaseModel):
+    # Partial update: `strictness` is a per-gate map, so send only the gates that changed.
+    enabled: bool | None = None
+    strictness: dict[str, str] | None = None  # {triage|plan|review: low·medium·high·extra}
+    # One judge across every project, so one answer, set here rather than per repo. Never the
+    # project's tier.
+    model: str | None = None
+    effort: str | None = None
+
+
+class AgentModelBody(BaseModel):
+    # Either/both may be sent. model = a TIER (`sonnet`) or concrete id; effort = low|medium|high.
+    model: str | None = None
+    effort: str | None = None
+
+
+class RepoMetaBody(BaseModel):
+    # None = leave the field unchanged; "" = clear it (back to defaults).
+    color: str | None = None
+    icon: str | None = None
+
+
+class RepoConnectBody(BaseModel):
+    path: str                    # absolute dir to link (created if kind=new)
+    label: str | None = None     # display name (defaults to the dir name)
+    kind: str                    # "new" (greenfield → project-init) | "existing" (code → retrofit)
+
+
+class AutopilotConcurrencyBody(BaseModel):
+    concurrency: int
+
+
+class RepoGitBody(BaseModel):
+    # None = leave unchanged; "" clears anchor_branch back to "derive the repo's default branch".
+    review_mode: str | None = None
+    anchor_branch: str | None = None

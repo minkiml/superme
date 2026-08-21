@@ -1,4 +1,4 @@
-"""Response schemas for the Manage-Harness routes (routers/dev/harness.py)."""
+"""Schemas for the Manage-Harness routes (routers/dev/harness.py)."""
 
 from pydantic import BaseModel, ConfigDict
 
@@ -218,3 +218,49 @@ class PublishedFileResponse(BaseModel):
 class PublishedFileSaveResponse(BaseModel):
     ok: bool
     proposal_id: int
+
+
+class PluginFileBody(BaseModel):
+    scope: str
+    kind: str
+    name: str
+    content: str
+    context_id: str = "global"
+
+
+class FoundationFileBody(BaseModel):
+    key: str
+    content: str
+
+
+class DeputyMandateBody(BaseModel):
+    content: str
+    context_id: str = "global"
+
+
+class PublishedToggleBody(BaseModel):
+    enabled: bool
+    context_id: str = "global"
+
+
+class ConstitutionToggleBody(BaseModel):
+    enabled: bool
+    scope: str                       # universal_dev | repo_dev
+    context_id: str = "global"
+
+
+class ConstitutionFileBody(BaseModel):
+    slug: str
+    scope: str                       # universal_dev | repo_dev (| _core)
+    content: str
+    context_id: str = "global"
+
+
+class AssetActionBody(BaseModel):
+    action: str  # 'adopt' | 'enable' | 'disable' | 'drop'
+    context_id: str = "global"
+
+
+class PublishedFileBody(BaseModel):
+    content: str
+    context_id: str = "global"

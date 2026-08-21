@@ -1,4 +1,4 @@
-"""Response schemas for the drilldown and lifecycle routes.
+"""Schemas for the drilldown and lifecycle routes.
 
 Deliberately dumb shapes: every field is either a fact computed in `core/` or a decision made in
 `services/drilldown.py`. Nothing is derived at render time.
@@ -282,3 +282,26 @@ class AbandonResponse(BaseModel):
     runs_freed: int
     blocking_children: list[str]
     parallel_children: list[str]
+
+
+class OwnerReferenceBody(BaseModel):
+    source: str = ""
+    description: str = ""
+
+
+class OwnerNoteBody(BaseModel):
+    description: str = ""
+
+
+class OwnerInputBody(BaseModel):
+    """The owner's § From you, whole. Add and delete are both a PUT of the full slot lists — the
+    owner is the section's only writer, so there is no concurrent edit for a delta to protect."""
+    context_id: str = "global"
+    references: list[OwnerReferenceBody] = []
+    notes: list[OwnerNoteBody] = []
+
+
+class AbandonBody(BaseModel):
+    context_id: str = "global"
+    reason: str = ""
+    superseded_by: str | None = None  # set → outcome `superseded` (no dangling supersedes)

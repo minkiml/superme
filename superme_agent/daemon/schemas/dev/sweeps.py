@@ -1,4 +1,4 @@
-"""Response schemas for the standing-sweep launch bar (routers/dev/sweeps.py)."""
+"""Schemas for the standing-sweep launch bar (routers/dev/sweeps.py)."""
 
 from pydantic import BaseModel
 
@@ -24,3 +24,13 @@ class SweepLaunchResponse(BaseModel):
     family: str
     # False is not a failure: the sweep exists and rests at investigate for a chat-driven pass.
     started: bool
+
+
+class SweepLaunchBody(BaseModel):
+    family: str
+    context_id: str = "global"
+    # Empty means the whole repo, which is the honest default: the record has to say which breadth
+    # it got.
+    area: str = ""
+    # No typed field for interest: one that only leans is unreliable, so it rides the description.
+    interest: str = ""

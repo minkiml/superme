@@ -9,7 +9,6 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse
-from pydantic import BaseModel
 
 from ...app_state import (
     DevKnowledgeService, DevStore, SessionStore, SystemSpine,
@@ -22,12 +21,12 @@ from ...services.runs import (
     DEFAULT_RUN_MODEL, _begin_run, _run_background_plan, build_item_timeline,
 )
 from ...services import scheduler, gates, clearance
-from ...schemas.dev.work_items import (
-    PlanResponse, WorkItemDetailResponse, WorkItemArtifactsResponse,
-    WorkItemAdvanceResponse,
-    WorkItemScaffoldResponse, WorkItemSeenResponse, WorkItemAutopilotResponse,
-    WorkItemTimelineResponse, PromptExtractionStatusResponse, WorkItemDocEditResponse,
-)
+from ...schemas.dev.work_items import (AuthorizeBody, AutopilotBody, DocEditBody, PlanBody,
+                                       PlanResponse, PromptExtractionStatusResponse, ScaffoldBody,
+                                       WorkItemAdvanceResponse, WorkItemArtifactsResponse,
+                                       WorkItemAutopilotResponse, WorkItemDetailResponse,
+                                       WorkItemDocEditResponse, WorkItemScaffoldResponse,
+                                       WorkItemSeenResponse, WorkItemTimelineResponse)
 
 log = logging.getLogger("superme-agent")
 
@@ -35,12 +34,6 @@ router = APIRouter()
 
 
 # --- background "Plan it": run /plan with no chat surface -------------------
-class PlanBody(BaseModel):
-    context_id: str = "global"
-    model: str | None = None   # per-run model choice; None -> DEFAULT_RUN_MODEL
-    effort: str | None = None  # per-run reasoning effort; None -> item/repo/system default
-
-
 @router.post("/dev/work-items/{item_id}/run", response_model=PlanResponse)
 async def dev_work_item_run(item_id: str, body: PlanBody,
                             dev: DevKnowledgeService = Depends(get_dev),
@@ -120,12 +113,6 @@ async def dev_work_item_rerun(item_id: str, body: PlanBody,
     return {"ok": True, "status": str(fresh.get("phase") or "active"), "id": item_id, "model": model}
 
 
-class AuthorizeBody(BaseModel):
-    context_id: str = "global"
-    auth_id: str                    # the pending authorization request's id (from authorizations.md)
-    decision: str                   # "granted" | "denied"
-
-
 @router.post("/dev/work-items/{item_id}/authorize", response_model=PlanResponse)
 async def dev_work_item_authorize(item_id: str, body: AuthorizeBody,
                                   dev: DevKnowledgeService = Depends(get_dev),
@@ -183,12 +170,6 @@ async def dev_work_item_compact(item_id: str, body: PlanBody,
     asyncio.create_task(run_compaction(ctx, body.context_id, item_id, str(session_id),
                                        model=model, pre_pct=None))
     return {"ok": True, "status": "compacting", "id": item_id, "model": model}
-
-
-class ScaffoldBody(BaseModel):
-    context_id: str = "global"
-    wave: str | None = None         # the roadmap wave this item instances (resolves its deliverable)
-    deliverable: str | None = None  # …or a deliverable directly when no wave applies
 
 
 @router.post("/dev/work-items/{item_id}/scaffold", response_model=WorkItemScaffoldResponse)
@@ -305,12 +286,6 @@ async def dev_work_item_doc(item_id: str, path: str, context_id: str = "global",
                                         context_id=context_id, editable=editable))
 
 
-class DocEditBody(BaseModel):
-    context_id: str = "global"
-    path: str            # the report's own relative pointer, e.g. "artifacts/plan.md"
-    text: str
-
-
 @router.put("/dev/work-items/{item_id}/doc", response_model=WorkItemDocEditResponse)
 async def dev_work_item_doc_edit(item_id: str, body: DocEditBody,
                                  dev: DevKnowledgeService = Depends(get_dev),
@@ -395,10 +370,6 @@ async def dev_work_item_advance(item_id: str, context_id: str = "global",
     ctx = contexts.resolve(context_id, "dev")
     return gates.advance_item(ctx, context_id, item_id, dev=dev, dev_store=dev_store,
                               spine=spine, actor="owner")
-
-
-class AutopilotBody(BaseModel):
-    on: bool
 
 
 @router.post("/dev/work-items/{item_id}/autopilot", response_model=WorkItemAutopilotResponse)

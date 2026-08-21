@@ -1,4 +1,4 @@
-"""Response schemas for the learning routes: stats, ops, and the two-gate review queue.
+"""Schemas for the learning routes: stats, ops, and the two-gate review queue.
 
 The rich DB rows use `extra='allow'` and emit only the keys they return; the stats payload is
 modeled strictly.
@@ -222,3 +222,20 @@ class PublishResponse(BaseModel):
     ok: bool
     path: str
     proposal: Proposal
+
+
+class ProposalActionBody(BaseModel):
+    context_id: str = "global"
+    type: str | None = None         # recall-loading tier override: rule|convention|decision|reference
+    description: str | None = None  # one-line index hook override (else derived from the body)
+
+
+class ApproveBody(BaseModel):
+    context_id: str = "global"
+    # The owner's answers at gate 1. Stored on the proposal and handed to the write phase.
+    answers: dict | list | None = None
+
+
+class ArtifactEditBody(BaseModel):
+    content: str
+    context_id: str = "global"

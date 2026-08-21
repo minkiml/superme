@@ -9,25 +9,18 @@ import logging
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
 
 from ...app_state import DevKnowledgeService, DevStore, SystemSpine, get_dev, get_dev_store, get_spine
 from ....core import git_layer
 from ....gateway import contexts
 from ...services import git_ops, pr_view
 from ...services.runs import _begin_run, _run_background_resolve
-from ...schemas.dev.git import (
-    GitHealthResponse, GitMergeResponse, GitRevertResponse, GitResolveResponse,
-    PrViewResponse, PrDiffResponse,
-)
+from ...schemas.dev.git import (GitBody, GitHealthResponse, GitMergeResponse, GitResolveResponse,
+                                GitRevertResponse, PrDiffResponse, PrViewResponse)
 
 log = logging.getLogger("superme-agent")
 
 router = APIRouter()
-
-
-class GitBody(BaseModel):
-    context_id: str = "global"
 
 
 def _load(context_id: str, item_id: str, dev: DevKnowledgeService):
