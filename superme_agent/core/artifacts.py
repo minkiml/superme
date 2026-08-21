@@ -1609,8 +1609,7 @@ def record_lens(item_dir: Path, *, probed: list[str] | str, lens: str,
     """Record one standing lens's read of this cycle: what was PROBED, and what it found.
     No findings is a complete record.
 
-    `probed` is a LIST, one probe per entry. No quotas anywhere: a quota manufactures a finding when
-    the code is fine."""
+    `probed` is a LIST, one probe per entry. No quotas: a quota manufactures findings."""
     item_dir = Path(item_dir)
 
     def _one_line(s: str) -> str:
@@ -1809,10 +1808,10 @@ def _tagged_bullets(body: str) -> tuple[dict[str, list[str]], list[str]]:
 
 
 def proof_rows(item_dir: Path) -> list[dict]:
-    """The Proof view's rows — the plan's tasks in order, then one item-wide row for the rest.
+    """The Proof view's rows: the plan's tasks in order, then one item-wide row for the rest.
 
-    `verified` entries are the PLANNED checks with any verdict joined on. A check the loop has not
-    reached is still a row: the exam is decided at plan."""
+    `verified` are the PLANNED checks. A check the loop has not reached is still a row — the exam
+    is decided at plan."""
     item_dir = Path(item_dir)
     plan_path = item_dir / "artifacts" / artifact_file("plan")
     plan = plan_path.read_text() if plan_path.is_file() else ""
@@ -2113,8 +2112,8 @@ def note_no_verification(item_dir: Path) -> str | None:
 def evidence_status(item_dir: Path, repo_dir: Path | None, *, scope_to_plan: bool = True) -> dict:
     """The derived verdict over the ledger: `unverified` · `failed` · `stale` · `passed`.
 
-    Scoped to the CURRENT plan's checks, so a renamed check's ORPHAN cannot pin the loop red forever.
-    `deferred` sits between passed and failed; the authorization ledger is the AUTHORITY."""
+    Scoped to the CURRENT plan's checks, so a renamed check's ORPHAN cannot pin the loop red.
+    `deferred` sits between the two; the authorization ledger is the AUTHORITY."""
     entries = evidence_entries(item_dir)
     ids = _plan_check_ids(item_dir) if scope_to_plan else None
     auths = authorization_entries(item_dir)
@@ -2424,11 +2423,10 @@ def write_plan_user_report(item_dir: Path, *, summary: str, approach: str = "",
 
 def write_vet_user_report(item_dir: Path, repo_dir: Path | None, *, summary: str = "",
                           confirms: str = "", looked_at: str = "", unknown: str = "") -> dict:
-    """Write the vet report: vet writes the narrative, code writes `## What didn't
-    hold` off the ledger.
+    """Write the vet report: vet writes the narrative, code writes `## What didn't hold`.
 
-    ONE-WRITER with the ledger, so vet cannot write around a red check. No report while a check has
-    no entry, a lens no read, or a failure no diagnosis."""
+    ONE-WRITER, so vet cannot write around a red check. No report while a check lacks an entry, a
+    lens a read, or a failure a diagnosis."""
     item_dir = Path(item_dir)
     plan_path = item_dir / "artifacts" / artifact_file("plan")
     plan_ids = [c["id"] for c in parse_vet_plan(plan_path.read_text()).get("checks", [])] \
@@ -2660,11 +2658,11 @@ def _normalize_signature(s: str) -> str:
 
 
 def convergence_fingerprint(item_dir: Path, *, extra: list[str] | None = None) -> str:
-    """The current cycle's failure fingerprint: sha1 over the sorted (check,
-    normalized result) pairs. Empty when nothing is failing.
+    """The cycle's failure fingerprint: sha1 over the sorted (check, normalized
+    result) pairs. Empty when nothing is failing.
 
     `extra` carries failure signatures that are not ledger checks — a wall the loop keeps hitting
-    should exit `not_converging`, not burn the budget."""
+    should exit `not_converging`."""
     latest: dict[str, dict] = {}
     for e in evidence_entries(item_dir):
         latest[e["check"]] = e
