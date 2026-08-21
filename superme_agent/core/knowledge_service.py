@@ -1,14 +1,7 @@
 """KnowledgeService — file CRUD over a Context's knowledge_root.
 
-The second half of the Core (alongside AgentService). Surface-agnostic: it operates
-on a knowledge_root Path and never knows who's calling. Stage C1 keeps it deliberately
-simple over a minimal base structure; the real retrieval model (index, metadata,
-lifecycle, taxonomy) is a dedicated future design job.
-
-  list_tree  the folder/file tree (relative paths), for the dashboard to render
-  read       one file's text
-  write      overwrite/create one file (used by in-place editing)
-  inject     create a new note from {title, content} and link it in index.md
+Surface-agnostic: it operates on a Path and never knows who is calling. Deliberately simple —
+the real retrieval model (index, metadata, lifecycle) is a future design job.
 """
 
 import re
@@ -32,10 +25,7 @@ class KnowledgeService:
         return p
 
     def list_tree(self, root: Path) -> dict:
-        """Nested tree of dirs/files under root (hidden entries skipped).
-
-        `root` is a context's workspace/ knowledge root; internal knowledge (dev/) lives
-        in a sibling internal/ root and never appears here (D-016)."""
+        """Nested tree of dirs/files under root (hidden entries skipped). Internal knowledge lives in a sibling root and never appears here."""
         root = Path(root)
 
         def walk(d: Path) -> list:

@@ -1,34 +1,15 @@
-"""Attention engine — "what needs me?" answered mechanically (workspace-workflow S7, D10;
-nimbalyst near-verbatim).
+"""Attention engine — "what needs me?", answered mechanically.
 
 Every work-item lands in AT MOST one bucket, strict priority:
-    error    (red)         — the work STOPPED: a crashed turn, an outage that outlasted the retry
-                             ladder, a daemon restart (durable `status == error`, carrying the
-                             `error_reason` it stopped with). Ranked above `needs_you` because an
-                             item resting at a gate is the workflow working as designed, while this
-                             one is not working at all. It is never terminal — the owner Resumes it
-                             or re-runs it — and it is NOT the run-level `system_fault`, which is a
-                             run that finished while our machinery misbehaved (recovery R2).
-    needs_you (orange)     — sits at a human gate: durable `status == awaiting_human`, never an
-                             ephemeral flag (restart-proof; only awaiting{human} pages — child/
-                             external stay silent, D2). Reserved for a TRUE human decision.
-                             ALSO covers the STALL: `active` at a gate phase with no live run.
-                             "Active" means being worked, and at a gate with nothing running
-                             there is nothing working and nothing that will start — only the
-                             owner moves it. Leaving those quiet is the one failure this engine
-                             exists to prevent, so they page (see `_reason`, which says which
-                             of the two it is).
-    deputy_working (purple)— a live run whose actor is the DEPUTY (the owner's delegated reviewer)
-                             is judging a gate right now. Split out of `running` so the board never
-                             reads "NEEDS YOU" (or a generic "agent working") while the deputy is
-                             covering the owner — the deputy is standing in for the human here.
-    running  (green)       — a live PHASE-agent run is executing for it right now (spine live rows).
-    unread   (blue)        — terminal, and the owner hasn't opened it since (no `seen_at` stamp):
-                             the close/abandon brief pushing back instead of waiting to be polled.
-Everything else is quiet — active-but-autonomous work makes no attention claim.
 
-The global badge shows ONLY the top non-empty tier (its color + count) — one glance, one number.
-Derived at read time from durable state; nothing stored, nothing to drift.
+    error           the work STOPPED — a crashed turn, an outage past the retry ladder, a
+                    restart. Above `needs_you` because resting at a gate is the workflow
+                    working, while this is not working at all. Never terminal.
+    needs_you       sits at a human gate (`awaiting_human`). Also covers the STALL: `active`
+                    at a gate with no live run, where nothing will start on its own.
+    deputy_working  a live run whose actor is the deputy, judging a gate right now
+    running         a phase agent is working it
+    resting         everything else
 """
 
 from .gate_briefs import GATE_FOR_PHASE
@@ -46,22 +27,19 @@ def _is_terminal(item: dict) -> bool:
 def _reason(item: dict, bucket: str, stalled: bool = False, rulings: int = 0) -> str:
     phase = str(item.get("phase") or "")
     if bucket == "error":
-        # The stored reason IS the message — written where the work stopped, by the runner that
-        # watched it stop. This reader never re-derives it: guessing a cause from the phase alone
-        # is how "unexpected error" labels that tell the owner nothing get born.
+        # The stored reason IS the message, written where the work stopped. Never re-derived:
+        # guessing from the phase alone is how useless "unexpected error" labels are born.
         why = str(item.get("error_reason") or "").strip()
         where = f"during {phase}" if phase else "mid-run"
         return f"the work stopped {where} — {why}" if why else f"the work stopped {where}"
     if bucket == "needs_you":
         gate = GATE_FOR_PHASE.get(phase)
         if stalled:
-            # Worth distinguishing: a normal gate pause is the workflow working as designed, while
-            # this one reached a gate and lost its run. Same claim on the owner, different story.
+            # A normal gate pause is the workflow working; this one reached a gate and lost its run.
             return f"stalled at the {gate} gate — active with nothing running" if gate \
                 else f"stalled (mid-{phase}) — active with nothing running"
-        # An item that ASKS the owner something must not read like one that merely finished. The
-        # gate brief names the questions too, but that is a page reached by opening the item —
-        # this line is what summons them, and a call nobody knows is waiting is a call nobody makes.
+        # An item that ASKS something must not read like one that merely finished — this line is
+        # what summons the owner.
         if rulings:
             return (f"at the {gate} gate — {rulings} proposal(s) need a call only you can make "
                     "(approving without ruling drops them)")
@@ -77,20 +55,17 @@ def _reason(item: dict, bucket: str, stalled: bool = False, rulings: int = 0) ->
 
 def assign(items: list[dict], running_ids: set[str], deputy_ids: set[str] = frozenset(),
            rulings_by_item: dict[str, int] | None = None) -> dict:
-    """Bucket every item → {buckets: {tier: [row…]}, badge: {tier, color, count} | None}.
-    A row carries what the kanban/badge surfaces need: id · title · kind · phase · status ·
-    outcome · bucket · reason (one human line) · gate (when parked at one).
+    """Bucket every item → {buckets, badge}. A row carries what the kanban and badge need:
+    id · title · kind · phase · status · outcome · bucket · reason · gate.
 
-    `deputy_ids` ⊆ `running_ids` — the subset whose live run is a deputy judgment (stamped
-    `feature="deputy"`). They peel out of the green `running` tier into `deputy_working` so the
-    owner can tell "the deputy is covering this" from "a phase agent is coding"."""
+    `deputy_ids` ⊆ `running_ids` — the subset judging a gate, peeled out so the owner can tell
+    "the deputy is covering this" from "a phase agent is coding"."""
     buckets: dict[str, list[dict]] = {t: [] for t in TIER_ORDER}
     for it in items:
         iid = str(it.get("id"))
         terminal = _is_terminal(it)
         stalled = False
-        # FIRST, above every other claim: a stopped item is not resting, it is broken, and it stays
-        # invisible to every tier below (they all key on active/awaiting_human, which it is not).
+        # FIRST: a stopped item is broken, and every tier below keys on states it is not in.
         if str(it.get("status")) == "error" and not terminal:
             tier = "error"
         elif str(it.get("status")) == "awaiting_human":
@@ -99,10 +74,8 @@ def assign(items: list[dict], running_ids: set[str], deputy_ids: set[str] = froz
             tier = "deputy_working"
         elif iid in running_ids and not terminal:
             tier = "running"
-        # AFTER the two live tiers on purpose: an item at a gate WITH a run is being worked, and
-        # only its absence makes the gate a stall. Deputy ⊆ running, so both are already excluded.
-        # A freshly-advanced item blips here for the moment between the advance and its run row
-        # appearing; it heals itself on the next read, and a brief page beats a silent wedge.
+        # After the live tiers: only the ABSENCE of a run makes a gate a stall. A freshly-advanced
+        # item blips here until its run row appears, and heals itself on the next read.
         elif (str(it.get("status")) == "active" and not terminal
               and str(it.get("phase") or "") in GATE_FOR_PHASE):
             tier, stalled = "needs_you", True

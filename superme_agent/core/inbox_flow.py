@@ -24,8 +24,8 @@ def inbox_content_dir(dev_root: Path, inbox_id: int) -> Path:
 
 def brief_state(dev_root: Path, item_id: str) -> list[str]:
     """The handoff brief's issues as the item now holds it, or [] when it is fine. An ABSENT
-        brief is one issue, not zero: a bare capture is legal, and its whole cold-start context is
-        then the one-line row."""
+    brief is one issue, not zero: a bare capture is legal, and its whole cold-start context is
+    then the one-line row."""
     from . import artifacts as _arts
     p = Path(dev_root) / "work-items" / item_id / "preliminary" / "handoff-brief.md"
     if not p.exists():
@@ -114,9 +114,9 @@ def push_inbox_item(store, dev: DevKnowledgeService, dev_root: Path, row: dict, 
 def brief_location(dev_root: Path, row: dict) -> tuple[Path, bool]:
     """Where this row's handoff brief lives, and whether it is still writable.
 
-        An OPEN row's brief is editable in the inbox folder — push is the last moment changing it is
-        free. A PUSHED row's has moved into `preliminary/` and is provenance. The path is returned
-        whether or not the file exists."""
+    An OPEN row's brief is editable in the inbox folder — push is the last moment changing it is
+    free. A PUSHED row's has moved into `preliminary/` and is provenance. The path is returned
+    whether or not the file exists."""
     dev_root = Path(dev_root)
     if row.get("status") == "pushed" and row.get("routed_to"):
         return (dev_root / "work-items" / str(row["routed_to"]) / "preliminary"
@@ -126,7 +126,7 @@ def brief_location(dev_root: Path, row: dict) -> tuple[Path, bool]:
 
 def read_brief(dev_root: Path, row: dict) -> tuple[str | None, bool]:
     """This row's handoff brief as raw markdown (frontmatter kept — the agent sees it too), plus
-        whether it may still be written."""
+    whether it may still be written."""
     path, editable = brief_location(dev_root, row)
     return (path.read_text() if path.is_file() else None), editable
 
@@ -134,8 +134,8 @@ def read_brief(dev_root: Path, row: dict) -> tuple[str | None, bool]:
 def write_brief(dev_root: Path, row: dict, content: str) -> Path:
     """Overwrite this row's handoff brief, creating it if the row never had one.
 
-        An overwrite, unlike the agent-side append: the owner is editing text in front of them, an
-        agent cannot see what it would clobber. Raises once the row is pushed."""
+    An overwrite, unlike the agent-side append: the owner is editing text in front of them, an
+    agent cannot see what it would clobber. Raises once the row is pushed."""
     path, editable = brief_location(dev_root, row)
     if not editable:
         raise ValueError("this row is pushed — its brief is the item's provenance and is read-only")

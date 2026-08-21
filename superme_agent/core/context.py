@@ -1,32 +1,13 @@
-"""Context — the surface-agnostic binding for one agent run.
+"""Context — the surface-agnostic binding for one agent run: who runs, and where.
 
-A Context says *who/where* a turn runs: the global root ("SuperMe hub") or a
-specific local/project (a project host). It generalizes the Slack-era "workspace" concept so the
-same Core code path serves every surface and both harness layers.
-
-  layer          "global" (the root SuperMe) | "local" (a project sub-SuperMe)
-  mode           "core" (the twin — lives the owner's work) | "dev" (builds SuperMe
-                 itself, anchored to dev-knowledge). ORTHOGONAL to layer: every
-                 (layer, mode) pair is valid (global-core, global-dev, …). Supplied by
-                 the surface, not the registry. Selects the system-prompt charter and
-                 which harness plugins load; it is NOT a knowledge sandbox.
-  id             stable identifier ("global", or a project/workspace name)
-  cwd            working directory the agent runs in
-  knowledge_root the dashboard-consumed knowledge (the `core/` sub-root of this
-                 context's knowledge home) — Me/Domains/Manage-Knowledge read this
-  internal_root  internal knowledge (the `internal/` sub-root) — dev-knowledge etc.,
-                 not browsable in the knowledge dashboards (consumed by Development)
-  persona_append extra persona text layered on top of the global persona
-  extra_mcp      names of surface/workspace-specific MCP servers to attach
-  label          human-facing display name
-  setting_sources which Claude Code setting layers to load — all three, so SuperMe keeps
-                 the owner's full NATIVE environment (commands, skills, MCP, memory):
-                   "user"    → the owner's global ~/.claude (native commands/skills, MCP, memory)
-                   "project" → the hosting dir's project-level cwd/.claude (resolves vs cwd)
-                   "local"   → cwd/.claude/*.local overrides
-                 SuperMe's OWN skills are mode-scoped separately by the per-mode harness
-                 plugins (see config.plugins_for) — dev vs core load different plugins — so the
-                 slash palette = SuperMe's mode-scoped skills + the native environment above.
+  layer           "global" (the root SuperMe) | "local" (a project sub-SuperMe)
+  mode            "core" (the twin) | "dev" (builds SuperMe itself). ORTHOGONAL to layer, and
+                  not a knowledge sandbox — it selects the charter and which plugins load.
+  cwd             working directory the agent runs in
+  knowledge_root  dashboard-browsable knowledge
+  internal_root   dev-knowledge; never browsable in the knowledge dashboards
+  setting_sources which Claude Code setting layers load, so the owner keeps their native
+                  environment (commands, skills, MCP, memory)
 """
 
 from pathlib import Path

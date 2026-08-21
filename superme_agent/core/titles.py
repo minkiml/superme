@@ -1,24 +1,11 @@
 """The one rule for a work-item's title, in one place.
 
-A title is a LABEL — the line a human reads on a card, in the attention feed, in the kanban
-column. It is not the ask, and it is not identity: the id is an opaque 12-hex token fully
-decoupled from it (see `create_work_item`), so nothing structural breaks when a title changes
-and nothing is gained by packing meaning into it.
+A title is a LABEL, not the ask and not identity — the id is an opaque token fully decoupled
+from it, so nothing breaks when a title changes.
 
-Three callers mint titles, and they need different treatment:
-
-  · `itemize_and_launch` and `create_inbox_item` are AGENTS. They get `check_title`, which
-    returns a retry-shaped complaint the model can act on — the same contract `_commit_spec`
-    uses for commit subjects. An agent that writes a bad title should be told, not corrected
-    behind its back, or it writes the same title next time.
-
-  · The owner's inbox push is a HUMAN, and the title there is optional. You cannot bounce a
-    person who has already walked away, so that path gets `normalize_title`, which never fails:
-    it takes the first sentence and truncates on a word boundary. The result is deliberately
-    only adequate — the good name comes later, from triage, which has read the whole ask.
-
-The rules are the ones a machine can actually check. Whether a title is DESCRIPTIVE is left to
-the writer; nothing here can measure that, and a rule that pretends to would just be noise.
+Agents get `check_title`, which returns a complaint they can act on: an agent told nothing
+writes the same title next time. The owner's inbox push gets `normalize_title`, which never
+fails, because you cannot bounce a person who has already walked away.
 """
 
 import re
@@ -34,10 +21,8 @@ def one_line(raw) -> str:
 
 
 def check_title(raw, *, description: str = "") -> str:
-    """Return the complaint for a title an AGENT wrote, or "" if it passes.
-
-    The message says what is wrong and what to do instead, because it is delivered back into the
-    agent's turn as a tool error and is the only instruction it gets."""
+    """Return the complaint for a title an AGENT wrote, or "" if it passes. The message is
+    delivered back into the agent's turn, so it is the only instruction it gets."""
     title = one_line(raw)
     if not title:
         return ("A work-item needs a `title` — the short line that names it on the board "
@@ -54,19 +39,15 @@ def check_title(raw, *, description: str = "") -> str:
 
 
 def normalize_title(raw, *, description: str = "") -> str:
-    """Coerce anything into a usable title. Never raises — this is the floor under the paths
-    where no one can be asked to try again.
-
-    A title that already passes is returned untouched, so this only ever acts on the broken case.
-    """
+    """Coerce anything into a usable title. Never raises — the floor under paths where no one
+    can be asked to try again. A passing title is returned untouched."""
     title = one_line(raw)
     if not title:
         return ""
     if not check_title(title, description=description):
         return title
-    # The first sentence of a request is nearly always the request itself ("tally search — find
-    # entries by note text. I log a lot of notes and…"), which makes a far better label than the
-    # first N characters of the whole paragraph.
+    # The first sentence is nearly always the request itself, and a better label than the first
+    # N characters of the paragraph.
     first = _SENTENCE_END.split(title, 1)[0].strip()
     first = first.rstrip(".!?").strip() or title
     if len(first) <= TITLE_MAX:

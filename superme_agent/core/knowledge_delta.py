@@ -42,8 +42,8 @@ def _sections(text: str) -> list[str]:
 
 def validate_ops(ops: list, dev_root: Path, repo_dir: Path | None) -> list[str]:
     """Itemized validation issues for a list of edit ops (empty = valid). Per op: shape · known
-        target doc · the `## section` exists (v1 never invents structure) · content non-empty with no
-        `<fill:…>` · every backticked file reference exists under `repo_dir` · deliverable slugs resolve."""
+    target doc · the `## section` exists (v1 never invents structure) · content non-empty with no
+    `<fill:…>` · every backticked file reference exists under `repo_dir` · deliverable slugs resolve."""
     if not isinstance(ops, list) or not ops:
         return ["a delta needs a non-empty list of edit ops"]
     dev = DevKnowledgeService()
@@ -98,8 +98,8 @@ def validate_ops(ops: list, dev_root: Path, repo_dir: Path | None) -> list[str]:
 
 def apply_ops(dev_root: Path, ops: list) -> dict:
     """The deterministic writer: apply already-VALIDATED ops atomically per doc.
-        `update`/`supersede` replace a section's body, `append` adds at its end, `rename_section`
-        rewrites the heading line. Trusts its input and fails loud on a target that vanished."""
+    `update`/`supersede` replace a section's body, `append` adds at its end, `rename_section`
+    rewrites the heading line. Trusts its input and fails loud on a target that vanished."""
     if not ops:
         return {"applied": 0, "docs": []}
     texts: dict[str, str] = {}
@@ -146,7 +146,7 @@ def change_log_path(dev_root: Path, when: date | None = None) -> Path:
 def append_change_log(dev_root: Path, item_id: str, title: str, ops: list,
                       when: date | None = None) -> str:
     """Append this item's entry to the current week's change log, creating the file on the
-        week's first write. Append-only: the log is history."""
+    week's first write. Append-only: the log is history."""
     path = change_log_path(dev_root, when)
     path.parent.mkdir(parents=True, exist_ok=True)
     head = "" if path.exists() else (
@@ -166,7 +166,7 @@ def append_change_log(dev_root: Path, item_id: str, title: str, ops: list,
 
 def freshness_lint(dev_root: Path, repo_dir: Path | None) -> list[str]:
     """The standing truth-decay check: anchor-doc file references that no longer exist, and
-        roadmap pointers that do not resolve. Warnings, never blockers."""
+    roadmap pointers that do not resolve. Warnings, never blockers."""
     warnings: list[str] = []
     dev = DevKnowledgeService()
     for doc in _DOCS:

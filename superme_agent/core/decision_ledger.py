@@ -74,7 +74,7 @@ def already_recorded(dev_root: Path, item_id: str, question: str) -> bool:
 
 def render_entry(entry_id: str, prop: dict, *, item_id: str, date: str) -> str:
     """One entry, every field copied. The HEADING is the rule, because the heading is the whole
-        index a later phase reads."""
+    index a later phase reads."""
     rule = " ".join(str(prop["rule"]).split())
     why = prop.get("why_now") or "recorded from a research review's proposed work."
     return (
@@ -91,7 +91,7 @@ def record_rulings(dev_root: Path, item_dir: Path, item_id: str, *, date: str,
                    project: str = "Project") -> list[str]:
     """Append one entry per PROMOTABLE ruling. An answered question with no rule records nothing.
 
-        Returns the ids written. Creates the ledger if the repo has none yet."""
+    Returns the ids written. Creates the ledger if the repo has none yet."""
     answered = [p for p in _arts.research_proposals(item_dir) if _arts.proposal_promotable(p)]
     if not answered:
         return []
@@ -125,7 +125,7 @@ def entries_for_item(dev_root: Path, item_id: str) -> list[dict]:
 def settled_index(dev_root: Path) -> str:
     """The ledger as one scan line per entry — what a phase reads before asking anything.
 
-        Headings only: the ledger grows forever, and a per-run cost that grows is a duty that gets dropped."""
+    Headings only: the ledger grows forever, and a per-run cost that grows is a duty that gets dropped."""
     entries = read_entries(dev_root)
     if not entries:
         return "This project has no recorded decisions yet."

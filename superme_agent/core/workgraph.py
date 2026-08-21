@@ -1,17 +1,11 @@
-"""WorkGraph — the DERIVED graph projection over the workspace (workspace-workflow S3, D3).
+"""WorkGraph — the DERIVED graph projection over the workspace.
 
-There is deliberately NO stored DAG: the would-be feeds (roadmap deliverables · item yaml · inbox
-store · git) each already have an authoritative home, and a stored graph would be a 4-way sync
-problem. This module reads prepared inputs and assembles a typed graph on demand.
+There is deliberately NO stored DAG: every feed (roadmap, item yaml, inbox, git) already has an
+authoritative home, and storing the graph would be a four-way sync problem. This reads prepared
+inputs and assembles a typed graph on demand.
 
-Node kinds: `repo_root` · `deliverable` · `work_item` · `inbox_spawn` (an OPEN spawned-but-
-unpushed inbox row — the graph view renders it as a transparent pushable node).
-Edge kinds: `contains` (repo→deliverable, deliverable→item, repo→ungrouped item) ·
-`spawned_from` (child→parent, carrying the relation) · `supersedes` (old→new).
-Git branch/worktree state becomes DECORATION on work_item nodes (S4 fills it) — never nodes.
-
-The structure is hand-rolled (adjacency + ancestors/descendants/topo/cycle-guard) — a dependency
-was rejected for four functions. Pure over plain dicts; unit-tested without a daemon.
+Nodes: `repo_root` · `deliverable` · `work_item` · `inbox_spawn`.
+Edges: `contains` · `spawned_from` · `supersedes`. Git state is DECORATION, never a node.
 """
 
 
@@ -29,7 +23,7 @@ class WorkGraph:
 
     def add_edge(self, src: str, dst: str, kind: str, **attrs) -> None:
         if src not in self.nodes or dst not in self.nodes:
-            return  # dangling ref (e.g. spawned_from a deleted item) — decoration, never a crash
+            return  # dangling ref — decoration, never a crash
         self.edges.append({"src": src, "dst": dst, "kind": kind, **attrs})
         self._out.setdefault(src, []).append(dst)
         self._in.setdefault(dst, []).append(src)
@@ -67,8 +61,8 @@ class WorkGraph:
         return order if len(order) == len(self.nodes) else None
 
     def cycles(self) -> list[list[str]]:
-        """The node sets stuck in cycles (empty = acyclic). Reported, never raised — a
-        hand-edited spawned_from cycle must surface as data, not crash the endpoint."""
+        """The node sets stuck in cycles (empty = acyclic). Reported, never raised — a hand-edited
+        cycle must surface as data, not crash the endpoint."""
         indeg = {n: 0 for n in self.nodes}
         for e in self.edges:
             indeg[e["dst"]] += 1
@@ -91,10 +85,8 @@ def item_node_id(item_id: str) -> str:
 
 def build(*, repo_id: str, items: list[dict], deliverables: list[dict],
           waves: list[dict], inbox_rows: list[dict]) -> WorkGraph:
-    """Assemble the graph from the authoritative feeds:
-    `items` = the work-item dicts (yaml reads) · `deliverables` = [{id, title}] from project-prd ·
-    `waves` = [{id, deliverable, …}] from roadmap (resolves an item's wave → its deliverable) ·
-    `inbox_rows` = the inbox queue (OPEN rows with spawned_from become inbox_spawn nodes)."""
+    """Assemble the graph from the authoritative feeds: work-item dicts, PRD deliverables,
+    roadmap waves (resolving an item's wave to its deliverable), and OPEN spawned inbox rows."""
     g = WorkGraph()
     root = f"repo:{repo_id}"
     g.add_node(root, "repo_root", label=repo_id)
@@ -110,9 +102,7 @@ def build(*, repo_id: str, items: list[dict], deliverables: list[dict],
         g.add_node(nid, "work_item", label=it.get("title") or it.get("id"),
                    item_kind=it.get("kind"), phase=it.get("phase"), status=it.get("status"),
                    outcome=it.get("outcome"),
-                   # S4/S7 git decoration: branch name + merged-to-main, straight off the item
-                   # record (health probes stay on the per-item git route — the graph must render
-                   # without touching git).
+                   # Straight off the item record: the graph must render without touching git.
                    git_branch=it.get("git_branch"),
                    git_merged=bool(it.get("git_merge_commit")))
         d_slug = it.get("deliverable") or wave_to_deliverable.get(it.get("wave"))
