@@ -1,8 +1,7 @@
 """Feature → category taxonomy for the token-usage breakdown.
 
-One governed place mapping each run `feature` to a top-level category. A new agent emits a new
-feature; classify it here with a single line. An UNREGISTERED feature is never silently dropped
-— it surfaces under its own name inside `other`, so it self-flags the first time it runs.
+An UNREGISTERED feature is never dropped: it surfaces under its own name inside `other`,
+so it self-flags the first time it runs.
 """
 
 # Stable top-level order for the dashboard (unknowns fall into the trailing catch-all).
@@ -46,14 +45,12 @@ FEATURE_CATEGORY = {
     "resolve": "workitem",
     # Interactive (owner-driven turns; bound chat still tags item_id for attribution).
     "chat": "interactive",
-    # Meta and one-off, not the main interactive spend. Registered explicitly so this reads as a
-    # decision rather than an unclassified self-flag.
+    # Meta and one-off, not the main interactive spend.
     "onboarding": "other",
     "diagnosis": "other",
     # A throwaway probe: real tokens, but meta rather than dev spend.
     "prompt-extraction": "other",
-    # Reports ZERO usage: the summarization happens inside the CLI and never surfaces. Not free —
-    # UNMEASURED. The shrink it achieved is a compaction metric, never a usage figure.
+    # Reports ZERO usage: the CLI summarizes internally. Not free — UNMEASURED.
     "compact": "other",
     # System / on-behalf features register here as they appear (e.g. "autotitle": "system").
 }
@@ -61,18 +58,16 @@ FEATURE_CATEGORY = {
 # Anything unmapped lands here, KEEPING its own feature name as a sub-bucket.
 UNCLASSIFIED = "other"
 
-# Retired feature → the one that absorbed its work: a rename leaves the old name in every row
-# already written, and reporting both reports one job twice.
-#
-# Presentation only. Rows keep their spelling, amounts are untouched, nothing is estimated.
+# Retired feature → the one that absorbed it. Presentation only: rows keep their spelling, amounts
+# untouched.
 FEATURE_ALIAS = {
     # Both were absorbed into the one shared `review` run.
     "report": "review",
     "research-report": "review",
 }
 
-# Shown as a SINGLE bar: a breakdown is only worth its width where the parts are separately
-# actionable. Declared here so the surface never re-decides it.
+# Shown as a SINGLE bar — a breakdown only earns its width where the parts are separately
+# actionable.
 COLLAPSED_CATEGORIES = ("learning", "other")
 
 

@@ -1,15 +1,7 @@
 """Attention engine — "what needs me?", answered mechanically.
 
-Every work-item lands in AT MOST one bucket, strict priority:
-
-    error           the work STOPPED — a crashed turn, an outage past the retry ladder, a
-                    restart. Above `needs_you` because resting at a gate is the workflow
-                    working, while this is not working at all. Never terminal.
-    needs_you       sits at a human gate (`awaiting_human`). Also covers the STALL: `active`
-                    at a gate with no live run, where nothing will start on its own.
-    deputy_working  a live run whose actor is the deputy, judging a gate right now
-    running         a phase agent is working it
-    resting         everything else
+Every item lands in AT MOST one bucket, strict priority: `error` (work stopped) ·
+`needs_you` (a human gate, or stalled at one) · `deputy_working` · `running` · `resting`.
 """
 
 from .gate_briefs import GATE_FOR_PHASE
@@ -27,8 +19,8 @@ def _is_terminal(item: dict) -> bool:
 def _reason(item: dict, bucket: str, stalled: bool = False, rulings: int = 0) -> str:
     phase = str(item.get("phase") or "")
     if bucket == "error":
-        # The stored reason IS the message, written where the work stopped. Never re-derived:
-        # guessing from the phase alone is how useless "unexpected error" labels are born.
+        # The stored reason IS the message. Re-deriving it from the phase is how "unexpected
+        # error" is born.
         why = str(item.get("error_reason") or "").strip()
         where = f"during {phase}" if phase else "mid-run"
         return f"the work stopped {where} — {why}" if why else f"the work stopped {where}"
@@ -38,8 +30,7 @@ def _reason(item: dict, bucket: str, stalled: bool = False, rulings: int = 0) ->
             # A normal gate pause is the workflow working; this one reached a gate and lost its run.
             return f"stalled at the {gate} gate — active with nothing running" if gate \
                 else f"stalled (mid-{phase}) — active with nothing running"
-        # An item that ASKS something must not read like one that merely finished — this line is
-        # what summons the owner.
+        # An item that ASKS must not read like one that merely finished.
         if rulings:
             return (f"at the {gate} gate — {rulings} proposal(s) need a call only you can make "
                     "(approving without ruling drops them)")
@@ -55,11 +46,8 @@ def _reason(item: dict, bucket: str, stalled: bool = False, rulings: int = 0) ->
 
 def assign(items: list[dict], running_ids: set[str], deputy_ids: set[str] = frozenset(),
            rulings_by_item: dict[str, int] | None = None) -> dict:
-    """Bucket every item → {buckets, badge}. A row carries what the kanban and badge need:
-    id · title · kind · phase · status · outcome · bucket · reason · gate.
-
-    `deputy_ids` ⊆ `running_ids` — the subset judging a gate, peeled out so the owner can tell
-    "the deputy is covering this" from "a phase agent is coding"."""
+    """Bucket every item → {buckets, badge}. `deputy_ids` ⊆ `running_ids`: the subset judging a
+    gate, as opposed to coding."""
     buckets: dict[str, list[dict]] = {t: [] for t in TIER_ORDER}
     for it in items:
         iid = str(it.get("id"))
@@ -74,8 +62,7 @@ def assign(items: list[dict], running_ids: set[str], deputy_ids: set[str] = froz
             tier = "deputy_working"
         elif iid in running_ids and not terminal:
             tier = "running"
-        # After the live tiers: only the ABSENCE of a run makes a gate a stall. A freshly-advanced
-        # item blips here until its run row appears, and heals itself on the next read.
+        # Only the ABSENCE of a run makes a gate a stall. A just-advanced item blips, then heals.
         elif (str(it.get("status")) == "active" and not terminal
               and str(it.get("phase") or "") in GATE_FOR_PHASE):
             tier, stalled = "needs_you", True

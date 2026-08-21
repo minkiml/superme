@@ -1,11 +1,7 @@
-"""WorkGraph — the DERIVED graph projection over the workspace.
+"""WorkGraph — the DERIVED graph over the workspace. No stored DAG: every feed has an
+authoritative home, so storing it would be a four-way sync problem.
 
-There is deliberately NO stored DAG: every feed (roadmap, item yaml, inbox, git) already has an
-authoritative home, and storing the graph would be a four-way sync problem. This reads prepared
-inputs and assembles a typed graph on demand.
-
-Nodes: `repo_root` · `deliverable` · `work_item` · `inbox_spawn`.
-Edges: `contains` · `spawned_from` · `supersedes`. Git state is DECORATION, never a node.
+Nodes: `repo_root` · `deliverable` · `work_item` · `inbox_spawn`. Git DECORATES, never a node.
 """
 
 
@@ -61,8 +57,8 @@ class WorkGraph:
         return order if len(order) == len(self.nodes) else None
 
     def cycles(self) -> list[list[str]]:
-        """The node sets stuck in cycles (empty = acyclic). Reported, never raised — a hand-edited
-        cycle must surface as data, not crash the endpoint."""
+        """Node sets stuck in cycles; empty means acyclic. Reported as data — a hand-edited cycle
+        must not crash."""
         indeg = {n: 0 for n in self.nodes}
         for e in self.edges:
             indeg[e["dst"]] += 1
@@ -85,8 +81,8 @@ def item_node_id(item_id: str) -> str:
 
 def build(*, repo_id: str, items: list[dict], deliverables: list[dict],
           waves: list[dict], inbox_rows: list[dict]) -> WorkGraph:
-    """Assemble the graph from the authoritative feeds: work-item dicts, PRD deliverables,
-    roadmap waves (resolving an item's wave to its deliverable), and OPEN spawned inbox rows."""
+    """Assemble the graph from the authoritative feeds: item dicts, PRD deliverables, roadmap waves,
+    and OPEN spawned inbox rows."""
     g = WorkGraph()
     root = f"repo:{repo_id}"
     g.add_node(root, "repo_root", label=repo_id)

@@ -1,11 +1,7 @@
-"""The one rule for a work-item's title, in one place.
+"""The one rule for a work-item's title. A title is a LABEL, not the ask and not identity.
 
-A title is a LABEL, not the ask and not identity — the id is an opaque token fully decoupled
-from it, so nothing breaks when a title changes.
-
-Agents get `check_title`, which returns a complaint they can act on: an agent told nothing
-writes the same title next time. The owner's inbox push gets `normalize_title`, which never
-fails, because you cannot bounce a person who has already walked away.
+`check_title` returns a complaint an AGENT can act on. `normalize_title` never fails, because
+you cannot bounce a person who already walked away.
 """
 
 import re
@@ -21,8 +17,7 @@ def one_line(raw) -> str:
 
 
 def check_title(raw, *, description: str = "") -> str:
-    """Return the complaint for a title an AGENT wrote, or "" if it passes. The message is
-    delivered back into the agent's turn, so it is the only instruction it gets."""
+    """The complaint for a title an AGENT wrote, or "" if it passes. It is the only instruction it gets."""
     title = one_line(raw)
     if not title:
         return ("A work-item needs a `title` — the short line that names it on the board "
@@ -39,15 +34,14 @@ def check_title(raw, *, description: str = "") -> str:
 
 
 def normalize_title(raw, *, description: str = "") -> str:
-    """Coerce anything into a usable title. Never raises — the floor under paths where no one
-    can be asked to try again. A passing title is returned untouched."""
+    """Coerce anything into a usable title. Never raises — the floor where nobody can be asked again."""
     title = one_line(raw)
     if not title:
         return ""
     if not check_title(title, description=description):
         return title
-    # The first sentence is nearly always the request itself, and a better label than the first
-    # N characters of the paragraph.
+    # The first sentence is nearly always the request itself, and a better label than N
+    # characters.
     first = _SENTENCE_END.split(title, 1)[0].strip()
     first = first.rstrip(".!?").strip() or title
     if len(first) <= TITLE_MAX:

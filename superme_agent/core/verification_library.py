@@ -1,14 +1,7 @@
 """The per-repo VERIFICATION LIBRARY — proven checks every later item inherits.
 
-Without it every plan re-derives the same checks from nothing, and the repo learns nothing from
-the last twenty items it verified.
-
-**standing** attaches to every implementation item's plan here; **available** is a catalogue a
-plan cites by id. Available is the default — a standing entry taxes every future item forever,
-so only the owner promotes.
-
-Close writes, vet only nominates, and an entry must have run, passed, and carry no item
-specifics. A library of untested or item-shaped hypotheses costs the next item a cycle.
+**standing** attaches to every plan here; **available** is a catalogue a plan cites by id.
+Available is the default, and only the owner promotes. Close writes; vet only nominates.
 """
 
 import re
@@ -22,8 +15,7 @@ TIERS = ("standing", "available")
 _SECTION = {"standing": "Standing", "available": "Available"}
 _TIER_OF = {v.lower(): k for k, v in _SECTION.items()}
 
-# What "no item specifics" means mechanically. Each of these turns a repo fact into an item
-# fact, so the next plan inherits a check pointing at work that no longer exists.
+# Each turns a repo fact into an item fact, so the next plan inherits a dead pointer.
 _TASK_REF = re.compile(r"\bt\d+\b")
 _ITEM_ID = re.compile(r"\b[0-9a-f]{12}\b")
 
@@ -61,8 +53,7 @@ def read_doc(dev_root: Path) -> str:
 
 
 def seed(dev_root: Path) -> bool:
-    """Create the library doc with its two sections if missing. Called before a write, not at
-    connect, so repos predating the library get one the first time close has something to put in it."""
+    """Create the library doc with its two sections if missing. Called before a write, not at connect."""
     text = read_doc(dev_root)
     if all(s in _split_sections(text) for s in _SECTION.values()):
         return False
@@ -75,8 +66,8 @@ def seed(dev_root: Path) -> bool:
 
 
 def read_library(dev_root: Path) -> dict:
-    """`{standing: [...], available: [...]}`, each entry a check dict plus `tier`. An absent doc
-    reads as two empty lists — a repo with no library is the normal starting state."""
+    """`{standing, available}`, each entry a check dict plus `tier`. An absent doc reads as two
+    empty lists."""
     sections = _split_sections(read_doc(dev_root))
     out: dict = {}
     for tier, heading in _SECTION.items():
@@ -94,8 +85,7 @@ def find_entry(dev_root: Path, entry_id: str) -> dict | None:
 
 
 def render_entry(check: dict, *, source: str = "") -> str:
-    """One check dict → its markdown block. `covers` is dropped: it names the plan tasks of
-    whatever item proved the check, and no other item has those. `source` stamps an inherited copy."""
+    """One check dict → its markdown block. `covers` is dropped: it names another item's plan tasks."""
     lines = [f"### {check['id']}"]
     for field in ("proves", "traces", "mode", "scenario", "run", "expect"):
         if check.get(field):
@@ -109,8 +99,7 @@ def render_entry(check: dict, *, source: str = "") -> str:
 
 
 def entry_issues(block: str) -> list[str]:
-    """Itemized reasons a block cannot enter the library (empty = it may). Each rule maps to a
-    way an inherited check would waste the next item's cycle."""
+    """Itemized reasons a block cannot enter the library; empty means it may."""
     checks = parse_check_blocks(block)
     if not checks:
         return ["a library entry is a `### <entry-id>` block with the check's fields under it"]
@@ -130,8 +119,8 @@ def entry_issues(block: str) -> list[str]:
         if c.get("covers"):
             issues.append(f"library entry {label!r}: drop `covers` — it names the plan tasks of the "
                           "item that proved this check, and no other item has them")
-        # A whole-suite run is build's validation, which every cycle already performs. Inheriting it
-        # would hand each future plan a check that files the suite's result as the item's own proof.
+        # A whole-suite run is build's validation. Inheriting it files the suite's result as the
+        # item's own proof.
         if c.get("run") and is_whole_suite_run(str(c["run"])):
             issues.append(f"library entry {label!r}: `run:` is the project's whole test suite — "
                           "that is BUILD's validation, not a verification asset. The library holds "
@@ -145,8 +134,7 @@ def entry_issues(block: str) -> list[str]:
     return issues
 
 
-# Line-level surgery rather than a re-render: the doc is the owner's to write in, and a
-# read-modify-render round trip would quietly delete their prose.
+# Line-level surgery, not a re-render: the doc is the owner's to write in.
 
 def _blocks(body_lines: list[str]) -> list[tuple[str, list[str]]]:
     """A section's lines → [(entry-id or "", its lines)] — leading prose comes back under `""`."""
@@ -183,8 +171,7 @@ def _render(head: list[str], secs: list[tuple[str, list[str]]]) -> str:
 
 
 def _rewrite(dev_root: Path, entry_id: str, tier: str | None) -> bool:
-    """Move `entry_id` to `tier`'s section, or drop it when tier is None. False when the entry isn't
-    there (or the destination section is)."""
+    """Move `entry_id` to `tier`'s section, or drop it when tier is None. False when it isn't there."""
     text = read_doc(dev_root)
     head, secs = _sections(text)
     dest = _SECTION.get(tier or "")
@@ -213,8 +200,8 @@ def _rewrite(dev_root: Path, entry_id: str, tier: str | None) -> bool:
 
 
 def move_entry(dev_root: Path, entry_id: str, tier: str) -> bool:
-    """Promote to standing or demote to available. The owner's call, and the only way an entry
-    becomes standing — nothing in the loop may spend every future item's time on its own."""
+    """Promote to standing or demote to available. The owner's call — nothing in the loop may tax
+    every future item."""
     if tier not in TIERS:
         raise ValueError(f"tier must be one of {'/'.join(TIERS)} (got {tier!r})")
     return _rewrite(dev_root, entry_id, tier)
@@ -226,6 +213,6 @@ def drop_entry(dev_root: Path, entry_id: str) -> bool:
 
 
 def standing_blocks(dev_root: Path) -> list[str]:
-    """The standing entries as plan-ready blocks. The scaffold injects these, so a planner can
-    neither forget what the repo always owes nor silently reword it."""
+    """The standing entries as plan-ready blocks. The scaffold injects these, so a planner cannot
+    reword them."""
     return [render_entry(e, source="standing") for e in read_library(dev_root)["standing"]]

@@ -1,11 +1,7 @@
 """Typed-awaiting semantics: which items are waiting, and on what.
 
-    awaiting_child     auto-resumes when the last open BLOCKING child terminates
-    awaiting_upstream  auto-starts when every peer named in `after:` has completed
-    awaiting_human     the only type that pages the owner
-
-`spawned_from` is vertical, `after` is horizontal — two edges, deliberately not one.
-Pure functions over item dicts: no IO, no spine, so callers own the writes.
+`awaiting_child` resumes when the last blocking child ends · `awaiting_upstream` starts when
+every `after:` peer completes · `awaiting_human` is the only type that pages the owner.
 """
 
 TERMINAL_STATUS = "done"
@@ -47,12 +43,8 @@ def open_children(items: list[dict], parent_id: str) -> list[dict]:
 
 
 def holding_children(items: list[dict], parent: dict, *, at_close: bool | None = None) -> list[dict]:
-    """The open children that currently HOLD `parent` — the one answer the close criterion and
-    the auto-resume both read.
-
-    Before the final phase only `blocking` children hold; at the final phase every open child does.
-    `at_close` states that question directly rather than deriving it from the parent's phase, so a
-    drilldown previewing the close gate asks the close question."""
+    """The open children that HOLD `parent`. Before the final phase only `blocking` children hold;
+    at close, all do."""
     if at_close is None:
         try:
             from .kind_profiles import is_final_phase
@@ -85,11 +77,8 @@ def upstream_ids(item: dict) -> list[str]:
 
 
 def upstream_state(items: list[dict], item: dict) -> tuple[list[str], list[str]]:
-    """`(open, failed)` upstream ids — the two reasons this item may not start yet.
-
-    **open** is a wait and releases automatically. **failed** is terminal but not `completed`, so
-    nothing happens on its own and the caller pages the owner. A named id with no matching item
-    counts as satisfied — otherwise a hard delete wedges the downstream forever."""
+    """`(open, failed)` upstream ids. **open** releases automatically; **failed** pages the owner.
+    An unknown id counts as satisfied."""
     by_id = {str(it.get("id")): it for it in items}
     open_ids, failed_ids = [], []
     for uid in upstream_ids(item):
@@ -121,9 +110,8 @@ def items_to_release(items: list[dict], upstream_id: str) -> tuple[list[str], li
 
 
 def parent_to_resume(items: list[dict], child: dict) -> str | None:
-    """The parent id to auto-resume when `child` goes terminal: it sits at `awaiting_child` and
-    nothing still holds it. Both real relations count — only the rule that decided the hold can
-    decide the release."""
+    """The parent to auto-resume when `child` goes terminal — only the rule that decided the hold
+    decides the release."""
     sf = spawned_from(child)
     if not sf or sf.get("relation") not in CHILD_RELATIONS:
         return None

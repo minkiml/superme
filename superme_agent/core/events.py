@@ -1,12 +1,6 @@
 """TurnEvent — the surface-neutral output stream of one agent turn.
 
-  Init       the turn started: available slash commands and resolved model
-  TextDelta  incremental assistant text
-  Status     a tool is about to run — raw name and input
-  ToolResult that call's output, persisted to the run trail, never streamed to chat
-  Usage      a per-step token snapshot
-  Result     the turn finished: final text plus run metadata
-
+`Init` · `TextDelta` · `Status` (a tool is about to run) · `ToolResult` · `Usage` · `Result`.
 No emoji, no markdown, no surface specifics.
 """
 
@@ -29,15 +23,15 @@ class Status:
     tool_name: str
     tool_input: dict
     tool_id: str | None = None   # pairs this call with its result
-    # The sub-agent spawn this call happened inside, or None. A fan-out interleaves its children
-    # into one stream, so without this the trail is unattributable.
+    # A fan-out interleaves its children into one stream; without this the trail is
+    # unattributable.
     parent_tool_id: str | None = None
 
 
 @dataclass
 class ToolResult:
-    """The output of the tool call named by the PRECEDING Status, correlated by tool_use_id.
-    Persisted (truncated) to the run trail, never streamed to the chat UI."""
+    """Output of the tool call named by the PRECEDING Status, matched on tool_use_id. Persisted,
+    never streamed."""
     tool_name: str
     content: str
     is_error: bool = False
@@ -47,11 +41,9 @@ class ToolResult:
 
 @dataclass
 class Usage:
-    """The usage of ONE API call, emitted per assistant step. Steps of one call share a
-    `message_id` and repeat its usage, so a reader must DEDUPE by it or over-count.
+    """One API call's usage, emitted per step. Steps share a `message_id`, so DEDUPE or over-count.
 
-    Deduped, this — not `Result.usage` — is the run's total: subagent calls arrive on this same
-    stream, while `Result.usage` counts only the parent conversation."""
+    Deduped, this is the run's true total: subagent calls land here, `Result.usage` is parent-only."""
     total_tokens: int = 0
     input_tokens: int = 0
     output_tokens: int = 0

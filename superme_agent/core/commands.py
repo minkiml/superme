@@ -1,7 +1,7 @@
 """Shared command layer — the few slash commands with no non-interactive SDK path.
 
-Native commands and skills pass straight through to the CLI, so only the non-native ones live
-here. `handle()` returns a reply when it owned the command, else None to fall through.
+Native commands and skills pass through to the CLI. `handle()` returns a reply, or None
+to fall through.
 """
 
 import logging
@@ -34,9 +34,8 @@ class CommandLayer:
         return None  # not ours — /compact, /clear and skills pass through natively
 
     def _model(self, ctx: Context) -> str:
-        """`/model` — informational only. Model and effort are a per-session runtime override from
-        the composer's picker, never a persisted default. Intercepted so a typed `/model` gets
-        this pointer instead of silently writing one."""
+        """`/model` is informational. The picker is a per-session override, never a persisted default —
+        so a typed `/model` writes nothing."""
         mopts, eopts = " | ".join(MODEL_ALIASES), " | ".join(EFFORT_LEVELS)
         repo_default = self._spine.get_model_override(ctx.id)
         return (f"Set the model for **this chat** with the model picker next to the composer — it "

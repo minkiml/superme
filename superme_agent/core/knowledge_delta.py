@@ -1,12 +1,7 @@
-"""Knowledge-delta pipeline — D7's write discipline for the general dev-knowledge anchor docs.
+"""Knowledge-delta pipeline — write discipline for the dev-knowledge anchor docs.
 
-Anchor docs must mirror current main-codebase truth. No freehand writes: the CLOSING run supplies
-structured edit ops, they are validated, and a deterministic writer applies them. Close is the
-sole writer — it runs after review locks the code, so no doc ever describes work that has not
-landed.
-
-Blocking children never write: their content is not on main until the parent lands. Research
-items never write at all. Deterministic and spine-free, so it tests without a daemon.
+No freehand writes: the CLOSING run supplies structured ops, they are validated, a
+deterministic writer applies them. Close is the sole writer, so no doc outruns the code.
 """
 
 import os
@@ -41,9 +36,7 @@ def _sections(text: str) -> list[str]:
 
 
 def validate_ops(ops: list, dev_root: Path, repo_dir: Path | None) -> list[str]:
-    """Itemized validation issues for a list of edit ops (empty = valid). Per op: shape · known
-    target doc · the `## section` exists (v1 never invents structure) · content non-empty with no
-    `<fill:…>` · every backticked file reference exists under `repo_dir` · deliverable slugs resolve."""
+    """Itemized validation issues for a list of edit ops; empty means valid. v1 never invents structure."""
     if not isinstance(ops, list) or not ops:
         return ["a delta needs a non-empty list of edit ops"]
     dev = DevKnowledgeService()
@@ -89,17 +82,16 @@ def validate_ops(ops: list, dev_root: Path, repo_dir: Path | None) -> list[str]:
         for slug in _SLUG_REF.findall(content):
             if slug not in prd_slugs:
                 issues.append(f"{tag}: deliverable {slug!r} is not defined in the project PRD")
-        # The one anchor doc whose content is a CONTRACT: a later plan inherits entries verbatim,
-        # so a malformed one costs the next item a cycle.
+        # The one anchor doc whose content is a CONTRACT: a later plan inherits its entries
+        # verbatim.
         if doc == _vl.LIBRARY_DOC and kind != "rename_section":
             issues.extend(f"{tag}: {i}" for i in _vl.entry_issues(content))
     return issues
 
 
 def apply_ops(dev_root: Path, ops: list) -> dict:
-    """The deterministic writer: apply already-VALIDATED ops atomically per doc.
-    `update`/`supersede` replace a section's body, `append` adds at its end, `rename_section`
-    rewrites the heading line. Trusts its input and fails loud on a target that vanished."""
+    """The deterministic writer: apply already-VALIDATED ops. Trusts its input and fails loud on a
+    target that vanished."""
     if not ops:
         return {"applied": 0, "docs": []}
     texts: dict[str, str] = {}
@@ -115,8 +107,8 @@ def apply_ops(dev_root: Path, ops: list) -> dict:
             # Rewrite the heading LINE, leaving the body untouched.
             texts[doc] = text[:m.start(1)] + f"## {content.strip()}\n" + text[m.end(1):]
             continue
-        # Agents often re-include the `## <section>` heading in their body. Kept in place here,
-        # so a re-included one would double it.
+        # Agents often re-include the `## <section>` heading. The heading stays here, so a re-
+        # included one doubles.
         content = re.sub(rf"(?ms)\A\s*##\s+{re.escape(section)}\s*\n+", "", content).rstrip()
         if op["op"] == "append":
             body = m.group(2).rstrip() + "\n\n" + content + "\n\n"
@@ -129,7 +121,6 @@ def apply_ops(dev_root: Path, ops: list) -> dict:
 
 
 # `delta-<N>.md`, N advancing weekly from a Monday epoch — monotonic, so weeks never collide.
-# Anchor docs say what is true NOW; this says when it arrived and from which item.
 
 _EPOCH_MONDAY = date(1970, 1, 5)
 
@@ -145,8 +136,7 @@ def change_log_path(dev_root: Path, when: date | None = None) -> Path:
 
 def append_change_log(dev_root: Path, item_id: str, title: str, ops: list,
                       when: date | None = None) -> str:
-    """Append this item's entry to the current week's change log, creating the file on the
-    week's first write. Append-only: the log is history."""
+    """Append this item's entry to the current week's log. Append-only: the log is history."""
     path = change_log_path(dev_root, when)
     path.parent.mkdir(parents=True, exist_ok=True)
     head = "" if path.exists() else (
@@ -165,8 +155,8 @@ def append_change_log(dev_root: Path, item_id: str, title: str, ops: list,
 
 
 def freshness_lint(dev_root: Path, repo_dir: Path | None) -> list[str]:
-    """The standing truth-decay check: anchor-doc file references that no longer exist, and
-    roadmap pointers that do not resolve. Warnings, never blockers."""
+    """The standing truth-decay check: dead file references and unresolvable roadmap pointers.
+    Warnings, never blockers."""
     warnings: list[str] = []
     dev = DevKnowledgeService()
     for doc in _DOCS:

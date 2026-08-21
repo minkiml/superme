@@ -11,36 +11,33 @@ from pathlib import Path
 
 log = logging.getLogger("superme-agent")
 
-# `allowUnsandboxedCommands: False` is load-bearing — a boundary the occupant can lift is none.
-# `autoAllowBashIfSandboxed` stays False so `can_use_tool` still sees every command.
-# Network is default-deny by omission: no `allowedDomains`.
 # Interactive turns are not sandboxed: a person approves each command.
 _POLICY: dict = {
     "enabled": True,
+    # False, so `can_use_tool` still sees every command.
     "autoAllowBashIfSandboxed": False,
+    # Load-bearing: a boundary the occupant can lift is no boundary.
     "allowUnsandboxedCommands": False,
+    # Network is default-deny by omission — no `allowedDomains` key.
     "network": {"allowLocalBinding": True},
 }
 
 
 def sandbox_options(writes: list[Path] | None) -> dict:
-    """The `ClaudeAgentOptions` fragment that sandboxes a run, writable in `writes`.
-
-    `None` = not sandboxed. An empty LIST is different: sandboxed, writable in its cwd only.
-    """
+    """The `ClaudeAgentOptions` fragment that sandboxes a run. `None` is unsandboxed; an empty LIST
+    is cwd-only."""
     if writes is None:
         return {}
     return {"sandbox": _POLICY, "add_dirs": _roots(writes)}
 
 
-# Agents need a temp file, and `$TMPDIR` is outside every boundary we grant. Each item folder
-# carries its own — transient, removed when the item goes terminal.
+# `$TMPDIR` is outside every boundary we grant, so each item folder carries its own.
 SCRATCH_DIRNAME = "scratch"
 
 
 def ensure_scratch(item_dir: Path) -> Path:
-    """Create and return `<item_dir>/scratch/`. Returns the path even if mkdir failed — an agent
-    inside the boundary can create it itself."""
+    """Create and return `<item_dir>/scratch/`. Returns the path even if mkdir failed — the agent can
+    retry inside."""
     scratch = Path(item_dir) / SCRATCH_DIRNAME
     try:
         scratch.mkdir(parents=True, exist_ok=True)
@@ -50,10 +47,8 @@ def ensure_scratch(item_dir: Path) -> Path:
 
 
 def prune_scratch(item_dir: Path, *, only_if_empty: bool = True) -> bool:
-    """Remove `<item_dir>/scratch/`, reporting whether it went.
-
-    `only_if_empty` is the per-run sweep; False is the terminal one. A run that left files keeps
-    them. Never raises — an item that cannot be tidied must still close."""
+    """Remove `<item_dir>/scratch/`, reporting whether it went. `only_if_empty` is the per-run sweep.
+    Never raises."""
     scratch = Path(item_dir) / SCRATCH_DIRNAME
     try:
         if not scratch.is_dir():
@@ -78,8 +73,8 @@ def _roots(paths: list[Path]) -> list[str]:
     return list(seen)
 
 
-# The daemon runs verification commands where the CLI's sandbox does not reach, so it wraps its
-# own. ALLOW-default: deny-default would enumerate every dylib a test runner touches.
+# The daemon verifies where the CLI's sandbox does not reach. ALLOW-default: deny-default would
+# enumerate every dylib.
 _SEATBELT = """(version 1)
 (allow default)
 (deny network*)
@@ -92,14 +87,13 @@ _SEATBELT = """(version 1)
   (literal "/dev/null") (literal "/dev/stdout") (literal "/dev/stderr")
   (literal "/dev/dtracehelper") (regex #"^/dev/tty"))
 """
-# Per-user TMPDIR is allowed: test runners scribble there constantly. Shared `/private/tmp` is
-# not — world-visible, so a write there is a channel out of the boundary.
+# Per-user TMPDIR only. Shared `/private/tmp` is world-visible — a write there leaves the
+# boundary.
 
 
 def kernel_command(command: str, writable: list[Path]) -> list[str] | None:
-    """Wrap a shell `command` so the kernel runs it isolated. `None` = no supported sandbox here,
-    and the caller must NOT fall back to running it bare. macOS only; Linux would use bubblewrap.
-    """
+    """Wrap `command` so the kernel isolates it. `None` means no supported sandbox — never fall back
+    to bare."""
     if sys.platform != "darwin" or not shutil.which("sandbox-exec"):
         return None
     roots = "".join(f'\n  (subpath "{r}")' for r in _roots(writable))

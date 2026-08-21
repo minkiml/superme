@@ -1,13 +1,7 @@
-"""Why a turn failed — the one reader of that question.
+"""Why a turn failed — the one reader.
 
-    none          the turn ran
-    transient     upstream blipped (5xx, dropped socket, timeout). Wait on the ladder.
-    rate_limited  the usage window is spent (429). The cure is time, not a retry.
-    fault         our bug. Retrying reproduces it, so it never enters the ladder.
-
-Unrecognized reads as `fault`, never `transient`: surfacing one wait early is the cheap mistake.
-The SDK sometimes returns an upstream error as assistant TEXT rather than raising, so a reply
-string can itself be a failure.
+`none` ran · `transient` upstream blipped, wait on the ladder · `rate_limited` the window is
+spent, the cure is time · `fault` our bug, never retried. Unrecognized reads as `fault`.
 """
 
 import asyncio
@@ -19,8 +13,7 @@ from dataclasses import dataclass
 # Seven attempts over ~29 minutes — long enough for a blip, short enough to surface a real outage.
 RETRY_LADDER: tuple[int, ...] = (60, 180, 300, 300, 300, 300, 300)
 
-# A usage window never reopens in 60s. `retry-after` wins when given, capped — an unbounded
-# honour parks a run for a day on one bad header.
+# `retry-after` wins when given, but capped: an unbounded honour parks a run for a day.
 _RATE_FLOOR = 300
 _RATE_CAP = 3600
 
@@ -32,10 +25,8 @@ def next_delay(attempt: int) -> int | None:
 
 @dataclass(frozen=True)
 class Fault:
-    """What went wrong, in the three words the recovery paths branch on.
-
-    `reason` is owner-facing prose — it lands on the Error label, so it says what happened, not
-    which regex matched. `retry_after` is the upstream's own hint when it gave one."""
+    """What went wrong, in the three words recovery paths branch on. `reason` is owner-facing prose —
+    it lands on the Error label."""
 
     kind: str          # none | transient | rate_limited | fault
     reason: str = ""
@@ -52,9 +43,8 @@ class Fault:
         return self.kind in ("transient", "rate_limited")
 
     def delay(self, attempt: int) -> int | None:
-        """How long to wait before `attempt`, or None when the ladder is spent / this kind never
-        retries. Rate limits wait for the WINDOW (the upstream's hint, floored and capped); a
-        transient failure walks the ladder."""
+        """Wait before `attempt`, or None when the ladder is spent. Rate limits wait for the WINDOW,
+        not the ladder."""
         if not self.retryable:
             return None
         base = next_delay(attempt)
@@ -124,14 +114,10 @@ def _from_text(text: str, *, source: str) -> Fault:
 
 def classify(*, exc: BaseException | None = None, reply: str | None = None,
              did_work: bool = False) -> Fault:
-    """The single entry point. Pass the exception a runner caught and/or the turn's last assistant
-    reply; get back the one verdict every recovery path reads.
+    """The single entry point: an exception and/or the turn's last assistant reply.
 
-    `did_work` is the caller's honest answer to "did this turn call a tool or file a report". When
-    True, the reply is never read as a failure — a turn that did real work and mentioned an error is
-    reporting on one, not suffering one. It has no effect on `exc`: an exception is a failure
-    whether or not work preceded it.
-    """
+    The SDK returns some upstream errors as assistant TEXT, so a reply can itself be a failure.
+    `did_work` True stops the reply being read as one."""
     if exc is not None:
         # A cancellation is the daemon shutting down, not a failure of the work.
         if isinstance(exc, asyncio.CancelledError):
@@ -141,8 +127,7 @@ def classify(*, exc: BaseException | None = None, reply: str | None = None,
         if isinstance(exc, (TimeoutError, ConnectionError)):
             return Fault("transient", "the connection timed out or dropped")
         text = f"{type(exc).__name__}: {exc}"
-        # ProcessError points at a stderr the SDK never piped. Splice the captured tail in, so
-        # the record holds the cause and not a pointer to it.
+        # ProcessError points at a stderr the SDK never piped. Splice the captured tail in.
         if "exit code" in text.lower() or "stderr" in text.lower():
             from .agent_service import cli_stderr_tail
             if (tail := cli_stderr_tail(6)):
@@ -153,8 +138,7 @@ def classify(*, exc: BaseException | None = None, reply: str | None = None,
         m = _API_ERROR_REPLY.match(text)
         if m:
             return _from_text(text[:400], source="upstream error, no work done")
-        # Matched here rather than by widening the prefix gate: `_from_text` falls back to `fault`,
-        # so every short reply would file as a crash. Only a reply that NAMES a limit counts.
+        # `_from_text` falls back to `fault`, so only a reply that NAMES a limit counts here.
         if _RATE_TEXT.search(text):
             return Fault("rate_limited", f"the usage window is spent — {_detail(text)}",
                          _retry_after(text))

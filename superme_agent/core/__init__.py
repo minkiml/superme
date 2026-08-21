@@ -1,8 +1,7 @@
 """SuperMe Core — the surface-agnostic brain.
 
-Nothing here knows about any particular surface. It exposes two services and a neutral
-vocabulary every adapter speaks: Context (who and where a turn runs), AgentService (run a turn,
-yielding TurnEvents), KnowledgeService, and ApproveFn (per-surface tool approval).
+Exposes Context (who and where a turn runs), AgentService (runs turns, yields TurnEvents),
+KnowledgeService, and ApproveFn (per-surface tool approval). Nothing here knows a surface.
 """
 
 from .context import Context

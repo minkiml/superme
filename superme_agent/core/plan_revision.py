@@ -1,19 +1,8 @@
-"""The revision grammar of `artifacts/plan.md`.
+"""The revision grammar of `artifacts/plan.md`: a revision APPENDS a block and edits only what
+it names.
 
-A `revise` sends review back to plan, the only writer of this file. Regenerating it wholesale
-re-creates solved problems and discards the `- [x]` progress build earned, so a revision APPENDS
-a block and makes only the surgical edits it names.
-
-    ## Intent · Design · Decisions      frozen prose
-    ## Revision log                     code-owned index
-    ## Revision r1 · r2 …               history, appended, never edited
-    ## Tasks · Verification plan        LIVE — always last, mutated in place
-
-The ordering IS the guarantee: nothing below `## Tasks` can contradict it.
-
-Scope is per CHANGE, not per revision — one conversation carries several concerns, and a
-revision-level scope would take the max, voiding tasks that were fine. `resume` may not touch
-the plan at all: it is the proportionality guard.
+Zones: frozen prose · revision log · revision history · the LIVE Tasks zone, always last.
+The ordering IS the guarantee.
 """
 
 from __future__ import annotations
@@ -68,8 +57,8 @@ def _read(item_dir: Path) -> str:
 
 
 def revision_ids(text: str) -> list[str]:
-    """Every recorded revision id, oldest first. Legacy `### r<n>` entries still count, so an
-    in-flight item's gate does not go red retroactively and a new block never reuses a number."""
+    """Every recorded revision id, oldest first. Legacy `### r<n>` entries count, so a new block
+    never reuses a number."""
     ids = [m.group(1) for m in _REV_HEAD.finditer(text)]
     legacy = _LEGACY_REV.findall(_split_sections(text).get(LEGACY_LOG, ""))
     return [r for r in legacy if r not in ids] + ids
@@ -97,16 +86,15 @@ def _last_block(text: str) -> str:
 
 
 def spend_at(item_dir: Path) -> int:
-    """The build+vet meter reading when the CURRENT revision opened — the boundary the loop
-    subtracts so each generation gets the whole budget. 0 for a plan never revised."""
+    """The build+vet meter reading when the CURRENT revision opened, so each generation gets the
+    whole budget."""
     m = _SPEND_AT.search(_last_block(_read(item_dir)))
     return int(m.group(1)) if m else 0
 
 
 def derive_concerns(item_dir: Path) -> list[str]:
-    """What drove this revision, read off the record, never asserted by the agent: the loop's
-    typed exit, the evidence verdict, and authorizations resolved since the last revision. Falls
-    back to `owner_judgment` when nothing mechanical explains it."""
+    """What drove this revision, read off the record, never asserted by the agent. Falls back to
+    `owner_judgment`."""
     from .artifacts import authorization_entries, read_cycle_outcomes
     item_dir = Path(item_dir)
     found: list[str] = []
@@ -250,9 +238,8 @@ def _blocks(text: str) -> tuple[str, list[tuple[str, list[str]]]]:
 
 
 def _pin_live_zone(text: str) -> str:
-    """Move `## Tasks` then `## Verification plan` to the end, in that order. Idempotent and
-    lossless — sections are moved whole. This is what makes the reading guarantee real for plans
-    authored before this grammar."""
+    """Move `## Tasks` then `## Verification plan` to the end. Idempotent and lossless — sections
+    move whole."""
     pre, blocks = _blocks(text)
     if not blocks:
         return text
@@ -278,9 +265,8 @@ def _insert_before_live(text: str, chunk: str) -> str:
 
 
 def task_high_water(text: str) -> int:
-    """The highest task number the plan has EVER reached, live list plus revision history. A new
-    task counts up from here: `SuperMe-Task: t3` trailers on landed commits are permanent, so
-    reusing an id would re-attribute another task's history."""
+    """The highest task number the plan ever reached. `SuperMe-Task:` commit trailers are permanent,
+    so ids never repeat."""
     live = [int(t[1:]) for t in _task_ids(text)]
     retired = [int(n) for n in _RETIRED_TASK.findall(text)]
     return max([0, *live, *retired])
@@ -294,8 +280,7 @@ def _apply_task_op(text: str, op: dict, *, new_id: str = "") -> tuple[str, str]:
     if kind == "add_task":
         body = body.rstrip() + f"\n- [ ] {new_id} — {content}"
         return _replace_section(text, TASKS, body), f"{new_id} added"
-    # A task is a BLOCK, not a line: long tasks wrap, so everything up to the next `- [ ] t<n>`
-    # belongs to the task above. A line-wise remove would glue orphaned lines onto its predecessor.
+    # A task is a BLOCK, not a line — long tasks wrap, and a line-wise remove would orphan them.
     lines: list[str] = []
     skipping = False
     for line in body.splitlines():
@@ -316,8 +301,7 @@ def _apply_task_op(text: str, op: dict, *, new_id: str = "") -> tuple[str, str]:
 
 
 def _tidy_tasks(text: str) -> str:
-    """Collapse the blank lines a removal leaves. The live zone is read at every gate, so it does
-    not accumulate holes."""
+    """Collapse the blank lines a removal leaves. The live zone is read at every gate."""
     kept: list[str] = []
     for ln in _section_body(text, TASKS).splitlines():
         if ln.strip() or (kept and kept[-1].strip()):
@@ -346,9 +330,8 @@ def _ensure_log(text: str) -> str:
 
 
 def _append_log_line(text: str, line: str) -> str:
-    """Add one index row to `## Revision log`, after the last row already there. Positional
-    because the section's body runs to the next `##`, so appending at the end would file the row
-    under the revision block below it."""
+    """Add one index row to `## Revision log`, after the last row there. Appending at the end would
+    misfile it."""
     body = _section_body(text, LOG).splitlines()
     at = max((i for i, ln in enumerate(body) if ln.startswith("- r")),
              default=max((i for i, ln in enumerate(body) if ln.strip()), default=-1))
@@ -377,11 +360,8 @@ def _render_block(*, rev: str, ts: str, concerns: list[str], spend: int, feedbac
 def revise(item_dir: Path, *, changes: list, feedback: str, directive: str = "",
            still_in_force: str = "", concerns: list[str] | None = None,
            spend: int = 0) -> dict:
-    """Apply one revision to plan.md atomically: the named edits, then the block explaining them,
-    inserted above the pinned live zone.
-
-    The caller validates first and supplies `concerns`; this trusts its input and fails loud on a
-    section that vanished. Returns {revision, ops, changed, path}."""
+    """Apply one revision atomically: the named edits, then the block explaining them, above the
+    pinned live zone. Trusts validated input."""
     path = plan_path(item_dir)
     text = _pin_live_zone(path.read_text())
     applied: list[dict] = []

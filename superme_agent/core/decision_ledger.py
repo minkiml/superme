@@ -1,11 +1,7 @@
-"""The decision ledger's ONE writer: a RULE an owner's ruling established becomes a `D-NNN` entry.
+"""The decision ledger's ONE writer: a ruling's RULE becomes a `D-NNN` entry.
 
-Most answers are not worth storing. "Delete this file" is spent the moment the file is gone. What
-is worth storing is the RULE the answer established — a sentence binding work nobody has proposed
-yet. So the promotion test is `Rule`, and the common case is that there is none.
-
-Nothing here is authored: every field is copied from the typed proposal the owner ruled on.
-`decisions.md` is append-only and never pruned, so a write path into it is a one-way valve.
+Most answers are spent once their work is done. What lasts is the rule, so the promotion
+test is `Rule` — and usually there is none.
 """
 
 import re
@@ -73,8 +69,7 @@ def already_recorded(dev_root: Path, item_id: str, question: str) -> bool:
 
 
 def render_entry(entry_id: str, prop: dict, *, item_id: str, date: str) -> str:
-    """One entry, every field copied. The HEADING is the rule, because the heading is the whole
-    index a later phase reads."""
+    """One entry, every field copied. The HEADING is the rule — it is the whole index later phases read."""
     rule = " ".join(str(prop["rule"]).split())
     why = prop.get("why_now") or "recorded from a research review's proposed work."
     return (
@@ -89,9 +84,8 @@ def render_entry(entry_id: str, prop: dict, *, item_id: str, date: str) -> str:
 
 def record_rulings(dev_root: Path, item_dir: Path, item_id: str, *, date: str,
                    project: str = "Project") -> list[str]:
-    """Append one entry per PROMOTABLE ruling. An answered question with no rule records nothing.
-
-    Returns the ids written. Creates the ledger if the repo has none yet."""
+    """Append one entry per PROMOTABLE ruling; an answered question with no rule records nothing.
+    Returns the ids written."""
     answered = [p for p in _arts.research_proposals(item_dir) if _arts.proposal_promotable(p)]
     if not answered:
         return []
@@ -123,9 +117,7 @@ def entries_for_item(dev_root: Path, item_id: str) -> list[dict]:
 
 
 def settled_index(dev_root: Path) -> str:
-    """The ledger as one scan line per entry — what a phase reads before asking anything.
-
-    Headings only: the ledger grows forever, and a per-run cost that grows is a duty that gets dropped."""
+    """The ledger as one heading per entry. It grows forever, and a per-run cost that grows gets dropped."""
     entries = read_entries(dev_root)
     if not entries:
         return "This project has no recorded decisions yet."

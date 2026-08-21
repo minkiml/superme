@@ -1,15 +1,8 @@
-"""The deputy's durable artifacts: the mandate (governance) and the per-item decision log.
+"""The deputy's artifacts: the mandate, and the per-item decision log.
 
-The deputy SESSION is disposable, minted per gate. Two things carry forward, and they are
-different kinds of thing in different homes:
-
-  mandate.md        the standing acceptance bar for this project. A governance artifact, so it
-                    lives in the per-repo harness cell and is wiped on disconnect.
-  deputy-log.jsonl  an append-only per-ITEM ledger in the item's own dir. A continuity cache,
-                    not the accountability record — that lives in the run row and dev events,
-                    so this file rightly GCs with the item.
-
-Pure and file-based. The strictness LEVELS live in `kernel_speech`; this owns the artifacts.
+`mandate.md` is per-repo GOVERNANCE in the harness cell, wiped on disconnect. `deputy-log.jsonl`
+is per-item continuity in the item dir, so it GCs with the item. Strictness lives in
+`kernel_speech`.
 """
 
 from __future__ import annotations
@@ -26,8 +19,8 @@ SEND_BACK_CAP = 3
 
 
 def deputy_root(repo_id: str) -> Path:
-    """The dev-scope root the deputy's artifacts hang under. The mandate is GOVERNANCE, so it
-    lives in the harness cell, not the knowledge home, and is wiped when the repo disconnects."""
+    """The dev-scope root the artifacts hang under. The mandate is GOVERNANCE — harness cell, wiped
+    on disconnect."""
     return LOCAL_HARNESS_DIR / repo_id / "dev"
 
 
@@ -40,8 +33,8 @@ def mandate_path(dev_root: Path) -> Path:
 
 
 def log_path(item_dir: Path) -> Path:
-    """This item's deputy decision log. Note the arg is the ITEM dir: the log is per-item
-    continuity, whereas the mandate is per-repo governance."""
+    """This item's deputy decision log. The arg is the ITEM dir: per-item continuity, not per-repo
+    governance."""
     return Path(item_dir) / "deputy-log.jsonl"
 
 
@@ -63,8 +56,7 @@ MANDATE_TEMPLATE = (
 
 
 def read_mandate(dev_root: Path, *, seed: bool = True) -> str:
-    """The project mandate text. Seeds the template on first read so a deputy always has a bar
-    to judge against. Best-effort — a read-only filesystem yields the template in memory."""
+    """The project mandate. Seeds the template on first read so a deputy always has a bar. Best-effort."""
     p = mandate_path(dev_root)
     if p.exists():
         return p.read_text()
@@ -78,8 +70,8 @@ def read_mandate(dev_root: Path, *, seed: bool = True) -> str:
 
 
 def _log_entries(item_dir: Path) -> list[dict]:
-    """Parse this item's deputy-log.jsonl, oldest first. Tolerant of a missing file or a torn
-    last line — a decision is a record, never a reason to 500 a judgment."""
+    """Parse deputy-log.jsonl, oldest first. Tolerates a missing file or a torn last line — never
+    500 a judgment."""
     p = log_path(item_dir)
     if not p.exists():
         return []
@@ -96,11 +88,8 @@ def _log_entries(item_dir: Path) -> list[dict]:
 
 
 def pending_send_back(item_dir: Path) -> dict | None:
-    """The item's latest decision when it is a `send_back`, else None.
-
-    Read by Resume. A stopped item's run did not finish, so a last "go fix this" was never carried
-    out, and re-firing the plain phase prompt drops it. Re-delivering one already acted on costs a
-    cheap "already done"; losing one costs a guaranteed no-op."""
+    """The latest decision if it is a `send_back`, else None. Re-delivering one is cheap; losing one
+    guarantees a no-op."""
     rows = _log_entries(item_dir)
     last = rows[-1] if rows else None
     return last if last and last.get("decision") == "send_back" else None
@@ -108,8 +97,8 @@ def pending_send_back(item_dir: Path) -> dict | None:
 
 def append_decision(item_dir: Path, gate: str, decision: str, because: str, *,
                     change: str | None = None, authorize: str | None = None) -> None:
-    """Append one deputy call to this item's log, never rewritten. `decision` is validated so a
-    typo cannot poison later counting. `change` and `authorize` ride along when present."""
+    """Append one deputy call, never rewritten. `decision` is validated so a typo cannot poison
+    later counting."""
     if decision not in DEPUTY_DECISIONS:
         raise ValueError(f"unknown deputy decision {decision!r}")
     entry = {"at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -131,14 +120,12 @@ def item_decisions(item_dir: Path) -> list[dict]:
 
 
 def gate_decisions(item_dir: Path, gate: str) -> list[dict]:
-    """This item's deputy calls AT ONE GATE, oldest first — the continuity a fresh dispatch
-    reads. Item and gate scoped: no cross-gate calls, and no cross-item precedent."""
+    """This item's deputy calls AT ONE GATE, oldest first. No cross-gate calls, no cross-item precedent."""
     return [r for r in _log_entries(item_dir) if r.get("gate") == gate]
 
 
 def count_send_backs(item_dir: Path, gate: str | None = None) -> int:
-    """How many times the deputy has sent this item back — the cap counter. Gate-scoped when
-    `gate` is given, else item-wide."""
+    """How many times the deputy sent this item back — the cap counter. Gate-scoped when `gate` is given."""
     rows = gate_decisions(item_dir, gate) if gate else _log_entries(item_dir)
     return sum(1 for r in rows if r.get("decision") == "send_back")
 

@@ -1,10 +1,7 @@
-"""Canonical model catalog — the one source of truth for which CONCRETE model each tier runs.
+"""Canonical model catalog — the one source of truth for the CONCRETE model each tier runs.
 
-The CLI's bare tier aliases LAG behind the newest release, so selecting an alias silently runs an
-older model than its label implies. Each tier is pinned to a concrete id here, and every model
-value is normalized through this module before it reaches the SDK.
-
-Bump these when a newer model ships, and mirror the FE labels in `lib/format.ts`.
+The CLI's aliases LAG the newest release, so an alias silently runs an older model than its
+label. Mirror the FE labels in `lib/format.ts`.
 """
 
 # Tier alias → the concrete id that runs the intended newest version.
@@ -17,12 +14,12 @@ MODEL_TIERS: dict[str, str] = {
 # The concrete ids the pickers offer / the system stores.
 CANONICAL_MODELS: tuple[str, ...] = tuple(MODEL_TIERS.values())
 
-# The floor when nothing more specific is set. Always concrete, so a turn never falls through
-# to the opaque CLI default.
+# The floor when nothing more specific is set. Concrete, so a turn never hits the opaque CLI
+# default.
 DEFAULT_MODEL: str = MODEL_TIERS["sonnet"]
 
 # Presets for background agents that take no user pick. Cost-aware: sweep is high-volume
-# extraction, distill and write author memory and skills.
+# extraction.
 AGENT_MODELS: dict[str, str] = {
     "sweep": "haiku",
     "distill": "sonnet",
@@ -31,9 +28,8 @@ AGENT_MODELS: dict[str, str] = {
 }
 _AGENT_MODEL_FLOOR = "sonnet"
 
-# Owner-tunable from Quick config, in display order. Each drives one sub-agent whose `.md`
-# frontmatter is the SOURCE OF TRUTH for its model; the config UI two-way-syncs it, so the
-# trigger turn and the sub-agent always run the same one.
+# Owner-tunable from Quick config. Each sub-agent's `.md` frontmatter is the SOURCE OF TRUTH; the
+# config UI two-way-syncs it.
 AGENT_MODEL_FEATURES: tuple[str, ...] = ("sweep", "distill", "write")
 AGENT_MD_NAME: dict[str, str] = {"sweep": "capture", "distill": "distill", "write": "forge"}
 AGENT_MODEL_LABELS: dict[str, str] = {
@@ -49,8 +45,7 @@ _RESET = ("reset", "default", "clear")
 
 
 def model_family(m: str | None) -> str | None:
-    """The tier FAMILY of any model value — the name that survives version bumps. Lets an agent
-    be re-pinned to its tier's latest concrete without storing a separate tier field."""
+    """The tier FAMILY of any model value — the name that survives version bumps."""
     if not m:
         return None
     m = m.strip().lower()
@@ -63,8 +58,7 @@ def model_family(m: str | None) -> str | None:
 
 
 def track_to_latest(m: str | None) -> str | None:
-    """Resolve a model value to its tier's CURRENT concrete id, so it auto-tracks MODEL_TIERS.
-    This is what makes "pick a tier once, get the newest version forever" work."""
+    """Resolve a model value to its tier's CURRENT concrete id. Pick a tier once, get the newest forever."""
     fam = model_family(m)
     if fam and fam in MODEL_TIERS:
         return MODEL_TIERS[fam]
@@ -72,8 +66,7 @@ def track_to_latest(m: str | None) -> str | None:
 
 
 def normalize_model(m: str | None) -> str | None:
-    """Map any accepted model value to the canonical CONCRETE id: alias → its pinned id, concrete
-    → itself, reset token → None. Unknown strings pass through; the SDK validates."""
+    """Map any accepted value to the canonical CONCRETE id. Unknown strings pass through; the SDK validates."""
     if not m:
         return None
     m = m.strip().lower()
@@ -83,8 +76,7 @@ def normalize_model(m: str | None) -> str | None:
 
 
 def agent_model(feature: str) -> str:
-    """The concrete, LATEST model a background agent should run on. Never None, so these agents
-    never fall to the opaque CLI default."""
+    """The concrete, LATEST model for a background agent. Never None, so it never hits the CLI default."""
     return normalize_model(AGENT_MODELS.get(feature, _AGENT_MODEL_FLOOR))
 
 
