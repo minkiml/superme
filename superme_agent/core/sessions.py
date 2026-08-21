@@ -1,10 +1,7 @@
-"""SessionStore — list and replay past conversations for a Context.
+"""SessionStore — list and replay conversations for a Context.
 
-The SDK already writes a transcript JSONL per session, keyed by cwd. That file is the source of
-truth for history; we never keep a parallel message log.
-
-The projects folder is shared with the owner's own Claude Code sessions, so WHICH sessions are
-SuperMe's comes from the spine. Here we only turn those ids into titles and bubbles.
+The SDK writes a transcript JSONL per session, keyed by cwd; that file is the history. The
+projects folder is shared with the owner's sessions, so membership comes from the spine.
 """
 
 import re
@@ -24,11 +21,8 @@ _ROLE = {"user": "you", "assistant": "superme"}
 
 
 def _turn_count(messages: list[dict]) -> int:
-    """How many MESSAGES a transcript holds, counted the way the owner reads them: one turn is
-    one message, however many bubbles it renders as.
-
-    An agent turn emits a text block per stretch of work, each its own record, so counting records
-    read a four-bubble reply as "4 msgs". Consecutive records from one speaker are one message."""
+    """How many MESSAGES, counted the way the owner reads them: consecutive records
+    from one speaker are one message."""
     turns = 0
     prev: str | None = None
     for m in messages:
@@ -45,8 +39,8 @@ _NOISE_PREFIXES = (
     "<command-args>",
     "<local-command-stdout>",
     "<local-command-caveat>",
-    # ONE PER INTAKE SKILL — every skill `_background_intake_run` can fire. Miss one and the
-    # kernel's order to itself opens that session as the OWNER's first message.
+    # ONE PER INTAKE SKILL. Miss one and the kernel's order to itself opens as the OWNER's first
+    # message.
     "Run superme-dev:plan for work-item",
     "Run superme-dev:triage for work-item",
     "Run superme-dev:investigate for work-item",
@@ -66,8 +60,8 @@ def _is_noise(record: dict, text: str) -> bool:
     return text.lstrip().startswith(_NOISE_PREFIXES)
 
 
-# Prepended to a session's FIRST user prompt. Replay shows only the real prompt after them;
-# dropping the whole record would hide what the owner typed.
+# Prepended to a session's FIRST user prompt. Dropping the whole record would hide what the owner
+# typed.
 _BIRTH_BLOCK_HEADERS = (
     "### Work-item orientation",
     "### Subject activity-run trace",
@@ -75,8 +69,8 @@ _BIRTH_BLOCK_HEADERS = (
 
 
 def _strip_birth_block(text: str) -> str:
-    """Cut a kernel-injected birth block off a prompt, keeping the real message after the `---`.
-    Empty when the turn was pure plumbing, which then falls to the noise filter."""
+    """Cut a kernel-injected birth block off a prompt, keeping the real message
+    after the `---`."""
     if not text.lstrip().startswith(_BIRTH_BLOCK_HEADERS):
         return text
     parts = text.split("\n\n---\n\n", 1)
@@ -94,8 +88,8 @@ def short_item_id(item_id: str | None) -> str:
 
 
 def _preset_title(kind: str, item_id: str | None, subject_run_id, sid: str) -> str:
-    """The DEFAULT title when the owner has set no override — a consistent, identity-bearing
-    preset by kind. The router upgrades a work-item one to the item's real title."""
+    """The DEFAULT title when the owner set no override. The router upgrades a
+    work-item one to the item's title."""
     if kind in ("intake", "build", "vet"):   # role-stamped item sessions (build-vet-loop §1.3)
         return f"Work-item · {short_item_id(item_id) if item_id else _short_id(sid)} · {kind}"
     if kind == "work_item":                  # legacy pre-roles item sessions (kind derived)
@@ -144,12 +138,8 @@ class SessionStore:
                                    repo_id=ctx.id)
 
     def delete(self, ctx: Context, session_id: str, *, cause: str = "deleted") -> bool:
-        """The single session deletion. Hard-deletes the resumable material — spine row and
-        transcript — so it leaves the picker. Runs, events and artifacts are PRESERVED and stamped
-        `session_fate=cause`. Returns True if the transcript file went.
-
-        Located by the SESSION'S recorded cwd, not the caller's: role sessions live under their
-        worktree's projects folder and a repo-cwd caller would otherwise miss them."""
+        """Deletes the spine row and transcript; runs and events are PRESERVED, stamped
+        `session_fate`. Located by the SESSION'S cwd, not the caller's."""
         if not session_id:
             return False
         rec = self._spine.get_session(session_id)
@@ -158,11 +148,8 @@ class SessionStore:
         return self.discard_transcript(ctx, session_id, cwd=cwd)
 
     def delete_channel(self, ctx: Context, session_id: str, *, cause: str = "deleted") -> int:
-        """Delete a whole CHANNEL — every thread the picker showed as one row. Returns how many.
-
-        A work-item is one conversation with several threads underneath, so dropping the row drops all
-        of them; leaving one behind reads as a delete that did not work. Scoped to CONVERSATIONS: the
-        headless build/vet threads go with the item's own disposal, not with this."""
+        """Delete a whole CHANNEL — every thread the picker showed as one row; leaving
+        one behind reads as a failed delete."""
         rec = self._spine.get_session(session_id) or {}
         item_id = rec.get("item_id") or None
         targets = [session_id]
@@ -176,8 +163,8 @@ class SessionStore:
         return len(targets)
 
     def discard_transcript(self, ctx: Context, session_id: str, cwd=None) -> bool:
-        """Delete a transcript from disk WITHOUT touching the index — for disposable runs whose
-        session was never recorded. `cwd` overrides the projects-folder key for worktree-born sessions."""
+        """Delete a transcript from disk WITHOUT touching the index — for disposable
+        runs never recorded as sessions."""
         if not session_id:
             return False
         path = self._transcript(ctx, session_id, cwd=cwd)
@@ -191,22 +178,20 @@ class SessionStore:
 
     # --- transcript access ------------------------------------------------------
     def _transcript(self, ctx: Context, session_id: str, cwd=None):
-        """The session's transcript path, keyed by the SESSION'S recorded cwd when the spine knows
-        it (worktree-born role sessions would otherwise be missed), else the caller's."""
+        """The transcript path, keyed by the SESSION'S recorded cwd when the spine knows it,
+        else the caller's."""
         if cwd is None:
             cwd = (self._spine.get_session(session_id) or {}).get("cwd")
         return self._projects / _encode_cwd(cwd or ctx.cwd) / f"{session_id}.jsonl"
 
     def has_transcript(self, ctx: Context, session_id: str) -> bool:
-        """Whether the session's resume material still exists. The CLI expires transcripts on its
-        own clock, so a row can outlive its JSONL. Same path resolution as `_scan`."""
+        """Whether the resume material still exists. The CLI expires transcripts, so a row
+        can outlive its JSONL."""
         return self._transcript(ctx, session_id).exists()
 
     def _scan(self, ctx: Context, session_id: str) -> dict | None:
-        """Parse a transcript into {title, messages, updated_at, message_count}.
-
-        Returns None if the transcript file is missing (e.g. cleared by the owner).
-        """
+        """Parse a transcript into {title, messages, updated_at, message_count}. None when the file
+        is missing."""
         path = self._transcript(ctx, session_id)
         if not path.exists():
             return None
@@ -255,30 +240,26 @@ class SessionStore:
             return None
 
     def transcript_messages(self, ctx: Context, session_id: str) -> list[dict]:
-        """The session's ordered chat messages, tools and noise dropped — what the capture sweep
-        reads. Same parse as `_scan`, so the watermark counts the units the sweep consumes."""
+        """The session's ordered chat messages, tools and noise dropped — what the
+        capture sweep reads."""
         scan = self._scan(ctx, session_id)
         return scan["messages"] if scan else []
 
     def _workspace_rows(self, ctx: Context) -> list[dict]:
-        """This workspace's resumable rows — the one membership answer `list`, `read` and `rename`
-        all use, so a thread cannot be listable but unreadable.
-
-        Scoped by REPO, not cwd: a phase run swaps its cwd to the item's worktree, so a cwd match
-        silently dropped every work-item thread from the picker."""
+        """This workspace's resumable rows, scoped by REPO not cwd: a phase run swaps
+        cwd to the worktree."""
         return self._spine.sessions_for_repo(ctx.id, resumable_only=True)
 
     def list(self, ctx: Context, mode: str | None = None) -> list[dict]:
-        """Sessions that ran in this workspace (any surface), newest first. When `mode`
-        ("core"|"dev") is given, only that mode's threads — the chat picker scopes by mode."""
+        """Sessions that ran in this workspace, newest first. `mode` ("core"|"dev") narrows to
+        that mode's threads."""
         out = []
         for rec in self._workspace_rows(ctx):
             sid = rec["id"]
             sess_mode = rec.get("mode", "core")
             if mode and sess_mode != mode:
                 continue
-            # Build and vet are headless working memory the owner cannot open. `session_count` has
-            # always excluded them; this reader must too, or the tile and the list disagree.
+            # Build and vet are headless. `session_count` excludes them, so this reader must too.
             if not is_conversation(rec.get("kind")):
                 continue
             scan = self._scan(ctx, sid)
@@ -306,17 +287,15 @@ class SessionStore:
         return out
 
     def rename(self, ctx: Context, session_id: str, title: str | None) -> bool:
-        """Set (or clear) a session's owner TITLE override, if it belongs to this workspace. A blank
-        title reverts to the transcript-derived title. Returns True if a row was updated."""
+        """Set or clear a session's owner TITLE override. A blank title reverts to the
+        transcript-derived one."""
         if session_id not in {r["id"] for r in self._workspace_rows(ctx)}:
             return False
         return self._spine.set_session_title(session_id, title)
 
     def read(self, ctx: Context, session_id: str, limit: int = 10) -> dict | None:
-        """One session's title + its most recent `limit` bubbles (older ones skipped),
-        or None if the session isn't in this workspace. The agent still resumes with
-        full server-side context — we just don't replay the whole transcript in the UI.
-        """
+        """One session's title plus its most recent `limit` bubbles. The agent still resumes with
+        full server-side context."""
         recs = {r["id"]: r for r in self._workspace_rows(ctx)}
         if session_id not in recs:
             return None

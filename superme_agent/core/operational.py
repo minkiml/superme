@@ -1,9 +1,7 @@
 """Operational-learning artifacts on disk — read, assemble, publish.
 
-  constitution   one file per item, assembled into the system prompt every turn. Always-on.
-  skill / agent  files inside the operational plugin; they load via the plugin channel.
-
-Disk holds only PUBLISHED artifacts. Drafts stage in the DB (see `dev_store`).
+`constitution` is one file per item, assembled into the system prompt every turn. `skill`/`agent`
+load via the plugin channel. Disk holds only PUBLISHED artifacts; drafts stage in `dev_store`.
 """
 
 from __future__ import annotations
@@ -16,8 +14,8 @@ _FM = re.compile(r"^---\n(.*?)\n---\n?(.*)$", re.DOTALL)
 
 
 def parse_frontmatter(text: str) -> tuple[dict, str]:
-    """Split `---\\nkey: val\\n---\\nbody` into (meta, body). Tolerant: no/blank frontmatter → ({}, text).
-    Values are read as plain strings (we only need scalars: enabled/scope/source/name/created)."""
+    """Split `---\nkey: val\n---\nbody` into (meta, body). Tolerant: no frontmatter
+    → ({}, text). Scalars only."""
     m = _FM.match(text or "")
     if not m:
         return {}, (text or "")
@@ -30,8 +28,8 @@ def parse_frontmatter(text: str) -> tuple[dict, str]:
 
 
 def set_frontmatter_field(path: Path, key: str, value: str) -> None:
-    """Update or insert one scalar frontmatter field, preserving every other line and the body.
-    A line-level edit, not a re-dump — the artifact stays the source of truth."""
+    """Update or insert one scalar frontmatter field, preserving every other
+    line and the body."""
     text = path.read_text()
     m = _FM.match(text)
     if not m:  # no frontmatter yet — prepend a minimal block
@@ -48,8 +46,8 @@ def set_frontmatter_field(path: Path, key: str, value: str) -> None:
 
 
 def with_frontmatter_default(text: str, key: str, value: str) -> str:
-    """Return `text` with `key: value` ensured in its frontmatter — inserted only if absent (an
-    existing value is left untouched). Used to give every forged agent a default `effort` field."""
+    """Ensure `key: value` in the frontmatter, inserted only if absent.
+    An existing value is untouched."""
     m = _FM.match(text or "")
     if not m:
         return f"---\n{key}: {value}\n---\n\n{text or ''}"
@@ -89,8 +87,8 @@ def _read_plugin(plugin_dir: Path) -> dict:
 def resolve_plugin_file(scope: str, kind: str, name: str, *,
                         dev_dir: Path, core_dir: Path, shared_dir: Path,
                         local_dir: Path | None = None) -> Path | None:
-    """Map (scope, kind, name) → the on-disk artifact path, or None. Path-traversal-safe: `name`
-    may hold no separators and the result must sit inside the scope's plugin dir."""
+    """Map (scope, kind, name) → the on-disk path, or None. Path-traversal-safe:
+    no separators, and the result must stay inside."""
     base = {"dev": dev_dir, "core": core_dir, "shared": shared_dir, "local": local_dir}.get(scope)
     if base is None:
         return None
@@ -133,8 +131,8 @@ def list_palette_skills(plugin_dirs: list[Path]) -> list[dict]:
 
 
 def silent_skill_names(plugin_dirs: list[Path]) -> set[str]:
-    """Skills marked `access: silent` — machinery the user-facing turn must never invoke, only
-    their owning sub-run. Returns both namespaced and bare forms so a check matches either."""
+    """Skills marked `access: silent` — only their owning sub-run may invoke them.
+    Both namespaced and bare forms."""
     out: set[str] = set()
     for d in plugin_dirs:
         p = Path(d)
@@ -149,11 +147,8 @@ def silent_skill_names(plugin_dirs: list[Path]) -> set[str]:
 
 
 def skills_in_category(plugin_dirs: list[Path], category: str) -> set[str]:
-    """Skill names in `category`, in both namespaced and bare forms.
-
-    Unlike `access: silent`, which is permanent, a category block is a property of the SESSION.
-    Today that is `onboarding`: those skills establish a project's memory, so once it IS
-    established they can only overwrite it. The kernel enforces the expiry, not the skill's prose."""
+    """Skill names in `category`, namespaced and bare. Unlike `access: silent`,
+    a category block is a property of the SESSION."""
     out: set[str] = set()
     want = (category or "").strip().lower()
     for d in plugin_dirs:
@@ -169,9 +164,8 @@ def skills_in_category(plugin_dirs: list[Path], category: str) -> set[str]:
 
 
 def list_harness_plugins(*, dev_dir: Path, core_dir: Path, shared_dir: Path) -> list[dict]:
-    """SuperMe's OWN universal skills/agents, grouped by the scope that loads them: `dev` and
-    `core` (mode-selected) plus `shared` (loaded in every mode). The per-repo operational tree
-    (`local-harness/<id>/<mode>`) is deliberately excluded — this is the universal harness only."""
+    """SuperMe's OWN universal skills/agents by loading scope: `dev`, `core`,
+    `shared`. Per-repo trees are deliberately excluded."""
     return [
         {"scope": "dev", "label": "Dev", "plugin": "superme-dev",
          "note": "Loaded in dev mode", **_read_plugin(dev_dir)},
@@ -189,14 +183,13 @@ def _is_enabled(meta: dict) -> bool:
 
 
 def _is_foundational(meta: dict) -> bool:
-    """`foundational: true` marks a constitution a charter consults BY NAME (e.g. dev-knowledge-structure).
-    Disabling one would dangle the charter's pull, so the toggle refuses it — it's pinned always-on."""
+    """`foundational: true` marks a constitution a charter consults BY NAME.
+    Disabling one would dangle that pull."""
     return str(meta.get("foundational", "false")).strip().lower() in ("true", "1", "yes", "on")
 
 
 def _title_of(body: str, slug: str) -> str:
-    """The artifact's own H1 if it has one, else the slug read as words. The H1 keeps real
-    hyphens that a blanket dash-to-space rule would flatten."""
+    """The artifact's own H1 if it has one, else the slug as words. The H1 keeps real hyphens."""
     for line in body.splitlines():
         t = line.strip()
         if t.startswith("# "):
@@ -208,8 +201,8 @@ def _title_of(body: str, slug: str) -> str:
 
 
 def read_constitution_dir(directory: Path, *, origin: str) -> list[dict]:
-    """Read one constitution home into a list of items (newest filename last → stable order).
-    `origin` tags where it came from ('universal' | 'repo'). Missing dir → []."""
+    """Read one constitution home into a list of items. `origin` tags where it
+    came from. Missing dir → []."""
     out: list[dict] = []
     d = Path(directory)
     if not d.is_dir():
@@ -238,8 +231,7 @@ def read_constitution_dir(directory: Path, *, origin: str) -> list[dict]:
     return out
 
 
-# One shared pool of constitutional knowledge that is NOT universal. A repo activates slugs BY
-# REFERENCE in `.assets` — no body is ever copied. New repos carry none.
+# A repo activates slugs BY REFERENCE in `.assets` — no body is ever copied.
 
 
 def read_asset_pool(asset_dir: Path | None = None) -> list[dict]:
@@ -254,8 +246,8 @@ def _repo_asset_file(repo_dir: Path) -> Path:
 
 
 def repo_asset_states(repo_dir: Path | None) -> dict[str, bool]:
-    """The asset-pool items a repo has ADOPTED → {slug: enabled}. `.assets` lines are `slug`
-    (adopted + enabled) or `slug  # off` (adopted but disabled). Empty / no file ⇒ {}."""
+    """The asset-pool items a repo has ADOPTED → {slug: enabled}. `.assets` lines
+    are `slug` or `slug  # off`."""
     if repo_dir is None:
         return {}
     f = _repo_asset_file(repo_dir)
@@ -281,15 +273,13 @@ def _write_asset_states(repo_dir: Path, states: dict[str, bool]) -> None:
 
 
 def list_repo_assets(repo_dir: Path | None) -> set[str]:
-    """ENABLED asset slugs for a repo — the set that drives the constitution catalog / context build.
-    Adopted-but-disabled items are excluded."""
+    """ENABLED asset slugs for a repo. Adopted-but-disabled items are excluded."""
     return {slug for slug, en in repo_asset_states(repo_dir).items() if en}
 
 
 def set_repo_asset(repo_dir: Path | None, slug: str, enabled: bool) -> dict[str, bool]:
-    """Enable/disable one adopted asset (adopting it first if absent — this backs the manual `+ Add`
-    and the enable/disable toggle). Disabling KEEPS adoption. Returns the new adopted map. No body
-    is ever copied."""
+    """Enable/disable one adopted asset, adopting it first if absent. Disabling KEEPS
+    adoption. No body is ever copied."""
     if repo_dir is None:
         return {}
     states = repo_asset_states(repo_dir)
@@ -299,8 +289,8 @@ def set_repo_asset(repo_dir: Path | None, slug: str, enabled: bool) -> dict[str,
 
 
 def adopt_repo_assets(repo_dir: Path | None, slugs: list[str]) -> list[str]:
-    """Bulk-adopt (enabled) any not-yet-adopted slugs — the onboarding auto-adopt. Already-adopted
-    items (including ones the owner disabled) are left untouched. Returns the newly adopted slugs."""
+    """Bulk-adopt any not-yet-adopted slugs. Already-adopted items, including
+    disabled ones, are untouched. Returns the new slugs."""
     if repo_dir is None:
         return []
     states = repo_asset_states(repo_dir)
@@ -331,10 +321,8 @@ def _activated_asset_items(activated: set[str] | None, asset_dir: Path | None = 
 
 def list_constitution(mode: str, universal_dir: Path, repo_dir: Path | None, *,
                       activated: set[str] | None = None, asset_dir: Path | None = None) -> list[dict]:
-    """All constitution items in a repo's scope: universal (applies everywhere) + this repo's
-    authored + the ASSET-pool items it has ACTIVATED. Includes disabled items (the manage UI needs
-    them); callers filter on `enabled` as needed. `activated` is the repo's active asset-slug set;
-    `asset_dir` overrides the shared pool location (tests)."""
+    """Every constitution item in a repo's scope: universal + authored + ACTIVATED
+    assets. Includes disabled ones; callers filter."""
     items = read_constitution_dir(universal_dir, origin="universal")
     if repo_dir is not None:
         items += read_constitution_dir(repo_dir, origin="repo")
@@ -344,12 +332,8 @@ def list_constitution(mode: str, universal_dir: Path, repo_dir: Path | None, *,
 
 def constitution_catalog(mode: str, universal_dir: Path, repo_dir: Path | None, *,
                          activated: set[str] | None = None, asset_dir: Path | None = None) -> str:
-    """The always-on constitution CATALOG: one frontmatter line per ENABLED in-scope item
-    (universal + this repo's authored + its activated ASSET-pool items) — name + its self-sufficient
-    description. Bodies are NOT dumped; the agent pulls a body on demand via `pull_constitution(name)`.
-    Empty string when there are none. Frontmatter-first loading model (context-model-spec §1/§2): the
-    directive/when-to-apply lives in the always-resident description.
-    """
+    """The always-on CATALOG: one frontmatter line per ENABLED in-scope item.
+    Bodies are pulled on demand via `pull_constitution`."""
     items = [it for it in list_constitution(mode, universal_dir, repo_dir,
                                             activated=activated, asset_dir=asset_dir)
              if it["enabled"]]
@@ -386,12 +370,8 @@ def _terms(text: str) -> set[str]:
 def rank_assets_by_relevance(
     spec_text: str, activated: set[str] | None = None, *, asset_dir: Path | None = None, limit: int = 8,
 ) -> list[dict]:
-    """Rank the ASSET POOL by keyword overlap with `spec_text` — the spec→asset bridge: a project's
-    stated stack/approach surfaces the knowledge assets it implies, which the owner can then activate
-    for this repo. Deterministic (no embeddings): a term shared with an item's slug or description
-    (the signal-dense catalog line) counts double vs. one only in its body. Items with zero overlap
-    are dropped. Each result carries `activated` (already on for this repo) so the caller can
-    foreground the relevant-but-not-yet-active ones. Read-only — activating stays the owner's gate."""
+    """Rank the asset pool by keyword overlap with `spec_text`.
+    Deterministic: a slug or description hit counts double. Read-only — activating is the owner's gate."""
     want = _terms(spec_text)
     if not want:
         return []
@@ -416,9 +396,8 @@ def rank_assets_by_relevance(
 
 def resolve_constitution(mode: str, universal_dir: Path, repo_dir: Path | None, name: str, *,
                          activated: set[str] | None = None, asset_dir: Path | None = None) -> dict | None:
-    """Find one ENABLED in-scope constitution by name (slug), or None. Backs the `pull_constitution`
-    tool — scope is enforced by the dirs/active-set the caller passes (universal + repo + activated
-    ASSET items), so an out-of-scope or un-activated item is simply not found."""
+    """Find one ENABLED in-scope constitution by name, or None. Scope is the dirs
+    and active set the caller passes."""
     want = (name or "").strip().lower()
     for it in list_constitution(mode, universal_dir, repo_dir, activated=activated, asset_dir=asset_dir):
         if it["enabled"] and it["slug"].strip().lower() == want:
@@ -456,8 +435,8 @@ def constitution_home(target_scope: str, repo_id: str | None) -> Path:
 
 
 def plugin_root(target_scope: str, repo_id: str | None) -> Path:
-    """The plugin root that holds skills/ + agents/ for this scope (universal = the shipped
-    superme-dev plugin; repo = the per-repo operational cell, manifest bootstrapped on write)."""
+    """The plugin root holding skills/ + agents/ for this scope. Repo scope bootstraps its
+    manifest on write."""
     CONST, LOCAL, DEV_PLUGIN = _homes()
     if target_scope == "universal_dev":
         return DEV_PLUGIN
@@ -469,8 +448,8 @@ def plugin_root(target_scope: str, repo_id: str | None) -> Path:
 
 
 def ensure_plugin_manifest(root: Path, name: str) -> None:
-    """Bootstrap a minimal Claude-Code plugin manifest so a per-repo operational cell's skills/agents
-    load. No-op if one already exists (the universal plugin ships with its own)."""
+    """Bootstrap a minimal plugin manifest so a per-repo cell's skills and
+    agents load. No-op if one exists."""
     manifest = Path(root) / ".claude-plugin" / "plugin.json"
     if manifest.is_file():
         return
@@ -484,12 +463,10 @@ def ensure_plugin_manifest(root: Path, name: str) -> None:
 def publish_artifact(output_form: str, target_scope: str, repo_id: str | None, *,
                      slug: str, content: str, source: str = "agent",
                      created: str = "") -> str:
-    """Gate-2 publish — write a PUBLISHED operational artifact to its live home and return the path.
-    `content` is the write phase's final artifact, frontmatter-first for every form: constitution
-    carries a `description` (+ optional body); skill/agent are the complete SKILL.md / agent.md. The
-    server-side fields (name, runtime `enabled`, scope, provenance) are stamped here as defaults —
-    never clobbering what the agent authored. Every form is stamped `category: learned`. Raises
-    ReservedScope for `core`."""
+    """Gate-2 publish: write a PUBLISHED artifact to its live home, return the path.
+
+    Server-side fields (name, `enabled`, scope, provenance) are stamped as defaults, never clobbering
+    the agent's. Raises ReservedScope for `core`."""
     slug = slugify(slug)
     if output_form == "constitution":
         home = constitution_home(target_scope, repo_id)
@@ -525,25 +502,23 @@ def publish_artifact(output_form: str, target_scope: str, repo_id: str | None, *
     raise ValueError(f"unknown output_form: {output_form}")
 
 
-# A constitution disables by frontmatter flag. Skills and agents load via the CLI's own plugin
-# scanner, which ignores frontmatter — so disabling one means moving it into `.disabled/`, a
-# sibling the scanner never descends into.
+# The CLI's plugin scanner ignores frontmatter, so disabling a skill or agent means moving it
+# here.
 
 _DISABLED = ".disabled"
 
 
 def _plugin_artifact_paths(root: Path, kind: str, slug: str) -> tuple[Path, Path]:
-    """(live, disabled) paths for a skill/agent under a plugin root. A skill is a directory
-    (`skills/<slug>/SKILL.md`), an agent a single file (`agents/<slug>.md`); the `.disabled/` shadow
-    mirrors that layout so a move round-trips cleanly."""
+    """(live, disabled) paths for a skill or agent. A skill is a directory,
+    an agent a single file."""
     if kind == "skill":
         return root / "skills" / slug / "SKILL.md", root / _DISABLED / "skills" / slug / "SKILL.md"
     return root / "agents" / f"{slug}.md", root / _DISABLED / "agents" / f"{slug}.md"
 
 
 def _published_paths(form: str, scope: str, repo_id: str | None, slug: str) -> dict:
-    """Resolve a published artifact's on-disk home(s). Constitution → one file; skill/agent → the
-    (live, disabled) pair. Slug is normalized the same way publish did."""
+    """Resolve a published artifact's on-disk home(s). Constitution → one file;
+    skill/agent → the (live, disabled) pair."""
     slug = slugify(slug)
     if form == "constitution":
         return {"file": constitution_home(scope, repo_id) / f"{slug}.md"}
@@ -554,8 +529,8 @@ def _published_paths(form: str, scope: str, repo_id: str | None, slug: str) -> d
 
 
 def published_state(form: str, scope: str, repo_id: str | None, slug: str) -> dict:
-    """Live on-disk state of a published artifact: `present` (still on disk at all) + `enabled`.
-    Constitution reads its frontmatter flag; skill/agent infer from which tree the file sits in."""
+    """Live on-disk state: `present` + `enabled`. Constitution reads frontmatter;
+    skill/agent infer from which tree holds them."""
     p = _published_paths(form, scope, repo_id, slug)
     if form == "constitution":
         f = p["file"]
@@ -588,9 +563,8 @@ def _flip_constitution(path: Path, enabled: bool) -> None:
 
 def set_published_enabled(form: str, scope: str, repo_id: str | None, slug: str,
                           enabled: bool) -> dict | None:
-    """Toggle a published artifact without deleting it; returns the new state, or None if absent.
-    Constitution → frontmatter flip. Skill/agent → move the artifact between the live plugin tree and
-    its `.disabled/` shadow. Idempotent. Effective on the next dev turn (plugins re-read per turn)."""
+    """Toggle a published artifact without deleting it. Constitution flips
+    frontmatter; skill/agent move between the live and `.disabled/` trees."""
     st = published_state(form, scope, repo_id, slug)
     if not st["present"]:
         return None
@@ -616,8 +590,8 @@ def set_published_enabled(form: str, scope: str, repo_id: str | None, slug: str,
 
 
 def published_file(form: str, scope: str, repo_id: str | None, slug: str) -> Path | None:
-    """The editable markdown file for a published artifact (constitution → its file; skill/agent →
-    whichever of the live/disabled copies is on disk). None if nothing is present."""
+    """The editable markdown file for a published artifact, live or disabled.
+    None if nothing is present."""
     p = _published_paths(form, scope, repo_id, slug)
     if form == "constitution":
         f = p["file"]
@@ -629,9 +603,8 @@ def published_file(form: str, scope: str, repo_id: str | None, slug: str) -> Pat
 
 
 def delete_published(form: str, scope: str, repo_id: str | None, slug: str) -> bool:
-    """Remove a published artifact from disk entirely — both the live copy and any `.disabled/`
-    shadow. Returns True if anything was removed. The proposal row stays as history (caller retires
-    it). The loader stops seeing it next turn."""
+    """Remove a published artifact from disk, live copy and `.disabled/` shadow.
+    The proposal row stays as history."""
     p = _published_paths(form, scope, repo_id, slug)
     if form == "constitution":
         if p["file"].is_file():

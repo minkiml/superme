@@ -1,14 +1,7 @@
 """Gate STATE — what the four human gates mechanically know.
 
-ONE COMPUTATION, TWO PROJECTIONS. `gate_state` is the single place a gate's checks are decided.
-The drilldown projects it into buttons and rows; `kernel_speech` projects it into the deputy's
-prompt. A deputy judging from different numbers than the owner sees is one the owner cannot check.
-
-VISIBLE ≠ BLOCKING. Every check renders as a named row with its own reason, but only the narrow
-must-resolve set (`_BLOCKING`) greys Approve. Freshness debt or a vague phrasing is real, worth
-showing, and the owner may act over it with their eyes open.
-
-Pure and file-based.
+ONE COMPUTATION, TWO PROJECTIONS: the drilldown renders rows, `kernel_speech` renders the
+deputy's prompt. VISIBLE ≠ BLOCKING — only `_BLOCKING` greys Approve.
 """
 
 import re
@@ -26,13 +19,12 @@ _GATE_LABEL = {"triage-exit": "Triage exit", "pre-main": "Pre-main (plan approva
                "review": "Review (merge decision)", "close": "Close"}
 
 _ALL = "*"
-# Which FAILING checks grey Approve. Narrow on purpose: a gate is listed only where clicking
-# through would actually fail. Greying anything else invents a restriction the backend lacks.
+# Which FAILING checks grey Approve. Narrow: only where clicking through would actually fail.
 _BLOCKING: dict[str, tuple[str, ...] | str] = {
     "triage-exit": (),
     "pre-main": ("plan_complete",),
-    # `method_read` blocks because it reads an instruction that was not followed, not a judgment
-    # call. `owner_rulings` blocks only on MALFORMED fields — open questions never grey Approve.
+    # `method_read` blocks: an instruction not followed, not a judgment call. `owner_rulings`
+    # blocks only on MALFORMED fields.
     "review": ("no_pending_authorizations", "evidence_fresh", "artifacts_complete",
                "findings_delivered", "spawns_exist", "children_terminal", "method_read",
                "owner_rulings"),
@@ -41,18 +33,16 @@ _BLOCKING: dict[str, tuple[str, ...] | str] = {
 
 
 def close_readiness(item: dict, item_dir: Path, all_items: list[dict]) -> dict:
-    """Evaluate the kind's close criteria → {ok, checks}. Universal first check: every required
-    artifact EXISTS — not that it is good.
+    """Evaluate the kind's close criteria → {ok, checks}. Every required artifact
+    EXISTS — not that it is good.
 
-    NOTHING HERE RE-JUDGES THE WORK. Close can fix nothing: the merge has landed and the sessions
-    are closed. So readiness is asked at gates with recourse, and what is left here can only be a
-    fact that became true after review, or a file never written at all."""
+    NOTHING HERE RE-JUDGES THE WORK: close can fix nothing, so readiness is asked at gates with
+    recourse."""
     profile = get_profile(item.get("kind"))
     item_dir = Path(item_dir)
     checks: list[dict] = []
 
-    # EXISTENCE ONLY. Judging quality here could refuse a merged item with no way for anyone to
-    # answer, and would make every contract tightening a trap for items already in flight.
+    # EXISTENCE ONLY. Judging quality here would refuse a merged item nobody can still repair.
     missing = [k for k in profile.required_artifacts
                if not (Path(item_dir) / "artifacts" / A.artifact_file(k)).exists()]
     checks.append({"criterion": "required_artifacts",
@@ -60,8 +50,8 @@ def close_readiness(item: dict, item_dir: Path, all_items: list[dict]) -> dict:
                    "detail": ("never written: " + ", ".join(missing)) if missing else
                              f"all present: {', '.join(profile.required_artifacts)}"})
 
-    # No profile declares one today; the loop stays because a genuinely close-time criterion
-    # belongs here, and an unknown slug must fail visibly rather than pass.
+    # No profile declares one today. The loop stays so an unknown slug fails visibly rather than
+    # passes.
     for crit in profile.close_criteria:
         checks.append({"criterion": crit, "ok": False,
                        "detail": "no evaluator for this criterion (kernel gap)"})
@@ -70,21 +60,16 @@ def close_readiness(item: dict, item_dir: Path, all_items: list[dict]) -> dict:
 
 def fanout_check(family: str | None, subagents: int | None,
                  fanout: str = "expected") -> dict | None:
-    """The `fanned_out` row, or None when the question does not apply.
+    """The `fanned_out` row, or None when the question does not apply — no prescribed
+    fan-out, nobody counted, or a BOUNDED surface.
 
-    ASKED ONLY WHERE ITS ANSWERER EXISTS. Three conditions: the family's guide must prescribe
-    fan-out, the caller must have been able to COUNT (None means nobody looked, which is not zero),
-    and triage must not have judged the surface BOUNDED — a run that split nothing because its
-    brief said not to did as it was told.
-
-    VISIBLE, NOT BLOCKING. Whether a surface deserved splitting is a judgment. What this removes is
-    the SILENCE: a single-threaded sweep used to be indistinguishable from one that split."""
+    VISIBLE, NOT BLOCKING. What it removes is the SILENCE around a sweep that split nothing."""
     from .kind_profiles import FANOUT_FAMILIES, item_fanout
     if family not in FANOUT_FAMILIES or subagents is None:
         return None
     if item_fanout({"fanout": fanout}) == "bounded":
-        # Not silence: the judgement is still on the gate. What is gone is a red row for a run that
-        # followed its brief.
+        # Not silence: the judgement stays on the gate. What is gone is a red row for a compliant
+        # run.
         return {"criterion": "fanned_out", "ok": True,
                 "detail": (f"triage judged this surface bounded, so no split was expected — "
                            f"investigate spawned {subagents}. Disagree with the sizing, not the run.")}
@@ -100,23 +85,16 @@ def fanout_check(family: str | None, subagents: int | None,
     }
 
 
-# The size below which a brief CANNOT have carried a bar. A floor for impossibility, not a
-# target: it fires on "audit the auth module" and stays quiet on any real attempt.
-#
-# Deliberately not tracked against the contract's length — briefs got leaner by design, and a
-# floor that followed would punish that.
+# The size below which a brief CANNOT have carried a bar. A floor for impossibility, not a target.
 BRIEF_FLOOR = 600
 
 
 def brief_check(sizes: list[int] | None) -> dict | None:
     """The `brief_carried` row: did the fan-out send its workers out with anything?
+    A subagent inherits nothing.
 
-    A subagent inherits nothing — not the skill, not the guide, not the plan — so whatever the brief
-    omits, the work is done without it, and the findings come back looking like findings written to
-    a bar.
-
-    VISIBLE, NOT BLOCKING. Size proves a brief too short to have carried a bar, never that a long
-    one carried the RIGHT bar. None means nobody spawned, which is not a thin brief."""
+    VISIBLE, NOT BLOCKING. Size proves a brief too short to carry a bar, never that a long one
+    carried the right one."""
     if not sizes:
         return None
     thin = [n for n in sizes if n < BRIEF_FLOOR]
@@ -135,11 +113,8 @@ def brief_check(sizes: list[int] | None) -> dict | None:
 
 
 def standards_check(reads: int | None) -> dict | None:
-    """The `standards_read` row: did review read what the project had already settled?
-
-    TWO BARS, NOT ONE. The plan says what this item owed; `decisions.md` and `architecture.md` say
-    what the project decided before it. Work can satisfy the plan exactly and still cut across a
-    settled decision, and a plan-only reading cannot see that by construction."""
+    """The `standards_read` row: did review read what the project already settled?
+    A plan-only reading cannot see a cut-across decision."""
     if reads is None:
         return None
     return {
@@ -155,8 +130,8 @@ def standards_check(reads: int | None) -> dict | None:
 
 
 def instrumentation_check(tags: list[dict] | None) -> dict | None:
-    """Whether the run's own instrumentation recorded what this gate needs to judge it. None when
-    there is nothing to have recorded."""
+    """Whether the run's own instrumentation recorded what this gate needs.
+    None when there was nothing to record."""
     if tags is None:
         return None
     if not tags:
@@ -173,16 +148,11 @@ def instrumentation_check(tags: list[dict] | None) -> dict | None:
 
 
 def guide_check(family: str | None, reads: int | None) -> dict | None:
-    """The `method_read` row: did investigate actually open `references/<family>.md`?
+    """The `method_read` row: did investigate open `references/<family>.md`? None when
+    there is no family, or nobody counted.
 
-    Asked of EVERY research family — unlike `fanned_out`, every family has a guide. None when the
-    item has no family, or nobody counted.
-
-    The artifact comes out in the right SHAPE regardless: the scaffolder stamps the family's
-    sections, so a record written without ever reading the method is indistinguishable on the page.
-
-    BLOCKING, unlike its neighbours: this is an instruction that was not followed, not a judgment
-    call, and no item is so small that its family's method did not apply."""
+    BLOCKING, unlike its neighbours: the scaffolder stamps the shape regardless, so an unread
+    method is otherwise invisible."""
     if not family or reads is None:
         return None
     return {
@@ -198,15 +168,10 @@ def guide_check(family: str | None, reads: int | None) -> dict | None:
 
 
 def judgment_current(item_dir: Path, kind: str | None) -> dict | None:
-    """The `judgment_current` row: is `artifacts/review.md` at least as new as the record it
-    judges? None when either file is missing.
+    """The `judgment_current` row: is `review.md` at least as new as what it judges?
+    None when either file is missing.
 
-    A judgment older than its subject is not a matter of opinion — it is two mtimes — and it is
-    otherwise invisible on every surface. Research's subject is the investigation; an implementation
-    item's is its newest build⟷vet cycle report.
-
-    VISIBLE, NOT BLOCKING: a review that re-read everything and honestly changed nothing writes no
-    file, and would fail this."""
+    VISIBLE, NOT BLOCKING: an honest re-read that changed nothing writes no file, and would fail."""
     review = Path(item_dir) / "artifacts" / "review.md"
     if not review.is_file():
         return None
@@ -233,32 +198,23 @@ def judgment_current(item_dir: Path, kind: str | None) -> dict | None:
 
 
 def research_readiness(item_dir: Path) -> list[dict]:
-    """A RESEARCH item's two deliverable checks, evaluated at its REVIEW gate.
-
-    Both were close criteria and both broke the rule that close wraps up finished work rather than
-    judging it. Both read review-phase output, so review is where they belong and where a failure is
-    still answerable."""
+    """A RESEARCH item's two deliverable checks, at its REVIEW gate. Both read
+    review-phase output, so a failure is still answerable."""
     issues = A.report_issues(item_dir, "report-review")
     proposals = A.proposed_work(item_dir)
     decision = A.owner_decision(item_dir)
     return [
         {"criterion": "findings_delivered", "ok": not issues,
          "detail": "; ".join(issues) or "report-review.md complete"},
-        # A research item must not reach its last gate with nothing said about the work its findings
-        # imply: the investigation is half the deliverable.
-        #
-        # ASKS WHETHER THE PROPOSALS ARE STATED, NOT WHETHER THEY ARE FILED. `itemize` files them on
-        # this gate's APPROVE, so a filed-or-not question is one no first approval could answer.
+        # Asks whether the proposals are STATED, not filed — `itemize` files them on this gate's
+        # approve.
         {"criterion": "spawns_exist", "ok": bool(proposals),
          "detail": (f"{proposals[:160]}" + (f" · itemized: {decision}" if decision else ""))
                    if proposals else
                    "`## Proposed work` in review.md is empty — say what work these findings imply, "
                    "or say plainly that none follows; itemize files it from there"},
-        # A withheld proposal is INVISIBLE unless this row names it: an absence from the inbox looks
-        # exactly like a review that proposed less.
-        #
-        # Passes with questions outstanding on purpose — blocking would hold settled siblings hostage
-        # to one open call. What DOES block is an unreadable ruling field.
+        # A withheld proposal is INVISIBLE unless this row names it. Open questions pass; a
+        # malformed ruling field blocks.
         _owner_rulings(item_dir),
     ]
 
@@ -267,8 +223,7 @@ def _owner_rulings(item_dir: Path) -> dict:
     props = A.research_proposals(item_dir)
     issues = A.research_proposal_issues(props)
     _, held = A.filed_and_withheld(props)
-    # A rule outlives the item, so this gate is the last place the owner can refuse one. Named
-    # even when nothing waits: approving still makes whatever is written here permanent.
+    # A rule outlives the item, so this is the last place the owner can refuse one.
     rules = [p for p in props if A.proposal_promotable(p)]
     tail = ("" if not rules else
             f" Approving records {len(rules)} standing rule(s) in this project's ledger — " +
@@ -304,8 +259,8 @@ def _task_ratio(item_dir: Path) -> tuple[int, int]:
 
 
 def _numbers(item_dir: Path) -> dict:
-    """The brief's real-ratio row: counts of real things, never scores. Task checkbox ratio, vet
-    cycle count, ledger passes against the plan's check total. All derived, nothing stored."""
+    """The brief's real-ratio row: counts of real things, never scores. All derived,
+    nothing stored."""
     done, total = _task_ratio(item_dir)
     plan_text = _strip_fm(_artifact_text(item_dir, "plan") or "")
     vp = A.parse_vet_plan(plan_text)
@@ -320,16 +275,12 @@ def _numbers(item_dir: Path) -> dict:
 
 
 def _page_reason(item: dict, events: list[dict]) -> dict | None:
-    """When an item rests `awaiting_human` for a REASON beyond a clean gate waiting — an
-    escalation, a loop halt, a blocked run — name it, so the drilldown leads with why it paused
-    rather than previewing a future gate.
-
-    Newest-first, stopping at the last `phase.advance`. None ⇒ a plain gate wait."""
+    """Why an item rests `awaiting_human` beyond a clean gate wait — escalation, loop
+    halt, blocked run. None means a plain wait."""
     if str(item.get("status")) != "awaiting_human":
         return None
-    # THIS PHASE ONLY. Everything at or past the last `phase.advance` belongs to a phase that is
-    # over, and its halts were resolved by the advance itself. Sweeping the whole history makes a
-    # clean gate quote a failure from four advances ago.
+    # THIS PHASE ONLY. Sweeping the whole history makes a clean gate quote a failure from four
+    # advances ago.
     window: list[dict] = []
     for e in events:
         if str(e.get("kind")) == "phase.advance":
@@ -360,8 +311,8 @@ def _page_reason(item: dict, events: list[dict]) -> dict | None:
 
 
 def _mark_blocking(gate: str, checks: list[dict]) -> list[str]:
-    """Stamp `blocking` on every row and return the reasons Approve is greyed, in row order. ONE
-    place decides, so the drilldown's button and the deputy's must-resolve set cannot disagree."""
+    """Stamp `blocking` on every row and return the greying reasons. ONE place decides,
+    so button and deputy agree."""
     must = _BLOCKING.get(gate, ())
     for c in checks:
         c["blocking"] = must == _ALL or c["criterion"] in must
@@ -377,10 +328,8 @@ def gate_state(item: dict, item_dir: Path, dev_root: Path,
                debug_tags: list[dict] | None = None,
                standards_reads: int | None = None,
                ) -> dict:
-    """The gate's full mechanical state: checks, which of them block, the counts, pending
-    authorizations, and why the item is parked.
-
-    The single computation both the drilldown and the deputy's prompt project from."""
+    """The gate's full mechanical state: checks, which block, counts, pending
+    authorizations, and why the item is parked."""
     item_dir, dev_root = Path(item_dir), Path(dev_root)
     all_items, events = all_items or [], events or []
     profile = get_profile(item.get("kind"))
@@ -401,11 +350,11 @@ def gate_state(item: dict, item_dir: Path, dev_root: Path,
         # body instead — read whichever exists.
         item_body = (_strip_fm(_artifact_text(item_dir, "brief") or "").strip()
                      or str(item.get("description") or "").strip())
-        # Ready = the `triaged_at` stamp, written only by triage's own tool. A `kind set + body
-        # filled` check would be a tautology: an inbox push satisfies both.
+        # Ready = the `triaged_at` stamp. `kind set + body filled` would be a tautology: an inbox
+        # push satisfies both.
         ready = bool(item.get("triaged_at"))
-        # The kind is frozen past this gate, so the one place the owner still sees the item should
-        # show that a proposal was overruled, not just the value that won.
+        # The kind is frozen past this gate, so show that a proposal was overruled, not just the
+        # winner.
         proposed = str(item.get("proposed_kind") or "")
         overruled = (f" (filed as {proposed})"
                      if proposed and proposed != str(item.get("kind") or "") else "")
@@ -421,8 +370,8 @@ def gate_state(item: dict, item_dir: Path, dev_root: Path,
         done, total = _task_ratio(item_dir)
         checks.append({"criterion": "plan_complete", "ok": not issues,
                        "detail": "; ".join(issues) or f"plan clean, {total} task(s)"})
-        # Depth and reason are a call the owner can veto HERE, before tokens burn on building. A
-        # vague `expect` is non-blocking: a human is present, the one fail-open that is safe.
+        # Depth and reason are a call the owner can veto HERE, before tokens burn. A vague
+        # `expect` is non-blocking.
         vp = A.parse_vet_plan(plan)
         if profile.kind == "implementation" and vp.get("present"):
             depth = vp.get("depth") or "?"
@@ -433,17 +382,8 @@ def gate_state(item: dict, item_dir: Path, dev_root: Path,
                           (f"depth `{depth}` — {vp.get('reason') or '(no reason given)'}"
                            + (" · NO check will run: the vet pass confirms there is nothing "
                               "observable and records that" if depth == "none" else ""))})
-        # Every re-routing round owes a revision block (§2.1): `revise` is the only way back here,
-        # it always records a `review.route` event, and the only way to change plan.md is
-        # `revise_plan`, which always writes the block. A round with no block means the plan was
-        # hand-edited — so which feedback drove what is unrecoverable, and the next build reads a
-        # plan it cannot tell has changed. Visible and named; it does not grey Approve, because the
-        # move it asks for is a conversation, not a click.
-        # BOTH routes owe a block: `review.route` is the owner/deputy's send-back, `revise.route`
-        # is a build cycle concluding the plan must change. They are separate events because they
-        # have separate speakers (a build's conclusion used to be logged as a review's, which put
-        # the OWNER's name on it and inflated this count), but each one re-routes the item and each
-        # one changes plan.md, so each owes a revision block.
+        # Every re-routing round owes a revision block; a round without one means plan.md was
+        # hand-edited.
         rounds = sum(1 for e in events if e.get("kind") in ("review.route", "revise.route"))
         if rounds:
             revs = plan_revision.revisions(item_dir)
@@ -454,15 +394,8 @@ def gate_state(item: dict, item_dir: Path, dev_root: Path,
                           (f"{rounds} feedback round(s) but only {len(revs)} revision block(s) — "
                            f"fold the feedback in with `revise_plan`, never by rewriting plan.md")})
     elif gate == "review":
-        # ARTIFACT COMPLETENESS IS JUDGED HERE, NOT AT CLOSE (owner's standing rule, 2026-08-09).
-        # Close used to re-run this same self-check, which meant an artifact could be refused at the
-        # one phase where nothing can act on the refusal: the merge has landed, the phase sessions
-        # are closed, and the owner has no surface to repair a work-item artifact. Review is the
-        # last gate with recourse — send back, revise, or fix and re-approve — so the question is
-        # asked here, where an answer is still possible, and close only asks that the file exist.
-        #
-        # It re-checks `plan` too, though `pre-main` already did: a revision round rewrites plan.md
-        # AFTER that gate, so the copy close would have judged is not the copy pre-main approved.
+        # ARTIFACT COMPLETENESS IS JUDGED HERE, NOT AT CLOSE: review is the last gate with
+        # recourse.
         arts = []
         for kind in profile.required_artifacts:
             issues = A.self_check(item_dir, kind, item_kind=profile.kind)
@@ -472,65 +405,42 @@ def gate_state(item: dict, item_dir: Path, dev_root: Path,
         checks.append({"criterion": "artifacts_complete", "ok": not arts,
                        "detail": "; ".join(arts) or
                                  f"clean: {', '.join(profile.required_artifacts) or 'none required'}"})
-        # Is the verdict newer than what it judges? Asked for BOTH kinds — a review that predates
-        # the last build cycle is as stale as one that predates a rewritten investigation.
+        # Is the verdict newer than what it judges? Asked of both kinds.
         fresh = judgment_current(item_dir, profile.kind)
         if fresh is not None:
             checks.append(fresh)
-        # Did any tagged probe survive the build? Asked of whatever HAS a branch — a research item
-        # has no worktree, so the caller passes None and the row never appears.
+        # Did any tagged probe survive the build? Asked only of items that have a branch.
         probes = instrumentation_check(debug_tags)
         if probes is not None:
             checks.append(probes)
-        # The SECOND bar. Everything above measures this item against its own plan; this asks
-        # whether the phase that judges it also read what the project settled before it.
+        # The SECOND bar: did the judging phase read what the project settled before this item?
         second_bar = standards_check(standards_reads)
         if second_bar is not None:
             checks.append(second_bar)
         if profile.kind == "research":
             checks.extend(research_readiness(item_dir))
-            # Did investigate read its family's method, and did it fan out? Both spine-counted by
-            # the caller — core has no spine access, the same reason `events` is passed in rather
-            # than read here. `method_read` comes first: whether the guide was followed decides how
-            # much the rest of the record is worth.
-            # `brief_carried` sits beside `fanned_out` and reads the other half of the same act:
-            # one says the surface was split, the other says the workers were given a bar to split
-            # it against. A green `fanned_out` over thin briefs is the shape of the defect that
-            # existed before either row — motion that looks like method.
+            # `method_read` comes first: whether the guide was followed decides what the rest of
+            # the record is worth.
             for row in (guide_check(research_kind(item), guide_reads),
                         fanout_check(research_kind(item), subagents,
                                      fanout=item_fanout(item)),
                         brief_check(brief_sizes)):
                 if row is not None:
                     checks.append(row)
-        # CHILDREN HOLD THE PARENT HERE, NOT AT CLOSE (owner, 2026-08-09). A child is spawned FROM
-        # this item and is part of its work, so when the child lands the parent has to still be
-        # re-workable against it — re-checked, revised, re-vetted. At close it is none of those: the
-        # branch is merged and the sessions are gone. Close was the ONLY place this was ever asked,
-        # which meant a parent could pass review, land, and first learn about its open child at the
-        # phase that can do nothing about it.
-        #
-        # BOTH relations hold (`children_terminal` reads every open child, not just `blocking`).
-        # That is what the three relations mean once they are stated in terms of the parent's
-        # WORK rather than its bookkeeping: `blocking` stops the parent now, `parallel` lets it keep
-        # working but lands with it, `spawn` is uncoupled follow-up. A `parallel` child that should
-        # not hold the merge was never part of this item — that is what `spawn` is for.
+        # CHILDREN HOLD THE PARENT HERE, NOT AT CLOSE — at close the branch is merged and the
+        # sessions are gone.
         kids_done, open_kids = status_router.children_terminal(all_items or [], str(item.get("id")))
         checks.append({"criterion": "children_terminal", "ok": kids_done,
                        "detail": f"open sub-item(s): {', '.join(open_kids)}" if not kids_done
                                  else "no open sub-items"})
-        # ONLY A KIND THAT VETS IS ASKED ABOUT ITS EVIDENCE (live, 2026-08-13). This row reads a
-        # ledger that only a vet run writes, and a research item has no vet phase — so it sat at
-        # "nothing recorded yet — vet writes the ledger" forever and blocked the one gate research
-        # has, with nothing anyone could do to clear it. Same fault `spawns_exist` had: a question
-        # asked where its answerer does not exist.
+        # ONLY A KIND THAT VETS IS ASKED ABOUT ITS EVIDENCE. Research has no vet, so nothing
+        # writes this ledger.
         if "vet" in profile.phases:
             wt = item.get("git_worktree")
             ev_repo = Path(str(wt)) if wt and Path(str(wt)).is_dir() else main_repo_dir
             ev = A.evidence_status(item_dir, ev_repo)
-        # The STATUS WORD alone ("stale") answered nothing anyone asked: it named a state without
-        # naming its cause or its exit, so a gate that went red the instant the owner pressed Sync
-        # read as a malfunction. Each status now says what happened and what clears it.
+        # The status word alone named a state without its cause or its exit. Each status now says
+        # both.
             n = ev.get("entries", 0)
             detail = {
                 "passed": f"all {n} recorded checks pass, and the code hasn't moved since they ran",
@@ -545,16 +455,8 @@ def gate_state(item: dict, item_dir: Path, dev_root: Path,
             checks.append({"criterion": "evidence_fresh", "ok": ev["status"] == "passed",
                            "detail": "no checks were owed — the approved plan declares `depth: none`"
                                      if ev.get("not_required") else detail})
-        # NO `git_fresh` row (owner, 2026-08-01 — removed with the manual Sync button). It was the
-        # only check that could neither block nor be acted on: behind-trunk is a FACT, the merge act
-        # syncs and re-measures at the instant that matters, and the same number already reads
-        # verbatim on the Git tab (`vs main: ahead N · behind N`). A permanently-inert row in a list
-        # of things that gate the button trained the eye to skim the list.
-        # BV-A2: deferred contract changes the build couldn't self-authorize surface HERE for the
-        # owner's grant/deny — a pending request holds the merge (deferred ≠ passed), and each rides
-        # the typed `authorizations` feed the FE renders Grant/Deny against. `delegable` tells the
-        # owner whether the deputy could have granted it (sync-to-reality) or it's reserved (why it's
-        # on their desk); the owner grants either way.
+        # A pending request HOLDS the merge: deferred is not passed. `delegable` says whether the
+        # deputy could have granted it.
         pend_auth = A.pending_authorizations(item_dir)
         if pend_auth:
             authorizations = [{"id": a.get("id", ""), "what": a.get("what", ""),

@@ -71,10 +71,8 @@ def _result_text(content) -> str:
 
 
 def _sum_tokens(usage: dict | None) -> int:
-    """The "critical" token usage: fresh input + output + cache writes.
-
-    EXCLUDES cache_read, which is cheap re-reads that otherwise dwarf the tokens representing real
-    work. Context-fill still counts them, because they do fill the window."""
+    """The "critical" token usage: fresh input + output + cache writes. EXCLUDES
+    cache_read, which would dwarf real work."""
     if not usage:
         return 0
     return sum(usage.get(k, 0) for k in (
@@ -83,10 +81,8 @@ def _sum_tokens(usage: dict | None) -> int:
 
 
 def _window_from_model_usage(model_usage: dict | None, model: str | None) -> int | None:
-    """The model's true contextWindow from the SDK's model_usage, if present.
-
-    Only the ResultMessage carries it, so the caller caches this per model and passes it back as
-    `window_hint` — otherwise streaming and the final result divide by different windows."""
+    """The model's true contextWindow, if the SDK reported it. Only the
+    ResultMessage carries it, so callers cache it."""
     if not model_usage:
         return None
     entry = model_usage.get(model) if model else None
@@ -98,14 +94,10 @@ def _window_from_model_usage(model_usage: dict | None, model: str | None) -> int
 
 def _context_usage(usage: dict | None, model_usage: dict | None, model: str | None,
                    window_hint: int | None = None):
-    """Approximate context-window fill. Returns (percent, window_tokens) or None.
+    """Approximate context-window fill, or None. `usage` MUST be a SINGLE call's —
+    an aggregate inflates it 2–3×.
 
-    `usage` MUST be a SINGLE call's usage, never a turn aggregate: an aggregate double-counts cache
-    reads across round-trips and inflates the fill 2–3×.
-
-    The denominator is the model's real contextWindow, read from `model_usage` or the cached hint.
-    There is deliberately NO fallback guess — a percentage against the wrong window is a false
-    reading, worse than none, so an unknown window returns None and the surface shows nothing."""
+    There is deliberately NO fallback window: a percentage against the wrong one is worse than none."""
     if not usage:
         return None
     used = (
@@ -121,11 +113,8 @@ def _context_usage(usage: dict | None, model_usage: dict | None, model: str | No
 
 
 def _read_roots(ctx: Context) -> list[Path]:
-    """The host's allowed-read roots for the L2 guard: its cwd, its knowledge tree, the universal
-    harness and its own local harness. Everything else is out of scope.
-
-    The hub's cwd already contains all of those, so the hub reads broadly and a repo host narrowly,
-    from the same rule."""
+    """The host's allowed-read roots: cwd, knowledge tree, universal harness, own local
+    harness. The hub's cwd contains all four."""
     roots = [ctx.cwd, HARNESS_DIR]
     if ctx.internal_root:
         roots.append(ctx.internal_root)          # this host's <id>-knowledge tree
@@ -152,21 +141,10 @@ class AgentService:
 
     async def measure_context_floor(self, ctx: Context, model: str | None = None
                                     ) -> tuple[int, int] | None:
-        """The session's incompressible FLOOR — (tokens, window) — measured, not guessed.
+        """The session's incompressible FLOOR — (tokens, window).
 
-        `get_context_usage()` read on a session built with the real `_build_options` but BEFORE
-        any turn reports exactly what every turn re-sends and no summary can ever remove: system
-        prompt + tool schemas + skills + agent defs. That is the honest denominator for
-        "did this compaction shed most of what was SHEDDABLE".
-
-        The old proxy — the session's FIRST observed fill — was wrong in both directions: a first
-        turn already carries a prompt and the item's context (it read ~16–20% against a ~10.6%
-        floor), and a daemon restart re-measured it mid-conversation, so the floor could land
-        anywhere. This depends only on the options, so it is stable and cached per
-        (context, model); the cost is one subprocess spawn the first time.
-
-        Returns None if the read fails — callers fall back to their flat threshold.
-        """
+        Read before any turn: what every turn re-sends and no summary can shed — system prompt + tools
+        + skills + agent defs. Cached per (context, model); None if the read fails."""
         key = f"{ctx.id or '-'}::{ctx.mode}::{model or '-'}"
         if key in self._floor_by_key:
             return self._floor_by_key[key]
@@ -190,13 +168,10 @@ class AgentService:
         return self._floor_by_key[key]
 
     def _context_preamble(self, ctx: Context, *, item_bound: bool = False) -> str:
-        """Where this turn is operating: host, cwd, the knowledge roots, and (unbound sessions only)
-        the project orientation digest.
+        """Where this turn is operating: host, cwd, knowledge roots, and (unbound
+        sessions only) the orientation digest.
 
-        Written as a lookup table, not prose — every line here rides EVERY turn, and the reader
-        needs to find a path, not read a paragraph. Each root is stated ONCE at full length and its
-        children hang off it relatively; spelling the 60-char prefix again per child was three
-        copies of one fact (00-superme-context-practice §4d/§4f)."""
+        A lookup table, not prose — every line rides EVERY turn, and the reader needs a path."""
         where = ("the **SuperMe hub** (the owner's home host: their cross-domain self, and "
                  "SuperMe's own codebase)" if ctx.layer == "global" else f"project host `{ctx.id}`")
         text = (
@@ -204,7 +179,7 @@ class AgentService:
             f"Host: {where} · context `{ctx.label}` · cwd `{ctx.cwd}`."
         )
         # ABSOLUTE paths: the knowledge trees do not live under the cwd, so relative ones silently
-        # miss. The charter refers to them relatively; these lines bind those references.
+        # miss.
         if ctx.internal_root:
             core_root = ctx.knowledge_root or (ctx.internal_root / "core")
             if ctx.mode == "dev":
@@ -214,8 +189,8 @@ class AgentService:
                     f"  · anchor docs `general/` · work-items `work-items/`\n"
                     f"Core knowledge `{core_root}` (read-only in dev)."
                 )
-                # A digest so a cold session is oriented without reading. An item-bound turn drops the
-                # in-progress list: it already has a subject.
+                # A digest so a cold session is oriented without reading. An item-bound turn
+                # already has a subject.
                 try:
                     digest = _DEV.orient_digest(dev_root, in_progress=not item_bound)
                 except Exception:  # noqa: BLE001 — orientation is best-effort, never fatal
@@ -240,10 +215,8 @@ class AgentService:
     _CATEGORY_DENY_DEFAULT = "The `{category}` skills aren't available in this session."
 
     def _resolve_scope(self, ctx: Context):
-        """The per-repo scope a turn resolves against: (op_home, const_universal, const_repo,
-        activated_assets). Deterministic from the Context — `_build_options` reuses it for the MCP
-        server + turn plugins, and `assemble_system_append` builds the catalog from it. Factored so
-        the input-preview endpoint resolves scope through the exact same code the live turn does."""
+        """The per-repo scope a turn resolves against, deterministic from the Context.
+        Factored so the preview endpoint runs the same code."""
         op_home = LOCAL_HARNESS_DIR / ctx.id / ctx.mode if ctx.id else None
         const_universal = CONSTITUTION_DIR / ctx.mode
         const_repo = (op_home / "constitution") if op_home is not None else None
@@ -253,14 +226,11 @@ class AgentService:
     def _fragment_parts(self, ctx: Context, *, op_home, const_universal, const_repo,
                         activated_assets, system_append: str | None = None,
                         item_bound: bool = False) -> list[dict]:
-        """The layer-2 system append as ORDERED provenance fragments: persona (WHO) · mode charter
-        (WHAT MODE) · per-repo local charter · constitution CATALOG · operating-context preamble
-        (WHERE) · per-project persona_append · the per-turn session-kind block (which, on
-        kernel-fired work-item runs, carries the run protocol — the retired background-contract
-        block has no successor fragment). THE single source of truth — `_assemble_append` joins these into the exact
-        string a turn sends, and the prompt inspector captures them for per-fragment display. Each
-        fragment carries `sep` = the exact string preceding it in the joined append, so
-        `''.join(sep+text)` reproduces the append byte-for-byte."""
+        """The layer-2 system append as ORDERED fragments: persona · mode charter ·
+        local charter · constitution catalog · operating context · persona_append · session-kind block.
+
+        THE single source of truth. Each fragment carries `sep`, so `''.join(sep+text)` reproduces the
+        append byte-for-byte."""
         frags: list[dict] = []
 
         def add(name: str, location: str, text: str, *, sep: str) -> None:
@@ -308,18 +278,16 @@ class AgentService:
     def _assemble_append(self, ctx: Context, *, op_home, const_universal, const_repo,
                          activated_assets, system_append: str | None = None,
                          item_bound: bool = False) -> str:
-        """Assemble the layer-2 system append (system_prompt.append) by joining `_fragment_parts`.
-        THE single assembler — `_build_options` and the input-preview endpoint both call it, so what
-        a preview shows is byte-for-byte what a real turn sends."""
+        """Join `_fragment_parts` into the layer-2 system append. THE single assembler,
+        so a preview is byte-for-byte the real turn."""
         return self._join_fragments(self._fragment_parts(
             ctx, op_home=op_home, const_universal=const_universal, const_repo=const_repo,
             activated_assets=activated_assets, system_append=system_append, item_bound=item_bound))
 
     def assemble_system_append(self, ctx: Context, *, system_append: str | None = None,
                                item_bound: bool = False) -> str:
-        """Public seam for the prompt inspector: resolve scope + assemble the exact system append a
-        turn with this (ctx, session_append) would send. No side effects. `item_bound` must match
-        what the real turn passes, or a preview drifts from the run it claims to show."""
+        """Public seam for the prompt inspector: the exact append this
+        (ctx, session_append) would send. `item_bound` must match the real turn."""
         op_home, const_universal, const_repo, activated_assets = self._resolve_scope(ctx)
         return self._assemble_append(
             ctx, op_home=op_home, const_universal=const_universal, const_repo=const_repo,
@@ -327,10 +295,8 @@ class AgentService:
 
     def assemble_system_fragments(self, ctx: Context, *, system_append: str | None = None,
                                   item_bound: bool = False) -> list[dict]:
-        """Public seam for the prompt inspector's per-fragment view: the SAME append as
-        `assemble_system_append`, but as ordered provenance fragments [{name, location, text}] (the
-        internal `sep` is dropped — it's for reconstruction, not display). Same builder → the
-        fragments always sum to the captured system prompt."""
+        """The same append as `assemble_system_append`, but as ordered
+        fragments [{name, location, text}]. Same builder, so they always agree."""
         op_home, const_universal, const_repo, activated_assets = self._resolve_scope(ctx)
         frags = self._fragment_parts(
             ctx, op_home=op_home, const_universal=const_universal, const_repo=const_repo,
@@ -362,15 +328,14 @@ class AgentService:
         blocked: dict[str, str] = {}
         if enforce_silent:
             blocked.update({n: self._SILENT_SKILL_DENY for n in silent_skill_names(turn_plugins)})
-        # The caller decides the block, Core resolves it: the daemon knows a repo's phase of life,
-        # Core knows where the skills live.
+        # The caller decides the block; Core resolves it — only Core knows where the skills live.
         for cat in (block_categories or ()):
             msg = self._CATEGORY_DENY.get(cat, self._CATEGORY_DENY_DEFAULT.format(category=cat))
             blocked.update({n: msg for n in skills_in_category(turn_plugins, cat)})
         return ClaudeAgentOptions(
             cwd=str(ctx.cwd),                       # the Context (cwd / workspace)
-            # Without this callback the SDK pipes no stderr, so a launch failure raises an error
-            # telling you to read output that was never captured.
+            # Without this the SDK pipes no stderr, so a launch failure points at output nobody
+            # captured.
             stderr=_cli_stderr,
             resume=resume,                          # continuous session (surface-owned)
             # The ONE execution choke, so a tier alias never silently runs a lagging version.
@@ -379,8 +344,8 @@ class AgentService:
             system_prompt={"type": "preset", "preset": "claude_code", "append": append},
             # Layers the owner's own ~/.claude and project settings under SuperMe's carried harness.
             setting_sources=ctx.setting_sources,
-            # Per-mode plugins: shared + (core|dev). The other mode's plugin isn't loaded,
-            # so its skills are simply absent — folder-as-scope (see config.plugins_for).
+            # Per-mode plugins: shared + (core|dev). The other mode's skills are simply absent —
+            # folder-as-scope.
             plugins=[{"type": "local", "path": p} for p in plugins_for(ctx.mode, op_home)],
             # SuperMe's own skills are mode-scoped by the plugins above; "all" keeps the owner's
             # native commands available alongside them.
@@ -394,15 +359,15 @@ class AgentService:
                 **(extra_mcp_servers or {}),
             },
             permission_mode="default",
-            # Surface-supplied SDK hooks (S8: the PreCompact checkpoint-first safety net on
-            # work-item sessions). None on every other turn — no behavior change.
+            # Surface-supplied SDK hooks — the PreCompact checkpoint on work-item sessions. None
+            # on every other turn.
             hooks=hooks,
-            # Keeps reads inside the host's scope. Background runs opt out: they are write-sandboxed
-            # and read their own scratch, which the guard would deny.
+            # Keeps reads inside the host's scope. Background runs opt out: the guard would deny
+            # their own scratch.
             can_use_tool=build_can_use_tool(
                 approve, blocked_skills=blocked,
-                # `cwd` does two INDEPENDENT jobs: resolving relative reads, and pinning the shell inside
-                # the write boundary. Gating it on scope_reads would disarm the second.
+                # `cwd` does two INDEPENDENT jobs: resolving relative reads, and pinning the shell
+                # inside the write boundary.
                 cwd=ctx.cwd,
                 read_roots=_read_roots(ctx) if scope_reads else None,
                 gate_general_mutations=gate_general_mutations,
@@ -413,9 +378,8 @@ class AgentService:
                 protected_paths=protected_paths,      # review read-only on plan.md (§2.1)
                 protected_nudge=protected_nudge,
             ),
-            # SuperMe owns its own memory subsystem and must never touch the CLI's native auto-memory,
-            # which is on by default and not gated by setting_sources. Targeted: skills and commands
-            # stay intact.
+            # SuperMe owns its memory subsystem. The CLI's native auto-memory is on by default and
+            # not gated by setting_sources.
             env={"CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1"},
             # Empty on an unsandboxed run. `core.sandbox` owns the policy.
             **sandbox_options(sandbox_writes),
@@ -446,17 +410,10 @@ class AgentService:
         sandbox_writes: list[Path] | None = None,
         item_bound: bool = False,
     ) -> AsyncIterator[TurnEvent]:
-        """Run one turn against `ctx`, yielding TurnEvents.
+        """Run one turn against `ctx`, yielding TurnEvents. Raises on a hard SDK failure —
+        the surface decides whether to retry.
 
-        Emits TextDelta as assistant text arrives, Status before each tool call, and a
-        final Result with the reply + run metadata (model, context fill, session id).
-        Raises on a hard SDK failure (the surface decides whether to retry, e.g. after a
-        stale resume).
-
-        Uses ClaudeSDKClient (persistent connection) rather than the one-shot query():
-        interactive permission callbacks (can_use_tool) need the control channel held
-        open for the whole turn, which query() closes once its input stream ends.
-        """
+        Uses ClaudeSDKClient, not query(): `can_use_tool` needs the control channel held open all turn."""
         options = self._build_options(
             ctx, resume=resume, model=model, approve=approve,
             extra_mcp_servers=extra_mcp_servers, enforce_silent=enforce_silent, effort=effort,
@@ -469,9 +426,8 @@ class AgentService:
             sandbox_writes=sandbox_writes, item_bound=item_bound,
         )
         resolved_model = None
-        # Fill is measured from a SINGLE call, not the turn aggregate: `Result.usage` sums every
-        # round-trip, so a multi-tool turn balloons to N× real occupancy. The last AssistantMessage
-        # is the fullest single prompt, so its usage ≈ true fill.
+        # Fill comes from a SINGLE call, not the turn aggregate: `Result.usage` sums round-trips
+        # and balloons N×.
         last_step_usage: dict | None = None
         # A tool result arrives with a tool_use_id and no name, so correlate it back to its call.
         tool_names: dict[str, str] = {}
@@ -489,11 +445,11 @@ class AgentService:
                             model=resolved_model,
                         )
                 elif isinstance(message, AssistantMessage):
-                    # Non-None when the message came from INSIDE a sub-agent. A fan-out interleaves children
-                    # into one stream, so the trail needs it to say who did what.
+                    # Non-None when the message came from INSIDE a sub-agent — the trail needs it
+                    # to say who did what.
                     parent_tuid = getattr(message, "parent_tool_use_id", None)
-                    # ONE TextDelta per assistant MESSAGE, joining its blocks. Per-block would make the live
-                    # view and the reloaded transcript disagree about where a message ends.
+                    # ONE TextDelta per assistant MESSAGE. Per-block would make the live view and
+                    # the reloaded transcript disagree.
                     said = "\n\n".join(b.text for b in message.content if hasattr(b, "text"))
                     if said.strip():
                         log.info("assistant: %s", said[:200])
@@ -508,8 +464,7 @@ class AgentService:
                                 tool_names[tuid] = block.name
                             yield Status(block.name, block.input or {}, tool_id=tuid,
                                          parent_tool_id=parent_tuid)
-                    # A live token snapshot for this step, so a surface can show a running
-                    # counter while the turn is still in flight.
+                    # A live token snapshot, so a surface can show a running counter mid-turn.
                     step_usage = getattr(message, "usage", None)
                     if step_usage:
                         last_step_usage = dict(step_usage)  # fullest single prompt so far
@@ -525,8 +480,8 @@ class AgentService:
                             message_id=getattr(message, "message_id", None),
                         )
                 elif isinstance(message, UserMessage):
-                    # Never rendered in the live chat, but persisted to the run trail so a full execution
-                    # trace is available to Activity and to diagnosis.
+                    # Never rendered in chat, but persisted to the run trail for Activity and
+                    # diagnosis.
                     content = getattr(message, "content", None)
                     if isinstance(content, list):
                         for block in content:
@@ -539,13 +494,13 @@ class AgentService:
                                 content=_result_text(block.content),
                                 is_error=bool(getattr(block, "is_error", False)),
                                 tool_id=tuid,
-                                # Same attribution as the call (see AssistantMessage above): a result
-                                # that came back inside a sub-agent belongs to that sub-agent's trail.
+                                # Same attribution as the call: a result from inside a sub-agent
+                                # belongs to that sub-agent's trail.
                                 parent_tool_id=getattr(message, "parent_tool_use_id", None),
                             )
                 elif isinstance(message, ResultMessage):
-                    # Fill % from the last single call; window size from model_usage. The tokens below stay
-                    # the turn aggregate — that IS the billing total.
+                    # Fill % from the last single call; window size from model_usage. Tokens below
+                    # stay the billing total.
                     usage = _context_usage(
                         last_step_usage or message.usage, message.model_usage, resolved_model,
                         window_hint=self._window_by_model.get(resolved_model),
