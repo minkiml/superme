@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Bot, User, ShieldCheck } from 'lucide-react'
 import Markdown from '@/ui/Markdown'
 import { getWorkItemTimeline, getDevLog, type WorkItemTimeline } from '@/lib/api/dev'
@@ -201,16 +201,14 @@ export default function TimelineView({
   }, [itemId, contextId, refreshKey])
 
   // Flatten runs into bubbles, tracking phase changes for handover dividers.
-  const { bubbles, toolCounts } = useMemo(() => {
+  const { bubbles } = useMemo(() => {
     const out: Bubble[] = []
-    const counts: Record<number, number> = {}
     for (const run of data?.runs ?? []) {
       // The deputy's JUDGING run is not a conversation: its prompt is a kernel string and its reply
       // is private reasoning.
       if (run.feature === 'deputy') continue
       // The report IS the closing statement. Interactive turns are exempt: a person is in the room.
       let ended = false
-      let tools = 0
       for (const ev of run.events ?? []) {
         if (ev.kind === 'mcp' && (ev.description || '').includes('report_completion')
             && run.feature !== 'chat') ended = true
@@ -228,13 +226,10 @@ export default function TimelineView({
             out.push({ key: `p${run.run_id}-${ev.seq}`, speaker: fromDeputy ? 'deputy' : 'you',
                        phase: run.phase ?? null, run: run.run_id ?? null, text, ts: ev.created_at })
           }
-        } else {
-          tools += 1
         }
       }
-      counts[run.run_id] = tools
     }
-    return { bubbles: out, toolCounts: counts }
+    return { bubbles: out }
   }, [data, deputyQueries])
 
   // Live frames append to the CURRENT phase lane. Skip as many replies as history already holds.

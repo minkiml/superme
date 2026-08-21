@@ -89,7 +89,6 @@ export default function DevWorkspace({
   const established: boolean | null =
     status.data ? status.data.established : status.error ? true : null
   const onboardMode = (status.data?.onboard_mode as OnboardMode | null) ?? null
-  const checkStatus = status.refresh
 
   // The other repos you can hop to (current one excluded) — hub first, then connected projects.
   const others = repos.filter((r) => r.id !== repo.id)

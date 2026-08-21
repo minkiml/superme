@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Sparkles, Check, X, Trash2, Loader2, Brain,
-  Bot, Pencil, Save, FileText, Layers, Send, FileCode, Gauge, Terminal,
+  Bot, Pencil, FileText, Layers, Send, FileCode, Gauge, Terminal,
 } from 'lucide-react'
 import Markdown from '@/ui/Markdown'
 import Modal from '@/ui/Modal'
@@ -538,7 +538,6 @@ const FORM_TINT: Record<string, string> = {
   contract: 'text-warn',
   core_candidate: 'text-warn',
 }
-const RECALL_TYPES = ['reference', 'convention', 'decision', 'rule'] as const
 
 function ReviewQueue({
   proposals,

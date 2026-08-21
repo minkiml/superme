@@ -13,7 +13,7 @@ import {
   getDecisions, type DecisionEntry,
   type ManagedConstitution, type HarnessEntry,
 } from '@/lib/api'
-import ScopeColumns, { type ScopeCard, type ScopeColumn } from '@/ui/ScopeColumns'
+import ScopeColumns, { type ScopeCard } from '@/ui/ScopeColumns'
 import ConstitutionModal from '@/features/dev/ConstitutionModal'
 import { Empty } from '@/features/dev/common'
 import { PaneHead } from '../controls'
@@ -247,42 +247,6 @@ function SectionLabel({ title, hint }: { title: string; hint: string }) {
   )
 }
 
-// A pooled knowledge asset ADOPTED by this repo (shared across repos, local-harness/asset/, no body
-// copy). Enable/disable keeps it adopted; Drop un-adopts it (it returns to the + Add picker).
-function AssetRow({ it, contextId, onChanged }: { it: AssetItem; contextId: string; onChanged: () => void }) {
-  const [busy, setBusy] = useState(false)
-  async function act(action: AssetAction) {
-    setBusy(true)
-    try {
-      await assetAction(it.slug, action, contextId)
-      onChanged()
-    } finally {
-      setBusy(false)
-    }
-  }
-  return (
-    <div className={`rounded-lg border border-line bg-surface ${it.enabled ? '' : 'opacity-60'}`}>
-      <div className="flex items-start gap-2 px-3.5 py-2.5">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-medium uppercase tracking-wider text-dev">pool</span>
-            <span className="min-w-0 truncate text-[14px] text-fg">{it.title}</span>
-            <span className="font-mono text-[10px] text-faint">{it.slug}</span>
-            {!it.enabled && <span className="text-[10px] uppercase tracking-wide text-faint">off</span>}
-          </div>
-          {it.description && <p className="mt-1 text-[12px] leading-relaxed text-muted">{it.description}</p>}
-        </div>
-        <div className="flex shrink-0 items-center gap-3 pt-0.5">
-          <button onClick={() => act('drop')} disabled={busy} title="Drop from this repo" className="text-faint hover:text-fg disabled:opacity-40">
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
-          <Toggle on={it.enabled} onChange={(v) => act(v ? 'enable' : 'disable')} onColor="bg-dev" disabled={busy} title={it.enabled ? 'Disable for this repo' : 'Enable for this repo'} />
-        </div>
-      </div>
-    </div>
-  )
-}
-
 // The + Add popup — batch-adopt un-adopted assets from the shared pool into this repo (enabled).
 // A modal so it scales to a long pool: multi-select, then Add (N) or Cancel.
 function AddAsset({ pool, contextId, onAdded }: { pool: AssetItem[]; contextId: string; onAdded: () => void }) {
@@ -351,31 +315,6 @@ function ListOrState<T>({ list, empty, children }: { list: T[] | null; empty: st
   if (list === null) return <Loading />
   if (list.length === 0) return <Empty>{empty}</Empty>
   return <>{children(list)}</>
-}
-
-function ConstitutionRow({ c, contextId, onToggled, onOpen }: { c: ManagedConstitution; contextId: string; onToggled: () => void; onOpen: () => void }) {
-  const [busy, setBusy] = useState(false)
-  async function toggle(v: boolean) {
-    setBusy(true)
-    try {
-      await toggleConstitution(c.slug, c.scope, v, contextId)
-      onToggled()
-    } finally {
-      setBusy(false)
-    }
-  }
-  return (
-    <div className={`rounded-lg border border-line bg-surface ${c.enabled ? '' : 'opacity-60'}`}>
-      <div className="flex items-center gap-2 px-3.5 py-2.5">
-        <button onClick={onOpen} className="flex min-w-0 flex-1 items-center gap-2 text-left" title="Preview">
-          <span className="text-[10px] font-medium uppercase tracking-wider text-dev">local</span>
-          <span className="min-w-0 flex-1 truncate text-[14px] text-fg">{c.title}</span>
-          {!c.enabled && <span className="text-[10px] uppercase tracking-wide text-faint">disabled</span>}
-        </button>
-        <Toggle on={c.enabled} onChange={toggle} onColor="bg-dev" disabled={busy} title={c.enabled ? 'Disable' : 'Enable'} />
-      </div>
-    </div>
-  )
 }
 
 // Promote and demote is the owner's only lever over what every future plan inherits, so it sits on

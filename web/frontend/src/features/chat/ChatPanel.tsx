@@ -15,7 +15,6 @@ import { getRuns, type ChatMode, type SessionMeta } from '@/lib/api'
 import { getDevLog, getWorkItemDetail, type WorkItemDetail } from '@/lib/api/dev'
 import { useLive } from '@/lib/live'
 import { K } from '@/lib/live/keys'
-import type { Msg } from './types'
 
 // The phases whose session is the item's own worker, not the intake thread. The input greys here.
 const AUTONOMOUS_PHASES = new Set(['build', 'vet'])
