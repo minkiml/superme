@@ -2353,7 +2353,7 @@
    "sig": "value:dict"
   },
   "SystemSpine": {
-   "home": "superme_agent.core.spine",
+   "home": "superme_agent.core.spine.store",
    "methods": [
     "_add_role_key(c: sqlite3.Connection, table: str, value_col: str) -> None",
     "_agent_file_effort(self, feature: str) -> str | None",
@@ -2492,7 +2492,7 @@
    "sig": "class"
   },
   "get_spine": {
-   "home": "superme_agent.core.spine",
+   "home": "superme_agent.core.spine.store",
    "sig": "def() -> SystemSpine"
   },
   "log": {
@@ -4551,7 +4551,7 @@
    "sig": "class"
   },
   "SystemSpine": {
-   "home": "superme_agent.core.spine",
+   "home": "superme_agent.core.spine.store",
    "methods": [
     "_add_role_key(c: sqlite3.Connection, table: str, value_col: str) -> None",
     "_agent_file_effort(self, feature: str) -> str | None",
@@ -4727,7 +4727,7 @@
    "sig": "def(messages: list[dict]) -> int"
   },
   "get_spine": {
-   "home": "superme_agent.core.spine",
+   "home": "superme_agent.core.spine.store",
    "sig": "def() -> SystemSpine"
   },
   "is_conversation": {
@@ -4743,29 +4743,14 @@
   }
  },
  "superme_agent.core.spine": {
-  "AGENT_THREAD_KINDS": {
-   "sig": "value:tuple"
-  },
   "DISPOSABLE_FEATURES": {
    "sig": "value:set"
-  },
-  "KNOWLEDGE_REPO_DIR": {
-   "sig": "value:PosixPath"
   },
   "LEARNING_FEATURES": {
    "sig": "value:set"
   },
-  "LOCAL_HARNESS_DIR": {
-   "sig": "value:PosixPath"
-  },
   "MODES": {
    "sig": "value:tuple"
-  },
-  "REPOS_CONFIG_FILE": {
-   "sig": "value:PosixPath"
-  },
-  "REPOS_SEED_FILE": {
-   "sig": "value:PosixPath"
   },
   "REVIEW_MODES": {
    "sig": "value:tuple"
@@ -4773,11 +4758,8 @@
   "REVIEW_MODE_DEFAULT": {
    "sig": "value:str"
   },
-  "ROOT_DIR": {
-   "sig": "value:PosixPath"
-  },
   "RepoConfig": {
-   "home": "superme_agent.core.spine",
+   "home": "superme_agent.core.spine.config",
    "methods": [
     "_knowledge_base(self) -> pathlib.Path",
     "constitution_home(self, scope: str) -> pathlib.Path",
@@ -4787,19 +4769,13 @@
    ],
    "sig": "class"
   },
-  "SYSTEM_CONFIG_FILE": {
-   "sig": "value:PosixPath"
-  },
-  "SYSTEM_DB_FILE": {
-   "sig": "value:PosixPath"
-  },
   "SystemConfig": {
-   "home": "superme_agent.core.spine",
+   "home": "superme_agent.core.spine.config",
    "methods": [],
    "sig": "class"
   },
   "SystemSpine": {
-   "home": "superme_agent.core.spine",
+   "home": "superme_agent.core.spine.store",
    "methods": [
     "_add_role_key(c: sqlite3.Connection, table: str, value_col: str) -> None",
     "_agent_file_effort(self, feature: str) -> str | None",
@@ -4943,39 +4919,754 @@
   "_RUN_STATUSES": {
    "sig": "value:set"
   },
-  "_SPINE": {
-   "sig": "value:NoneType"
+  "_UNRECONCILED_STATUSES": {
+   "sig": "value:set"
+  },
+  "_duration_ms": {
+   "home": "superme_agent.core.spine.common",
+   "sig": "def(started_at: str | None, ended_at: str | None) -> int | None"
+  },
+  "_norm": {
+   "home": "superme_agent.core.spine.common",
+   "sig": "def(p) -> str"
+  },
+  "_now": {
+   "home": "superme_agent.core.spine.common",
+   "sig": "def() -> str"
+  },
+  "_opens_a_file": {
+   "home": "superme_agent.core.spine.common",
+   "sig": "def(command: str) -> bool"
+  },
+  "get_spine": {
+   "home": "superme_agent.core.spine.store",
+   "sig": "def() -> SystemSpine"
+  },
+  "load_repos": {
+   "home": "superme_agent.core.spine.config",
+   "sig": "def(path: pathlib.Path = PosixPath('<root>/superme_agent/config/repos.yaml')) -> dict[str, RepoConfig]"
+  },
+  "load_system_config": {
+   "home": "superme_agent.core.spine.config",
+   "sig": "def(path: pathlib.Path = PosixPath('<root>/superme_agent/config/system.yaml')) -> SystemConfig"
+  },
+  "log": {
+   "sig": "value:Logger"
+  }
+ },
+ "superme_agent.core.spine.base": {
+  "Base": {
+   "home": "superme_agent.core.spine.base",
+   "methods": [
+    "_add_role_key(c: sqlite3.Connection, table: str, value_col: str) -> None",
+    "_conn(self) -> sqlite3.Connection",
+    "_ensure_columns(c: sqlite3.Connection, table: str, cols: dict[str, str]) -> None",
+    "_init_db(self) -> None",
+    "_seed_repos_config(self) -> None"
+   ],
+   "sig": "class"
+  },
+  "REPOS_CONFIG_FILE": {
+   "sig": "value:PosixPath"
+  },
+  "REPOS_SEED_FILE": {
+   "sig": "value:PosixPath"
+  },
+  "SYSTEM_CONFIG_FILE": {
+   "sig": "value:PosixPath"
+  },
+  "SYSTEM_DB_FILE": {
+   "sig": "value:PosixPath"
+  },
+  "log": {
+   "sig": "value:Logger"
+  }
+ },
+ "superme_agent.core.spine.common": {
+  "DISPOSABLE_FEATURES": {
+   "sig": "value:set"
+  },
+  "LEARNING_FEATURES": {
+   "sig": "value:set"
+  },
+  "MODES": {
+   "sig": "value:tuple"
+  },
+  "_FILE_OPENERS": {
+   "sig": "value:frozenset"
+  },
+  "_RUN_STATUSES": {
+   "sig": "value:set"
   },
   "_UNRECONCILED_STATUSES": {
    "sig": "value:set"
   },
   "_duration_ms": {
-   "home": "superme_agent.core.spine",
+   "home": "superme_agent.core.spine.common",
    "sig": "def(started_at: str | None, ended_at: str | None) -> int | None"
   },
   "_norm": {
-   "home": "superme_agent.core.spine",
+   "home": "superme_agent.core.spine.common",
    "sig": "def(p) -> str"
   },
   "_now": {
-   "home": "superme_agent.core.spine",
+   "home": "superme_agent.core.spine.common",
    "sig": "def() -> str"
   },
   "_opens_a_file": {
-   "home": "superme_agent.core.spine",
+   "home": "superme_agent.core.spine.common",
    "sig": "def(command: str) -> bool"
   },
-  "get_spine": {
-   "home": "superme_agent.core.spine",
-   "sig": "def() -> SystemSpine"
+  "log": {
+   "sig": "value:Logger"
+  }
+ },
+ "superme_agent.core.spine.config": {
+  "KNOWLEDGE_REPO_DIR": {
+   "sig": "value:PosixPath"
+  },
+  "LOCAL_HARNESS_DIR": {
+   "sig": "value:PosixPath"
+  },
+  "REPOS_CONFIG_FILE": {
+   "sig": "value:PosixPath"
+  },
+  "REVIEW_MODES": {
+   "sig": "value:tuple"
+  },
+  "REVIEW_MODE_DEFAULT": {
+   "sig": "value:str"
+  },
+  "ROOT_DIR": {
+   "sig": "value:PosixPath"
+  },
+  "RepoConfig": {
+   "home": "superme_agent.core.spine.config",
+   "methods": [
+    "_knowledge_base(self) -> pathlib.Path",
+    "constitution_home(self, scope: str) -> pathlib.Path",
+    "knowledge_home(self, scope: str) -> pathlib.Path",
+    "operational_home(self, scope: str) -> pathlib.Path",
+    "to_dict(self) -> dict"
+   ],
+   "sig": "class"
+  },
+  "SYSTEM_CONFIG_FILE": {
+   "sig": "value:PosixPath"
+  },
+  "SystemConfig": {
+   "home": "superme_agent.core.spine.config",
+   "methods": [],
+   "sig": "class"
   },
   "load_repos": {
-   "home": "superme_agent.core.spine",
+   "home": "superme_agent.core.spine.config",
    "sig": "def(path: pathlib.Path = PosixPath('<root>/superme_agent/config/repos.yaml')) -> dict[str, RepoConfig]"
   },
   "load_system_config": {
-   "home": "superme_agent.core.spine",
+   "home": "superme_agent.core.spine.config",
    "sig": "def(path: pathlib.Path = PosixPath('<root>/superme_agent/config/system.yaml')) -> SystemConfig"
+  },
+  "log": {
+   "sig": "value:Logger"
+  }
+ },
+ "superme_agent.core.spine.events": {
+  "EventOps": {
+   "home": "superme_agent.core.spine.events",
+   "methods": [
+    "events_for_item(self, repo_id: str, item_id: str) -> list[dict]",
+    "events_for_run(self, run_id: int) -> list[dict]",
+    "get_prompt_extraction_state(self, repo_id: str) -> dict | None",
+    "get_run(self, run_id: int) -> dict | None",
+    "list_run_inputs_for_item(self, item_id: str) -> list[dict]",
+    "log_run_event(self, *, repo_id: str, kind: str, name: str, description: str | None = None, run_id: int | None = None, item_id: str | None = None, tool_id: str | None = None, parent_tool_id: str | None = None, payload: str | None = None) -> None",
+    "read_run_input(self, run_id: int) -> dict | None",
+    "recent_runs(self, *, limit: int = 50) -> list[dict]",
+    "record_run_input(self, run_id: int, *, repo_id: str, item_id: str | None, phase: str | None, feature: str | None, background: bool, system_prompt: str, prompt_body: str, system_fragments: str | None = None, turn_surface: str | None = None, authored_extras: str | None = None) -> None",
+    "run_stats(self, repo_id: str, *, mode: str | None = None) -> dict[str, dict]",
+    "set_prompt_extraction_state(self, repo_id: str, state: dict) -> None",
+    "set_run_feature(self, run_id: int, feature: str) -> None"
+   ],
+   "sig": "class"
+  },
+  "_duration_ms": {
+   "home": "superme_agent.core.spine.common",
+   "sig": "def(started_at: str | None, ended_at: str | None) -> int | None"
+  },
+  "_now": {
+   "home": "superme_agent.core.spine.common",
+   "sig": "def() -> str"
+  }
+ },
+ "superme_agent.core.spine.models": {
+  "ModelOps": {
+   "home": "superme_agent.core.spine.models",
+   "methods": [
+    "_agent_file_effort(self, feature: str) -> str | None",
+    "_agent_file_model(self, feature: str) -> str | None",
+    "_agent_md_path(feature: str)",
+    "agent_model_config(self) -> list[dict]",
+    "all_effort_overrides(self) -> dict[str, str]",
+    "all_model_overrides(self) -> dict[str, str]",
+    "effective_effort(self, repo_id: str, *, per_call: str | None = None, item_effort: str | None = None) -> str",
+    "effective_model(self, repo_id: str, *, per_call: str | None = None, item_model: str | None = None) -> str",
+    "effective_system_effort(self) -> str",
+    "effective_system_model(self) -> str",
+    "get_effort_override(self, repo_id: str, role: str = 'default') -> str | None",
+    "get_model_override(self, repo_id: str, role: str = 'default') -> str | None",
+    "reconcile_agent_models(self) -> None",
+    "reconcile_model_overrides(self) -> None",
+    "resolve_agent_effort(self, feature: str) -> str",
+    "resolve_agent_model(self, feature: str) -> str",
+    "role_effort(self, repo_id: str, role: str, *, item_effort: str | None = None) -> str",
+    "role_model(self, repo_id: str, role: str, *, item_model: str | None = None) -> str",
+    "set_agent_effort(self, feature: str, effort: str | None) -> None",
+    "set_agent_model(self, feature: str, model: str | None) -> None",
+    "set_effort_override(self, repo_id: str, effort: str | None, role: str = 'default') -> None",
+    "set_model_override(self, repo_id: str, model: str | None, role: str = 'default') -> None"
+   ],
+   "sig": "class"
+  },
+  "_now": {
+   "home": "superme_agent.core.spine.common",
+   "sig": "def() -> str"
+  }
+ },
+ "superme_agent.core.spine.repos": {
+  "AGENT_THREAD_KINDS": {
+   "sig": "value:tuple"
+  },
+  "LEARNING_FEATURES": {
+   "sig": "value:set"
+  },
+  "REVIEW_MODES": {
+   "sig": "value:tuple"
+  },
+  "REVIEW_MODE_DEFAULT": {
+   "sig": "value:str"
+  },
+  "RepoConfig": {
+   "home": "superme_agent.core.spine.config",
+   "methods": [
+    "_knowledge_base(self) -> pathlib.Path",
+    "constitution_home(self, scope: str) -> pathlib.Path",
+    "knowledge_home(self, scope: str) -> pathlib.Path",
+    "operational_home(self, scope: str) -> pathlib.Path",
+    "to_dict(self) -> dict"
+   ],
+   "sig": "class"
+  },
+  "RepoOps": {
+   "home": "superme_agent.core.spine.repos",
+   "methods": [
+    "add_repo(self, rc: RepoConfig) -> RepoConfig",
+    "archived_repos(self) -> dict[str, dict]",
+    "live_agent_runs(self, repo_id: str, mode: str) -> dict",
+    "reconcile(self) -> list[dict]",
+    "remove_repo(self, repo_id: str) -> RepoConfig",
+    "repo(self, repo_id: str) -> RepoConfig | None",
+    "repo_for_cwd(self, cwd) -> str | None",
+    "repo_status(self, repo_id: str, mode: str) -> dict",
+    "repos(self) -> dict[str, RepoConfig]",
+    "run_count(self, repo_id: str, mode: str | None = None) -> int",
+    "session_count(self, repo_id: str, mode: str | None = None, *, include_agent_threads: bool = False) -> int",
+    "system(self) -> dict",
+    "system_config(self) -> SystemConfig",
+    "update_repo(self, repo_id: str, **fields) -> RepoConfig"
+   ],
+   "sig": "class"
+  },
+  "SystemConfig": {
+   "home": "superme_agent.core.spine.config",
+   "methods": [],
+   "sig": "class"
+  },
+  "_norm": {
+   "home": "superme_agent.core.spine.common",
+   "sig": "def(p) -> str"
+  },
+  "_now": {
+   "home": "superme_agent.core.spine.common",
+   "sig": "def() -> str"
+  },
+  "load_repos": {
+   "home": "superme_agent.core.spine.config",
+   "sig": "def(path: pathlib.Path = PosixPath('<root>/superme_agent/config/repos.yaml')) -> dict[str, RepoConfig]"
+  },
+  "load_system_config": {
+   "home": "superme_agent.core.spine.config",
+   "sig": "def(path: pathlib.Path = PosixPath('<root>/superme_agent/config/system.yaml')) -> SystemConfig"
+  },
+  "log": {
+   "sig": "value:Logger"
+  }
+ },
+ "superme_agent.core.spine.runs": {
+  "RunOps": {
+   "home": "superme_agent.core.spine.runs",
+   "methods": [
+    "_finish_usage_apply(self, c: sqlite3.Connection, run_id: int, usage: dict | None) -> None",
+    "brief_sizes(self, repo_id: str, item_id: str, *, phase: str) -> list[int]",
+    "bump_item_run(self, repo_id: str, item_id: str, *, add_tokens: int = 0, ctx_pct: int | None = None) -> None",
+    "bump_run(self, run_id: int, *, add_tokens: int = 0, ctx_pct: int | None = None) -> None",
+    "discard_item_trace(self, repo_id: str, item_id: str, *, at: str) -> dict",
+    "finish_item_run(self, repo_id: str, item_id: str, *, run_status: str = 'done', fallback_tokens: int | None = None, usage: dict | None = None, ctx_pct: int | None = None, outcome: str | None = None, session_id: str | None = None) -> int | None",
+    "finish_run(self, run_id: int, *, status: str = 'done', tokens: int | None = None, usage: dict | None = None, ctx_pct: int | None = None, model: str | None = None, session_id: str | None = None) -> None",
+    "is_item_running(self, repo_id: str, item_id: str) -> bool",
+    "is_running(self, repo_id: str, mode: str, feature: str | None = None) -> bool",
+    "last_phase_run_end(self, repo_id: str, item_id: str, *, phase: str) -> str | None",
+    "live_item_runs_quiet_since(self) -> list[dict]",
+    "live_run(self, repo_id: str, item_id: str) -> dict | None",
+    "live_runs(self, repo_id: str | None = None) -> list[dict]",
+    "read_hits(self, repo_id: str, item_id: str, *, phase: str, needle: str) -> int",
+    "release_item_runs(self, repo_id: str, item_id: str) -> int",
+    "run_history(self, repo_id: str, *, mode: str | None = None, limit: int = 100) -> list[dict]",
+    "run_tokens(self, run_id: int | None) -> int",
+    "running_run_id(self, repo_id: str, item_id: str) -> int | None",
+    "runs_for_item(self, repo_id: str, item_id: str) -> list[dict]",
+    "session_compacted_pending(self, session_id: str | None) -> str | None",
+    "session_ctx_pct(self, session_id: str | None) -> int | None",
+    "set_item_run_tokens(self, repo_id: str, item_id: str, *, tokens: int, ctx_pct: int | None = None) -> None",
+    "start_item_run(self, repo_id: str, *, mode: str = 'dev', feature: str = 'plan', item_id: str, model: str | None = None, phase: str | None = None) -> int | None",
+    "start_run(self, repo_id: str, *, mode: str = 'dev', feature: str = 'chat', session_id: str | None = None, item_id: str | None = None, model: str | None = None) -> int",
+    "subagent_briefs(self, repo_id: str, item_id: str, *, phase: str) -> list[dict]",
+    "subagent_count(self, repo_id: str, item_id: str, *, phase: str) -> int"
+   ],
+   "sig": "class"
+  },
+  "_RUN_STATUSES": {
+   "sig": "value:set"
+  },
+  "_now": {
+   "home": "superme_agent.core.spine.common",
+   "sig": "def() -> str"
+  },
+  "_opens_a_file": {
+   "home": "superme_agent.core.spine.common",
+   "sig": "def(command: str) -> bool"
+  }
+ },
+ "superme_agent.core.spine.sessions": {
+  "SessionOps": {
+   "home": "superme_agent.core.spine.sessions",
+   "methods": [
+    "_get_session(self, c: sqlite3.Connection, session_id: str) -> dict | None",
+    "backfill_session_items(self, pairs: list[tuple[str, str]]) -> int",
+    "delete_session_record(self, session_id: str, *, cause: str = 'deleted') -> bool",
+    "forget_thread(self, thread_ts: str) -> bool",
+    "get_session(self, session_id: str) -> dict | None",
+    "get_sweep_watermark(self, session_id: str) -> int",
+    "record_session(self, session_id: str, cwd, *, surface: str = 'web', mode: str = 'core', thread_ts: str | None = None, repo_id: str | None = None, resumable: bool = True) -> dict | None",
+    "running_run_count(self, repo_id: str) -> int",
+    "session_for_thread(self, thread_ts: str) -> str | None",
+    "session_is_diagnosis(self, session_id: str | None) -> bool",
+    "session_is_onboarding(self, session_id: str | None) -> bool",
+    "session_item(self, session_id: str | None) -> str | None",
+    "session_kind(self, session_id: str | None) -> dict | None",
+    "sessions_for_cwd(self, cwd, *, resumable_only: bool = True) -> list[dict]",
+    "sessions_for_repo(self, repo_id: str, *, resumable_only: bool = False) -> list[dict]",
+    "set_session_title(self, session_id: str, title: str | None) -> bool",
+    "set_sweep_watermark(self, session_id: str, position: int) -> None",
+    "stamp_session_item(self, session_id: str, item_id: str) -> bool",
+    "stamp_session_kind(self, session_id: str, kind: str, subject_run_id: int | None = None) -> bool"
+   ],
+   "sig": "class"
+  },
+  "_norm": {
+   "home": "superme_agent.core.spine.common",
+   "sig": "def(p) -> str"
+  },
+  "_now": {
+   "home": "superme_agent.core.spine.common",
+   "sig": "def() -> str"
+  }
+ },
+ "superme_agent.core.spine.settings": {
+  "SettingsOps": {
+   "home": "superme_agent.core.spine.settings",
+   "methods": [
+    "deputy_params(self, *, item_model: str | None = None, item_effort: str | None = None) -> tuple[str, str]",
+    "deputy_strictness_map(self) -> dict",
+    "effective_loop_budget(self, repo_id: str, item_budget=None) -> int",
+    "get_autopilot_concurrency(self, repo_id: str) -> int",
+    "get_compaction_config(self) -> dict",
+    "get_deputy_delegated_authority(self) -> list[str]",
+    "get_deputy_effort(self) -> str | None",
+    "get_deputy_enabled(self) -> bool",
+    "get_deputy_model(self) -> str | None",
+    "get_deputy_strictness(self, gate: str) -> str",
+    "get_learning_enabled(self) -> bool",
+    "get_loop_budget(self) -> int",
+    "get_repo_learning(self, repo_id: str) -> bool",
+    "get_repo_meta(self, repo_id: str) -> dict",
+    "get_sweep_config(self) -> dict",
+    "learning_enabled_for(self, repo_id: str) -> bool",
+    "set_autopilot_concurrency(self, repo_id: str, n: int) -> int",
+    "set_compaction_config(self, *, trigger_pct: int | None = None, by_kind: dict | None = None, min_gain_pct: int | str | None = None) -> dict",
+    "set_deputy_delegated_authority(self, scopes: list[str]) -> None",
+    "set_deputy_effort(self, effort: str | None) -> None",
+    "set_deputy_enabled(self, enabled: bool) -> None",
+    "set_deputy_model(self, model: str | None) -> None",
+    "set_deputy_strictness(self, gate: str, level: str) -> dict",
+    "set_learning_enabled(self, enabled: bool) -> None",
+    "set_loop_budget(self, budget: int | None) -> None",
+    "set_repo_learning(self, repo_id: str, enabled: bool) -> None",
+    "set_repo_meta(self, repo_id: str, *, color: str | None = None, icon: str | None = None) -> dict",
+    "set_sweep_config(self, *, idle_seconds: int | None = None, poll_seconds: int | None = None, min_user_msgs: int | None = None) -> dict"
+   ],
+   "sig": "class"
+  },
+  "_now": {
+   "home": "superme_agent.core.spine.common",
+   "sig": "def() -> str"
+  }
+ },
+ "superme_agent.core.spine.store": {
+  "Base": {
+   "home": "superme_agent.core.spine.base",
+   "methods": [
+    "_add_role_key(c: sqlite3.Connection, table: str, value_col: str) -> None",
+    "_conn(self) -> sqlite3.Connection",
+    "_ensure_columns(c: sqlite3.Connection, table: str, cols: dict[str, str]) -> None",
+    "_init_db(self) -> None",
+    "_seed_repos_config(self) -> None"
+   ],
+   "sig": "class"
+  },
+  "EventOps": {
+   "home": "superme_agent.core.spine.events",
+   "methods": [
+    "events_for_item(self, repo_id: str, item_id: str) -> list[dict]",
+    "events_for_run(self, run_id: int) -> list[dict]",
+    "get_prompt_extraction_state(self, repo_id: str) -> dict | None",
+    "get_run(self, run_id: int) -> dict | None",
+    "list_run_inputs_for_item(self, item_id: str) -> list[dict]",
+    "log_run_event(self, *, repo_id: str, kind: str, name: str, description: str | None = None, run_id: int | None = None, item_id: str | None = None, tool_id: str | None = None, parent_tool_id: str | None = None, payload: str | None = None) -> None",
+    "read_run_input(self, run_id: int) -> dict | None",
+    "recent_runs(self, *, limit: int = 50) -> list[dict]",
+    "record_run_input(self, run_id: int, *, repo_id: str, item_id: str | None, phase: str | None, feature: str | None, background: bool, system_prompt: str, prompt_body: str, system_fragments: str | None = None, turn_surface: str | None = None, authored_extras: str | None = None) -> None",
+    "run_stats(self, repo_id: str, *, mode: str | None = None) -> dict[str, dict]",
+    "set_prompt_extraction_state(self, repo_id: str, state: dict) -> None",
+    "set_run_feature(self, run_id: int, feature: str) -> None"
+   ],
+   "sig": "class"
+  },
+  "ModelOps": {
+   "home": "superme_agent.core.spine.models",
+   "methods": [
+    "_agent_file_effort(self, feature: str) -> str | None",
+    "_agent_file_model(self, feature: str) -> str | None",
+    "_agent_md_path(feature: str)",
+    "agent_model_config(self) -> list[dict]",
+    "all_effort_overrides(self) -> dict[str, str]",
+    "all_model_overrides(self) -> dict[str, str]",
+    "effective_effort(self, repo_id: str, *, per_call: str | None = None, item_effort: str | None = None) -> str",
+    "effective_model(self, repo_id: str, *, per_call: str | None = None, item_model: str | None = None) -> str",
+    "effective_system_effort(self) -> str",
+    "effective_system_model(self) -> str",
+    "get_effort_override(self, repo_id: str, role: str = 'default') -> str | None",
+    "get_model_override(self, repo_id: str, role: str = 'default') -> str | None",
+    "reconcile_agent_models(self) -> None",
+    "reconcile_model_overrides(self) -> None",
+    "resolve_agent_effort(self, feature: str) -> str",
+    "resolve_agent_model(self, feature: str) -> str",
+    "role_effort(self, repo_id: str, role: str, *, item_effort: str | None = None) -> str",
+    "role_model(self, repo_id: str, role: str, *, item_model: str | None = None) -> str",
+    "set_agent_effort(self, feature: str, effort: str | None) -> None",
+    "set_agent_model(self, feature: str, model: str | None) -> None",
+    "set_effort_override(self, repo_id: str, effort: str | None, role: str = 'default') -> None",
+    "set_model_override(self, repo_id: str, model: str | None, role: str = 'default') -> None"
+   ],
+   "sig": "class"
+  },
+  "RepoOps": {
+   "home": "superme_agent.core.spine.repos",
+   "methods": [
+    "add_repo(self, rc: RepoConfig) -> RepoConfig",
+    "archived_repos(self) -> dict[str, dict]",
+    "live_agent_runs(self, repo_id: str, mode: str) -> dict",
+    "reconcile(self) -> list[dict]",
+    "remove_repo(self, repo_id: str) -> RepoConfig",
+    "repo(self, repo_id: str) -> RepoConfig | None",
+    "repo_for_cwd(self, cwd) -> str | None",
+    "repo_status(self, repo_id: str, mode: str) -> dict",
+    "repos(self) -> dict[str, RepoConfig]",
+    "run_count(self, repo_id: str, mode: str | None = None) -> int",
+    "session_count(self, repo_id: str, mode: str | None = None, *, include_agent_threads: bool = False) -> int",
+    "system(self) -> dict",
+    "system_config(self) -> SystemConfig",
+    "update_repo(self, repo_id: str, **fields) -> RepoConfig"
+   ],
+   "sig": "class"
+  },
+  "RunOps": {
+   "home": "superme_agent.core.spine.runs",
+   "methods": [
+    "_finish_usage_apply(self, c: sqlite3.Connection, run_id: int, usage: dict | None) -> None",
+    "brief_sizes(self, repo_id: str, item_id: str, *, phase: str) -> list[int]",
+    "bump_item_run(self, repo_id: str, item_id: str, *, add_tokens: int = 0, ctx_pct: int | None = None) -> None",
+    "bump_run(self, run_id: int, *, add_tokens: int = 0, ctx_pct: int | None = None) -> None",
+    "discard_item_trace(self, repo_id: str, item_id: str, *, at: str) -> dict",
+    "finish_item_run(self, repo_id: str, item_id: str, *, run_status: str = 'done', fallback_tokens: int | None = None, usage: dict | None = None, ctx_pct: int | None = None, outcome: str | None = None, session_id: str | None = None) -> int | None",
+    "finish_run(self, run_id: int, *, status: str = 'done', tokens: int | None = None, usage: dict | None = None, ctx_pct: int | None = None, model: str | None = None, session_id: str | None = None) -> None",
+    "is_item_running(self, repo_id: str, item_id: str) -> bool",
+    "is_running(self, repo_id: str, mode: str, feature: str | None = None) -> bool",
+    "last_phase_run_end(self, repo_id: str, item_id: str, *, phase: str) -> str | None",
+    "live_item_runs_quiet_since(self) -> list[dict]",
+    "live_run(self, repo_id: str, item_id: str) -> dict | None",
+    "live_runs(self, repo_id: str | None = None) -> list[dict]",
+    "read_hits(self, repo_id: str, item_id: str, *, phase: str, needle: str) -> int",
+    "release_item_runs(self, repo_id: str, item_id: str) -> int",
+    "run_history(self, repo_id: str, *, mode: str | None = None, limit: int = 100) -> list[dict]",
+    "run_tokens(self, run_id: int | None) -> int",
+    "running_run_id(self, repo_id: str, item_id: str) -> int | None",
+    "runs_for_item(self, repo_id: str, item_id: str) -> list[dict]",
+    "session_compacted_pending(self, session_id: str | None) -> str | None",
+    "session_ctx_pct(self, session_id: str | None) -> int | None",
+    "set_item_run_tokens(self, repo_id: str, item_id: str, *, tokens: int, ctx_pct: int | None = None) -> None",
+    "start_item_run(self, repo_id: str, *, mode: str = 'dev', feature: str = 'plan', item_id: str, model: str | None = None, phase: str | None = None) -> int | None",
+    "start_run(self, repo_id: str, *, mode: str = 'dev', feature: str = 'chat', session_id: str | None = None, item_id: str | None = None, model: str | None = None) -> int",
+    "subagent_briefs(self, repo_id: str, item_id: str, *, phase: str) -> list[dict]",
+    "subagent_count(self, repo_id: str, item_id: str, *, phase: str) -> int"
+   ],
+   "sig": "class"
+  },
+  "SessionOps": {
+   "home": "superme_agent.core.spine.sessions",
+   "methods": [
+    "_get_session(self, c: sqlite3.Connection, session_id: str) -> dict | None",
+    "backfill_session_items(self, pairs: list[tuple[str, str]]) -> int",
+    "delete_session_record(self, session_id: str, *, cause: str = 'deleted') -> bool",
+    "forget_thread(self, thread_ts: str) -> bool",
+    "get_session(self, session_id: str) -> dict | None",
+    "get_sweep_watermark(self, session_id: str) -> int",
+    "record_session(self, session_id: str, cwd, *, surface: str = 'web', mode: str = 'core', thread_ts: str | None = None, repo_id: str | None = None, resumable: bool = True) -> dict | None",
+    "running_run_count(self, repo_id: str) -> int",
+    "session_for_thread(self, thread_ts: str) -> str | None",
+    "session_is_diagnosis(self, session_id: str | None) -> bool",
+    "session_is_onboarding(self, session_id: str | None) -> bool",
+    "session_item(self, session_id: str | None) -> str | None",
+    "session_kind(self, session_id: str | None) -> dict | None",
+    "sessions_for_cwd(self, cwd, *, resumable_only: bool = True) -> list[dict]",
+    "sessions_for_repo(self, repo_id: str, *, resumable_only: bool = False) -> list[dict]",
+    "set_session_title(self, session_id: str, title: str | None) -> bool",
+    "set_sweep_watermark(self, session_id: str, position: int) -> None",
+    "stamp_session_item(self, session_id: str, item_id: str) -> bool",
+    "stamp_session_kind(self, session_id: str, kind: str, subject_run_id: int | None = None) -> bool"
+   ],
+   "sig": "class"
+  },
+  "SettingsOps": {
+   "home": "superme_agent.core.spine.settings",
+   "methods": [
+    "deputy_params(self, *, item_model: str | None = None, item_effort: str | None = None) -> tuple[str, str]",
+    "deputy_strictness_map(self) -> dict",
+    "effective_loop_budget(self, repo_id: str, item_budget=None) -> int",
+    "get_autopilot_concurrency(self, repo_id: str) -> int",
+    "get_compaction_config(self) -> dict",
+    "get_deputy_delegated_authority(self) -> list[str]",
+    "get_deputy_effort(self) -> str | None",
+    "get_deputy_enabled(self) -> bool",
+    "get_deputy_model(self) -> str | None",
+    "get_deputy_strictness(self, gate: str) -> str",
+    "get_learning_enabled(self) -> bool",
+    "get_loop_budget(self) -> int",
+    "get_repo_learning(self, repo_id: str) -> bool",
+    "get_repo_meta(self, repo_id: str) -> dict",
+    "get_sweep_config(self) -> dict",
+    "learning_enabled_for(self, repo_id: str) -> bool",
+    "set_autopilot_concurrency(self, repo_id: str, n: int) -> int",
+    "set_compaction_config(self, *, trigger_pct: int | None = None, by_kind: dict | None = None, min_gain_pct: int | str | None = None) -> dict",
+    "set_deputy_delegated_authority(self, scopes: list[str]) -> None",
+    "set_deputy_effort(self, effort: str | None) -> None",
+    "set_deputy_enabled(self, enabled: bool) -> None",
+    "set_deputy_model(self, model: str | None) -> None",
+    "set_deputy_strictness(self, gate: str, level: str) -> dict",
+    "set_learning_enabled(self, enabled: bool) -> None",
+    "set_loop_budget(self, budget: int | None) -> None",
+    "set_repo_learning(self, repo_id: str, enabled: bool) -> None",
+    "set_repo_meta(self, repo_id: str, *, color: str | None = None, icon: str | None = None) -> dict",
+    "set_sweep_config(self, *, idle_seconds: int | None = None, poll_seconds: int | None = None, min_user_msgs: int | None = None) -> dict"
+   ],
+   "sig": "class"
+  },
+  "SystemSpine": {
+   "home": "superme_agent.core.spine.store",
+   "methods": [
+    "_add_role_key(c: sqlite3.Connection, table: str, value_col: str) -> None",
+    "_agent_file_effort(self, feature: str) -> str | None",
+    "_agent_file_model(self, feature: str) -> str | None",
+    "_agent_md_path(feature: str)",
+    "_conn(self) -> sqlite3.Connection",
+    "_display_tokens(row) -> int",
+    "_ensure_columns(c: sqlite3.Connection, table: str, cols: dict[str, str]) -> None",
+    "_finish_usage_apply(self, c: sqlite3.Connection, run_id: int, usage: dict | None) -> None",
+    "_get_session(self, c: sqlite3.Connection, session_id: str) -> dict | None",
+    "_init_db(self) -> None",
+    "_legacy_tokens(i: int, cc: int, cr: int, o: int) -> int",
+    "_run_dict(self, r) -> dict",
+    "_seed_repos_config(self) -> None",
+    "_usage_parts(usage: dict | None) -> tuple[int, int, int, int]",
+    "add_repo(self, rc: RepoConfig) -> RepoConfig",
+    "agent_model_config(self) -> list[dict]",
+    "all_effort_overrides(self) -> dict[str, str]",
+    "all_model_overrides(self) -> dict[str, str]",
+    "archived_repos(self) -> dict[str, dict]",
+    "backfill_session_items(self, pairs: list[tuple[str, str]]) -> int",
+    "brief_sizes(self, repo_id: str, item_id: str, *, phase: str) -> list[int]",
+    "bump_item_run(self, repo_id: str, item_id: str, *, add_tokens: int = 0, ctx_pct: int | None = None) -> None",
+    "bump_run(self, run_id: int, *, add_tokens: int = 0, ctx_pct: int | None = None) -> None",
+    "delete_session_record(self, session_id: str, *, cause: str = 'deleted') -> bool",
+    "deputy_params(self, *, item_model: str | None = None, item_effort: str | None = None) -> tuple[str, str]",
+    "deputy_strictness_map(self) -> dict",
+    "discard_item_trace(self, repo_id: str, item_id: str, *, at: str) -> dict",
+    "effective_effort(self, repo_id: str, *, per_call: str | None = None, item_effort: str | None = None) -> str",
+    "effective_loop_budget(self, repo_id: str, item_budget=None) -> int",
+    "effective_model(self, repo_id: str, *, per_call: str | None = None, item_model: str | None = None) -> str",
+    "effective_system_effort(self) -> str",
+    "effective_system_model(self) -> str",
+    "events_for_item(self, repo_id: str, item_id: str) -> list[dict]",
+    "events_for_run(self, run_id: int) -> list[dict]",
+    "finish_item_run(self, repo_id: str, item_id: str, *, run_status: str = 'done', fallback_tokens: int | None = None, usage: dict | None = None, ctx_pct: int | None = None, outcome: str | None = None, session_id: str | None = None) -> int | None",
+    "finish_run(self, run_id: int, *, status: str = 'done', tokens: int | None = None, usage: dict | None = None, ctx_pct: int | None = None, model: str | None = None, session_id: str | None = None) -> None",
+    "forget_thread(self, thread_ts: str) -> bool",
+    "get_autopilot_concurrency(self, repo_id: str) -> int",
+    "get_compaction_config(self) -> dict",
+    "get_deputy_delegated_authority(self) -> list[str]",
+    "get_deputy_effort(self) -> str | None",
+    "get_deputy_enabled(self) -> bool",
+    "get_deputy_model(self) -> str | None",
+    "get_deputy_strictness(self, gate: str) -> str",
+    "get_effort_override(self, repo_id: str, role: str = 'default') -> str | None",
+    "get_learning_enabled(self) -> bool",
+    "get_loop_budget(self) -> int",
+    "get_model_override(self, repo_id: str, role: str = 'default') -> str | None",
+    "get_prompt_extraction_state(self, repo_id: str) -> dict | None",
+    "get_repo_learning(self, repo_id: str) -> bool",
+    "get_repo_meta(self, repo_id: str) -> dict",
+    "get_run(self, run_id: int) -> dict | None",
+    "get_session(self, session_id: str) -> dict | None",
+    "get_sweep_config(self) -> dict",
+    "get_sweep_watermark(self, session_id: str) -> int",
+    "is_item_running(self, repo_id: str, item_id: str) -> bool",
+    "is_running(self, repo_id: str, mode: str, feature: str | None = None) -> bool",
+    "item_phase_tokens(self, repo_id: str, item_id: str, phases: tuple[str, ...] = ('build', 'vet')) -> int",
+    "last_phase_run_end(self, repo_id: str, item_id: str, *, phase: str) -> str | None",
+    "learning_enabled_for(self, repo_id: str) -> bool",
+    "list_run_inputs_for_item(self, item_id: str) -> list[dict]",
+    "live_agent_runs(self, repo_id: str, mode: str) -> dict",
+    "live_item_runs_quiet_since(self) -> list[dict]",
+    "live_run(self, repo_id: str, item_id: str) -> dict | None",
+    "live_runs(self, repo_id: str | None = None) -> list[dict]",
+    "log_run_event(self, *, repo_id: str, kind: str, name: str, description: str | None = None, run_id: int | None = None, item_id: str | None = None, tool_id: str | None = None, parent_tool_id: str | None = None, payload: str | None = None) -> None",
+    "read_hits(self, repo_id: str, item_id: str, *, phase: str, needle: str) -> int",
+    "read_run_input(self, run_id: int) -> dict | None",
+    "recent_runs(self, *, limit: int = 50) -> list[dict]",
+    "reconcile(self) -> list[dict]",
+    "reconcile_agent_models(self) -> None",
+    "reconcile_model_overrides(self) -> None",
+    "record_run_input(self, run_id: int, *, repo_id: str, item_id: str | None, phase: str | None, feature: str | None, background: bool, system_prompt: str, prompt_body: str, system_fragments: str | None = None, turn_surface: str | None = None, authored_extras: str | None = None) -> None",
+    "record_session(self, session_id: str, cwd, *, surface: str = 'web', mode: str = 'core', thread_ts: str | None = None, repo_id: str | None = None, resumable: bool = True) -> dict | None",
+    "release_item_runs(self, repo_id: str, item_id: str) -> int",
+    "remove_repo(self, repo_id: str) -> RepoConfig",
+    "repo(self, repo_id: str) -> RepoConfig | None",
+    "repo_for_cwd(self, cwd) -> str | None",
+    "repo_status(self, repo_id: str, mode: str) -> dict",
+    "repos(self) -> dict[str, RepoConfig]",
+    "resolve_agent_effort(self, feature: str) -> str",
+    "resolve_agent_model(self, feature: str) -> str",
+    "role_effort(self, repo_id: str, role: str, *, item_effort: str | None = None) -> str",
+    "role_model(self, repo_id: str, role: str, *, item_model: str | None = None) -> str",
+    "run_count(self, repo_id: str, mode: str | None = None) -> int",
+    "run_history(self, repo_id: str, *, mode: str | None = None, limit: int = 100) -> list[dict]",
+    "run_stats(self, repo_id: str, *, mode: str | None = None) -> dict[str, dict]",
+    "run_tokens(self, run_id: int | None) -> int",
+    "running_run_count(self, repo_id: str) -> int",
+    "running_run_id(self, repo_id: str, item_id: str) -> int | None",
+    "runs_for_item(self, repo_id: str, item_id: str) -> list[dict]",
+    "session_compacted_pending(self, session_id: str | None) -> str | None",
+    "session_count(self, repo_id: str, mode: str | None = None, *, include_agent_threads: bool = False) -> int",
+    "session_ctx_pct(self, session_id: str | None) -> int | None",
+    "session_for_thread(self, thread_ts: str) -> str | None",
+    "session_is_diagnosis(self, session_id: str | None) -> bool",
+    "session_is_onboarding(self, session_id: str | None) -> bool",
+    "session_item(self, session_id: str | None) -> str | None",
+    "session_kind(self, session_id: str | None) -> dict | None",
+    "sessions_for_cwd(self, cwd, *, resumable_only: bool = True) -> list[dict]",
+    "sessions_for_repo(self, repo_id: str, *, resumable_only: bool = False) -> list[dict]",
+    "set_agent_effort(self, feature: str, effort: str | None) -> None",
+    "set_agent_model(self, feature: str, model: str | None) -> None",
+    "set_autopilot_concurrency(self, repo_id: str, n: int) -> int",
+    "set_compaction_config(self, *, trigger_pct: int | None = None, by_kind: dict | None = None, min_gain_pct: int | str | None = None) -> dict",
+    "set_deputy_delegated_authority(self, scopes: list[str]) -> None",
+    "set_deputy_effort(self, effort: str | None) -> None",
+    "set_deputy_enabled(self, enabled: bool) -> None",
+    "set_deputy_model(self, model: str | None) -> None",
+    "set_deputy_strictness(self, gate: str, level: str) -> dict",
+    "set_effort_override(self, repo_id: str, effort: str | None, role: str = 'default') -> None",
+    "set_item_run_tokens(self, repo_id: str, item_id: str, *, tokens: int, ctx_pct: int | None = None) -> None",
+    "set_learning_enabled(self, enabled: bool) -> None",
+    "set_loop_budget(self, budget: int | None) -> None",
+    "set_model_override(self, repo_id: str, model: str | None, role: str = 'default') -> None",
+    "set_prompt_extraction_state(self, repo_id: str, state: dict) -> None",
+    "set_repo_learning(self, repo_id: str, enabled: bool) -> None",
+    "set_repo_meta(self, repo_id: str, *, color: str | None = None, icon: str | None = None) -> dict",
+    "set_run_feature(self, run_id: int, feature: str) -> None",
+    "set_session_title(self, session_id: str, title: str | None) -> bool",
+    "set_sweep_config(self, *, idle_seconds: int | None = None, poll_seconds: int | None = None, min_user_msgs: int | None = None) -> dict",
+    "set_sweep_watermark(self, session_id: str, position: int) -> None",
+    "stamp_session_item(self, session_id: str, item_id: str) -> bool",
+    "stamp_session_kind(self, session_id: str, kind: str, subject_run_id: int | None = None) -> bool",
+    "start_item_run(self, repo_id: str, *, mode: str = 'dev', feature: str = 'plan', item_id: str, model: str | None = None, phase: str | None = None) -> int | None",
+    "start_run(self, repo_id: str, *, mode: str = 'dev', feature: str = 'chat', session_id: str | None = None, item_id: str | None = None, model: str | None = None) -> int",
+    "subagent_briefs(self, repo_id: str, item_id: str, *, phase: str) -> list[dict]",
+    "subagent_count(self, repo_id: str, item_id: str, *, phase: str) -> int",
+    "system(self) -> dict",
+    "system_config(self) -> SystemConfig",
+    "token_timeseries(self, tz_offset: int = 0) -> dict",
+    "token_usage(self) -> dict",
+    "update_repo(self, repo_id: str, **fields) -> RepoConfig"
+   ],
+   "sig": "class"
+  },
+  "TokenOps": {
+   "home": "superme_agent.core.spine.tokens",
+   "methods": [
+    "_display_tokens(row) -> int",
+    "_legacy_tokens(i: int, cc: int, cr: int, o: int) -> int",
+    "_run_dict(self, r) -> dict",
+    "_usage_parts(usage: dict | None) -> tuple[int, int, int, int]",
+    "item_phase_tokens(self, repo_id: str, item_id: str, phases: tuple[str, ...] = ('build', 'vet')) -> int",
+    "token_timeseries(self, tz_offset: int = 0) -> dict",
+    "token_usage(self) -> dict"
+   ],
+   "sig": "class"
+  },
+  "_SPINE": {
+   "sig": "value:NoneType"
+  },
+  "get_spine": {
+   "home": "superme_agent.core.spine.store",
+   "sig": "def() -> SystemSpine"
+  }
+ },
+ "superme_agent.core.spine.tokens": {
+  "TokenOps": {
+   "home": "superme_agent.core.spine.tokens",
+   "methods": [
+    "_display_tokens(row) -> int",
+    "_legacy_tokens(i: int, cc: int, cr: int, o: int) -> int",
+    "_run_dict(self, r) -> dict",
+    "_usage_parts(usage: dict | None) -> tuple[int, int, int, int]",
+    "item_phase_tokens(self, repo_id: str, item_id: str, phases: tuple[str, ...] = ('build', 'vet')) -> int",
+    "token_timeseries(self, tz_offset: int = 0) -> dict",
+    "token_usage(self) -> dict"
+   ],
+   "sig": "class"
+  },
+  "_UNRECONCILED_STATUSES": {
+   "sig": "value:set"
   },
   "log": {
    "sig": "value:Logger"
@@ -5389,7 +6080,7 @@
    "sig": "class"
   },
   "SystemSpine": {
-   "home": "superme_agent.core.spine",
+   "home": "superme_agent.core.spine.store",
    "methods": [
     "_add_role_key(c: sqlite3.Connection, table: str, value_col: str) -> None",
     "_agent_file_effort(self, feature: str) -> str | None",
@@ -5528,7 +6219,7 @@
    "sig": "class"
   },
   "_spine_factory": {
-   "home": "superme_agent.core.spine",
+   "home": "superme_agent.core.spine.store",
    "sig": "def() -> SystemSpine"
   },
   "agent": {
@@ -5929,7 +6620,7 @@
    "sig": "class"
   },
   "SystemSpine": {
-   "home": "superme_agent.core.spine",
+   "home": "superme_agent.core.spine.store",
    "methods": [
     "_add_role_key(c: sqlite3.Connection, table: str, value_col: str) -> None",
     "_agent_file_effort(self, feature: str) -> str | None",
@@ -6228,7 +6919,7 @@
    "sig": "class"
   },
   "SystemSpine": {
-   "home": "superme_agent.core.spine",
+   "home": "superme_agent.core.spine.store",
    "methods": [
     "_add_role_key(c: sqlite3.Connection, table: str, value_col: str) -> None",
     "_agent_file_effort(self, feature: str) -> str | None",
@@ -6563,7 +7254,7 @@
    "sig": "class"
   },
   "SystemSpine": {
-   "home": "superme_agent.core.spine",
+   "home": "superme_agent.core.spine.store",
    "methods": [
     "_add_role_key(c: sqlite3.Connection, table: str, value_col: str) -> None",
     "_agent_file_effort(self, feature: str) -> str | None",
@@ -7202,7 +7893,7 @@
    "sig": "class"
   },
   "SystemSpine": {
-   "home": "superme_agent.core.spine",
+   "home": "superme_agent.core.spine.store",
    "methods": [
     "_add_role_key(c: sqlite3.Connection, table: str, value_col: str) -> None",
     "_agent_file_effort(self, feature: str) -> str | None",
@@ -7505,7 +8196,7 @@
    "sig": "class"
   },
   "SystemSpine": {
-   "home": "superme_agent.core.spine",
+   "home": "superme_agent.core.spine.store",
    "methods": [
     "_add_role_key(c: sqlite3.Connection, table: str, value_col: str) -> None",
     "_agent_file_effort(self, feature: str) -> str | None",
@@ -7854,7 +8545,7 @@
    "sig": "class"
   },
   "SystemSpine": {
-   "home": "superme_agent.core.spine",
+   "home": "superme_agent.core.spine.store",
    "methods": [
     "_add_role_key(c: sqlite3.Connection, table: str, value_col: str) -> None",
     "_agent_file_effort(self, feature: str) -> str | None",
@@ -8150,7 +8841,7 @@
    "sig": "class"
   },
   "SystemSpine": {
-   "home": "superme_agent.core.spine",
+   "home": "superme_agent.core.spine.store",
    "methods": [
     "_add_role_key(c: sqlite3.Connection, table: str, value_col: str) -> None",
     "_agent_file_effort(self, feature: str) -> str | None",
@@ -8474,7 +9165,7 @@
    "sig": "class"
   },
   "SystemSpine": {
-   "home": "superme_agent.core.spine",
+   "home": "superme_agent.core.spine.store",
    "methods": [
     "_add_role_key(c: sqlite3.Connection, table: str, value_col: str) -> None",
     "_agent_file_effort(self, feature: str) -> str | None",
@@ -9131,7 +9822,7 @@
    "sig": "class"
   },
   "RepoConfig": {
-   "home": "superme_agent.core.spine",
+   "home": "superme_agent.core.spine.config",
    "methods": [
     "_knowledge_base(self) -> pathlib.Path",
     "constitution_home(self, scope: str) -> pathlib.Path",
@@ -9232,7 +9923,7 @@
    "sig": "class"
   },
   "SystemSpine": {
-   "home": "superme_agent.core.spine",
+   "home": "superme_agent.core.spine.store",
    "methods": [
     "_add_role_key(c: sqlite3.Connection, table: str, value_col: str) -> None",
     "_agent_file_effort(self, feature: str) -> str | None",
@@ -13056,7 +13747,7 @@
    "sig": "value:str"
   },
   "RepoConfig": {
-   "home": "superme_agent.core.spine",
+   "home": "superme_agent.core.spine.config",
    "methods": [
     "_knowledge_base(self) -> pathlib.Path",
     "constitution_home(self, scope: str) -> pathlib.Path",
@@ -13071,7 +13762,7 @@
    "sig": "def(rc: RepoConfig, mode: str) -> Context"
   },
   "get_spine": {
-   "home": "superme_agent.core.spine",
+   "home": "superme_agent.core.spine.store",
    "sig": "def() -> SystemSpine"
   },
   "list_all": {
