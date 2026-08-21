@@ -12,16 +12,20 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from ..harness.tools.run_tools import DEPUTY_DECISIONS
+from .vocab.context import Context
 from ..paths import LOCAL_HARNESS_DIR
 
 # Bounds the deputy's own bouncing, so a stuck item surfaces to the owner instead of looping.
 SEND_BACK_CAP = 3
 
 
-def deputy_root(repo_id: str) -> Path:
+def deputy_root(ctx: Context) -> Path:
     """The dev-scope root the artifacts hang under. The mandate is GOVERNANCE — harness cell, wiped
-    on disconnect."""
-    return LOCAL_HARNESS_DIR / repo_id / "dev"
+    on disconnect.
+
+    Takes a resolved Context, never an id: joining a caller's string here would seed a mandate for
+    a project that does not exist."""
+    return LOCAL_HARNESS_DIR / ctx.id / "dev"
 
 
 def deputy_dir(dev_root: Path) -> Path:

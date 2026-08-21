@@ -172,7 +172,7 @@ async def _judge(ctx, context_id: str, item_id: str, item: dict, gate: str, dev_
                                     _git_ops.repo_anchor(ctx, _spine))
     state = gate_briefs.gate_state(item, item_dir, dev_root, ctx.cwd,
                                    all_items=all_items, events=events, **counters)
-    dep_root = deputy_core.deputy_root(context_id)  # mandate lives in the harness cell, not knowledge
+    dep_root = deputy_core.deputy_root(ctx)  # mandate lives in the harness cell, not knowledge
     mandate = deputy_core.read_mandate(dep_root)
     digest = deputy_core.log_digest(item_dir, gate)  # this item's prior calls AT THIS GATE (continuity)
     # On a loop re-entry, feed a lean delta so the deputy re-judges the DELTA. A POINTER, never

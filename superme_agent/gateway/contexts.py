@@ -4,12 +4,8 @@ The global root plus the connected projects the spine's repo registry defines, e
 cwd and a knowledge home. The repo root IS the global context, never a project.
 """
 
-import logging
-
 from ..core.vocab.context import Context
 from ..core.spine import RepoConfig, get_spine
-
-log = logging.getLogger("superme-agent")
 
 GLOBAL_ID = "global"
 # A knowledge home splits by scope: `core/` is what the dashboards render, `dev/` is not.
@@ -34,23 +30,34 @@ def _context_from_repo(rc: RepoConfig, mode: str) -> Context:
     )
 
 
+class UnknownContext(LookupError):
+    """A context id no repo answers to. The daemon turns this into a 404."""
+
+    def __init__(self, context_id: str) -> None:
+        super().__init__(f"unknown context_id {context_id!r}")
+        self.context_id = context_id
+
+
 def resolve(context_id: str | None, mode: str = "core") -> Context:
     """Resolve a surface-facing context id (+ mode) to a Core Context.
 
-    An unknown id falls back to the root SuperMe. `mode` comes FROM THE SURFACE: it picks the
-    charter and the plugins, never a knowledge sandbox."""
-    spine = get_spine()
-    repos = spine.repos()
+    An unknown id RAISES: answering as another project would write this work into that project's
+    home. `mode` comes FROM THE SURFACE — charter and plugins, never a sandbox."""
+    repos = get_spine().repos()
     cid = context_id or GLOBAL_ID
     rc = repos.get(cid)
     if rc is None:
-        if cid != GLOBAL_ID:
-            log.warning("unknown context_id %r; falling back to global", cid)
-        rc = repos.get(GLOBAL_ID)
-    if rc is None:  # no registry yet: synthesize a global rather than crash
+        if cid != GLOBAL_ID or repos:
+            raise UnknownContext(cid)
+        # No registry at all — first boot. Synthesizing the hub is the one safe substitution.
         from ..paths import ROOT_DIR
         rc = RepoConfig(id=GLOBAL_ID, label="SuperMe hub", cwd=ROOT_DIR, layer="global")
     return _context_from_repo(rc, mode)
+
+
+def exists(context_id: str | None) -> bool:
+    """Whether a context id names a live repo — for callers acting on a row that may outlive it."""
+    return (context_id or GLOBAL_ID) in get_spine().repos()
 
 
 def list_all() -> list[dict]:

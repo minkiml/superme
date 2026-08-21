@@ -6,7 +6,10 @@ Thin assembly: build the `app` with its lifespan and mount the routers. Handlers
 
 import logging
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+
+from ..gateway import UnknownContext
 
 from .lifespan import lifespan
 
@@ -14,6 +17,15 @@ log = logging.getLogger("superme-agent")
 
 # Swagger is off: the daemon is localhost-only and its client is the BFF, not a browser.
 app = FastAPI(title="SuperMe Core daemon", docs_url=None, redoc_url=None, lifespan=lifespan)
+
+
+@app.exception_handler(UnknownContext)
+async def _unknown_context(_request: Request, exc: UnknownContext) -> JSONResponse:
+    """One handler for every route: naming a project that does not exist is a 404, not a
+    substitution. Answering as another project would write this work into that project's home."""
+    return JSONResponse(status_code=404,
+                        content={"detail": f"unknown context_id {exc.context_id!r}",
+                                 "context_id": exc.context_id})
 
 
 # --- router assembly: each surface is an APIRouter mounted behind its real path ------------------

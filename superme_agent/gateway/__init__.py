@@ -4,6 +4,6 @@ Surfaces never reach into the Core directly: they name a context, and the Gatewa
 that surface-facing id to a harness layer.
 """
 
-from .contexts import resolve, GLOBAL_ID
+from .contexts import resolve, exists, UnknownContext, GLOBAL_ID
 
-__all__ = ["resolve", "GLOBAL_ID"]
+__all__ = ["resolve", "exists", "UnknownContext", "GLOBAL_ID"]

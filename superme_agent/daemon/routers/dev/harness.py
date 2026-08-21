@@ -7,6 +7,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from ....gateway import contexts
 from ...app_state import DevStore, get_dev_store
 from ...deps import load_slash_cache, local_harness_root, published_ident
 from ...schemas.dev.harness import (AssetActionBody, AssetActionResponse, AssetsResponse,
@@ -139,7 +140,7 @@ async def dev_harness_deputy(context_id: str = "global") -> dict:
     """This repo's deputy mandate — the standing bar the deputy judges gates against while the owner
     is away. Seeded from a template on first read, so there is always a mandate to show/edit."""
     from ....core import deputy as deputy_core
-    root = deputy_core.deputy_root(context_id)
+    root = deputy_core.deputy_root(contexts.resolve(context_id, "dev"))
     content = deputy_core.read_mandate(root)
     return {"context_id": context_id, "path": str(deputy_core.mandate_path(root)), "content": content}
 
@@ -152,7 +153,7 @@ async def dev_harness_deputy_save(body: DeputyMandateBody,
     from ....core import deputy as deputy_core
     if not (body.content or "").strip():
         raise HTTPException(status_code=400, detail="content is empty")
-    p = deputy_core.mandate_path(deputy_core.deputy_root(body.context_id))
+    p = deputy_core.mandate_path(deputy_core.deputy_root(contexts.resolve(body.context_id, "dev")))
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(body.content)
     log.info("saved deputy mandate for '%s'", body.context_id)

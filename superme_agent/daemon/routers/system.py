@@ -120,7 +120,8 @@ async def connect_repo(body: RepoConnectBody, spine: SystemSpine = Depends(get_s
     # connect.
     try:
         from ...core import deputy as deputy_core
-        deputy_core.read_mandate(deputy_core.deputy_root(rid))  # seed=True writes the template
+        from ...gateway import contexts
+        deputy_core.read_mandate(deputy_core.deputy_root(contexts.resolve(rid, "dev")))
     except Exception:
         log.warning("deputy mandate seed skipped for '%s'", rid, exc_info=True)
     log.info("connected repo '%s' (%s) at %s [%s]", rid, label, p, onboarding)

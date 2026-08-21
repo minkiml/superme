@@ -2546,6 +2546,11 @@
   }
  },
  "superme_agent.core.deputy": {
+  "Context": {
+   "home": "superme_agent.core.vocab.context",
+   "methods": [],
+   "sig": "class"
+  },
   "DEPUTY_DECISIONS": {
    "sig": "value:tuple"
   },
@@ -2579,7 +2584,7 @@
   },
   "deputy_root": {
    "home": "superme_agent.core.deputy",
-   "sig": "def(repo_id: 'str') -> 'Path'"
+   "sig": "def(ctx: 'Context') -> 'Path'"
   },
   "gate_decisions": {
    "home": "superme_agent.core.deputy",
@@ -12352,6 +12357,15 @@
   }
  },
  "superme_agent.daemon.server": {
+  "UnknownContext": {
+   "home": "superme_agent.gateway.contexts",
+   "methods": [],
+   "sig": "class"
+  },
+  "_unknown_context": {
+   "home": "superme_agent.daemon.server",
+   "sig": "def(_request: starlette.requests.Request, exc: UnknownContext) -> starlette.responses.JSONResponse"
+  },
   "app": {
    "sig": "value:FastAPI"
   },
@@ -14758,6 +14772,15 @@
   "GLOBAL_ID": {
    "sig": "value:str"
   },
+  "UnknownContext": {
+   "home": "superme_agent.gateway.contexts",
+   "methods": [],
+   "sig": "class"
+  },
+  "exists": {
+   "home": "superme_agent.gateway.contexts",
+   "sig": "def(context_id: str | None) -> bool"
+  },
   "resolve": {
    "home": "superme_agent.gateway.contexts",
    "sig": "def(context_id: str | None, mode: str = 'core') -> Context"
@@ -14786,9 +14809,18 @@
    ],
    "sig": "class"
   },
+  "UnknownContext": {
+   "home": "superme_agent.gateway.contexts",
+   "methods": [],
+   "sig": "class"
+  },
   "_context_from_repo": {
    "home": "superme_agent.gateway.contexts",
    "sig": "def(rc: RepoConfig, mode: str) -> Context"
+  },
+  "exists": {
+   "home": "superme_agent.gateway.contexts",
+   "sig": "def(context_id: str | None) -> bool"
   },
   "get_spine": {
    "home": "superme_agent.core.spine.store",
@@ -14797,9 +14829,6 @@
   "list_all": {
    "home": "superme_agent.gateway.contexts",
    "sig": "def() -> list[dict]"
-  },
-  "log": {
-   "sig": "value:Logger"
   },
   "resolve": {
    "home": "superme_agent.gateway.contexts",
