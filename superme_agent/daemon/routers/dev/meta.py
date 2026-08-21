@@ -9,7 +9,7 @@ from ...schemas.dev.meta import (
     AttentionResponse, DevReadResponse, DevLogResponse, WorkGraphResponse,
 )
 from ....core import artifacts, attention, workgraph
-from ....core.dev_knowledge import _parse_deliverables, _parse_waves
+from ....core.dev_knowledge import parse_deliverables, parse_waves
 
 router = APIRouter()
 
@@ -80,8 +80,8 @@ async def dev_workgraph(context_id: str = "global",
     g = workgraph.build(
         repo_id=context_id,
         items=items,
-        deliverables=_parse_deliverables(dev.read_general_doc(root, "project-prd") or ""),
-        waves=_parse_waves(dev.read_general_doc(root, "roadmap") or ""),
+        deliverables=parse_deliverables(dev.read_general_doc(root, "project-prd") or ""),
+        waves=parse_waves(dev.read_general_doc(root, "roadmap") or ""),
         inbox_rows=dev_store.list_inbox(context_id),
     )
     return {"context_id": context_id, "nodes": list(g.nodes.values()), "edges": g.edges,

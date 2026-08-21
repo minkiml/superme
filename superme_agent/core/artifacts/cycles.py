@@ -5,7 +5,7 @@ from datetime import date
 from datetime import datetime
 from pathlib import Path
 
-from .text import _atomic_write, _one_line, _split_sections
+from .text import atomic_write, _one_line, split_sections
 from .templates import skill_template
 
 # cycle reports
@@ -49,7 +49,7 @@ def latest_cycle_report(item_dir: Path, *, char_cap: int = 8000) -> dict | None:
 
 def _cycle_closed(text: str) -> bool:
     """A cycle is CLOSED once the driver has appended at least one §Cycle outcome entry."""
-    return bool(_OUTCOME_HEAD.search(_split_sections(text).get("Cycle outcome", "")))
+    return bool(_OUTCOME_HEAD.search(split_sections(text).get("Cycle outcome", "")))
 
 
 def scaffold_cycle(item_dir: Path, *, title: str = "") -> dict:
@@ -76,7 +76,7 @@ def scaffold_cycle(item_dir: Path, *, title: str = "") -> dict:
     # produces.
     body = re.sub(r"[ \t]*<!--.*?-->\n?", "", skill_template("build-vet"), flags=re.DOTALL).format(
         cycle=cycle, title=title or Path(item_dir).name)
-    _atomic_write(path, fm + body)
+    atomic_write(path, fm + body)
     return {"cycle": cycle, "path": str(path), "created": True}
 
 
@@ -110,7 +110,7 @@ def _append_to_section(path: Path, heading: str, entry: str, *, fence: str = "")
             lines[end:end] = ["", f"```{fence}", *entry_lines, "```"]
     else:
         lines[end:end] = ["", *entry_lines]
-    _atomic_write(path, "\n".join(lines) + "\n")
+    atomic_write(path, "\n".join(lines) + "\n")
 
 
 # §Cycle outcome — the driver's trail
@@ -159,7 +159,7 @@ def read_cycle_outcomes(item_dir: Path, *, revision: str | None = None) -> list[
     for r in cycle_reports(item_dir):
         if revision is not None and r["revision"] != revision:
             continue
-        body = _split_sections(Path(r["path"]).read_text()).get("Cycle outcome", "")
+        body = split_sections(Path(r["path"]).read_text()).get("Cycle outcome", "")
         cur: dict | None = None
         for line in body.splitlines():
             m = re.match(r"^### (?P<ts>\S+) — (?P<decision>\S+)$", line)

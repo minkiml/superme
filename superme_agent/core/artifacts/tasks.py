@@ -2,7 +2,7 @@
 
 import re
 
-from .text import _split_sections
+from .text import split_sections
 
 _TASK_LINE = re.compile(r"^\s*-\s*\[(?P<tick>[ xX])\]\s*(?P<id>t\d+)\b[\s—:-]*(?P<text>.*)$")
 
@@ -13,7 +13,7 @@ def parse_tasks(plan_text: str) -> list[dict]:
 
     A task is a BLOCK of two parts: `text` is the NAME the board shows, `detail` the indented spec
     under it."""
-    body = _split_sections(plan_text).get("Tasks", "")
+    body = split_sections(plan_text).get("Tasks", "")
     out: list[dict] = []
     cur: dict | None = None
     for line in body.splitlines():
@@ -36,7 +36,7 @@ _DECISION_HEAD = re.compile(r"^### (?P<ts>\S+) — (?P<q>.+)$", re.M)
 def parse_decisions(plan_text: str) -> list[dict]:
     """plan.md's `## Decisions & clarifications` ledger: one entry per answered question,
     append-only with owner provenance. The deputy never re-litigates one."""
-    body = _split_sections(plan_text).get("Decisions & clarifications", "")
+    body = split_sections(plan_text).get("Decisions & clarifications", "")
     body = re.sub(r"<!--.*?-->", "", body, flags=re.S)
     heads = list(_DECISION_HEAD.finditer(body))
     out: list[dict] = []

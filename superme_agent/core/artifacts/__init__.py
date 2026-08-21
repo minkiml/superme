@@ -4,7 +4,7 @@ THE STANDARD: agent supplies content, code supplies form. Code owns frontmatter,
 ids and timestamps; the agent fills `<fill:…>` slots. A self-check runs at the CONSUMING gate.
 """
 
-from .text import (log, FILL, _atomic_write, _split_sections, _section_filled, clip, _FENCE,
+from .text import (log, FILL, atomic_write, split_sections, _section_filled, clip, _FENCE,
                    _fenced_blocks, _LABEL_LINE, _HEADING, _one_line)
 from .templates import _TEMPLATE_HOMES, _template_cache, skill_template, template_section_spec
 from .spec import (_FM_BLOCK, _FM_RESEARCH_KIND, _SPECS, _PLAN_REQUIRED_LEGACY,
@@ -13,9 +13,9 @@ from .spec import (_FM_BLOCK, _FM_RESEARCH_KIND, _SPECS, _PLAN_REQUIRED_LEGACY,
                    required_sections, artifact_file, ARTIFACT_READERS)
 from .scaffold import (_HANDOFF, _template, _inject_checks, scaffold, _BRIEF_SECTIONS,
                        write_handoff_brief)
-from .vet_plan import (VET_DEPTHS, VET_MODES, _VET_CHECK_ID, _VET_HEADER_KEY, _VET_FIELD,
+from .vet_plan import (VET_DEPTHS, VET_MODES, VET_CHECK_ID, _VET_HEADER_KEY, _VET_FIELD,
                        _RUBRIC_ITEM, _VET_CHECK_HEAD, _VET_VAGUE, _VET_EXPECT_MIN,
-                       _PROVES_MACHINE, _PROVES_MIN, _vet_value, parse_check_blocks,
+                       _PROVES_MACHINE, _PROVES_MIN, vet_value, parse_check_blocks,
                        parse_vet_plan, _SUITE_RUNNERS, _SUITE_NARROWERS, _SUITE_RUN,
                        is_whole_suite_run, vet_plan_hard_issues, _RETIRED_DOC_REF,
                        vet_plan_soft_flags, _VET_DEPTH_RANK, parse_inner_checks, _is_legacy_plan,

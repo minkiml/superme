@@ -38,7 +38,7 @@ def _iso_epoch(iso: str | None) -> float | None:
 _FRONTMATTER = re.compile(r"^---\s*\n(.*?)\n---\s*\n?(.*)$", re.DOTALL)
 
 
-def _parse_md(text: str) -> tuple[dict, str]:
+def parse_md(text: str) -> tuple[dict, str]:
     """Split a doc into (frontmatter dict, body). Tolerant: no/!invalid frontmatter -> {}."""
     m = _FRONTMATTER.match(text)
     if not m:

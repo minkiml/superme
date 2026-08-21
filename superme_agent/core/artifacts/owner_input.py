@@ -3,7 +3,7 @@
 import re
 from pathlib import Path
 
-from .text import FILL, _LABEL_LINE, _atomic_write, _one_line, _split_sections
+from .text import FILL, _LABEL_LINE, atomic_write, _one_line, split_sections
 from .spec import artifact_file
 
 # --------------------------------------------------------------- `## From you` (the owner's input)
@@ -58,7 +58,7 @@ def owner_input(item_dir: Path) -> dict:
     path = Path(item_dir) / "reports" / "report-triage.md"
     if not path.is_file():
         return {"exists": False, "references": [], "notes": []}
-    blocks = _owner_blocks(_split_sections(path.read_text()).get(FROM_YOU, ""))
+    blocks = _owner_blocks(split_sections(path.read_text()).get(FROM_YOU, ""))
     return {"exists": True,
             "references": _owner_slots(blocks["references"], sourced=True),
             "notes": _owner_slots(blocks["notes"], sourced=False)}
@@ -88,7 +88,7 @@ def carry_owner_input(item_dir: Path, *, cap: int = _CARRY_CAP) -> str | None:
     try:
         plan = Path(item_dir) / "artifacts" / artifact_file("plan")
         if plan.is_file():
-            body = _split_sections(plan.read_text()).get(_DECISIONS, "")
+            body = split_sections(plan.read_text()).get(_DECISIONS, "")
             # Comment-only bodies are the SCAFFOLD, not an answer — the template ships its
             # instructions inside `<!-- -->`.
             body = re.sub(r"<!--.*?-->", "", body, flags=re.DOTALL)
@@ -144,5 +144,5 @@ def write_owner_input(item_dir: Path, *, references: list[dict],
         text = pattern.sub(lambda _m: section + "\n", text, count=1)
     else:
         text = text.rstrip() + "\n\n" + section
-    _atomic_write(path, text.rstrip() + "\n")
+    atomic_write(path, text.rstrip() + "\n")
     return owner_input(item_dir)

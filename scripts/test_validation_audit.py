@@ -78,7 +78,7 @@ def test_the_machine_lane_and_the_prose_coexist() -> None:
     path = Path(A.cycle_reports(d)[-1]["path"])
     path.write_text(path.read_text().replace(
         "## Validation", "## Validation\n- t1 — 12 unit tests pass\n- the suite is green", 1))
-    body = A._split_sections(path.read_text())["Validation"]
+    body = A.split_sections(path.read_text())["Validation"]
     by_task, loose = A._tagged_bullets(body)
     ok("the per-task bullet still reaches the Task tab", by_task == {"t1": ["12 unit tests pass"]})
     ok("…and the fence's own lines never leak into the prose",
@@ -94,7 +94,7 @@ def test_an_entry_stands_apart_from_the_one_before_it() -> None:
     for n in range(3):
         A.record_validation(d, None, command=f"pytest -q tests/t{n}.py", result="exit 0",
                             passed=True)
-    body = A._split_sections((d / "artifacts" / A.cycle_reports(d)[-1]["path"].split("/")[-1]
+    body = A.split_sections((d / "artifacts" / A.cycle_reports(d)[-1]["path"].split("/")[-1]
                               ).read_text())["Validation"]
     fence = A._fenced_blocks(body, lang=A.VALIDATION_FENCE)[0].strip("\n").splitlines()
     heads = [i for i, ln in enumerate(fence) if ln.startswith("### ")]

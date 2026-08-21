@@ -3,9 +3,9 @@
 import re
 from pathlib import Path
 
-from .text import _split_sections, clip
+from .text import split_sections, clip
 from .spec import artifact_file
-from .vet_plan import _vet_value
+from .vet_plan import vet_value
 
 # ----------------------------------------------------- research proposals (the typed `## Proposed work`)
 
@@ -37,7 +37,7 @@ def research_proposals(item_dir: Path) -> list[dict]:
     if not path.is_file():
         return []
     text = re.sub(r"<!--.*?-->", "", path.read_text(), flags=re.DOTALL)
-    body = _split_sections(text).get("Proposed work", "")
+    body = split_sections(text).get("Proposed work", "")
     out: list[dict] = []
     cur: dict | None = None
     field: str | None = None
@@ -51,9 +51,9 @@ def research_proposals(item_dir: Path) -> list[dict]:
             if cur is None:      # a stray field before any title — nothing to attach it to
                 continue
             field = key
-            cur[key] = _vet_value(m.group(2))
+            cur[key] = vet_value(m.group(2))
         elif cur is not None and field and line.strip():
-            cur[field] = (cur[field] + " " + _vet_value(line)).strip()
+            cur[field] = (cur[field] + " " + vet_value(line)).strip()
     return [p for p in out if p["title"]]
 
 

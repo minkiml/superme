@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 from ..vocab.kind_profiles import get_profile
-from .text import FILL, _atomic_write, _section_filled, _split_sections
+from .text import FILL, atomic_write, _section_filled, split_sections
 from .spec import (ARTIFACT_KINDS, _FM_BLOCK, _FM_RESEARCH_KIND, _PLAN_FEED_SECTIONS,
                    _PLAN_REQUIRED_LEGACY, _PLAN_REQUIRED_RESEARCH_V1, _PLAN_REQUIRED_V1,
                    _PLAN_REQUIRED_V2, _SPECS, artifact_file, section_spec)
@@ -31,7 +31,7 @@ def self_check(item_dir: Path, artifact: str, *, item_kind: str | None = None,
     # clear its slots.
     if fills and artifact != "handoff-brief":
         issues.append(f"{len(fills)} unfilled <fill:…> slot(s) remain — fill or remove them")
-    sections = _split_sections(text)
+    sections = split_sections(text)
     # The shape the file was AUTHORED under, read from its own frontmatter — never the item's
     # current field.
     head = _FM_BLOCK.match(text)
@@ -122,7 +122,7 @@ def owner_edit(item_dir: Path, artifact: str, text: str, *,
     finally:
         probe.unlink(missing_ok=True)
         probe.parent.rmdir()
-    _atomic_write(path, body)
+    atomic_write(path, body)
     return []
 
 

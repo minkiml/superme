@@ -45,9 +45,9 @@ async def dev_harness_plugins() -> dict:
 async def dev_harness_local_plugins(context_id: str = "global") -> dict:
     """This host's OWN local-harness skills + agents (its `local-harness/<id>/dev` plugin tree) — the
     per-repo Artifacts tab. Flat: the dev workspace is already dev-scoped, so no scope split."""
-    from ....core.operational import _read_plugin
+    from ....core.operational import read_plugin
     from ....paths import LOCAL_HARNESS_DIR
-    plug = _read_plugin(local_harness_root(context_id))
+    plug = read_plugin(local_harness_root(context_id))
     return {"context_id": context_id, "skills": plug["skills"], "agents": plug["agents"]}
 
 
@@ -277,8 +277,8 @@ async def dev_harness_constitution_toggle(slug: str, body: ConstitutionToggleBod
     # would dangle that pull.
     if not body.enabled:
         p = _resolve_constitution_file(body.scope, slug, body.context_id)
-        from ....core.operational import parse_frontmatter, _is_foundational
-        if _is_foundational(parse_frontmatter(p.read_text())[0]):
+        from ....core.operational import parse_frontmatter, is_foundational
+        if is_foundational(parse_frontmatter(p.read_text())[0]):
             raise HTTPException(
                 status_code=409,
                 detail=f"'{slug}' is foundational (a charter consults it by name) — it can't be disabled.")

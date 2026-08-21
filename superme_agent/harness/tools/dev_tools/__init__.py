@@ -33,5 +33,5 @@ from .reports import (FilePlanReportArgs, _file_plan_report, FilePhaseReportArgs
                       _file_investigate_report, FileVetReportArgs, _file_vet_report)
 from .revisions import (KnowledgeOpArg, ApplyKnowledgeDeltaArgs, _apply_knowledge_delta,
                         PlanOpArg, PlanChangeArg, RevisePlanArgs, _revise_plan)
-from .scopes import (_ITEM_DEV_TOOLS, _MAIN_DEV_TOOLS, _LEARNING_DEV_TOOLS, DEV_TOOLS, _BY_NAME,
+from .scopes import (ITEM_DEV_TOOLS, MAIN_DEV_TOOLS, LEARNING_DEV_TOOLS, DEV_TOOLS, _BY_NAME,
                      TOOL_SCOPES, make_dev_mcp_server, dev_tool_specs)

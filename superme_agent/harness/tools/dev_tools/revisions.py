@@ -156,8 +156,8 @@ def _revise_plan(*, store, context_id, dev_root=None, bound_item_id=None, spine=
                         "(`scaffold_artifact`); a revision edits a plan that already exists.")
         # plan.md belongs to the plan phase; review is read-only on it, which is exactly why
         # review has `revise`.
-        from ....core.dev_knowledge import _parse_md
-        phase = str((_parse_md((d / "item.md").read_text())[0] or {}).get("phase") or "")
+        from ....core.dev_knowledge import parse_md
+        phase = str((parse_md((d / "item.md").read_text())[0] or {}).get("phase") or "")
         if phase != "plan":
             return _err(
                 f"plan.md is the PLAN phase's to write — this item is at `{phase}`. "

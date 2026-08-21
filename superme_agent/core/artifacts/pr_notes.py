@@ -3,7 +3,7 @@
 import re
 from pathlib import Path
 
-from .text import _one_line, _split_sections
+from .text import _one_line, split_sections
 from .spec import artifact_file
 from .vet_plan import parse_vet_plan
 from .cycles import cycle_reports
@@ -49,7 +49,7 @@ def pr_task_notes(item_dir: Path) -> dict:
     notes: dict[str, dict] = {}
     for r in cycle_reports(item_dir):
         try:
-            section = _split_sections(Path(r["path"]).read_text()).get("For the reviewer", "")
+            section = split_sections(Path(r["path"]).read_text()).get("For the reviewer", "")
         except OSError:
             continue
         for b in _bullets(section):

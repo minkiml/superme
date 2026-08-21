@@ -3,7 +3,7 @@
 import re
 from pathlib import Path
 
-from .common import _iso_epoch, _parse_md
+from .common import _iso_epoch, parse_md
 from .parse import _PHASE_RANK, _STATUS_RANK, _norm_artifacts, _session_fields
 from .general import _section
 
@@ -91,7 +91,7 @@ class ReadOps:
         p = Path(dev_root) / "work-items" / item_id / "item.md"
         if not p.exists():
             return None
-        meta, body = _parse_md(p.read_text())
+        meta, body = parse_md(p.read_text())
         it = dict(meta)
         it["id"] = str(meta.get("id") or item_id)
         # An all-decimal 12-hex id parses from YAML as an int. Coerce.
@@ -154,7 +154,7 @@ class ReadOps:
         p = Path(dev_root) / "work-items" / item_id / "artifacts" / name
         if not p.exists():
             return None
-        _meta, body = _parse_md(p.read_text())
+        _meta, body = parse_md(p.read_text())
         return body.strip() or None
 
     def work_item_session_ids(self, item: dict) -> list[str]:
@@ -177,7 +177,7 @@ class ReadOps:
             rel = item_md.parent.relative_to(base)
             if any(part.startswith((".", "_")) for part in rel.parts):
                 continue
-            meta, body = _parse_md(item_md.read_text())
+            meta, body = parse_md(item_md.read_text())
             it = dict(meta)
             it["id"] = str(meta.get("id") or item_md.parent.name)
             it["root_id"] = rel.parts[0]

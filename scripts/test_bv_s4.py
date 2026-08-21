@@ -256,8 +256,8 @@ def test_preamble_and_registration() -> None:
        "read-only" in p and "file_vet_report" in p and "never fix it" in p, p[:400])
     build_p = work_item_preamble("i1", {**item, "phase": "build"}, "/items/i1")
     ok("build preamble unchanged (owns its worktree)", "all code changes happen" in build_p)
-    from superme_agent.harness.tools.dev_tools import _ITEM_DEV_TOOLS
-    ok("file_vet_report registered", "file_vet_report" in {t.name for t in _ITEM_DEV_TOOLS})
+    from superme_agent.harness.tools.dev_tools import ITEM_DEV_TOOLS
+    ok("file_vet_report registered", "file_vet_report" in {t.name for t in ITEM_DEV_TOOLS})
     from superme_agent.harness.policy import SAFE_TOOLS
     ok("file_vet_report auto-allows (vet's only pen — a prompt would park background cycles)",
        "mcp__dev__file_vet_report" in SAFE_TOOLS)

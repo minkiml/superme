@@ -131,5 +131,5 @@ def write_brief(dev_root: Path, row: dict, content: str) -> Path:
         raise ValueError("this row is pushed — its brief is the item's provenance and is read-only")
     from . import artifacts as _arts
     path.parent.mkdir(parents=True, exist_ok=True)
-    _arts._atomic_write(path, content)
+    _arts.atomic_write(path, content)
     return path

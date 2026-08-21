@@ -14,7 +14,7 @@ from ...app_state import (
 )
 from ....core import artifacts, git_layer
 from ....core.vocab import status_router
-from ....core.artifacts import _atomic_write
+from ....core.artifacts import atomic_write
 from ...services import drilldown, git_ops, scheduler
 from ....gateway import contexts
 from ...schemas.dev.gates import (AbandonBody, AbandonResponse, DrilldownResponse, OwnerInputBody,
@@ -169,7 +169,7 @@ async def dev_work_item_abandon(item_id: str, body: AbandonBody,
         f"# Close — {item.get('title') or item_id}\n\n"
         f"**What landed:** nothing — the item was {outcome} at the `{item.get('phase')}` phase.\n")
     if "## Abandon note" not in (report.read_text() if report.is_file() else ""):
-        _atomic_write(report, (head + (report.read_text() if report.is_file() else "")).rstrip()
+        atomic_write(report, (head + (report.read_text() if report.is_file() else "")).rstrip()
                       + "\n" + note)
     # 4. terminal — a status change, never a delete (folder, artifacts, branch, trace remain).
     try:

@@ -10,8 +10,8 @@ from datetime import date, datetime
 from pathlib import Path
 
 from . import verification_library as _vl
-from .artifacts import FILL, _atomic_write
-from .dev_knowledge import ANCHOR_DOCS, DevKnowledgeService, _parse_deliverables
+from .artifacts import FILL, atomic_write
+from .dev_knowledge import ANCHOR_DOCS, DevKnowledgeService, parse_deliverables
 
 # The first three act on a section's BODY; rename_section rewrites the `## <heading>` LINE.
 OPS = ("update", "append", "supersede", "rename_section")
@@ -41,7 +41,7 @@ def validate_ops(ops: list, dev_root: Path, repo_dir: Path | None) -> list[str]:
         return ["a delta needs a non-empty list of edit ops"]
     dev = DevKnowledgeService()
     prd_slugs = {d.get("id") for d in
-                 _parse_deliverables(dev.read_general_doc(dev_root, "project-prd") or "")}
+                 parse_deliverables(dev.read_general_doc(dev_root, "project-prd") or "")}
     issues: list[str] = []
     for i, op in enumerate(ops, 1):
         tag = f"op {i}"
@@ -116,7 +116,7 @@ def apply_ops(dev_root: Path, ops: list) -> dict:
             body = content + "\n\n"
         texts[doc] = text[:m.start(2)] + body + text[m.end(2):]
     for doc, text in texts.items():
-        _atomic_write(_doc_path(dev_root, doc), text)
+        atomic_write(_doc_path(dev_root, doc), text)
     return {"applied": len(ops), "docs": sorted(texts)}
 
 
@@ -150,7 +150,7 @@ def append_change_log(dev_root: Path, item_id: str, title: str, ops: list,
     entry = (f"\n## [{stamp}] {title or item_id}\n\n"
              "| doc · section | op | what changed | source item |\n"
              "|---|---|---|---|\n" + rows + "\n")
-    _atomic_write(path, (head + (path.read_text() if path.exists() else "")).rstrip() + "\n" + entry)
+    atomic_write(path, (head + (path.read_text() if path.exists() else "")).rstrip() + "\n" + entry)
     return str(path)
 
 

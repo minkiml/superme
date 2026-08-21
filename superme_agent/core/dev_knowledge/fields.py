@@ -7,7 +7,7 @@ from pathlib import Path
 
 from ..vocab import sandbox
 from ..vocab.titles import check_title, normalize_title
-from .common import _FRONTMATTER, _parse_md
+from .common import _FRONTMATTER, parse_md
 
 
 class FieldOps:
@@ -18,7 +18,7 @@ class FieldOps:
         if not item.exists():
             return False
         text = item.read_text()
-        meta, body = _parse_md(text)
+        meta, body = parse_md(text)
         if str(meta.get("phase")) == str(phase):
             return False
         m = _FRONTMATTER.match(text)
@@ -41,7 +41,7 @@ class FieldOps:
         if not item.exists():
             return False
         text = item.read_text()
-        meta, body = _parse_md(text)
+        meta, body = parse_md(text)
         if str(meta.get("title") or "") == title:
             return False
         m = _FRONTMATTER.match(text)
@@ -63,7 +63,7 @@ class FieldOps:
         if not item.exists():
             return False
         text = item.read_text()
-        meta, body = _parse_md(text)
+        meta, body = parse_md(text)
         if str(meta.get("kind")) == str(kind):
             return False
         m = _FRONTMATTER.match(text)
@@ -91,7 +91,7 @@ class FieldOps:
         m = _FRONTMATTER.match(text)
         if not m:
             return False
-        _, body = _parse_md(text)
+        _, body = parse_md(text)
         fm = m.group(1)
         # Every replacement is a LAMBDA: `re.sub` parses backslash escapes in a replacement
         # string.
@@ -122,7 +122,7 @@ class FieldOps:
         m = _FRONTMATTER.match(text)
         if not m:
             return False
-        _, body = _parse_md(text)
+        _, body = parse_md(text)
         fm = m.group(1)
         line = f"fanout: {fanout}"
         if re.search(r"(?m)^fanout:", fm):
@@ -158,7 +158,7 @@ class FieldOps:
         m = _FRONTMATTER.match(text)
         if not m:
             return False
-        _, body = _parse_md(text)
+        _, body = parse_md(text)
         fm = m.group(1)
         if not re.search(r"(?m)^kind:\s*research\s*$", fm):
             raise ValueError("only a research item has an investigation family — this item's kind "
@@ -191,7 +191,7 @@ class FieldOps:
         if not item.exists():
             return False
         text = item.read_text()
-        meta, body = _parse_md(text)
+        meta, body = parse_md(text)
         if meta.get("triaged_at"):
             return False
         m = _FRONTMATTER.match(text)
@@ -219,7 +219,7 @@ class FieldOps:
         if not item.exists():
             return False
         text = item.read_text()
-        meta, body = _parse_md(text)
+        meta, body = parse_md(text)
         if meta.get("done_at") or str(meta.get("status")) == "done":
             return False
         m = _FRONTMATTER.match(text)
@@ -267,7 +267,7 @@ class FieldOps:
         if not item.exists():
             return False
         text = item.read_text()
-        meta, body = _parse_md(text)
+        meta, body = parse_md(text)
         if str(meta.get(key)) == str(value):
             return False
         m = _FRONTMATTER.match(text)
@@ -331,7 +331,7 @@ class FieldOps:
         if not item.exists():
             return False
         text = item.read_text()
-        meta, body = _parse_md(text)
+        meta, body = parse_md(text)
         key = f"session_{slot}"
         if str(meta.get(key)) == str(session_id) and not meta.get("session_id"):
             return False
@@ -359,7 +359,7 @@ class FieldOps:
         if not item.exists():
             return False
         text = item.read_text()
-        meta, body = _parse_md(text)
+        meta, body = parse_md(text)
         try:
             cur = int(str(meta.get("handoffs_promoted") or 0).strip() or 0)
         except (TypeError, ValueError):
@@ -386,7 +386,7 @@ class FieldOps:
         if not item.exists():
             return False
         text = item.read_text()
-        meta, body = _parse_md(text)
+        meta, body = parse_md(text)
         if str(meta.get("status")) == str(status):
             return False
         # Terminal is FINAL on this axis: a straggler run's status write must never revive a done
@@ -412,7 +412,7 @@ class FieldOps:
         if not item.exists():
             return False
         text = item.read_text()
-        meta, body = _parse_md(text)
+        meta, body = parse_md(text)
         if meta.get("done_at") or str(meta.get("status")) == "done":
             return False
         m = _FRONTMATTER.match(text)
@@ -437,7 +437,7 @@ class FieldOps:
         if not item.exists():
             return False
         text = item.read_text()
-        meta, body = _parse_md(text)
+        meta, body = parse_md(text)
         if bool(meta.get("autopilot")) == bool(on):
             return False
         m = _FRONTMATTER.match(text)
@@ -470,7 +470,7 @@ class FieldOps:
             fm = re.sub(r"(?m)^seen_at:.*$", f"seen_at: {stamp}", fm)
         else:
             fm = fm.rstrip() + f"\nseen_at: {stamp}"
-        _meta, body = _parse_md(text)
+        _meta, body = parse_md(text)
         item.write_text(f"---\n{fm}\n---\n{body}")
         return True
 
@@ -486,7 +486,7 @@ class FieldOps:
         m = _FRONTMATTER.match(text)
         if not m:
             return False
-        _meta, body = _parse_md(text)
+        _meta, body = parse_md(text)
         fm = m.group(1)
 
         def _set(fm: str, key: str, val: str) -> str:
@@ -525,7 +525,7 @@ class FieldOps:
         m = _FRONTMATTER.match(text)
         if not m:
             return False
-        _meta, body = _parse_md(text)
+        _meta, body = parse_md(text)
         fm = m.group(1)
 
         def _upsert(block: str, key: str, val) -> str:

@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 
 from ..vocab.kind_profiles import get_profile
-from .text import _atomic_write, clip
+from .text import atomic_write, clip
 from .templates import skill_template
 from .spec import artifact_file
 from .vet_plan import parse_vet_plan, plan_vet_depth
@@ -104,7 +104,7 @@ def write_plan_user_report(item_dir: Path, *, summary: str, approach: str = "",
     rdir = item_dir / "reports"
     rdir.mkdir(parents=True, exist_ok=True)
     path = rdir / "report-plan.md"
-    _atomic_write(path, body)
+    atomic_write(path, body)
     return {"path": str(path), "tasks": len(tasks), "checks": len(vp.get("checks", [])),
             "uncovered": uncovered}
 
@@ -212,5 +212,5 @@ def write_vet_user_report(item_dir: Path, repo_dir: Path | None, *, summary: str
     rdir = item_dir / "reports"
     rdir.mkdir(parents=True, exist_ok=True)
     path = rdir / "report-vet.md"
-    _atomic_write(path, body)
+    atomic_write(path, body)
     return {"path": str(path), "verdict": ev.get("status", ""), "failed": failed}

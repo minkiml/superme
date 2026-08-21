@@ -2,7 +2,7 @@
 
 import yaml
 
-from .text import FILL, _fenced_blocks, _split_sections
+from .text import FILL, _fenced_blocks, split_sections
 
 # gate feeds
 
@@ -15,7 +15,7 @@ TOUCH_ACTIONS = ("new", "modify", "read")
 def parse_touches(plan_text: str) -> list[dict]:
     """plan.md's `## Touches` fenced yaml → [{component, path, action}]. Tolerant: anything
     unparseable gives []."""
-    body = _split_sections(plan_text).get("Touches", "")
+    body = split_sections(plan_text).get("Touches", "")
     blocks = _fenced_blocks(body)
     raw = blocks[0] if blocks else body
     if FILL.search(raw):

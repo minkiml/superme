@@ -4,7 +4,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-from .text import _atomic_write, _one_line
+from .text import atomic_write, _one_line
 
 # the authorization ledger
 
@@ -94,7 +94,7 @@ def record_authorization(item_dir: Path, *, what: str, why: str, doc: str, scope
              f"- cycle: {cycle if cycle is not None else ''}\n"
              f"- status: pending\n"
              f"- by: \n")
-    _atomic_write(path, (path.read_text() if path.exists() else head) + entry)
+    atomic_write(path, (path.read_text() if path.exists() else head) + entry)
     return {"id": ts, "what": what, "scope": scope, "check": check, "status": "pending"}
 
 
@@ -145,5 +145,5 @@ def resolve_authorization(item_dir: Path, auth_id: str, *, decision: str, by: st
         out.append(line)
     if not changed:
         return None
-    _atomic_write(path, "".join(out))
+    atomic_write(path, "".join(out))
     return next((a for a in authorization_entries(item_dir) if a["id"] == auth_id), None)

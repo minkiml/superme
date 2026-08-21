@@ -37,7 +37,7 @@ class ScaffoldArtifactArgs(TypedDict, total=False):
 def _scaffold_artifact(*, store, context_id, dev_root=None, bound_item_id=None, **_):
     async def scaffold_artifact(args: dict) -> dict:
         from ....core import artifacts as _arts
-        from ....core.dev_knowledge import _parse_md
+        from ....core.dev_knowledge import parse_md
         item_id = _s(args, "item_id")
         if (msg := _bound_err(item_id, bound_item_id)):
             return _err(msg)
@@ -46,7 +46,7 @@ def _scaffold_artifact(*, store, context_id, dev_root=None, bound_item_id=None, 
             return _err(f"No work-item {item_id!r} here.")
         from pathlib import Path
         from ....core import verification_library as _vl
-        meta, _body = _parse_md((d / "item.md").read_text())
+        meta, _body = parse_md((d / "item.md").read_text())
         try:
             r = _arts.scaffold(d, _s(args, "artifact"), title=str(meta.get("title") or item_id),
                                item_kind=meta.get("kind"), item_id=item_id,
@@ -138,7 +138,7 @@ def _set_triage_classification(*, store, context_id, dev_root=None, bound_item_i
 
         Naming rides with classifying — triage has read the whole ask."""
         from pathlib import Path
-        from ....core.dev_knowledge import DevKnowledgeService, _parse_deliverables
+        from ....core.dev_knowledge import DevKnowledgeService, parse_deliverables
         item_id = _s(args, "item_id")
         if (msg := _bound_err(item_id, bound_item_id)):
             return _err(msg)
@@ -197,7 +197,7 @@ def _set_triage_classification(*, store, context_id, dev_root=None, bound_item_i
         deliverable = _s(args, "deliverable")
         d_note = ""
         if deliverable and deliverable.lower() != "none":
-            known = {x["id"] for x in _parse_deliverables(
+            known = {x["id"] for x in parse_deliverables(
                 dev.read_general_doc(root, "project-prd") or "")}
             if deliverable not in known:
                 return _err(f"Deliverable {deliverable!r} isn't in the project PRD "
@@ -284,14 +284,14 @@ def _sync_from_main(*, store, context_id, dev_root=None, main_repo_dir=None, bou
     async def sync_from_main(args: dict) -> dict:
         from pathlib import Path
         from ....core import git_layer as _gl
-        from ....core.dev_knowledge import _parse_md
+        from ....core.dev_knowledge import parse_md
         item_id = _s(args, "item_id")
         if (msg := _bound_err(item_id, bound_item_id)):
             return _err(msg)
         d = _item_dir(dev_root, item_id)
         if d is None:
             return _err(f"No work-item {item_id!r} here.")
-        meta, _body = _parse_md((d / "item.md").read_text())
+        meta, _body = parse_md((d / "item.md").read_text())
         wt = meta.get("git_worktree")
         if not wt or not Path(str(wt)).is_dir():
             return _err("This item has no live worktree — sync applies only during build "

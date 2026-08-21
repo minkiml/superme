@@ -57,7 +57,7 @@ def with_frontmatter_default(text: str, key: str, value: str) -> str:
     return f"---\n{m.group(1)}\n{key}: {value}\n---\n{m.group(2)}"
 
 
-def _read_plugin(plugin_dir: Path) -> dict:
+def read_plugin(plugin_dir: Path) -> dict:
     """One universal plugin's SuperMe-authored skills + agents, read from their frontmatter.
     Skills live at `<plugin>/skills/<name>/SKILL.md`, agents at `<plugin>/agents/<name>.md`."""
     skills: list[dict] = []
@@ -125,7 +125,7 @@ def list_palette_skills(plugin_dirs: list[Path]) -> list[dict]:
         if not p.is_dir():
             continue
         ns = _plugin_namespace(p)
-        for sk in _read_plugin(p)["skills"]:
+        for sk in read_plugin(p)["skills"]:
             out.append({"command": f"{ns}:{sk['name']}", "category": sk.get("category"), "namespace": ns})
     return out
 
@@ -139,7 +139,7 @@ def silent_skill_names(plugin_dirs: list[Path]) -> set[str]:
         if not p.is_dir():
             continue
         ns = _plugin_namespace(p)
-        for sk in _read_plugin(p)["skills"]:
+        for sk in read_plugin(p)["skills"]:
             if (sk.get("access") or "").strip().lower() == "silent":
                 out.add(f"{ns}:{sk['name']}")
                 out.add(sk["name"])
@@ -156,7 +156,7 @@ def skills_in_category(plugin_dirs: list[Path], category: str) -> set[str]:
         if not p.is_dir():
             continue
         ns = _plugin_namespace(p)
-        for sk in _read_plugin(p)["skills"]:
+        for sk in read_plugin(p)["skills"]:
             if (sk.get("category") or "").strip().lower() == want:
                 out.add(f"{ns}:{sk['name']}")
                 out.add(sk["name"])
@@ -168,11 +168,11 @@ def list_harness_plugins(*, dev_dir: Path, core_dir: Path, shared_dir: Path) -> 
     `shared`. Per-repo trees are deliberately excluded."""
     return [
         {"scope": "dev", "label": "Dev", "plugin": "superme-dev",
-         "note": "Loaded in dev mode", **_read_plugin(dev_dir)},
+         "note": "Loaded in dev mode", **read_plugin(dev_dir)},
         {"scope": "core", "label": "Core", "plugin": "superme-core",
-         "note": "Loaded in core mode", **_read_plugin(core_dir)},
+         "note": "Loaded in core mode", **read_plugin(core_dir)},
         {"scope": "shared", "label": "Shared", "plugin": "superme-shared",
-         "note": "Loaded in every mode", **_read_plugin(shared_dir)},
+         "note": "Loaded in every mode", **read_plugin(shared_dir)},
     ]
 
 
@@ -182,7 +182,7 @@ def _is_enabled(meta: dict) -> bool:
     return v not in ("false", "0", "no", "off")
 
 
-def _is_foundational(meta: dict) -> bool:
+def is_foundational(meta: dict) -> bool:
     """`foundational: true` marks a constitution a charter consults BY NAME.
     Disabling one would dangle that pull."""
     return str(meta.get("foundational", "false")).strip().lower() in ("true", "1", "yes", "on")
@@ -218,7 +218,7 @@ def read_constitution_dir(directory: Path, *, origin: str) -> list[dict]:
             "slug": slug,
             "title": _title_of(body, slug),
             "enabled": _is_enabled(meta),
-            "foundational": _is_foundational(meta),  # charter-pinned → not disable-able
+            "foundational": is_foundational(meta),  # charter-pinned → not disable-able
             "description": meta.get("description"),  # the always-resident catalog line (directive / when-to-apply)
             "scope": meta.get("scope"),
             "source": meta.get("source"),

@@ -4,12 +4,12 @@ issues that block a gate."""
 import re
 from pathlib import Path
 
-from .text import FILL, _split_sections
+from .text import FILL, split_sections
 from .spec import artifact_file
 
 VET_DEPTHS = ("none", "checks", "scenarios")
 VET_MODES = ("command", "interaction", "inspection")
-_VET_CHECK_ID = re.compile(r"^[a-z0-9-]+$")
+VET_CHECK_ID = re.compile(r"^[a-z0-9-]+$")
 _VET_HEADER_KEY = re.compile(r"^(depth|reason|env):\s*(.*)$")
 _VET_FIELD = re.compile(
     r"^-\s*(proves|traces|covers|mode|scenario|run|rubric|expect|source):\s*(.*)$")
@@ -31,7 +31,7 @@ _PROVES_MACHINE = re.compile(
 _PROVES_MIN = 25
 
 
-def _vet_value(raw: str) -> str:
+def vet_value(raw: str) -> str:
     """A field value with unfilled `<fill:…>` markers treated as absent."""
     return FILL.sub("", raw or "").strip()
 
@@ -48,7 +48,7 @@ def parse_check_blocks(body: str) -> list[dict]:
             last = ""
             # `covers` joins the Proof view; absent is not hard. `proves` is the one HUMAN field,
             # and without it readers drift.
-            cur = {"id": _vet_value(h.group(1)), "proves": "", "traces": "", "covers": "",
+            cur = {"id": vet_value(h.group(1)), "proves": "", "traces": "", "covers": "",
                    "mode": "", "scenario": "", "run": "", "expect": "", "rubric": [], "source": ""}
             out.append(cur)
             continue
@@ -58,11 +58,11 @@ def parse_check_blocks(body: str) -> list[dict]:
         if m:
             # `rubric:` holds a LIST — indented bullets, each judged and recorded separately.
             # Everything else is one value.
-            cur[m.group(1)] = [] if m.group(1) == "rubric" else _vet_value(m.group(2))
+            cur[m.group(1)] = [] if m.group(1) == "rubric" else vet_value(m.group(2))
             last = m.group(1)
         elif last and line.startswith((" ", "\t")) and line.strip():
             if last == "rubric":
-                text = _vet_value(re.sub(r"^\s*[-*]\s*", "", line))
+                text = vet_value(re.sub(r"^\s*[-*]\s*", "", line))
                 if _RUBRIC_ITEM.match(line):
                     cur["rubric"].append(text)
                 elif cur["rubric"] and text:
@@ -77,7 +77,7 @@ def parse_check_blocks(body: str) -> list[dict]:
 def parse_vet_plan(plan_text: str) -> dict:
     """Parse plan.md's `## Verification plan` → {present, depth, reason, env, checks}.
     Pure text → data; validity is judged separately."""
-    sections = _split_sections(plan_text)
+    sections = split_sections(plan_text)
     body = sections.get("Verification plan")
     if body is None:
         body = sections.get("Vet plan")
@@ -89,7 +89,7 @@ def parse_vet_plan(plan_text: str) -> dict:
     for line in lines[:first]:
         m = _VET_HEADER_KEY.match(line.strip())
         if m:
-            out[m.group(1)] = _vet_value(m.group(2))
+            out[m.group(1)] = vet_value(m.group(2))
     out["checks"] = parse_check_blocks("\n".join(lines[first:]))
     return out
 
@@ -146,7 +146,7 @@ def vet_plan_hard_issues(vp: dict) -> list[str]:
     for c in checks:
         cid = c.get("id", "")
         label = cid or "(unnamed)"
-        if not _VET_CHECK_ID.match(cid or ""):
+        if not VET_CHECK_ID.match(cid or ""):
             issues.append(f"vet plan check {label!r}: id must be a lowercase slug ([a-z0-9-]+) — "
                           "it keys the evidence ledger")
         if cid in seen:
@@ -235,13 +235,13 @@ _VET_DEPTH_RANK = {"none": 0, "checks": 1, "scenarios": 2}
 def parse_inner_checks(plan_text: str) -> list[str]:
     """plan.md's `## Inner checks` bullets → the commands build must run green before
     it may exit."""
-    body = _split_sections(plan_text).get("Inner checks", "")
+    body = split_sections(plan_text).get("Inner checks", "")
     cmds: list[str] = []
     for line in body.splitlines():
         m = re.match(r"^\s*[-*]\s+(.+?)\s*$", line)
         if not m:
             continue
-        cmd = _vet_value(m.group(1)).strip("`").strip()
+        cmd = vet_value(m.group(1)).strip("`").strip()
         if cmd:
             cmds.append(cmd)
     return cmds

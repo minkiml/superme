@@ -1,7 +1,7 @@
 """Learning pipeline — the capture, distill and write runners plus the capture-sweep machinery.
 
 Three disposable, sessionless background runners and the sweep triggers. The learning and work-item
-routes call these; `lifespan` launches `_idle_sweep_loop`.
+routes call these; `lifespan` launches `idle_sweep_loop`.
 """
 
 import time
@@ -29,7 +29,7 @@ FORGE_KIT = HARNESS_DIR / "forge_kit"   # the forge agent's lint + behavioural-e
 
 # --- DISTILL phase: process the candidate pool into proposals -----------------------------------
 
-async def _run_background_distill(ctx, context_id: str, run_id: int) -> None:
+async def run_background_distill(ctx, context_id: str, run_id: int) -> None:
     """Drive one background distill pass over the un-processed candidate pool.
 
     A DISPOSABLE spine run with NO session — `ev.session_id` is deliberately unrecorded, so it cannot
@@ -88,11 +88,11 @@ async def _run_background_distill(ctx, context_id: str, run_id: int) -> None:
 # --- WRITE phase: gate-1 approval → background per-item authoring ---
 
 # Forms and scopes that can actually be written today; core is reserved.
-_WRITE_FORMS = {"constitution", "skill", "agent"}
-_WRITE_SCOPES = {"repo_dev", "universal_dev"}
+WRITE_FORMS = {"constitution", "skill", "agent"}
+WRITE_SCOPES = {"repo_dev", "universal_dev"}
 
 
-def _has_answer(answers, question) -> bool:
+def has_answer(answers, question) -> bool:
     """Did the owner answer this clarifying question? Tolerates {question: answer} dicts or a list
     of {question, answer} entries."""
     if not answers or not question:
@@ -143,7 +143,7 @@ def _existing_rules_file(prop: dict, repo_id: str | None, workspace: Path) -> st
     return str(path)
 
 
-async def _run_background_write(ctx, context_id: str, proposal_id: int, run_id: int) -> None:
+async def run_background_write(ctx, context_id: str, proposal_id: int, run_id: int) -> None:
     """Drive one background WRITE pass for a single approved proposal — one proposal per run, no context
     mixing.
 
@@ -348,7 +348,7 @@ def _fire_sweep_bg(ctx, session_id: str | None, *, focus: str | None = None,
     asyncio.create_task(_job())
 
 
-async def _sweep_idle_sessions(idle_seconds: int | None = None, min_user_msgs: int | None = None) -> dict:
+async def sweep_idle_sessions(idle_seconds: int | None = None, min_user_msgs: int | None = None) -> dict:
     """One idle-scan pass: sweep every dev session quiet for `idle_seconds` with enough un-swept content.
     Eligible sessions sweep concurrently.
 
@@ -405,7 +405,7 @@ async def _sweep_idle_sessions(idle_seconds: int | None = None, min_user_msgs: i
     return {"scanned": scanned, "swept": swept}
 
 
-async def _idle_sweep_loop() -> None:
+async def idle_sweep_loop() -> None:
     """The daemon's idle-sweep heartbeat: every `poll_seconds`, if auto-learning is on, scan and sweep
     quiet dev sessions.
 
@@ -415,7 +415,7 @@ async def _idle_sweep_loop() -> None:
             poll = max(30, _spine.get_sweep_config()["poll_seconds"])
             await asyncio.sleep(poll)
             if _spine.get_learning_enabled():
-                await _sweep_idle_sessions()
+                await sweep_idle_sessions()
         except asyncio.CancelledError:
             break
         except Exception:

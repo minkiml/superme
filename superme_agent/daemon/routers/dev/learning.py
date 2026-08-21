@@ -12,8 +12,8 @@ from ...app_state import DevStore, SystemSpine, get_dev_store, get_spine
 from ...deps import proposal_slug as _proposal_slug, published_ident as _published_ident
 from ....gateway import contexts
 from ...services.learning import (
-    _run_background_distill, _run_background_write, run_sweep, _sweep_idle_sessions,
-    SWEEP_IDLE_SECONDS, _WRITE_FORMS, _WRITE_SCOPES, _has_answer,
+    run_background_distill, run_background_write, run_sweep, sweep_idle_sessions,
+    SWEEP_IDLE_SECONDS, WRITE_FORMS, WRITE_SCOPES, has_answer,
 )
 from ...schemas.dev.learning import (ApproveBody, ApproveResponse, ArtifactEditBody,
                                      DistillResponse, IdleScanResponse, LearningRollupResponse,
@@ -161,7 +161,7 @@ async def dev_memory_distill(context_id: str = "global",
     # Open the run row synchronously so it IS the guard, closing the double-click race with the
     # background task.
     run_id = spine.start_run(context_id, mode="dev", feature="distill")
-    asyncio.create_task(_run_background_distill(ctx, context_id, run_id))
+    asyncio.create_task(run_background_distill(ctx, context_id, run_id))
     return {"status": "started", "context_id": context_id, "candidates": len(cands)}
 
 
@@ -182,7 +182,7 @@ async def dev_sweep(session_id: str, context_id: str = "global", focus: str | No
 async def dev_sweep_idle_scan(idle_seconds: int = SWEEP_IDLE_SECONDS) -> dict:
     """Ops hook: force an idle-scan pass now — the same pass the heartbeat runs — with an optionally
     lower `idle_seconds`."""
-    return await _sweep_idle_sessions(idle_seconds=idle_seconds)
+    return await sweep_idle_sessions(idle_seconds=idle_seconds)
 
 
 # --- the review queue and owner gate --- Apply is deterministic and daemon-side, not an agent
@@ -241,9 +241,9 @@ async def memory_proposal_approve(proposal_id: int, body: ApproveBody,
         raise HTTPException(status_code=404, detail="proposal not found")
     if prop["status"] != "proposed":
         raise HTTPException(status_code=409, detail=f"proposal already {prop['status']}")
-    if prop["output_form"] not in _WRITE_FORMS:
+    if prop["output_form"] not in WRITE_FORMS:
         raise HTTPException(status_code=400, detail=f"unknown output_form `{prop['output_form']}`")
-    if prop["target_scope"] not in _WRITE_SCOPES:
+    if prop["target_scope"] not in WRITE_SCOPES:
         raise HTTPException(
             status_code=400,
             detail=f"`{prop['target_scope']}` apply is reserved — core internals aren't wired yet. "
@@ -252,7 +252,7 @@ async def memory_proposal_approve(proposal_id: int, body: ApproveBody,
     answers = body.answers
     unanswered = [
         q.get("question") for q in (prop.get("clarifications") or [])
-        if isinstance(q, dict) and q.get("blocking") and not _has_answer(answers, q.get("question"))
+        if isinstance(q, dict) and q.get("blocking") and not has_answer(answers, q.get("question"))
     ]
     if unanswered:
         raise HTTPException(
@@ -267,7 +267,7 @@ async def memory_proposal_approve(proposal_id: int, body: ApproveBody,
         body.context_id, "memory.approved",
         f"Approved proposal #{proposal_id} ({prop['output_form']}/{prop['target_scope']}) → writing",
         scope="dev", actor="owner", meta={"proposal_id": proposal_id})
-    asyncio.create_task(_run_background_write(ctx, body.context_id, proposal_id, run_id))
+    asyncio.create_task(run_background_write(ctx, body.context_id, proposal_id, run_id))
     return {"status": "writing", "proposal_id": proposal_id}
 
 

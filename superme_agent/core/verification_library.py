@@ -7,8 +7,8 @@ Available is the default, and only the owner promotes. Close writes; vet only no
 import re
 from pathlib import Path
 
-from .artifacts import (FILL, VET_MODES, _split_sections, _vet_value, parse_check_blocks,
-                        _VET_CHECK_ID, is_whole_suite_run)
+from .artifacts import (FILL, VET_MODES, split_sections, vet_value, parse_check_blocks,
+                        VET_CHECK_ID, is_whole_suite_run)
 
 LIBRARY_DOC = "verification"
 TIERS = ("standing", "available")
@@ -55,20 +55,20 @@ def read_doc(dev_root: Path) -> str:
 def seed(dev_root: Path) -> bool:
     """Create the library doc with its two sections if missing. Called before a write, not at connect."""
     text = read_doc(dev_root)
-    if all(s in _split_sections(text) for s in _SECTION.values()):
+    if all(s in split_sections(text) for s in _SECTION.values()):
         return False
     dev, root = _dev(dev_root)
     dev.write_general_doc(root, LIBRARY_DOC, _SEED if not text.strip() else
                           text.rstrip() + "\n\n" + "\n\n".join(
                               f"## {s}" for s in _SECTION.values()
-                              if s not in _split_sections(text)) + "\n")
+                              if s not in split_sections(text)) + "\n")
     return True
 
 
 def read_library(dev_root: Path) -> dict:
     """`{standing, available}`, each entry a check dict plus `tier`. An absent doc reads as two
     empty lists."""
-    sections = _split_sections(read_doc(dev_root))
+    sections = split_sections(read_doc(dev_root))
     out: dict = {}
     for tier, heading in _SECTION.items():
         out[tier] = [{**c, "tier": tier} for c in parse_check_blocks(sections.get(heading, ""))]
@@ -106,7 +106,7 @@ def entry_issues(block: str) -> list[str]:
     issues: list[str] = []
     for c in checks:
         label = c.get("id") or "(unnamed)"
-        if not _VET_CHECK_ID.match(c.get("id") or ""):
+        if not VET_CHECK_ID.match(c.get("id") or ""):
             issues.append(f"library entry {label!r}: id must be a lowercase slug ([a-z0-9-]+)")
         for field in ("proves", "traces", "mode", "scenario"):
             if not c.get(field):
@@ -143,7 +143,7 @@ def _blocks(body_lines: list[str]) -> list[tuple[str, list[str]]]:
     for line in body_lines:
         m = re.match(r"^###\s+(.+?)\s*$", line)
         if m:
-            out.append((_vet_value(m.group(1)), [line]))
+            out.append((vet_value(m.group(1)), [line]))
         else:
             out[-1][1].append(line)
     return out

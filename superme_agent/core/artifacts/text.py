@@ -12,7 +12,7 @@ log = logging.getLogger(__name__)
 FILL = re.compile(r"<fill:[^>]*>")
 
 
-def _atomic_write(path: Path, text: str) -> None:
+def atomic_write(path: Path, text: str) -> None:
     """tmp + os.replace in the target dir — a reader never sees a half-written artifact."""
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
@@ -25,7 +25,7 @@ def _atomic_write(path: Path, text: str) -> None:
         raise
 
 
-def _split_sections(text: str) -> dict[str, str]:
+def split_sections(text: str) -> dict[str, str]:
     """`## Heading` → body map (frontmatter stripped by the caller or tolerated here)."""
     out: dict[str, str] = {}
     cur = None

@@ -6,7 +6,7 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 
-from .text import _atomic_write
+from .text import atomic_write
 from .ledger import evidence_entries
 
 # convergence guard
@@ -79,7 +79,7 @@ def write_checkpoint(item_dir: Path, repo_dir: Path | None, *, working_on: str, 
             f"## Decisions\n{(decisions or '').strip() or '—'}\n\n"
             f"## Remaining\n{remaining.strip()}\n\n"
             f"## Notes\n{(notes or '').strip() or '—'}\n")
-    _atomic_write(path, text)
+    atomic_write(path, text)
     return str(path)
 
 

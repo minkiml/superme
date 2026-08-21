@@ -7,7 +7,7 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 
-from .text import FILL, _FENCE, _fenced_blocks, _one_line, _split_sections
+from .text import FILL, _FENCE, _fenced_blocks, _one_line, split_sections
 from .spec import artifact_file
 from .vet_plan import _plan_check_ids, parse_vet_plan, plan_vet_depth
 from .tasks import parse_tasks
@@ -145,7 +145,7 @@ def validation_runs(item_dir: Path, *, cycle: int | None = None) -> list[dict]:
     for r in cycle_reports(item_dir):
         if cycle is not None and r["cycle"] != cycle:
             continue
-        body = _split_sections(Path(r["path"]).read_text()).get("Validation", "")
+        body = split_sections(Path(r["path"]).read_text()).get("Validation", "")
         for block in _fenced_blocks(body, lang=VALIDATION_FENCE):
             for e in _parse_ledger_entries(block):
                 out.append({"ts": e.get("ts", ""), "command": e.get("check", ""),
@@ -506,7 +506,7 @@ def _ledger(item_dir: Path) -> list[dict]:
     """Every entry in the §Verification fences, verdicts and diagnoses alike, in record order."""
     entries: list[dict] = []
     for r in cycle_reports(item_dir):
-        body = _split_sections(Path(r["path"]).read_text()).get("Verification", "")
+        body = split_sections(Path(r["path"]).read_text()).get("Verification", "")
         for block in _fenced_blocks(body):
             for e in _parse_ledger_entries(block):
                 entries.append({**e, "cycle": r["cycle"]})
@@ -582,7 +582,7 @@ def proof_rows(item_dir: Path) -> list[dict]:
     built_loose: list[str] = []
     valid_loose: list[str] = []
     for r in cycle_reports(item_dir):
-        sections = _split_sections(Path(r["path"]).read_text())
+        sections = split_sections(Path(r["path"]).read_text())
         b, bl = _tagged_bullets(sections.get("Built", ""))
         v, vl = _tagged_bullets(sections.get("Validation", ""))
         for src, dst in ((b, built), (v, validated)):

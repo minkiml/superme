@@ -26,7 +26,7 @@ from .reports import (FileInvestigateReportArgs, FilePhaseReportArgs, FilePlanRe
 from .revisions import (ApplyKnowledgeDeltaArgs, RevisePlanArgs, _apply_knowledge_delta,
                         _revise_plan)
 
-_ITEM_DEV_TOOLS: list[ToolSpec] = [
+ITEM_DEV_TOOLS: list[ToolSpec] = [
     ToolSpec(
         "set_triage_classification",
         "Record a triage session's classification onto its work-item: the confirmed kind "
@@ -204,7 +204,7 @@ _ITEM_DEV_TOOLS: list[ToolSpec] = [
 
 # Read-only tools every dev turn gets. The learning-pool reads live here because they mutate
 # nothing.
-_MAIN_DEV_TOOLS: list[ToolSpec] = [
+MAIN_DEV_TOOLS: list[ToolSpec] = [
     ToolSpec(
         "read_dev_log",
         "This repo's dev activity log — the cross-run record of what's happened in its dev work over "
@@ -272,7 +272,7 @@ _MAIN_DEV_TOOLS: list[ToolSpec] = [
 
 # Pipeline-only write pens. These must never reach the main chat agent, which would bypass
 # automatic capture.
-_LEARNING_DEV_TOOLS: list[ToolSpec] = [
+LEARNING_DEV_TOOLS: list[ToolSpec] = [
     ToolSpec(
         "file_candidate",
         "File one durable operational learning found in a swept conversation slice as a candidate.",
@@ -300,7 +300,7 @@ _LEARNING_DEV_TOOLS: list[ToolSpec] = [
     ),
 ]
 
-DEV_TOOLS: list[ToolSpec] = _MAIN_DEV_TOOLS + _ITEM_DEV_TOOLS + _LEARNING_DEV_TOOLS   # full set (for reference/tests)
+DEV_TOOLS: list[ToolSpec] = MAIN_DEV_TOOLS + ITEM_DEV_TOOLS + LEARNING_DEV_TOOLS   # full set (for reference/tests)
 
 _BY_NAME: dict[str, ToolSpec] = {t.name: t for t in DEV_TOOLS}
 

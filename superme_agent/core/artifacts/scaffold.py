@@ -5,7 +5,7 @@ from datetime import date
 from pathlib import Path
 
 from ..vocab.kind_profiles import get_profile
-from .text import _atomic_write
+from .text import atomic_write
 from .templates import skill_template
 from .spec import _SPECS, _template_name, artifact_file, required_sections
 
@@ -78,7 +78,7 @@ def scaffold(item_dir: Path, artifact: str, *, title: str = "", item_kind: str |
     body = tmpl.format(title=heading)
     if artifact == "plan" and standing:
         body = _inject_checks(body, standing)
-    _atomic_write(path, fm + body)
+    atomic_write(path, fm + body)
     return {"path": str(path), "created": True, "sections": sections,
             "inherited": len(standing or []) if artifact == "plan" else 0}
 
@@ -102,7 +102,7 @@ def write_handoff_brief(folder: Path, title: str, *, background: str = "", discu
     if path.exists():
         add = "\n".join(f"**{h}:** {provided[k]}" for h, k in _BRIEF_SECTIONS if provided[k])
         if add:
-            _atomic_write(path, path.read_text().rstrip() + "\n\n---\n"
+            atomic_write(path, path.read_text().rstrip() + "\n\n---\n"
                           f"*(appended {date.today().isoformat()})*\n\n" + add + "\n")
         return str(path)
     fm = (f"---\nartifact: handoff-brief\ntitle: {title!r}\nreader: agent\n"
@@ -110,5 +110,5 @@ def write_handoff_brief(folder: Path, title: str, *, background: str = "", discu
     body = f"# Handoff brief — {title}\n"
     for heading, key in _BRIEF_SECTIONS:
         body += f"\n## {heading}\n{provided[key] or f'<fill:{key}>'}\n"
-    _atomic_write(path, fm + body)
+    atomic_write(path, fm + body)
     return str(path)

@@ -21,7 +21,7 @@ from superme_agent.core import gate_briefs as GB
 from superme_agent.core import knowledge_delta as KD
 from superme_agent.core.dev_knowledge import DevKnowledgeService
 from superme_agent.core.vocab.kind_profiles import KIND_PROFILES
-from superme_agent.harness.tools.dev_tools import _apply_knowledge_delta, _ITEM_DEV_TOOLS
+from superme_agent.harness.tools.dev_tools import _apply_knowledge_delta, ITEM_DEV_TOOLS
 from scripts.sources import src
 
 PASS = 0
@@ -497,7 +497,7 @@ def test_close_driver() -> None:
     finally:
         C.clear_item, C.close_retries, R.fire_close_run, R._dev_store = saved
     ok("`propose_close` is gone — clearance is mechanical, nothing proposes it",
-       not any(t.name == "propose_close" for t in _ITEM_DEV_TOOLS))
+       not any(t.name == "propose_close" for t in ITEM_DEV_TOOLS))
 
 
 def main() -> None:

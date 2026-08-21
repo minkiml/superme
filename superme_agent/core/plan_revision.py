@@ -11,7 +11,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-from .artifacts import FILL, _atomic_write, _split_sections
+from .artifacts import FILL, atomic_write, split_sections
 
 PLAN_FILE = "plan.md"
 LOG = "Revision log"
@@ -48,7 +48,7 @@ def _one_line(s: str) -> str:
 
 
 def _task_ids(text: str) -> list[str]:
-    return [m.group(4) for m in _TASK.finditer(_split_sections(text).get(TASKS, ""))]
+    return [m.group(4) for m in _TASK.finditer(split_sections(text).get(TASKS, ""))]
 
 
 def _read(item_dir: Path) -> str:
@@ -60,7 +60,7 @@ def revision_ids(text: str) -> list[str]:
     """Every recorded revision id, oldest first. Legacy `### r<n>` entries count, so a new block
     never reuses a number."""
     ids = [m.group(1) for m in _REV_HEAD.finditer(text)]
-    legacy = _LEGACY_REV.findall(_split_sections(text).get(LEGACY_LOG, ""))
+    legacy = _LEGACY_REV.findall(split_sections(text).get(LEGACY_LOG, ""))
     return [r for r in legacy if r not in ids] + ids
 
 
@@ -168,7 +168,7 @@ def validate(plan_text: str, changes: list) -> list[str]:
     if not isinstance(changes, list) or not changes:
         return ["a revision needs at least one change — even 'keep going' is a change with "
                 "`scope: resume` and no ops"]
-    sections = _split_sections(plan_text)
+    sections = split_sections(plan_text)
     ids = _task_ids(plan_text)
     issues: list[str] = []
     for i, ch in enumerate(changes, 1):
@@ -219,7 +219,7 @@ def _replace_section(text: str, section: str, body: str) -> str:
 
 
 def _section_body(text: str, section: str) -> str:
-    return _split_sections(text).get(section, "")
+    return split_sections(text).get(section, "")
 
 
 def _blocks(text: str) -> tuple[str, list[tuple[str, list[str]]]]:
@@ -324,7 +324,7 @@ _LOG_NOTE = ("<!-- CODE-OWNED index, written by `revise_plan`: the shape of the 
 
 
 def _ensure_log(text: str) -> str:
-    if LOG in _split_sections(text):
+    if LOG in split_sections(text):
         return text
     return _insert_before_live(text, f"## {LOG}\n{_LOG_NOTE}\n")
 
@@ -396,7 +396,7 @@ def revise(item_dir: Path, *, changes: list, feedback: str, directive: str = "",
     text = _insert_before_live(text, _render_block(
         rev=rev, ts=ts, concerns=tags, spend=spend, feedback=feedback, directive=directive,
         still_in_force=still_in_force, changes=applied))
-    _atomic_write(path, text)
+    atomic_write(path, text)
     return {"revision": rev, "ops": n_ops, "concerns": tags, "path": str(path),
             "changed": [f"{c['area']} ({c['scope']})"
                         + (f": {', '.join(c['applied'])}" if c["applied"] else "")

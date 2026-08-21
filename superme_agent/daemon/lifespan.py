@@ -14,7 +14,7 @@ from . import app_state
 from ..core import dev_store, git_layer
 from ..gateway import contexts
 from .services import dashboard_stream, watchdog
-from .services.learning import _idle_sweep_loop, SWEEP_POLL_SECONDS, SWEEP_IDLE_SECONDS
+from .services.learning import idle_sweep_loop, SWEEP_POLL_SECONDS, SWEEP_IDLE_SECONDS
 
 log = logging.getLogger("superme-agent")
 
@@ -325,7 +325,7 @@ async def lifespan(app: FastAPI):
     # invalidation topic.
     dev_store.subscribe_events(dashboard_stream.publish_event)
 
-    task = asyncio.create_task(_idle_sweep_loop())
+    task = asyncio.create_task(idle_sweep_loop())
     log.info("idle sweep loop started (every %ds, idle threshold %ds, auto-learning=%s)",
              SWEEP_POLL_SECONDS, SWEEP_IDLE_SECONDS, app_state.spine.get_learning_enabled())
     # The reconcilers above cover runs whose task died WITH the daemon; the watchdog covers one

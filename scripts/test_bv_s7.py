@@ -277,8 +277,8 @@ def test_pre_grammar_plan_migrates(tmp: Path) -> None:
        and heads.index("## Revisions") < heads.index("## Revision log"))
     for sec in ("Intent", "Tasks", "Decisions & clarifications", "Verification plan", "Revisions"):
         ok(f"`## {sec}` came through the move byte-identical",
-           A._split_sections(before).get(sec, "").strip()
-           == A._split_sections(after).get(sec, "").strip())
+           A.split_sections(before).get(sec, "").strip()
+           == A.split_sections(after).get(sec, "").strip())
     ok("every reader still parses the migrated file", A.self_check(d, "plan",
                                                                   item_kind="implementation") == []
        and [c["id"] for c in A.parse_vet_plan(after)["checks"]] == ["probe-value"]
@@ -894,9 +894,9 @@ def test_chat_can_report() -> None:
 def test_contracts() -> None:
     print("registry + policy + skill contracts")
     from superme_agent.harness.policy import SAFE_TOOLS
-    from superme_agent.harness.tools.dev_tools import DEV_TOOLS, _ITEM_DEV_TOOLS
+    from superme_agent.harness.tools.dev_tools import DEV_TOOLS, ITEM_DEV_TOOLS
     ok("revise_plan registered in the item set",
-       any(t.name == "revise_plan" for t in _ITEM_DEV_TOOLS)
+       any(t.name == "revise_plan" for t in ITEM_DEV_TOOLS)
        and any(t.name == "revise_plan" for t in DEV_TOOLS))
     ok("auto-allowed (prompting here pushes the agent toward the whole-file rewrite)",
        "mcp__dev__revise_plan" in SAFE_TOOLS)

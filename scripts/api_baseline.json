@@ -484,6 +484,9 @@
   "VERIFICATION_FENCE": {
    "sig": "value:str"
   },
+  "VET_CHECK_ID": {
+   "sig": "value:Pattern"
+  },
   "VET_DEPTHS": {
    "sig": "value:tuple"
   },
@@ -640,9 +643,6 @@
   "_VET_CHECK_HEAD": {
    "sig": "value:Pattern"
   },
-  "_VET_CHECK_ID": {
-   "sig": "value:Pattern"
-  },
   "_VET_DEPTH_RANK": {
    "sig": "value:dict"
   },
@@ -664,10 +664,6 @@
   "_append_to_section": {
    "home": "superme_agent.core.artifacts.cycles",
    "sig": "def(path: pathlib.Path, heading: str, entry: str, *, fence: str = '') -> None"
-  },
-  "_atomic_write": {
-   "home": "superme_agent.core.artifacts.text",
-   "sig": "def(path: pathlib.Path, text: str) -> None"
   },
   "_bold_lenses": {
    "home": "superme_agent.core.artifacts.user_reports",
@@ -765,10 +761,6 @@
    "home": "superme_agent.core.artifacts.reports",
    "sig": "def(text: str) -> str"
   },
-  "_split_sections": {
-   "home": "superme_agent.core.artifacts.text",
-   "sig": "def(text: str) -> dict[str, str]"
-  },
   "_tagged_bullets": {
    "home": "superme_agent.core.artifacts.ledger",
    "sig": "def(body: str) -> tuple[dict[str, list[str]], list[str]]"
@@ -784,10 +776,6 @@
    "home": "superme_agent.core.artifacts.spec",
    "sig": "def(artifact: str, item_kind: str | None, research_kind: str | None = None) -> str | None"
   },
-  "_vet_value": {
-   "home": "superme_agent.core.artifacts.vet_plan",
-   "sig": "def(raw: str) -> str"
-  },
   "append_cycle_outcome": {
    "home": "superme_agent.core.artifacts.cycles",
    "sig": "def(item_dir: pathlib.Path, *, evidence: str, decision: str, reason: str, fingerprint: str = '', failed: list[str] | tuple = (), tokens: int | None = None, budget: int | None = None, loop_exit: str = '') -> dict | None"
@@ -799,6 +787,10 @@
   "artifact_status": {
    "home": "superme_agent.core.artifacts.self_check",
    "sig": "def(item: dict, item_dir: pathlib.Path, repo_dir: pathlib.Path | None = None) -> dict"
+  },
+  "atomic_write": {
+   "home": "superme_agent.core.artifacts.text",
+   "sig": "def(path: pathlib.Path, text: str) -> None"
   },
   "authorization_entries": {
    "home": "superme_agent.core.artifacts.authorization",
@@ -1067,6 +1059,10 @@
    "home": "superme_agent.core.artifacts.templates",
    "sig": "def(name: str) -> str"
   },
+  "split_sections": {
+   "home": "superme_agent.core.artifacts.text",
+   "sig": "def(text: str) -> dict[str, str]"
+  },
   "template_section_spec": {
    "home": "superme_agent.core.artifacts.templates",
    "sig": "def(name: str) -> list[tuple[str, bool]]"
@@ -1107,6 +1103,10 @@
    "home": "superme_agent.core.artifacts.vet_plan",
    "sig": "def(vp: dict) -> list[str]"
   },
+  "vet_value": {
+   "home": "superme_agent.core.artifacts.vet_plan",
+   "sig": "def(raw: str) -> str"
+  },
   "write_checkpoint": {
    "home": "superme_agent.core.artifacts.checkpoints",
    "sig": "def(item_dir: pathlib.Path, repo_dir: pathlib.Path | None, *, working_on: str, decisions: str, remaining: str, notes: str = '', role: str | None = None) -> str"
@@ -1144,13 +1144,13 @@
   "_INTENT_SECTIONS": {
    "sig": "value:dict"
   },
-  "_atomic_write": {
-   "home": "superme_agent.core.artifacts.text",
-   "sig": "def(path: pathlib.Path, text: str) -> None"
-  },
   "_one_line": {
    "home": "superme_agent.core.artifacts.text",
    "sig": "def(s: str) -> str"
+  },
+  "atomic_write": {
+   "home": "superme_agent.core.artifacts.text",
+   "sig": "def(path: pathlib.Path, text: str) -> None"
   },
   "authorization_entries": {
    "home": "superme_agent.core.artifacts.authorization",
@@ -1187,13 +1187,13 @@
   "_SIG_NUM": {
    "sig": "value:Pattern"
   },
-  "_atomic_write": {
-   "home": "superme_agent.core.artifacts.text",
-   "sig": "def(path: pathlib.Path, text: str) -> None"
-  },
   "_normalize_signature": {
    "home": "superme_agent.core.artifacts.checkpoints",
    "sig": "def(s: str) -> str"
+  },
+  "atomic_write": {
+   "home": "superme_agent.core.artifacts.text",
+   "sig": "def(path: pathlib.Path, text: str) -> None"
   },
   "checkpoint_feed": {
    "home": "superme_agent.core.artifacts.checkpoints",
@@ -1241,10 +1241,6 @@
    "home": "superme_agent.core.artifacts.cycles",
    "sig": "def(path: pathlib.Path, heading: str, entry: str, *, fence: str = '') -> None"
   },
-  "_atomic_write": {
-   "home": "superme_agent.core.artifacts.text",
-   "sig": "def(path: pathlib.Path, text: str) -> None"
-  },
   "_cycle_closed": {
    "home": "superme_agent.core.artifacts.cycles",
    "sig": "def(text: str) -> bool"
@@ -1253,13 +1249,13 @@
    "home": "superme_agent.core.artifacts.text",
    "sig": "def(s: str) -> str"
   },
-  "_split_sections": {
-   "home": "superme_agent.core.artifacts.text",
-   "sig": "def(text: str) -> dict[str, str]"
-  },
   "append_cycle_outcome": {
    "home": "superme_agent.core.artifacts.cycles",
    "sig": "def(item_dir: pathlib.Path, *, evidence: str, decision: str, reason: str, fingerprint: str = '', failed: list[str] | tuple = (), tokens: int | None = None, budget: int | None = None, loop_exit: str = '') -> dict | None"
+  },
+  "atomic_write": {
+   "home": "superme_agent.core.artifacts.text",
+   "sig": "def(path: pathlib.Path, text: str) -> None"
   },
   "cycle_reports": {
    "home": "superme_agent.core.artifacts.cycles",
@@ -1280,6 +1276,10 @@
   "skill_template": {
    "home": "superme_agent.core.artifacts.templates",
    "sig": "def(name: str) -> str"
+  },
+  "split_sections": {
+   "home": "superme_agent.core.artifacts.text",
+   "sig": "def(text: str) -> dict[str, str]"
   }
  },
  "superme_agent.core.artifacts.ledger": {
@@ -1369,10 +1369,6 @@
    "home": "superme_agent.core.artifacts.ledger",
    "sig": "def(check: str, valid_ids: list[str]) -> str"
   },
-  "_split_sections": {
-   "home": "superme_agent.core.artifacts.text",
-   "sig": "def(text: str) -> dict[str, str]"
-  },
   "_tagged_bullets": {
    "home": "superme_agent.core.artifacts.ledger",
    "sig": "def(body: str) -> tuple[dict[str, list[str]], list[str]]"
@@ -1469,6 +1465,10 @@
    "home": "superme_agent.core.artifacts.cycles",
    "sig": "def(item_dir: pathlib.Path, *, title: str = '') -> dict"
   },
+  "split_sections": {
+   "home": "superme_agent.core.artifacts.text",
+   "sig": "def(text: str) -> dict[str, str]"
+  },
   "undiagnosed_failures": {
    "home": "superme_agent.core.artifacts.ledger",
    "sig": "def(item_dir: pathlib.Path) -> list[str]"
@@ -1512,10 +1512,6 @@
   "_OWNER_BULLET": {
    "sig": "value:Pattern"
   },
-  "_atomic_write": {
-   "home": "superme_agent.core.artifacts.text",
-   "sig": "def(path: pathlib.Path, text: str) -> None"
-  },
   "_one_line": {
    "home": "superme_agent.core.artifacts.text",
    "sig": "def(s: str) -> str"
@@ -1532,13 +1528,13 @@
    "home": "superme_agent.core.artifacts.owner_input",
    "sig": "def(references: list[dict], notes: list[dict]) -> str"
   },
-  "_split_sections": {
-   "home": "superme_agent.core.artifacts.text",
-   "sig": "def(text: str) -> dict[str, str]"
-  },
   "artifact_file": {
    "home": "superme_agent.core.artifacts.spec",
    "sig": "def(artifact: str) -> str"
+  },
+  "atomic_write": {
+   "home": "superme_agent.core.artifacts.text",
+   "sig": "def(path: pathlib.Path, text: str) -> None"
   },
   "carry_owner_input": {
    "home": "superme_agent.core.artifacts.owner_input",
@@ -1547,6 +1543,10 @@
   "owner_input": {
    "home": "superme_agent.core.artifacts.owner_input",
    "sig": "def(item_dir: pathlib.Path) -> dict"
+  },
+  "split_sections": {
+   "home": "superme_agent.core.artifacts.text",
+   "sig": "def(text: str) -> dict[str, str]"
   },
   "write_owner_input": {
    "home": "superme_agent.core.artifacts.owner_input",
@@ -1572,10 +1572,6 @@
    "home": "superme_agent.core.artifacts.text",
    "sig": "def(s: str) -> str"
   },
-  "_split_sections": {
-   "home": "superme_agent.core.artifacts.text",
-   "sig": "def(text: str) -> dict[str, str]"
-  },
   "artifact_file": {
    "home": "superme_agent.core.artifacts.spec",
    "sig": "def(artifact: str) -> str"
@@ -1599,6 +1595,10 @@
   "proof_rows": {
    "home": "superme_agent.core.artifacts.ledger",
    "sig": "def(item_dir: pathlib.Path) -> list[dict]"
+  },
+  "split_sections": {
+   "home": "superme_agent.core.artifacts.text",
+   "sig": "def(text: str) -> dict[str, str]"
   }
  },
  "superme_agent.core.artifacts.proposals": {
@@ -1613,14 +1613,6 @@
   },
   "_PROPOSAL_FIELDS": {
    "sig": "value:dict"
-  },
-  "_split_sections": {
-   "home": "superme_agent.core.artifacts.text",
-   "sig": "def(text: str) -> dict[str, str]"
-  },
-  "_vet_value": {
-   "home": "superme_agent.core.artifacts.vet_plan",
-   "sig": "def(raw: str) -> str"
   },
   "artifact_file": {
    "home": "superme_agent.core.artifacts.spec",
@@ -1657,6 +1649,14 @@
   "research_proposals": {
    "home": "superme_agent.core.artifacts.proposals",
    "sig": "def(item_dir: pathlib.Path) -> list[dict]"
+  },
+  "split_sections": {
+   "home": "superme_agent.core.artifacts.text",
+   "sig": "def(text: str) -> dict[str, str]"
+  },
+  "vet_value": {
+   "home": "superme_agent.core.artifacts.vet_plan",
+   "sig": "def(raw: str) -> str"
   }
  },
  "superme_agent.core.artifacts.reports": {
@@ -1693,10 +1693,6 @@
   "_space_labels": {
    "home": "superme_agent.core.artifacts.reports",
    "sig": "def(text: str) -> str"
-  },
-  "_split_sections": {
-   "home": "superme_agent.core.artifacts.text",
-   "sig": "def(text: str) -> dict[str, str]"
   },
   "artifact_file": {
    "home": "superme_agent.core.artifacts.spec",
@@ -1741,6 +1737,10 @@
    "home": "superme_agent.core.artifacts.reports",
    "sig": "def(item_dir: pathlib.Path, phase: str) -> dict | None"
   },
+  "split_sections": {
+   "home": "superme_agent.core.artifacts.text",
+   "sig": "def(text: str) -> dict[str, str]"
+  },
   "triage_facts": {
    "home": "superme_agent.core.artifacts.reports",
    "sig": "def(item_dir: pathlib.Path) -> dict"
@@ -1755,10 +1755,6 @@
   },
   "_SPECS": {
    "sig": "value:dict"
-  },
-  "_atomic_write": {
-   "home": "superme_agent.core.artifacts.text",
-   "sig": "def(path: pathlib.Path, text: str) -> None"
   },
   "_inject_checks": {
    "home": "superme_agent.core.artifacts.scaffold",
@@ -1775,6 +1771,10 @@
   "artifact_file": {
    "home": "superme_agent.core.artifacts.spec",
    "sig": "def(artifact: str) -> str"
+  },
+  "atomic_write": {
+   "home": "superme_agent.core.artifacts.text",
+   "sig": "def(path: pathlib.Path, text: str) -> None"
   },
   "get_profile": {
    "home": "superme_agent.core.vocab.kind_profiles",
@@ -1834,10 +1834,6 @@
   "_SPECS": {
    "sig": "value:dict"
   },
-  "_atomic_write": {
-   "home": "superme_agent.core.artifacts.text",
-   "sig": "def(path: pathlib.Path, text: str) -> None"
-  },
   "_is_legacy_plan": {
    "home": "superme_agent.core.artifacts.vet_plan",
    "sig": "def(sections: dict) -> bool"
@@ -1846,10 +1842,6 @@
    "home": "superme_agent.core.artifacts.text",
    "sig": "def(body: str) -> bool"
   },
-  "_split_sections": {
-   "home": "superme_agent.core.artifacts.text",
-   "sig": "def(text: str) -> dict[str, str]"
-  },
   "artifact_file": {
    "home": "superme_agent.core.artifacts.spec",
    "sig": "def(artifact: str) -> str"
@@ -1857,6 +1849,10 @@
   "artifact_status": {
    "home": "superme_agent.core.artifacts.self_check",
    "sig": "def(item: dict, item_dir: pathlib.Path, repo_dir: pathlib.Path | None = None) -> dict"
+  },
+  "atomic_write": {
+   "home": "superme_agent.core.artifacts.text",
+   "sig": "def(path: pathlib.Path, text: str) -> None"
   },
   "cycle_reports": {
    "home": "superme_agent.core.artifacts.cycles",
@@ -1889,6 +1885,10 @@
   "self_check": {
    "home": "superme_agent.core.artifacts.self_check",
    "sig": "def(item_dir: pathlib.Path, artifact: str, *, item_kind: str | None = None, path: pathlib.Path | None = None) -> list[str]"
+  },
+  "split_sections": {
+   "home": "superme_agent.core.artifacts.text",
+   "sig": "def(text: str) -> dict[str, str]"
   },
   "touches_hard_issues": {
    "home": "superme_agent.core.artifacts.touches",
@@ -1958,10 +1958,6 @@
   "_TASK_LINE": {
    "sig": "value:Pattern"
   },
-  "_split_sections": {
-   "home": "superme_agent.core.artifacts.text",
-   "sig": "def(text: str) -> dict[str, str]"
-  },
   "parse_decisions": {
    "home": "superme_agent.core.artifacts.tasks",
    "sig": "def(plan_text: str) -> list[dict]"
@@ -1969,6 +1965,10 @@
   "parse_tasks": {
    "home": "superme_agent.core.artifacts.tasks",
    "sig": "def(plan_text: str) -> list[dict]"
+  },
+  "split_sections": {
+   "home": "superme_agent.core.artifacts.text",
+   "sig": "def(text: str) -> dict[str, str]"
   }
  },
  "superme_agent.core.artifacts.templates": {
@@ -2003,10 +2003,6 @@
   "_LABEL_LINE": {
    "sig": "value:Pattern"
   },
-  "_atomic_write": {
-   "home": "superme_agent.core.artifacts.text",
-   "sig": "def(path: pathlib.Path, text: str) -> None"
-  },
   "_fenced_blocks": {
    "home": "superme_agent.core.artifacts.text",
    "sig": "def(body: str, *, lang: str = '') -> list[str]"
@@ -2019,9 +2015,9 @@
    "home": "superme_agent.core.artifacts.text",
    "sig": "def(body: str) -> bool"
   },
-  "_split_sections": {
+  "atomic_write": {
    "home": "superme_agent.core.artifacts.text",
-   "sig": "def(text: str) -> dict[str, str]"
+   "sig": "def(path: pathlib.Path, text: str) -> None"
   },
   "clip": {
    "home": "superme_agent.core.artifacts.text",
@@ -2029,6 +2025,10 @@
   },
   "log": {
    "sig": "value:Logger"
+  },
+  "split_sections": {
+   "home": "superme_agent.core.artifacts.text",
+   "sig": "def(text: str) -> dict[str, str]"
   }
  },
  "superme_agent.core.artifacts.touches": {
@@ -2042,13 +2042,13 @@
    "home": "superme_agent.core.artifacts.text",
    "sig": "def(body: str, *, lang: str = '') -> list[str]"
   },
-  "_split_sections": {
-   "home": "superme_agent.core.artifacts.text",
-   "sig": "def(text: str) -> dict[str, str]"
-  },
   "parse_touches": {
    "home": "superme_agent.core.artifacts.touches",
    "sig": "def(plan_text: str) -> list[dict]"
+  },
+  "split_sections": {
+   "home": "superme_agent.core.artifacts.text",
+   "sig": "def(text: str) -> dict[str, str]"
   },
   "touches_hard_issues": {
    "home": "superme_agent.core.artifacts.touches",
@@ -2061,10 +2061,6 @@
   },
   "_LENS_LINE": {
    "sig": "value:Pattern"
-  },
-  "_atomic_write": {
-   "home": "superme_agent.core.artifacts.text",
-   "sig": "def(path: pathlib.Path, text: str) -> None"
   },
   "_bold_lenses": {
    "home": "superme_agent.core.artifacts.user_reports",
@@ -2081,6 +2077,10 @@
   "artifact_file": {
    "home": "superme_agent.core.artifacts.spec",
    "sig": "def(artifact: str) -> str"
+  },
+  "atomic_write": {
+   "home": "superme_agent.core.artifacts.text",
+   "sig": "def(path: pathlib.Path, text: str) -> None"
   },
   "clip": {
    "home": "superme_agent.core.artifacts.text",
@@ -2159,6 +2159,9 @@
   "FILL": {
    "sig": "value:Pattern"
   },
+  "VET_CHECK_ID": {
+   "sig": "value:Pattern"
+  },
   "VET_DEPTHS": {
    "sig": "value:tuple"
   },
@@ -2189,9 +2192,6 @@
   "_VET_CHECK_HEAD": {
    "sig": "value:Pattern"
   },
-  "_VET_CHECK_ID": {
-   "sig": "value:Pattern"
-  },
   "_VET_DEPTH_RANK": {
    "sig": "value:dict"
   },
@@ -2214,14 +2214,6 @@
   "_plan_check_ids": {
    "home": "superme_agent.core.artifacts.vet_plan",
    "sig": "def(item_dir: pathlib.Path) -> set[str] | None"
-  },
-  "_split_sections": {
-   "home": "superme_agent.core.artifacts.text",
-   "sig": "def(text: str) -> dict[str, str]"
-  },
-  "_vet_value": {
-   "home": "superme_agent.core.artifacts.vet_plan",
-   "sig": "def(raw: str) -> str"
   },
   "artifact_file": {
    "home": "superme_agent.core.artifacts.spec",
@@ -2247,6 +2239,10 @@
    "home": "superme_agent.core.artifacts.vet_plan",
    "sig": "def(item_dir: pathlib.Path) -> str"
   },
+  "split_sections": {
+   "home": "superme_agent.core.artifacts.text",
+   "sig": "def(text: str) -> dict[str, str]"
+  },
   "vet_plan_hard_issues": {
    "home": "superme_agent.core.artifacts.vet_plan",
    "sig": "def(vp: dict) -> list[str]"
@@ -2254,6 +2250,10 @@
   "vet_plan_soft_flags": {
    "home": "superme_agent.core.artifacts.vet_plan",
    "sig": "def(vp: dict) -> list[str]"
+  },
+  "vet_value": {
+   "home": "superme_agent.core.artifacts.vet_plan",
+   "sig": "def(raw: str) -> str"
   }
  },
  "superme_agent.core.attention": {
@@ -2754,18 +2754,6 @@
    "home": "superme_agent.core.dev_knowledge.parse",
    "sig": "def(raw) -> list[dict]"
   },
-  "_parse_deliverables": {
-   "home": "superme_agent.core.dev_knowledge.general",
-   "sig": "def(prd_text: str) -> list[dict]"
-  },
-  "_parse_md": {
-   "home": "superme_agent.core.dev_knowledge.common",
-   "sig": "def(text: str) -> tuple[dict, str]"
-  },
-  "_parse_waves": {
-   "home": "superme_agent.core.dev_knowledge.general",
-   "sig": "def(roadmap_text: str) -> list[dict]"
-  },
   "_project_name": {
    "home": "superme_agent.core.dev_knowledge.general",
    "sig": "def(prd_text: str) -> str | None"
@@ -2789,6 +2777,18 @@
   "_toposort_keys": {
    "home": "superme_agent.core.dev_knowledge.parse",
    "sig": "def(specs: list[dict]) -> list[str]"
+  },
+  "parse_deliverables": {
+   "home": "superme_agent.core.dev_knowledge.general",
+   "sig": "def(prd_text: str) -> list[dict]"
+  },
+  "parse_md": {
+   "home": "superme_agent.core.dev_knowledge.common",
+   "sig": "def(text: str) -> tuple[dict, str]"
+  },
+  "parse_waves": {
+   "home": "superme_agent.core.dev_knowledge.general",
+   "sig": "def(roadmap_text: str) -> list[dict]"
   }
  },
  "superme_agent.core.dev_knowledge.common": {
@@ -2806,7 +2806,7 @@
    "home": "superme_agent.core.dev_knowledge.common",
    "sig": "def(iso: str | None) -> float | None"
   },
-  "_parse_md": {
+  "parse_md": {
    "home": "superme_agent.core.dev_knowledge.common",
    "sig": "def(text: str) -> tuple[dict, str]"
   }
@@ -2843,10 +2843,6 @@
   "_FRONTMATTER": {
    "sig": "value:Pattern"
   },
-  "_parse_md": {
-   "home": "superme_agent.core.dev_knowledge.common",
-   "sig": "def(text: str) -> tuple[dict, str]"
-  },
   "check_title": {
    "home": "superme_agent.core.vocab.titles",
    "sig": "def(raw, *, description: str = '') -> str"
@@ -2854,6 +2850,10 @@
   "normalize_title": {
    "home": "superme_agent.core.vocab.titles",
    "sig": "def(raw, *, description: str = '') -> str"
+  },
+  "parse_md": {
+   "home": "superme_agent.core.dev_knowledge.common",
+   "sig": "def(text: str) -> tuple[dict, str]"
   }
  },
  "superme_agent.core.dev_knowledge.general": {
@@ -2933,14 +2933,6 @@
    "home": "superme_agent.core.dev_knowledge.general",
    "sig": "def(section: str) -> list[dict]"
   },
-  "_parse_deliverables": {
-   "home": "superme_agent.core.dev_knowledge.general",
-   "sig": "def(prd_text: str) -> list[dict]"
-  },
-  "_parse_waves": {
-   "home": "superme_agent.core.dev_knowledge.general",
-   "sig": "def(roadmap_text: str) -> list[dict]"
-  },
   "_project_name": {
    "home": "superme_agent.core.dev_knowledge.general",
    "sig": "def(prd_text: str) -> str | None"
@@ -2956,6 +2948,14 @@
   "_strip_fences": {
    "home": "superme_agent.core.dev_knowledge.general",
    "sig": "def(text: str) -> str"
+  },
+  "parse_deliverables": {
+   "home": "superme_agent.core.dev_knowledge.general",
+   "sig": "def(prd_text: str) -> list[dict]"
+  },
+  "parse_waves": {
+   "home": "superme_agent.core.dev_knowledge.general",
+   "sig": "def(roadmap_text: str) -> list[dict]"
   }
  },
  "superme_agent.core.dev_knowledge.lifecycle": {
@@ -2976,10 +2976,6 @@
    "home": "superme_agent.core.dev_knowledge.common",
    "sig": "def(dev_root: pathlib.Path) -> None"
   },
-  "_parse_md": {
-   "home": "superme_agent.core.dev_knowledge.common",
-   "sig": "def(text: str) -> tuple[dict, str]"
-  },
   "_toposort_keys": {
    "home": "superme_agent.core.dev_knowledge.parse",
    "sig": "def(specs: list[dict]) -> list[str]"
@@ -2991,6 +2987,10 @@
   "normalize_title": {
    "home": "superme_agent.core.vocab.titles",
    "sig": "def(raw, *, description: str = '') -> str"
+  },
+  "parse_md": {
+   "home": "superme_agent.core.dev_knowledge.common",
+   "sig": "def(text: str) -> tuple[dict, str]"
   }
  },
  "superme_agent.core.dev_knowledge.parse": {
@@ -3062,10 +3062,6 @@
    "home": "superme_agent.core.dev_knowledge.parse",
    "sig": "def(raw) -> list[dict]"
   },
-  "_parse_md": {
-   "home": "superme_agent.core.dev_knowledge.common",
-   "sig": "def(text: str) -> tuple[dict, str]"
-  },
   "_section": {
    "home": "superme_agent.core.dev_knowledge.general",
    "sig": "def(text: str, heading: str) -> str"
@@ -3073,6 +3069,10 @@
   "_session_fields": {
    "home": "superme_agent.core.dev_knowledge.parse",
    "sig": "def(meta: dict) -> tuple[dict, str | None]"
+  },
+  "parse_md": {
+   "home": "superme_agent.core.dev_knowledge.common",
+   "sig": "def(text: str) -> tuple[dict, str]"
   }
  },
  "superme_agent.core.dev_knowledge.store": {
@@ -4026,17 +4026,9 @@
   "_SLUG_REF": {
    "sig": "value:Pattern"
   },
-  "_atomic_write": {
-   "home": "superme_agent.core.artifacts.text",
-   "sig": "def(path: pathlib.Path, text: str) -> None"
-  },
   "_doc_path": {
    "home": "superme_agent.core.knowledge_delta",
    "sig": "def(dev_root: pathlib.Path, doc: str) -> pathlib.Path | None"
-  },
-  "_parse_deliverables": {
-   "home": "superme_agent.core.dev_knowledge.general",
-   "sig": "def(prd_text: str) -> list[dict]"
   },
   "_sections": {
    "home": "superme_agent.core.knowledge_delta",
@@ -4050,6 +4042,10 @@
    "home": "superme_agent.core.knowledge_delta",
    "sig": "def(dev_root: pathlib.Path, ops: list) -> dict"
   },
+  "atomic_write": {
+   "home": "superme_agent.core.artifacts.text",
+   "sig": "def(path: pathlib.Path, text: str) -> None"
+  },
   "change_log_index": {
    "home": "superme_agent.core.knowledge_delta",
    "sig": "def(when: datetime.date | None = None) -> int"
@@ -4061,6 +4057,10 @@
   "freshness_lint": {
    "home": "superme_agent.core.knowledge_delta",
    "sig": "def(dev_root: pathlib.Path, repo_dir: pathlib.Path | None) -> list[str]"
+  },
+  "parse_deliverables": {
+   "home": "superme_agent.core.dev_knowledge.general",
+   "sig": "def(prd_text: str) -> list[dict]"
   },
   "validate_ops": {
    "home": "superme_agent.core.knowledge_delta",
@@ -4115,10 +4115,6 @@
    "home": "superme_agent.core.operational",
    "sig": "def(meta: 'dict') -> 'bool'"
   },
-  "_is_foundational": {
-   "home": "superme_agent.core.operational",
-   "sig": "def(meta: 'dict') -> 'bool'"
-  },
   "_plugin_artifact_paths": {
    "home": "superme_agent.core.operational",
    "sig": "def(root: 'Path', kind: 'str', slug: 'str') -> 'tuple[Path, Path]'"
@@ -4130,10 +4126,6 @@
   "_published_paths": {
    "home": "superme_agent.core.operational",
    "sig": "def(form: 'str', scope: 'str', repo_id: 'str | None', slug: 'str') -> 'dict'"
-  },
-  "_read_plugin": {
-   "home": "superme_agent.core.operational",
-   "sig": "def(plugin_dir: 'Path') -> 'dict'"
   },
   "_repo_asset_file": {
    "home": "superme_agent.core.operational",
@@ -4177,6 +4169,10 @@
   "ensure_plugin_manifest": {
    "home": "superme_agent.core.operational",
    "sig": "def(root: 'Path', name: 'str') -> 'None'"
+  },
+  "is_foundational": {
+   "home": "superme_agent.core.operational",
+   "sig": "def(meta: 'dict') -> 'bool'"
   },
   "list_constitution": {
    "home": "superme_agent.core.operational",
@@ -4225,6 +4221,10 @@
   "read_constitution_dir": {
    "home": "superme_agent.core.operational",
    "sig": "def(directory: 'Path', *, origin: 'str') -> 'list[dict]'"
+  },
+  "read_plugin": {
+   "home": "superme_agent.core.operational",
+   "sig": "def(plugin_dir: 'Path') -> 'dict'"
   },
   "repo_asset_states": {
    "home": "superme_agent.core.operational",
@@ -4573,10 +4573,6 @@
    "home": "superme_agent.core.plan_revision",
    "sig": "def(text: 'str', op: 'dict', *, new_id: 'str' = '') -> 'tuple[str, str]'"
   },
-  "_atomic_write": {
-   "home": "superme_agent.core.artifacts.text",
-   "sig": "def(path: pathlib.Path, text: str) -> None"
-  },
   "_blocks": {
    "home": "superme_agent.core.plan_revision",
    "sig": "def(text: 'str') -> 'tuple[str, list[tuple[str, list[str]]]]'"
@@ -4617,10 +4613,6 @@
    "home": "superme_agent.core.plan_revision",
    "sig": "def(text: 'str', section: 'str') -> 'str'"
   },
-  "_split_sections": {
-   "home": "superme_agent.core.artifacts.text",
-   "sig": "def(text: str) -> dict[str, str]"
-  },
   "_task_ids": {
    "home": "superme_agent.core.plan_revision",
    "sig": "def(text: 'str') -> 'list[str]'"
@@ -4635,6 +4627,10 @@
   },
   "annotations": {
    "sig": "value:_Feature"
+  },
+  "atomic_write": {
+   "home": "superme_agent.core.artifacts.text",
+   "sig": "def(path: pathlib.Path, text: str) -> None"
   },
   "current_revision": {
    "home": "superme_agent.core.plan_revision",
@@ -4663,6 +4659,10 @@
   "spend_at": {
    "home": "superme_agent.core.plan_revision",
    "sig": "def(item_dir: 'Path') -> 'int'"
+  },
+  "split_sections": {
+   "home": "superme_agent.core.artifacts.text",
+   "sig": "def(text: str) -> dict[str, str]"
   },
   "task_high_water": {
    "home": "superme_agent.core.plan_revision",
@@ -5833,6 +5833,9 @@
   "TIERS": {
    "sig": "value:tuple"
   },
+  "VET_CHECK_ID": {
+   "sig": "value:Pattern"
+  },
   "VET_MODES": {
    "sig": "value:tuple"
   },
@@ -5850,9 +5853,6 @@
   },
   "_TIER_OF": {
    "sig": "value:dict"
-  },
-  "_VET_CHECK_ID": {
-   "sig": "value:Pattern"
   },
   "_blocks": {
    "home": "superme_agent.core.verification_library",
@@ -5873,14 +5873,6 @@
   "_sections": {
    "home": "superme_agent.core.verification_library",
    "sig": "def(text: str) -> tuple[list[str], list[tuple[str, list[str]]]]"
-  },
-  "_split_sections": {
-   "home": "superme_agent.core.artifacts.text",
-   "sig": "def(text: str) -> dict[str, str]"
-  },
-  "_vet_value": {
-   "home": "superme_agent.core.artifacts.vet_plan",
-   "sig": "def(raw: str) -> str"
   },
   "drop_entry": {
    "home": "superme_agent.core.verification_library",
@@ -5926,9 +5918,17 @@
    "home": "superme_agent.core.verification_library",
    "sig": "def(dev_root: pathlib.Path) -> bool"
   },
+  "split_sections": {
+   "home": "superme_agent.core.artifacts.text",
+   "sig": "def(text: str) -> dict[str, str]"
+  },
   "standing_blocks": {
    "home": "superme_agent.core.verification_library",
    "sig": "def(dev_root: pathlib.Path) -> list[str]"
+  },
+  "vet_value": {
+   "home": "superme_agent.core.artifacts.vet_plan",
+   "sig": "def(raw: str) -> str"
   }
  },
  "superme_agent.core.vocab": {},
@@ -6721,10 +6721,6 @@
    "home": "superme_agent.daemon.lifespan",
    "sig": "def() -> None"
   },
-  "_idle_sweep_loop": {
-   "home": "superme_agent.daemon.services.learning",
-   "sig": "def() -> None"
-  },
   "_reconcile_close_steps": {
    "home": "superme_agent.daemon.lifespan",
    "sig": "def() -> None"
@@ -6747,6 +6743,10 @@
   },
   "_reconcile_worktrees": {
    "home": "superme_agent.daemon.lifespan",
+   "sig": "def() -> None"
+  },
+  "idle_sweep_loop": {
+   "home": "superme_agent.daemon.services.learning",
    "sig": "def() -> None"
   },
   "lifespan": {
@@ -7159,13 +7159,13 @@
    ],
    "sig": "class"
   },
-  "_atomic_write": {
-   "home": "superme_agent.core.artifacts.text",
-   "sig": "def(path: pathlib.Path, text: str) -> None"
-  },
   "_load": {
    "home": "superme_agent.daemon.routers.dev.gates",
    "sig": "def(context_id: str, item_id: str, dev: DevKnowledgeService)"
+  },
+  "atomic_write": {
+   "home": "superme_agent.core.artifacts.text",
+   "sig": "def(path: pathlib.Path, text: str) -> None"
   },
   "dev_work_item_abandon": {
    "home": "superme_agent.daemon.routers.dev.gates",
@@ -8735,19 +8735,15 @@
    ],
    "sig": "class"
   },
-  "_WRITE_FORMS": {
+  "WRITE_FORMS": {
    "sig": "value:set"
   },
-  "_WRITE_SCOPES": {
+  "WRITE_SCOPES": {
    "sig": "value:set"
   },
   "_count_by": {
    "home": "superme_agent.daemon.routers.dev.learning",
    "sig": "def(rows: list[dict], key: str) -> dict"
-  },
-  "_has_answer": {
-   "home": "superme_agent.daemon.services.learning",
-   "sig": "def(answers, question) -> bool"
   },
   "_proposal_slug": {
    "home": "superme_agent.daemon.deps",
@@ -8757,21 +8753,9 @@
    "home": "superme_agent.daemon.deps",
    "sig": "def(prop: dict, context_id: str) -> tuple[str, str, str | None, str]"
   },
-  "_run_background_distill": {
-   "home": "superme_agent.daemon.services.learning",
-   "sig": "def(ctx, context_id: str, run_id: int) -> None"
-  },
-  "_run_background_write": {
-   "home": "superme_agent.daemon.services.learning",
-   "sig": "def(ctx, context_id: str, proposal_id: int, run_id: int) -> None"
-  },
   "_scope_bucket": {
    "home": "superme_agent.daemon.routers.dev.learning",
    "sig": "def(scope: str | None) -> str"
-  },
-  "_sweep_idle_sessions": {
-   "home": "superme_agent.daemon.services.learning",
-   "sig": "def(idle_seconds: int | None = None, min_user_msgs: int | None = None) -> dict"
   },
   "dev_memory_distill": {
    "home": "superme_agent.daemon.routers.dev.learning",
@@ -8800,6 +8784,10 @@
   "get_spine": {
    "home": "superme_agent.daemon.app_state",
    "sig": "def() -> SystemSpine"
+  },
+  "has_answer": {
+   "home": "superme_agent.daemon.services.learning",
+   "sig": "def(answers, question) -> bool"
   },
   "memory_proposal_approve": {
    "home": "superme_agent.daemon.routers.dev.learning",
@@ -8832,9 +8820,21 @@
   "router": {
    "sig": "value:APIRouter"
   },
+  "run_background_distill": {
+   "home": "superme_agent.daemon.services.learning",
+   "sig": "def(ctx, context_id: str, run_id: int) -> None"
+  },
+  "run_background_write": {
+   "home": "superme_agent.daemon.services.learning",
+   "sig": "def(ctx, context_id: str, proposal_id: int, run_id: int) -> None"
+  },
   "run_sweep": {
    "home": "superme_agent.daemon.services.learning",
    "sig": "def(ctx, session_id: str, focus: str | None = None) -> dict"
+  },
+  "sweep_idle_sessions": {
+   "home": "superme_agent.daemon.services.learning",
+   "sig": "def(idle_seconds: int | None = None, min_user_msgs: int | None = None) -> dict"
   }
  },
  "superme_agent.daemon.routers.dev.meta": {
@@ -9089,14 +9089,6 @@
    "methods": [],
    "sig": "class"
   },
-  "_parse_deliverables": {
-   "home": "superme_agent.core.dev_knowledge.general",
-   "sig": "def(prd_text: str) -> list[dict]"
-  },
-  "_parse_waves": {
-   "home": "superme_agent.core.dev_knowledge.general",
-   "sig": "def(roadmap_text: str) -> list[dict]"
-  },
   "dev_attention": {
    "home": "superme_agent.daemon.routers.dev.meta",
    "sig": "def(context_id: str = 'global', dev: DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None), spine: SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
@@ -9128,6 +9120,14 @@
   "get_spine": {
    "home": "superme_agent.daemon.app_state",
    "sig": "def() -> SystemSpine"
+  },
+  "parse_deliverables": {
+   "home": "superme_agent.core.dev_knowledge.general",
+   "sig": "def(prd_text: str) -> list[dict]"
+  },
+  "parse_waves": {
+   "home": "superme_agent.core.dev_knowledge.general",
+   "sig": "def(roadmap_text: str) -> list[dict]"
   },
   "router": {
    "sig": "value:APIRouter"
@@ -13220,10 +13220,10 @@
    "methods": [],
    "sig": "class"
   },
-  "_WRITE_FORMS": {
+  "WRITE_FORMS": {
    "sig": "value:set"
   },
-  "_WRITE_SCOPES": {
+  "WRITE_SCOPES": {
    "sig": "value:set"
   },
   "_agent": {
@@ -13244,14 +13244,6 @@
    "home": "superme_agent.daemon.services.learning",
    "sig": "def(ctx, session_id: str | None, *, focus: str | None = None, then_delete: str | None = None) -> None"
   },
-  "_has_answer": {
-   "home": "superme_agent.daemon.services.learning",
-   "sig": "def(answers, question) -> bool"
-  },
-  "_idle_sweep_loop": {
-   "home": "superme_agent.daemon.services.learning",
-   "sig": "def() -> None"
-  },
   "_intended_path": {
    "home": "superme_agent.daemon.services.learning",
    "sig": "def(prop: dict, repo_id: str | None) -> str | None"
@@ -13264,23 +13256,11 @@
    "home": "superme_agent.daemon.services.learning",
    "sig": "def(messages: list[dict]) -> str"
   },
-  "_run_background_distill": {
-   "home": "superme_agent.daemon.services.learning",
-   "sig": "def(ctx, context_id: str, run_id: int) -> None"
-  },
-  "_run_background_write": {
-   "home": "superme_agent.daemon.services.learning",
-   "sig": "def(ctx, context_id: str, proposal_id: int, run_id: int) -> None"
-  },
   "_sessions": {
    "sig": "value:SessionStore"
   },
   "_spine": {
    "sig": "value:SystemSpine"
-  },
-  "_sweep_idle_sessions": {
-   "home": "superme_agent.daemon.services.learning",
-   "sig": "def(idle_seconds: int | None = None, min_user_msgs: int | None = None) -> dict"
   },
   "_sweeping": {
    "sig": "value:set"
@@ -13297,6 +13277,14 @@
    "home": "superme_agent.core.permissions",
    "sig": "def(tool_name: str, tool_input: dict) -> bool | str"
   },
+  "has_answer": {
+   "home": "superme_agent.daemon.services.learning",
+   "sig": "def(answers, question) -> bool"
+  },
+  "idle_sweep_loop": {
+   "home": "superme_agent.daemon.services.learning",
+   "sig": "def() -> None"
+  },
   "learning_write_approve": {
    "home": "superme_agent.core.permissions",
    "sig": "def(workspace: pathlib.Path) -> Callable[[str, dict], Awaitable[bool | str]]"
@@ -13308,9 +13296,21 @@
    "home": "superme_agent.harness.tools.dev_tools.scopes",
    "sig": "def(store, context_id: str, *, scope: str, **deps)"
   },
+  "run_background_distill": {
+   "home": "superme_agent.daemon.services.learning",
+   "sig": "def(ctx, context_id: str, run_id: int) -> None"
+  },
+  "run_background_write": {
+   "home": "superme_agent.daemon.services.learning",
+   "sig": "def(ctx, context_id: str, proposal_id: int, run_id: int) -> None"
+  },
   "run_sweep": {
    "home": "superme_agent.daemon.services.learning",
    "sig": "def(ctx, session_id: str, focus: str | None = None) -> dict"
+  },
+  "sweep_idle_sessions": {
+   "home": "superme_agent.daemon.services.learning",
+   "sig": "def(idle_seconds: int | None = None, min_user_msgs: int | None = None) -> dict"
   }
  },
  "superme_agent.daemon.services.loop": {
@@ -14948,6 +14948,9 @@
    "methods": [],
    "sig": "class"
   },
+  "ITEM_DEV_TOOLS": {
+   "sig": "value:list"
+  },
   "InboxArgs": {
    "home": "superme_agent.harness.tools.dev_tools.inbox",
    "methods": [],
@@ -14967,6 +14970,12 @@
    "home": "superme_agent.harness.tools.dev_tools.revisions",
    "methods": [],
    "sig": "class"
+  },
+  "LEARNING_DEV_TOOLS": {
+   "sig": "value:list"
+  },
+  "MAIN_DEV_TOOLS": {
+   "sig": "value:list"
   },
   "MergeProposalArgs": {
    "home": "superme_agent.harness.tools.dev_tools.learning",
@@ -15092,17 +15101,8 @@
   "_BY_NAME": {
    "sig": "value:dict"
   },
-  "_ITEM_DEV_TOOLS": {
-   "sig": "value:list"
-  },
-  "_LEARNING_DEV_TOOLS": {
-   "sig": "value:list"
-  },
   "_LOG_LEVELS": {
    "sig": "value:dict"
-  },
-  "_MAIN_DEV_TOOLS": {
-   "sig": "value:list"
   },
   "_append_inbox_item": {
    "home": "superme_agent.harness.tools.dev_tools.inbox",
@@ -15932,6 +15932,9 @@
    "methods": [],
    "sig": "class"
   },
+  "ITEM_DEV_TOOLS": {
+   "sig": "value:list"
+  },
   "InboxArgs": {
    "home": "superme_agent.harness.tools.dev_tools.inbox",
    "methods": [],
@@ -15941,6 +15944,12 @@
    "home": "superme_agent.harness.tools.dev_tools.inbox",
    "methods": [],
    "sig": "class"
+  },
+  "LEARNING_DEV_TOOLS": {
+   "sig": "value:list"
+  },
+  "MAIN_DEV_TOOLS": {
+   "sig": "value:list"
   },
   "MergeProposalArgs": {
    "home": "superme_agent.harness.tools.dev_tools.learning",
@@ -16057,15 +16066,6 @@
   },
   "_BY_NAME": {
    "sig": "value:dict"
-  },
-  "_ITEM_DEV_TOOLS": {
-   "sig": "value:list"
-  },
-  "_LEARNING_DEV_TOOLS": {
-   "sig": "value:list"
-  },
-  "_MAIN_DEV_TOOLS": {
-   "sig": "value:list"
   },
   "_append_inbox_item": {
    "home": "superme_agent.harness.tools.dev_tools.inbox",

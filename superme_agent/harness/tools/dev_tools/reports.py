@@ -37,8 +37,8 @@ def _file_plan_report(*, store, context_id, dev_root=None, bound_item_id=None, *
             return _err(f"No work-item {item_id!r} here.")
         kind = None
         try:
-            from ....core.dev_knowledge import _parse_md
-            meta, _b = _parse_md((d / "item.md").read_text())
+            from ....core.dev_knowledge import parse_md
+            meta, _b = parse_md((d / "item.md").read_text())
             kind = meta.get("kind")
         except Exception:
             pass

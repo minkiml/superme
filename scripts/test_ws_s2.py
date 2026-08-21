@@ -417,8 +417,8 @@ def test_report_read_hygiene(tmp: Path) -> None:
 
 def test_tool_registration() -> None:
     print("tool registration")
-    from superme_agent.harness.tools.dev_tools import DEV_TOOLS, _ITEM_DEV_TOOLS
-    names = {t.name for t in _ITEM_DEV_TOOLS}
+    from superme_agent.harness.tools.dev_tools import DEV_TOOLS, ITEM_DEV_TOOLS
+    names = {t.name for t in ITEM_DEV_TOOLS}
     ok("S2 tools registered",
        names == {"scaffold_artifact", "record_verification", "write_checkpoint",
                  "record_validation",   # build's self-check as DATA, so vet can audit the claim

@@ -8,7 +8,7 @@ from pathlib import Path
 
 from ..vocab import sandbox
 from ..vocab.titles import check_title, normalize_title
-from .common import _ensure_knowledge_ignore, _parse_md
+from .common import _ensure_knowledge_ignore, parse_md
 from .parse import _SPAWN_RELATIONS, _toposort_keys
 
 
@@ -222,7 +222,7 @@ class LifecycleOps:
         item_md = folder / "item.md"
         if not item_md.exists():
             return None
-        meta, body = _parse_md(item_md.read_text())
+        meta, body = parse_md(item_md.read_text())
         if not meta:
             return None
         kept = {k: meta[k] for k in self._RERUN_KEEP if k in meta}

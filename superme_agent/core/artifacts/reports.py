@@ -4,7 +4,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-from .text import FILL, _HEADING, _LABEL_LINE, _split_sections, log
+from .text import FILL, _HEADING, _LABEL_LINE, split_sections, log
 from .spec import artifact_file
 from .cycles import cycle_reports
 
@@ -205,7 +205,7 @@ def proposed_work(item_dir: Path) -> str:
     if not path.is_file():
         return ""
     text = re.sub(r"<!--.*?-->", "", path.read_text(), flags=re.DOTALL)
-    body = _split_sections(text).get("Proposed work", "")
+    body = split_sections(text).get("Proposed work", "")
     if FILL.search(body) or not _live_body(body.splitlines()):
         return ""
     return " ".join(body.split())

@@ -88,7 +88,7 @@ def _project_name(prd_text: str) -> str | None:
 _D_FIELD_RE = re.compile(r"^\s+-\s+\*\*(?P<key>Value|Needs)\*\*\s*:\s*(?P<val>.+?)\s*$")
 
 
-def _parse_deliverables(prd_text: str) -> list[dict]:
+def parse_deliverables(prd_text: str) -> list[dict]:
     """project-prd.md `## Deliverables` → [{id, title, value, needs}]. The
     sub-fields are additive, so a v1 PRD still parses."""
     body = _section(_strip_fences(prd_text or ""), "Deliverables")
@@ -110,7 +110,7 @@ def _parse_deliverables(prd_text: str) -> list[dict]:
 
 
 # An open question is an ADDRESSABLE record, not prose. The id is what lets the owner answer it.
-def _parse_waves(roadmap_text: str) -> list[dict]:
+def parse_waves(roadmap_text: str) -> list[dict]:
     """roadmap.md → [{id, title, deliverable, status}] — waves grouped under each `## <d-id> …`."""
     waves, current = [], None
     for line in _strip_fences(roadmap_text or "").splitlines():
@@ -189,7 +189,7 @@ class GeneralOps:
         """True once this project's memory exists: the PRD defines at least one
         deliverable. Keyed on deliverables, not file presence."""
         prd = self.read_general_doc(dev_root, "project-prd")
-        return bool(prd and _parse_deliverables(prd))
+        return bool(prd and parse_deliverables(prd))
 
     def write_general_doc(self, dev_root: Path, name: str, text: str) -> bool:
         """Overwrite one anchor doc (creating its folder if needed). False on an unknown name."""
@@ -209,9 +209,9 @@ class GeneralOps:
         unanswered questions, stale docs. Worst-first."""
         root = Path(dev_root)
         prd = self.read_general_doc(root, "project-prd") or ""
-        deliverables = _parse_deliverables(prd)
+        deliverables = parse_deliverables(prd)
         d_ids = {d["id"] for d in deliverables}
-        waves = _parse_waves(self.read_general_doc(root, "roadmap") or "")
+        waves = parse_waves(self.read_general_doc(root, "roadmap") or "")
         items = self._read_work_items(root)
         find: list[dict] = []
 
@@ -308,7 +308,7 @@ class GeneralOps:
             "deliverables": [
                 {"id": d["id"], "value": d["value"], "title": d["title"],
                  "delivered": d["id"] in delivered}
-                for d in _parse_deliverables(prd)],
+                for d in parse_deliverables(prd)],
             # Resources are authored as `- **Label**: pointer` or as plain bullets. Accept both.
             "resources": _kv_list(res) or [{"key": "", "value": v} for v in _bullets(res)],
         }
@@ -317,8 +317,8 @@ class GeneralOps:
         """Join the anchor scaffold with live work-items: deliverable → wave → items, plus
         rollup. `orphans` surfaces breaks."""
         root = Path(dev_root)
-        deliverables = _parse_deliverables(self.read_general_doc(dev_root, "project-prd") or "")
-        waves = _parse_waves(self.read_general_doc(dev_root, "roadmap") or "")
+        deliverables = parse_deliverables(self.read_general_doc(dev_root, "project-prd") or "")
+        waves = parse_waves(self.read_general_doc(dev_root, "roadmap") or "")
         if items is None:
             items = self._read_work_items(root / "work-items")
 
