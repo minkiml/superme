@@ -1,20 +1,19 @@
 #!/usr/bin/env bash
-# Fast, read-only refactor gate — run CONSTANTLY between edits during the Backend Refactor (R0–R8).
-# Asserts the daemon's route surface is unchanged + the frontend still typechecks. Seconds, no mutation.
+# Fast, read-only gate to run between edits: the daemon's route surface is unchanged and
+# the frontend still typechecks. Seconds, and it mutates nothing.
 #
 #   bash scripts/check_fast.sh                 # inventory gate + shapes-info + ws + FE tsc
-#   STRICT=1 bash scripts/check_fast.sh        # also fail on ANY OpenAPI shape drift (pure-move stages)
+#   STRICT=1 bash scripts/check_fast.sh        # also fail on ANY OpenAPI shape drift
 #
-# Heavier checks (the self-cleaning E2E in scripts/test_*.py) run at the stage boundaries that touch them.
+# The heavier E2E suites in scripts/test_*.py run only when a change reaches them.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
 PY="${SUPERME_PY:-/opt/homebrew/Caskroom/miniconda/base/envs/my-agent/bin/python}"
 EXTRA=""; [ "${STRICT:-0}" = "1" ] && EXTRA="--strict-shapes"
 
-# Import the app FRESH (not the running daemon) so a startup-breaking edit — a bad relative import,
-# a syntax error — fails the gate even when a stale daemon is still serving the old code on the port.
-# (Parity below hits the LIVE daemon; without this, a silently-failed restart would gate green.)
+# Load the app fresh, because parity below hits the LIVE daemon: without this, a stale
+# daemon still serving old code would let a startup-breaking edit gate green.
 echo "▸ import check (fresh app load)"
 PYTHONPATH=. "$PY" -c "from superme_agent.daemon import server; assert server.app" ; IMPORT=$?
 

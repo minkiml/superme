@@ -3,12 +3,8 @@ export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
   theme: {
     extend: {
-      // Semantic, theme-aware tokens (values come from CSS vars in index.css, which
-      // swap between light and dark). Components reference these — never raw slate/sky —
-      // so the whole cockpit re-themes from one place.
-      // Colors are `rgb(var(--c-x) / <alpha-value>)` so every `/opacity` modifier
-      // resolves (e.g. `border-line/50`, `bg-accent/10`). The vars themselves are
-      // space-separated RGB channels defined in index.css (light + .dark).
+      // Semantic tokens, so the whole cockpit re-themes from index.css. Never raw slate/sky.
+      // `rgb(var(--c-x) / <alpha-value>)` is what makes `bg-accent/10` resolve.
       colors: {
         app: 'rgb(var(--c-app) / <alpha-value>)', // page background
         sidebar: 'rgb(var(--c-sidebar) / <alpha-value>)', // the nav rail (deepest tier)
@@ -26,7 +22,7 @@ export default {
         success: 'rgb(var(--c-success) / <alpha-value>)',
         danger: 'rgb(var(--c-danger) / <alpha-value>)',
         warn: 'rgb(var(--c-warn) / <alpha-value>)',
-        deputy: 'rgb(var(--c-deputy) / <alpha-value>)', // deputy-working attention tier (F1)
+        deputy: 'rgb(var(--c-deputy) / <alpha-value>)', // deputy-working attention tier
         // scope accents — dev/core/universal color-coding
         dev: 'rgb(var(--c-dev) / <alpha-value>)',
         core: 'rgb(var(--c-core) / <alpha-value>)',

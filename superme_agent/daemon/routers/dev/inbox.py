@@ -1,4 +1,5 @@
-"""Inbox routes (the quick-capture triage queue, D-013/D-014): /dev/inbox CRUD + push."""
+"""Inbox routes — the quick-capture triage queue: /dev/inbox CRUD + push.
+"""
 
 import logging
 

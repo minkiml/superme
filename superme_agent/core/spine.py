@@ -889,7 +889,7 @@ class SystemSpine:
             cur = c.execute("DELETE FROM session WHERE id=?", (session_id,))
             return cur.rowcount > 0
 
-    # --- capture-sweep watermark (WI-8) -----------------------------------------
+    # --- capture-sweep watermark ------------------------------------------------
     def get_sweep_watermark(self, session_id: str) -> int:
         """The count of chat messages already swept for this session (0 if never swept)."""
         with self._conn() as c:
@@ -1982,7 +1982,7 @@ class SystemSpine:
                 (",".join(s.strip() for s in scopes if s.strip()), _now()),
             )
 
-    # --- learning master switch (WI-8) -------------------------------------------
+    # --- learning master switch --------------------------------------------------
     def get_learning_enabled(self) -> bool:
         """Whether capture sweeps may fire. Default OFF — background learning spends
         tokens on its own, so it is opt-in."""

@@ -9,5 +9,5 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-_ROOT = Path(__file__).resolve().parents[2]      # repo root (web/bff/_env.py -> ../../..)
+_ROOT = Path(__file__).resolve().parents[2]      # repo root
 load_dotenv(_ROOT / ".env")

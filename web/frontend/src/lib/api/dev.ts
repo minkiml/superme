@@ -145,8 +145,6 @@ export function getDevLog(
   return getJSON(`/api/dev/log?${p.toString()}`)
 }
 
-// (The legacy dev/memory applied-fact store + its client fns are retired — WI-8. Learned content is
-// constitution/skill/agent, surfaced via the Published inventory.)
 
 // Manage-Harness "Skills & Agents" tab — SuperMe's OWN universal skills/agents per scope.
 export type HarnessEntry = {

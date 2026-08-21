@@ -1,19 +1,17 @@
 #!/usr/bin/env bash
 # Boot a server that runs THIS WORKTREE's code, so verification runs against what was built.
 #
-# The problem it solves: a check that asks a running server anything asks whatever instance is
-# already listening — started from a different checkout, serving the code it loaded then. A new
-# endpoint reads as missing; a DELETED one still reads as present. The second is the dangerous one:
-# a pass for a surface nobody looked at.
+# Without it, a check asks whatever instance is already listening, serving the code IT loaded.
+# A new endpoint reads as missing and a deleted one still reads as present — a pass for a
+# surface nobody looked at.
 #
 #   eval "$(bash "$SCRIPT" start)"     # boots on a free port, exports the repo's URL variable
 #   …run the checks…
 #   bash "$SCRIPT" stop                # ALWAYS, including after a failure
 #   bash "$SCRIPT" status
 #
-# WHAT to boot comes from the repo's `vet_env` block in config/repos.yaml — this script owns only
-# the lifecycle. A repo without that block has no vet env, and a check needing one is unrunnable
-# there rather than silently retargeted at some other instance.
+# WHAT to boot comes from the repo's `vet_env` block; this script owns only the lifecycle. A
+# repo without one has no vet env, so a check that needs it is unrunnable rather than misaimed.
 #
 # stdout carries ONLY the `export` line, so `eval` is safe; everything else goes to stderr.
 # Refuses to run outside a worktree: the main checkout's server is the host, and a run is its child.
@@ -26,7 +24,7 @@ READY_TRIES=80          # × 0.25s ≈ 20s to first response
 STOP_TRIES=40           # × 0.25s ≈ 10s for a graceful exit before SIGKILL
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# .../superme_agent/harness/plugins/superme-dev/skills/vet/scripts → six levels up is the package.
+# Six levels up from this script is the package root.
 INSTALL="$(cd "$HERE/../../../../../.." && pwd)"
 
 say() { echo "$@" >&2; }
@@ -41,26 +39,20 @@ LOG="$WT/.vet-env.log"
 REPO_ID="${2:-$(basename "$(dirname "$WT")")}"
 
 # --- identity by cwd, never by a remembered pid ------------------------------------------------
-# A daemon BELONGS to this worktree if its working directory is this worktree. That fact survives a
-# lost state file, a second daemon on another port, and a stop that killed only what it knew about
-# — all of which happened live, and left daemons holding ports after their worktree was deleted.
-# The state file is a convenience; this is the truth.
+# A daemon belongs to this worktree if its working directory IS this worktree. That survives a
+# lost state file and a second daemon on another port; the state file is only a convenience.
 daemons_here() {
     local p cwd
     : "${MATCH:=$(cfg cmd | tr ' ' '\n' | grep -v '^{' | tail -1)}"
     for p in $(lsof -nP -iTCP -sTCP:LISTEN -t 2>/dev/null | sort -u); do
         cwd="$(lsof -a -p "$p" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | tail -1)"
-        # NEVER the host. A process sitting in the MAIN checkout is the daemon every run is a child
-        # of, and no path through this script may adopt it, stop it, or count it as ours — not even
-        # if `$WT` somehow resolved there. The subcommand guard already refuses the main checkout;
-        # this is the same rule stated where the pids are chosen, because a build agent's run
-        # reported adopting "what appears to be the actual running SuperMe host daemon", and a rule
-        # that lives only at the entrance is one call site away from being bypassed.
+        # NEVER the host. A process in the MAIN checkout is the daemon every run is a child of,
+        # and no path here may adopt, stop, or count it. Restated where the pids are chosen: a
+        # rule that lives only at the entrance is one call site from being bypassed.
         [ "$cwd" = "$MAIN" ] && continue
         [ "$cwd" = "$WT" ] || continue
-        # …AND it must be the thing we boot. cwd alone matched anything listening from this
-        # directory — including the agent's own process tree, which is how a `stop` ended a build
-        # run with exit 143 (SIGTERM to the agent, read as a crash). Two facts, not one.
+        # …AND it must be the thing we boot. cwd alone also matches the agent's own process
+        # tree, so a `stop` would SIGTERM the caller. Two facts, not one.
         [ -z "$MATCH" ] && { echo "$p"; continue; }
         ps -o command= -p "$p" 2>/dev/null | grep -qF -- "$MATCH" && echo "$p"
     done
@@ -102,10 +94,8 @@ for p in range(lo, hi + 1):
 EOF
 }
 
-# Spawn and print the pid. Done from PYTHON, not `nohup … &`, because a shell background job gets
-# two things wrong that both bite: `$!` reports the subshell while the server is its grandchild —
-# kill that pid and a server keeps the port — and the job inherits the caller's stdout, so
-# `eval "$(… start)"` never returns. start_new_session makes the pid a process-group leader.
+# Spawned from Python, not `nohup … &`: a shell job reports the subshell in `$!` while the server
+# is its grandchild, and it inherits stdout, so `eval "$(… start)"` would never return.
 spawn() {  # spawn <cmd> <port> <port_env> → pid
     "$PY" - "$WT" "$1" "$2" "$3" "$LOG" <<'EOF'
 import os, shlex, subprocess, sys
@@ -147,8 +137,8 @@ cmd_start() {
         return 0
     fi
 
-    # The env file is gitignored, so a worktree has none — and without it a server that needs
-    # credentials starts but cannot work. Symlink, never copy: secrets get one home on disk.
+    # A worktree has no .env, so a server needing credentials would start but not work.
+    # Symlink, never copy: secrets get one home on disk.
     if [ ! -e "$WT/.env" ] && [ -f "$MAIN/.env" ]; then
         ln -s "$MAIN/.env" "$WT/.env" && say "▸ linked .env from the main checkout"
     fi
@@ -204,10 +194,8 @@ cmd_status() {
     for p in $pids; do say "▸ up — pid $p, port $(port_of "$p"), log $LOG"; done
 }
 
-# EVERY subcommand refuses here, not just `start`. `stop` sweeps by cwd, and the host daemon's cwd
-# IS the main checkout — so a `stop` run from the repo root killed the daemon every run is a child
-# of (three times on 2026-08-10, until the shell reported the SIGTERM plainly: `zsh: terminated`).
-# A guard on the dangerous verb only is not a guard; the whole script belongs to worktrees.
+# EVERY subcommand refuses here, not just `start`: `stop` sweeps by cwd, and the host daemon's
+# cwd IS the main checkout. A guard on one verb is not a guard — this script belongs to worktrees.
 [ "$WT" != "$MAIN" ] || die "this is the main checkout, not an item worktree. The server running
    here is the HOST — every run is its child, so starting, stopping or sweeping it would kill the
    run asking. Run this from an item's worktree; there is no vet env to manage here."

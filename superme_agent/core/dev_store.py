@@ -722,7 +722,7 @@ class DevStore:
             d["candidate_ids"] = json.loads(d["candidate_ids"]) if d.get("candidate_ids") else []
         except (ValueError, TypeError):
             d["candidate_ids"] = []
-        # WI-8 JSON columns → parsed structures (tolerate plain/None on old rows).
+        # JSON columns → parsed structures, tolerating plain or absent values on old rows.
         for col in ("fields", "clarifications", "clarification_answers", "eval_report"):
             if d.get(col):
                 try:

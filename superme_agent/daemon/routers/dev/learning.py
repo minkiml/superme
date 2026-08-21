@@ -378,9 +378,10 @@ async def memory_proposal_reject(proposal_id: int, body: ProposalActionBody,
 @router.post("/dev/memory/proposals/{proposal_id}/drop", response_model=ProposalActionResponse, response_model_exclude_unset=True)
 async def memory_proposal_drop(proposal_id: int, body: ProposalActionBody,
                                dev_store: DevStore = Depends(get_dev_store)) -> dict:
-    """Owner DROPS a proposal → this is noise, stop suggesting it: mark the proposal `dropped`
-    and its source candidates `dropped` (the negative signal for the learn-from-drops loop, PRD
-    §4.10). Unlike reject, dropped candidates are NOT re-queued."""
+    """Owner DROPS a proposal — this is noise, stop suggesting it.
+
+    Marks the proposal and its source candidates `dropped`, the negative signal the learning
+    loop reads. Unlike reject, dropped candidates are never re-queued."""
     prop = dev_store.get_memory_proposal(proposal_id)
     if not prop or prop["context_id"] != body.context_id:
         raise HTTPException(status_code=404, detail="proposal not found")

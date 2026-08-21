@@ -1,25 +1,13 @@
-"""Behavior-parity harness for the Backend Refactor (R0) — the gate every R-stage is measured against.
+"""Behavior-parity harness: proves a refactor moved code without changing the API.
 
-Captures the daemon's API surface as a committed baseline and fails loudly on unintended drift, so a
-purely structural refactor (router extraction, DI, BFF proxy) can PROVE it changed organization but not
-behavior. Two layers:
-
-  • ROUTE INVENTORY (the hard gate) — the sorted set of "METHOD /path" over every HTTP route (from
-    /openapi.json) plus the known WebSocket route(s). MUST stay identical through the pure-move stages
-    (R1, R2, R7). Any add / remove / path-change / method-change fails the check.
-  • OPENAPI SNAPSHOT (shapes) — the full /openapi.json. Informational by default (today there are no
-    response models, so response shapes are undeclared); becomes meaningful as R3 attaches
-    response_model=. Re-baseline DELIBERATELY (run `snapshot`) when a stage is meant to change shapes;
-    gate on it between pure-move stages with `check --strict-shapes`.
-  • WS HANDSHAKE — opens ws://…/ws/agent and closes immediately (no turn frame → no agent run), proving
-    the socket route is mounted. OpenAPI can't enumerate WebSocket routes, so this is tracked explicitly.
-
-The daemon must be UP (matches the scripts/ E2E convention). Read-only — never mutates any store.
+The route inventory is the hard gate — the sorted "METHOD /path" set from /openapi.json plus
+the WebSocket routes, which OpenAPI cannot enumerate. The shape snapshot is informational
+until `--strict-shapes`. Read-only, and the daemon must be up.
 
 Usage:
     python -m scripts.parity snapshot                 # write/refresh the committed baseline
-    python -m scripts.parity check                    # inventory hard-gate + shapes report + WS (default)
-    python -m scripts.parity check --strict-shapes    # also fail on ANY OpenAPI shape drift (pure-move gate)
+    python -m scripts.parity check                    # inventory gate + shapes report + WS
+    python -m scripts.parity check --strict-shapes    # also fail on any OpenAPI shape drift
     python -m scripts.parity check --no-ws            # skip the WS handshake
 """
 
@@ -56,10 +44,10 @@ def _inventory(openapi: dict) -> list[str]:
 
 
 def _ws_ok(name: str) -> bool:
-    """Open one daemon socket and close it immediately. Both are side-effect-free to merely open:
-    the agent socket does nothing until a turn frame arrives, and the dashboard socket is send-only.
-    Sockets are absent from the OpenAPI, so without this probe they could break silently while the
-    route inventory stayed green — which is exactly what a parity net exists to prevent."""
+    """Open one daemon socket and close it. Both are side-effect-free to merely open.
+
+    Sockets are absent from the OpenAPI, so without this probe one could break silently while
+    the route inventory stayed green."""
     base = DAEMON.replace("http://", "ws://").replace("https://", "wss://")
 
     async def _probe() -> bool:

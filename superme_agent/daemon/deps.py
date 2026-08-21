@@ -34,10 +34,9 @@ def local_harness_root(context_id: str | None, mode: str = "dev"):
 
 
 def dev_root(context_id: str):
-    """Resolve a context to its dev-knowledge root: `<internal_root>/dev/` (D-011/D-016).
+    """Resolve a context to its dev-knowledge root, `<internal_root>/dev/`.
 
-    dev-knowledge lives under the internal/ sub-root — physically separate from the
-    workspace/ knowledge the Me/Domains/Manage-Knowledge dashboards consume."""
+    dev-knowledge is physically separate from the knowledge the owner-facing dashboards read."""
     ctx = contexts.resolve(context_id)
     if not ctx.internal_root:
         raise HTTPException(status_code=400, detail="context has no internal root")

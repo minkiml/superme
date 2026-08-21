@@ -1,10 +1,8 @@
-"""Export the WebSocket frame models' JSON schema for the frontend's WS-type codegen (R6).
+"""Export the WebSocket frame models' JSON schema for the frontend's type codegen.
 
-The agent socket isn't an HTTP route, so its frames don't land in the daemon OpenAPI. This dumps the
-combined `WsFrames` JSON schema (every frame model in `$defs`) to the FE's generated/ dir, where
-`npm run gen:ws` turns it into TypeScript — the same drift-proof pipeline R8 uses for REST.
+The agent socket is not an HTTP route, so its frames never reach the OpenAPI document.
 
-    PYTHONPATH=. python scripts/ws_schema.py        # writes web/frontend/src/lib/api/generated/ws-schema.json
+    PYTHONPATH=. python scripts/ws_schema.py
 """
 
 import json
@@ -16,8 +14,8 @@ OUT = Path(__file__).resolve().parents[1] / "web/frontend/src/lib/api/generated/
 
 
 def _strip_field_titles(node):
-    """Drop pydantic's per-field `title`s so json-schema-to-typescript names interfaces from the
-    `$defs` keys (TurnFrame, ResultFrame, …) instead of hoisting a noisy alias per property."""
+    """Drop pydantic's per-field `title`s so the generator names interfaces from the
+    `$defs` keys rather than hoisting an alias per property."""
     if isinstance(node, dict):
         node.pop("title", None)
         for v in node.values():

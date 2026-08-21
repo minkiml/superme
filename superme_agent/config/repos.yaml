@@ -1,31 +1,28 @@
-# System spine — repo registry, scope-aware (PRD §4.11.3). Supersedes registry.yaml.
+# System spine — the repo registry, scope-aware.
 #
-# Each repo's STATIC half. The global/"Me" repo is a FIRST-CLASS entry here (it used to
-# be synthesized from registry.yaml's `default_workspace: base` — that base/global split
-# is gone; the id is `global`). Every repo spans the {core, dev} scope lattice; the
-# per-scope operational + knowledge HOME paths are derived by convention in spine.py
-# (so the WI-3 relocation pass edits one function, not every entry), not pinned here.
+# Each repo's static half; the global hub is a first-class entry. Every repo spans the
+# {core, dev} scope lattice, and the per-scope home paths are derived by convention in
+# spine.py rather than pinned here, so relocating them edits one function.
 #
-# LIVE status (active/idle, last activity, current work-item, inventory counts) is
-# computed from .system.db + the filesystem at read time — never stored here.
+# Live status (active/idle, last activity, current work-item, counts) is computed from
+# .system.db and the filesystem at read time — never stored here.
 
 repos:
   global:
     label: SuperMe hub
-    cwd: "."                 # repo root (also the universal-harness codebase)
+    cwd: "."                 # repo root
     layer: global
     persona_append: ""
     extra_mcp: []
-    vet_env:                      # how to boot a server running an ITEM WORKTREE's code
+    vet_env:                      # how to boot a server running a work item's worktree
       cmd: "{py} -m superme_agent.daemon"
       port_env: SUPERME_DAEMON_PORT
       ready: /openapi.json
       url_env: SUPERME_DAEMON_URL
     anchor_branch: superme-dev
 
-    # Gitignored paths that are nonetheless this repo's SOURCE, mirrored read-only
-    # into a research scratch worktree. `scripts/` holds ~40 offline suites that a
-    # checkout omits, which made a housekeeping sweep report a live function as dead.
+    # Gitignored paths that are nonetheless this repo's SOURCE. A read-only worktree
+    # mirrors them, so a sweep over a plain checkout cannot call live code dead.
     source_ignored:
       - scripts
   dummy:

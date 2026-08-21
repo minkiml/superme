@@ -3,15 +3,12 @@
 @tailwind utilities;
 
 /* ── Theme tokens ───────────────────────────────────────────────────────────
-   Renovation visual language: near-black muted surfaces + an iridescent
-   blue→mint→lavender accent. `.dark` is the primary (design is dark-first);
-   `:root` is a clean cool-light fallback. Three surface tiers give depth:
-   sidebar (deepest) < app < surface (cards). Scope accents: dev=blue,
-   core=mint, universal=lavender. Components reference the semantic tokens
-   only — never raw colors — so the whole cockpit re-themes from here.
-   Values are space-separated RGB CHANNELS (not hex) so Tailwind's `/opacity`
-   modifiers resolve (`rgb(var(--c-x) / <alpha-value>)`); use `rgb(var(--c-x))`
-   when referencing a token directly in CSS/inline styles. */
+   Dark-first, with `:root` as the light fallback. Three surface tiers give depth:
+   sidebar (deepest) < app < surface (cards). Components reference these semantic
+   tokens and never raw colors, so the whole cockpit re-themes from here.
+
+   Values are space-separated RGB CHANNELS, which is what makes Tailwind's `/opacity`
+   modifiers resolve. Referencing one directly in CSS needs `rgb(var(--c-x))`. */
 :root {
   --c-app: 244 245 247;
   --c-sidebar: 236 238 241;
@@ -34,10 +31,8 @@
   --c-dev: 59 130 246;
   --c-core: 18 168 120;
   --c-universal: 124 108 240;
-  /* WORK-KIND accents — what a work-item IS, an axis of its own. Deliberately not reused from the
-     status hues (success/warn/danger say how it is GOING) or the scope hues (core/dev/universal say
-     WHERE it lives): a chip borrowing either would make a claim it doesn't mean. Build = slate-teal
-     (it changes the product); research = indigo (it changes what we know). */
+  /* What a work-item IS, an axis of its own. Borrowing a status hue (how it is going) or a
+     scope hue (where it lives) would make a chip claim something it does not mean. */
   --c-kind-build: 15 132 145;
   --c-kind-research: 99 91 205;
   color-scheme: light;
@@ -65,14 +60,13 @@
   --c-dev: 110 168 254;
   --c-core: 95 227 179;
   --c-universal: 185 167 247;
-  /* work-kind accents, lifted for the dark ground (see the light block for why they are their own axis) */
+  /* work-kind accents, lifted for the dark ground */
   --c-kind-build: 94 213 217;
   --c-kind-research: 167 158 250;
   color-scheme: dark;
 }
 
-/* The iridescent brand gradient — logo, hub ring, primary/send. Richer than the old
-   blue→green: blue → violet → rose → mint, so it reads dynamic. */
+/* The iridescent brand gradient — logo, hub ring, primary/send. */
 :root,
 .dark {
   --grad-iris: linear-gradient(105deg, #6ea8fe, #a78bfa 38%, #f472b6 68%, #34d399);
@@ -125,14 +119,11 @@ select.bare {
 }
 
 /* ── Container-driven columns ───────────────────────────────────────────────
-   The app is a three-band frame (nav · main · chat rail), so a pane's width has almost nothing to
-   do with the window's: at 1000px of viewport the main surface can be 560px or the whole row,
-   depending on the rails. That makes Tailwind's `sm:` / `md:` prefixes the wrong instrument for
-   anything INSIDE main — they answer a question about the window while the layout is asking one
-   about the column. These three answer the column's own question instead: fit as many tracks as
-   the container can hold at that minimum, then reflow. One vocabulary, every page.
+   The app is a three-band frame, so a pane's width says almost nothing about the window's.
+   Tailwind's `sm:` / `md:` answer a question about the window; inside main, the layout is
+   asking one about the column. These fit as many tracks as the container holds, then reflow.
 
-   Pick by the narrowest width the CONTENT stays readable at, not by how many columns you want. */
+   Pick by the narrowest width the CONTENT stays readable at, not by the column count. */
 .cols-narrow { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
 .cols-mid    { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
 .cols-wide   { grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
@@ -152,9 +143,8 @@ select.bare {
   background: transparent;
 }
 
-/* Nexus "heartbeat" ring — a soft pulse (scale + fade) shown around a repo/hub node while it is
-   actively RUNNING an agent (real operations). Live-but-idle agents get a static ring (no anim).
-   Scales from the element's centre; the border color is set inline to the repo's tag color. */
+/* A soft pulse around a node that is actively RUNNING an agent. Live-but-idle gets a
+   static ring instead. The border color is set inline, to the repo's tag color. */
 @keyframes heartbeat {
   0%, 100% { transform: scale(1); opacity: 0.6; }
   50%      { transform: scale(1.14); opacity: 0.12; }
@@ -162,14 +152,11 @@ select.bare {
 .animate-heartbeat { animation: heartbeat 1.5s ease-in-out infinite; }
 
 /* ── Syntax highlighting (highlight.js token classes) ───────────────────────
-   A canned hljs theme is a second, fixed palette that would sit inside our themed surfaces and
-   ignore the light/dark switch entirely. So the token classes map onto OUR tokens instead — the
-   diff and any highlighted code re-theme with everything else, and there is still exactly one
-   place colour is defined.
+   A canned hljs theme is a second fixed palette that would ignore the light/dark switch,
+   so the token classes map onto OUR tokens and re-theme with everything else.
 
-   Deliberately few colours: a diff is already carrying red/green line tints, and a rainbow on top
-   of that competes with the signal the reader actually came for (what changed). Keywords, strings,
-   comments and names — everything else inherits. */
+   Few colours on purpose: a diff already carries red/green line tints, and a rainbow on
+   top competes with the signal the reader came for. Everything unlisted inherits. */
 .hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-type, .hljs-selector-tag {
   color: rgb(var(--c-universal));
 }

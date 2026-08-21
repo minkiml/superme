@@ -1,6 +1,6 @@
 <!doctype html>
 <!--
-  Plan gate report — TEMPLATE (renovation §0b chapter grammar; hermes discipline).
+  Plan gate report — TEMPLATE.
   The template owns ALL style, layout, and rendering. The agent fills exactly ONE slot:
   {"title": "Ledger CLI verbose flag", "item": "27eb782d8634", "ask": "Approving this plan creates the item's branch and lets build execute these tasks.", "surface": "CLI \u2014 python tally.py --verbose", "before": "$ python tally.py\ntotal: 42.50", "after": "$ python tally.py --verbose\n2026-07-01  12.50  groceries\n2026-07-02  30.00  rent\ntotal: 42.50", "touches": [{"component": "cli", "path": "tally.py", "action": "modify"}, {"component": "formatter", "path": "fmt.py", "action": "new"}, {"component": "ledger data", "path": "ledger/", "action": "read"}], "assumptions": ["--verbose lists entries date-ascending (no flag to change order)", "amounts keep two decimals, matching the existing total line"], "depth": "checks", "reason": "observable CLI surface \u2014 command checks suffice", "checks": [{"id": "verbose-lists-rows", "mode": "command", "expect": "output has one row per ledger entry plus the total line"}, {"id": "default-unchanged", "mode": "command", "expect": "plain `python tally.py` output is byte-identical to before"}], "tasks": 4} — a single-line JSON object (no markdown, no HTML) with this shape:
 

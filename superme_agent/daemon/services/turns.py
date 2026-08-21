@@ -1,9 +1,7 @@
 """One turn, with the retry ladder around it.
 
-IT ONLY EVER RETRIES A TURN THAT DID NOTHING: an attempt that issued a tool call is never replayed,
-because doubling those effects is worse than a wait.
-
-A turn whose whole output is an API error raises nothing, and would otherwise be stamped a success.
+IT ONLY EVER RETRIES A TURN THAT DID NOTHING: an attempt that issued a tool call is never
+replayed, because doubling those effects is worse than a wait.
 """
 
 import asyncio
@@ -33,10 +31,10 @@ class ResilientTurn:
         self.attempts = 0          # completed attempts, so 1 after a clean first try
 
     async def stream(self, agent, ctx, prompt: str, **kw) -> AsyncIterator:
-        """Yield the turn's events, re-attempting when an attempt fails without having done anything.
+        """Yield the turn's events, re-attempting an attempt that failed having done nothing.
 
-        Registers this task against the item, so the stall watchdog has something to cancel — here rather
-        than in each runner."""
+        Registers the task against the item here rather than in each runner, so the stall
+        watchdog has something to cancel."""
         watch = run_tasks.register(getattr(ctx, "id", ""), self.item_id)
         try:
             async for ev in self._attempts(agent, ctx, prompt, **kw):

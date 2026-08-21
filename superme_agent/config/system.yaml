@@ -1,8 +1,6 @@
-# System spine — singleton static-meta (PRD §4.11.3).
-# The System entity's STATIC half. Its LIVE half (daemon health, active context,
-# in-flight runs) is derived from .system.db at read time, never stored here.
-# Hand-editable + git-tracked. Runtime overrides (e.g. per-repo model) are DB rows,
-# not edits to this file.
+# System spine — the System entity's static half.
+# Its live half (daemon health, active context, in-flight runs) is derived at read time.
+# Hand-editable and git-tracked; a runtime override is a DB row, never an edit here.
 
 version: 1
 identity: SuperMe

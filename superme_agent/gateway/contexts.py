@@ -1,15 +1,7 @@
-"""Context resolution — surface-facing id -> Core Context.
+"""Context resolution — surface-facing id to Core Context.
 
-The global root ("SuperMe hub") plus connected projects ("domains"). Domains are defined in the
-spine's repo registry (config/repos.yaml); each resolves to its cwd and a knowledge home
-in the central knowledge repo at `superme-knowledge/<id>-knowledge/` (renovation §4.11.2 —
-centralized for all repos, not under each project's cwd). Each home splits into `core/`
-(dashboard-consumed) + `dev/` (dev-knowledge). The DEFAULT workspace is the repo root and
-IS the global context, so it's never listed as a separate domain.
-
-This registry is the source of *which* domains exist. The future "knowledge bridge" — a
-domains index inside global knowledge (status, meta, root, so SuperMe's own knowledge
-knows its projects) — layers on top of this; it doesn't replace it.
+The global root plus the connected projects the spine's repo registry defines, each with a
+cwd and a knowledge home. The repo root IS the global context, never a project.
 """
 
 import logging
@@ -20,23 +12,14 @@ from ..core.spine import RepoConfig, get_spine
 log = logging.getLogger("superme-agent")
 
 GLOBAL_ID = "global"
-# Every per-repo knowledge home splits into sub-roots by scope: core/ (the represented
-# knowledge the Me/Domains dashboards consume — the domain/twin substance) and dev/ (internal
-# dev-knowledge, wired only to the Development dashboard — not browsable). The `internal/`
-# nesting was dropped in the renovation (§4.11.2); dev-knowledge is `<base>/dev` now.
+# A knowledge home splits by scope: `core/` is what the dashboards render, `dev/` is not.
 CORE_SUBDIR = "core"
 
-# The repo registry lives in the system spine (config/repos.yaml). The Context shape is
-# unchanged from the WI-3 cutover: only its SOURCE moved. registry.yaml and its lone reader
-# were deleted with the Slack app.
-
-
 def _context_from_repo(rc: RepoConfig, mode: str) -> Context:
-    """Build a Core Context from a spine RepoConfig. Home computation stays here (not in
-    RepoConfig) so the exact Context shape every call-site depends on is preserved:
-    knowledge_root = <base>/core (dashboard-consumed core knowledge); internal_root = <base>
-    (callers append '/dev' → <base>/dev). The renovation dropped the old `internal/` nesting
-    (§4.11.2), so internal_root is just the per-repo knowledge base now."""
+    """Build a Core Context from a spine RepoConfig.
+
+    Home computation stays here rather than on RepoConfig, so the exact Context shape every
+    call-site depends on is preserved."""
     home = rc._knowledge_base()
     return Context(
         layer=rc.layer,
@@ -54,12 +37,8 @@ def _context_from_repo(rc: RepoConfig, mode: str) -> Context:
 def resolve(context_id: str | None, mode: str = "core") -> Context:
     """Resolve a surface-facing context id (+ mode) to a Core Context.
 
-    `global` (or unknown ids) -> the root SuperMe; a registered repo id -> that project's
-    sub-SuperMe. `mode` ("core" | "dev") is supplied BY THE SURFACE — the Me chat runs
-    "core"; the Development dashboard runs "dev". It is orthogonal to the layer (every
-    (layer, mode) pair is valid) and selects the agent's charter + which harness plugins
-    load — not a knowledge sandbox.
-    """
+    An unknown id falls back to the root SuperMe. `mode` comes FROM THE SURFACE: it picks the
+    charter and the plugins, never a knowledge sandbox."""
     spine = get_spine()
     repos = spine.repos()
     cid = context_id or GLOBAL_ID
@@ -68,7 +47,7 @@ def resolve(context_id: str | None, mode: str = "core") -> Context:
         if cid != GLOBAL_ID:
             log.warning("unknown context_id %r; falling back to global", cid)
         rc = repos.get(GLOBAL_ID)
-    if rc is None:  # repos.yaml empty/missing — synthesize a minimal global so we never crash
+    if rc is None:  # no registry yet: synthesize a global rather than crash
         from ..paths import ROOT_DIR
         rc = RepoConfig(id=GLOBAL_ID, label="SuperMe hub", cwd=ROOT_DIR, layer="global")
     return _context_from_repo(rc, mode)

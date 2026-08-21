@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import type { WorkItem } from '@/lib/api'
 
-// Shared dev-knowledge primitives (the v2 work-item model — D-018).
+// Shared dev-knowledge primitives for the work-item model.
 
 // The per-kind phase pipelines. The kanban renders the UNION in pipeline order, and a column shows
 // only when it has items.

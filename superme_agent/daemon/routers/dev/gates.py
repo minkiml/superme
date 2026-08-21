@@ -41,9 +41,9 @@ def _load(context_id: str, item_id: str, dev: DevKnowledgeService):
 @router.get("/dev/work-items/{item_id}/report/{phase}", response_model=PhaseReportResponse)
 async def dev_work_item_report(item_id: str, phase: str, context_id: str = "global",
                                dev: DevKnowledgeService = Depends(get_dev)) -> dict:
-    """One phase's user-facing report (`reports/report-<phase>.md`) for the Reports tab — the markdown
-    1:1, plus the path to the full agent-facing contract behind it (§4.3). 404 when that phase hasn't
-    written one; the tab greys itself from `DrilldownResponse.reports` rather than probing."""
+    """One phase's user-facing report for the Reports tab: the markdown 1:1, plus the path
+    to the agent-facing contract behind it. 404 when that phase wrote none — the tab greys
+    itself from the drilldown rather than probing."""
     _ctx, dev_root, _item = _load(context_id, item_id, dev)
     report = artifacts.report_text(dev_root / "work-items" / item_id, phase)
     if report is None:
