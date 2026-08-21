@@ -26,6 +26,10 @@ _ADDRESS = re.compile(r" at 0x[0-9a-fA-F]+")
 # Some defaults are paths built from the install root, which differs per checkout.
 _ROOT = ""
 
+# An annotation names our own classes fully qualified, so moving one would read as every
+# signature mentioning it changing. `home` already tracks where a class lives.
+_QUALNAME = re.compile(r"superme_agent[\w.]*\.(\w+)")
+
 
 def _ours(obj) -> bool:
     return str(getattr(obj, "__module__", "")).startswith(PKG)
@@ -36,6 +40,7 @@ def _signature(obj) -> str:
         text = _ADDRESS.sub("", str(inspect.signature(obj)))
     except (TypeError, ValueError):
         return "(?)"
+    text = _QUALNAME.sub(r"\1", text)
     return text.replace(_ROOT, "<root>") if _ROOT else text
 
 

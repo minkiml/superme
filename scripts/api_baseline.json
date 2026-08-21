@@ -4,16 +4,16 @@
   "AgentService": {
    "home": "superme_agent.core.agent_service",
    "methods": [
-    "_assemble_append(self, ctx: superme_agent.core.context.Context, *, op_home, const_universal, const_repo, activated_assets, system_append: str | None = None, item_bound: bool = False) -> str",
-    "_build_options(self, ctx: superme_agent.core.context.Context, *, resume, model, approve: Callable[[str, dict], Awaitable[bool | str]], extra_mcp_servers, enforce_silent: bool = False, effort: str | None = None, scope_reads: bool = False, system_append: str | None = None, gate_general_mutations: bool = False, general_write_root: pathlib.Path | None = None, write_boundary: list[pathlib.Path] | None = None, shell_roots: list[pathlib.Path] | None = None, hooks: dict | None = None, block_categories: set[str] | None = None, deny_write_tools: str | None = None, protected_paths: list[pathlib.Path] | None = None, protected_nudge: str | None = None, sandbox_writes: list[pathlib.Path] | None = None, item_bound: bool = False) -> claude_agent_sdk.types.ClaudeAgentOptions",
-    "_context_preamble(self, ctx: superme_agent.core.context.Context, *, item_bound: bool = False) -> str",
-    "_fragment_parts(self, ctx: superme_agent.core.context.Context, *, op_home, const_universal, const_repo, activated_assets, system_append: str | None = None, item_bound: bool = False) -> list[dict]",
+    "_assemble_append(self, ctx: Context, *, op_home, const_universal, const_repo, activated_assets, system_append: str | None = None, item_bound: bool = False) -> str",
+    "_build_options(self, ctx: Context, *, resume, model, approve: Callable[[str, dict], Awaitable[bool | str]], extra_mcp_servers, enforce_silent: bool = False, effort: str | None = None, scope_reads: bool = False, system_append: str | None = None, gate_general_mutations: bool = False, general_write_root: pathlib.Path | None = None, write_boundary: list[pathlib.Path] | None = None, shell_roots: list[pathlib.Path] | None = None, hooks: dict | None = None, block_categories: set[str] | None = None, deny_write_tools: str | None = None, protected_paths: list[pathlib.Path] | None = None, protected_nudge: str | None = None, sandbox_writes: list[pathlib.Path] | None = None, item_bound: bool = False) -> claude_agent_sdk.types.ClaudeAgentOptions",
+    "_context_preamble(self, ctx: Context, *, item_bound: bool = False) -> str",
+    "_fragment_parts(self, ctx: Context, *, op_home, const_universal, const_repo, activated_assets, system_append: str | None = None, item_bound: bool = False) -> list[dict]",
     "_join_fragments(frags: list[dict]) -> str",
-    "_resolve_scope(self, ctx: superme_agent.core.context.Context)",
-    "assemble_system_append(self, ctx: superme_agent.core.context.Context, *, system_append: str | None = None, item_bound: bool = False) -> str",
-    "assemble_system_fragments(self, ctx: superme_agent.core.context.Context, *, system_append: str | None = None, item_bound: bool = False) -> list[dict]",
-    "measure_context_floor(self, ctx: superme_agent.core.context.Context, model: str | None = None) -> tuple[int, int] | None",
-    "run_turn(self, ctx: superme_agent.core.context.Context, prompt: str, *, resume: str | None = None, model: str | None = None, effort: str | None = None, approve: Callable[[str, dict], Awaitable[bool | str]], extra_mcp_servers: dict | None = None, enforce_silent: bool = False, scope_reads: bool = False, system_append: str | None = None, gate_general_mutations: bool = False, general_write_root: pathlib.Path | None = None, write_boundary: list[pathlib.Path] | None = None, shell_roots: list[pathlib.Path] | None = None, hooks: dict | None = None, block_categories: set[str] | None = None, deny_write_tools: str | None = None, protected_paths: list[pathlib.Path] | None = None, protected_nudge: str | None = None, sandbox_writes: list[pathlib.Path] | None = None, item_bound: bool = False) -> AsyncIterator[superme_agent.core.events.Init | superme_agent.core.events.TextDelta | superme_agent.core.events.Status | superme_agent.core.events.ToolResult | superme_agent.core.events.Usage | superme_agent.core.events.Result]"
+    "_resolve_scope(self, ctx: Context)",
+    "assemble_system_append(self, ctx: Context, *, system_append: str | None = None, item_bound: bool = False) -> str",
+    "assemble_system_fragments(self, ctx: Context, *, system_append: str | None = None, item_bound: bool = False) -> list[dict]",
+    "measure_context_floor(self, ctx: Context, model: str | None = None) -> tuple[int, int] | None",
+    "run_turn(self, ctx: Context, prompt: str, *, resume: str | None = None, model: str | None = None, effort: str | None = None, approve: Callable[[str, dict], Awaitable[bool | str]], extra_mcp_servers: dict | None = None, enforce_silent: bool = False, scope_reads: bool = False, system_append: str | None = None, gate_general_mutations: bool = False, general_write_root: pathlib.Path | None = None, write_boundary: list[pathlib.Path] | None = None, shell_roots: list[pathlib.Path] | None = None, hooks: dict | None = None, block_categories: set[str] | None = None, deny_write_tools: str | None = None, protected_paths: list[pathlib.Path] | None = None, protected_nudge: str | None = None, sandbox_writes: list[pathlib.Path] | None = None, item_bound: bool = False) -> AsyncIterator[Init | TextDelta | Status | ToolResult | Usage | Result]"
    ],
    "sig": "class"
   },
@@ -23,8 +23,8 @@
   "CommandLayer": {
    "home": "superme_agent.core.commands",
    "methods": [
-    "_model(self, ctx: superme_agent.core.context.Context) -> str",
-    "handle(self, ctx: superme_agent.core.context.Context, prompt: str) -> str | None"
+    "_model(self, ctx: Context) -> str",
+    "handle(self, ctx: Context, prompt: str) -> str | None"
    ],
    "sig": "class"
   },
@@ -152,19 +152,19 @@
   "SessionStore": {
    "home": "superme_agent.core.sessions",
    "methods": [
-    "_scan(self, ctx: superme_agent.core.context.Context, session_id: str) -> dict | None",
-    "_transcript(self, ctx: superme_agent.core.context.Context, session_id: str, cwd=None)",
-    "_workspace_rows(self, ctx: superme_agent.core.context.Context) -> list[dict]",
-    "delete(self, ctx: superme_agent.core.context.Context, session_id: str, *, cause: str = 'deleted') -> bool",
-    "delete_channel(self, ctx: superme_agent.core.context.Context, session_id: str, *, cause: str = 'deleted') -> int",
-    "discard_transcript(self, ctx: superme_agent.core.context.Context, session_id: str, cwd=None) -> bool",
-    "has_transcript(self, ctx: superme_agent.core.context.Context, session_id: str) -> bool",
-    "list(self, ctx: superme_agent.core.context.Context, mode: str | None = None) -> list[dict]",
-    "read(self, ctx: superme_agent.core.context.Context, session_id: str, limit: int = 10) -> dict | None",
-    "record(self, ctx: superme_agent.core.context.Context, session_id: str | None) -> None",
-    "rename(self, ctx: superme_agent.core.context.Context, session_id: str, title: str | None) -> bool",
-    "transcript_messages(self, ctx: superme_agent.core.context.Context, session_id: str) -> list[dict]",
-    "transcript_mtime(self, ctx: superme_agent.core.context.Context, session_id: str) -> float | None"
+    "_scan(self, ctx: Context, session_id: str) -> dict | None",
+    "_transcript(self, ctx: Context, session_id: str, cwd=None)",
+    "_workspace_rows(self, ctx: Context) -> list[dict]",
+    "delete(self, ctx: Context, session_id: str, *, cause: str = 'deleted') -> bool",
+    "delete_channel(self, ctx: Context, session_id: str, *, cause: str = 'deleted') -> int",
+    "discard_transcript(self, ctx: Context, session_id: str, cwd=None) -> bool",
+    "has_transcript(self, ctx: Context, session_id: str) -> bool",
+    "list(self, ctx: Context, mode: str | None = None) -> list[dict]",
+    "read(self, ctx: Context, session_id: str, limit: int = 10) -> dict | None",
+    "record(self, ctx: Context, session_id: str | None) -> None",
+    "rename(self, ctx: Context, session_id: str, title: str | None) -> bool",
+    "transcript_messages(self, ctx: Context, session_id: str) -> list[dict]",
+    "transcript_mtime(self, ctx: Context, session_id: str) -> float | None"
    ],
    "sig": "class"
   },
@@ -215,16 +215,16 @@
   "AgentService": {
    "home": "superme_agent.core.agent_service",
    "methods": [
-    "_assemble_append(self, ctx: superme_agent.core.context.Context, *, op_home, const_universal, const_repo, activated_assets, system_append: str | None = None, item_bound: bool = False) -> str",
-    "_build_options(self, ctx: superme_agent.core.context.Context, *, resume, model, approve: Callable[[str, dict], Awaitable[bool | str]], extra_mcp_servers, enforce_silent: bool = False, effort: str | None = None, scope_reads: bool = False, system_append: str | None = None, gate_general_mutations: bool = False, general_write_root: pathlib.Path | None = None, write_boundary: list[pathlib.Path] | None = None, shell_roots: list[pathlib.Path] | None = None, hooks: dict | None = None, block_categories: set[str] | None = None, deny_write_tools: str | None = None, protected_paths: list[pathlib.Path] | None = None, protected_nudge: str | None = None, sandbox_writes: list[pathlib.Path] | None = None, item_bound: bool = False) -> claude_agent_sdk.types.ClaudeAgentOptions",
-    "_context_preamble(self, ctx: superme_agent.core.context.Context, *, item_bound: bool = False) -> str",
-    "_fragment_parts(self, ctx: superme_agent.core.context.Context, *, op_home, const_universal, const_repo, activated_assets, system_append: str | None = None, item_bound: bool = False) -> list[dict]",
+    "_assemble_append(self, ctx: Context, *, op_home, const_universal, const_repo, activated_assets, system_append: str | None = None, item_bound: bool = False) -> str",
+    "_build_options(self, ctx: Context, *, resume, model, approve: Callable[[str, dict], Awaitable[bool | str]], extra_mcp_servers, enforce_silent: bool = False, effort: str | None = None, scope_reads: bool = False, system_append: str | None = None, gate_general_mutations: bool = False, general_write_root: pathlib.Path | None = None, write_boundary: list[pathlib.Path] | None = None, shell_roots: list[pathlib.Path] | None = None, hooks: dict | None = None, block_categories: set[str] | None = None, deny_write_tools: str | None = None, protected_paths: list[pathlib.Path] | None = None, protected_nudge: str | None = None, sandbox_writes: list[pathlib.Path] | None = None, item_bound: bool = False) -> claude_agent_sdk.types.ClaudeAgentOptions",
+    "_context_preamble(self, ctx: Context, *, item_bound: bool = False) -> str",
+    "_fragment_parts(self, ctx: Context, *, op_home, const_universal, const_repo, activated_assets, system_append: str | None = None, item_bound: bool = False) -> list[dict]",
     "_join_fragments(frags: list[dict]) -> str",
-    "_resolve_scope(self, ctx: superme_agent.core.context.Context)",
-    "assemble_system_append(self, ctx: superme_agent.core.context.Context, *, system_append: str | None = None, item_bound: bool = False) -> str",
-    "assemble_system_fragments(self, ctx: superme_agent.core.context.Context, *, system_append: str | None = None, item_bound: bool = False) -> list[dict]",
-    "measure_context_floor(self, ctx: superme_agent.core.context.Context, model: str | None = None) -> tuple[int, int] | None",
-    "run_turn(self, ctx: superme_agent.core.context.Context, prompt: str, *, resume: str | None = None, model: str | None = None, effort: str | None = None, approve: Callable[[str, dict], Awaitable[bool | str]], extra_mcp_servers: dict | None = None, enforce_silent: bool = False, scope_reads: bool = False, system_append: str | None = None, gate_general_mutations: bool = False, general_write_root: pathlib.Path | None = None, write_boundary: list[pathlib.Path] | None = None, shell_roots: list[pathlib.Path] | None = None, hooks: dict | None = None, block_categories: set[str] | None = None, deny_write_tools: str | None = None, protected_paths: list[pathlib.Path] | None = None, protected_nudge: str | None = None, sandbox_writes: list[pathlib.Path] | None = None, item_bound: bool = False) -> AsyncIterator[superme_agent.core.events.Init | superme_agent.core.events.TextDelta | superme_agent.core.events.Status | superme_agent.core.events.ToolResult | superme_agent.core.events.Usage | superme_agent.core.events.Result]"
+    "_resolve_scope(self, ctx: Context)",
+    "assemble_system_append(self, ctx: Context, *, system_append: str | None = None, item_bound: bool = False) -> str",
+    "assemble_system_fragments(self, ctx: Context, *, system_append: str | None = None, item_bound: bool = False) -> list[dict]",
+    "measure_context_floor(self, ctx: Context, model: str | None = None) -> tuple[int, int] | None",
+    "run_turn(self, ctx: Context, prompt: str, *, resume: str | None = None, model: str | None = None, effort: str | None = None, approve: Callable[[str, dict], Awaitable[bool | str]], extra_mcp_servers: dict | None = None, enforce_silent: bool = False, scope_reads: bool = False, system_append: str | None = None, gate_general_mutations: bool = False, general_write_root: pathlib.Path | None = None, write_boundary: list[pathlib.Path] | None = None, shell_roots: list[pathlib.Path] | None = None, hooks: dict | None = None, block_categories: set[str] | None = None, deny_write_tools: str | None = None, protected_paths: list[pathlib.Path] | None = None, protected_nudge: str | None = None, sandbox_writes: list[pathlib.Path] | None = None, item_bound: bool = False) -> AsyncIterator[Init | TextDelta | Status | ToolResult | Usage | Result]"
    ],
    "sig": "class"
   },
@@ -355,7 +355,7 @@
   },
   "_read_roots": {
    "home": "superme_agent.core.agent_service",
-   "sig": "def(ctx: superme_agent.core.context.Context) -> list[pathlib.Path]"
+   "sig": "def(ctx: Context) -> list[pathlib.Path]"
   },
   "_result_text": {
    "home": "superme_agent.core.agent_service",
@@ -854,7 +854,7 @@
   },
   "get_profile": {
    "home": "superme_agent.core.kind_profiles",
-   "sig": "def(kind: str | None) -> superme_agent.core.kind_profiles.KindProfile"
+   "sig": "def(kind: str | None) -> KindProfile"
   },
   "intent_ops": {
    "home": "superme_agent.core.artifacts",
@@ -1156,7 +1156,7 @@
   },
   "get_profile": {
    "home": "superme_agent.core.kind_profiles",
-   "sig": "def(kind: str | None) -> superme_agent.core.kind_profiles.KindProfile"
+   "sig": "def(kind: str | None) -> KindProfile"
   }
  },
  "superme_agent.core.autopilot": {
@@ -1209,8 +1209,8 @@
   "CommandLayer": {
    "home": "superme_agent.core.commands",
    "methods": [
-    "_model(self, ctx: superme_agent.core.context.Context) -> str",
-    "handle(self, ctx: superme_agent.core.context.Context, prompt: str) -> str | None"
+    "_model(self, ctx: Context) -> str",
+    "handle(self, ctx: Context, prompt: str) -> str | None"
    ],
    "sig": "class"
   },
@@ -1245,7 +1245,7 @@
     "_run_dict(self, r) -> dict",
     "_seed_repos_config(self) -> None",
     "_usage_parts(usage: dict | None) -> tuple[int, int, int, int]",
-    "add_repo(self, rc: superme_agent.core.spine.RepoConfig) -> superme_agent.core.spine.RepoConfig",
+    "add_repo(self, rc: RepoConfig) -> RepoConfig",
     "agent_model_config(self) -> list[dict]",
     "all_effort_overrides(self) -> dict[str, str]",
     "all_model_overrides(self) -> dict[str, str]",
@@ -1306,11 +1306,11 @@
     "record_run_input(self, run_id: int, *, repo_id: str, item_id: str | None, phase: str | None, feature: str | None, background: bool, system_prompt: str, prompt_body: str, system_fragments: str | None = None, turn_surface: str | None = None, authored_extras: str | None = None) -> None",
     "record_session(self, session_id: str, cwd, *, surface: str = 'web', mode: str = 'core', thread_ts: str | None = None, repo_id: str | None = None, resumable: bool = True) -> dict | None",
     "release_item_runs(self, repo_id: str, item_id: str) -> int",
-    "remove_repo(self, repo_id: str) -> superme_agent.core.spine.RepoConfig",
-    "repo(self, repo_id: str) -> superme_agent.core.spine.RepoConfig | None",
+    "remove_repo(self, repo_id: str) -> RepoConfig",
+    "repo(self, repo_id: str) -> RepoConfig | None",
     "repo_for_cwd(self, cwd) -> str | None",
     "repo_status(self, repo_id: str, mode: str) -> dict",
-    "repos(self) -> dict[str, superme_agent.core.spine.RepoConfig]",
+    "repos(self) -> dict[str, RepoConfig]",
     "resolve_agent_effort(self, feature: str) -> str",
     "resolve_agent_model(self, feature: str) -> str",
     "role_effort(self, repo_id: str, role: str, *, item_effort: str | None = None) -> str",
@@ -1360,16 +1360,16 @@
     "subagent_briefs(self, repo_id: str, item_id: str, *, phase: str) -> list[dict]",
     "subagent_count(self, repo_id: str, item_id: str, *, phase: str) -> int",
     "system(self) -> dict",
-    "system_config(self) -> superme_agent.core.spine.SystemConfig",
+    "system_config(self) -> SystemConfig",
     "token_timeseries(self, tz_offset: int = 0) -> dict",
     "token_usage(self) -> dict",
-    "update_repo(self, repo_id: str, **fields) -> superme_agent.core.spine.RepoConfig"
+    "update_repo(self, repo_id: str, **fields) -> RepoConfig"
    ],
    "sig": "class"
   },
   "get_spine": {
    "home": "superme_agent.core.spine",
-   "sig": "def() -> superme_agent.core.spine.SystemSpine"
+   "sig": "def() -> SystemSpine"
   },
   "log": {
    "sig": "value:Logger"
@@ -1874,7 +1874,7 @@
   },
   "_from_text": {
    "home": "superme_agent.core.faults",
-   "sig": "def(text: str, *, source: str) -> superme_agent.core.faults.Fault"
+   "sig": "def(text: str, *, source: str) -> Fault"
   },
   "_retry_after": {
    "home": "superme_agent.core.faults",
@@ -1882,7 +1882,7 @@
   },
   "classify": {
    "home": "superme_agent.core.faults",
-   "sig": "def(*, exc: BaseException | None = None, reply: str | None = None, did_work: bool = False) -> superme_agent.core.faults.Fault"
+   "sig": "def(*, exc: BaseException | None = None, reply: str | None = None, did_work: bool = False) -> Fault"
   },
   "next_delay": {
    "home": "superme_agent.core.faults",
@@ -1951,7 +1951,7 @@
   },
   "get_profile": {
    "home": "superme_agent.core.kind_profiles",
-   "sig": "def(kind: str | None) -> superme_agent.core.kind_profiles.KindProfile"
+   "sig": "def(kind: str | None) -> KindProfile"
   },
   "guide_check": {
    "home": "superme_agent.core.gate_briefs",
@@ -2297,7 +2297,7 @@
   },
   "push_inbox_item": {
    "home": "superme_agent.core.inbox_flow",
-   "sig": "def(store, dev: superme_agent.core.dev_knowledge.DevKnowledgeService, dev_root: pathlib.Path, row: dict, *, context_id: str, actor: str = 'owner') -> dict"
+   "sig": "def(store, dev: DevKnowledgeService, dev_root: pathlib.Path, row: dict, *, context_id: str, actor: str = 'owner') -> dict"
   },
   "read_brief": {
    "home": "superme_agent.core.inbox_flow",
@@ -2545,7 +2545,7 @@
   },
   "get_profile": {
    "home": "superme_agent.core.kind_profiles",
-   "sig": "def(kind: str | None) -> superme_agent.core.kind_profiles.KindProfile"
+   "sig": "def(kind: str | None) -> KindProfile"
   },
   "is_conversation": {
    "home": "superme_agent.core.kind_profiles",
@@ -2585,7 +2585,7 @@
   },
   "standing_families": {
    "home": "superme_agent.core.kind_profiles",
-   "sig": "def() -> tuple[superme_agent.core.kind_profiles.ResearchFamily, ...]"
+   "sig": "def() -> tuple[ResearchFamily, ...]"
   }
  },
  "superme_agent.core.knowledge_delta": {
@@ -3410,19 +3410,19 @@
   "SessionStore": {
    "home": "superme_agent.core.sessions",
    "methods": [
-    "_scan(self, ctx: superme_agent.core.context.Context, session_id: str) -> dict | None",
-    "_transcript(self, ctx: superme_agent.core.context.Context, session_id: str, cwd=None)",
-    "_workspace_rows(self, ctx: superme_agent.core.context.Context) -> list[dict]",
-    "delete(self, ctx: superme_agent.core.context.Context, session_id: str, *, cause: str = 'deleted') -> bool",
-    "delete_channel(self, ctx: superme_agent.core.context.Context, session_id: str, *, cause: str = 'deleted') -> int",
-    "discard_transcript(self, ctx: superme_agent.core.context.Context, session_id: str, cwd=None) -> bool",
-    "has_transcript(self, ctx: superme_agent.core.context.Context, session_id: str) -> bool",
-    "list(self, ctx: superme_agent.core.context.Context, mode: str | None = None) -> list[dict]",
-    "read(self, ctx: superme_agent.core.context.Context, session_id: str, limit: int = 10) -> dict | None",
-    "record(self, ctx: superme_agent.core.context.Context, session_id: str | None) -> None",
-    "rename(self, ctx: superme_agent.core.context.Context, session_id: str, title: str | None) -> bool",
-    "transcript_messages(self, ctx: superme_agent.core.context.Context, session_id: str) -> list[dict]",
-    "transcript_mtime(self, ctx: superme_agent.core.context.Context, session_id: str) -> float | None"
+    "_scan(self, ctx: Context, session_id: str) -> dict | None",
+    "_transcript(self, ctx: Context, session_id: str, cwd=None)",
+    "_workspace_rows(self, ctx: Context) -> list[dict]",
+    "delete(self, ctx: Context, session_id: str, *, cause: str = 'deleted') -> bool",
+    "delete_channel(self, ctx: Context, session_id: str, *, cause: str = 'deleted') -> int",
+    "discard_transcript(self, ctx: Context, session_id: str, cwd=None) -> bool",
+    "has_transcript(self, ctx: Context, session_id: str) -> bool",
+    "list(self, ctx: Context, mode: str | None = None) -> list[dict]",
+    "read(self, ctx: Context, session_id: str, limit: int = 10) -> dict | None",
+    "record(self, ctx: Context, session_id: str | None) -> None",
+    "rename(self, ctx: Context, session_id: str, title: str | None) -> bool",
+    "transcript_messages(self, ctx: Context, session_id: str) -> list[dict]",
+    "transcript_mtime(self, ctx: Context, session_id: str) -> float | None"
    ],
    "sig": "class"
   },
@@ -3443,7 +3443,7 @@
     "_run_dict(self, r) -> dict",
     "_seed_repos_config(self) -> None",
     "_usage_parts(usage: dict | None) -> tuple[int, int, int, int]",
-    "add_repo(self, rc: superme_agent.core.spine.RepoConfig) -> superme_agent.core.spine.RepoConfig",
+    "add_repo(self, rc: RepoConfig) -> RepoConfig",
     "agent_model_config(self) -> list[dict]",
     "all_effort_overrides(self) -> dict[str, str]",
     "all_model_overrides(self) -> dict[str, str]",
@@ -3504,11 +3504,11 @@
     "record_run_input(self, run_id: int, *, repo_id: str, item_id: str | None, phase: str | None, feature: str | None, background: bool, system_prompt: str, prompt_body: str, system_fragments: str | None = None, turn_surface: str | None = None, authored_extras: str | None = None) -> None",
     "record_session(self, session_id: str, cwd, *, surface: str = 'web', mode: str = 'core', thread_ts: str | None = None, repo_id: str | None = None, resumable: bool = True) -> dict | None",
     "release_item_runs(self, repo_id: str, item_id: str) -> int",
-    "remove_repo(self, repo_id: str) -> superme_agent.core.spine.RepoConfig",
-    "repo(self, repo_id: str) -> superme_agent.core.spine.RepoConfig | None",
+    "remove_repo(self, repo_id: str) -> RepoConfig",
+    "repo(self, repo_id: str) -> RepoConfig | None",
     "repo_for_cwd(self, cwd) -> str | None",
     "repo_status(self, repo_id: str, mode: str) -> dict",
-    "repos(self) -> dict[str, superme_agent.core.spine.RepoConfig]",
+    "repos(self) -> dict[str, RepoConfig]",
     "resolve_agent_effort(self, feature: str) -> str",
     "resolve_agent_model(self, feature: str) -> str",
     "role_effort(self, repo_id: str, role: str, *, item_effort: str | None = None) -> str",
@@ -3558,10 +3558,10 @@
     "subagent_briefs(self, repo_id: str, item_id: str, *, phase: str) -> list[dict]",
     "subagent_count(self, repo_id: str, item_id: str, *, phase: str) -> int",
     "system(self) -> dict",
-    "system_config(self) -> superme_agent.core.spine.SystemConfig",
+    "system_config(self) -> SystemConfig",
     "token_timeseries(self, tz_offset: int = 0) -> dict",
     "token_usage(self) -> dict",
-    "update_repo(self, repo_id: str, **fields) -> superme_agent.core.spine.RepoConfig"
+    "update_repo(self, repo_id: str, **fields) -> RepoConfig"
    ],
    "sig": "class"
   },
@@ -3604,7 +3604,7 @@
   },
   "get_spine": {
    "home": "superme_agent.core.spine",
-   "sig": "def() -> superme_agent.core.spine.SystemSpine"
+   "sig": "def() -> SystemSpine"
   },
   "is_conversation": {
    "home": "superme_agent.core.kind_profiles",
@@ -3691,7 +3691,7 @@
     "_run_dict(self, r) -> dict",
     "_seed_repos_config(self) -> None",
     "_usage_parts(usage: dict | None) -> tuple[int, int, int, int]",
-    "add_repo(self, rc: superme_agent.core.spine.RepoConfig) -> superme_agent.core.spine.RepoConfig",
+    "add_repo(self, rc: RepoConfig) -> RepoConfig",
     "agent_model_config(self) -> list[dict]",
     "all_effort_overrides(self) -> dict[str, str]",
     "all_model_overrides(self) -> dict[str, str]",
@@ -3752,11 +3752,11 @@
     "record_run_input(self, run_id: int, *, repo_id: str, item_id: str | None, phase: str | None, feature: str | None, background: bool, system_prompt: str, prompt_body: str, system_fragments: str | None = None, turn_surface: str | None = None, authored_extras: str | None = None) -> None",
     "record_session(self, session_id: str, cwd, *, surface: str = 'web', mode: str = 'core', thread_ts: str | None = None, repo_id: str | None = None, resumable: bool = True) -> dict | None",
     "release_item_runs(self, repo_id: str, item_id: str) -> int",
-    "remove_repo(self, repo_id: str) -> superme_agent.core.spine.RepoConfig",
-    "repo(self, repo_id: str) -> superme_agent.core.spine.RepoConfig | None",
+    "remove_repo(self, repo_id: str) -> RepoConfig",
+    "repo(self, repo_id: str) -> RepoConfig | None",
     "repo_for_cwd(self, cwd) -> str | None",
     "repo_status(self, repo_id: str, mode: str) -> dict",
-    "repos(self) -> dict[str, superme_agent.core.spine.RepoConfig]",
+    "repos(self) -> dict[str, RepoConfig]",
     "resolve_agent_effort(self, feature: str) -> str",
     "resolve_agent_model(self, feature: str) -> str",
     "role_effort(self, repo_id: str, role: str, *, item_effort: str | None = None) -> str",
@@ -3806,10 +3806,10 @@
     "subagent_briefs(self, repo_id: str, item_id: str, *, phase: str) -> list[dict]",
     "subagent_count(self, repo_id: str, item_id: str, *, phase: str) -> int",
     "system(self) -> dict",
-    "system_config(self) -> superme_agent.core.spine.SystemConfig",
+    "system_config(self) -> SystemConfig",
     "token_timeseries(self, tz_offset: int = 0) -> dict",
     "token_usage(self) -> dict",
-    "update_repo(self, repo_id: str, **fields) -> superme_agent.core.spine.RepoConfig"
+    "update_repo(self, repo_id: str, **fields) -> RepoConfig"
    ],
    "sig": "class"
   },
@@ -3843,15 +3843,15 @@
   },
   "get_spine": {
    "home": "superme_agent.core.spine",
-   "sig": "def() -> superme_agent.core.spine.SystemSpine"
+   "sig": "def() -> SystemSpine"
   },
   "load_repos": {
    "home": "superme_agent.core.spine",
-   "sig": "def(path: pathlib.Path = PosixPath('<root>/superme_agent/config/repos.yaml')) -> dict[str, superme_agent.core.spine.RepoConfig]"
+   "sig": "def(path: pathlib.Path = PosixPath('<root>/superme_agent/config/repos.yaml')) -> dict[str, RepoConfig]"
   },
   "load_system_config": {
    "home": "superme_agent.core.spine",
-   "sig": "def(path: pathlib.Path = PosixPath('<root>/superme_agent/config/system.yaml')) -> superme_agent.core.spine.SystemConfig"
+   "sig": "def(path: pathlib.Path = PosixPath('<root>/superme_agent/config/system.yaml')) -> SystemConfig"
   },
   "log": {
    "sig": "value:Logger"
@@ -4087,7 +4087,7 @@
   },
   "build": {
    "home": "superme_agent.core.workgraph",
-   "sig": "def(*, repo_id: str, items: list[dict], deliverables: list[dict], waves: list[dict], inbox_rows: list[dict]) -> superme_agent.core.workgraph.WorkGraph"
+   "sig": "def(*, repo_id: str, items: list[dict], deliverables: list[dict], waves: list[dict], inbox_rows: list[dict]) -> WorkGraph"
   },
   "item_node_id": {
    "home": "superme_agent.core.workgraph",
@@ -4118,24 +4118,24 @@
   "AgentService": {
    "home": "superme_agent.core.agent_service",
    "methods": [
-    "_assemble_append(self, ctx: superme_agent.core.context.Context, *, op_home, const_universal, const_repo, activated_assets, system_append: str | None = None, item_bound: bool = False) -> str",
-    "_build_options(self, ctx: superme_agent.core.context.Context, *, resume, model, approve: Callable[[str, dict], Awaitable[bool | str]], extra_mcp_servers, enforce_silent: bool = False, effort: str | None = None, scope_reads: bool = False, system_append: str | None = None, gate_general_mutations: bool = False, general_write_root: pathlib.Path | None = None, write_boundary: list[pathlib.Path] | None = None, shell_roots: list[pathlib.Path] | None = None, hooks: dict | None = None, block_categories: set[str] | None = None, deny_write_tools: str | None = None, protected_paths: list[pathlib.Path] | None = None, protected_nudge: str | None = None, sandbox_writes: list[pathlib.Path] | None = None, item_bound: bool = False) -> claude_agent_sdk.types.ClaudeAgentOptions",
-    "_context_preamble(self, ctx: superme_agent.core.context.Context, *, item_bound: bool = False) -> str",
-    "_fragment_parts(self, ctx: superme_agent.core.context.Context, *, op_home, const_universal, const_repo, activated_assets, system_append: str | None = None, item_bound: bool = False) -> list[dict]",
+    "_assemble_append(self, ctx: Context, *, op_home, const_universal, const_repo, activated_assets, system_append: str | None = None, item_bound: bool = False) -> str",
+    "_build_options(self, ctx: Context, *, resume, model, approve: Callable[[str, dict], Awaitable[bool | str]], extra_mcp_servers, enforce_silent: bool = False, effort: str | None = None, scope_reads: bool = False, system_append: str | None = None, gate_general_mutations: bool = False, general_write_root: pathlib.Path | None = None, write_boundary: list[pathlib.Path] | None = None, shell_roots: list[pathlib.Path] | None = None, hooks: dict | None = None, block_categories: set[str] | None = None, deny_write_tools: str | None = None, protected_paths: list[pathlib.Path] | None = None, protected_nudge: str | None = None, sandbox_writes: list[pathlib.Path] | None = None, item_bound: bool = False) -> claude_agent_sdk.types.ClaudeAgentOptions",
+    "_context_preamble(self, ctx: Context, *, item_bound: bool = False) -> str",
+    "_fragment_parts(self, ctx: Context, *, op_home, const_universal, const_repo, activated_assets, system_append: str | None = None, item_bound: bool = False) -> list[dict]",
     "_join_fragments(frags: list[dict]) -> str",
-    "_resolve_scope(self, ctx: superme_agent.core.context.Context)",
-    "assemble_system_append(self, ctx: superme_agent.core.context.Context, *, system_append: str | None = None, item_bound: bool = False) -> str",
-    "assemble_system_fragments(self, ctx: superme_agent.core.context.Context, *, system_append: str | None = None, item_bound: bool = False) -> list[dict]",
-    "measure_context_floor(self, ctx: superme_agent.core.context.Context, model: str | None = None) -> tuple[int, int] | None",
-    "run_turn(self, ctx: superme_agent.core.context.Context, prompt: str, *, resume: str | None = None, model: str | None = None, effort: str | None = None, approve: Callable[[str, dict], Awaitable[bool | str]], extra_mcp_servers: dict | None = None, enforce_silent: bool = False, scope_reads: bool = False, system_append: str | None = None, gate_general_mutations: bool = False, general_write_root: pathlib.Path | None = None, write_boundary: list[pathlib.Path] | None = None, shell_roots: list[pathlib.Path] | None = None, hooks: dict | None = None, block_categories: set[str] | None = None, deny_write_tools: str | None = None, protected_paths: list[pathlib.Path] | None = None, protected_nudge: str | None = None, sandbox_writes: list[pathlib.Path] | None = None, item_bound: bool = False) -> AsyncIterator[superme_agent.core.events.Init | superme_agent.core.events.TextDelta | superme_agent.core.events.Status | superme_agent.core.events.ToolResult | superme_agent.core.events.Usage | superme_agent.core.events.Result]"
+    "_resolve_scope(self, ctx: Context)",
+    "assemble_system_append(self, ctx: Context, *, system_append: str | None = None, item_bound: bool = False) -> str",
+    "assemble_system_fragments(self, ctx: Context, *, system_append: str | None = None, item_bound: bool = False) -> list[dict]",
+    "measure_context_floor(self, ctx: Context, model: str | None = None) -> tuple[int, int] | None",
+    "run_turn(self, ctx: Context, prompt: str, *, resume: str | None = None, model: str | None = None, effort: str | None = None, approve: Callable[[str, dict], Awaitable[bool | str]], extra_mcp_servers: dict | None = None, enforce_silent: bool = False, scope_reads: bool = False, system_append: str | None = None, gate_general_mutations: bool = False, general_write_root: pathlib.Path | None = None, write_boundary: list[pathlib.Path] | None = None, shell_roots: list[pathlib.Path] | None = None, hooks: dict | None = None, block_categories: set[str] | None = None, deny_write_tools: str | None = None, protected_paths: list[pathlib.Path] | None = None, protected_nudge: str | None = None, sandbox_writes: list[pathlib.Path] | None = None, item_bound: bool = False) -> AsyncIterator[Init | TextDelta | Status | ToolResult | Usage | Result]"
    ],
    "sig": "class"
   },
   "CommandLayer": {
    "home": "superme_agent.core.commands",
    "methods": [
-    "_model(self, ctx: superme_agent.core.context.Context) -> str",
-    "handle(self, ctx: superme_agent.core.context.Context, prompt: str) -> str | None"
+    "_model(self, ctx: Context) -> str",
+    "handle(self, ctx: Context, prompt: str) -> str | None"
    ],
    "sig": "class"
   },
@@ -4248,19 +4248,19 @@
   "SessionStore": {
    "home": "superme_agent.core.sessions",
    "methods": [
-    "_scan(self, ctx: superme_agent.core.context.Context, session_id: str) -> dict | None",
-    "_transcript(self, ctx: superme_agent.core.context.Context, session_id: str, cwd=None)",
-    "_workspace_rows(self, ctx: superme_agent.core.context.Context) -> list[dict]",
-    "delete(self, ctx: superme_agent.core.context.Context, session_id: str, *, cause: str = 'deleted') -> bool",
-    "delete_channel(self, ctx: superme_agent.core.context.Context, session_id: str, *, cause: str = 'deleted') -> int",
-    "discard_transcript(self, ctx: superme_agent.core.context.Context, session_id: str, cwd=None) -> bool",
-    "has_transcript(self, ctx: superme_agent.core.context.Context, session_id: str) -> bool",
-    "list(self, ctx: superme_agent.core.context.Context, mode: str | None = None) -> list[dict]",
-    "read(self, ctx: superme_agent.core.context.Context, session_id: str, limit: int = 10) -> dict | None",
-    "record(self, ctx: superme_agent.core.context.Context, session_id: str | None) -> None",
-    "rename(self, ctx: superme_agent.core.context.Context, session_id: str, title: str | None) -> bool",
-    "transcript_messages(self, ctx: superme_agent.core.context.Context, session_id: str) -> list[dict]",
-    "transcript_mtime(self, ctx: superme_agent.core.context.Context, session_id: str) -> float | None"
+    "_scan(self, ctx: Context, session_id: str) -> dict | None",
+    "_transcript(self, ctx: Context, session_id: str, cwd=None)",
+    "_workspace_rows(self, ctx: Context) -> list[dict]",
+    "delete(self, ctx: Context, session_id: str, *, cause: str = 'deleted') -> bool",
+    "delete_channel(self, ctx: Context, session_id: str, *, cause: str = 'deleted') -> int",
+    "discard_transcript(self, ctx: Context, session_id: str, cwd=None) -> bool",
+    "has_transcript(self, ctx: Context, session_id: str) -> bool",
+    "list(self, ctx: Context, mode: str | None = None) -> list[dict]",
+    "read(self, ctx: Context, session_id: str, limit: int = 10) -> dict | None",
+    "record(self, ctx: Context, session_id: str | None) -> None",
+    "rename(self, ctx: Context, session_id: str, title: str | None) -> bool",
+    "transcript_messages(self, ctx: Context, session_id: str) -> list[dict]",
+    "transcript_mtime(self, ctx: Context, session_id: str) -> float | None"
    ],
    "sig": "class"
   },
@@ -4281,7 +4281,7 @@
     "_run_dict(self, r) -> dict",
     "_seed_repos_config(self) -> None",
     "_usage_parts(usage: dict | None) -> tuple[int, int, int, int]",
-    "add_repo(self, rc: superme_agent.core.spine.RepoConfig) -> superme_agent.core.spine.RepoConfig",
+    "add_repo(self, rc: RepoConfig) -> RepoConfig",
     "agent_model_config(self) -> list[dict]",
     "all_effort_overrides(self) -> dict[str, str]",
     "all_model_overrides(self) -> dict[str, str]",
@@ -4342,11 +4342,11 @@
     "record_run_input(self, run_id: int, *, repo_id: str, item_id: str | None, phase: str | None, feature: str | None, background: bool, system_prompt: str, prompt_body: str, system_fragments: str | None = None, turn_surface: str | None = None, authored_extras: str | None = None) -> None",
     "record_session(self, session_id: str, cwd, *, surface: str = 'web', mode: str = 'core', thread_ts: str | None = None, repo_id: str | None = None, resumable: bool = True) -> dict | None",
     "release_item_runs(self, repo_id: str, item_id: str) -> int",
-    "remove_repo(self, repo_id: str) -> superme_agent.core.spine.RepoConfig",
-    "repo(self, repo_id: str) -> superme_agent.core.spine.RepoConfig | None",
+    "remove_repo(self, repo_id: str) -> RepoConfig",
+    "repo(self, repo_id: str) -> RepoConfig | None",
     "repo_for_cwd(self, cwd) -> str | None",
     "repo_status(self, repo_id: str, mode: str) -> dict",
-    "repos(self) -> dict[str, superme_agent.core.spine.RepoConfig]",
+    "repos(self) -> dict[str, RepoConfig]",
     "resolve_agent_effort(self, feature: str) -> str",
     "resolve_agent_model(self, feature: str) -> str",
     "role_effort(self, repo_id: str, role: str, *, item_effort: str | None = None) -> str",
@@ -4396,16 +4396,16 @@
     "subagent_briefs(self, repo_id: str, item_id: str, *, phase: str) -> list[dict]",
     "subagent_count(self, repo_id: str, item_id: str, *, phase: str) -> int",
     "system(self) -> dict",
-    "system_config(self) -> superme_agent.core.spine.SystemConfig",
+    "system_config(self) -> SystemConfig",
     "token_timeseries(self, tz_offset: int = 0) -> dict",
     "token_usage(self) -> dict",
-    "update_repo(self, repo_id: str, **fields) -> superme_agent.core.spine.RepoConfig"
+    "update_repo(self, repo_id: str, **fields) -> RepoConfig"
    ],
    "sig": "class"
   },
   "_spine_factory": {
    "home": "superme_agent.core.spine",
-   "sig": "def() -> superme_agent.core.spine.SystemSpine"
+   "sig": "def() -> SystemSpine"
   },
   "agent": {
    "sig": "value:AgentService"
@@ -4421,23 +4421,23 @@
   },
   "get_dev": {
    "home": "superme_agent.daemon.app_state",
-   "sig": "def() -> superme_agent.core.dev_knowledge.DevKnowledgeService"
+   "sig": "def() -> DevKnowledgeService"
   },
   "get_dev_store": {
    "home": "superme_agent.daemon.app_state",
-   "sig": "def() -> superme_agent.core.dev_store.DevStore"
+   "sig": "def() -> DevStore"
   },
   "get_knowledge": {
    "home": "superme_agent.daemon.app_state",
-   "sig": "def() -> superme_agent.core.knowledge_service.KnowledgeService"
+   "sig": "def() -> KnowledgeService"
   },
   "get_sessions": {
    "home": "superme_agent.daemon.app_state",
-   "sig": "def() -> superme_agent.core.sessions.SessionStore"
+   "sig": "def() -> SessionStore"
   },
   "get_spine": {
    "home": "superme_agent.daemon.app_state",
-   "sig": "def() -> superme_agent.core.spine.SystemSpine"
+   "sig": "def() -> SystemSpine"
   },
   "knowledge": {
    "sig": "value:KnowledgeService"
@@ -4635,7 +4635,7 @@
   },
   "event_to_frame": {
    "home": "superme_agent.daemon.protocol",
-   "sig": "def(ev: superme_agent.core.events.Init | superme_agent.core.events.TextDelta | superme_agent.core.events.Status | superme_agent.core.events.ToolResult | superme_agent.core.events.Usage | superme_agent.core.events.Result) -> dict"
+   "sig": "def(ev: Init | TextDelta | Status | ToolResult | Usage | Result) -> dict"
   },
   "init_frame": {
    "home": "superme_agent.daemon.protocol",
@@ -4643,7 +4643,7 @@
   },
   "parse_inbound": {
    "home": "superme_agent.daemon.protocol",
-   "sig": "def(msg: dict) -> superme_agent.daemon.schemas.ws.TurnFrame | superme_agent.daemon.schemas.ws.ApprovalResponseFrame | superme_agent.daemon.schemas.ws.WatchFrame | None"
+   "sig": "def(msg: dict) -> TurnFrame | ApprovalResponseFrame | WatchFrame | None"
   },
   "result_frame": {
    "home": "superme_agent.daemon.protocol",
@@ -4788,19 +4788,19 @@
   "SessionStore": {
    "home": "superme_agent.core.sessions",
    "methods": [
-    "_scan(self, ctx: superme_agent.core.context.Context, session_id: str) -> dict | None",
-    "_transcript(self, ctx: superme_agent.core.context.Context, session_id: str, cwd=None)",
-    "_workspace_rows(self, ctx: superme_agent.core.context.Context) -> list[dict]",
-    "delete(self, ctx: superme_agent.core.context.Context, session_id: str, *, cause: str = 'deleted') -> bool",
-    "delete_channel(self, ctx: superme_agent.core.context.Context, session_id: str, *, cause: str = 'deleted') -> int",
-    "discard_transcript(self, ctx: superme_agent.core.context.Context, session_id: str, cwd=None) -> bool",
-    "has_transcript(self, ctx: superme_agent.core.context.Context, session_id: str) -> bool",
-    "list(self, ctx: superme_agent.core.context.Context, mode: str | None = None) -> list[dict]",
-    "read(self, ctx: superme_agent.core.context.Context, session_id: str, limit: int = 10) -> dict | None",
-    "record(self, ctx: superme_agent.core.context.Context, session_id: str | None) -> None",
-    "rename(self, ctx: superme_agent.core.context.Context, session_id: str, title: str | None) -> bool",
-    "transcript_messages(self, ctx: superme_agent.core.context.Context, session_id: str) -> list[dict]",
-    "transcript_mtime(self, ctx: superme_agent.core.context.Context, session_id: str) -> float | None"
+    "_scan(self, ctx: Context, session_id: str) -> dict | None",
+    "_transcript(self, ctx: Context, session_id: str, cwd=None)",
+    "_workspace_rows(self, ctx: Context) -> list[dict]",
+    "delete(self, ctx: Context, session_id: str, *, cause: str = 'deleted') -> bool",
+    "delete_channel(self, ctx: Context, session_id: str, *, cause: str = 'deleted') -> int",
+    "discard_transcript(self, ctx: Context, session_id: str, cwd=None) -> bool",
+    "has_transcript(self, ctx: Context, session_id: str) -> bool",
+    "list(self, ctx: Context, mode: str | None = None) -> list[dict]",
+    "read(self, ctx: Context, session_id: str, limit: int = 10) -> dict | None",
+    "record(self, ctx: Context, session_id: str | None) -> None",
+    "rename(self, ctx: Context, session_id: str, title: str | None) -> bool",
+    "transcript_messages(self, ctx: Context, session_id: str) -> list[dict]",
+    "transcript_mtime(self, ctx: Context, session_id: str) -> float | None"
    ],
    "sig": "class"
   },
@@ -4821,7 +4821,7 @@
     "_run_dict(self, r) -> dict",
     "_seed_repos_config(self) -> None",
     "_usage_parts(usage: dict | None) -> tuple[int, int, int, int]",
-    "add_repo(self, rc: superme_agent.core.spine.RepoConfig) -> superme_agent.core.spine.RepoConfig",
+    "add_repo(self, rc: RepoConfig) -> RepoConfig",
     "agent_model_config(self) -> list[dict]",
     "all_effort_overrides(self) -> dict[str, str]",
     "all_model_overrides(self) -> dict[str, str]",
@@ -4882,11 +4882,11 @@
     "record_run_input(self, run_id: int, *, repo_id: str, item_id: str | None, phase: str | None, feature: str | None, background: bool, system_prompt: str, prompt_body: str, system_fragments: str | None = None, turn_surface: str | None = None, authored_extras: str | None = None) -> None",
     "record_session(self, session_id: str, cwd, *, surface: str = 'web', mode: str = 'core', thread_ts: str | None = None, repo_id: str | None = None, resumable: bool = True) -> dict | None",
     "release_item_runs(self, repo_id: str, item_id: str) -> int",
-    "remove_repo(self, repo_id: str) -> superme_agent.core.spine.RepoConfig",
-    "repo(self, repo_id: str) -> superme_agent.core.spine.RepoConfig | None",
+    "remove_repo(self, repo_id: str) -> RepoConfig",
+    "repo(self, repo_id: str) -> RepoConfig | None",
     "repo_for_cwd(self, cwd) -> str | None",
     "repo_status(self, repo_id: str, mode: str) -> dict",
-    "repos(self) -> dict[str, superme_agent.core.spine.RepoConfig]",
+    "repos(self) -> dict[str, RepoConfig]",
     "resolve_agent_effort(self, feature: str) -> str",
     "resolve_agent_model(self, feature: str) -> str",
     "role_effort(self, repo_id: str, role: str, *, item_effort: str | None = None) -> str",
@@ -4936,10 +4936,10 @@
     "subagent_briefs(self, repo_id: str, item_id: str, *, phase: str) -> list[dict]",
     "subagent_count(self, repo_id: str, item_id: str, *, phase: str) -> int",
     "system(self) -> dict",
-    "system_config(self) -> superme_agent.core.spine.SystemConfig",
+    "system_config(self) -> SystemConfig",
     "token_timeseries(self, tz_offset: int = 0) -> dict",
     "token_usage(self) -> dict",
-    "update_repo(self, repo_id: str, **fields) -> superme_agent.core.spine.RepoConfig"
+    "update_repo(self, repo_id: str, **fields) -> RepoConfig"
    ],
    "sig": "class"
   },
@@ -4949,43 +4949,43 @@
   },
   "_load": {
    "home": "superme_agent.daemon.routers.dev.gates",
-   "sig": "def(context_id: str, item_id: str, dev: superme_agent.core.dev_knowledge.DevKnowledgeService)"
+   "sig": "def(context_id: str, item_id: str, dev: DevKnowledgeService)"
   },
   "dev_work_item_abandon": {
    "home": "superme_agent.daemon.routers.dev.gates",
-   "sig": "def(item_id: str, body: superme_agent.daemon.routers.dev.gates.AbandonBody, dev: superme_agent.core.dev_knowledge.DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None), dev_store: superme_agent.core.dev_store.DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None), sessions: superme_agent.core.sessions.SessionStore = Depends(dependency=<function get_sessions>, use_cache=True, scope=None), spine: superme_agent.core.spine.SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(item_id: str, body: AbandonBody, dev: DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None), dev_store: DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None), sessions: SessionStore = Depends(dependency=<function get_sessions>, use_cache=True, scope=None), spine: SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
   },
   "dev_work_item_drilldown": {
    "home": "superme_agent.daemon.routers.dev.gates",
-   "sig": "def(item_id: str, context_id: str = 'global', dev: superme_agent.core.dev_knowledge.DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None), dev_store: superme_agent.core.dev_store.DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None), spine: superme_agent.core.spine.SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(item_id: str, context_id: str = 'global', dev: DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None), dev_store: DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None), spine: SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
   },
   "dev_work_item_owner_input": {
    "home": "superme_agent.daemon.routers.dev.gates",
-   "sig": "def(item_id: str, context_id: str = 'global', dev: superme_agent.core.dev_knowledge.DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(item_id: str, context_id: str = 'global', dev: DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None)) -> dict"
   },
   "dev_work_item_report": {
    "home": "superme_agent.daemon.routers.dev.gates",
-   "sig": "def(item_id: str, phase: str, context_id: str = 'global', dev: superme_agent.core.dev_knowledge.DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(item_id: str, phase: str, context_id: str = 'global', dev: DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None)) -> dict"
   },
   "dev_work_item_set_owner_input": {
    "home": "superme_agent.daemon.routers.dev.gates",
-   "sig": "def(item_id: str, body: superme_agent.daemon.routers.dev.gates.OwnerInputBody, dev: superme_agent.core.dev_knowledge.DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(item_id: str, body: OwnerInputBody, dev: DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None)) -> dict"
   },
   "get_dev": {
    "home": "superme_agent.daemon.app_state",
-   "sig": "def() -> superme_agent.core.dev_knowledge.DevKnowledgeService"
+   "sig": "def() -> DevKnowledgeService"
   },
   "get_dev_store": {
    "home": "superme_agent.daemon.app_state",
-   "sig": "def() -> superme_agent.core.dev_store.DevStore"
+   "sig": "def() -> DevStore"
   },
   "get_sessions": {
    "home": "superme_agent.daemon.app_state",
-   "sig": "def() -> superme_agent.core.sessions.SessionStore"
+   "sig": "def() -> SessionStore"
   },
   "get_spine": {
    "home": "superme_agent.daemon.app_state",
-   "sig": "def() -> superme_agent.core.spine.SystemSpine"
+   "sig": "def() -> SystemSpine"
   },
   "log": {
    "sig": "value:Logger"
@@ -5120,7 +5120,7 @@
     "_run_dict(self, r) -> dict",
     "_seed_repos_config(self) -> None",
     "_usage_parts(usage: dict | None) -> tuple[int, int, int, int]",
-    "add_repo(self, rc: superme_agent.core.spine.RepoConfig) -> superme_agent.core.spine.RepoConfig",
+    "add_repo(self, rc: RepoConfig) -> RepoConfig",
     "agent_model_config(self) -> list[dict]",
     "all_effort_overrides(self) -> dict[str, str]",
     "all_model_overrides(self) -> dict[str, str]",
@@ -5181,11 +5181,11 @@
     "record_run_input(self, run_id: int, *, repo_id: str, item_id: str | None, phase: str | None, feature: str | None, background: bool, system_prompt: str, prompt_body: str, system_fragments: str | None = None, turn_surface: str | None = None, authored_extras: str | None = None) -> None",
     "record_session(self, session_id: str, cwd, *, surface: str = 'web', mode: str = 'core', thread_ts: str | None = None, repo_id: str | None = None, resumable: bool = True) -> dict | None",
     "release_item_runs(self, repo_id: str, item_id: str) -> int",
-    "remove_repo(self, repo_id: str) -> superme_agent.core.spine.RepoConfig",
-    "repo(self, repo_id: str) -> superme_agent.core.spine.RepoConfig | None",
+    "remove_repo(self, repo_id: str) -> RepoConfig",
+    "repo(self, repo_id: str) -> RepoConfig | None",
     "repo_for_cwd(self, cwd) -> str | None",
     "repo_status(self, repo_id: str, mode: str) -> dict",
-    "repos(self) -> dict[str, superme_agent.core.spine.RepoConfig]",
+    "repos(self) -> dict[str, RepoConfig]",
     "resolve_agent_effort(self, feature: str) -> str",
     "resolve_agent_model(self, feature: str) -> str",
     "role_effort(self, repo_id: str, role: str, *, item_effort: str | None = None) -> str",
@@ -5235,10 +5235,10 @@
     "subagent_briefs(self, repo_id: str, item_id: str, *, phase: str) -> list[dict]",
     "subagent_count(self, repo_id: str, item_id: str, *, phase: str) -> int",
     "system(self) -> dict",
-    "system_config(self) -> superme_agent.core.spine.SystemConfig",
+    "system_config(self) -> SystemConfig",
     "token_timeseries(self, tz_offset: int = 0) -> dict",
     "token_usage(self) -> dict",
-    "update_repo(self, repo_id: str, **fields) -> superme_agent.core.spine.RepoConfig"
+    "update_repo(self, repo_id: str, **fields) -> RepoConfig"
    ],
    "sig": "class"
   },
@@ -5260,31 +5260,31 @@
   },
   "dev_general_doc": {
    "home": "superme_agent.daemon.routers.dev.general",
-   "sig": "def(name: str, context_id: str = 'global', dev: superme_agent.core.dev_knowledge.DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(name: str, context_id: str = 'global', dev: DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None)) -> dict"
   },
   "dev_general_doc_save": {
    "home": "superme_agent.daemon.routers.dev.general",
-   "sig": "def(name: str, body: superme_agent.daemon.schemas.dev.general.GeneralDocSaveBody, dev: superme_agent.core.dev_knowledge.DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(name: str, body: GeneralDocSaveBody, dev: DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None)) -> dict"
   },
   "dev_general_docs": {
    "home": "superme_agent.daemon.routers.dev.general",
-   "sig": "def(context_id: str = 'global', dev: superme_agent.core.dev_knowledge.DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(context_id: str = 'global', dev: DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None)) -> dict"
   },
   "dev_lint": {
    "home": "superme_agent.daemon.routers.dev.general",
-   "sig": "def(context_id: str = 'global', dev: superme_agent.core.dev_knowledge.DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(context_id: str = 'global', dev: DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None)) -> dict"
   },
   "dev_portrait": {
    "home": "superme_agent.daemon.routers.dev.general",
-   "sig": "def(context_id: str = 'global', dev: superme_agent.core.dev_knowledge.DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(context_id: str = 'global', dev: DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None)) -> dict"
   },
   "dev_project_status": {
    "home": "superme_agent.daemon.routers.dev.general",
-   "sig": "def(context_id: str = 'global', dev: superme_agent.core.dev_knowledge.DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None), spine: superme_agent.core.spine.SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(context_id: str = 'global', dev: DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None), spine: SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
   },
   "dev_roadmap": {
    "home": "superme_agent.daemon.routers.dev.general",
-   "sig": "def(context_id: str = 'global', dev: superme_agent.core.dev_knowledge.DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(context_id: str = 'global', dev: DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None)) -> dict"
   },
   "dev_verification_drop": {
    "home": "superme_agent.daemon.routers.dev.general",
@@ -5296,15 +5296,15 @@
   },
   "dev_verification_move": {
    "home": "superme_agent.daemon.routers.dev.general",
-   "sig": "def(entry_id: str, body: superme_agent.daemon.schemas.dev.general.LibraryEntryBody) -> dict"
+   "sig": "def(entry_id: str, body: LibraryEntryBody) -> dict"
   },
   "get_dev": {
    "home": "superme_agent.daemon.app_state",
-   "sig": "def() -> superme_agent.core.dev_knowledge.DevKnowledgeService"
+   "sig": "def() -> DevKnowledgeService"
   },
   "get_spine": {
    "home": "superme_agent.daemon.app_state",
-   "sig": "def() -> superme_agent.core.spine.SystemSpine"
+   "sig": "def() -> SystemSpine"
   },
   "router": {
    "sig": "value:APIRouter"
@@ -5455,7 +5455,7 @@
     "_run_dict(self, r) -> dict",
     "_seed_repos_config(self) -> None",
     "_usage_parts(usage: dict | None) -> tuple[int, int, int, int]",
-    "add_repo(self, rc: superme_agent.core.spine.RepoConfig) -> superme_agent.core.spine.RepoConfig",
+    "add_repo(self, rc: RepoConfig) -> RepoConfig",
     "agent_model_config(self) -> list[dict]",
     "all_effort_overrides(self) -> dict[str, str]",
     "all_model_overrides(self) -> dict[str, str]",
@@ -5516,11 +5516,11 @@
     "record_run_input(self, run_id: int, *, repo_id: str, item_id: str | None, phase: str | None, feature: str | None, background: bool, system_prompt: str, prompt_body: str, system_fragments: str | None = None, turn_surface: str | None = None, authored_extras: str | None = None) -> None",
     "record_session(self, session_id: str, cwd, *, surface: str = 'web', mode: str = 'core', thread_ts: str | None = None, repo_id: str | None = None, resumable: bool = True) -> dict | None",
     "release_item_runs(self, repo_id: str, item_id: str) -> int",
-    "remove_repo(self, repo_id: str) -> superme_agent.core.spine.RepoConfig",
-    "repo(self, repo_id: str) -> superme_agent.core.spine.RepoConfig | None",
+    "remove_repo(self, repo_id: str) -> RepoConfig",
+    "repo(self, repo_id: str) -> RepoConfig | None",
     "repo_for_cwd(self, cwd) -> str | None",
     "repo_status(self, repo_id: str, mode: str) -> dict",
-    "repos(self) -> dict[str, superme_agent.core.spine.RepoConfig]",
+    "repos(self) -> dict[str, RepoConfig]",
     "resolve_agent_effort(self, feature: str) -> str",
     "resolve_agent_model(self, feature: str) -> str",
     "role_effort(self, repo_id: str, role: str, *, item_effort: str | None = None) -> str",
@@ -5570,10 +5570,10 @@
     "subagent_briefs(self, repo_id: str, item_id: str, *, phase: str) -> list[dict]",
     "subagent_count(self, repo_id: str, item_id: str, *, phase: str) -> int",
     "system(self) -> dict",
-    "system_config(self) -> superme_agent.core.spine.SystemConfig",
+    "system_config(self) -> SystemConfig",
     "token_timeseries(self, tz_offset: int = 0) -> dict",
     "token_usage(self) -> dict",
-    "update_repo(self, repo_id: str, **fields) -> superme_agent.core.spine.RepoConfig"
+    "update_repo(self, repo_id: str, **fields) -> RepoConfig"
    ],
    "sig": "class"
   },
@@ -5583,7 +5583,7 @@
   },
   "_load": {
    "home": "superme_agent.daemon.routers.dev.git",
-   "sig": "def(context_id: str, item_id: str, dev: superme_agent.core.dev_knowledge.DevKnowledgeService)"
+   "sig": "def(context_id: str, item_id: str, dev: DevKnowledgeService)"
   },
   "_require_worktree": {
    "home": "superme_agent.daemon.routers.dev.git",
@@ -5595,39 +5595,39 @@
   },
   "dev_work_item_git": {
    "home": "superme_agent.daemon.routers.dev.git",
-   "sig": "def(item_id: str, context_id: str = 'global', dev: superme_agent.core.dev_knowledge.DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None), spine: superme_agent.core.spine.SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(item_id: str, context_id: str = 'global', dev: DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None), spine: SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
   },
   "dev_work_item_git_merge": {
    "home": "superme_agent.daemon.routers.dev.git",
-   "sig": "def(item_id: str, body: superme_agent.daemon.routers.dev.git.GitBody, dev: superme_agent.core.dev_knowledge.DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None), dev_store: superme_agent.core.dev_store.DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None), spine: superme_agent.core.spine.SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(item_id: str, body: GitBody, dev: DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None), dev_store: DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None), spine: SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
   },
   "dev_work_item_git_resolve": {
    "home": "superme_agent.daemon.routers.dev.git",
-   "sig": "def(item_id: str, body: superme_agent.daemon.routers.dev.git.GitBody, dev: superme_agent.core.dev_knowledge.DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None), spine: superme_agent.core.spine.SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(item_id: str, body: GitBody, dev: DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None), spine: SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
   },
   "dev_work_item_git_revert": {
    "home": "superme_agent.daemon.routers.dev.git",
-   "sig": "def(item_id: str, body: superme_agent.daemon.routers.dev.git.GitBody, dev: superme_agent.core.dev_knowledge.DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None), dev_store: superme_agent.core.dev_store.DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None), spine: superme_agent.core.spine.SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(item_id: str, body: GitBody, dev: DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None), dev_store: DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None), spine: SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
   },
   "dev_work_item_pr": {
    "home": "superme_agent.daemon.routers.dev.git",
-   "sig": "def(item_id: str, context_id: str = 'global', dev: superme_agent.core.dev_knowledge.DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None), spine: superme_agent.core.spine.SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(item_id: str, context_id: str = 'global', dev: DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None), spine: SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
   },
   "dev_work_item_pr_diff": {
    "home": "superme_agent.daemon.routers.dev.git",
-   "sig": "def(item_id: str, path: str, task: str | None = None, context_id: str = 'global', dev: superme_agent.core.dev_knowledge.DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None), spine: superme_agent.core.spine.SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(item_id: str, path: str, task: str | None = None, context_id: str = 'global', dev: DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None), spine: SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
   },
   "get_dev": {
    "home": "superme_agent.daemon.app_state",
-   "sig": "def() -> superme_agent.core.dev_knowledge.DevKnowledgeService"
+   "sig": "def() -> DevKnowledgeService"
   },
   "get_dev_store": {
    "home": "superme_agent.daemon.app_state",
-   "sig": "def() -> superme_agent.core.dev_store.DevStore"
+   "sig": "def() -> DevStore"
   },
   "get_spine": {
    "home": "superme_agent.daemon.app_state",
-   "sig": "def() -> superme_agent.core.spine.SystemSpine"
+   "sig": "def() -> SystemSpine"
   },
   "log": {
    "sig": "value:Logger"
@@ -5826,7 +5826,7 @@
   },
   "_published_prop": {
    "home": "superme_agent.daemon.routers.dev.harness",
-   "sig": "def(proposal_id: int, context_id: str, dev_store: superme_agent.core.dev_store.DevStore)"
+   "sig": "def(proposal_id: int, context_id: str, dev_store: DevStore)"
   },
   "_resolve_constitution_file": {
    "home": "superme_agent.daemon.routers.dev.harness",
@@ -5838,7 +5838,7 @@
   },
   "dev_harness_asset_action": {
    "home": "superme_agent.daemon.routers.dev.harness",
-   "sig": "def(slug: str, body: superme_agent.daemon.routers.dev.harness.AssetActionBody, dev_store: superme_agent.core.dev_store.DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(slug: str, body: AssetActionBody, dev_store: DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None)) -> dict"
   },
   "dev_harness_assets": {
    "home": "superme_agent.daemon.routers.dev.harness",
@@ -5850,11 +5850,11 @@
   },
   "dev_harness_constitution_file_save": {
    "home": "superme_agent.daemon.routers.dev.harness",
-   "sig": "def(body: superme_agent.daemon.routers.dev.harness.ConstitutionFileBody, dev_store: superme_agent.core.dev_store.DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(body: ConstitutionFileBody, dev_store: DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None)) -> dict"
   },
   "dev_harness_constitution_toggle": {
    "home": "superme_agent.daemon.routers.dev.harness",
-   "sig": "def(slug: str, body: superme_agent.daemon.routers.dev.harness.ConstitutionToggleBody, dev_store: superme_agent.core.dev_store.DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(slug: str, body: ConstitutionToggleBody, dev_store: DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None)) -> dict"
   },
   "dev_harness_constitutions": {
    "home": "superme_agent.daemon.routers.dev.harness",
@@ -5866,7 +5866,7 @@
   },
   "dev_harness_deputy_save": {
    "home": "superme_agent.daemon.routers.dev.harness",
-   "sig": "def(body: superme_agent.daemon.routers.dev.harness.DeputyMandateBody, dev_store: superme_agent.core.dev_store.DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(body: DeputyMandateBody, dev_store: DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None)) -> dict"
   },
   "dev_harness_foundation": {
    "home": "superme_agent.daemon.routers.dev.harness",
@@ -5874,7 +5874,7 @@
   },
   "dev_harness_foundation_save": {
    "home": "superme_agent.daemon.routers.dev.harness",
-   "sig": "def(body: superme_agent.daemon.routers.dev.harness.FoundationFileBody) -> dict"
+   "sig": "def(body: FoundationFileBody) -> dict"
   },
   "dev_harness_local_plugins": {
    "home": "superme_agent.daemon.routers.dev.harness",
@@ -5886,7 +5886,7 @@
   },
   "dev_harness_plugin_file_save": {
    "home": "superme_agent.daemon.routers.dev.harness",
-   "sig": "def(body: superme_agent.daemon.routers.dev.harness.PluginFileBody) -> dict"
+   "sig": "def(body: PluginFileBody) -> dict"
   },
   "dev_harness_plugins": {
    "home": "superme_agent.daemon.routers.dev.harness",
@@ -5894,23 +5894,23 @@
   },
   "dev_harness_published": {
    "home": "superme_agent.daemon.routers.dev.harness",
-   "sig": "def(context_id: str = 'global', dev_store: superme_agent.core.dev_store.DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(context_id: str = 'global', dev_store: DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None)) -> dict"
   },
   "dev_harness_published_delete": {
    "home": "superme_agent.daemon.routers.dev.harness",
-   "sig": "def(proposal_id: int, context_id: str = 'global', dev_store: superme_agent.core.dev_store.DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(proposal_id: int, context_id: str = 'global', dev_store: DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None)) -> dict"
   },
   "dev_harness_published_file": {
    "home": "superme_agent.daemon.routers.dev.harness",
-   "sig": "def(proposal_id: int, context_id: str = 'global', dev_store: superme_agent.core.dev_store.DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(proposal_id: int, context_id: str = 'global', dev_store: DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None)) -> dict"
   },
   "dev_harness_published_file_save": {
    "home": "superme_agent.daemon.routers.dev.harness",
-   "sig": "def(proposal_id: int, body: superme_agent.daemon.routers.dev.harness.PublishedFileBody, dev_store: superme_agent.core.dev_store.DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(proposal_id: int, body: PublishedFileBody, dev_store: DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None)) -> dict"
   },
   "dev_harness_published_toggle": {
    "home": "superme_agent.daemon.routers.dev.harness",
-   "sig": "def(proposal_id: int, body: superme_agent.daemon.routers.dev.harness.PublishedToggleBody, dev_store: superme_agent.core.dev_store.DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(proposal_id: int, body: PublishedToggleBody, dev_store: DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None)) -> dict"
   },
   "dev_palette": {
    "home": "superme_agent.daemon.routers.dev.harness",
@@ -5918,7 +5918,7 @@
   },
   "get_dev_store": {
    "home": "superme_agent.daemon.app_state",
-   "sig": "def() -> superme_agent.core.dev_store.DevStore"
+   "sig": "def() -> DevStore"
   },
   "load_slash_cache": {
    "home": "superme_agent.daemon.deps",
@@ -6094,7 +6094,7 @@
     "_run_dict(self, r) -> dict",
     "_seed_repos_config(self) -> None",
     "_usage_parts(usage: dict | None) -> tuple[int, int, int, int]",
-    "add_repo(self, rc: superme_agent.core.spine.RepoConfig) -> superme_agent.core.spine.RepoConfig",
+    "add_repo(self, rc: RepoConfig) -> RepoConfig",
     "agent_model_config(self) -> list[dict]",
     "all_effort_overrides(self) -> dict[str, str]",
     "all_model_overrides(self) -> dict[str, str]",
@@ -6155,11 +6155,11 @@
     "record_run_input(self, run_id: int, *, repo_id: str, item_id: str | None, phase: str | None, feature: str | None, background: bool, system_prompt: str, prompt_body: str, system_fragments: str | None = None, turn_surface: str | None = None, authored_extras: str | None = None) -> None",
     "record_session(self, session_id: str, cwd, *, surface: str = 'web', mode: str = 'core', thread_ts: str | None = None, repo_id: str | None = None, resumable: bool = True) -> dict | None",
     "release_item_runs(self, repo_id: str, item_id: str) -> int",
-    "remove_repo(self, repo_id: str) -> superme_agent.core.spine.RepoConfig",
-    "repo(self, repo_id: str) -> superme_agent.core.spine.RepoConfig | None",
+    "remove_repo(self, repo_id: str) -> RepoConfig",
+    "repo(self, repo_id: str) -> RepoConfig | None",
     "repo_for_cwd(self, cwd) -> str | None",
     "repo_status(self, repo_id: str, mode: str) -> dict",
-    "repos(self) -> dict[str, superme_agent.core.spine.RepoConfig]",
+    "repos(self) -> dict[str, RepoConfig]",
     "resolve_agent_effort(self, feature: str) -> str",
     "resolve_agent_model(self, feature: str) -> str",
     "role_effort(self, repo_id: str, role: str, *, item_effort: str | None = None) -> str",
@@ -6209,10 +6209,10 @@
     "subagent_briefs(self, repo_id: str, item_id: str, *, phase: str) -> list[dict]",
     "subagent_count(self, repo_id: str, item_id: str, *, phase: str) -> int",
     "system(self) -> dict",
-    "system_config(self) -> superme_agent.core.spine.SystemConfig",
+    "system_config(self) -> SystemConfig",
     "token_timeseries(self, tz_offset: int = 0) -> dict",
     "token_usage(self) -> dict",
-    "update_repo(self, repo_id: str, **fields) -> superme_agent.core.spine.RepoConfig"
+    "update_repo(self, repo_id: str, **fields) -> RepoConfig"
    ],
    "sig": "class"
   },
@@ -6222,27 +6222,27 @@
   },
   "dev_inbox_add": {
    "home": "superme_agent.daemon.routers.dev.inbox",
-   "sig": "def(body: superme_agent.daemon.routers.dev.inbox.InboxBody, dev_store: superme_agent.core.dev_store.DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(body: InboxBody, dev_store: DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None)) -> dict"
   },
   "dev_inbox_brief": {
    "home": "superme_agent.daemon.routers.dev.inbox",
-   "sig": "def(item_id: int, dev_store: superme_agent.core.dev_store.DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(item_id: int, dev_store: DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None)) -> dict"
   },
   "dev_inbox_brief_save": {
    "home": "superme_agent.daemon.routers.dev.inbox",
-   "sig": "def(item_id: int, body: superme_agent.daemon.schemas.dev.inbox.InboxBriefBody, dev_store: superme_agent.core.dev_store.DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(item_id: int, body: InboxBriefBody, dev_store: DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None)) -> dict"
   },
   "dev_inbox_delete": {
    "home": "superme_agent.daemon.routers.dev.inbox",
-   "sig": "def(item_id: int, dev_store: superme_agent.core.dev_store.DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(item_id: int, dev_store: DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None)) -> dict"
   },
   "dev_inbox_push": {
    "home": "superme_agent.daemon.routers.dev.inbox",
-   "sig": "def(item_id: int, body: superme_agent.daemon.routers.dev.inbox.InboxPushBody, dev_store: superme_agent.core.dev_store.DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None), dev: superme_agent.core.dev_knowledge.DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None), spine: superme_agent.core.spine.SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(item_id: int, body: InboxPushBody, dev_store: DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None), dev: DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None), spine: SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
   },
   "dev_inbox_update": {
    "home": "superme_agent.daemon.routers.dev.inbox",
-   "sig": "def(item_id: int, body: superme_agent.daemon.routers.dev.inbox.InboxPatch, dev_store: superme_agent.core.dev_store.DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(item_id: int, body: InboxPatch, dev_store: DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None)) -> dict"
   },
   "dev_root": {
    "home": "superme_agent.daemon.deps",
@@ -6254,15 +6254,15 @@
   },
   "get_dev": {
    "home": "superme_agent.daemon.app_state",
-   "sig": "def() -> superme_agent.core.dev_knowledge.DevKnowledgeService"
+   "sig": "def() -> DevKnowledgeService"
   },
   "get_dev_store": {
    "home": "superme_agent.daemon.app_state",
-   "sig": "def() -> superme_agent.core.dev_store.DevStore"
+   "sig": "def() -> DevStore"
   },
   "get_spine": {
    "home": "superme_agent.daemon.app_state",
-   "sig": "def() -> superme_agent.core.spine.SystemSpine"
+   "sig": "def() -> SystemSpine"
   },
   "log": {
    "sig": "value:Logger"
@@ -6397,7 +6397,7 @@
     "_run_dict(self, r) -> dict",
     "_seed_repos_config(self) -> None",
     "_usage_parts(usage: dict | None) -> tuple[int, int, int, int]",
-    "add_repo(self, rc: superme_agent.core.spine.RepoConfig) -> superme_agent.core.spine.RepoConfig",
+    "add_repo(self, rc: RepoConfig) -> RepoConfig",
     "agent_model_config(self) -> list[dict]",
     "all_effort_overrides(self) -> dict[str, str]",
     "all_model_overrides(self) -> dict[str, str]",
@@ -6458,11 +6458,11 @@
     "record_run_input(self, run_id: int, *, repo_id: str, item_id: str | None, phase: str | None, feature: str | None, background: bool, system_prompt: str, prompt_body: str, system_fragments: str | None = None, turn_surface: str | None = None, authored_extras: str | None = None) -> None",
     "record_session(self, session_id: str, cwd, *, surface: str = 'web', mode: str = 'core', thread_ts: str | None = None, repo_id: str | None = None, resumable: bool = True) -> dict | None",
     "release_item_runs(self, repo_id: str, item_id: str) -> int",
-    "remove_repo(self, repo_id: str) -> superme_agent.core.spine.RepoConfig",
-    "repo(self, repo_id: str) -> superme_agent.core.spine.RepoConfig | None",
+    "remove_repo(self, repo_id: str) -> RepoConfig",
+    "repo(self, repo_id: str) -> RepoConfig | None",
     "repo_for_cwd(self, cwd) -> str | None",
     "repo_status(self, repo_id: str, mode: str) -> dict",
-    "repos(self) -> dict[str, superme_agent.core.spine.RepoConfig]",
+    "repos(self) -> dict[str, RepoConfig]",
     "resolve_agent_effort(self, feature: str) -> str",
     "resolve_agent_model(self, feature: str) -> str",
     "role_effort(self, repo_id: str, role: str, *, item_effort: str | None = None) -> str",
@@ -6512,10 +6512,10 @@
     "subagent_briefs(self, repo_id: str, item_id: str, *, phase: str) -> list[dict]",
     "subagent_count(self, repo_id: str, item_id: str, *, phase: str) -> int",
     "system(self) -> dict",
-    "system_config(self) -> superme_agent.core.spine.SystemConfig",
+    "system_config(self) -> SystemConfig",
     "token_timeseries(self, tz_offset: int = 0) -> dict",
     "token_usage(self) -> dict",
-    "update_repo(self, repo_id: str, **fields) -> superme_agent.core.spine.RepoConfig"
+    "update_repo(self, repo_id: str, **fields) -> RepoConfig"
    ],
    "sig": "class"
   },
@@ -6559,15 +6559,15 @@
   },
   "dev_memory_distill": {
    "home": "superme_agent.daemon.routers.dev.learning",
-   "sig": "def(context_id: str = 'global', dev_store: superme_agent.core.dev_store.DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None), spine: superme_agent.core.spine.SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(context_id: str = 'global', dev_store: DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None), spine: SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
   },
   "dev_memory_rollup": {
    "home": "superme_agent.daemon.routers.dev.learning",
-   "sig": "def(dev_store: superme_agent.core.dev_store.DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None), spine: superme_agent.core.spine.SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(dev_store: DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None), spine: SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
   },
   "dev_memory_stats": {
    "home": "superme_agent.daemon.routers.dev.learning",
-   "sig": "def(context_id: str = 'global', dev_store: superme_agent.core.dev_store.DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None), spine: superme_agent.core.spine.SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(context_id: str = 'global', dev_store: DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None), spine: SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
   },
   "dev_sweep": {
    "home": "superme_agent.daemon.routers.dev.learning",
@@ -6579,39 +6579,39 @@
   },
   "get_dev_store": {
    "home": "superme_agent.daemon.app_state",
-   "sig": "def() -> superme_agent.core.dev_store.DevStore"
+   "sig": "def() -> DevStore"
   },
   "get_spine": {
    "home": "superme_agent.daemon.app_state",
-   "sig": "def() -> superme_agent.core.spine.SystemSpine"
+   "sig": "def() -> SystemSpine"
   },
   "memory_proposal_approve": {
    "home": "superme_agent.daemon.routers.dev.learning",
-   "sig": "def(proposal_id: int, body: superme_agent.daemon.routers.dev.learning.ApproveBody, dev_store: superme_agent.core.dev_store.DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None), spine: superme_agent.core.spine.SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(proposal_id: int, body: ApproveBody, dev_store: DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None), spine: SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
   },
   "memory_proposal_drop": {
    "home": "superme_agent.daemon.routers.dev.learning",
-   "sig": "def(proposal_id: int, body: superme_agent.daemon.routers.dev.learning.ProposalActionBody, dev_store: superme_agent.core.dev_store.DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(proposal_id: int, body: ProposalActionBody, dev_store: DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None)) -> dict"
   },
   "memory_proposal_edit_artifact": {
    "home": "superme_agent.daemon.routers.dev.learning",
-   "sig": "def(proposal_id: int, body: superme_agent.daemon.routers.dev.learning.ArtifactEditBody, dev_store: superme_agent.core.dev_store.DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(proposal_id: int, body: ArtifactEditBody, dev_store: DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None)) -> dict"
   },
   "memory_proposal_execution": {
    "home": "superme_agent.daemon.routers.dev.learning",
-   "sig": "def(proposal_id: int, context_id: str = 'global', dev_store: superme_agent.core.dev_store.DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(proposal_id: int, context_id: str = 'global', dev_store: DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None)) -> dict"
   },
   "memory_proposal_publish": {
    "home": "superme_agent.daemon.routers.dev.learning",
-   "sig": "def(proposal_id: int, body: superme_agent.daemon.routers.dev.learning.ProposalActionBody, dev_store: superme_agent.core.dev_store.DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(proposal_id: int, body: ProposalActionBody, dev_store: DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None)) -> dict"
   },
   "memory_proposal_reject": {
    "home": "superme_agent.daemon.routers.dev.learning",
-   "sig": "def(proposal_id: int, body: superme_agent.daemon.routers.dev.learning.ProposalActionBody, dev_store: superme_agent.core.dev_store.DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(proposal_id: int, body: ProposalActionBody, dev_store: DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None)) -> dict"
   },
   "memory_proposals": {
    "home": "superme_agent.daemon.routers.dev.learning",
-   "sig": "def(context_id: str = 'global', status: str | None = None, dev_store: superme_agent.core.dev_store.DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(context_id: str = 'global', status: str | None = None, dev_store: DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None)) -> dict"
   },
   "router": {
    "sig": "value:APIRouter"
@@ -6746,7 +6746,7 @@
     "_run_dict(self, r) -> dict",
     "_seed_repos_config(self) -> None",
     "_usage_parts(usage: dict | None) -> tuple[int, int, int, int]",
-    "add_repo(self, rc: superme_agent.core.spine.RepoConfig) -> superme_agent.core.spine.RepoConfig",
+    "add_repo(self, rc: RepoConfig) -> RepoConfig",
     "agent_model_config(self) -> list[dict]",
     "all_effort_overrides(self) -> dict[str, str]",
     "all_model_overrides(self) -> dict[str, str]",
@@ -6807,11 +6807,11 @@
     "record_run_input(self, run_id: int, *, repo_id: str, item_id: str | None, phase: str | None, feature: str | None, background: bool, system_prompt: str, prompt_body: str, system_fragments: str | None = None, turn_surface: str | None = None, authored_extras: str | None = None) -> None",
     "record_session(self, session_id: str, cwd, *, surface: str = 'web', mode: str = 'core', thread_ts: str | None = None, repo_id: str | None = None, resumable: bool = True) -> dict | None",
     "release_item_runs(self, repo_id: str, item_id: str) -> int",
-    "remove_repo(self, repo_id: str) -> superme_agent.core.spine.RepoConfig",
-    "repo(self, repo_id: str) -> superme_agent.core.spine.RepoConfig | None",
+    "remove_repo(self, repo_id: str) -> RepoConfig",
+    "repo(self, repo_id: str) -> RepoConfig | None",
     "repo_for_cwd(self, cwd) -> str | None",
     "repo_status(self, repo_id: str, mode: str) -> dict",
-    "repos(self) -> dict[str, superme_agent.core.spine.RepoConfig]",
+    "repos(self) -> dict[str, RepoConfig]",
     "resolve_agent_effort(self, feature: str) -> str",
     "resolve_agent_model(self, feature: str) -> str",
     "role_effort(self, repo_id: str, role: str, *, item_effort: str | None = None) -> str",
@@ -6861,10 +6861,10 @@
     "subagent_briefs(self, repo_id: str, item_id: str, *, phase: str) -> list[dict]",
     "subagent_count(self, repo_id: str, item_id: str, *, phase: str) -> int",
     "system(self) -> dict",
-    "system_config(self) -> superme_agent.core.spine.SystemConfig",
+    "system_config(self) -> SystemConfig",
     "token_timeseries(self, tz_offset: int = 0) -> dict",
     "token_usage(self) -> dict",
-    "update_repo(self, repo_id: str, **fields) -> superme_agent.core.spine.RepoConfig"
+    "update_repo(self, repo_id: str, **fields) -> RepoConfig"
    ],
    "sig": "class"
   },
@@ -6883,15 +6883,15 @@
   },
   "dev_attention": {
    "home": "superme_agent.daemon.routers.dev.meta",
-   "sig": "def(context_id: str = 'global', dev: superme_agent.core.dev_knowledge.DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None), spine: superme_agent.core.spine.SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(context_id: str = 'global', dev: DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None), spine: SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
   },
   "dev_log": {
    "home": "superme_agent.daemon.routers.dev.meta",
-   "sig": "def(context_id: str = 'global', since: str | None = None, until: str | None = None, scope: str | None = None, item_id: str | None = None, limit: int = 200, dev_store: superme_agent.core.dev_store.DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(context_id: str = 'global', since: str | None = None, until: str | None = None, scope: str | None = None, item_id: str | None = None, limit: int = 200, dev_store: DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None)) -> dict"
   },
   "dev_read": {
    "home": "superme_agent.daemon.routers.dev.meta",
-   "sig": "def(context_id: str = 'global', dev: superme_agent.core.dev_knowledge.DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None), dev_store: superme_agent.core.dev_store.DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None), spine: superme_agent.core.spine.SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(context_id: str = 'global', dev: DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None), dev_store: DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None), spine: SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
   },
   "dev_root": {
    "home": "superme_agent.daemon.deps",
@@ -6899,19 +6899,19 @@
   },
   "dev_workgraph": {
    "home": "superme_agent.daemon.routers.dev.meta",
-   "sig": "def(context_id: str = 'global', dev: superme_agent.core.dev_knowledge.DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None), dev_store: superme_agent.core.dev_store.DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(context_id: str = 'global', dev: DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None), dev_store: DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None)) -> dict"
   },
   "get_dev": {
    "home": "superme_agent.daemon.app_state",
-   "sig": "def() -> superme_agent.core.dev_knowledge.DevKnowledgeService"
+   "sig": "def() -> DevKnowledgeService"
   },
   "get_dev_store": {
    "home": "superme_agent.daemon.app_state",
-   "sig": "def() -> superme_agent.core.dev_store.DevStore"
+   "sig": "def() -> DevStore"
   },
   "get_spine": {
    "home": "superme_agent.daemon.app_state",
-   "sig": "def() -> superme_agent.core.spine.SystemSpine"
+   "sig": "def() -> SystemSpine"
   },
   "router": {
    "sig": "value:APIRouter"
@@ -7042,7 +7042,7 @@
     "_run_dict(self, r) -> dict",
     "_seed_repos_config(self) -> None",
     "_usage_parts(usage: dict | None) -> tuple[int, int, int, int]",
-    "add_repo(self, rc: superme_agent.core.spine.RepoConfig) -> superme_agent.core.spine.RepoConfig",
+    "add_repo(self, rc: RepoConfig) -> RepoConfig",
     "agent_model_config(self) -> list[dict]",
     "all_effort_overrides(self) -> dict[str, str]",
     "all_model_overrides(self) -> dict[str, str]",
@@ -7103,11 +7103,11 @@
     "record_run_input(self, run_id: int, *, repo_id: str, item_id: str | None, phase: str | None, feature: str | None, background: bool, system_prompt: str, prompt_body: str, system_fragments: str | None = None, turn_surface: str | None = None, authored_extras: str | None = None) -> None",
     "record_session(self, session_id: str, cwd, *, surface: str = 'web', mode: str = 'core', thread_ts: str | None = None, repo_id: str | None = None, resumable: bool = True) -> dict | None",
     "release_item_runs(self, repo_id: str, item_id: str) -> int",
-    "remove_repo(self, repo_id: str) -> superme_agent.core.spine.RepoConfig",
-    "repo(self, repo_id: str) -> superme_agent.core.spine.RepoConfig | None",
+    "remove_repo(self, repo_id: str) -> RepoConfig",
+    "repo(self, repo_id: str) -> RepoConfig | None",
     "repo_for_cwd(self, cwd) -> str | None",
     "repo_status(self, repo_id: str, mode: str) -> dict",
-    "repos(self) -> dict[str, superme_agent.core.spine.RepoConfig]",
+    "repos(self) -> dict[str, RepoConfig]",
     "resolve_agent_effort(self, feature: str) -> str",
     "resolve_agent_model(self, feature: str) -> str",
     "role_effort(self, repo_id: str, role: str, *, item_effort: str | None = None) -> str",
@@ -7157,10 +7157,10 @@
     "subagent_briefs(self, repo_id: str, item_id: str, *, phase: str) -> list[dict]",
     "subagent_count(self, repo_id: str, item_id: str, *, phase: str) -> int",
     "system(self) -> dict",
-    "system_config(self) -> superme_agent.core.spine.SystemConfig",
+    "system_config(self) -> SystemConfig",
     "token_timeseries(self, tz_offset: int = 0) -> dict",
     "token_usage(self) -> dict",
-    "update_repo(self, repo_id: str, **fields) -> superme_agent.core.spine.RepoConfig"
+    "update_repo(self, repo_id: str, **fields) -> RepoConfig"
    ],
    "sig": "class"
   },
@@ -7174,7 +7174,7 @@
   },
   "dev_sweep_launch": {
    "home": "superme_agent.daemon.routers.dev.sweeps",
-   "sig": "def(body: superme_agent.daemon.routers.dev.sweeps.SweepLaunchBody, dev: superme_agent.core.dev_knowledge.DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None), dev_store: superme_agent.core.dev_store.DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None), spine: superme_agent.core.spine.SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(body: SweepLaunchBody, dev: DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None), dev_store: DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None), spine: SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
   },
   "fire_first_investigate": {
    "home": "superme_agent.daemon.services.runs",
@@ -7182,15 +7182,15 @@
   },
   "get_dev": {
    "home": "superme_agent.daemon.app_state",
-   "sig": "def() -> superme_agent.core.dev_knowledge.DevKnowledgeService"
+   "sig": "def() -> DevKnowledgeService"
   },
   "get_dev_store": {
    "home": "superme_agent.daemon.app_state",
-   "sig": "def() -> superme_agent.core.dev_store.DevStore"
+   "sig": "def() -> DevStore"
   },
   "get_spine": {
    "home": "superme_agent.daemon.app_state",
-   "sig": "def() -> superme_agent.core.spine.SystemSpine"
+   "sig": "def() -> SystemSpine"
   },
   "log": {
    "sig": "value:Logger"
@@ -7333,19 +7333,19 @@
   "SessionStore": {
    "home": "superme_agent.core.sessions",
    "methods": [
-    "_scan(self, ctx: superme_agent.core.context.Context, session_id: str) -> dict | None",
-    "_transcript(self, ctx: superme_agent.core.context.Context, session_id: str, cwd=None)",
-    "_workspace_rows(self, ctx: superme_agent.core.context.Context) -> list[dict]",
-    "delete(self, ctx: superme_agent.core.context.Context, session_id: str, *, cause: str = 'deleted') -> bool",
-    "delete_channel(self, ctx: superme_agent.core.context.Context, session_id: str, *, cause: str = 'deleted') -> int",
-    "discard_transcript(self, ctx: superme_agent.core.context.Context, session_id: str, cwd=None) -> bool",
-    "has_transcript(self, ctx: superme_agent.core.context.Context, session_id: str) -> bool",
-    "list(self, ctx: superme_agent.core.context.Context, mode: str | None = None) -> list[dict]",
-    "read(self, ctx: superme_agent.core.context.Context, session_id: str, limit: int = 10) -> dict | None",
-    "record(self, ctx: superme_agent.core.context.Context, session_id: str | None) -> None",
-    "rename(self, ctx: superme_agent.core.context.Context, session_id: str, title: str | None) -> bool",
-    "transcript_messages(self, ctx: superme_agent.core.context.Context, session_id: str) -> list[dict]",
-    "transcript_mtime(self, ctx: superme_agent.core.context.Context, session_id: str) -> float | None"
+    "_scan(self, ctx: Context, session_id: str) -> dict | None",
+    "_transcript(self, ctx: Context, session_id: str, cwd=None)",
+    "_workspace_rows(self, ctx: Context) -> list[dict]",
+    "delete(self, ctx: Context, session_id: str, *, cause: str = 'deleted') -> bool",
+    "delete_channel(self, ctx: Context, session_id: str, *, cause: str = 'deleted') -> int",
+    "discard_transcript(self, ctx: Context, session_id: str, cwd=None) -> bool",
+    "has_transcript(self, ctx: Context, session_id: str) -> bool",
+    "list(self, ctx: Context, mode: str | None = None) -> list[dict]",
+    "read(self, ctx: Context, session_id: str, limit: int = 10) -> dict | None",
+    "record(self, ctx: Context, session_id: str | None) -> None",
+    "rename(self, ctx: Context, session_id: str, title: str | None) -> bool",
+    "transcript_messages(self, ctx: Context, session_id: str) -> list[dict]",
+    "transcript_mtime(self, ctx: Context, session_id: str) -> float | None"
    ],
    "sig": "class"
   },
@@ -7366,7 +7366,7 @@
     "_run_dict(self, r) -> dict",
     "_seed_repos_config(self) -> None",
     "_usage_parts(usage: dict | None) -> tuple[int, int, int, int]",
-    "add_repo(self, rc: superme_agent.core.spine.RepoConfig) -> superme_agent.core.spine.RepoConfig",
+    "add_repo(self, rc: RepoConfig) -> RepoConfig",
     "agent_model_config(self) -> list[dict]",
     "all_effort_overrides(self) -> dict[str, str]",
     "all_model_overrides(self) -> dict[str, str]",
@@ -7427,11 +7427,11 @@
     "record_run_input(self, run_id: int, *, repo_id: str, item_id: str | None, phase: str | None, feature: str | None, background: bool, system_prompt: str, prompt_body: str, system_fragments: str | None = None, turn_surface: str | None = None, authored_extras: str | None = None) -> None",
     "record_session(self, session_id: str, cwd, *, surface: str = 'web', mode: str = 'core', thread_ts: str | None = None, repo_id: str | None = None, resumable: bool = True) -> dict | None",
     "release_item_runs(self, repo_id: str, item_id: str) -> int",
-    "remove_repo(self, repo_id: str) -> superme_agent.core.spine.RepoConfig",
-    "repo(self, repo_id: str) -> superme_agent.core.spine.RepoConfig | None",
+    "remove_repo(self, repo_id: str) -> RepoConfig",
+    "repo(self, repo_id: str) -> RepoConfig | None",
     "repo_for_cwd(self, cwd) -> str | None",
     "repo_status(self, repo_id: str, mode: str) -> dict",
-    "repos(self) -> dict[str, superme_agent.core.spine.RepoConfig]",
+    "repos(self) -> dict[str, RepoConfig]",
     "resolve_agent_effort(self, feature: str) -> str",
     "resolve_agent_model(self, feature: str) -> str",
     "role_effort(self, repo_id: str, role: str, *, item_effort: str | None = None) -> str",
@@ -7481,10 +7481,10 @@
     "subagent_briefs(self, repo_id: str, item_id: str, *, phase: str) -> list[dict]",
     "subagent_count(self, repo_id: str, item_id: str, *, phase: str) -> int",
     "system(self) -> dict",
-    "system_config(self) -> superme_agent.core.spine.SystemConfig",
+    "system_config(self) -> SystemConfig",
     "token_timeseries(self, tz_offset: int = 0) -> dict",
     "token_usage(self) -> dict",
-    "update_repo(self, repo_id: str, **fields) -> superme_agent.core.spine.RepoConfig"
+    "update_repo(self, repo_id: str, **fields) -> RepoConfig"
    ],
    "sig": "class"
   },
@@ -7554,47 +7554,47 @@
   },
   "dev_work_item_advance": {
    "home": "superme_agent.daemon.routers.dev.work_items",
-   "sig": "def(item_id: str, context_id: str = 'global', dev: superme_agent.core.dev_knowledge.DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None), dev_store: superme_agent.core.dev_store.DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None), spine: superme_agent.core.spine.SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(item_id: str, context_id: str = 'global', dev: DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None), dev_store: DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None), spine: SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
   },
   "dev_work_item_artifacts": {
    "home": "superme_agent.daemon.routers.dev.work_items",
-   "sig": "def(item_id: str, context_id: str = 'global', spine: superme_agent.core.spine.SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(item_id: str, context_id: str = 'global', spine: SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
   },
   "dev_work_item_authorize": {
    "home": "superme_agent.daemon.routers.dev.work_items",
-   "sig": "def(item_id: str, body: superme_agent.daemon.routers.dev.work_items.AuthorizeBody, dev: superme_agent.core.dev_knowledge.DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None), spine: superme_agent.core.spine.SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(item_id: str, body: AuthorizeBody, dev: DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None), spine: SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
   },
   "dev_work_item_autopilot": {
    "home": "superme_agent.daemon.routers.dev.work_items",
-   "sig": "def(item_id: str, body: superme_agent.daemon.routers.dev.work_items.AutopilotBody, context_id: str = 'global', dev: superme_agent.core.dev_knowledge.DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None), dev_store: superme_agent.core.dev_store.DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(item_id: str, body: AutopilotBody, context_id: str = 'global', dev: DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None), dev_store: DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None)) -> dict"
   },
   "dev_work_item_compact": {
    "home": "superme_agent.daemon.routers.dev.work_items",
-   "sig": "def(item_id: str, body: superme_agent.daemon.routers.dev.work_items.PlanBody, dev: superme_agent.core.dev_knowledge.DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None), spine: superme_agent.core.spine.SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(item_id: str, body: PlanBody, dev: DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None), spine: SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
   },
   "dev_work_item_detail": {
    "home": "superme_agent.daemon.routers.dev.work_items",
-   "sig": "def(item_id: str, context_id: str = 'global', dev: superme_agent.core.dev_knowledge.DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None), spine: superme_agent.core.spine.SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(item_id: str, context_id: str = 'global', dev: DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None), spine: SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
   },
   "dev_work_item_doc": {
    "home": "superme_agent.daemon.routers.dev.work_items",
-   "sig": "def(item_id: str, path: str, context_id: str = 'global', dev: superme_agent.core.dev_knowledge.DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None)) -> starlette.responses.HTMLResponse"
+   "sig": "def(item_id: str, path: str, context_id: str = 'global', dev: DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None)) -> starlette.responses.HTMLResponse"
   },
   "dev_work_item_doc_edit": {
    "home": "superme_agent.daemon.routers.dev.work_items",
-   "sig": "def(item_id: str, body: superme_agent.daemon.routers.dev.work_items.DocEditBody, dev: superme_agent.core.dev_knowledge.DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None), dev_store: superme_agent.core.dev_store.DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None), spine: superme_agent.core.spine.SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(item_id: str, body: DocEditBody, dev: DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None), dev_store: DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None), spine: SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
   },
   "dev_work_item_rerun": {
    "home": "superme_agent.daemon.routers.dev.work_items",
-   "sig": "def(item_id: str, body: superme_agent.daemon.routers.dev.work_items.PlanBody, dev: superme_agent.core.dev_knowledge.DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None), spine: superme_agent.core.spine.SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(item_id: str, body: PlanBody, dev: DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None), spine: SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
   },
   "dev_work_item_resume": {
    "home": "superme_agent.daemon.routers.dev.work_items",
-   "sig": "def(item_id: str, body: superme_agent.daemon.routers.dev.work_items.PlanBody, dev: superme_agent.core.dev_knowledge.DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None), spine: superme_agent.core.spine.SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(item_id: str, body: PlanBody, dev: DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None), spine: SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
   },
   "dev_work_item_run": {
    "home": "superme_agent.daemon.routers.dev.work_items",
-   "sig": "def(item_id: str, body: superme_agent.daemon.routers.dev.work_items.PlanBody, dev: superme_agent.core.dev_knowledge.DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None), spine: superme_agent.core.spine.SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(item_id: str, body: PlanBody, dev: DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None), spine: SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
   },
   "dev_work_item_run_input": {
    "home": "superme_agent.daemon.routers.dev.work_items",
@@ -7602,11 +7602,11 @@
   },
   "dev_work_item_scaffold": {
    "home": "superme_agent.daemon.routers.dev.work_items",
-   "sig": "def(item_id: str, body: superme_agent.daemon.routers.dev.work_items.ScaffoldBody, dev: superme_agent.core.dev_knowledge.DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(item_id: str, body: ScaffoldBody, dev: DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None)) -> dict"
   },
   "dev_work_item_seen": {
    "home": "superme_agent.daemon.routers.dev.work_items",
-   "sig": "def(item_id: str, context_id: str = 'global', dev: superme_agent.core.dev_knowledge.DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(item_id: str, context_id: str = 'global', dev: DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None)) -> dict"
   },
   "dev_work_item_timeline": {
    "home": "superme_agent.daemon.routers.dev.work_items",
@@ -7614,19 +7614,19 @@
   },
   "get_dev": {
    "home": "superme_agent.daemon.app_state",
-   "sig": "def() -> superme_agent.core.dev_knowledge.DevKnowledgeService"
+   "sig": "def() -> DevKnowledgeService"
   },
   "get_dev_store": {
    "home": "superme_agent.daemon.app_state",
-   "sig": "def() -> superme_agent.core.dev_store.DevStore"
+   "sig": "def() -> DevStore"
   },
   "get_sessions": {
    "home": "superme_agent.daemon.app_state",
-   "sig": "def() -> superme_agent.core.sessions.SessionStore"
+   "sig": "def() -> SessionStore"
   },
   "get_spine": {
    "home": "superme_agent.daemon.app_state",
-   "sig": "def() -> superme_agent.core.spine.SystemSpine"
+   "sig": "def() -> SystemSpine"
   },
   "log": {
    "sig": "value:Logger"
@@ -7721,15 +7721,15 @@
   },
   "_collect_tools": {
    "home": "superme_agent.daemon.routers.inventory",
-   "sig": "def() -> list[superme_agent.daemon.routers.inventory.ToolInfo]"
+   "sig": "def() -> list[ToolInfo]"
   },
   "_read_db": {
    "home": "superme_agent.daemon.routers.inventory",
-   "sig": "def(name: str, path: pathlib.Path) -> superme_agent.daemon.routers.inventory.DatabaseInfo"
+   "sig": "def(name: str, path: pathlib.Path) -> DatabaseInfo"
   },
   "_tool_params": {
    "home": "superme_agent.daemon.routers.inventory",
-   "sig": "def(schema) -> list[superme_agent.daemon.routers.inventory.ToolParam]"
+   "sig": "def(schema) -> list[ToolParam]"
   },
   "log": {
    "sig": "value:Logger"
@@ -7739,7 +7739,7 @@
   },
   "system_inventory": {
    "home": "superme_agent.daemon.routers.inventory",
-   "sig": "def() -> superme_agent.daemon.routers.inventory.InventoryResponse"
+   "sig": "def() -> InventoryResponse"
   }
  },
  "superme_agent.daemon.routers.knowledge": {
@@ -7781,15 +7781,15 @@
   },
   "get_knowledge": {
    "home": "superme_agent.daemon.app_state",
-   "sig": "def() -> superme_agent.core.knowledge_service.KnowledgeService"
+   "sig": "def() -> KnowledgeService"
   },
   "knowledge_inject": {
    "home": "superme_agent.daemon.routers.knowledge",
-   "sig": "def(body: superme_agent.daemon.routers.knowledge.InjectBody, knowledge: superme_agent.core.knowledge_service.KnowledgeService = Depends(dependency=<function get_knowledge>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(body: InjectBody, knowledge: KnowledgeService = Depends(dependency=<function get_knowledge>, use_cache=True, scope=None)) -> dict"
   },
   "knowledge_read": {
    "home": "superme_agent.daemon.routers.knowledge",
-   "sig": "def(path: str, context_id: str = 'global', knowledge: superme_agent.core.knowledge_service.KnowledgeService = Depends(dependency=<function get_knowledge>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(path: str, context_id: str = 'global', knowledge: KnowledgeService = Depends(dependency=<function get_knowledge>, use_cache=True, scope=None)) -> dict"
   },
   "knowledge_root": {
    "home": "superme_agent.daemon.deps",
@@ -7797,11 +7797,11 @@
   },
   "knowledge_tree": {
    "home": "superme_agent.daemon.routers.knowledge",
-   "sig": "def(context_id: str = 'global', knowledge: superme_agent.core.knowledge_service.KnowledgeService = Depends(dependency=<function get_knowledge>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(context_id: str = 'global', knowledge: KnowledgeService = Depends(dependency=<function get_knowledge>, use_cache=True, scope=None)) -> dict"
   },
   "knowledge_write": {
    "home": "superme_agent.daemon.routers.knowledge",
-   "sig": "def(body: superme_agent.daemon.routers.knowledge.WriteBody, knowledge: superme_agent.core.knowledge_service.KnowledgeService = Depends(dependency=<function get_knowledge>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(body: WriteBody, knowledge: KnowledgeService = Depends(dependency=<function get_knowledge>, use_cache=True, scope=None)) -> dict"
   },
   "router": {
    "sig": "value:APIRouter"
@@ -7883,19 +7883,19 @@
   "SessionStore": {
    "home": "superme_agent.core.sessions",
    "methods": [
-    "_scan(self, ctx: superme_agent.core.context.Context, session_id: str) -> dict | None",
-    "_transcript(self, ctx: superme_agent.core.context.Context, session_id: str, cwd=None)",
-    "_workspace_rows(self, ctx: superme_agent.core.context.Context) -> list[dict]",
-    "delete(self, ctx: superme_agent.core.context.Context, session_id: str, *, cause: str = 'deleted') -> bool",
-    "delete_channel(self, ctx: superme_agent.core.context.Context, session_id: str, *, cause: str = 'deleted') -> int",
-    "discard_transcript(self, ctx: superme_agent.core.context.Context, session_id: str, cwd=None) -> bool",
-    "has_transcript(self, ctx: superme_agent.core.context.Context, session_id: str) -> bool",
-    "list(self, ctx: superme_agent.core.context.Context, mode: str | None = None) -> list[dict]",
-    "read(self, ctx: superme_agent.core.context.Context, session_id: str, limit: int = 10) -> dict | None",
-    "record(self, ctx: superme_agent.core.context.Context, session_id: str | None) -> None",
-    "rename(self, ctx: superme_agent.core.context.Context, session_id: str, title: str | None) -> bool",
-    "transcript_messages(self, ctx: superme_agent.core.context.Context, session_id: str) -> list[dict]",
-    "transcript_mtime(self, ctx: superme_agent.core.context.Context, session_id: str) -> float | None"
+    "_scan(self, ctx: Context, session_id: str) -> dict | None",
+    "_transcript(self, ctx: Context, session_id: str, cwd=None)",
+    "_workspace_rows(self, ctx: Context) -> list[dict]",
+    "delete(self, ctx: Context, session_id: str, *, cause: str = 'deleted') -> bool",
+    "delete_channel(self, ctx: Context, session_id: str, *, cause: str = 'deleted') -> int",
+    "discard_transcript(self, ctx: Context, session_id: str, cwd=None) -> bool",
+    "has_transcript(self, ctx: Context, session_id: str) -> bool",
+    "list(self, ctx: Context, mode: str | None = None) -> list[dict]",
+    "read(self, ctx: Context, session_id: str, limit: int = 10) -> dict | None",
+    "record(self, ctx: Context, session_id: str | None) -> None",
+    "rename(self, ctx: Context, session_id: str, title: str | None) -> bool",
+    "transcript_messages(self, ctx: Context, session_id: str) -> list[dict]",
+    "transcript_mtime(self, ctx: Context, session_id: str) -> float | None"
    ],
    "sig": "class"
   },
@@ -7906,30 +7906,30 @@
   },
   "get_dev": {
    "home": "superme_agent.daemon.app_state",
-   "sig": "def() -> superme_agent.core.dev_knowledge.DevKnowledgeService"
+   "sig": "def() -> DevKnowledgeService"
   },
   "get_sessions": {
    "home": "superme_agent.daemon.app_state",
-   "sig": "def() -> superme_agent.core.sessions.SessionStore"
+   "sig": "def() -> SessionStore"
   },
   "router": {
    "sig": "value:APIRouter"
   },
   "session_delete": {
    "home": "superme_agent.daemon.routers.sessions",
-   "sig": "def(session_id: str, context_id: str = 'global', sessions: superme_agent.core.sessions.SessionStore = Depends(dependency=<function get_sessions>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(session_id: str, context_id: str = 'global', sessions: SessionStore = Depends(dependency=<function get_sessions>, use_cache=True, scope=None)) -> dict"
   },
   "session_read": {
    "home": "superme_agent.daemon.routers.sessions",
-   "sig": "def(session_id: str, context_id: str = 'global', limit: int = 10, sessions: superme_agent.core.sessions.SessionStore = Depends(dependency=<function get_sessions>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(session_id: str, context_id: str = 'global', limit: int = 10, sessions: SessionStore = Depends(dependency=<function get_sessions>, use_cache=True, scope=None)) -> dict"
   },
   "session_rename": {
    "home": "superme_agent.daemon.routers.sessions",
-   "sig": "def(session_id: str, body: superme_agent.daemon.schemas.sessions.SessionRenameBody, sessions: superme_agent.core.sessions.SessionStore = Depends(dependency=<function get_sessions>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(session_id: str, body: SessionRenameBody, sessions: SessionStore = Depends(dependency=<function get_sessions>, use_cache=True, scope=None)) -> dict"
   },
   "sessions_list": {
    "home": "superme_agent.daemon.routers.sessions",
-   "sig": "def(context_id: str = 'global', mode: str | None = None, sessions: superme_agent.core.sessions.SessionStore = Depends(dependency=<function get_sessions>, use_cache=True, scope=None), dev: superme_agent.core.dev_knowledge.DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None)) -> list[dict]"
+   "sig": "def(context_id: str = 'global', mode: str | None = None, sessions: SessionStore = Depends(dependency=<function get_sessions>, use_cache=True, scope=None), dev: DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None)) -> list[dict]"
   },
   "short_item_id": {
    "home": "superme_agent.core.sessions",
@@ -8124,7 +8124,7 @@
     "_run_dict(self, r) -> dict",
     "_seed_repos_config(self) -> None",
     "_usage_parts(usage: dict | None) -> tuple[int, int, int, int]",
-    "add_repo(self, rc: superme_agent.core.spine.RepoConfig) -> superme_agent.core.spine.RepoConfig",
+    "add_repo(self, rc: RepoConfig) -> RepoConfig",
     "agent_model_config(self) -> list[dict]",
     "all_effort_overrides(self) -> dict[str, str]",
     "all_model_overrides(self) -> dict[str, str]",
@@ -8185,11 +8185,11 @@
     "record_run_input(self, run_id: int, *, repo_id: str, item_id: str | None, phase: str | None, feature: str | None, background: bool, system_prompt: str, prompt_body: str, system_fragments: str | None = None, turn_surface: str | None = None, authored_extras: str | None = None) -> None",
     "record_session(self, session_id: str, cwd, *, surface: str = 'web', mode: str = 'core', thread_ts: str | None = None, repo_id: str | None = None, resumable: bool = True) -> dict | None",
     "release_item_runs(self, repo_id: str, item_id: str) -> int",
-    "remove_repo(self, repo_id: str) -> superme_agent.core.spine.RepoConfig",
-    "repo(self, repo_id: str) -> superme_agent.core.spine.RepoConfig | None",
+    "remove_repo(self, repo_id: str) -> RepoConfig",
+    "repo(self, repo_id: str) -> RepoConfig | None",
     "repo_for_cwd(self, cwd) -> str | None",
     "repo_status(self, repo_id: str, mode: str) -> dict",
-    "repos(self) -> dict[str, superme_agent.core.spine.RepoConfig]",
+    "repos(self) -> dict[str, RepoConfig]",
     "resolve_agent_effort(self, feature: str) -> str",
     "resolve_agent_model(self, feature: str) -> str",
     "role_effort(self, repo_id: str, role: str, *, item_effort: str | None = None) -> str",
@@ -8239,10 +8239,10 @@
     "subagent_briefs(self, repo_id: str, item_id: str, *, phase: str) -> list[dict]",
     "subagent_count(self, repo_id: str, item_id: str, *, phase: str) -> int",
     "system(self) -> dict",
-    "system_config(self) -> superme_agent.core.spine.SystemConfig",
+    "system_config(self) -> SystemConfig",
     "token_timeseries(self, tz_offset: int = 0) -> dict",
     "token_usage(self) -> dict",
-    "update_repo(self, repo_id: str, **fields) -> superme_agent.core.spine.RepoConfig"
+    "update_repo(self, repo_id: str, **fields) -> RepoConfig"
    ],
    "sig": "class"
   },
@@ -8284,7 +8284,7 @@
   },
   "connect_repo": {
    "home": "superme_agent.daemon.routers.system",
-   "sig": "def(body: superme_agent.daemon.routers.system.RepoConnectBody, spine: superme_agent.core.spine.SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(body: RepoConnectBody, spine: SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
   },
   "dev_root": {
    "home": "superme_agent.daemon.deps",
@@ -8292,23 +8292,23 @@
   },
   "disconnect_repo": {
    "home": "superme_agent.daemon.routers.system",
-   "sig": "def(repo_id: str, confirm: str = '', spine: superme_agent.core.spine.SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(repo_id: str, confirm: str = '', spine: SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
   },
   "get_agent_models": {
    "home": "superme_agent.daemon.routers.system",
-   "sig": "def(spine: superme_agent.core.spine.SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(spine: SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
   },
   "get_repo_branches": {
    "home": "superme_agent.daemon.routers.system",
-   "sig": "def(repo_id: str, spine: superme_agent.core.spine.SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(repo_id: str, spine: SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
   },
   "get_spine": {
    "home": "superme_agent.daemon.app_state",
-   "sig": "def() -> superme_agent.core.spine.SystemSpine"
+   "sig": "def() -> SystemSpine"
   },
   "get_system_compaction": {
    "home": "superme_agent.daemon.routers.system",
-   "sig": "def(spine: superme_agent.core.spine.SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(spine: SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
   },
   "is_valid_model": {
    "home": "superme_agent.core.models",
@@ -8327,62 +8327,62 @@
   },
   "repos_overview": {
    "home": "superme_agent.daemon.routers.system",
-   "sig": "def(spine: superme_agent.core.spine.SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> list[dict]"
+   "sig": "def(spine: SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> list[dict]"
   },
   "router": {
    "sig": "value:APIRouter"
   },
   "run_trace": {
    "home": "superme_agent.daemon.routers.system",
-   "sig": "def(run_id: int, spine: superme_agent.core.spine.SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(run_id: int, spine: SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
   },
   "runs_overview": {
    "home": "superme_agent.daemon.routers.system",
-   "sig": "def(context_id: str | None = None, limit: int = 50, spine: superme_agent.core.spine.SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(context_id: str | None = None, limit: int = 50, spine: SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
   },
   "set_agent_model": {
    "home": "superme_agent.daemon.routers.system",
-   "sig": "def(feature: str, body: superme_agent.daemon.routers.system.AgentModelBody, spine: superme_agent.core.spine.SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(feature: str, body: AgentModelBody, spine: SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
   },
   "set_repo_autopilot": {
    "home": "superme_agent.daemon.routers.system",
-   "sig": "def(repo_id: str, body: superme_agent.daemon.routers.system.AutopilotConcurrencyBody, spine: superme_agent.core.spine.SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(repo_id: str, body: AutopilotConcurrencyBody, spine: SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
   },
   "set_repo_effort": {
    "home": "superme_agent.daemon.routers.system",
-   "sig": "def(repo_id: str, body: superme_agent.daemon.routers.system.RepoEffortBody, spine: superme_agent.core.spine.SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(repo_id: str, body: RepoEffortBody, spine: SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
   },
   "set_repo_git": {
    "home": "superme_agent.daemon.routers.system",
-   "sig": "def(repo_id: str, body: superme_agent.daemon.routers.system.RepoGitBody, spine: superme_agent.core.spine.SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(repo_id: str, body: RepoGitBody, spine: SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
   },
   "set_repo_learning": {
    "home": "superme_agent.daemon.routers.system",
-   "sig": "def(repo_id: str, body: superme_agent.daemon.routers.system.LearningBody, spine: superme_agent.core.spine.SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(repo_id: str, body: LearningBody, spine: SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
   },
   "set_repo_meta": {
    "home": "superme_agent.daemon.routers.system",
-   "sig": "def(repo_id: str, body: superme_agent.daemon.routers.system.RepoMetaBody, spine: superme_agent.core.spine.SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(repo_id: str, body: RepoMetaBody, spine: SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
   },
   "set_repo_model": {
    "home": "superme_agent.daemon.routers.system",
-   "sig": "def(repo_id: str, body: superme_agent.daemon.routers.system.RepoModelBody, spine: superme_agent.core.spine.SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(repo_id: str, body: RepoModelBody, spine: SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
   },
   "set_system_compaction": {
    "home": "superme_agent.daemon.routers.system",
-   "sig": "def(body: superme_agent.daemon.schemas.system.CompactionConfigBody, spine: superme_agent.core.spine.SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(body: CompactionConfigBody, spine: SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
   },
   "set_system_deputy": {
    "home": "superme_agent.daemon.routers.system",
-   "sig": "def(body: superme_agent.daemon.routers.system.DeputyConfigBody, spine: superme_agent.core.spine.SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(body: DeputyConfigBody, spine: SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
   },
   "set_system_learning": {
    "home": "superme_agent.daemon.routers.system",
-   "sig": "def(body: superme_agent.daemon.routers.system.LearningBody, spine: superme_agent.core.spine.SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(body: LearningBody, spine: SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
   },
   "set_system_sweep": {
    "home": "superme_agent.daemon.routers.system",
-   "sig": "def(body: superme_agent.daemon.schemas.system.SweepConfigBody, spine: superme_agent.core.spine.SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(body: SweepConfigBody, spine: SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
   },
   "system_attention": {
    "home": "superme_agent.daemon.routers.system",
@@ -8390,15 +8390,15 @@
   },
   "system_overview": {
    "home": "superme_agent.daemon.routers.system",
-   "sig": "def(spine: superme_agent.core.spine.SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(spine: SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
   },
   "token_timeseries": {
    "home": "superme_agent.daemon.routers.system",
-   "sig": "def(tz_offset: int = 0, spine: superme_agent.core.spine.SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(tz_offset: int = 0, spine: SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
   },
   "token_usage": {
    "home": "superme_agent.daemon.routers.system",
-   "sig": "def(spine: superme_agent.core.spine.SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
+   "sig": "def(spine: SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
   }
  },
  "superme_agent.daemon.routers.ws": {
@@ -8546,7 +8546,7 @@
   },
   "classify": {
    "home": "superme_agent.core.faults",
-   "sig": "def(*, exc: BaseException | None = None, reply: str | None = None, did_work: bool = False) -> superme_agent.core.faults.Fault"
+   "sig": "def(*, exc: BaseException | None = None, reply: str | None = None, did_work: bool = False) -> Fault"
   },
   "compacted_checkpoint": {
    "home": "superme_agent.daemon.services.runs",
@@ -8574,7 +8574,7 @@
   },
   "event_to_frame": {
    "home": "superme_agent.daemon.protocol",
-   "sig": "def(ev: superme_agent.core.events.Init | superme_agent.core.events.TextDelta | superme_agent.core.events.Status | superme_agent.core.events.ToolResult | superme_agent.core.events.Usage | superme_agent.core.events.Result) -> dict"
+   "sig": "def(ev: Init | TextDelta | Status | ToolResult | Usage | Result) -> dict"
   },
   "fire_auto_triage": {
    "home": "superme_agent.daemon.services.runs",
@@ -8601,7 +8601,7 @@
   },
   "parse_inbound": {
    "home": "superme_agent.daemon.protocol",
-   "sig": "def(msg: dict) -> superme_agent.daemon.schemas.ws.TurnFrame | superme_agent.daemon.schemas.ws.ApprovalResponseFrame | superme_agent.daemon.schemas.ws.WatchFrame | None"
+   "sig": "def(msg: dict) -> TurnFrame | ApprovalResponseFrame | WatchFrame | None"
   },
   "read_completion": {
    "home": "superme_agent.daemon.services.runs",
@@ -10097,7 +10097,7 @@
   },
   "_s": {
    "home": "superme_agent.daemon.services.compaction",
-   "sig": "def(session_id: str) -> superme_agent.daemon.services.compaction._SessState"
+   "sig": "def(session_id: str) -> _SessState"
   },
   "_spine": {
    "sig": "value:SystemSpine"
@@ -10111,11 +10111,11 @@
   },
   "bank_precompaction_checkpoint": {
    "home": "superme_agent.daemon.services.compaction",
-   "sig": "def(ctx: superme_agent.core.context.Context, item_id: str) -> bool"
+   "sig": "def(ctx: Context, item_id: str) -> bool"
   },
   "compact_before_run": {
    "home": "superme_agent.daemon.services.compaction",
-   "sig": "def(ctx: superme_agent.core.context.Context, context_id: str, item_id: str | None, session_id: str | None, *, kind: str | None, model: str | None, force: bool = False) -> dict | None"
+   "sig": "def(ctx: Context, context_id: str, item_id: str | None, session_id: str | None, *, kind: str | None, model: str | None, force: bool = False) -> dict | None"
   },
   "deny_all": {
    "home": "superme_agent.core.permissions",
@@ -10131,7 +10131,7 @@
   },
   "get_profile": {
    "home": "superme_agent.core.kind_profiles",
-   "sig": "def(kind: str | None) -> superme_agent.core.kind_profiles.KindProfile"
+   "sig": "def(kind: str | None) -> KindProfile"
   },
   "judge_effectiveness": {
    "home": "superme_agent.daemon.services.compaction",
@@ -10146,11 +10146,11 @@
   },
   "run_compaction": {
    "home": "superme_agent.daemon.services.compaction",
-   "sig": "def(ctx: superme_agent.core.context.Context, context_id: str, item_id: str | None, session_id: str, *, model: str | None, pre_pct: int | None, manual: bool = False) -> dict"
+   "sig": "def(ctx: Context, context_id: str, item_id: str | None, session_id: str, *, model: str | None, pre_pct: int | None, manual: bool = False) -> dict"
   },
   "run_handoff_turn": {
    "home": "superme_agent.daemon.services.compaction",
-   "sig": "def(ctx: superme_agent.core.context.Context, context_id: str, item_id: str | None, session_id: str, *, model: str | None) -> bool"
+   "sig": "def(ctx: Context, context_id: str, item_id: str | None, session_id: str, *, model: str | None) -> bool"
   },
   "scoped_writes_approve": {
    "home": "superme_agent.core.permissions",
@@ -10158,7 +10158,7 @@
   },
   "session_memory_root": {
    "home": "superme_agent.daemon.services.compaction",
-   "sig": "def(ctx: superme_agent.core.context.Context) -> pathlib.Path | None"
+   "sig": "def(ctx: Context) -> pathlib.Path | None"
   },
   "validate_trigger": {
    "home": "superme_agent.daemon.services.compaction",
@@ -11453,7 +11453,7 @@
   },
   "_result_row": {
    "home": "superme_agent.daemon.services.runs",
-   "sig": "def(ev: superme_agent.core.events.ToolResult) -> tuple[str, str]"
+   "sig": "def(ev: ToolResult) -> tuple[str, str]"
   },
   "_run_background_close": {
    "home": "superme_agent.daemon.services.runs",
@@ -11649,7 +11649,7 @@
   },
   "classify": {
    "home": "superme_agent.core.faults",
-   "sig": "def(*, exc: BaseException | None = None, reply: str | None = None, did_work: bool = False) -> superme_agent.core.faults.Fault"
+   "sig": "def(*, exc: BaseException | None = None, reply: str | None = None, did_work: bool = False) -> Fault"
   },
   "log": {
    "sig": "value:Logger"
@@ -11704,7 +11704,7 @@
   },
   "resolve": {
    "home": "superme_agent.gateway.contexts",
-   "sig": "def(context_id: str | None, mode: str = 'core') -> superme_agent.core.context.Context"
+   "sig": "def(context_id: str | None, mode: str = 'core') -> Context"
   }
  },
  "superme_agent.gateway.contexts": {
@@ -11732,11 +11732,11 @@
   },
   "_context_from_repo": {
    "home": "superme_agent.gateway.contexts",
-   "sig": "def(rc: superme_agent.core.spine.RepoConfig, mode: str) -> superme_agent.core.context.Context"
+   "sig": "def(rc: RepoConfig, mode: str) -> Context"
   },
   "get_spine": {
    "home": "superme_agent.core.spine",
-   "sig": "def() -> superme_agent.core.spine.SystemSpine"
+   "sig": "def() -> SystemSpine"
   },
   "list_all": {
    "home": "superme_agent.gateway.contexts",
@@ -11747,7 +11747,7 @@
   },
   "resolve": {
    "home": "superme_agent.gateway.contexts",
-   "sig": "def(context_id: str | None, mode: str = 'core') -> superme_agent.core.context.Context"
+   "sig": "def(context_id: str | None, mode: str = 'core') -> Context"
   }
  },
  "superme_agent.harness": {},
@@ -12301,7 +12301,7 @@
   },
   "dev_tool_specs": {
    "home": "superme_agent.harness.tools.dev_tools",
-   "sig": "def(scope: str) -> list[superme_agent.harness.tools.registry.ToolSpec]"
+   "sig": "def(scope: str) -> list[ToolSpec]"
   },
   "make_dev_mcp_server": {
    "home": "superme_agent.harness.tools.dev_tools",
