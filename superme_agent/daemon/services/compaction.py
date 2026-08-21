@@ -16,8 +16,8 @@ from pathlib import Path
 from ..app_state import agent as _agent, dev as _dev, dev_store as _dev_store, spine as _spine
 from ...core import Result, kernel_speech, scoped_writes_approve
 from ...core import artifacts
-from ...core.context import Context
-from ...core.kind_profiles import get_profile
+from ...core.vocab.context import Context
+from ...core.vocab.kind_profiles import get_profile
 from ...core.permissions import deny_all
 from .turns import ResilientTurn
 

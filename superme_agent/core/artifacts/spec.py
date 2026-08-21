@@ -3,7 +3,7 @@ the file lives."""
 
 import re
 
-from .. import kind_profiles as _kp
+from ..vocab import kind_profiles as _kp
 from .templates import template_section_spec
 
 # An artifact's own frontmatter, and the family stamp inside it. `self_check` judges a file

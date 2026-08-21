@@ -3,7 +3,7 @@
 def _session_fields(meta: dict) -> tuple[dict, str | None]:
     """A work-item's session slots plus the COMPUTED `session_id` — the current
     phase's, so single-session readers follow the phase."""
-    from ..kind_profiles import (INTAKE_PHASES, LEGACY_INTAKE_SLOT, SESSION_SLOTS, session_slot)
+    from ..vocab.kind_profiles import (INTAKE_PHASES, LEGACY_INTAKE_SLOT, SESSION_SLOTS, session_slot)
     keys = (*SESSION_SLOTS, LEGACY_INTAKE_SLOT)
     sessions = {s: str(meta[f"session_{s}"]) for s in keys if meta.get(f"session_{s}")}
     phase = str(meta.get("phase") or "triage")

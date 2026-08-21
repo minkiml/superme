@@ -4,8 +4,8 @@ Exposes Context (who and where a turn runs), AgentService (runs turns, yields Tu
 KnowledgeService, and ApproveFn (per-surface tool approval). Nothing here knows a surface.
 """
 
-from .context import Context
-from .events import Init, TextDelta, Status, ToolResult, Usage, Result, TurnEvent
+from .vocab.context import Context
+from .vocab.events import Init, TextDelta, Status, ToolResult, Usage, Result, TurnEvent
 from .permissions import (
     ApproveFn, build_can_use_tool, scoped_writes_approve, deny_all, learning_write_approve,
     PLAN_READONLY_NUDGE,

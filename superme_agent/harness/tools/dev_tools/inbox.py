@@ -116,7 +116,7 @@ def _create_inbox_item(*, store, context_id, dev_root=None, fire_triage=None, **
         from ....core import artifacts as _arts
         from ....core import inbox_flow as _flow
         from ....core.dev_knowledge import DevKnowledgeService
-        from ....core.titles import check_title
+        from ....core.vocab.titles import check_title
         title, body = _s(args, "title"), _s(args, "body")
         if not body:
             return _err("An inbox item needs both `title` and `body` (a crisp synthesis, not a dump).")
@@ -136,7 +136,7 @@ def _create_inbox_item(*, store, context_id, dev_root=None, fire_triage=None, **
             # A kind with no worktree has no branch to hand over, and auto-pushing would start
             # work the owner never chose.
             if relation in ("blocking", "parallel"):
-                from ....core.kind_profiles import get_profile
+                from ....core.vocab.kind_profiles import get_profile
                 if not get_profile(parent_item.get("kind")).worktree:
                     return _err(
                         f"A {parent_item.get('kind')!r} item has no worktree, so it cannot carry a "

@@ -246,7 +246,7 @@ def _reconcile_close_steps() -> None:
     unfinished steps, healed here on the next start.
 
     The worktree step belongs to `_reconcile_worktrees`."""
-    from ..core import status_router
+    from ..core.vocab import status_router
     from .services import scheduler
     from .services.runs import render_execution_md
     try:

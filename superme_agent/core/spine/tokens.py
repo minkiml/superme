@@ -51,7 +51,7 @@ class TokenOps:
         reconcile by construction: `by_category` and `by_type`.
 
         A row with four zero columns contributes NOTHING — it never returned a final usage."""
-        from ..token_taxonomy import (
+        from ..vocab.token_taxonomy import (
             category_for, display_feature, CATEGORY_ORDER, CATEGORY_LABELS, COLLAPSED_CATEGORIES,
         )
         with self._conn() as c:

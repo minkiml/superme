@@ -165,7 +165,7 @@ class SettingsOps:
             return (r["value"] or None) if r else None
 
     def set_deputy_model(self, model: str | None) -> None:
-        from ..models import model_family
+        from ..vocab.models import model_family
         alias = model_family(model) if model else None
         with self._conn() as c:
             if alias is None:

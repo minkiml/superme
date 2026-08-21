@@ -4,7 +4,7 @@ versions of them."""
 import re
 from pathlib import Path
 
-from ..kind_profiles import get_profile
+from ..vocab.kind_profiles import get_profile
 from .text import _atomic_write, clip
 from .templates import skill_template
 from .spec import artifact_file

@@ -12,7 +12,8 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from superme_agent.core import git_layer, kernel_speech, kind_profiles
+from superme_agent.core import git_layer, kernel_speech
+from superme_agent.core.vocab import kind_profiles
 from superme_agent.core.permissions import build_can_use_tool, deny_all
 from superme_agent.daemon.services import watchdog
 from superme_agent.harness.policy import MAX_SUBAGENTS, SAFE_TOOLS, SUBAGENT_TOOLS

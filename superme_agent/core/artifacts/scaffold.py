@@ -4,7 +4,7 @@ import re
 from datetime import date
 from pathlib import Path
 
-from ..kind_profiles import get_profile
+from ..vocab.kind_profiles import get_profile
 from .text import _atomic_write
 from .templates import skill_template
 from .spec import _SPECS, _template_name, artifact_file, required_sections
@@ -52,7 +52,7 @@ def scaffold(item_dir: Path, artifact: str, *, title: str = "", item_kind: str |
     if artifact not in _SPECS:
         raise KeyError(f"unknown artifact kind {artifact!r} — known: {sorted(_SPECS)}")
     item_kind = get_profile(item_kind).kind
-    from ..kind_profiles import RESEARCH_KINDS
+    from ..vocab.kind_profiles import RESEARCH_KINDS
     if research_kind not in RESEARCH_KINDS:
         research_kind = None  # forgiving, like kind_profiles.research_kind — unjudged is a state
     adir = Path(item_dir) / "artifacts"

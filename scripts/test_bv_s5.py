@@ -16,7 +16,7 @@ from types import SimpleNamespace
 
 from superme_agent.core import artifacts as A
 from superme_agent.core.spine import SystemSpine
-from superme_agent.core.token_taxonomy import category_for
+from superme_agent.core.vocab.token_taxonomy import category_for
 from superme_agent.daemon.services import loop as L
 from superme_agent.daemon.services.loop import decide_after_vet
 

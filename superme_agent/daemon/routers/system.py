@@ -22,10 +22,10 @@ from ..schemas.system import (AgentModelBody, AgentModelsResponse, AutopilotConc
                               RepoModelResponse, RepoOverview, RunTraceResponse, RunsResponse,
                               SweepConfigBody, SweepConfigResponse, SystemResponse,
                               TokenTimeseriesResponse, TokenUsageResponse)
-from ...core.models import AGENT_MODEL_FEATURES
+from ...core.vocab.models import AGENT_MODEL_FEATURES
 from ...core import git_layer
 from ...core.spine import MODES, RepoConfig
-from ...core.models import CANONICAL_MODELS, is_valid_model, model_family, normalize_model
+from ...core.vocab.models import CANONICAL_MODELS, is_valid_model, model_family, normalize_model
 
 router = APIRouter()
 log = logging.getLogger("superme-agent")

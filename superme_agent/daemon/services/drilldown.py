@@ -13,7 +13,8 @@ from pathlib import Path
 
 from ...core import artifacts as _arts
 from ...core import decision_ledger as _ledger
-from ...core import gate_briefs, kind_profiles, status_router
+from ...core import gate_briefs
+from ...core.vocab import kind_profiles, status_router
 from . import attention as _attention
 from .rerun import rerun_reason as _rerun_reason
 from .resume import resume_reason as _resume_reason, RESUMABLE_PHASES
@@ -245,7 +246,7 @@ def _standing_summary(item: dict, item_dir: Path, phase: str,
     rather than going blank. Handing back the phase is what makes holding it honest."""
     if (own := _live_summary(item_dir, phase, events)):
         return own, phase
-    from ...core.kind_profiles import get_profile
+    from ...core.vocab.kind_profiles import get_profile
     try:
         order = list(get_profile(str(item.get("kind") or "implementation")).phases)
     except KeyError:

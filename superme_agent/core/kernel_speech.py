@@ -7,7 +7,8 @@ are triggers (durable) · preambles (per-turn) · assemblers. `test_thread3` sna
 import json
 from pathlib import Path
 
-from . import artifacts, kind_profiles, sandbox
+from . import artifacts
+from .vocab import kind_profiles, sandbox
 
 
 # triggers (durable user-messages — each opens one background run's transcript)

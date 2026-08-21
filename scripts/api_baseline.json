@@ -29,7 +29,7 @@
    "sig": "class"
   },
   "Context": {
-   "home": "superme_agent.core.context",
+   "home": "superme_agent.core.vocab.context",
    "methods": [],
    "sig": "class"
   },
@@ -126,7 +126,7 @@
    "sig": "class"
   },
   "Init": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
@@ -145,7 +145,7 @@
    "sig": "value:str"
   },
   "Result": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
@@ -169,17 +169,17 @@
    "sig": "class"
   },
   "Status": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
   "TextDelta": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
   "ToolResult": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
@@ -187,7 +187,7 @@
    "sig": "value:UnionType"
   },
   "Usage": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
@@ -241,7 +241,7 @@
    "sig": "value:PosixPath"
   },
   "Context": {
-   "home": "superme_agent.core.context",
+   "home": "superme_agent.core.vocab.context",
    "methods": [],
    "sig": "class"
   },
@@ -301,7 +301,7 @@
    "sig": "value:PosixPath"
   },
   "Init": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
@@ -309,7 +309,7 @@
    "sig": "value:PosixPath"
   },
   "Result": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
@@ -317,17 +317,17 @@
    "sig": "value:PosixPath"
   },
   "Status": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
   "TextDelta": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
   "ToolResult": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
@@ -335,7 +335,7 @@
    "sig": "value:UnionType"
   },
   "Usage": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
@@ -397,7 +397,7 @@
    "sig": "def(mode: 'str', universal_dir: 'Path', repo_dir: 'Path | None', activated: 'set | None' = None)"
   },
   "normalize_model": {
-   "home": "superme_agent.core.models",
+   "home": "superme_agent.core.vocab.models",
    "sig": "def(m: str | None) -> str | None"
   },
   "plugins_for": {
@@ -405,7 +405,7 @@
    "sig": "def(mode: str, op_home: pathlib.Path | None = None) -> list[str]"
   },
   "sandbox_options": {
-   "home": "superme_agent.core.sandbox",
+   "home": "superme_agent.core.vocab.sandbox",
    "sig": "def(writes: list[pathlib.Path] | None) -> dict"
   },
   "silent_skill_names": {
@@ -1777,7 +1777,7 @@
    "sig": "def(artifact: str) -> str"
   },
   "get_profile": {
-   "home": "superme_agent.core.kind_profiles",
+   "home": "superme_agent.core.vocab.kind_profiles",
    "sig": "def(kind: str | None) -> KindProfile"
   },
   "required_sections": {
@@ -1867,7 +1867,7 @@
    "sig": "def(item_dir: pathlib.Path, repo_dir: pathlib.Path | None, *, scope_to_plan: bool = True) -> dict"
   },
   "get_profile": {
-   "home": "superme_agent.core.kind_profiles",
+   "home": "superme_agent.core.vocab.kind_profiles",
    "sig": "def(kind: str | None) -> KindProfile"
   },
   "owner_edit": {
@@ -2103,7 +2103,7 @@
    "sig": "def(item_dir: pathlib.Path, repo_dir: pathlib.Path | None, *, scope_to_plan: bool = True) -> dict"
   },
   "get_profile": {
-   "home": "superme_agent.core.kind_profiles",
+   "home": "superme_agent.core.vocab.kind_profiles",
    "sig": "def(kind: str | None) -> KindProfile"
   },
   "lens_gaps": {
@@ -2279,7 +2279,7 @@
    "sig": "def(items: list[dict], running_ids: set[str], deputy_ids: set[str] = frozenset(), rulings_by_item: dict[str, int] | None = None) -> dict"
   },
   "get_profile": {
-   "home": "superme_agent.core.kind_profiles",
+   "home": "superme_agent.core.vocab.kind_profiles",
    "sig": "def(kind: str | None) -> KindProfile"
   }
  },
@@ -2339,7 +2339,7 @@
    "sig": "class"
   },
   "Context": {
-   "home": "superme_agent.core.context",
+   "home": "superme_agent.core.vocab.context",
    "methods": [],
    "sig": "class"
   },
@@ -2497,13 +2497,6 @@
   },
   "log": {
    "sig": "value:Logger"
-  }
- },
- "superme_agent.core.context": {
-  "Context": {
-   "home": "superme_agent.core.context",
-   "methods": [],
-   "sig": "class"
   }
  },
  "superme_agent.core.decision_ledger": {
@@ -2855,11 +2848,11 @@
    "sig": "def(text: str) -> tuple[dict, str]"
   },
   "check_title": {
-   "home": "superme_agent.core.titles",
+   "home": "superme_agent.core.vocab.titles",
    "sig": "def(raw, *, description: str = '') -> str"
   },
   "normalize_title": {
-   "home": "superme_agent.core.titles",
+   "home": "superme_agent.core.vocab.titles",
    "sig": "def(raw, *, description: str = '') -> str"
   }
  },
@@ -2992,11 +2985,11 @@
    "sig": "def(specs: list[dict]) -> list[str]"
   },
   "check_title": {
-   "home": "superme_agent.core.titles",
+   "home": "superme_agent.core.vocab.titles",
    "sig": "def(raw, *, description: str = '') -> str"
   },
   "normalize_title": {
-   "home": "superme_agent.core.titles",
+   "home": "superme_agent.core.vocab.titles",
    "sig": "def(raw, *, description: str = '') -> str"
   }
  },
@@ -3314,41 +3307,6 @@
    "sig": "def(fn) -> None"
   }
  },
- "superme_agent.core.events": {
-  "Init": {
-   "home": "superme_agent.core.events",
-   "methods": [],
-   "sig": "class"
-  },
-  "Result": {
-   "home": "superme_agent.core.events",
-   "methods": [],
-   "sig": "class"
-  },
-  "Status": {
-   "home": "superme_agent.core.events",
-   "methods": [],
-   "sig": "class"
-  },
-  "TextDelta": {
-   "home": "superme_agent.core.events",
-   "methods": [],
-   "sig": "class"
-  },
-  "ToolResult": {
-   "home": "superme_agent.core.events",
-   "methods": [],
-   "sig": "class"
-  },
-  "TurnEvent": {
-   "sig": "value:UnionType"
-  },
-  "Usage": {
-   "home": "superme_agent.core.events",
-   "methods": [],
-   "sig": "class"
-  }
- },
  "superme_agent.core.faults": {
   "Fault": {
    "home": "superme_agent.core.faults",
@@ -3474,7 +3432,7 @@
    "sig": "def(item: dict, item_dir: pathlib.Path, dev_root: pathlib.Path, main_repo_dir: pathlib.Path | None, *, all_items: list[dict] | None = None, events: list[dict] | None = None, subagents: int | None = None, guide_reads: int | None = None, brief_sizes: list[int] | None = None, debug_tags: list[dict] | None = None, standards_reads: int | None = None) -> dict"
   },
   "get_profile": {
-   "home": "superme_agent.core.kind_profiles",
+   "home": "superme_agent.core.vocab.kind_profiles",
    "sig": "def(kind: str | None) -> KindProfile"
   },
   "guide_check": {
@@ -3486,7 +3444,7 @@
    "sig": "def(tags: list[dict] | None) -> dict | None"
   },
   "item_fanout": {
-   "home": "superme_agent.core.kind_profiles",
+   "home": "superme_agent.core.vocab.kind_profiles",
    "sig": "def(item: dict | None) -> str"
   },
   "judgment_current": {
@@ -3494,7 +3452,7 @@
    "sig": "def(item_dir: pathlib.Path, kind: str | None) -> dict | None"
   },
   "research_kind": {
-   "home": "superme_agent.core.kind_profiles",
+   "home": "superme_agent.core.vocab.kind_profiles",
    "sig": "def(item: dict | None) -> str | None"
   },
   "research_readiness": {
@@ -3991,127 +3949,6 @@
    "sig": "def(prop: dict, *, slug: str, workspace, existing_path: str | None, forge_kit) -> str"
   }
  },
- "superme_agent.core.kind_profiles": {
-  "AGENT_THREAD_KINDS": {
-   "sig": "value:tuple"
-  },
-  "ALL_PHASES": {
-   "sig": "value:tuple"
-  },
-  "DEFAULT_FANOUT": {
-   "sig": "value:str"
-  },
-  "DEFAULT_KIND": {
-   "sig": "value:str"
-  },
-  "DEFAULT_SCALE": {
-   "sig": "value:str"
-  },
-  "FAMILY_BY_SLUG": {
-   "sig": "value:dict"
-  },
-  "FANOUT_FAMILIES": {
-   "sig": "value:tuple"
-  },
-  "INTAKE_PHASES": {
-   "sig": "value:tuple"
-  },
-  "ITEM_FANOUT": {
-   "sig": "value:tuple"
-  },
-  "ITEM_SCALES": {
-   "sig": "value:tuple"
-  },
-  "KIND_PROFILES": {
-   "sig": "value:dict"
-  },
-  "KindProfile": {
-   "home": "superme_agent.core.kind_profiles",
-   "methods": [],
-   "sig": "class"
-  },
-  "LEGACY_INTAKE_SLOT": {
-   "sig": "value:str"
-  },
-  "RESEARCH_FAMILIES": {
-   "sig": "value:tuple"
-  },
-  "RESEARCH_KINDS": {
-   "sig": "value:tuple"
-  },
-  "ResearchFamily": {
-   "home": "superme_agent.core.kind_profiles",
-   "methods": [],
-   "sig": "class"
-  },
-  "SESSION_KINDS": {
-   "sig": "value:tuple"
-  },
-  "SESSION_ROLES": {
-   "sig": "value:tuple"
-  },
-  "SESSION_SLOTS": {
-   "sig": "value:tuple"
-  },
-  "_ROLE_FOR_PHASE": {
-   "sig": "value:dict"
-  },
-  "_SLOT_FOR_PHASE": {
-   "sig": "value:dict"
-  },
-  "family_guide": {
-   "home": "superme_agent.core.kind_profiles",
-   "sig": "def(slug: str) -> str"
-  },
-  "family_template": {
-   "home": "superme_agent.core.kind_profiles",
-   "sig": "def(slug: str) -> str"
-  },
-  "get_profile": {
-   "home": "superme_agent.core.kind_profiles",
-   "sig": "def(kind: str | None) -> KindProfile"
-  },
-  "is_conversation": {
-   "home": "superme_agent.core.kind_profiles",
-   "sig": "def(kind: str | None) -> bool"
-  },
-  "is_final_phase": {
-   "home": "superme_agent.core.kind_profiles",
-   "sig": "def(kind: str | None, phase: str | None) -> bool"
-  },
-  "item_fanout": {
-   "home": "superme_agent.core.kind_profiles",
-   "sig": "def(item: dict | None) -> str"
-  },
-  "item_scale": {
-   "home": "superme_agent.core.kind_profiles",
-   "sig": "def(item: dict | None) -> str"
-  },
-  "next_phase": {
-   "home": "superme_agent.core.kind_profiles",
-   "sig": "def(kind: str | None, phase: str | None) -> str | None"
-  },
-  "research_kind": {
-   "home": "superme_agent.core.kind_profiles",
-   "sig": "def(item: dict | None) -> str | None"
-  },
-  "role_uses_worktree": {
-   "home": "superme_agent.core.kind_profiles",
-   "sig": "def(role: str, kind: str | None = None) -> bool"
-  },
-  "session_role": {
-   "home": "superme_agent.core.kind_profiles",
-   "sig": "def(phase: str | None) -> str"
-  },
-  "session_slot": {
-   "home": "superme_agent.core.kind_profiles",
-   "sig": "def(phase: str | None) -> str"
-  },
-  "standing_families": {
-   "home": "superme_agent.core.kind_profiles",
-   "sig": "def() -> tuple[ResearchFamily, ...]"
-  }
- },
  "superme_agent.core.knowledge_delta": {
   "ANCHOR_DOCS": {
    "sig": "value:tuple"
@@ -4245,58 +4082,6 @@
   "_slugify": {
    "home": "superme_agent.core.knowledge_service",
    "sig": "def(text: str) -> str"
-  }
- },
- "superme_agent.core.models": {
-  "AGENT_MD_NAME": {
-   "sig": "value:dict"
-  },
-  "AGENT_MODELS": {
-   "sig": "value:dict"
-  },
-  "AGENT_MODEL_FEATURES": {
-   "sig": "value:tuple"
-  },
-  "AGENT_MODEL_LABELS": {
-   "sig": "value:dict"
-  },
-  "AGENT_MODEL_SCOPE": {
-   "sig": "value:str"
-  },
-  "CANONICAL_MODELS": {
-   "sig": "value:tuple"
-  },
-  "DEFAULT_MODEL": {
-   "sig": "value:str"
-  },
-  "MODEL_TIERS": {
-   "sig": "value:dict"
-  },
-  "_AGENT_MODEL_FLOOR": {
-   "sig": "value:str"
-  },
-  "_RESET": {
-   "sig": "value:tuple"
-  },
-  "agent_model": {
-   "home": "superme_agent.core.models",
-   "sig": "def(feature: str) -> str"
-  },
-  "is_valid_model": {
-   "home": "superme_agent.core.models",
-   "sig": "def(m: str | None) -> bool"
-  },
-  "model_family": {
-   "home": "superme_agent.core.models",
-   "sig": "def(m: str | None) -> str | None"
-  },
-  "normalize_model": {
-   "home": "superme_agent.core.models",
-   "sig": "def(m: str | None) -> str | None"
-  },
-  "track_to_latest": {
-   "home": "superme_agent.core.models",
-   "sig": "def(m: str | None) -> str | None"
   }
  },
  "superme_agent.core.operational": {
@@ -4888,46 +4673,12 @@
    "sig": "def(plan_text: 'str', changes: 'list') -> 'list[str]'"
   }
  },
- "superme_agent.core.sandbox": {
-  "SCRATCH_DIRNAME": {
-   "sig": "value:str"
-  },
-  "_POLICY": {
-   "sig": "value:dict"
-  },
-  "_SEATBELT": {
-   "sig": "value:str"
-  },
-  "_roots": {
-   "home": "superme_agent.core.sandbox",
-   "sig": "def(paths: list[pathlib.Path]) -> list[str]"
-  },
-  "ensure_scratch": {
-   "home": "superme_agent.core.sandbox",
-   "sig": "def(item_dir: pathlib.Path) -> pathlib.Path"
-  },
-  "kernel_command": {
-   "home": "superme_agent.core.sandbox",
-   "sig": "def(command: str, writable: list[pathlib.Path]) -> list[str] | None"
-  },
-  "log": {
-   "sig": "value:Logger"
-  },
-  "prune_scratch": {
-   "home": "superme_agent.core.sandbox",
-   "sig": "def(item_dir: pathlib.Path, *, only_if_empty: bool = True) -> bool"
-  },
-  "sandbox_options": {
-   "home": "superme_agent.core.sandbox",
-   "sig": "def(writes: list[pathlib.Path] | None) -> dict"
-  }
- },
  "superme_agent.core.sessions": {
   "CLAUDE_PROJECTS_DIR": {
    "sig": "value:PosixPath"
   },
   "Context": {
-   "home": "superme_agent.core.context",
+   "home": "superme_agent.core.vocab.context",
    "methods": [],
    "sig": "class"
   },
@@ -5131,7 +4882,7 @@
    "sig": "def() -> SystemSpine"
   },
   "is_conversation": {
-   "home": "superme_agent.core.kind_profiles",
+   "home": "superme_agent.core.vocab.kind_profiles",
    "sig": "def(kind: str | None) -> bool"
   },
   "log": {
@@ -6072,112 +5823,6 @@
    "sig": "value:Logger"
   }
  },
- "superme_agent.core.status_router": {
-  "AWAITING_UPSTREAM": {
-   "sig": "value:str"
-  },
-  "CHILD_RELATIONS": {
-   "sig": "value:tuple"
-  },
-  "SPAWN_RELATIONS": {
-   "sig": "value:tuple"
-  },
-  "TERMINAL_STATUS": {
-   "sig": "value:str"
-  },
-  "children_of": {
-   "home": "superme_agent.core.status_router",
-   "sig": "def(items: list[dict], parent_id: str, relations: tuple[str, ...] = ('blocking', 'parallel')) -> list[dict]"
-  },
-  "children_terminal": {
-   "home": "superme_agent.core.status_router",
-   "sig": "def(items: list[dict], parent_id: str) -> tuple[bool, list[str]]"
-  },
-  "holding_children": {
-   "home": "superme_agent.core.status_router",
-   "sig": "def(items: list[dict], parent: dict, *, at_close: bool | None = None) -> list[dict]"
-  },
-  "is_terminal": {
-   "home": "superme_agent.core.status_router",
-   "sig": "def(item: dict) -> bool"
-  },
-  "items_to_release": {
-   "home": "superme_agent.core.status_router",
-   "sig": "def(items: list[dict], upstream_id: str) -> tuple[list[str], list[str]]"
-  },
-  "open_children": {
-   "home": "superme_agent.core.status_router",
-   "sig": "def(items: list[dict], parent_id: str) -> list[dict]"
-  },
-  "parent_to_resume": {
-   "home": "superme_agent.core.status_router",
-   "sig": "def(items: list[dict], child: dict) -> str | None"
-  },
-  "relation_of": {
-   "home": "superme_agent.core.status_router",
-   "sig": "def(child: dict) -> str"
-  },
-  "spawned_from": {
-   "home": "superme_agent.core.status_router",
-   "sig": "def(item: dict) -> dict | None"
-  },
-  "upstream_ids": {
-   "home": "superme_agent.core.status_router",
-   "sig": "def(item: dict) -> list[str]"
-  },
-  "upstream_state": {
-   "home": "superme_agent.core.status_router",
-   "sig": "def(items: list[dict], item: dict) -> tuple[list[str], list[str]]"
-  }
- },
- "superme_agent.core.titles": {
-  "TITLE_MAX": {
-   "sig": "value:int"
-  },
-  "_SENTENCE_END": {
-   "sig": "value:Pattern"
-  },
-  "check_title": {
-   "home": "superme_agent.core.titles",
-   "sig": "def(raw, *, description: str = '') -> str"
-  },
-  "normalize_title": {
-   "home": "superme_agent.core.titles",
-   "sig": "def(raw, *, description: str = '') -> str"
-  },
-  "one_line": {
-   "home": "superme_agent.core.titles",
-   "sig": "def(raw) -> str"
-  }
- },
- "superme_agent.core.token_taxonomy": {
-  "CATEGORY_LABELS": {
-   "sig": "value:dict"
-  },
-  "CATEGORY_ORDER": {
-   "sig": "value:tuple"
-  },
-  "COLLAPSED_CATEGORIES": {
-   "sig": "value:tuple"
-  },
-  "FEATURE_ALIAS": {
-   "sig": "value:dict"
-  },
-  "FEATURE_CATEGORY": {
-   "sig": "value:dict"
-  },
-  "UNCLASSIFIED": {
-   "sig": "value:str"
-  },
-  "category_for": {
-   "home": "superme_agent.core.token_taxonomy",
-   "sig": "def(feature: str | None) -> str"
-  },
-  "display_feature": {
-   "home": "superme_agent.core.token_taxonomy",
-   "sig": "def(feature: str | None) -> str"
-  }
- },
  "superme_agent.core.verification_library": {
   "FILL": {
    "sig": "value:Pattern"
@@ -6284,6 +5929,362 @@
   "standing_blocks": {
    "home": "superme_agent.core.verification_library",
    "sig": "def(dev_root: pathlib.Path) -> list[str]"
+  }
+ },
+ "superme_agent.core.vocab": {},
+ "superme_agent.core.vocab.context": {
+  "Context": {
+   "home": "superme_agent.core.vocab.context",
+   "methods": [],
+   "sig": "class"
+  }
+ },
+ "superme_agent.core.vocab.events": {
+  "Init": {
+   "home": "superme_agent.core.vocab.events",
+   "methods": [],
+   "sig": "class"
+  },
+  "Result": {
+   "home": "superme_agent.core.vocab.events",
+   "methods": [],
+   "sig": "class"
+  },
+  "Status": {
+   "home": "superme_agent.core.vocab.events",
+   "methods": [],
+   "sig": "class"
+  },
+  "TextDelta": {
+   "home": "superme_agent.core.vocab.events",
+   "methods": [],
+   "sig": "class"
+  },
+  "ToolResult": {
+   "home": "superme_agent.core.vocab.events",
+   "methods": [],
+   "sig": "class"
+  },
+  "TurnEvent": {
+   "sig": "value:UnionType"
+  },
+  "Usage": {
+   "home": "superme_agent.core.vocab.events",
+   "methods": [],
+   "sig": "class"
+  }
+ },
+ "superme_agent.core.vocab.kind_profiles": {
+  "AGENT_THREAD_KINDS": {
+   "sig": "value:tuple"
+  },
+  "ALL_PHASES": {
+   "sig": "value:tuple"
+  },
+  "DEFAULT_FANOUT": {
+   "sig": "value:str"
+  },
+  "DEFAULT_KIND": {
+   "sig": "value:str"
+  },
+  "DEFAULT_SCALE": {
+   "sig": "value:str"
+  },
+  "FAMILY_BY_SLUG": {
+   "sig": "value:dict"
+  },
+  "FANOUT_FAMILIES": {
+   "sig": "value:tuple"
+  },
+  "INTAKE_PHASES": {
+   "sig": "value:tuple"
+  },
+  "ITEM_FANOUT": {
+   "sig": "value:tuple"
+  },
+  "ITEM_SCALES": {
+   "sig": "value:tuple"
+  },
+  "KIND_PROFILES": {
+   "sig": "value:dict"
+  },
+  "KindProfile": {
+   "home": "superme_agent.core.vocab.kind_profiles",
+   "methods": [],
+   "sig": "class"
+  },
+  "LEGACY_INTAKE_SLOT": {
+   "sig": "value:str"
+  },
+  "RESEARCH_FAMILIES": {
+   "sig": "value:tuple"
+  },
+  "RESEARCH_KINDS": {
+   "sig": "value:tuple"
+  },
+  "ResearchFamily": {
+   "home": "superme_agent.core.vocab.kind_profiles",
+   "methods": [],
+   "sig": "class"
+  },
+  "SESSION_KINDS": {
+   "sig": "value:tuple"
+  },
+  "SESSION_ROLES": {
+   "sig": "value:tuple"
+  },
+  "SESSION_SLOTS": {
+   "sig": "value:tuple"
+  },
+  "_ROLE_FOR_PHASE": {
+   "sig": "value:dict"
+  },
+  "_SLOT_FOR_PHASE": {
+   "sig": "value:dict"
+  },
+  "family_guide": {
+   "home": "superme_agent.core.vocab.kind_profiles",
+   "sig": "def(slug: str) -> str"
+  },
+  "family_template": {
+   "home": "superme_agent.core.vocab.kind_profiles",
+   "sig": "def(slug: str) -> str"
+  },
+  "get_profile": {
+   "home": "superme_agent.core.vocab.kind_profiles",
+   "sig": "def(kind: str | None) -> KindProfile"
+  },
+  "is_conversation": {
+   "home": "superme_agent.core.vocab.kind_profiles",
+   "sig": "def(kind: str | None) -> bool"
+  },
+  "is_final_phase": {
+   "home": "superme_agent.core.vocab.kind_profiles",
+   "sig": "def(kind: str | None, phase: str | None) -> bool"
+  },
+  "item_fanout": {
+   "home": "superme_agent.core.vocab.kind_profiles",
+   "sig": "def(item: dict | None) -> str"
+  },
+  "item_scale": {
+   "home": "superme_agent.core.vocab.kind_profiles",
+   "sig": "def(item: dict | None) -> str"
+  },
+  "next_phase": {
+   "home": "superme_agent.core.vocab.kind_profiles",
+   "sig": "def(kind: str | None, phase: str | None) -> str | None"
+  },
+  "research_kind": {
+   "home": "superme_agent.core.vocab.kind_profiles",
+   "sig": "def(item: dict | None) -> str | None"
+  },
+  "role_uses_worktree": {
+   "home": "superme_agent.core.vocab.kind_profiles",
+   "sig": "def(role: str, kind: str | None = None) -> bool"
+  },
+  "session_role": {
+   "home": "superme_agent.core.vocab.kind_profiles",
+   "sig": "def(phase: str | None) -> str"
+  },
+  "session_slot": {
+   "home": "superme_agent.core.vocab.kind_profiles",
+   "sig": "def(phase: str | None) -> str"
+  },
+  "standing_families": {
+   "home": "superme_agent.core.vocab.kind_profiles",
+   "sig": "def() -> tuple[ResearchFamily, ...]"
+  }
+ },
+ "superme_agent.core.vocab.models": {
+  "AGENT_MD_NAME": {
+   "sig": "value:dict"
+  },
+  "AGENT_MODELS": {
+   "sig": "value:dict"
+  },
+  "AGENT_MODEL_FEATURES": {
+   "sig": "value:tuple"
+  },
+  "AGENT_MODEL_LABELS": {
+   "sig": "value:dict"
+  },
+  "AGENT_MODEL_SCOPE": {
+   "sig": "value:str"
+  },
+  "CANONICAL_MODELS": {
+   "sig": "value:tuple"
+  },
+  "DEFAULT_MODEL": {
+   "sig": "value:str"
+  },
+  "MODEL_TIERS": {
+   "sig": "value:dict"
+  },
+  "_AGENT_MODEL_FLOOR": {
+   "sig": "value:str"
+  },
+  "_RESET": {
+   "sig": "value:tuple"
+  },
+  "agent_model": {
+   "home": "superme_agent.core.vocab.models",
+   "sig": "def(feature: str) -> str"
+  },
+  "is_valid_model": {
+   "home": "superme_agent.core.vocab.models",
+   "sig": "def(m: str | None) -> bool"
+  },
+  "model_family": {
+   "home": "superme_agent.core.vocab.models",
+   "sig": "def(m: str | None) -> str | None"
+  },
+  "normalize_model": {
+   "home": "superme_agent.core.vocab.models",
+   "sig": "def(m: str | None) -> str | None"
+  },
+  "track_to_latest": {
+   "home": "superme_agent.core.vocab.models",
+   "sig": "def(m: str | None) -> str | None"
+  }
+ },
+ "superme_agent.core.vocab.sandbox": {
+  "SCRATCH_DIRNAME": {
+   "sig": "value:str"
+  },
+  "_POLICY": {
+   "sig": "value:dict"
+  },
+  "_SEATBELT": {
+   "sig": "value:str"
+  },
+  "_roots": {
+   "home": "superme_agent.core.vocab.sandbox",
+   "sig": "def(paths: list[pathlib.Path]) -> list[str]"
+  },
+  "ensure_scratch": {
+   "home": "superme_agent.core.vocab.sandbox",
+   "sig": "def(item_dir: pathlib.Path) -> pathlib.Path"
+  },
+  "kernel_command": {
+   "home": "superme_agent.core.vocab.sandbox",
+   "sig": "def(command: str, writable: list[pathlib.Path]) -> list[str] | None"
+  },
+  "log": {
+   "sig": "value:Logger"
+  },
+  "prune_scratch": {
+   "home": "superme_agent.core.vocab.sandbox",
+   "sig": "def(item_dir: pathlib.Path, *, only_if_empty: bool = True) -> bool"
+  },
+  "sandbox_options": {
+   "home": "superme_agent.core.vocab.sandbox",
+   "sig": "def(writes: list[pathlib.Path] | None) -> dict"
+  }
+ },
+ "superme_agent.core.vocab.status_router": {
+  "AWAITING_UPSTREAM": {
+   "sig": "value:str"
+  },
+  "CHILD_RELATIONS": {
+   "sig": "value:tuple"
+  },
+  "SPAWN_RELATIONS": {
+   "sig": "value:tuple"
+  },
+  "TERMINAL_STATUS": {
+   "sig": "value:str"
+  },
+  "children_of": {
+   "home": "superme_agent.core.vocab.status_router",
+   "sig": "def(items: list[dict], parent_id: str, relations: tuple[str, ...] = ('blocking', 'parallel')) -> list[dict]"
+  },
+  "children_terminal": {
+   "home": "superme_agent.core.vocab.status_router",
+   "sig": "def(items: list[dict], parent_id: str) -> tuple[bool, list[str]]"
+  },
+  "holding_children": {
+   "home": "superme_agent.core.vocab.status_router",
+   "sig": "def(items: list[dict], parent: dict, *, at_close: bool | None = None) -> list[dict]"
+  },
+  "is_terminal": {
+   "home": "superme_agent.core.vocab.status_router",
+   "sig": "def(item: dict) -> bool"
+  },
+  "items_to_release": {
+   "home": "superme_agent.core.vocab.status_router",
+   "sig": "def(items: list[dict], upstream_id: str) -> tuple[list[str], list[str]]"
+  },
+  "open_children": {
+   "home": "superme_agent.core.vocab.status_router",
+   "sig": "def(items: list[dict], parent_id: str) -> list[dict]"
+  },
+  "parent_to_resume": {
+   "home": "superme_agent.core.vocab.status_router",
+   "sig": "def(items: list[dict], child: dict) -> str | None"
+  },
+  "relation_of": {
+   "home": "superme_agent.core.vocab.status_router",
+   "sig": "def(child: dict) -> str"
+  },
+  "spawned_from": {
+   "home": "superme_agent.core.vocab.status_router",
+   "sig": "def(item: dict) -> dict | None"
+  },
+  "upstream_ids": {
+   "home": "superme_agent.core.vocab.status_router",
+   "sig": "def(item: dict) -> list[str]"
+  },
+  "upstream_state": {
+   "home": "superme_agent.core.vocab.status_router",
+   "sig": "def(items: list[dict], item: dict) -> tuple[list[str], list[str]]"
+  }
+ },
+ "superme_agent.core.vocab.titles": {
+  "TITLE_MAX": {
+   "sig": "value:int"
+  },
+  "_SENTENCE_END": {
+   "sig": "value:Pattern"
+  },
+  "check_title": {
+   "home": "superme_agent.core.vocab.titles",
+   "sig": "def(raw, *, description: str = '') -> str"
+  },
+  "normalize_title": {
+   "home": "superme_agent.core.vocab.titles",
+   "sig": "def(raw, *, description: str = '') -> str"
+  },
+  "one_line": {
+   "home": "superme_agent.core.vocab.titles",
+   "sig": "def(raw) -> str"
+  }
+ },
+ "superme_agent.core.vocab.token_taxonomy": {
+  "CATEGORY_LABELS": {
+   "sig": "value:dict"
+  },
+  "CATEGORY_ORDER": {
+   "sig": "value:tuple"
+  },
+  "COLLAPSED_CATEGORIES": {
+   "sig": "value:tuple"
+  },
+  "FEATURE_ALIAS": {
+   "sig": "value:dict"
+  },
+  "FEATURE_CATEGORY": {
+   "sig": "value:dict"
+  },
+  "UNCLASSIFIED": {
+   "sig": "value:str"
+  },
+  "category_for": {
+   "home": "superme_agent.core.vocab.token_taxonomy",
+   "sig": "def(feature: str | None) -> str"
+  },
+  "display_feature": {
+   "home": "superme_agent.core.vocab.token_taxonomy",
+   "sig": "def(feature: str | None) -> str"
   }
  },
  "superme_agent.core.workgraph": {
@@ -6773,7 +6774,7 @@
    "sig": "class"
   },
   "Init": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
@@ -6783,7 +6784,7 @@
    "sig": "class"
   },
   "Result": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
@@ -6793,7 +6794,7 @@
    "sig": "class"
   },
   "Status": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
@@ -6803,7 +6804,7 @@
    "sig": "class"
   },
   "TextDelta": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
@@ -6826,7 +6827,7 @@
    "sig": "class"
   },
   "Usage": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
@@ -10526,18 +10527,18 @@
    "sig": "def(spine: SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
   },
   "is_valid_model": {
-   "home": "superme_agent.core.models",
+   "home": "superme_agent.core.vocab.models",
    "sig": "def(m: str | None) -> bool"
   },
   "log": {
    "sig": "value:Logger"
   },
   "model_family": {
-   "home": "superme_agent.core.models",
+   "home": "superme_agent.core.vocab.models",
    "sig": "def(m: str | None) -> str | None"
   },
   "normalize_model": {
-   "home": "superme_agent.core.models",
+   "home": "superme_agent.core.vocab.models",
    "sig": "def(m: str | None) -> str | None"
   },
   "repos_overview": {
@@ -10634,7 +10635,7 @@
    "sig": "class"
   },
   "Init": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
@@ -10652,22 +10653,22 @@
    "sig": "value:str"
   },
   "Result": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
   "Status": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
   "TextDelta": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
   "ToolResult": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
@@ -10677,7 +10678,7 @@
    "sig": "class"
   },
   "Usage": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
@@ -12418,7 +12419,7 @@
    "sig": "def(item_dir: pathlib.Path, worktree: pathlib.Path, *, skip: list[str] | None = None, title: str = '') -> list[dict]"
   },
   "kernel_command": {
-   "home": "superme_agent.core.sandbox",
+   "home": "superme_agent.core.vocab.sandbox",
    "sig": "def(command: str, writable: list[pathlib.Path]) -> list[str] | None"
   },
   "log": {
@@ -12469,7 +12470,7 @@
    "sig": "value:float"
   },
   "Context": {
-   "home": "superme_agent.core.context",
+   "home": "superme_agent.core.vocab.context",
    "methods": [],
    "sig": "class"
   },
@@ -12488,7 +12489,7 @@
    "sig": "class"
   },
   "Result": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
@@ -12557,7 +12558,7 @@
    "sig": "def(kind: str | None) -> int"
   },
   "get_profile": {
-   "home": "superme_agent.core.kind_profiles",
+   "home": "superme_agent.core.vocab.kind_profiles",
    "sig": "def(kind: str | None) -> KindProfile"
   },
   "judge_effectiveness": {
@@ -12676,27 +12677,27 @@
    "sig": "class"
   },
   "Result": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
   "Status": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
   "TextDelta": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
   "ToolResult": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
   "Usage": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
@@ -13176,7 +13177,7 @@
    "sig": "value:PosixPath"
   },
   "Init": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
@@ -13189,7 +13190,7 @@
    "sig": "class"
   },
   "Result": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
@@ -13200,22 +13201,22 @@
    "sig": "value:int"
   },
   "Status": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
   "TextDelta": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
   "ToolResult": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
   "Usage": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
@@ -13332,27 +13333,27 @@
    "sig": "class"
   },
   "Result": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
   "Status": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
   "TextDelta": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
   "ToolResult": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
   "Usage": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
@@ -13948,7 +13949,7 @@
  },
  "superme_agent.daemon.services.runs.background": {
   "Init": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
@@ -13971,22 +13972,22 @@
    "sig": "class"
   },
   "Result": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
   "Status": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
   "TextDelta": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
   "ToolResult": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
@@ -13994,7 +13995,7 @@
    "sig": "value:str"
   },
   "Usage": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
@@ -14106,17 +14107,17 @@
    "sig": "value:str"
   },
   "Status": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
   "TextDelta": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
   "ToolResult": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
@@ -14223,7 +14224,7 @@
  },
  "superme_agent.daemon.services.runs.close": {
   "Init": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
@@ -14246,27 +14247,27 @@
    "sig": "class"
   },
   "Result": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
   "Status": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
   "TextDelta": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
   "ToolResult": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
   "Usage": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
@@ -14473,7 +14474,7 @@
  },
  "superme_agent.daemon.services.runs.phases": {
   "Init": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
@@ -14496,22 +14497,22 @@
    "sig": "class"
   },
   "Result": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
   "Status": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
   "TextDelta": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
   "ToolResult": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
@@ -14519,7 +14520,7 @@
    "sig": "value:str"
   },
   "Usage": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
@@ -14693,12 +14694,12 @@
    "sig": "class"
   },
   "Status": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
   "TextDelta": {
-   "home": "superme_agent.core.events",
+   "home": "superme_agent.core.vocab.events",
    "methods": [],
    "sig": "class"
   },
@@ -14767,7 +14768,7 @@
    "sig": "value:str"
   },
   "Context": {
-   "home": "superme_agent.core.context",
+   "home": "superme_agent.core.vocab.context",
    "methods": [],
    "sig": "class"
   },

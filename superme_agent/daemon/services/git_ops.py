@@ -16,7 +16,8 @@ from pathlib import Path
 
 from fastapi import HTTPException
 
-from ...core import artifacts, git_layer, kind_profiles, knowledge_delta
+from ...core import artifacts, git_layer, knowledge_delta
+from ...core.vocab import kind_profiles
 from ...core import autopilot as _autopilot
 from ...core.spine import REVIEW_MODE_DEFAULT
 

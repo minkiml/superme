@@ -5,7 +5,7 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 
-from ..kind_profiles import get_profile
+from ..vocab.kind_profiles import get_profile
 from .text import FILL, _atomic_write, _section_filled, _split_sections
 from .spec import (ARTIFACT_KINDS, _FM_BLOCK, _FM_RESEARCH_KIND, _PLAN_FEED_SECTIONS,
                    _PLAN_REQUIRED_LEGACY, _PLAN_REQUIRED_RESEARCH_V1, _PLAN_REQUIRED_V1,

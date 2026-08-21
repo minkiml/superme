@@ -13,7 +13,7 @@ from pathlib import Path
 
 from superme_agent.core import artifacts as _arts
 from superme_agent.core import kernel_speech
-from superme_agent.core import kind_profiles as KP
+from superme_agent.core.vocab import kind_profiles as KP
 from superme_agent.core.dev_knowledge import DevKnowledgeService
 from superme_agent.core.sessions import _is_noise, _preset_title
 from superme_agent.core.spine import SystemSpine
@@ -299,7 +299,7 @@ def test_titles() -> None:
     ok("legacy work_item title unchanged",
        _preset_title("work_item", "abc123def456", None, "s") == "Work-item · abc123def456")
     ok("roles are durable SESSION_KINDS", set(KP.SESSION_ROLES) <=
-       set(__import__("superme_agent.core.kind_profiles", fromlist=["SESSION_KINDS"]).SESSION_KINDS))
+       set(__import__("superme_agent.core.vocab.kind_profiles", fromlist=["SESSION_KINDS"]).SESSION_KINDS))
 
 
 def _raises(fn) -> bool:

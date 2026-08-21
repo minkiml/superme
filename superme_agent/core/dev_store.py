@@ -295,7 +295,7 @@ class DevStore:
             raise ValueError("empty inbox text")
         roles = {k: (v or None) for k, v in (role_config or {}).items() if k in _ROLE_COLS}
         if work_kind is not None:
-            from .kind_profiles import KIND_PROFILES
+            from .vocab.kind_profiles import KIND_PROFILES
             if work_kind not in KIND_PROFILES:
                 raise ValueError(f"work_kind must be one of {sorted(KIND_PROFILES)}")
         if spawned_from is not None:
@@ -377,7 +377,7 @@ class DevStore:
         if "work_kind" in sets:
             # An invalid value RAISES, never drops: NULL is a state, so a dropped typo reads as a
             # clear.
-            from .kind_profiles import KIND_PROFILES
+            from .vocab.kind_profiles import KIND_PROFILES
             if not sets["work_kind"]:
                 sets["work_kind"] = None
             elif sets["work_kind"] not in KIND_PROFILES:

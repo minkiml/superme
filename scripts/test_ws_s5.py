@@ -16,7 +16,7 @@ from types import SimpleNamespace
 from superme_agent.core import artifacts as A
 from superme_agent.core.dev_knowledge import DevKnowledgeService
 from superme_agent.core.kernel_speech import work_item_preamble, _PHASE_CONTRACTS
-from superme_agent.core.kind_profiles import KIND_PROFILES
+from superme_agent.core.vocab.kind_profiles import KIND_PROFILES
 from superme_agent.harness.tools import run_tools as RT
 from superme_agent.harness.tools.dev_tools import _scaffold_artifact, _bound_err
 
@@ -164,7 +164,7 @@ def test_run_outcome(tmp: Path) -> None:
 
 def test_session_count_excludes_agent_threads(tmp: Path) -> None:
     print("session_count counts conversations, not agent threads")
-    from superme_agent.core.kind_profiles import is_conversation
+    from superme_agent.core.vocab.kind_profiles import is_conversation
     from superme_agent.core.spine import SystemSpine
     sp = SystemSpine(db_path=tmp / "s5count.db")
     # One of every kind the owner can open, the two headless ones, and a legacy NULL-kind row.

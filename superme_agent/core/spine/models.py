@@ -40,7 +40,7 @@ class ModelOps:
     def effective_system_model(self) -> str:
         """The default model a repo with no override runs — always a concrete, known
         id, never the opaque CLI default."""
-        from ..models import DEFAULT_MODEL, normalize_model
+        from ..vocab.models import DEFAULT_MODEL, normalize_model
         return normalize_model(self.system_config().default_model) or DEFAULT_MODEL
 
     def effective_model(self, repo_id: str, *, per_call: str | None = None,
@@ -63,7 +63,7 @@ class ModelOps:
     # SOURCE OF TRUTH = each sub-agent's own `.md` frontmatter. The code preset is the fallback.
     @staticmethod
     def _agent_md_path(feature: str):
-        from ..models import AGENT_MD_NAME
+        from ..vocab.models import AGENT_MD_NAME
         from ...paths import DEV_PLUGIN_DIR
         name = AGENT_MD_NAME.get(feature)
         return (DEV_PLUGIN_DIR / "agents" / f"{name}.md") if name else None
@@ -83,13 +83,13 @@ class ModelOps:
     def resolve_agent_model(self, feature: str) -> str:
         """The concrete, latest model a background sub-agent runs on: its `.md` tier alias
         resolved here, else the code preset."""
-        from ..models import agent_model, track_to_latest
+        from ..vocab.models import agent_model, track_to_latest
         return track_to_latest(self._agent_file_model(feature)) or agent_model(feature)
 
     def set_agent_model(self, feature: str, model: str | None) -> None:
         """Write a sub-agent's model into its `.md` frontmatter as a TIER ALIAS, so a
         MODEL_TIERS bump needs no file rewrite."""
-        from ..models import AGENT_MODELS, model_family
+        from ..vocab.models import AGENT_MODELS, model_family
         from ..operational import set_frontmatter_field
         path = self._agent_md_path(feature)
         if not path or not path.is_file():
@@ -130,7 +130,7 @@ class ModelOps:
     def reconcile_model_overrides(self) -> None:
         """Normalize picker overrides to their TIER ALIAS, so old concrete picks
         auto-track a MODEL_TIERS bump. Idempotent."""
-        from ..models import model_family
+        from ..vocab.models import model_family
         with self._conn() as c:
             row = c.execute("SELECT value FROM system_setting WHERE key='default_model'").fetchone()
             if row and row["value"]:
@@ -147,7 +147,7 @@ class ModelOps:
     def reconcile_agent_models(self) -> None:
         """Normalize every sub-agent `.md` model to its TIER ALIAS. Idempotent; run at
         daemon startup."""
-        from ..models import AGENT_MODEL_FEATURES, model_family
+        from ..vocab.models import AGENT_MODEL_FEATURES, model_family
         from ..operational import set_frontmatter_field
         for feat in AGENT_MODEL_FEATURES:
             cur = self._agent_file_model(feat)
@@ -159,8 +159,8 @@ class ModelOps:
     def agent_model_config(self) -> list[dict]:
         """The tunable background sub-agents in display order: label, scope, tracked tier,
         and the concrete it resolves to."""
-        from ..models import (AGENT_MODEL_FEATURES, AGENT_MODEL_LABELS, AGENT_MODEL_SCOPE,
-                              agent_model, track_to_latest, model_family)
+        from ..vocab.models import (AGENT_MODEL_FEATURES, AGENT_MODEL_LABELS, AGENT_MODEL_SCOPE,
+                                    agent_model, track_to_latest, model_family)
         out: list[dict] = []
         for feat in AGENT_MODEL_FEATURES:
             model = track_to_latest(self._agent_file_model(feat)) or agent_model(feat)

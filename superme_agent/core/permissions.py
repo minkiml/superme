@@ -17,7 +17,7 @@ from claude_agent_sdk import (
 )
 
 from ..harness.policy import MAX_SUBAGENTS, SUBAGENT_TOOLS, is_safe
-from .sandbox import SCRATCH_DIRNAME
+from .vocab.sandbox import SCRATCH_DIRNAME
 
 log = logging.getLogger("superme-agent")
 
@@ -617,7 +617,7 @@ def build_can_use_tool(approve: ApproveFn, *, blocked_skills: dict[str, str] | N
     else defers to `approve`.
 
     `write_boundary` is accident-prevention, not security — a run passing `sandbox_writes` hands the
-    same roots to `core.sandbox`, where an escape fails as a syscall."""
+    same roots to `core.vocab.sandbox`, where an escape fails as a syscall."""
     spawned = 0
 
     async def can_use_tool(

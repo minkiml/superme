@@ -5,8 +5,8 @@ import json
 from datetime import date, datetime
 from pathlib import Path
 
-from .. import sandbox
-from ..titles import check_title, normalize_title
+from ..vocab import sandbox
+from ..vocab.titles import check_title, normalize_title
 from .common import _FRONTMATTER, _parse_md
 
 
@@ -57,7 +57,7 @@ class FieldOps:
     def set_work_item_kind(self, dev_root: Path, item_id: str, kind: str) -> bool:
         """Record a work-item's `kind` — triage's surface. Validated against
         KIND_PROFILES, loud on unknown."""
-        from ..kind_profiles import get_profile
+        from ..vocab.kind_profiles import get_profile
         get_profile(kind)
         item = Path(dev_root) / "work-items" / item_id / "item.md"
         if not item.exists():
@@ -78,7 +78,7 @@ class FieldOps:
                             reason: str) -> bool:
         """Set `scale` plus the one-line `scale_reason`. The reason is REQUIRED even
         for `standard` — a bare label is unarguable at the gate."""
-        from ..kind_profiles import ITEM_SCALES
+        from ..vocab.kind_profiles import ITEM_SCALES
         if scale not in ITEM_SCALES:
             raise ValueError(f"scale must be one of {'/'.join(ITEM_SCALES)} (got {scale!r})")
         if not (reason or "").strip():
@@ -112,7 +112,7 @@ class FieldOps:
     def set_work_item_fanout(self, dev_root: Path, item_id: str, fanout: str) -> bool:
         """Set a research item's `fanout` — whether triage judged the surface to need
         SPLITTING. No reason field: `scale_reason` already carries the sizing argument."""
-        from ..kind_profiles import ITEM_FANOUT
+        from ..vocab.kind_profiles import ITEM_FANOUT
         if fanout not in ITEM_FANOUT:
             raise ValueError(f"fanout must be one of {'/'.join(ITEM_FANOUT)} (got {fanout!r})")
         item = Path(dev_root) / "work-items" / item_id / "item.md"
@@ -143,7 +143,7 @@ class FieldOps:
 
         LOUD where scale's writer is forgiving: writing a family onto an implementation item is a field
         nobody would ever read."""
-        from ..kind_profiles import RESEARCH_KINDS
+        from ..vocab.kind_profiles import RESEARCH_KINDS
         if research_kind not in RESEARCH_KINDS:
             raise ValueError(
                 f"research_kind must be one of {'/'.join(RESEARCH_KINDS)} (got {research_kind!r})")
@@ -289,7 +289,7 @@ class FieldOps:
     def set_work_item_model(self, dev_root: Path, item_id: str, model: str) -> bool:
         """Set a work-item's configured `model`, stored as its TIER ALIAS. The concrete
         latest resolves at consumption, so a pick auto-tracks."""
-        from ..models import model_family
+        from ..vocab.models import model_family
         return self._set_item_field(dev_root, item_id, "model",
                                     model_family(model) or model, after=("status",))
 
@@ -304,7 +304,7 @@ class FieldOps:
 
     def set_work_item_role_model(self, dev_root: Path, item_id: str, role: str, model: str) -> bool:
         """Set this item's model for one ROLE (`vet_model` / `deputy_model`), as a tier alias."""
-        from ..models import model_family
+        from ..vocab.models import model_family
         if role not in self.ROLE_FIELDS:
             raise ValueError(f"unknown run role '{role}'")
         return self._set_item_field(dev_root, item_id, f"{role}_model",
@@ -324,7 +324,7 @@ class FieldOps:
 
         Writing any slot NULLs the legacy `session_id`, so a stale value cannot shadow the others.
         A retired slot can be read but never written."""
-        from ..kind_profiles import SESSION_SLOTS
+        from ..vocab.kind_profiles import SESSION_SLOTS
         if slot not in SESSION_SLOTS:
             raise ValueError(f"unknown session slot {slot!r} — known: {SESSION_SLOTS}")
         item = Path(dev_root) / "work-items" / item_id / "item.md"

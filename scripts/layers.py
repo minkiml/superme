@@ -33,17 +33,9 @@ PINNED = {
     "superme_agent.core.permissions → superme_agent.harness.policy",
 }
 
-# The tier the rest of core is defined in terms of. Importing nothing else in core is what
-# keeps it a floor.
-VOCAB = {
-    "superme_agent.core.context",
-    "superme_agent.core.events",
-    "superme_agent.core.kind_profiles",
-    "superme_agent.core.models",
-    "superme_agent.core.sandbox",
-    "superme_agent.core.titles",
-    "superme_agent.core.token_taxonomy",
-}
+# The tier the rest of core is defined in terms of, read off the folder so a new module
+# joins the lint by living there. Importing nothing else in core is what keeps it a floor.
+VOCAB_PKG = "superme_agent.core.vocab"
 
 
 def _modname(p: Path) -> str:
@@ -146,18 +138,18 @@ def main() -> int:
         for s in sorted(stale):
             print(f"    {s}")
 
-    leaks = sorted(f"{m} → {d}" for m in VOCAB & mods
-                   for d in edges.get(m, ()) if d != m and _area(d) == "core")
-    missing = sorted(VOCAB - mods)
-    if leaks or missing:
+    vocab = {m for m in mods if m.startswith(VOCAB_PKG + ".")}
+    leaks = sorted(f"{m} → {d}" for m in vocab
+                   for d in edges.get(m, ()) if _area(d) == "core" and d not in vocab)
+    if leaks or not vocab:
         failed = True
         print("✗ VOCABULARY TIER BROKEN:")
-        for m in missing:
-            print(f"    {m} — declared vocab, no such module")
+        if not vocab:
+            print(f"    {VOCAB_PKG} holds no modules — the floor other core modules stand on")
         for l in leaks:
             print(f"    {l} — vocab may not import the rest of core")
     else:
-        print(f"✓ vocabulary tier is a floor ({len(VOCAB)} modules, no upward edge)")
+        print(f"✓ vocabulary tier is a floor ({len(vocab)} modules, no upward edge)")
 
     if "--graph" in sys.argv:
         print("\ncross-area edges:")

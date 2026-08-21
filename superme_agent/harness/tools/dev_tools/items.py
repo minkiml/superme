@@ -256,7 +256,8 @@ def _write_checkpoint(*, store, context_id, dev_root=None, repo_dir=None, bound_
         # session role.
         role = None
         try:
-            from ....core import kind_profiles as _kp, dev_knowledge as _dk  # noqa: F401
+            from ....core import dev_knowledge as _dk  # noqa: F401
+            from ....core.vocab import kind_profiles as _kp  # noqa: F401
             from ....daemon import app_state as _app
             it = _app.dev.read_work_item(dev_root, item_id) or {}
             role = _kp.session_slot(str(it.get("phase") or "triage"))

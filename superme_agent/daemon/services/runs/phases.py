@@ -11,7 +11,8 @@ from ...deps import cache_slash as _cache_slash
 from .. import run_tasks
 from ....core import (Init, Result, Status, TextDelta, ToolResult, Usage, deny_all,
                       scoped_writes_approve)
-from ....core import kernel_speech, kind_profiles
+from ....core import kernel_speech
+from ....core.vocab import kind_profiles
 from ....harness.tools.run_tools import make_run_report_server
 from ..turns import ResilientTurn
 from .lifecycle import (LiveTokens, begin_run, dev_mcp, end_run, log, mark_item_error,

@@ -9,8 +9,8 @@ from pathlib import Path
 
 from . import artifacts as A
 from . import plan_revision
-from . import status_router
-from .kind_profiles import get_profile, item_fanout, research_kind
+from .vocab import status_router
+from .vocab.kind_profiles import get_profile, item_fanout, research_kind
 
 # The four briefed human gates, keyed by the phase whose EXIT they guard.
 GATE_FOR_PHASE = {"triage": "triage-exit", "plan": "pre-main", "review": "review",
@@ -64,7 +64,7 @@ def fanout_check(family: str | None, subagents: int | None,
     fan-out, nobody counted, or a BOUNDED surface.
 
     VISIBLE, NOT BLOCKING. What it removes is the SILENCE around a sweep that split nothing."""
-    from .kind_profiles import FANOUT_FAMILIES, item_fanout
+    from .vocab.kind_profiles import FANOUT_FAMILIES, item_fanout
     if family not in FANOUT_FAMILIES or subagents is None:
         return None
     if item_fanout({"fanout": fanout}) == "bounded":

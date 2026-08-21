@@ -15,7 +15,8 @@ from ...app_state import (
     get_dev, get_dev_store, get_sessions, get_spine,
 )
 from ...deps import dev_root as _dev_root
-from ....core import artifacts, status_router
+from ....core import artifacts
+from ....core.vocab import status_router
 from ....gateway import contexts
 from ...services.runs import (
     DEFAULT_RUN_MODEL, begin_run, run_background_plan, build_item_timeline,

@@ -14,7 +14,7 @@ from ...app_state import (
 from ...deps import dev_root
 from ...schemas.dev.sweeps import SweepFamiliesResponse, SweepLaunchBody, SweepLaunchResponse
 from ...services.runs import fire_first_investigate
-from ....core import kind_profiles
+from ....core.vocab import kind_profiles
 
 log = logging.getLogger("superme-agent")
 

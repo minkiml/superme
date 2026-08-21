@@ -451,7 +451,7 @@ def test_review_record(tmp: Path) -> None:
     Review was the one phase with no agent doc, so its OWNER report had accumulated fields only
     machines read. Each moves here, and what the owner reads becomes prose again."""
     print("review record — the phase's agent-facing doc")
-    from superme_agent.core import kind_profiles as _kp
+    from superme_agent.core.vocab import kind_profiles as _kp
     from superme_agent.daemon.services import git_ops as _go
 
     impl, res = tmp / "rr-impl", tmp / "rr-res"

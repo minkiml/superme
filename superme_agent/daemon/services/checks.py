@@ -9,7 +9,7 @@ import subprocess
 from pathlib import Path
 
 from ...core import artifacts as _arts
-from ...core.sandbox import kernel_command
+from ...core.vocab.sandbox import kernel_command
 
 log = logging.getLogger("superme-agent")
 

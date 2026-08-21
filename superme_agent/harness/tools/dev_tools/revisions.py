@@ -36,7 +36,7 @@ def _apply_knowledge_delta(*, store, context_id, dev_root=None, repo_dir=None,
         from ....core import knowledge_delta as _kd
         from ....core import verification_library as _vl
         from ....core.dev_knowledge import DevKnowledgeService as _DK
-        from ....core.kind_profiles import get_profile, is_final_phase
+        from ....core.vocab.kind_profiles import get_profile, is_final_phase
         item_id = _s(args, "item_id")
         if (msg := _bound_err(item_id, bound_item_id)):
             return _err(msg)

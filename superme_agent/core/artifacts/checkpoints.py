@@ -120,7 +120,7 @@ def latest_checkpoint(item_dir: Path, *, char_cap: int = 6000,
     if role:
         # Two other stamps match: an UNSTAMPED checkpoint, and a legacy `intake` one. Both widen,
         # never narrow.
-        from ..kind_profiles import INTAKE_PHASES, LEGACY_INTAKE_SLOT
+        from ..vocab.kind_profiles import INTAKE_PHASES, LEGACY_INTAKE_SLOT
         wants = [f"\nrole: {role}\n"]
         if role in INTAKE_PHASES:
             wants.append(f"\nrole: {LEGACY_INTAKE_SLOT}\n")

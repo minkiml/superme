@@ -978,7 +978,8 @@ def test_contracts() -> None:
 def test_review_entry_run() -> None:
     """Review HAS a runner, and both doors into review use the same one."""
     print("slice 4a — the review-ENTRY run, one skill, both doors")
-    from superme_agent.core import kernel_speech, token_taxonomy
+    from superme_agent.core import kernel_speech
+    from superme_agent.core.vocab import token_taxonomy
     from superme_agent.daemon.services import runs as runs_svc
     gates_src = src("superme_agent/daemon/services/gates.py")
     loop_src = src("superme_agent/daemon/services/loop.py")

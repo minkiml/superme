@@ -6,8 +6,8 @@ import secrets
 from datetime import date
 from pathlib import Path
 
-from .. import sandbox
-from ..titles import check_title, normalize_title
+from ..vocab import sandbox
+from ..vocab.titles import check_title, normalize_title
 from .common import _ensure_knowledge_ignore, _parse_md
 from .parse import _SPAWN_RELATIONS, _toposort_keys
 
@@ -36,7 +36,7 @@ class LifecycleOps:
 
         `kind` is REQUIRED with no default — a default gave every ticket an implementation pipeline.
         `proposed_kind` is birth provenance, never routed on. Peers are validated to EXIST."""
-        from ..kind_profiles import DEFAULT_SCALE, KIND_PROFILES, RESEARCH_KINDS, get_profile
+        from ..vocab.kind_profiles import DEFAULT_SCALE, KIND_PROFILES, RESEARCH_KINDS, get_profile
         profile = get_profile(kind)
         # A button-launched sweep is born classified: the button IS the classification. Every
         # other mint point enters at phase 0.
@@ -217,7 +217,7 @@ class LifecycleOps:
 
         `preliminary/` STAYS: it is the pushed input, not work this item did. Runs and events are
         permanent trace."""
-        from ..kind_profiles import get_profile
+        from ..vocab.kind_profiles import get_profile
         folder = Path(dev_root) / "work-items" / item_id
         item_md = folder / "item.md"
         if not item_md.exists():

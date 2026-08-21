@@ -6,8 +6,8 @@ to fall through.
 
 import logging
 
-from .context import Context
-from .models import MODEL_TIERS
+from .vocab.context import Context
+from .vocab.models import MODEL_TIERS
 from .spine import SystemSpine, get_spine
 
 log = logging.getLogger("superme-agent")

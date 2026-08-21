@@ -11,7 +11,8 @@ import logging
 
 from fastapi import HTTPException
 
-from ...core import artifacts, kind_profiles, git_layer, autopilot as autopilot_core
+from ...core import artifacts, git_layer, autopilot as autopilot_core
+from ...core.vocab import kind_profiles
 from . import run_tasks
 
 log = logging.getLogger("superme-agent")

@@ -9,7 +9,7 @@ Run: PYTHONPATH=. python -m scripts.test_sandbox
 
 from pathlib import Path
 
-from superme_agent.core.sandbox import sandbox_options
+from superme_agent.core.vocab.sandbox import sandbox_options
 from scripts.sources import src
 
 PASS = 0
@@ -114,14 +114,14 @@ def test_interactive_is_deliberately_not_sandboxed():
     ok("a chat turn passes no sandbox — the human approving each command is the boundary",
        "sandbox_writes" not in ws)
     ok("…and the reason is written down where the policy lives",
-       "Interactive turns are not sandboxed" in src("superme_agent/core/sandbox.py"))
+       "Interactive turns are not sandboxed" in src("superme_agent/core/vocab/sandbox.py"))
 
 
 def test_the_stale_claim_is_gone():
     perms = src("superme_agent/core/permissions.py")
     ok("permissions.py no longer claims the SDK has no sandbox",
        "no fs-sandbox mode" not in perms)
-    ok("…and points at the layer that now holds the boundary", "core.sandbox" in perms)
+    ok("…and points at the layer that now holds the boundary", "core.vocab.sandbox" in perms)
 
 
 def test_a_run_has_somewhere_to_put_a_temp_file():
@@ -133,7 +133,7 @@ def test_a_run_has_somewhere_to_put_a_temp_file():
     import tempfile
 
     from superme_agent.core import permissions as perms
-    from superme_agent.core.sandbox import SCRATCH_DIRNAME, ensure_scratch, prune_scratch
+    from superme_agent.core.vocab.sandbox import SCRATCH_DIRNAME, ensure_scratch, prune_scratch
 
     item = Path(tempfile.mkdtemp()) / "item"
     item.mkdir()
@@ -198,7 +198,7 @@ def test_the_shell_may_name_what_the_write_tools_may_not():
     import tempfile
 
     from superme_agent.core import permissions as perms
-    from superme_agent.core.sandbox import ensure_scratch
+    from superme_agent.core.vocab.sandbox import ensure_scratch
 
     item = Path(tempfile.mkdtemp()) / "item"
     item.mkdir()
@@ -240,7 +240,7 @@ def test_a_search_pattern_is_not_a_place():
     import tempfile
 
     from superme_agent.core import permissions as perms
-    from superme_agent.core.sandbox import ensure_scratch
+    from superme_agent.core.vocab.sandbox import ensure_scratch
 
     item = Path(tempfile.mkdtemp()) / "item"
     item.mkdir()
@@ -278,7 +278,7 @@ def test_research_cannot_reach_the_codebase():
     import tempfile
 
     from superme_agent.core import permissions as perms
-    from superme_agent.core.sandbox import sandbox_options
+    from superme_agent.core.vocab.sandbox import sandbox_options
 
     item = Path(tempfile.mkdtemp()) / "item"
     item.mkdir()

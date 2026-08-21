@@ -10,7 +10,7 @@ Run: PYTHONPATH=. python -m scripts.test_faults
 import asyncio
 from pathlib import Path
 
-from superme_agent.core.events import Result, Status, TextDelta
+from superme_agent.core.vocab.events import Result, Status, TextDelta
 from superme_agent.core.faults import (NO_FAULT, RETRY_LADDER, Fault, classify, next_delay)
 from superme_agent.daemon.services.turns import ResilientTurn
 from scripts.sources import src

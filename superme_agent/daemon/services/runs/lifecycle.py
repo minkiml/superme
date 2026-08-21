@@ -6,9 +6,9 @@ from pathlib import Path
 
 from ...app_state import dev as _dev, dev_store as _dev_store, spine as _spine
 from .. import run_tasks
-from ....core import sandbox as _sandbox
+from ....core.vocab import sandbox as _sandbox
 from ....core.faults import RETRY_LADDER
-from ....core.models import MODEL_TIERS
+from ....core.vocab.models import MODEL_TIERS
 from ....harness.tools.dev_tools import make_dev_mcp_server
 
 log = logging.getLogger("superme-agent")

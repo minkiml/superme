@@ -6,7 +6,7 @@ cwd and a knowledge home. The repo root IS the global context, never a project.
 
 import logging
 
-from ..core.context import Context
+from ..core.vocab.context import Context
 from ..core.spine import RepoConfig, get_spine
 
 log = logging.getLogger("superme-agent")

@@ -13,7 +13,7 @@ import tempfile
 from pathlib import Path
 
 from superme_agent.core import artifacts as _arts
-from superme_agent.core import kind_profiles as _kp
+from superme_agent.core.vocab import kind_profiles as _kp
 from superme_agent.core.dev_knowledge import DevKnowledgeService
 from scripts.sources import src
 
@@ -633,7 +633,7 @@ ok("the triage skill teaches every family, so none is unpickable in practice",
    all(f.slug in src("superme_agent/harness/plugins/superme-dev/skills/triage/SKILL.md")
        for f in _kp.RESEARCH_FAMILIES))
 ok("the registry names both mirrors, so the next person knows where to look",
-   all(k in src("superme_agent/core/kind_profiles.py")
+   all(k in src("superme_agent/core/vocab/kind_profiles.py")
        for k in ("TriageFacts.research_kind", "triage/SKILL.md")))
 
 
@@ -1358,7 +1358,7 @@ print("\n— fan-out: the check answers to triage, not to the family default —
 # A judgement living in prose no reader parses lets the check contradict a decision made upstream,
 # and blame the run for obeying.
 from superme_agent.core.gate_briefs import fanout_check as _fo             # noqa: E402
-from superme_agent.core.kind_profiles import ITEM_FANOUT, item_fanout      # noqa: E402
+from superme_agent.core.vocab.kind_profiles import ITEM_FANOUT, item_fanout      # noqa: E402
 
 ok("`fanout` is a CLOSED set, and separate from `scale` — size and splittability are different "
    "questions, and one field answering both is the defect this codebase keeps meeting",

@@ -31,7 +31,8 @@ from ..services.runs import (
     bank_auto_checkpoint, capture_prompt, capture_event, compacted_checkpoint,
     compacted_session_memory, fire_auto_triage, read_completion,
 )
-from ...core import kernel_speech, kind_profiles
+from ...core import kernel_speech
+from ...core.vocab import kind_profiles
 from ...core import (
     Init, Usage, Result, Status, TextDelta, ToolResult, scoped_writes_approve,
     PLAN_READONLY_NUDGE,

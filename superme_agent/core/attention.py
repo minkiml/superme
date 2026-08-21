@@ -5,7 +5,7 @@ Every item lands in AT MOST one bucket, strict priority: `error` (work stopped) 
 """
 
 from .gate_briefs import GATE_FOR_PHASE
-from .kind_profiles import get_profile
+from .vocab.kind_profiles import get_profile
 
 TIER_ORDER = ("error", "needs_you", "deputy_working", "running", "unread")
 TIER_COLOR = {"error": "red", "needs_you": "orange", "deputy_working": "purple",

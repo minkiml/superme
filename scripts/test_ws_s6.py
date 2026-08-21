@@ -20,7 +20,7 @@ from superme_agent.core import artifacts as A
 from superme_agent.core import gate_briefs as GB
 from superme_agent.core import knowledge_delta as KD
 from superme_agent.core.dev_knowledge import DevKnowledgeService
-from superme_agent.core.kind_profiles import KIND_PROFILES
+from superme_agent.core.vocab.kind_profiles import KIND_PROFILES
 from superme_agent.harness.tools.dev_tools import _apply_knowledge_delta, _ITEM_DEV_TOOLS
 from scripts.sources import src
 

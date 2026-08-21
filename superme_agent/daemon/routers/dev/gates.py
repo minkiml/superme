@@ -12,7 +12,8 @@ from ...app_state import (
     DevKnowledgeService, DevStore, SessionStore, SystemSpine,
     get_dev, get_dev_store, get_sessions, get_spine,
 )
-from ....core import artifacts, git_layer, status_router
+from ....core import artifacts, git_layer
+from ....core.vocab import status_router
 from ....core.artifacts import _atomic_write
 from ...services import drilldown, git_ops, scheduler
 from ....gateway import contexts

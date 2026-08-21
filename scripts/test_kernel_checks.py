@@ -15,7 +15,7 @@ from pathlib import Path
 
 from superme_agent.core import artifacts as _arts
 from superme_agent.core.kernel_speech import vet_trigger
-from superme_agent.core.sandbox import kernel_command
+from superme_agent.core.vocab.sandbox import kernel_command
 from superme_agent.daemon.services import checks as _checks
 from scripts.sources import src
 

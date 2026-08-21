@@ -10,7 +10,7 @@ import sqlite3
 import sys
 
 from superme_agent.core.spine import SystemSpine
-from superme_agent.core.token_taxonomy import CATEGORY_ORDER, FEATURE_CATEGORY, display_feature
+from superme_agent.core.vocab.token_taxonomy import CATEGORY_ORDER, FEATURE_CATEGORY, display_feature
 from superme_agent.paths import SYSTEM_DB_FILE
 
 fails: list[str] = []

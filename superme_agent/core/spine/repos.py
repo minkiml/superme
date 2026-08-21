@@ -4,7 +4,7 @@ from pathlib import Path
 
 import yaml
 
-from ..kind_profiles import AGENT_THREAD_KINDS
+from ..vocab.kind_profiles import AGENT_THREAD_KINDS
 from .common import LEARNING_FEATURES, _norm, _now, log
 from .config import (REVIEW_MODES, REVIEW_MODE_DEFAULT, RepoConfig, SystemConfig, load_repos,
                      load_system_config)

@@ -12,7 +12,8 @@ import tempfile
 from pathlib import Path
 
 from superme_agent.core import artifacts as A
-from superme_agent.core import inbox_flow, status_router, workgraph
+from superme_agent.core import inbox_flow, workgraph
+from superme_agent.core.vocab import status_router
 from superme_agent.core.dev_knowledge import DevKnowledgeService
 from superme_agent.core.dev_store import DevStore
 from superme_agent.harness.tools.dev_tools import _create_inbox_item, _push_inbox_item

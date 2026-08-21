@@ -10,9 +10,9 @@ import logging
 from datetime import datetime, timezone
 
 from ..paths import CLAUDE_PROJECTS_DIR
-from .context import Context
+from .vocab.context import Context
 from .spine import SystemSpine, get_spine
-from .kind_profiles import is_conversation
+from .vocab.kind_profiles import is_conversation
 
 log = logging.getLogger("superme-agent")
 

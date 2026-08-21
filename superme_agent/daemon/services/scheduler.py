@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from ...core import status_router
+from ...core.vocab import status_router
 
 log = logging.getLogger("superme-agent")
 

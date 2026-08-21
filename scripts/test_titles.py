@@ -13,7 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from superme_agent.core.dev_knowledge import DevKnowledgeService      # noqa: E402
-from superme_agent.core.titles import TITLE_MAX, check_title, normalize_title  # noqa: E402
+from superme_agent.core.vocab.titles import TITLE_MAX, check_title, normalize_title  # noqa: E402
 
 PASS = FAIL = 0
 

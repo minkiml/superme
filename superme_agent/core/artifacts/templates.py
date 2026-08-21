@@ -2,7 +2,7 @@
 
 import re
 
-from .. import kind_profiles as _kp
+from ..vocab import kind_profiles as _kp
 from .text import FILL
 
 # The template FILE is the single source. A `<fill:…>` slot must be FILLED; a comment-only section

@@ -4,7 +4,7 @@ from pathlib import Path
 
 from ...app_state import dev as _dev, sessions as _sessions, spine as _spine
 from ....core import artifacts as _arts
-from ....core import kind_profiles
+from ....core.vocab import kind_profiles
 
 def bank_auto_checkpoint(ctx, item_id: str, *, since: float | None = None) -> bool:
     """Mechanical fallback for the session-end checkpoint hook, so the orient block always has one.

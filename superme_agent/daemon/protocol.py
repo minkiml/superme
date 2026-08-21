@@ -4,7 +4,7 @@ Every outbound frame is built through a typed model in `schemas/ws.py`, so the w
 source of truth.
 """
 
-from ..core.events import Init, TextDelta, Status, Usage, Result, TurnEvent
+from ..core.vocab.events import Init, TextDelta, Status, Usage, Result, TurnEvent
 from .schemas.ws import (
     InitFrame, TextDeltaFrame, StatusFrame, UsageFrame, ApprovalRequestFrame,
     ResultFrame, ErrorFrame, TimelineFrame, TurnFrame, ApprovalResponseFrame, WatchFrame,

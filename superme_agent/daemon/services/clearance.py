@@ -10,7 +10,8 @@ import logging
 from ..app_state import dev as _dev, dev_store as _dev_store, \
     spine as _spine, sessions as _sessions
 from ...core import autopilot as _autopilot
-from ...core import gate_briefs, git_layer, kind_profiles, status_router
+from ...core import gate_briefs, git_layer
+from ...core.vocab import kind_profiles, status_router
 from ...gateway import contexts
 
 log = logging.getLogger("superme-agent")

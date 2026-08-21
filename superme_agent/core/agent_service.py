@@ -23,17 +23,17 @@ from claude_agent_sdk import (
 from ..paths import (
     SELF_FILE, CHARTER_FILES, HARNESS_DIR, LOCAL_HARNESS_DIR, CONSTITUTION_DIR, plugins_for,
 )
-from .models import normalize_model
+from .vocab.models import normalize_model
 from .operational import (constitution_catalog, list_repo_assets, silent_skill_names,
                           skills_in_category)
 from .dev_knowledge import DevKnowledgeService
 
 _DEV = DevKnowledgeService()  # stateless — reused to build the dev Orient digest
 from ..harness.tools.base_tools import make_base_mcp_server
-from .context import Context
-from .events import Init, TextDelta, Status, ToolResult, Usage, Result, TurnEvent
+from .vocab.context import Context
+from .vocab.events import Init, TextDelta, Status, ToolResult, Usage, Result, TurnEvent
 from .permissions import ApproveFn, build_can_use_tool, deny_all
-from .sandbox import sandbox_options
+from .vocab.sandbox import sandbox_options
 
 log = logging.getLogger("superme-agent")
 

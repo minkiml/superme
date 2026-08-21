@@ -11,7 +11,7 @@ import json
 import logging
 import re
 
-from ...core import kind_profiles
+from ...core.vocab import kind_profiles
 
 log = logging.getLogger("superme-agent")
 

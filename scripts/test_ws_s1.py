@@ -10,8 +10,8 @@ import re
 import tempfile
 from pathlib import Path
 
-from superme_agent.core import kind_profiles as kp
-from superme_agent.core import status_router as sr
+from superme_agent.core.vocab import kind_profiles as kp
+from superme_agent.core.vocab import status_router as sr
 from superme_agent.core.dev_knowledge import DevKnowledgeService
 from superme_agent.core.dev_store import DevStore
 from scripts.sources import src
@@ -267,7 +267,8 @@ def test_after_field(dev: DevKnowledgeService, root: Path) -> None:
 
 def test_autopilot_decision() -> None:
     print("autopilot decision (core.autopilot)")
-    from superme_agent.core import autopilot, kind_profiles
+    from superme_agent.core import autopilot
+    from superme_agent.core.vocab import kind_profiles
     nxt = kind_profiles.next_phase
 
     def item(phase="triage", status="awaiting_human", ap=True, done=False):
