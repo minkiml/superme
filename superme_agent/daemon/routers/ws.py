@@ -27,7 +27,7 @@ from ..protocol import (
 from ..schemas.ws import TurnFrame, ApprovalResponseFrame, WatchFrame, DashboardHelloFrame
 from ..services import compaction, dashboard_stream, item_stream
 from ..services.runs import (
-    _begin_run, _end_run, _LiveTokens,
+    begin_run, end_run, LiveTokens,
     bank_auto_checkpoint, capture_prompt, capture_event, compacted_checkpoint,
     compacted_session_memory, fire_auto_triage, read_completion,
 )
@@ -372,7 +372,7 @@ async def ws_agent(ws: WebSocket) -> None:
                         kind=(item or {}).get("kind"), model=model, force=manual_compact)
                 except Exception:
                     log.exception("run-start compaction check failed")
-                item_run_id = _begin_run(ctx, ctx.id, work_item_id, "chat", model, phase=item.get("phase"))
+                item_run_id = begin_run(ctx, ctx.id, work_item_id, "chat", model, phase=item.get("phase"))
                 began_run = item_run_id is not None
                 last_bound = (ctx, work_item_id)
                 session_append = work_item_preamble(
@@ -510,7 +510,7 @@ async def ws_agent(ws: WebSocket) -> None:
             final_model = None
             final_ctx = None   # the turn's end-of-turn context-window fill (persisted so the chat
                                # header can show a session's ctx% on reopen, not just live)
-            live = _LiveTokens()   # dedupes the Usage stream by message_id for an accurate live estimate
+            live = LiveTokens()   # dedupes the Usage stream by message_id for an accurate live estimate
             try:
                 async for ev in _agent.run_turn(
                     ctx,
@@ -600,7 +600,7 @@ async def ws_agent(ws: WebSocket) -> None:
                     rest_status = ("awaiting_human"
                                    if str((item or {}).get("status")) == "awaiting_human"
                                    and outcome != "revise" else "active")
-                    _end_run(ctx, ctx.id, work_item_id, final_tokens, rest_status, final_usage,
+                    end_run(ctx, ctx.id, work_item_id, final_tokens, rest_status, final_usage,
                              final_ctx, outcome=outcome, session_id=final_session,
                              summary=str((report or {}).get("summary") or ""))
                     # A real turn just reported fresh usage, so release the defer latch. No
@@ -618,7 +618,7 @@ async def ws_agent(ws: WebSocket) -> None:
                 # phase-advance/completion), so nothing fires here per-turn.
             except Exception as e:
                 if began_run:
-                    _end_run(ctx, ctx.id, work_item_id, final_tokens, "active", final_usage,
+                    end_run(ctx, ctx.id, work_item_id, final_tokens, "active", final_usage,
                              final_ctx, session_id=final_session)
                 elif chat_run_id:
                     _spine.finish_run(chat_run_id, status="aborted", usage=final_usage,

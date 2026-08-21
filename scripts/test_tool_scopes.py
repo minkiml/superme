@@ -141,7 +141,7 @@ def test_skills_name_only_visible_tools() -> None:
 
 # Every site that mounts the dev server, with its scope. A computed one is listed so it is at
 # least accounted for.
-COMPUTED = ("scope=scope",          # the two _dev_mcp helpers, forwarding their caller's choice
+COMPUTED = ("scope=scope",          # the two dev_mcp helpers, forwarding their caller's choice
             "scope=skill",          # the generic intake runner: the skill it fires IS the scope
             "scope=tool_scope",     # ws.py: session kind, or the bound item's current phase
             'scope=str(live_item.get("phase") or phase)')   # deputy send-back, post review→plan flip
@@ -189,7 +189,7 @@ def test_call_sites() -> None:
         if rel.endswith("harness/tools/dev_tools.py"):
             continue
         assert "learning=True" not in text, f"FAIL: {rel} still passes the retired learning= kwarg"
-        for m in re.finditer(r"\b(?:make_dev_mcp_server|_dev_mcp)\s*\(", text):
+        for m in re.finditer(r"\b(?:make_dev_mcp_server|dev_mcp)\s*\(", text):
             if text[:m.start()].rstrip().endswith("def"):
                 continue                       # the helper's own definition
             call = _call_at(text, m.start())

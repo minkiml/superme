@@ -190,12 +190,12 @@ def test_f8_background_mcp(tmp: Path) -> None:
     item_dir = root / "work-items" / wid
 
     # `scope` is required: a background run mounts its phase's tools, not the whole catalogue.
-    mount = RL._dev_mcp(ctx, ctx.cwd, wid, scope="plan")
-    ok("_dev_mcp returns a dev-keyed mount", isinstance(mount, dict) and mount.get("dev"))
+    mount = RL.dev_mcp(ctx, ctx.cwd, wid, scope="plan")
+    ok("dev_mcp returns a dev-keyed mount", isinstance(mount, dict) and mount.get("dev"))
 
     saved = {n: getattr(R, n) for n in
              ("_agent", "_dev", "_spine", "_dev_store", "_sessions",
-              "capture_prompt", "capture_event", "_end_run",
+              "capture_prompt", "capture_event", "end_run",
               "bank_auto_checkpoint", "git_layer")}
     agent = _FakeAgent()
     try:
@@ -208,9 +208,9 @@ def test_f8_background_mcp(tmp: Path) -> None:
         R._sessions = SimpleNamespace(record=lambda *a: None, delete=lambda *a, **k: None)
         R.capture_prompt = lambda *a, **k: None
         R.capture_event = lambda *a, **k: None
-        R._end_run = lambda *a, **k: None
+        R.end_run = lambda *a, **k: None
         R.bank_auto_checkpoint = lambda *a, **k: False
-        asyncio.run(R._run_background_plan(ctx, "t", wid, item_dir))
+        asyncio.run(R.run_background_plan(ctx, "t", wid, item_dir))
         ok("background plan passes extra_mcp_servers",
            isinstance(agent.kw.get("extra_mcp_servers"), dict)
            and agent.kw["extra_mcp_servers"].get("dev"), str(agent.kw and agent.kw.keys()))
@@ -222,7 +222,7 @@ def test_f8_background_mcp(tmp: Path) -> None:
         def _no_merge(_wt):
             raise git_layer.GitError("no merge in progress (probe)")
         R.git_layer = SimpleNamespace(finish_merge=_no_merge, GitError=git_layer.GitError)
-        asyncio.run(R._run_background_resolve(ctx, "t", wid, wt, ["a.py"]))
+        asyncio.run(R.run_background_resolve(ctx, "t", wid, wt, ["a.py"]))
         ok("background resolve passes extra_mcp_servers",
            isinstance(agent.kw.get("extra_mcp_servers"), dict)
            and agent.kw["extra_mcp_servers"].get("dev"), str(agent.kw and agent.kw.keys()))
@@ -232,7 +232,7 @@ def test_f8_background_mcp(tmp: Path) -> None:
 
     # The loop runners keep their own mount — this batch changed plan/resolve only.
     loop_src = src("superme_agent/daemon/services/loop.py")
-    ok("loop runners still mount dev MCP", loop_src.count("**_dev_mcp(") >= 2)
+    ok("loop runners still mount dev MCP", loop_src.count("**dev_mcp(") >= 2)
 
 
 def main() -> None:

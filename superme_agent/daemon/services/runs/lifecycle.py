@@ -87,7 +87,7 @@ def _set_status(ctx, item_id: str, status: str) -> None:
         log.exception("could not set status %s on %s", status, item_id)
 
 
-def _begin_run(ctx, context_id: str, item_id: str, kind: str = "plan",
+def begin_run(ctx, context_id: str, item_id: str, kind: str = "plan",
                model: str | None = None, phase: str | None = None) -> int | None:
     """Open a run row only if the item isn't already running, then rest it `active` and log.
 
@@ -105,7 +105,7 @@ def _begin_run(ctx, context_id: str, item_id: str, kind: str = "plan",
     return run_id  # the live run id — the caller keys its per-run event trail on it
 
 
-class _LiveTokens:
+class LiveTokens:
     """Per-run token tally, deduped by `message_id` — the run's authoritative total.
 
     The SDK emits one Usage step per content block, so summing steps over-counts; latest-per-id
@@ -165,7 +165,7 @@ class _LiveTokens:
                 + self._num(u.get("output_tokens")))
 
 
-def _end_run(ctx, context_id: str, item_id: str, tokens: int | None,
+def end_run(ctx, context_id: str, item_id: str, tokens: int | None,
              status: str = "active", usage: dict | None = None,
              ctx_pct: int | None = None, outcome: str | None = None,
              session_id: str | None = None, summary: str = "") -> None:
@@ -216,7 +216,7 @@ def _end_run(ctx, context_id: str, item_id: str, tokens: int | None,
             pass  # no running loop (sync/test context) — driver is tested directly
 
 
-def _dev_mcp(ctx, repo_dir: Path, item_id: str, *, scope: str) -> dict:
+def dev_mcp(ctx, repo_dir: Path, item_id: str, *, scope: str) -> dict:
     """The dev MCP server for a background intake/resolve run.
 
     `repo_dir` is where evidence fingerprints — the worktree when one exists, else the repo root.

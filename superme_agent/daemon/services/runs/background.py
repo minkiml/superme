@@ -14,20 +14,20 @@ from ....core import autopilot as _autopilot
 from ....core import git_layer, kernel_speech, kind_profiles
 from ....harness.tools.run_tools import make_run_report_server
 from ..turns import ResilientTurn
-from .lifecycle import _LiveTokens, _dev_mcp, _end_run, log, mark_item_error, retry_notice
+from .lifecycle import LiveTokens, dev_mcp, end_run, log, mark_item_error, retry_notice
 from .capture import capture_event, capture_prompt, capture_run_input, surface_from_turn
 from .checkpoints import bank_auto_checkpoint, reset_vet_thread
 from .completion import UNREPORTED, ensure_completion
 from .close import _clear_or_retry
 
-async def _run_background_plan(ctx, context_id: str, item_id: str, item_dir: Path,
+async def run_background_plan(ctx, context_id: str, item_id: str, item_dir: Path,
                                model: str | None = None, effort: str | None = None) -> None:
     """Background "Plan it" — one /plan turn, no surface. Thin wrapper over _background_intake_run."""
     await _background_intake_run(ctx, context_id, item_id, item_dir,
                                  skill="plan", model=model, effort=effort)
 
 
-async def _run_background_item_skill(ctx, context_id: str, item_id: str, item_dir: Path,
+async def run_background_item_skill(ctx, context_id: str, item_id: str, item_dir: Path,
                                      skill: str, model: str | None = None,
                                      effort: str | None = None) -> None:
     """The generic phase-entry runner for any auto-fired item skill that is not plan: `review`,
@@ -103,7 +103,7 @@ async def _background_intake_run(ctx, context_id: str, item_id: str, item_dir: P
     final_usage = None
     final_session = None
     run_started = time.time()
-    live = _LiveTokens()   # dedupes the Usage stream by message_id for an accurate live estimate
+    live = LiveTokens()   # dedupes the Usage stream by message_id for an accurate live estimate
     sink: dict = {}   # report_completion lands here (run_tools) — read after the turn
     turn = ResilientTurn(f"background {skill}", item_id=item_id,
                          notify=retry_notice(context_id, item_id, skill))
@@ -120,7 +120,7 @@ async def _background_intake_run(ctx, context_id: str, item_id: str, item_dir: P
         # scratch worktree.
         shell_roots=scratch_tree,
         sandbox_writes=[item_dir, *scratch_tree],   # the kernel holds the same two roots
-        extra_mcp_servers={**_dev_mcp(ctx, ctx.cwd, item_id, scope=skill),
+        extra_mcp_servers={**dev_mcp(ctx, ctx.cwd, item_id, scope=skill),
                            "run": make_run_report_server(sink)},
         system_append=focus,
         item_bound=True,       # one item is this run's subject — no board-wide in-progress list
@@ -171,7 +171,7 @@ async def _background_intake_run(ctx, context_id: str, item_id: str, item_dir: P
     stopped = turn.fault.failed and not report
     if stopped:
         mark_item_error(ctx, context_id, item_id, turn.fault.reason, phase=skill)
-    _end_run(ctx, context_id, item_id, final_tokens,
+    end_run(ctx, context_id, item_id, final_tokens,
              "error" if stopped else "awaiting_human", final_usage,
              outcome="blocked" if stopped else ((report or {}).get("outcome") or UNREPORTED),
              session_id=final_session, summary=str((report or {}).get("summary") or ""))
@@ -190,7 +190,7 @@ async def _background_intake_run(ctx, context_id: str, item_id: str, item_dir: P
              f" ({turn.fault.kind})" if turn.fault.failed else "")
 
 
-async def _run_background_resolve(ctx, context_id: str, item_id: str, worktree: Path,
+async def run_background_resolve(ctx, context_id: str, item_id: str, worktree: Path,
                                 conflicts: list[str], model: str | None = None,
                                   effort: str | None = None) -> None:
     """Drive one background turn that edits a conflicted merge's markers, then COMPLETE the merge
@@ -206,7 +206,7 @@ async def _run_background_resolve(ctx, context_id: str, item_id: str, worktree: 
     final_usage = None
     final_session = None
     run_started = time.time()
-    live = _LiveTokens()
+    live = LiveTokens()
     turn = ResilientTurn("background resolve", item_id=item_id,
                          notify=retry_notice(context_id, item_id, "resolve"))
     async for ev in turn.stream(
@@ -216,7 +216,7 @@ async def _run_background_resolve(ctx, context_id: str, item_id: str, worktree: 
         effort=effort or _spine.effective_effort(context_id),
         approve=scoped_writes_approve(worktree, deny_all),
         sandbox_writes=[worktree],   # resolving a conflict is git + edits inside the tree, nothing more
-        extra_mcp_servers=_dev_mcp(ctx, worktree, item_id, scope="resolve"),  # Dev tools mounted so a background planner can read the log, roadmap and inbox.
+        extra_mcp_servers=dev_mcp(ctx, worktree, item_id, scope="resolve"),  # Dev tools mounted so a background planner can read the log, roadmap and inbox.
     ):
         if isinstance(ev, Usage):
             live.bump(context_id, item_id, ev)
@@ -250,9 +250,9 @@ async def _run_background_resolve(ctx, context_id: str, item_id: str, worktree: 
                                  "Conflict resolved — re-entering vet before re-presenting",
                                  item_id=item_id, actor="daemon",
                                  meta={"from": "review", "to": "vet"})
-        _end_run(ctx, context_id, item_id, final_tokens, "active", final_usage, outcome=outcome,
+        end_run(ctx, context_id, item_id, final_tokens, "active", final_usage, outcome=outcome,
                  session_id=final_session)
-        # Something must run behind that `active`. Fired after `_end_run`, because `start_vet_run`
+        # Something must run behind that `active`. Fired after `end_run`, because `start_vet_run`
         # refuses while a run holds the lock.
         if revet:
             from ..loop import start_vet_run
@@ -265,11 +265,11 @@ async def _run_background_resolve(ctx, context_id: str, item_id: str, worktree: 
         # The resolver never finished: an outage, not a hard conflict. The merge is still in the
         # tree either way.
         mark_item_error(ctx, context_id, item_id, turn.fault.reason, phase="resolve")
-        _end_run(ctx, context_id, item_id, final_tokens, "error", final_usage,
+        end_run(ctx, context_id, item_id, final_tokens, "error", final_usage,
                  outcome=outcome, session_id=final_session)
     else:
         # Conflicts remain in the tree (deliberate — retry or manual abort); page the owner.
-        _end_run(ctx, context_id, item_id, final_tokens, "awaiting_human", final_usage,
+        end_run(ctx, context_id, item_id, final_tokens, "awaiting_human", final_usage,
                  outcome=outcome, session_id=final_session)
     try:
         bank_auto_checkpoint(ctx, item_id, since=run_started)

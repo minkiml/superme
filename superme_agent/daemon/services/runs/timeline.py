@@ -26,7 +26,7 @@ def build_item_timeline(context_id: str, item_id: str) -> dict:
     return {"item_id": str(item_id), "runs": out}
 
 
-def _render_execution_md(context_id: str, item_id: str, item: dict) -> str:
+def render_execution_md(context_id: str, item_id: str, item: dict) -> str:
     """Snapshot a work-item's execution trace to Markdown, so the item folder keeps its own copy.
     Chronological, oldest run first."""
     # The call trail only — prompt and reply rows belong to the conversation.

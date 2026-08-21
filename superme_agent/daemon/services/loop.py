@@ -22,7 +22,7 @@ from .turns import ResilientTurn
 from ...harness.tools.run_tools import make_run_report_server
 from ...core.permissions import VET_READONLY_NUDGE
 from ...harness.tools.dev_tools import make_dev_mcp_server
-from .runs import (_LiveTokens, _begin_run, _end_run, surface_from_turn,
+from .runs import (LiveTokens, begin_run, end_run, surface_from_turn,
                    bank_auto_checkpoint, capture_event, capture_prompt, capture_run_input,
                    compacted_checkpoint, ensure_completion, fire_auto_triage, mark_item_error, read_completion,
                    reset_vet_thread, retry_notice)
@@ -185,7 +185,7 @@ def _resolve_vet_params(context_id: str, item: dict) -> tuple[str, str]:
             _spine.role_effort(context_id, "vet", item_effort=item.get("vet_effort")))
 
 
-def _dev_mcp(ctx, wt: Path, main_repo_dir: Path, item_id: str, *, scope: str) -> dict:
+def dev_mcp(ctx, wt: Path, main_repo_dir: Path, item_id: str, *, scope: str) -> dict:
     """The dev MCP server for a background loop run: pens scoped to this item, `repo_dir` at the
     worktree so evidence fingerprints the vetted tree.
 
@@ -293,10 +293,10 @@ def start_vet_run(ctx, context_id: str, item_id: str) -> tuple[bool, str]:
         return False, "item has no live worktree — nothing to vet"
     reset_vet_thread(ctx, item)   # fresh per cycle (no-op when the slot is already clear)
     model, effort = _resolve_vet_params(context_id, item)
-    if not _begin_run(ctx, context_id, item_id, "vet", model, phase="vet"):
+    if not begin_run(ctx, context_id, item_id, "vet", model, phase="vet"):
         return False, "a run is already in progress for this item"
     # A paged item the owner just re-launched is active again (the launch IS the answer);
-    # _begin_run rested it already.
+    # begin_run rested it already.
     run_tasks.track(asyncio.create_task(_run_background_vet(ctx, context_id, item_id, model, effort)))
     return True, "vet"
 
@@ -309,7 +309,7 @@ async def _run_background_vet(ctx, context_id: str, item_id: str,
     item = _dev.read_work_item(dev_root, item_id) or {}
     lc = _loop_ctx(ctx, item)
     if lc is None:   # worktree vanished between start and run
-        _end_run(ctx, context_id, item_id, None, "awaiting_human", None, outcome="blocked")
+        end_run(ctx, context_id, item_id, None, "awaiting_human", None, outcome="blocked")
         return
     wt_ctx, wt, item_dir, _ = lc
     # ONE definition of what this run may write to: the turn, the sandbox and the X-ray all read
@@ -345,7 +345,7 @@ async def _run_background_vet(ctx, context_id: str, item_id: str,
     final_usage = None
     final_session = None
     run_started = time.time()
-    live = _LiveTokens()
+    live = LiveTokens()
     sink: dict = {}   # report_completion lands here (run_tools) — recorded; the DRIVER decides
     # The turn carries its own retry ladder, so a vet that never got off the ground is waited out
     # here.
@@ -356,7 +356,7 @@ async def _run_background_vet(ctx, context_id: str, item_id: str,
         resume=None,                     # vet FORGETS — fresh eyes, prior reports are data
         model=model, effort=effort,
         approve=deny_all,                # background: nothing outside the boundary runs
-        extra_mcp_servers={**_dev_mcp(ctx, wt, ctx.cwd, item_id, scope="vet"),
+        extra_mcp_servers={**dev_mcp(ctx, wt, ctx.cwd, item_id, scope="vet"),
                            "run": make_run_report_server(sink)},
         system_append=kernel_speech.work_item_preamble(item_id, item, str(item_dir), interactive=False),
         item_bound=True,                 # one item is the subject — no board-wide in-progress list
@@ -442,7 +442,7 @@ async def _run_background_vet(ctx, context_id: str, item_id: str,
     # exists to stop.
     if d["action"] == "error":
         mark_item_error(ctx, context_id, item_id, d["reason"], phase="vet")
-    _end_run(ctx, context_id, item_id, final_tokens, d["status"] or "active", final_usage,
+    end_run(ctx, context_id, item_id, final_tokens, d["status"] or "active", final_usage,
              outcome=outcome, session_id=final_session)
     if d["record"]:
         try:
@@ -515,7 +515,7 @@ def start_first_build(ctx, context_id: str, item_id: str) -> tuple[bool, str]:
         item_id, title,
         vet_env=bool(getattr(_spine.repos().get(context_id), "vet_env", None)))
     model, effort = _resolve_run_params(context_id, item)
-    if not _begin_run(ctx, context_id, item_id, "build", model, phase="build"):
+    if not begin_run(ctx, context_id, item_id, "build", model, phase="build"):
         return False, "a run is already in progress for this item"
     run_tasks.track(asyncio.create_task(
         _run_background_build(ctx, context_id, item_id, model, effort, trigger=trigger)))
@@ -539,7 +539,7 @@ def start_build_cycle(ctx, context_id: str, item_id: str) -> tuple[bool, str]:
     if _arts.latest_cycle_report(dev_root / "work-items" / item_id) is None:
         return False, "no cycle report to hand over — a loop build cycle needs one"
     model, effort = _resolve_run_params(context_id, item)
-    if not _begin_run(ctx, context_id, item_id, "build", model, phase="build"):
+    if not begin_run(ctx, context_id, item_id, "build", model, phase="build"):
         return False, "a run is already in progress for this item"
     run_tasks.track(asyncio.create_task(_run_background_build(ctx, context_id, item_id, model, effort)))
     return True, "build"
@@ -555,7 +555,7 @@ async def _run_background_build(ctx, context_id: str, item_id: str,
     item = _dev.read_work_item(dev_root, item_id) or {}
     lc = _loop_ctx(ctx, item)
     if lc is None:
-        _end_run(ctx, context_id, item_id, None, "awaiting_human", None, outcome="blocked")
+        end_run(ctx, context_id, item_id, None, "awaiting_human", None, outcome="blocked")
         return
     wt_ctx, wt, item_dir, _ = lc
     boundary = [wt, item_dir]    # one definition — turn, sandbox, and X-ray capture all read it
@@ -590,7 +590,7 @@ async def _run_background_build(ctx, context_id: str, item_id: str,
     final_usage = None
     final_session = None
     run_started = time.time()
-    live = _LiveTokens()
+    live = LiveTokens()
     sink: dict = {}   # report_completion lands here (run_tools) — read after the turn
     # An upstream API error arrives as assistant TEXT, so without a classifier the turn looks like
     # a clean no-op.
@@ -601,7 +601,7 @@ async def _run_background_build(ctx, context_id: str, item_id: str,
         resume=prev_build,               # build REMEMBERS — same thread every cycle
         model=model, effort=effort,
         approve=deny_all,
-        extra_mcp_servers={**_dev_mcp(ctx, wt, ctx.cwd, item_id, scope="build"),
+        extra_mcp_servers={**dev_mcp(ctx, wt, ctx.cwd, item_id, scope="build"),
                            "run": make_run_report_server(sink)},
         # Build REMEMBERS, so it is the other thread compaction can hit.
         system_append=kernel_speech.work_item_preamble(
@@ -652,7 +652,7 @@ async def _run_background_build(ctx, context_id: str, item_id: str,
             # The build run STOPPED after the retry ladder was spent; the item stops at `build`.
             reason = turn.fault.reason or "the build run stopped before it could report"
             mark_item_error(ctx, context_id, item_id, reason, phase="build")
-            _end_run(ctx, context_id, item_id, final_tokens, "error", final_usage,
+            end_run(ctx, context_id, item_id, final_tokens, "error", final_usage,
                      outcome="blocked", session_id=final_session)
             _log_decision(context_id, item_id, cycle,
                           {"action": "error", "exit": "error", "fault": reason,
@@ -664,7 +664,7 @@ async def _run_background_build(ctx, context_id: str, item_id: str,
         still_ours = d["klass"] not in ("moved", "revise")
         rest = ("active" if d["klass"] == "revise" else
                 "awaiting_human" if still_ours else str(item.get("status") or "active"))
-        _end_run(ctx, context_id, item_id, final_tokens, rest, final_usage,
+        end_run(ctx, context_id, item_id, final_tokens, rest, final_usage,
                  outcome=("blocked" if turn_error else outcome), session_id=final_session)
         if d["klass"] == "moved":
             msg, meta = ("Loop: item moved during build cycle — loop yields",
@@ -691,7 +691,7 @@ async def _run_background_build(ctx, context_id: str, item_id: str,
         # Back into vet: retire the old vetter (vet forgets), CAS the flip, fire the next look.
         reset_vet_thread(ctx, item)
         moved = _cas_phase(dev_root, item_id, "build", "vet")
-        _end_run(ctx, context_id, item_id, final_tokens, "active", final_usage,
+        end_run(ctx, context_id, item_id, final_tokens, "active", final_usage,
                  outcome=(report_out or {}).get("outcome") or "success", session_id=final_session)
         if moved:
             _dev_store.log_event(context_id, "phase.advance",

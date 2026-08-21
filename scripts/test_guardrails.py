@@ -310,14 +310,14 @@ def test_the_agent_is_told_where_it_is():
 
 def test_the_total_counts_subagents_and_cannot_kill_a_run():
     from types import SimpleNamespace
-    from superme_agent.daemon.services.runs.lifecycle import _LiveTokens
+    from superme_agent.daemon.services.runs.lifecycle import LiveTokens
     from superme_agent.daemon.services.runs import lifecycle as RN
 
     written: list[int] = []
     real = RN._spine
     RN._spine = SimpleNamespace(set_item_run_tokens=lambda *a, **k: written.append(k["tokens"]))
     try:
-        live = _LiveTokens()
+        live = LiveTokens()
         step = lambda mid, i, cc, cr, o: SimpleNamespace(  # noqa: E731
             message_id=mid, ctx_pct=None,
             usage={"input_tokens": i, "cache_creation_input_tokens": cc,

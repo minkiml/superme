@@ -612,12 +612,12 @@ def test_start_guards(tmp: Path) -> None:
         ok("vet: paused item refused", started is False and "not runnable" in why)
         # Happy path with the expensive bits faked: run-lock taken, runner stubbed.
         calls: list[tuple] = []
-        real_begin, real_runner, real_reset = L._begin_run, L._run_background_vet, L.reset_vet_thread
+        real_begin, real_runner, real_reset = L.begin_run, L._run_background_vet, L.reset_vet_thread
         fired = asyncio.Event()
 
         async def fake_runner(*a, **k):
             fired.set()
-        L._begin_run = lambda *a, **k: 42
+        L.begin_run = lambda *a, **k: 42
         L._run_background_vet = fake_runner
         L.reset_vet_thread = lambda c, it: calls.append("reset") or False
         try:
@@ -626,11 +626,11 @@ def test_start_guards(tmp: Path) -> None:
             await asyncio.wait_for(fired.wait(), 5)
             ok("vet: happy path starts (fresh-mint reset fired first)",
                started is True and calls == ["reset"])
-            L._begin_run = lambda *a, **k: None
+            L.begin_run = lambda *a, **k: None
             started, why = L.start_vet_run(ctx, "r", "s4")
             ok("vet: run-lock contention refused", started is False and "in progress" in why)
         finally:
-            L._begin_run, L._run_background_vet, L.reset_vet_thread = real_begin, real_runner, real_reset
+            L.begin_run, L._run_background_vet, L.reset_vet_thread = real_begin, real_runner, real_reset
         # Build-cycle guards (the failure hop — needs a vet report).
         started, why = L.start_build_cycle(ctx, "r", "s2")
         ok("build: wrong phase refused", started is False and "not in build" in why)
@@ -649,13 +649,13 @@ def test_start_guards(tmp: Path) -> None:
         ok("first-build: paused item refused", started is False and "not runnable" in why)
         # Happy path: build-first STARTS at phase build with NO vet report present (the whole point).
         calls2: list[str] = []
-        real_begin, real_build = L._begin_run, L._run_background_build
+        real_begin, real_build = L.begin_run, L._run_background_build
         fired2 = asyncio.Event()
 
         async def fake_build(*a, **k):
             calls2.append(str(k.get("trigger") or (a[-1] if a else "")))
             fired2.set()
-        L._begin_run = lambda *a, **k: 77
+        L.begin_run = lambda *a, **k: 77
         L._run_background_build = fake_build
         try:
             _write_item(dev_root, "s8", phase="build", worktree=str(wt))   # NO vet report on disk
@@ -665,7 +665,7 @@ def test_start_guards(tmp: Path) -> None:
             ok("first-build: hands the build a plan-pointed trigger (not a vet report)",
                len(calls2) == 1 and "plan.md" in calls2[0] and "vet-report" not in calls2[0])
         finally:
-            L._begin_run, L._run_background_build = real_begin, real_build
+            L.begin_run, L._run_background_build = real_begin, real_build
         # The loop never parks, so no build rests at a paged reason and this entry point had no
         # caller.
     asyncio.run(run())

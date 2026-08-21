@@ -365,14 +365,14 @@ def advance_item(ctx, context_id: str, item_id: str, *, dev, dev_store, spine,
             dev.set_work_item_status(dev_root, item_id, "awaiting_human")
     elif auto_skill:
         try:
-            from .runs import _begin_run, _run_background_plan, _run_background_item_skill
+            from .runs import begin_run, run_background_plan, run_background_item_skill
             p_model = spine.effective_model(context_id, item_model=item.get("model"))
             p_effort = spine.effective_effort(context_id, item_effort=item.get("effort"))
             phase_dir = dev_root / "work-items" / item_id
-            if _begin_run(ctx, context_id, item_id, auto_skill, p_model, phase=nxt) is not None:
-                coro = (_run_background_plan(ctx, context_id, item_id, phase_dir, p_model, p_effort)
+            if begin_run(ctx, context_id, item_id, auto_skill, p_model, phase=nxt) is not None:
+                coro = (run_background_plan(ctx, context_id, item_id, phase_dir, p_model, p_effort)
                         if auto_skill == "plan" else
-                        _run_background_item_skill(ctx, context_id, item_id, phase_dir, auto_skill,
+                        run_background_item_skill(ctx, context_id, item_id, phase_dir, auto_skill,
                                                    p_model, p_effort))
                 run_tasks.track(asyncio.create_task(coro))
                 auto_started = True

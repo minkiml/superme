@@ -177,12 +177,12 @@ async def run_handoff_turn(ctx: Context, context_id: str, item_id: str | None, s
 
     The reply becomes the LAST thing in the transcript, which the summarizer weights most. A
     work-item thread calls `write_checkpoint`; a general session writes `session-memory/<sid>.md`."""
-    from .runs import _dev_mcp, capture_prompt
+    from .runs import dev_mcp, capture_prompt
     if item_id:
         prompt = kernel_speech.checkpoint_trigger(item_id)
         write_dir = (ctx.internal_root / "dev" / "work-items" / item_id
                      if ctx.internal_root else None)
-        mcp = _dev_mcp(ctx, ctx.cwd, item_id, scope="handoff")
+        mcp = dev_mcp(ctx, ctx.cwd, item_id, scope="handoff")
     else:
         root = session_memory_root(ctx)
         if not root:
@@ -210,7 +210,7 @@ async def run_compaction(ctx: Context, context_id: str, item_id: str | None, ses
 
     The caller holds NO run — this opens its own, which is why every caller must be at a run
     boundary. `item_id=None` is a general session."""
-    from .runs import _begin_run, _end_run, capture_prompt
+    from .runs import begin_run, end_run, capture_prompt
     st = _s(session_id)
     # A compaction is a MAINTENANCE run and must not move the item's workflow state.
     rest_status = "active"
@@ -219,7 +219,7 @@ async def run_compaction(ctx: Context, context_id: str, item_id: str | None, ses
         cur = _dev.read_work_item(ctx.internal_root / "dev", item_id) or {}
         rest_status = str(cur.get("status") or "active")
     # Phase stamp: compaction spend attributes to the phase it happened in, like every item run.
-    run_id = (_begin_run(ctx, context_id, item_id, "compact", model, phase=cur.get("phase"))
+    run_id = (begin_run(ctx, context_id, item_id, "compact", model, phase=cur.get("phase"))
               if item_id else
               _spine.start_run(context_id, mode=ctx.mode, feature="compact",
                                session_id=session_id, model=model))
@@ -319,7 +319,7 @@ async def run_compaction(ctx: Context, context_id: str, item_id: str | None, ses
         # Back-off: two strikes stop compacting this session and page the owner.
         if st.strikes >= STRIKES_TO_BACKOFF and not st.backed_off and not manual:
             st.backed_off = True
-            rest_status = "awaiting_human"   # the page — _end_run below rests the item there
+            rest_status = "awaiting_human"   # the page — end_run below rests the item there
             _dev_store.log_event(context_id, "compaction.backoff",
                                  "Compaction ineffective twice — this session needs a fresh "
                                  "start (cold-start from its latest checkpoint)",
@@ -332,7 +332,7 @@ async def run_compaction(ctx: Context, context_id: str, item_id: str | None, ses
         run_usage = None
     finally:
         if item_id:
-            _end_run(ctx, context_id, item_id, None, rest_status, run_usage,
+            end_run(ctx, context_id, item_id, None, rest_status, run_usage,
                      ctx_pct=post_pct, session_id=session_id)
         else:
             _spine.finish_run(run_id, usage=run_usage, ctx_pct=post_pct,

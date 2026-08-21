@@ -14,7 +14,7 @@ from ....core import autopilot as _autopilot
 from ....core import kernel_speech
 from ....harness.tools.run_tools import make_run_report_server
 from ..turns import ResilientTurn
-from .lifecycle import (_LiveTokens, _begin_run, _dev_mcp, _end_run, log, mark_item_error,
+from .lifecycle import (LiveTokens, begin_run, dev_mcp, end_run, log, mark_item_error,
                         retry_notice)
 from .capture import capture_event, capture_prompt, capture_run_input, surface_from_turn
 from .checkpoints import bank_auto_checkpoint, compacted_checkpoint
@@ -37,7 +37,7 @@ def fire_close_run(context_id: str, item_id: str, spine) -> bool:
             return False
         model = spine.effective_model(context_id, item_model=item.get("model"))
         effort = spine.effective_effort(context_id, item_effort=item.get("effort"))
-        if _begin_run(ctx, context_id, item_id, "close", model, phase="close") is None:
+        if begin_run(ctx, context_id, item_id, "close", model, phase="close") is None:
             return False   # a run is already in flight — don't double-fire (it owns the status)
         run_tasks.track(asyncio.create_task(
             _run_background_close(ctx, context_id, item_id, dev_root / "work-items" / item_id,
@@ -84,7 +84,7 @@ async def _run_background_close(ctx, context_id: str, item_id: str, item_dir: Pa
         compacted_checkpoint=compacted_checkpoint(ctx, item, session_id))
     final_tokens = final_usage = final_session = None
     run_started = time.time()
-    live = _LiveTokens()
+    live = LiveTokens()
     sink: dict = {}   # report_completion lands here (run_tools) — read after the turn
     turn = ResilientTurn("auto-close", item_id=item_id,
                          notify=retry_notice(context_id, item_id, "close"))
@@ -96,7 +96,7 @@ async def _run_background_close(ctx, context_id: str, item_id: str, item_dir: Pa
         approve=scoped_writes_approve(item_dir, deny_all),
         write_boundary=[item_dir],   # the shell boundary, matching the sandbox beside it
         sandbox_writes=[item_dir],   # sandboxed shell; the item folder is its one outside write
-        extra_mcp_servers={**_dev_mcp(ctx, ctx.cwd, item_id, scope="close"),
+        extra_mcp_servers={**dev_mcp(ctx, ctx.cwd, item_id, scope="close"),
                            "run": make_run_report_server(sink)},
         system_append=focus,
         item_bound=True,       # one item is this run's subject — no board-wide in-progress list
@@ -132,7 +132,7 @@ async def _run_background_close(ctx, context_id: str, item_id: str, item_dir: Pa
     stopped = turn.fault.failed and not outcome
     if stopped:
         mark_item_error(ctx, context_id, item_id, turn.fault.reason, phase="close")
-    _end_run(ctx, context_id, item_id, final_tokens, "error" if stopped else "active", final_usage,
+    end_run(ctx, context_id, item_id, final_tokens, "error" if stopped else "active", final_usage,
              outcome="blocked" if stopped else (outcome or None), session_id=final_session)
     try:
         bank_auto_checkpoint(ctx, item_id, since=run_started)

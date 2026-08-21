@@ -15,8 +15,8 @@ from ...core import Usage, Result, Status, TextDelta, ToolResult, deny_all
 from ...core import kernel_speech, gate_briefs, deputy as deputy_core
 from ...core import autopilot as _autopilot
 from ...harness.tools.run_tools import make_deputy_verdict_server
-from .runs import _begin_run, _LiveTokens, capture_prompt, capture_event, capture_run_input, \
-    _dev_mcp, retry_notice, surface_from_turn
+from .runs import begin_run, LiveTokens, capture_prompt, capture_event, capture_run_input, \
+    dev_mcp, retry_notice, surface_from_turn
 from .turns import ResilientTurn
 
 log = logging.getLogger("superme-agent")
@@ -122,12 +122,12 @@ async def run_deputy_gate(context_id: str, item_id: str) -> None:
         # Opening the run takes the item's run-lock, so nothing else advances the item while it
         # judges.
         model, effort = _resolve_deputy_params(context_id, item)
-        run_id = _begin_run(ctx, context_id, item_id, "deputy", model, phase=gate)
+        run_id = begin_run(ctx, context_id, item_id, "deputy", model, phase=gate)
         if run_id is None:
             return
         verdict, final_tokens, final_usage = await _judge(ctx, context_id, item_id, item, gate,
                                                           dev_root, model, effort)
-        # Close the run row to release the lock. NOT `_end_run`, which would re-fire the seam and
+        # Close the run row to release the lock. NOT `end_run`, which would re-fire the seam and
         # loop the deputy.
         rid = _spine.finish_item_run(context_id, item_id, fallback_tokens=final_tokens,
                                      usage=final_usage, outcome=(verdict or {}).get("decision"))
@@ -203,7 +203,7 @@ async def _judge(ctx, context_id: str, item_id: str, item: dict, gate: str, dev_
     # capture site too.
     final_tokens = None
     final_usage = None
-    live = _LiveTokens()
+    live = LiveTokens()
     sink: dict = {}   # the deputy_verdict tool (run_tools) lands the verdict here
     turn = ResilientTurn("deputy judge", item_id=item_id,
                          notify=retry_notice(context_id, item_id, gate))
@@ -213,7 +213,7 @@ async def _judge(ctx, context_id: str, item_id: str, item: dict, gate: str, dev_
         model=model, effort=effort,
         approve=deny_all,                  # read-only judge: no writes, no shell side effects
         sandbox_writes=[],                 # …and sandboxed anyway: cwd only, no network
-        extra_mcp_servers={**_dev_mcp(ctx, ctx.cwd, item_id, scope="deputy"),
+        extra_mcp_servers={**dev_mcp(ctx, ctx.cwd, item_id, scope="deputy"),
                            "deputy": make_deputy_verdict_server(sink)},
         system_append=system_append,
         item_bound=True,                   # judging one item — no board-wide in-progress list

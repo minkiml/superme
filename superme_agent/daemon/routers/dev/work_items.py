@@ -18,7 +18,7 @@ from ...deps import dev_root as _dev_root
 from ....core import artifacts, status_router
 from ....gateway import contexts
 from ...services.runs import (
-    DEFAULT_RUN_MODEL, _begin_run, _run_background_plan, build_item_timeline,
+    DEFAULT_RUN_MODEL, begin_run, run_background_plan, build_item_timeline,
 )
 from ...services import gates
 from ...schemas.dev.work_items import (AuthorizeBody, AutopilotBody, DocEditBody, PlanBody,

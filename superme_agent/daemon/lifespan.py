@@ -248,7 +248,7 @@ def _reconcile_close_steps() -> None:
     The worktree step belongs to `_reconcile_worktrees`."""
     from ..core import status_router
     from .services import scheduler
-    from .services.runs import _render_execution_md
+    from .services.runs import render_execution_md
     try:
         for rid in app_state.spine.repos():
             ctx = contexts.resolve(rid, "dev")
@@ -268,7 +268,7 @@ def _reconcile_close_steps() -> None:
                             not (dev_root / "work-items" / item_id / "artifacts" /
                                  "execution.md").exists():
                         app_state.dev.write_artifact(dev_root, item_id, "execution.md",
-                                                     _render_execution_md(rid, item_id, it))
+                                                     render_execution_md(rid, item_id, it))
                         log.info("close reconcile [%s]: re-snapshot execution.md for %s",
                                  rid, item_id)
                     # The row half alone: this is boot, so the task registry is empty and there is

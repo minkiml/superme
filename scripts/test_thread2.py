@@ -49,7 +49,7 @@ def test_triage_runner_delegates() -> None:
            str(seen))
         # And the plan wrapper still delegates with skill='plan' (shared driver, unchanged behavior).
         seen.clear()
-        asyncio.run(runs._run_background_plan(SimpleNamespace(), "global", "itemP", Path("/tmp/p")))
+        asyncio.run(runs.run_background_plan(SimpleNamespace(), "global", "itemP", Path("/tmp/p")))
         ok("plan runner still drives skill='plan'", seen.get("skill") == "plan", str(seen))
     finally:
         runs._background_intake_run = orig
@@ -80,7 +80,7 @@ def test_fire_auto_triage() -> None:
     async def _fake_triage(*a, **k):
         return None
 
-    orig = (GW.resolve, RN._begin_run, RN._run_background_triage, RN.asyncio)
+    orig = (GW.resolve, RN.begin_run, RN._run_background_triage, RN.asyncio)
     with TemporaryDirectory() as td:
         root = Path(td)
         d = root / "dev" / "work-items" / "i1"
@@ -90,7 +90,7 @@ def test_fire_auto_triage() -> None:
             (d / "item.md").write_text(ITEM.format(status=status, phase=phase))
 
         try:
-            RN._begin_run = _stub_begin
+            RN.begin_run = _stub_begin
             RN._run_background_triage = _fake_triage
             RN.asyncio = types.SimpleNamespace(create_task=_rec_task)
             GW.resolve = lambda cid, mode: SimpleNamespace(internal_root=root, mode="dev", id=cid)
@@ -107,16 +107,16 @@ def test_fire_auto_triage() -> None:
             ok("an item past triage is not kicked",
                not RN.fire_auto_triage("global", "i1", spine) and tasks == [])
 
-            # Already running — _begin_run returns None → no task, no raise.
+            # Already running — begin_run returns None → no task, no raise.
             begins.clear(); tasks.clear()
             write()
-            RN._begin_run = lambda *a, **k: None
+            RN.begin_run = lambda *a, **k: None
             ok("an in-flight run doesn't double-fire",
                not RN.fire_auto_triage("global", "i1", spine) and tasks == [])
 
             # No internal root — nothing fires, no raise (the push still succeeds).
             begins.clear(); tasks.clear()
-            RN._begin_run = _stub_begin
+            RN.begin_run = _stub_begin
             GW.resolve = lambda cid, mode: SimpleNamespace(internal_root=None, mode="dev", id=cid)
             ok("no internal root → no run opened, no raise",
                not RN.fire_auto_triage("global", "i1", spine) and begins == [] and tasks == [])
@@ -130,7 +130,7 @@ def test_fire_auto_triage() -> None:
             ok("a resolve failure is swallowed",
                not RN.fire_auto_triage("global", "i1", spine) and tasks == [])
         finally:
-            GW.resolve, RN._begin_run, RN._run_background_triage, RN.asyncio = orig
+            GW.resolve, RN.begin_run, RN._run_background_triage, RN.asyncio = orig
 
 
 # ------------------------------------------------------------------ skill + replay + FE

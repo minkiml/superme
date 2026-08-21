@@ -67,7 +67,7 @@ async def turn(prompt: str, *, work_item_id: str, resume: str | None = None) -> 
 
 async def turn_retry(prompt: str, *, work_item_id: str, resume: str | None) -> dict:
     """A resumed follow-up can land inside the window where the previous turn's run row is
-    still closing (the result frame streams before _end_run) — retry through the busy reply."""
+    still closing (the result frame streams before end_run) — retry through the busy reply."""
     for _ in range(10):
         t = await turn(prompt, work_item_id=work_item_id, resume=resume)
         if "already has a run in progress" not in t["text"]:

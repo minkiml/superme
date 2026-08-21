@@ -14,12 +14,12 @@ from ....core import (Init, Result, Status, TextDelta, ToolResult, Usage, deny_a
 from ....core import kernel_speech, kind_profiles
 from ....harness.tools.run_tools import make_run_report_server
 from ..turns import ResilientTurn
-from .lifecycle import (_LiveTokens, _begin_run, _dev_mcp, _end_run, log, mark_item_error,
+from .lifecycle import (LiveTokens, begin_run, dev_mcp, end_run, log, mark_item_error,
                         retry_notice)
 from .capture import capture_event, capture_prompt
 from .checkpoints import bank_auto_checkpoint, compacted_checkpoint
 from .completion import UNREPORTED, ensure_completion
-from .background import _run_background_item_skill, _run_background_triage
+from .background import run_background_item_skill, _run_background_triage
 
 def fire_review_entry(context_id: str, item_id: str, spine) -> bool:
     """Fire the review-entry run for an item that just landed at review.
@@ -39,11 +39,11 @@ def fire_review_entry(context_id: str, item_id: str, spine) -> bool:
             return False   # paused / parked — the owner's hold wins
         model = spine.effective_model(context_id, item_model=item.get("model"))
         effort = spine.effective_effort(context_id, item_effort=item.get("effort"))
-        if _begin_run(ctx, context_id, item_id, "review", model, phase="review") is None:
+        if begin_run(ctx, context_id, item_id, "review", model, phase="review") is None:
             return False   # a run is already in flight — don't double-fire
         _dev.set_work_item_status(dev_root, item_id, "active")
         run_tasks.track(asyncio.create_task(
-            _run_background_item_skill(ctx, context_id, item_id,
+            run_background_item_skill(ctx, context_id, item_id,
                                        dev_root / "work-items" / item_id, "review", model, effort)))
         return True
     except Exception:
@@ -71,10 +71,10 @@ def fire_first_investigate(context_id: str, item_id: str, spine) -> bool:
             return False
         model = spine.effective_model(context_id, item_model=item.get("model"))
         effort = spine.effective_effort(context_id, item_effort=item.get("effort"))
-        if _begin_run(ctx, context_id, item_id, "investigate", model, phase="investigate") is None:
+        if begin_run(ctx, context_id, item_id, "investigate", model, phase="investigate") is None:
             return False   # a run is already in flight — don't double-fire
         run_tasks.track(asyncio.create_task(
-            _run_background_item_skill(ctx, context_id, item_id,
+            run_background_item_skill(ctx, context_id, item_id,
                                        dev_root / "work-items" / item_id,
                                        "investigate", model, effort)))
         return True
@@ -101,7 +101,7 @@ def fire_auto_triage(context_id: str, item_id: str, spine) -> bool:
         # capture.
         model = spine.effective_model(context_id, item_model=item.get("model"))
         effort = spine.effective_effort(context_id, item_effort=item.get("effort"))
-        if _begin_run(ctx, context_id, item_id, "triage", model, phase="triage") is None:
+        if begin_run(ctx, context_id, item_id, "triage", model, phase="triage") is None:
             return False   # a run is already in flight — don't double-fire
         run_tasks.track(asyncio.create_task(
             _run_background_triage(ctx, context_id, item_id, dev_root / "work-items" / item_id,
@@ -188,7 +188,7 @@ def fire_phase_feedback(context_id: str, item_id: str, *, phase: str, feedback: 
             ctx = replace(ctx, cwd=repo_dir)
         model = _spine.effective_model(context_id, item_model=item.get("model"))
         effort = _spine.effective_effort(context_id, item_effort=item.get("effort"))
-        if _begin_run(ctx, context_id, item_id, skill, model, phase=run_phase) is None:
+        if begin_run(ctx, context_id, item_id, skill, model, phase=run_phase) is None:
             return False   # a run is already in flight — don't double-fire
         # The marker the FE matches to attribute the turn to `<by>`; `speech` is the bubble,
         # `text` is what gets sent.
@@ -235,7 +235,7 @@ async def _run_deputy_feedback_turn(ctx, context_id: str, item_id: str, item_dir
         compacted_checkpoint=compacted_checkpoint(ctx, live_item, session_id))
     final_tokens = final_usage = final_session = None
     run_started = time.time()
-    live = _LiveTokens()
+    live = LiveTokens()
     sink: dict = {}   # report_completion lands here (run_tools) — read after the turn
     turn = ResilientTurn("deputy feedback", item_id=item_id,
                          notify=retry_notice(context_id, item_id, phase))
@@ -246,7 +246,7 @@ async def _run_deputy_feedback_turn(ctx, context_id: str, item_id: str, item_dir
         effort=effort or _spine.effective_effort(context_id),
         approve=scoped_writes_approve(item_dir, deny_all),
         sandbox_writes=[item_dir],   # sandboxed shell; the item folder is its one outside write
-        extra_mcp_servers={**_dev_mcp(ctx, ctx.cwd, item_id,
+        extra_mcp_servers={**dev_mcp(ctx, ctx.cwd, item_id,
                                       scope=str(live_item.get("phase") or phase)),
                            "run": make_run_report_server(sink)},
         system_append=focus,
@@ -277,7 +277,7 @@ async def _run_deputy_feedback_turn(ctx, context_id: str, item_id: str, item_dir
     stopped = turn.fault.failed and not report
     if stopped:
         mark_item_error(ctx, context_id, item_id, turn.fault.reason, phase=phase)
-    _end_run(ctx, context_id, item_id, final_tokens,
+    end_run(ctx, context_id, item_id, final_tokens,
              "error" if stopped else "awaiting_human", final_usage,
              outcome="blocked" if stopped else ((report or {}).get("outcome") or UNREPORTED),
              session_id=final_session)

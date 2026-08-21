@@ -67,8 +67,8 @@ def clear_item(context_id: str, item_id: str, *, actor: str = "daemon",
                              f"Cleared without the knowledge write — {knowledge_gap}",
                              item_id=item_id, actor="daemon", meta={"gap": knowledge_gap})
     # 1. snapshot BEFORE freeing rows.
-    from .runs import _render_execution_md   # lazy: runs.py drives clearance
-    md = _render_execution_md(context_id, item_id, item)
+    from .runs import render_execution_md   # lazy: runs.py drives clearance
+    md = render_execution_md(context_id, item_id, item)
     _dev.write_artifact(dev_root, item_id, "execution.md", md)
     # 2. terminal: status=done + outcome=completed + done_at (status change, never a delete).
     _dev.set_work_item_terminal(dev_root, item_id, "completed")

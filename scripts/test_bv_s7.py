@@ -414,7 +414,7 @@ class _Ctx:
 
 
 def test_revise_outcome_routes(tmp: Path) -> None:
-    print("_end_run — the `revise` outcome is the one way back")
+    print("end_run — the `revise` outcome is the one way back")
     _RUNS_SRC = src("superme_agent/daemon/services/runs.py")
     fired: list = []
     advanced: list = []
@@ -430,7 +430,7 @@ def test_revise_outcome_routes(tmp: Path) -> None:
         RP.fire_phase_feedback = lambda cid, iid, **kw: fired.append((iid, kw)) or True
         RL._spine, RL._dev_store = _Spine(), _Store()
         RL._set_status = lambda *a, **kw: None
-        RL._end_run(None, "c", "it7", 0, status="awaiting_human", outcome="revise",
+        RL.end_run(None, "c", "it7", 0, status="awaiting_human", outcome="revise",
                     summary="the approach misses the empty case")
         ok("revise routes the conversation back to plan, owner-attributed",
            len(fired) == 1 and fired[0][1]["phase"] == "review" and fired[0][1]["by"] == "owner"
@@ -440,7 +440,7 @@ def test_revise_outcome_routes(tmp: Path) -> None:
         # never ran.
         fired.clear()
         _Spine.live_run = lambda self, *a: {"feature": "build", "phase": "build"}
-        RL._end_run(None, "c", "it7", 0, status="active", outcome="revise",
+        RL.end_run(None, "c", "it7", 0, status="active", outcome="revise",
                     summary="the plan's commands point at the wrong tree")
         ok("a build's revise is left to the loop driver — one writer per transition", not fired)
 
@@ -448,7 +448,7 @@ def test_revise_outcome_routes(tmp: Path) -> None:
         # branch reading the FEATURE never fires.
         fired.clear()
         _Spine.live_run = lambda self, *a: {"feature": "chat", "phase": "review"}
-        RL._end_run(None, "c", "it7", 0, status="active", outcome="revise",
+        RL.end_run(None, "c", "it7", 0, status="active", outcome="revise",
                     summary="you covered storage and stopped; the callers are part of the surface")
         ok("an OWNER's revise, concluded in chat at review, routes exactly like the run's",
            len(fired) == 1 and fired[0][1]["phase"] == "review" and fired[0][1]["by"] == "owner")
@@ -458,7 +458,7 @@ def test_revise_outcome_routes(tmp: Path) -> None:
         # A chat turn at a phase that is NOT review still belongs to that phase's driver.
         fired.clear()
         _Spine.live_run = lambda self, *a: {"feature": "chat", "phase": "build"}
-        RL._end_run(None, "c", "it7", 0, status="active", outcome="revise", summary="nope")
+        RL.end_run(None, "c", "it7", 0, status="active", outcome="revise", summary="nope")
         ok("…and a chat turn at build is still the loop's to route", not fired)
     finally:
         RP.fire_phase_feedback, RL._spine, RL._dev_store, RL._set_status = (
@@ -485,12 +485,12 @@ def test_fire_phase_feedback_owner(tmp: Path) -> None:
         def effective_effort(self, cid, **kw): return "medium"
         def stamp_session_item(self, *a): pass
 
-    orig = (GW.resolve, RP._dev_store, RP._spine, RP._begin_run, RP._run_deputy_feedback_turn)
+    orig = (GW.resolve, RP._dev_store, RP._spine, RP.begin_run, RP._run_deputy_feedback_turn)
     try:
         GW.resolve = lambda cid, mode: _Ctx(internal_root=real, cwd=tmp, id=cid)
         RP._dev_store = store
         RP._spine = _Spine()
-        RP._begin_run = lambda *a, **kw: began.append((a, kw)) or 7
+        RP.begin_run = lambda *a, **kw: began.append((a, kw)) or 7
 
         async def fake_turn(*a, **kw):
             tasks.append((a, kw))
@@ -523,7 +523,7 @@ def test_fire_phase_feedback_owner(tmp: Path) -> None:
         ok("...and a non-plan phase's trigger doesn't carry that instruction",
            "revise_plan" not in KS.phase_feedback_trigger("it7", "t", "triage", "triage", FEEDBACK))
     finally:
-        GW.resolve, RP._dev_store, RP._spine, RP._begin_run, RP._run_deputy_feedback_turn = orig
+        GW.resolve, RP._dev_store, RP._spine, RP.begin_run, RP._run_deputy_feedback_turn = orig
 
 
 # ---------------------------------------------------------------------------- the gate check
@@ -684,11 +684,11 @@ def test_hold_and_compaction_hooks() -> None:
     # latch.
     runs = src("superme_agent/daemon/services/runs.py")
     ws = src("superme_agent/daemon/routers/ws.py")
-    ok("_end_run only releases the latch — it evaluates nothing",
+    ok("end_run only releases the latch — it evaluates nothing",
        "compaction.note_turn_start(session_id)" in runs
        and "maybe_compact" not in runs and "maybe_compact" not in ws)
-    ok("the interactive seam checks BEFORE _begin_run takes the lock",
-       ws.index("compaction.compact_before_run(") < ws.index('_begin_run(ctx, ctx.id, work_item_id, "chat"'))
+    ok("the interactive seam checks BEFORE begin_run takes the lock",
+       ws.index("compaction.compact_before_run(") < ws.index('begin_run(ctx, ctx.id, work_item_id, "chat"'))
     gates = src("superme_agent/daemon/services/gates.py")
     ok("the background chain checks at the gate seam, then re-enters",
        "_compact_then_readvance(ctx, context_id, item_id, item)" in gates
@@ -738,7 +738,7 @@ def test_hold_and_compaction_hooks() -> None:
     ok("run_compaction opens a plain session run when there is no item",
        "item_id: str | None, session_id: str" in comp
        and '_spine.start_run(context_id, mode=ctx.mode, feature="compact"' in comp
-       and "if item_id:\n            _end_run(" in comp)
+       and "if item_id:\n            end_run(" in comp)
     ok("the derived fallback is item-only — a general session has no artifacts to derive from",
        "banked = by_agent or (bool(item_id) and bank_precompaction_checkpoint(" in comp)
     ok("the general handoff scopes writes to session-memory/ and names the exact path",
@@ -880,7 +880,7 @@ def test_chat_can_report() -> None:
     ok("the run-report pen is mounted on every bound work-item turn, not just a parked grill",
        'if work_item_id and ctx.mode == "dev":' in ws_src
        and ws_src.index('make_run_report_server')
-       < ws_src.index("_end_run(ctx, ctx.id, work_item_id"))
+       < ws_src.index("end_run(ctx, ctx.id, work_item_id"))
     ok("a reported `revise` is honoured ONLY at review (elsewhere it is just a logged report)",
        'outcome == "revise" and str((item or {}).get("phase")) != "review"' in ws_src)
     # One reader for interactive and kernel-fired endings alike. Pinned as the seam, not as one
@@ -998,7 +998,7 @@ def test_review_entry_run() -> None:
     ok("...and it judges nothing while ANY run holds the item's lock",
        "if spine.is_item_running(context_id, item_id):" in gates_src)
     ok("the runner is named for what it does, not for the one kind that used to call it",
-       callable(getattr(runs_svc, "_run_background_item_skill", None))
+       callable(getattr(runs_svc, "run_background_item_skill", None))
        and not hasattr(runs_svc, "_run_background_research"))
     # One skill for both kinds: the per-kind override is gone, and so is the parallel skill.
     ok("no per-kind review override remains",
@@ -1729,10 +1729,10 @@ def test_pr_gate_and_page(tmp: Path) -> None:
 
     # Flipping the phase without dispatching leaves the item active with nothing working.
     runs_src = src("superme_agent/daemon/services/runs.py")
-    resolve_src = runs_src.split("async def _run_background_resolve", 1)[1].split("\nasync def ", 1)[0]
+    resolve_src = runs_src.split("async def run_background_resolve", 1)[1].split("\nasync def ", 1)[0]
     ok("a resolved conflict actually STARTS the vet it re-enters",
        "start_vet_run(ctx, context_id, item_id)" in resolve_src)
-    ok("...after `_end_run`, since the resolve run holds the item's lock until then",
+    ok("...after `end_run`, since the resolve run holds the item's lock until then",
        resolve_src.index("start_vet_run(ctx") > resolve_src.index('final_usage, outcome=outcome'))
     ok("...and if it can't start, the item rests where the owner SEES it, never `active` with no run",
        'set_work_item_status(dev_root, item_id, "awaiting_human")' in resolve_src)

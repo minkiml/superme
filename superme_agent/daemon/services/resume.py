@@ -128,8 +128,8 @@ def run_phase(context_id: str, item_id: str) -> tuple[bool, str]:
 
 def _fire(ctx, context_id: str, item_id: str, phase: str) -> tuple[bool, str]:
     """Dispatch to the phase's own firer. Each one already refuses a double-fire (the per-item
-    run-lock in `_begin_run`), so this adds no locking of its own."""
-    from .runs import (_begin_run, _run_background_item_skill, _run_background_plan,
+    run-lock in `begin_run`), so this adds no locking of its own."""
+    from .runs import (begin_run, run_background_item_skill, run_background_plan,
                        fire_auto_triage, fire_close_run, fire_review_entry)
     if phase == "build":
         from .loop import start_build_cycle
@@ -150,11 +150,11 @@ def _fire(ctx, context_id: str, item_id: str, phase: str) -> tuple[bool, str]:
     item = _dev.read_work_item(dev_root, item_id) or {}
     model = _spine.effective_model(context_id, item_model=item.get("model"))
     effort = _spine.effective_effort(context_id, item_effort=item.get("effort"))
-    if _begin_run(ctx, context_id, item_id, phase, model, phase=phase) is None:
+    if begin_run(ctx, context_id, item_id, phase, model, phase=phase) is None:
         return False, "a run is already in flight"
     item_dir = dev_root / "work-items" / item_id
-    coro = (_run_background_plan(ctx, context_id, item_id, item_dir, model, effort)
+    coro = (run_background_plan(ctx, context_id, item_id, item_dir, model, effort)
             if phase == "plan" else
-            _run_background_item_skill(ctx, context_id, item_id, item_dir, phase, model, effort))
+            run_background_item_skill(ctx, context_id, item_id, item_dir, phase, model, effort))
     run_tasks.track(asyncio.create_task(coro))
     return True, f"re-fired the {phase} run"

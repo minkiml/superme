@@ -50,9 +50,9 @@ def test_plan_phase_guard(tmp: Path) -> None:
 
     try:
         WI.contexts = SimpleNamespace(resolve=lambda cid, mode: ctx)
-        # _begin_run must NEVER be reached outside `plan` (the whole point: refuse pre-token-burn).
-        orig_begin = WI._begin_run
-        WI._begin_run = lambda *a, **k: (began.__setitem__("n", began["n"] + 1) or 1)
+        # begin_run must NEVER be reached outside `plan` (the whole point: refuse pre-token-burn).
+        orig_begin = WI.begin_run
+        WI.begin_run = lambda *a, **k: (began.__setitem__("n", began["n"] + 1) or 1)
 
         def run(iid: str):
             return asyncio.run(WI.dev_work_item_run(
@@ -81,7 +81,7 @@ def test_plan_phase_guard(tmp: Path) -> None:
             ok("no run was opened for any refused state", began["n"] == 0)
         finally:
             RES.contexts.resolve, RES._dev, RES._spine = real_resolve, real_dev, real_spine
-            WI._begin_run = orig_begin
+            WI.begin_run = orig_begin
     finally:
         WI.contexts = real_contexts
 

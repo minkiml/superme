@@ -14,7 +14,7 @@ from ...app_state import DevKnowledgeService, DevStore, SystemSpine, get_dev, ge
 from ....core import git_layer
 from ....gateway import contexts
 from ...services import git_ops, pr_view
-from ...services.runs import _begin_run, _run_background_resolve
+from ...services.runs import begin_run, run_background_resolve
 from ...schemas.dev.git import (GitBody, GitHealthResponse, GitMergeResponse, GitResolveResponse,
                                 GitRevertResponse, PrDiffResponse, PrViewResponse)
 
@@ -145,10 +145,10 @@ async def dev_work_item_git_resolve(item_id: str, body: GitBody,
                             detail="nothing to resolve — the sync merged cleanly (or was up to date)")
     model = spine.effective_model(body.context_id, item_model=item.get("model"))
     effort = spine.effective_effort(body.context_id, item_effort=item.get("effort"))
-    if not _begin_run(ctx, body.context_id, item_id, "resolve", model, phase=item.get("phase")):
+    if not begin_run(ctx, body.context_id, item_id, "resolve", model, phase=item.get("phase")):
         # Undo the in-tree conflict state before refusing — never leave a mess behind a 409.
         git_layer._git(wt, "merge", "--abort", check=False)
         raise HTTPException(status_code=409, detail="a run is already in progress for this item")
-    asyncio.create_task(_run_background_resolve(
+    asyncio.create_task(run_background_resolve(
         ctx, body.context_id, item_id, wt, res["conflicts"], model, effort))
     return {"ok": True, "status": "resolving", "id": item_id, "conflicts": res["conflicts"]}
