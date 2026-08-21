@@ -86,7 +86,7 @@ def _importable(name: str) -> bool:
 
 
 def _auth() -> None:
-    """Report only whether a credential is set. Its value is never read back or printed."""
+    """Report only whether the plan token is set. Its value is never read back or printed."""
     env = ROOT / ".env"
     text = env.read_text(encoding="utf-8") if env.is_file() else ""
     filled = {
@@ -94,12 +94,15 @@ def _auth() -> None:
         for line in text.splitlines()
         if not line.lstrip().startswith("#") and "=" in line and line.split("=", 1)[1].strip()
     }
-    keys = {"CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY"}
-    if keys & filled or any(os.environ.get(k) for k in keys):
+    key = "CLAUDE_CODE_OAUTH_TOKEN"
+    if key in filled or os.environ.get(key):
         note(OK, "auth credential set")
     else:
         note(BAD, "auth credential missing",
              "put a token from `claude setup-token` in .env as CLAUDE_CODE_OAUTH_TOKEN")
+    if "ANTHROPIC_API_KEY" in filled:
+        note(WARN, "ANTHROPIC_API_KEY is set and will be ignored",
+             "SuperMe runs on Claude plan auth only; the key is dropped from the process")
 
 
 def _knowledge_home() -> None:

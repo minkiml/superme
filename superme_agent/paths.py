@@ -16,6 +16,10 @@ ROOT_DIR = APP_DIR.parent                               # repo root = the defaul
 ENV_FILE = ROOT_DIR / ".env"
 load_dotenv(ENV_FILE)
 
+# SuperMe runs on Claude plan auth alone. An API key anywhere in the environment silently
+# outranks the OAuth token and bills pay-as-you-go, so this process never carries one.
+os.environ.pop("ANTHROPIC_API_KEY", None)
+
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("superme-agent")
 
@@ -84,10 +88,10 @@ DAEMON_PORT = int(os.environ.get("SUPERME_DAEMON_PORT", "8787"))
 DAEMON_APPROVAL_TIMEOUT = int(os.environ.get("SUPERME_APPROVAL_TIMEOUT", "180"))
 
 
-def warn_on_conflicting_auth() -> None:
-    """Subscription auth (Claude Max) wins only if no API key shadows it."""
-    if os.environ.get("ANTHROPIC_API_KEY") and os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"):
+def check_auth() -> None:
+    """Warn when no plan credential is set, rather than failing on the first turn."""
+    if not os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"):
         log.warning(
-            "Both ANTHROPIC_API_KEY and CLAUDE_CODE_OAUTH_TOKEN are set; the API key "
-            "takes precedence (pay-as-you-go). Unset it to use your Claude plan."
+            "CLAUDE_CODE_OAUTH_TOKEN is not set — every agent turn will fail. Run "
+            "`claude setup-token` and put the token in .env."
         )

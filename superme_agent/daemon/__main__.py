@@ -7,11 +7,11 @@ Localhost only. Surfaces connect to ws://HOST:PORT/ws/agent.
 
 import uvicorn
 
-from ..paths import DAEMON_HOST, DAEMON_PORT, log, warn_on_conflicting_auth
+from ..paths import DAEMON_HOST, DAEMON_PORT, log, check_auth
 
 
 def main() -> None:
-    warn_on_conflicting_auth()
+    check_auth()
     log.info("Starting SuperMe Core daemon on http://%s:%s", DAEMON_HOST, DAEMON_PORT)
     uvicorn.run(
         "superme_agent.daemon.server:app",

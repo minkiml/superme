@@ -77,7 +77,7 @@ Then open http://localhost:5173. To run a layer alone: `python -m superme_agent.
 `python -m web.bff` / `npm --prefix web/frontend run dev`.
 
 **Auth (OAuth, Claude Max):** `claude setup-token` → put the `sk-ant-oat01-…` token in the repo-root
-`.env` as `CLAUDE_CODE_OAUTH_TOKEN`. Keep `ANTHROPIC_API_KEY` unset (it silently takes precedence).
+`.env` as `CLAUDE_CODE_OAUTH_TOKEN`. `ANTHROPIC_API_KEY` is dropped in `paths.py` and never used.
 
 ## The gate
 

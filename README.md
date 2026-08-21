@@ -10,7 +10,7 @@ Code CLI, so they reach Anthropic exactly the way `claude` does and no further.
 
 - **Python 3.11+** and a virtual environment of your choosing
 - **Node.js** with npm
-- The **[Claude Code](https://claude.com/claude-code) CLI**, signed in to a Claude plan or with an API key
+- The **[Claude Code](https://claude.com/claude-code) CLI**, signed in to a Claude plan
 
 ## Setup
 
@@ -34,6 +34,9 @@ python setup_superme.py
 ```
 CLAUDE_CODE_OAUTH_TOKEN=...
 ```
+
+SuperMe runs on Claude plan auth only. `ANTHROPIC_API_KEY` is dropped from the process
+whether or not you set it, so a key in your shell can never quietly bill you instead.
 
 Re-run `python setup_superme.py --check` at any point to see what is still missing. It reports
 without writing anything.
