@@ -1,15 +1,7 @@
-"""Kernel speech — every in-code prompt the kernel says to an agent, in one module.
+"""Kernel speech — every in-code prompt the kernel says to an agent.
 
-Admission rule, applied to every entry:
-  1. AGENT-consumed only. Owner-directed text lives on its own surfaces.
-  2. NOT bound to a code object that is its natural surface — tool descriptions, deny messages
-     and artifact templates stay where they are, and file-based harness content is untouched.
-
-Layers: triggers (background-run user messages, durable) · preambles (per-kind identity blocks,
-per-turn) · assemblers (kernel speech built from durable item state).
-
-`test_thread3` snapshots every entry against a baseline, so an edit here is a deliberate
-re-baseline, and instruction-shaped strings elsewhere fail its outside-registry lint.
+Admission: AGENT-consumed, and not bound to a code object that is its natural surface. Layers
+are triggers (durable) · preambles (per-turn) · assemblers. `test_thread3` snapshots every entry.
 """
 
 import json
@@ -22,16 +14,11 @@ from . import artifacts, kind_profiles, sandbox
 
 def intake_trigger(skill: str, item_id: str, title: str,
                    changed: list[str] | None = None) -> str:
-    """The background intake run's message · durable. The delta is just WHICH skill for WHICH
-    item; the procedure lives in the skill.
+    """The background intake run's message · durable. The delta is WHICH skill for
+    WHICH item.
 
-    `changed` is the records rewritten since THIS PHASE's own last run. Per-phase sessions made
-    re-entry cheap and created one failure with it: a resumed review answered "nothing has changed"
-    from memory and filed over a superseded investigation. A resumed agent's own transcript is the
-    most convincing thing in its context.
-
-    So an advance into a phase that ALREADY HOLDS A THREAD must name what changed. Named files, not
-    "things may have changed" — a re-read is checkable, an exhortation is not."""
+    `changed` names the records rewritten since this phase's own last run — a resumed agent answers
+    "nothing changed" from memory."""
     base = f"Run superme-dev:{skill} for work-item `{item_id}` (\"{title}\")."
     if not changed:
         return base
@@ -50,12 +37,8 @@ def intake_trigger(skill: str, item_id: str, title: str,
 
 def completion_nudge(skill: str) -> str:
     """The completion BACKSTOP, fired only when a run ended without calling
-    `report_completion`.
-
-    The miss tracks whether anything downstream breaks: rare on build and vet, where the loop routes
-    on `outcome`, common on phases that park at a gate either way. The cause is real ambiguity — for
-    triage and review the PHASE ends when someone approves, so "completion" reads as a claim the
-    agent cannot make. Hence the wording: it asks about THIS RUN and names the one call."""
+    `report_completion`. It asks about THIS RUN, because for triage and review the phase ends when
+    someone approves."""
     return (
         f"Your {skill} run is over, but it never called `report_completion`, so the kernel has no "
         f"outcome for it. Call it now and nothing else.\n"
@@ -67,17 +50,16 @@ def completion_nudge(skill: str) -> str:
 
 
 def checkpoint_trigger(item_id: str) -> str:
-    """The pre-compaction handoff turn · durable. The reason is load-bearing here: the thread
-    must know its memory is about to be replaced, or it writes a status update instead of a handoff."""
+    """The pre-compaction handoff turn · durable. The reason is load-bearing:
+    without it the thread writes a status update."""
     return (f"This session is about to be compacted — its conversation will be replaced by a "
             f"summary you did not write. Run superme-dev:checkpoint for work-item `{item_id}` "
             f"now, so what only this conversation knows survives.")
 
 
 def session_checkpoint_trigger(memory_path: str) -> str:
-    """The same for a session with NO work-item. Only the write target differs — a general
-    session has no item folder. The path is named so the skill never derives it, and so the write
-    lands inside the turn's permission scope."""
+    """The same for a session with NO work-item. The path is named so the
+    write lands inside the turn's permission scope."""
     return (f"This session is about to be compacted — its conversation will be replaced by a "
             f"summary you did not write. This session is not tied to a work-item, so run "
             f"superme-dev:checkpoint and WRITE the result to `{memory_path}` (create or overwrite "
@@ -85,18 +67,16 @@ def session_checkpoint_trigger(memory_path: str) -> str:
 
 
 def vet_env_script() -> str:
-    """Absolute path to the vet skill's `vet_env.sh`, or "" if absent.
-
-    Resolved here because a Bash line needs a REAL path: the script lives in the install, not the
-    repo being vetted, so nothing relative resolves. A path the kernel resolved is a fact."""
+    """Absolute path to the vet skill's `vet_env.sh`, or "". The script lives in the
+    install, so nothing relative resolves."""
     from ..paths import DEV_PLUGIN_DIR
     p = DEV_PLUGIN_DIR / "skills" / "vet" / "scripts" / "vet_env.sh"
     return str(p) if p.is_file() else ""
 
 
 def vet_env_note(script: str) -> str:
-    """The two lines every phase that runs checks needs, with a real path. Shared, so build and
-    vet are told the same thing — vet re-executes build's recorded commands."""
+    """The two lines every phase that runs checks needs. Shared, because vet re-executes
+    build's recorded commands."""
     return (f"\n\nThis repo can run its own server from THIS worktree — anything that queries one "
             f"must query that, never an instance already listening (it serves a different checkout, "
             f"where a deleted endpoint still answers):\n"
@@ -112,12 +92,8 @@ def vet_env_note(script: str) -> str:
 def vet_trigger(item_id: str, title: str, deferred: list[str] | None = None,
                 machine: list[dict] | None = None, audit: list[dict] | None = None,
                 vet_env: bool = False) -> str:
-    """The background vet run · durable (vet forgets, so each cycle opens with this).
-
-    `deferred` are checks build declared as needs-you deferrals: intentional skips awaiting the
-    owner, so re-judging them never converges. `machine` are checks the KERNEL already ran this
-    cycle — settled facts, and the ledger refuses a second entry, so an unwarned vetter would spend
-    the run on a tool error."""
+    """The background vet run · durable, since vet forgets each cycle. `deferred` are
+    build's intentional skips; `machine` are checks the kernel already ran."""
     base = f"Run superme-dev:vet for work-item `{item_id}` (\"{title}\")."
     if machine:
         lines = "\n".join(f"- `{m['check']}` — {'PASS' if m.get('passed') else 'FAIL'} "
@@ -126,8 +102,8 @@ def vet_trigger(item_id: str, title: str, deferred: list[str] | None = None,
                  "— they are DONE:\n" + lines + "\nDo not re-run or re-record them; a second entry "
                  "is refused. Read them as findings, perform the remaining checks yourself, and "
                  "cover all of them in your report.")
-    # Only DISAGREEMENTS are named: an audit that agreed is the expected case, while a
-    # disagreement says a claim the whole cycle rests on is untrue. Orientation, not the record.
+    # Only DISAGREEMENTS are named: an audit that agreed is the expected case. Orientation, not
+    # the record.
     if (bad := [a for a in (audit or []) if not a.get("agrees")]):
         lines = "\n".join(
             f"- `{a['command']}` — build recorded "
@@ -150,8 +126,8 @@ def vet_trigger(item_id: str, title: str, deferred: list[str] | None = None,
 
 
 def build_first_trigger(item_id: str, title: str, vet_env: bool = False) -> str:
-    """The loop's ENTRY build run · durable. Build-first: the loop opens with an implementation
-    cycle from the plan, because a vet against an empty tree is a wasted look."""
+    """The loop's ENTRY build run · durable. Build-first, because a vet against
+    an empty tree is a wasted look."""
     return (
         f"The build⟷vet loop just entered BUILD for work-item `{item_id}` (\"{title}\") — this is "
         f"the loop's opening cycle, nothing is built yet. Run superme-dev:build to implement the "
@@ -164,15 +140,11 @@ def build_first_trigger(item_id: str, title: str, vet_env: bool = False) -> str:
 def build_loop_trigger(item_id: str, title: str, cycle: int, report_text: str,
                        *, reload_skill: bool = False,
                        diagnoses: dict[str, dict] | None = None) -> str:
-    """The loop's failure-hop build run · durable in the persistent build thread. The failed
-    cycle's report IS the payload, injected once.
+    """The loop's failure-hop build run · durable. The failed cycle's report IS the
+    payload, injected once.
 
-    `reload_skill` when the thread was COMPACTED: build remembers across cycles, so later cycles
-    skip the skill call — after a compaction that stops being true, and repeating a line the agent
-    already satisfied will not make it re-read.
-
-    `diagnoses` are vet's located causes, lifted ABOVE the report because they are the work order's
-    first line. Vet never names the fix — that reasoning is build's."""
+    `reload_skill` after a compaction. `diagnoses` are vet's located causes, lifted above the report
+    — vet never names the fix."""
     head = (
         "Your context was COMPACTED since the last cycle, so the build procedure may no longer be "
         "in it: invoke the `superme-dev:build` skill again before you start. Then fix"
@@ -196,14 +168,11 @@ def build_loop_trigger(item_id: str, title: str, cycle: int, report_text: str,
 
 def phase_feedback_trigger(item_id: str, title: str, phase: str, skill: str, feedback: str,
                            digest: str | None = None) -> str:
-    """The deputy's send-back re-run · durable, resuming the item's own session.
-
-    Worded as feedback to act on, exactly as the owner's would be — the agent must NOT branch on who
-    sent it. `digest` carries what happened downstream, but never re-dumps the plan: the agent reads
-    plan.md, which is the contract."""
+    """The deputy's send-back re-run · durable. Worded exactly as the owner's
+    would be — the agent must NOT branch on who sent it."""
     digest_block = f"\n\nWhat happened downstream since the last plan (context for your re-plan):\n{digest}\n" if digest else ""
-    # There is one sanctioned way to change plan.md. Naming it matters: the whole-file rewrite is
-    # the tempting move, and it discards the progress build already earned.
+    # There is one sanctioned way to change plan.md. The whole-file rewrite discards the progress
+    # build earned.
     how = ("" if phase != "plan" else
            " Change `plan.md` ONLY through `revise_plan` — never rewrite the file. Split the "
            "feedback into its concerns and give each one its own scope: `resume` when the plan was "
@@ -221,10 +190,8 @@ def phase_feedback_trigger(item_id: str, title: str, phase: str, skill: str, fee
 
 
 def close_trigger(item_id: str, title: str) -> str:
-    """The auto-fired close run · durable, resuming the item's intake thread.
-
-    The ONE closing run. Review's exit locked code and git, so close's whole job is knowledge.
-    Clearance to Done is mechanical and happens after the report."""
+    """The auto-fired close run · durable. Review's exit locked code and git, so close's
+    whole job is knowledge."""
     return (
         f"Work-item `{item_id}` (\"{title}\") merged and entered its CLOSE phase. Run "
         f"superme-dev:close: reflect what LANDED into the general anchor docs through "
@@ -236,9 +203,8 @@ def close_trigger(item_id: str, title: str) -> str:
 
 
 def resolve_trigger(worktree, item_id: str, conflicts: list[str]) -> str:
-    """Consumer: the background conflict-resolve run (runs._run_background_resolve) · durable.
-    The conflict-resolution procedure here is genuine task policy (what to do), not run
-    narration — there is no resolve skill yet to own it (follow-on candidate)."""
+    """The background conflict-resolve run · durable. The procedure sits here because
+    no resolve skill owns it yet."""
     files = "\n".join(f"- {f}" for f in conflicts) or "- (see `git status` in the worktree)"
     return (
         f"A sync-from-main merge left CONFLICTS in this work-item's git worktree at `{worktree}` "
@@ -253,9 +219,8 @@ def resolve_trigger(worktree, item_id: str, conflicts: list[str]) -> str:
 
 
 def distill_trigger() -> str:
-    """Consumer: the background distill run (learning._run_background_distill) · durable in a
-    disposed transcript (the run trail is the only surviving record). Names the sub-agent + the
-    job; the steps live in the distill agent."""
+    """The background distill run · durable in a disposed transcript. Names the
+    sub-agent; the steps live in it."""
     return (
         "Use the `distill` sub-agent (superme-dev:distill) to process the un-distilled memory "
         "candidate pool for this context. Invoke the agent and let it file its proposals."
@@ -264,8 +229,8 @@ def distill_trigger() -> str:
 
 def write_trigger(prop: dict, *, slug: str, workspace, existing_path: str | None,
                   forge_kit) -> str:
-    """The background write run · durable in a disposed transcript. Names the forge sub-agent
-    and hands it the proposal plus the toolkit paths; authoring lives in the agent."""
+    """The background write run · durable in a disposed transcript. Names the forge
+    sub-agent and its toolkit paths."""
     fields = prop.get("fields")
     answers = prop.get("clarification_answers")
     parts = [
@@ -296,9 +261,8 @@ def write_trigger(prop: dict, *, slug: str, workspace, existing_path: str | None
 
 
 def capture_trigger(slice_text: str, focus: str | None = None) -> str:
-    """Consumer: the background capture-sweep run (learning.run_sweep) · durable in a disposed
-    transcript. Names the capture sub-agent + carries the conversation slice; `focus` is the
-    owner's explicit steer (manual sweep only) — a payload directive, not narration."""
+    """The background capture-sweep run · durable in a disposed transcript. `focus`
+    is the owner's steer on a manual sweep."""
     focus_line = (f"\n\n**A capture steer was supplied for this sweep — treat it as a directive, not "
                   f"a hint.** Prioritize it: file it as a candidate unless it is genuinely "
                   f"non-operational (a pure fact/reference with no effect on how SuperMe behaves). "
@@ -312,17 +276,11 @@ def capture_trigger(slice_text: str, focus: str | None = None) -> str:
     )
 
 
-# Per-kind session preambles: per-turn system layer, never durable. Adding an agent is adding
-# a preamble here, not conditionals in the ws turn loop. The daemon picks; Core appends.
-#
-#   general    — the advisor. May author `general/` memory; no code or work-item mutation.
-#   work_item  — the builder, bound to one item. Owns and advances it.
-#   onboarding — the establish-memory persona, applied by project state rather than the
-#                session's stamp, so it un-applies once memory exists.
-#   diagnosis  — the read-only inspector, pointed at a subject run.
+# Per-kind session preambles: per-turn system layer, never durable. Adding an agent means a
+# preamble here, not a conditional.
 
-# Thin preamble, thick skill: one line of WHAT the phase is, plus the skill that owns the
-# procedure. Constraints are derived from live state; this table holds only the constants.
+# Thin preamble, thick skill: one line of WHAT, plus the skill that owns the procedure. Constants
+# only.
 _PHASE_CONTRACTS: dict[str, dict] = {
     "triage":      {"skill": "triage",
                     "what": "classify this item (kind, scope, deliverable) and shape its brief — no building yet"},
@@ -343,31 +301,26 @@ _PHASE_CONTRACTS: dict[str, dict] = {
                     "what": "answer the plan's research questions within its boundaries — read-only on code"},
 }
 
-# EMPTY by design: kind variation belongs in a skill's TEMPLATES, never in a second skill.
-# Kept as a seam — but the moment an entry here names a NEW skill for a shared phase, this
-# comment is the warning.
+# EMPTY by design: kind variation belongs in a skill's TEMPLATES, never a second skill. Kept as a
+# seam.
 _KIND_PHASE_CONTRACTS: dict[tuple[str, str], dict] = {}
 
 
 def phase_contract(kind: str | None, phase: str) -> dict:
-    """What a (kind, phase) pair is for + which skill runs it — the kind's override, else the
-    phase's default. Unknown pairs return {} (the preamble degrades, never raises)."""
+    """What a (kind, phase) pair is for and which skill runs it. Unknown pairs return
+    {} — degrade, never raise."""
     return _KIND_PHASE_CONTRACTS.get((str(kind or ""), phase)) or _PHASE_CONTRACTS.get(phase, {})
 
 
 def compaction_notice(checkpoint_path: str | None, *, has_artifacts: bool = True) -> str:
     """The post-compaction continuity notice, owed until a real turn runs.
+    A POINTER, never contents.
 
-    A POINTER, never contents — a per-turn prompt must not carry a body. What was missing is a
-    REASON to open it: "read on demand" never fires, because a compacted agent does not know it just
-    lost its memory.
-
-    It doubles as the safety envelope: models resume cancelled work from a summary, and this line is
-    the only place we can say the latest message wins."""
+    What was missing is a REASON to open it: a compacted agent does not know it just lost its memory."""
     if not checkpoint_path:
         return ""
-    # `has_artifacts=False` for a general session: it has no item folder, so "trust the item's
-    # artifacts" would point at nothing — the banked memory is the ONLY disk copy there.
+    # A general session has no item folder, so "trust the item's artifacts" would point at
+    # nothing.
     fallback = ("and trust the item's artifacts over your memory"
                 if has_artifacts else "— it is the only record of this thread that survived")
     return (
@@ -381,19 +334,13 @@ def compaction_notice(checkpoint_path: str | None, *, has_artifacts: bool = True
 
 def work_item_preamble(item_id: str, item: dict, item_dir, *, interactive: bool = True,
                        compacted_checkpoint: str | None = None) -> str:
-    """EVERY work-item-bound turn, interactive and background · per-turn.
-
-    A THIN contract derived from (kind, phase): the focus pointer, this phase's job and skill, the
-    edit boundary, the next gate. The PROCEDURE lives in the skill and orientation is on demand,
-    because this rides every turn's system prompt.
-
-    `interactive` swaps the presence line and, on kernel-fired runs, appends the run protocol."""
+    """EVERY work-item-bound turn · per-turn. A THIN contract derived from
+    (kind, phase); the procedure lives in the skill."""
     title = item.get("title") or item_id
     phase = str(item.get("phase") or "triage")
     kind = str(item.get("kind") or "implementation")
     c = phase_contract(kind, phase)
-    # "Sole subject" survives because nothing else in the context stops a run wandering into a
-    # second item, and a background run has nobody to stop it.
+    # "Sole subject" survives because nothing else stops a run wandering into a second item.
     presence = (
         "This is an interactive chat — the user is present. Their interactions primarily "
         "center on this item unless they point elsewhere."
@@ -411,16 +358,12 @@ def work_item_preamble(item_id: str, item: dict, item_dir, *, interactive: bool 
         "the file, you have not read it.",
     ]
     if c:
-        # The skill name rides EVERY turn even though the triggers name it: a trigger is one message,
-        # and a mid-cycle compaction can replace it with a summary that drops it.
+        # The skill name rides EVERY turn: a trigger is one message, and compaction can summarize
+        # it away.
         lines.append(f"\n**This phase:** {c['what']} — procedure in the `superme-dev:{c['skill']}` "
                      f"skill.")
-    # Only `small` says anything: `standard` IS what every skill already describes, so a line for
-    # it would be floor paid every turn to change nothing.
-    #
-    # Two boundaries rather than "be concise", which produces no change. The overflow clause
-    # matters most: the structure stays whole at small, so an agent with nothing to say in a
-    # section it must still write will pad it. Overflow gives that pressure somewhere to go.
+    # Only `small` says anything — `standard` is what every skill already describes. Overflow
+    # gives padding pressure somewhere to go.
     if kind_profiles.item_scale(item) == "small":
         lines.append(
             "\n**This item is scaled `small`.** Read narrow: this item's own folder, and the files "
@@ -436,14 +379,13 @@ def work_item_preamble(item_id: str, item: dict, item_dir, *, interactive: bool 
             "small, and it is the owner's call to make, not yours to absorb."
         )
     # Stated for EVERY phase, not just investigate: review reads findings against the family's
-    # bar. A bare label is enough — what each family owes lives in the phase skills.
+    # bar.
     if (fam := kind_profiles.research_kind(item)):
         why = str(item.get("research_kind_reason") or "").strip()
         lines.append(f"\n**Investigation family: `{fam}`.**"
                      + (f" Triage's reason: {why}" if why else "")
                      + " Your phase's contract says what that family owes.")
-    # Triage is the only reader: the kind is frozen after this phase. Said here because an agent
-    # should meet a rule before it meets the wall that enforces it.
+    # Triage is the only reader: the kind freezes after this phase. Meet the rule before the wall.
     if phase == "triage" and (proposed := str(item.get("proposed_kind") or "")):
         lines.append(
             f"\n**This item was filed as `{proposed}`.** Read the ask yourself and judge it — but "
@@ -451,13 +393,12 @@ def work_item_preamble(item_id: str, item: dict, item_dir, *, interactive: bool 
             "nothing about it. If you disagree, you may not simply record the other one: end your "
             "run with `report_completion(machine.outcome='needs_user')`, ask the owner which it "
             "is, and say what you saw that disagrees.")
-    # Each intake phase runs in its own session, so anything the owner said in an earlier one is
-    # gone from this thread. Placed high, because it can change what the phase should do.
+    # Each intake phase has its own session, so anything the owner said earlier is gone from this
+    # thread.
     if carried := artifacts.carry_owner_input(item_dir):
         lines.append(carried)
-    # Edit boundary: worktree during build+ (S4 freeze), item folder otherwise. Vet is the
-    # exception (build-vet-loop §4): read-only on files by construction — the write tools are
-    # denied at the permission layer, so the preamble states the contract that matches.
+    # Edit boundary: worktree during build+, item folder otherwise. Vet is read-only by
+    # construction at the permission layer.
     wt = item.get("git_worktree")
     if phase == "vet":
         lines.append(
@@ -473,12 +414,8 @@ def work_item_preamble(item_id: str, item: dict, item_dir, *, interactive: bool 
             "file the report with `file_vet_report`."
         )
     elif wt and kind_profiles.get_profile(kind).scratch_worktree:
-        # A SCRATCH tree (kind_profiles: research). Same directory shape as a build worktree,
-        # opposite meaning — nothing here lands, so the sentence below must not borrow the build
-        # boundary's "your changes go here". Two things the agent cannot work out for itself and
-        # would otherwise get wrong in its report: this is a checkout of the ANCHOR (so
-        # uncommitted work in the owner's tree is not visible, and saying so is honest reporting,
-        # not a caveat), and the absolute paths it sees are this tree's, not the repository's.
+        # A SCRATCH tree: same shape as a build worktree, opposite meaning. It checks out the
+        # ANCHOR, and nothing lands.
         base = item.get("git_base")
         lines.append(
             f"\n**Where you are reading:** `{wt}/` — a detached, throwaway checkout of "
@@ -494,9 +431,8 @@ def work_item_preamble(item_id: str, item: dict, item_dir, *, interactive: bool 
             f"you read."
         )
     elif wt:
-        # The branch BASE rides here too (renovation §2.2): review reports the diff shape from
-        # `git diff --stat <base>...HEAD`, and nothing else in the session carries that commit —
-        # without it the skill's instruction names a value the agent would have to invent.
+        # The branch BASE rides here too: review diffs `<base>...HEAD`, and nothing else in the
+        # session carries that commit.
         base = item.get("git_base")
         lines.append(
             f"\n**Edit boundary:** all code changes happen in this item's git worktree `{wt}/` "
@@ -506,8 +442,8 @@ def work_item_preamble(item_id: str, item: dict, item_dir, *, interactive: bool 
             + (f" Branch base: `{base}`." if base else "")
         )
     else:
-        # Kind-aware (M4): research items never get a worktree — telling them "the build phase
-        # gets one" asserts a future their pipeline doesn't have.
+        # Research items never get a worktree — promising them one asserts a future their pipeline
+        # lacks.
         code_line = (
             "the repo stays read-only for this item — research changes no code."
             if kind == "research" else
@@ -517,11 +453,8 @@ def work_item_preamble(item_id: str, item: dict, item_dir, *, interactive: bool 
             "\n**Edit boundary:** this phase touches no real code — writes belong in the item's "
             "own folder (artifacts, checkpoints); " + code_line
         )
-    # Every boundary above includes the item folder, so this sentence is true in all of them —
-    # and it is the half of the boundary rule the agent could not work out for itself. Told only
-    # where it may NOT write, a shell reaches for `$TMPDIR`, is refused, and abandons the work that
-    # needed a file (measured 2026-08-16). Made here rather than at each of the six runners: naming
-    # a directory and creating it are one act, and a path the kernel names must exist.
+    # Told only where it may NOT write, a shell reaches for `$TMPDIR`, is refused, and abandons
+    # the work.
     scratch = sandbox.ensure_scratch(Path(item_dir))
     lines.append(
         f"\n**Scratch space:** intermediate output — inventories, sorted lists, a helper script, "
@@ -530,12 +463,8 @@ def work_item_preamble(item_id: str, item: dict, item_dir, *, interactive: bool 
         f"are outside every boundary. Nothing in it is read as a result or kept after this item "
         f"closes, so put working files there freely and cite none of them."
     )
-    # Two ENDINGS in one block was the defect here (owner, 2026-08-11): this said "say so and stop"
-    # while the run protocol below says the `report_completion` call IS the closing statement and
-    # nothing follows it. Both are true — of different sessions. So the ending belongs to whichever
-    # branch owns it, and what stays shared is the half that is about neither: don't run ahead.
-    # `write_checkpoint` goes with the interactive branch too — a background run has no "long
-    # session" to wrap up, and build/SKILL.md already tells the one phase that resumes to bank one.
+    # The ending belongs to whichever branch owns it. What stays shared is the half about neither:
+    # don't run ahead.
     lines.append(
         "\n**Gates:** the user advances phases and closes items — never you. When this phase's "
         "work is done, say so and stop; don't start the next phase's work. Bank a checkpoint "
@@ -544,14 +473,13 @@ def work_item_preamble(item_id: str, item: dict, item_dir, *, interactive: bool 
         "\n**Gates:** the user advances phases and closes items — never you. Don't start the next "
         "phase's work."
     )
-    # Continuity: owed only while this thread's newest finished run is the compaction itself, so it
-    # disappears by itself once a real turn has run (spine.session_compacted_pending).
+    # Owed only while this thread's newest finished run is the compaction itself, so it clears
+    # itself.
     if compacted_checkpoint:
         lines.append(compaction_notice(compacted_checkpoint))
     if interactive and phase == "review":
         # Here, not in review/SKILL.md: the turn hosting the review conversation never invokes the
-        # phase skill. The capability is reachable from the conversation, so the restraint must be
-        # too. This block is the conversation's whole contract.
+        # phase skill.
         lines.append(
             "\n**Routing:** `plan.md` is not yours to edit here — the only way it changes is by "
             "routing this item back. Ending a turn with "
@@ -570,16 +498,15 @@ def work_item_preamble(item_id: str, item: dict, item_dir, *, interactive: bool 
         )
     if not interactive:
         # The counterpart, the never-page rule, and the tool ending. The payload contract lives in
-        # the tool's own schema, never restated as prose.
+        # the tool's schema.
         lines.append(
             "\n**Run protocol:** no reply from a person arrives mid-run, so never stop to page: a "
             "judgment call you can't make → a `## Assumptions` note in your phase's own record; a "
             "CONTRACT change you can't self-authorize → `request_authorization` (defers it to the "
             "review gate). Either way, finish what you can. End the run by calling "
             "`report_completion` — that call IS your closing statement, so say nothing after it.\n"
-            # A run costs the SUM of its growing transcript, not of its payloads: a result read at step i
-            # is re-sent (N−i) times. Breadth rules do not catch this — the file WAS the right file, read
-            # whole. The mechanism is stated so the rule generalizes past the tools named.
+            # A run costs the SUM of its growing transcript: a result read at step i is re-sent
+            # (N−i) times.
             "\n**Read the span, not the file.** What you read stays in this run's context and is "
             "re-sent on every step after it, so a big file read early is paid many times over. "
             "Once you have a line or a symbol — from a grep, a glob, or the plan — take that span "
@@ -590,8 +517,8 @@ def work_item_preamble(item_id: str, item: dict, item_dir, *, interactive: bool 
 
 
 def general_preamble() -> str:
-    """Consumer: every interactive un-bound dev turn (ws.py) · per-turn. The advisor:
-    discussion-only, may author `general/` memory but no code / work-item mutation."""
+    """Every interactive un-bound dev turn · per-turn. The advisor: discussion only,
+    no code or work-item mutation."""
     return (
         "## General session\n"
         "This session is NOT tied to any work-item. You MAY author and maintain this project's `general/` "
@@ -616,12 +543,8 @@ def general_preamble() -> str:
 
 
 def onboarding_preamble(mode: str | None = None) -> str:
-    """Interactive dev turns while the project has no established memory · per-turn. More
-    directive than the advisor: its job is to stand the project's memory up.
-
-    This IS the kickoff — it carries the skill directive, so nothing need be said in chat to start.
-    `mode` is the connect-time choice: when known, NAME the skill rather than making the agent
-    re-derive greenfield-from-existing."""
+    """Interactive dev turns while the project has no established memory · per-turn.
+    This IS the kickoff — it carries the skill directive."""
     if mode == "project-init":
         skill = ("Run **project-init** — this was connected as a NEW/greenfield project.")
     elif mode == "retrofit":
@@ -647,11 +570,8 @@ def onboarding_preamble(mode: str | None = None) -> str:
 
 
 def diagnosis_preamble(run: dict | None, run_id: int) -> str:
-    """Every turn of a diagnosis session · per-turn. Identity plus the read-only contract, small
-    and STABLE so it caches.
-
-    The subject run's large TRACE is NOT here — injected once at session birth, so resumed turns read
-    it from cache instead of rewriting ~20k every turn."""
+    """Every turn of a diagnosis session. Small and STABLE so it caches; the
+    subject's TRACE is injected once at birth."""
     run = run or {}
     feature = run.get("feature") or "chat"
     status = run.get("status") or "?"
@@ -699,12 +619,8 @@ DEPUTY_STRICTNESS_DEFAULT = "medium"
 
 
 def deputy_preamble(strictness: str = DEPUTY_STRICTNESS_DEFAULT) -> str:
-    """Every deputy dispatch · one-shot, since a deputy is minted per gate and dies with it.
-    Identity, the refusal floor, and the verdict contract.
-
-    The mandate, decision log, gate brief and authorizations ride the PROMPT body, never here.
-    `strictness` tunes ONLY the escalation band; the floor is level-invariant, because the failure
-    this exists to prevent is a deputy that approves everything while sounding thoughtful."""
+    """Every deputy dispatch · one-shot. `strictness` tunes ONLY the escalation band;
+    the floor is level-invariant."""
     if strictness not in _DEPUTY_STRICTNESS:   # defence in depth — the setting is validated too
         strictness = DEPUTY_STRICTNESS_DEFAULT
     band = _DEPUTY_STRICTNESS[strictness]
@@ -837,14 +753,14 @@ def _cap(text: str, cap: int) -> str:
 
 _DEPUTY_MANDATE_CAP = 3_000
 _DEPUTY_LOG_CAP = 2_000
-# A RUNAWAY GUARD, not a summarizer: reports are scaffold-capped by contract, and a cap on a
-# cap only truncates mid-sentence. Should never fire on a report written from its template.
+# A RUNAWAY GUARD, not a summarizer: reports are scaffold-capped already, so this should never
+# fire.
 _DEPUTY_REPORT_CAP = 12_000
 
 
 def render_authorizations_block(pending: list[dict], delegated: list[str]) -> str:
-    """The review deputy's authorization surface: pending requests and which it may grant.
-    `[delegated]` means the owner delegated that scope; `[owner-reserved]` means escalate."""
+    """The review deputy's authorization surface. `[delegated]` means the
+    owner delegated that scope; `[owner-reserved]` means escalate."""
     if not pending:
         return ""
     dset = set(delegated or [])
@@ -861,8 +777,8 @@ def render_authorizations_block(pending: list[dict], delegated: list[str]) -> st
 
 
 def _deputy_check_rows(state: dict) -> str:
-    """The gate's mechanical checks as the deputy reads them — the SAME rows the drilldown
-    renders, off the same call. Which failures grey Approve is a fact, not a judgment to re-derive."""
+    """The gate's mechanical checks as the deputy reads them — the SAME rows the
+    drilldown renders, off one call."""
     checks = state.get("checks") or []
     if not checks:
         return "_(this gate has no mechanical checks.)_"
@@ -878,9 +794,8 @@ def _deputy_check_rows(state: dict) -> str:
 
 
 def _deputy_verdict_table(rows: list[dict]) -> str:
-    """The vet's per-check verdicts, latest per check. The review deputy used to be told to read
-    an evidence ledger that carried a one-line COUNT and no verdicts, so the gate deciding the merge
-    saw no check results at all."""
+    """The vet's per-check verdicts, latest per check. The evidence ledger carried
+    a count and no verdicts."""
     if not rows:
         return ("_(no check verdicts recorded. Either the approved plan declared `depth: none` — "
                 "verify that in `## Verification plan` — or the vet never ran, which is not "
@@ -901,14 +816,8 @@ def deputy_brief_block(item_id: str, title: str, gate: str, *,
                        authorizations: str | None = None) -> str:
     """A deputy dispatch's BIRTH prompt · one-shot.
 
-    THE DEPUTY READS WHAT THE OWNER READS, AND NEVER THE OWNER'S DECISION. Fixed order: mandate →
-    its decision log at this gate → the loop delta on re-entry → the phase's own report, verbatim →
-    the typed gate state's check rows → the PATH to the full contract, opened on demand. At review,
-    also the PRD success signal, the vet verdicts, and pending authorizations.
-
-    What it deliberately no longer gets: the gate-brief markdown, which embedded a truncated copy of
-    the artifact and then named no path to the original; and the owner's decision block, because a
-    judge handed a verdict judges the verdict."""
+    THE DEPUTY READS WHAT THE OWNER READS, AND NEVER THE OWNER'S DECISION — a judge handed a verdict
+    judges the verdict."""
     parts = [f"You are judging the **{gate}** gate of work-item `{item_id}` — \"{title}\".", ""]
     parts += ["### Mandate (this project's standing bar — binding)",
               _cap(mandate or "", _DEPUTY_MANDATE_CAP)
@@ -948,19 +857,15 @@ def deputy_brief_block(item_id: str, title: str, gate: str, *,
     return "\n".join(parts)
 
 
-# intake NARRATES: at review it answers from the record, not from having done the work. The
-# loop's record is promoted into the intake thread ONCE, curated to handoffs and verdicts.
-#
-# The watermark counts ledger entries already promoted — the ledger is append-only, so a count
-# is a stable cursor. Advanced only after the turn carrying the block lands, so a failure
-# re-injects.
+# intake NARRATES: at review it answers from the record. The watermark counts promoted ledger
+# entries — a stable cursor.
 
 _HANDOFF_TOTAL_CAP = 12_000   # the whole block (O10: bounded handoffs, always)
 _HANDOFF_REPORT_CAP = 8_000   # the LATEST new cycle's report, verbatim; older cycles = one line
 
 def _cycle_verdict_summary(item_dir: Path, cycle: int) -> str:
-    """One line summarizing a cycle's recorded check verdicts (older-cycle collapse, O10) —
-    derived from the same §Verification entries the loop driver reads."""
+    """One line summarizing a cycle's recorded check verdicts, from the same
+    §Verification entries the loop reads."""
     latest: dict[str, bool] = {}
     for e in artifacts.evidence_entries(item_dir):
         if int(e.get("cycle") or 0) == cycle:
@@ -971,11 +876,8 @@ def _cycle_verdict_summary(item_dir: Path, cycle: int) -> str:
 
 
 def render_handoff_block(item: dict, item_dir: Path) -> tuple[str | None, int]:
-    """The item's intake thread, first turn after new loop activity · durable, promoted once.
-
-    One line per new driver decision, then the newest cycle's report verbatim with older ones
-    collapsed to verdicts. Attribution is explicit: intake did not do this work and must narrate
-    from the record."""
+    """The item's intake thread, first turn after new loop activity · promoted
+    once. Intake did not do this work and narrates from the record."""
     item_dir = Path(item_dir)
     try:
         mark = int(str(item.get("handoffs_promoted") or 0).strip() or 0)
@@ -1016,14 +918,14 @@ def render_handoff_block(item: dict, item_dir: Path) -> tuple[str | None, int]:
 
 # --- diagnosis subject-run trace ------------------------------------------------------------
 
-# The kinds the trace formatter renders in full (a prompt/reply/tool/result line each). Anything
-# else (usage snapshots etc.) is skipped — the diagnosis preamble wants the human-legible trail only.
+# The kinds the trace formatter renders in full. Anything else is skipped — the human-legible
+# trail only.
 _TRACE_KINDS = {"prompt", "reply", "tool", "mcp", "skill", "agent", "status", "result"}
 
 
 def _format_trace(run: dict, events: list[dict]) -> str:
-    """The subject run's trail as compact, ordered lines — the same (prompt · reply · call) data the
-    Activity trace popup shows, rendered for the agent to read."""
+    """The subject run's trail as compact, ordered lines — the same data the Activity
+    trace popup shows."""
     lines: list[str] = []
     for ev in events:
         kind = (ev.get("kind") or "").lower()
@@ -1038,8 +940,7 @@ def _format_trace(run: dict, events: list[dict]) -> str:
         elif kind == "reply":
             lines.append(f"- **assistant:** {desc}")
         elif kind == "result":
-            # The output of a preceding call — labelled with the tool name (parallel calls batch, so
-            # position alone can mis-pair) and indented so the trail stays legible.
+            # Labelled with the tool name — parallel calls batch, so position alone can mis-pair.
             label = name or "tool"
             lines.append(f"    ↳ {label} returned: {desc}" if desc else f"    ↳ {label} returned: (empty)")
         else:  # a tool / mcp / skill / agent call
@@ -1049,9 +950,8 @@ def _format_trace(run: dict, events: list[dict]) -> str:
 
 
 def diagnosis_trace_block(run: dict | None, events: list[dict], run_id: int) -> str:
-    """Consumer: a diagnosis session's BIRTH turn (ws.py) · durable (injected once so it lands in
-    the SDK transcript — cache-read on every later turn rather than re-sent per-turn;
-    token-inefficiency-per-turn-append)."""
+    """A diagnosis session's BIRTH turn · injected once, so later turns cache-read
+    it instead of re-sending."""
     return (
         f"### Subject activity-run trace (Activity #{run_id})\n"
         f"{_format_trace(run or {}, events)}"

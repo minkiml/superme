@@ -1,10 +1,7 @@
 """The approval seam — surface-neutral human-in-the-loop gating.
 
-Core contains no asking-UI. When a tool needs approval it calls an `ApproveFn` the SURFACE
-supplied: True allows, False denies, and a STRING denies with that reason.
-
-The string exists because a bare False had to stand for three different facts — the owner
-refused, nobody answered, nobody was there — and the agent reasons from whatever we say.
+Core contains no asking-UI. An `ApproveFn` the SURFACE supplies returns True, False, or a
+STRING that denies with a reason — because a bare False stood for three different facts.
 """
 
 import logging
@@ -27,12 +24,8 @@ log = logging.getLogger("superme-agent")
 # (tool_name, tool_input) -> True | False | "why it was denied".  Supplied by each surface.
 ApproveFn = Callable[[str, dict], Awaitable[bool | str]]
 
-# The deny message is the agent's ONLY account of what happened, and it reasons onward from it,
-# so each path states the fact that actually occurred. Sharing one string made a timed-out
-# request report a refusal by a person who never saw it, and the agent invented a cause.
-#
-# Each also says how MUCH to say back: a denial is a one-line event. That instruction lives
-# here, arriving when it applies, rather than in a preamble every turn would pay for.
+# Each path states the fact that actually occurred: the deny message is the agent's only account,
+# and it reasons onward.
 _DENIED_BY_OWNER = (
     "The owner saw this exact call and denied it. Don't retry it, and don't reshape it into a "
     "near-identical call to get around the refusal — if you believe it's needed, say so and ask. "
@@ -52,9 +45,8 @@ NO_HUMAN_TO_ASK = (
     "and don't route around it: do what you can with the tools you have, and record what you "
     "couldn't do in your report."
 )
-# Neither provably read-only nor scoped into the write boundary. Unlike most refusals this one
-# has a fix the agent can apply itself, and naming the remedy turns a dropped half of a sweep
-# into one retry.
+# Unlike most refusals, this one has a fix the agent can apply itself. Naming the remedy earns a
+# retry.
 _BASH_OUTSIDE_BOUNDARY = (
     "That command runs outside this run's write boundary, which is {roots}. This shell did not "
     "start there, and the command does not name it — so nothing about the call says it stays "
@@ -63,17 +55,15 @@ _BASH_OUTSIDE_BOUNDARY = (
     "directory. If the work genuinely belongs outside it, that is a wall — say so in your record "
     "rather than looking for another way through."
 )
-# Only when the boundary actually HAS a scratch dir — telling a builder to create one would
-# litter the repo. "Stay inside the boundary", without saying where a temp file may live, is
-# half a rule.
+# Only when the boundary actually HAS a scratch dir — telling a builder to create one would litter
+# the repo.
 _BASH_SCRATCH_HINT = (
     "\n\nIf what you needed was somewhere to put intermediate output, this run has a scratch "
     "directory at `{scratch}/`. It is inside the boundary, so commands writing there need no "
     "approval; nothing in it is read as a result or kept after the item closes. Use it instead of "
     "`$TMPDIR` or `/tmp`, which are outside every boundary."
 )
-# The number is the point: what a report gets wrong is never the individual wall, it is how
-# many there were by the time the report is written.
+# The number is the point: not the individual wall, but how many there were by report time.
 _REFUSAL_TALLY = (
     "(Tool calls refused so far this run: {n}. The kernel keeps this count — quote it in your "
     "record's coverage note rather than recalling it, and say what it left unverified.)"
@@ -87,8 +77,8 @@ _LEARNING_SCOPE_DENIED = (
 # Tools that write to the filesystem (reads are covered by the safe-tool policy).
 _WRITE_TOOLS = {"Write", "Edit", "MultiEdit", "NotebookEdit"}
 
-# No SuperMe surface handling, so denied with feedback. `AskUserQuestion` needs a picker this
-# chat does not have — the agent must ask in text.
+# No SuperMe surface handling. `AskUserQuestion` needs a picker this chat lacks — the agent must
+# ask in text.
 _SURFACE_UNSUPPORTED = {"AskUserQuestion"}
 _ASK_IN_TEXT_NUDGE = (
     "The AskUserQuestion tool isn't available on this surface. If a human is in this chat, ask "
@@ -97,10 +87,8 @@ _ASK_IN_TEXT_NUDGE = (
     "call in your final report."
 )
 
-# The mutating tools a GENERAL dev session may not use: real dev work flows through a
-# work-item. Denied with FEEDBACK and no prompt, so the agent pivots to itemizing.
-# The itemize tool is absent, so it stays allowed — the one write a general session may make.
-# Bash is absent too: read-only inspection stays useful.
+# Real dev work flows through a work-item. Denied with FEEDBACK and no prompt, so the agent pivots
+# to itemizing.
 _GENERAL_SESSION_BLOCKED = set(_WRITE_TOOLS)
 _GENERAL_SESSION_NUDGE = (
     "Mutating the project's real code (writing/editing files or implementing) is disabled in a "
@@ -110,8 +98,8 @@ _GENERAL_SESSION_NUDGE = (
     "real implementation work, don't try it here: propose itemizing it into an inbox item (the "
     "create-inbox-item skill) so it can be picked up and done properly."
 )
-# Diagnosis carves no `general/` exception, so the general nudge's claim would be false there
-# and the agent would retry a write it was just told is fine.
+# Diagnosis carves no `general/` exception, so the general nudge would be false there and invite a
+# retry.
 _READONLY_SESSION_NUDGE = (
     "This session is fully READ-ONLY — no file writes at all, including the project's memory "
     "docs. Describe the change you'd make instead, and offer to itemize it (the create-inbox-item "
@@ -119,9 +107,8 @@ _READONLY_SESSION_NUDGE = (
 )
 
 
-# Read-only Bash is access the agent already has via Read/Grep/Glob, so it should not prompt.
-# FAIL-CLOSED: True only for a command it can PROVE read-only. A false negative costs a
-# prompt; a false positive is a hole.
+# FAIL-CLOSED: true only when PROVABLY read-only. A false negative costs a prompt; a false
+# positive is a hole.
 _READONLY_BASH_CMDS = frozenset({
     "ls", "pwd", "cat", "head", "tail", "wc", "stat", "file", "tree", "du", "df", "echo", "printf",
     "date", "whoami", "id", "hostname", "uname", "env", "which", "type", "basename", "dirname",
@@ -144,8 +131,7 @@ _GIT_READONLY = frozenset({
 _GIT_MUTATING_ARGS = ("-d", "-D", "-m", "-M", "--delete", "--move", "--add", "--set", "--unset",
                       "--remove", "-f", "--force", "add", "set", "rename", "prune", "set-url",
                       "set-head", "push", "pop", "apply", "drop", "clear", "create")
-# Skipped in PAIRS, so the value is never read as the subcommand. `--opt=…` forms carry their
-# own value and skip singly.
+# Skipped in PAIRS, so the value is never read as the subcommand. `--opt=…` forms skip singly.
 _GIT_GLOBAL_WITH_VALUE = frozenset({"-C", "-c", "--git-dir", "--work-tree", "--namespace",
                                     "--exec-path", "--config-env"})
 _BASH_SEPARATORS = frozenset({";", "&&", "||", "|", "&"})
@@ -160,9 +146,8 @@ def _segment_read_only(seg: list[str]) -> bool:
     if "=" in head and not head.startswith("-"):
         return False
     if head == "git":
-        # Skip git's GLOBAL options before reading the subcommand: `git -C <dir> diff` is the same
-        # read as `git diff`, and it is the idiom review and close are told to use. Reading `seg[1]`
-        # saw `-C` and fell through to an approval no background run can answer.
+        # `git -C <dir> diff` is the same read as `git diff`. Reading `seg[1]` saw `-C` and fell
+        # through to approval.
         i = 1
         while i < len(seg) and seg[i].startswith("-"):
             i += 2 if seg[i] in _GIT_GLOBAL_WITH_VALUE else 1
@@ -180,12 +165,11 @@ def _segment_read_only(seg: list[str]) -> bool:
 
 
 def is_read_only_bash(command: str) -> bool:
-    """PROVE a shell command is read-only (fail-closed). True only when every pipeline segment is a
-    known read-only command with no redirection, command-substitution, or in-place/mutating flags."""
+    """PROVE a shell command is read-only (fail-closed). Every segment must be a
+    known read-only command with no redirection."""
     if not command or not command.strip():
         return False
-    # The two PROVABLY write-free redirects. Without this carve-out every ordinary `ls` using one
-    # stalls at an approval card. Strip the exact tokens; any other `>` still refuses.
+    # The two PROVABLY write-free redirects. Strip the exact tokens; any other `>` still refuses.
     command = command.replace("2>/dev/null", " ").replace("2>&1", " ")
     if any(bad in command for bad in _BASH_UNSAFE_SUBSTR):
         return False
@@ -205,9 +189,8 @@ def is_read_only_bash(command: str) -> bool:
 
 
 def _write_target_under(input_data: dict, root: Path) -> bool:
-    """True if a write tool's target path resolves inside `root`. Fail-CLOSED (no/unparseable path
-    → False): the general-session gate treats an unclear write as out-of-scope, so only a clearly
-    in-`root` write (the project's `general/` memory) escapes the deny."""
+    """True if a write tool's target resolves inside `root`. Fail-CLOSED: an
+    unclear write is out-of-scope."""
     path = input_data.get("file_path") or input_data.get("path")
     if not path:
         return False
@@ -218,21 +201,20 @@ def _write_target_under(input_data: dict, root: Path) -> bool:
         return False
     return target == r or r in target.parents
 
-# Bash is deliberately absent: shell READS are the accepted ceiling, and the OS sandbox does
-# not scope reads either. Defense-in-depth over the by-construction scoping.
+# Bash is deliberately absent: shell READS are the accepted ceiling, and the OS sandbox does not
+# scope reads either.
 _READ_TOOLS = {"Read", "Grep", "Glob"}
 
 
 def _read_target(tool_input: dict) -> str | None:
-    """The path a Read/Grep/Glob call targets. Read → `file_path`; Grep/Glob → `path` (the search
-    root; absent means the agent's cwd, which is always in scope)."""
+    """The path a Read/Grep/Glob call targets. Grep/Glob's absent `path` means the
+    agent's cwd, always in scope."""
     return tool_input.get("file_path") or tool_input.get("path")
 
 
 def path_in_scope(target: str, cwd: Path, roots: list[Path]) -> bool:
-    """True if `target` resolves inside any allowed root; relatives resolve against `cwd`.
-
-    Fail-OPEN on an unparseable path: this is defense-in-depth, not the primary boundary."""
+    """True if `target` resolves inside any allowed root. Fail-OPEN: this is
+    defense-in-depth, not the primary boundary."""
     try:
         p = Path(target)
         if not p.is_absolute():
@@ -251,20 +233,17 @@ def path_in_scope(target: str, cwd: Path, roots: list[Path]) -> bool:
 
 
 async def deny_all(tool_name: str, tool_input: dict) -> bool | str:
-    """An ApproveFn that denies everything — the fallback for a background run. Says so, because
-    an agent told only "denied" will keep spending turns on a gate that will never open."""
+    """An ApproveFn that denies everything, and says so — an agent told only "denied"
+    keeps spending turns."""
     return NO_HUMAN_TO_ASK
 
 
 def scoped_writes_approve(allowed_dir: Path, fallback: ApproveFn) -> ApproveFn:
-    """An ApproveFn that auto-allows writes INSIDE `allowed_dir` and defers the rest to
-    `fallback`. With `deny_all` that is a hard sandbox; with a surface approve, outside writes still
-    prompt.
+    """Auto-allow writes INSIDE `allowed_dir`, defer the rest to `fallback`.
+    With `deny_all` that is a hard sandbox.
 
-    `Bash` gets the same scope and needs it: these sessions run at the REPO cwd, so a mutating
-    command has no in-boundary cwd to be allowed by — which silently costs a research run its whole
-    measurement half. A command that EXPLICITLY scopes itself in (`cd <item-dir> && …`) auto-allows;
-    a bare mutating command at the repo cwd still defers."""
+    `Bash` gets the same scope: these sessions run at the REPO cwd, so only a command that
+    explicitly scopes itself in auto-allows."""
     allowed = allowed_dir.resolve()
 
     async def approve(tool_name: str, tool_input: dict) -> bool | str:
@@ -289,12 +268,8 @@ def scoped_writes_approve(allowed_dir: Path, fallback: ApproveFn) -> ApproveFn:
 
 
 def learning_write_approve(workspace: Path) -> ApproveFn:
-    """Policy for a background learning WRITE run: auto-allow Bash and writes inside `workspace`,
-    deny everything else.
-
-    Safe unattended because the run is hermetic and disposable — the proposal text is the only
-    input, the transcript is discarded, and the workspace is removed. The disk publish stays
-    owner-gated downstream."""
+    """Policy for a background learning WRITE run: auto-allow Bash and writes
+    inside `workspace`, deny the rest. Hermetic and disposable, so it is safe unattended."""
     ws = workspace.resolve()
 
     async def approve(tool_name: str, tool_input: dict) -> bool | str:
@@ -314,8 +289,7 @@ def learning_write_approve(workspace: Path) -> ApproveFn:
     return approve
 
 
-# A build session works ONLY in its worktree, so an outside write is an accident by
-# construction and hard-denies rather than prompting.
+# A build session works ONLY in its worktree, so an outside write is an accident by construction.
 _FREEZE_NUDGE = (
     "Edit boundary (build phase): this work-item owns a dedicated git worktree, and all file "
     "changes must happen inside it (or the item's own artifacts folder). The path you tried is "
@@ -323,12 +297,8 @@ _FREEZE_NUDGE = (
     "to main happens at the review gate."
 )
 
-# A verifier that physically cannot edit cannot report a fix it did not make. The shell stays,
-# for RUNNING checks.
-# Review is read-only on the PLAN. `revise_plan` refuses outside the plan phase, but that is
-# not the boundary that matters: at review the write boundary is directory-level, so plan.md
-# sits inside it and a plain `Edit` would auto-allow. Denied outright — a permission card here
-# would grant exactly the wholesale rewrite the surgical revise exists to prevent.
+# Review is read-only on the PLAN: plan.md sits inside the write boundary, so a plain `Edit` would
+# auto-allow.
 PLAN_READONLY_NUDGE = (
     "`plan.md` is the PLAN phase's to write, and this item is at review — editing it here would "
     "change the contract with nothing downstream re-running against it. If the conversation "
@@ -362,8 +332,8 @@ def _in_any(target: Path, roots: list[Path]) -> bool:
 
 
 def _target_in_any(input_data: dict, roots: list[Path]) -> bool:
-    """True if a write tool's target path resolves inside any of `roots`. Fail-CLOSED (no path /
-    unparseable → False): during a build freeze an unclear write is treated as out-of-bounds."""
+    """True if a write tool's target resolves inside any of `roots`. Fail-CLOSED:
+    an unclear write is out-of-bounds."""
     path = input_data.get("file_path") or input_data.get("path") or input_data.get("notebook_path")
     if not path:
         return False
@@ -373,13 +343,8 @@ def _target_in_any(input_data: dict, roots: list[Path]) -> bool:
         return False
 
 
-# Paths that are not places. `/dev/null` and the standard streams name a kernel device, not a
-# directory anyone can be inside, so asking whether they sit in a write boundary is a category
-# error — and answering "no" costs real work: measured 2026-08-16, an investigation's capability
-# probe (`… | sed … > /dev/null; echo $?`) was refused as an out-of-boundary write, and so were
-# several inventory commands whose only sin was discarding stderr. They are transparent to both
-# boundary checks: they never mark a command as escaping, and they never count as the in-boundary
-# path that scopes one.
+# Paths that are not places. Asking whether `/dev/null` sits in a write boundary is a category
+# error.
 _PSEUDO_DEVICE_ROOTS = ("/dev/null", "/dev/zero", "/dev/tty",
                         "/dev/stdin", "/dev/stdout", "/dev/stderr", "/dev/fd/")
 
@@ -390,9 +355,8 @@ def _is_pseudo_device(token: str) -> bool:
 
 
 def _scratch_in(roots: list[Path]) -> Path | None:
-    """The first boundary root that already HAS a `scratch/` directory, or None. Read from disk
-    rather than derived: an item folder is scaffolded with one, a build worktree is not, and that is
-    the difference between a remedy the agent can follow and an instruction to litter the repo."""
+    """The first boundary root that already HAS a `scratch/` dir, or None. Read from disk,
+    not derived."""
     for root in roots:
         try:
             cand = Path(root) / SCRATCH_DIRNAME
@@ -403,14 +367,10 @@ def _scratch_in(roots: list[Path]) -> Path | None:
     return None
 
 
-# Tokens that look like an absolute path (`/x`, `~/x`) — the only part of a shell command we can
-# honestly reason about. Everything else (relative paths, `cd`, substitution) resolves against the
-# session cwd, which the boundary check already pins inside the worktree.
+# Absolute-looking tokens are the only part of a shell command we can honestly reason about.
 def _bash_escapes_boundary(command: str, roots: list[Path]) -> bool:
-    """True if the command NAMES an absolute path outside every boundary root. A cheap
-    accident-catcher, not a sandbox — it cannot see through `cd`, variables or substitution.
-
-    Escaping does not deny; it falls through to the normal prompt."""
+    """True if the command NAMES an absolute path outside every root. A cheap
+    accident-catcher — escaping prompts, never denies."""
     for raw in _path_tokens(command):
         tok = raw.strip("'\"")
         if tok.startswith("~"):
@@ -430,11 +390,7 @@ def shlex_split_safe(command: str) -> list[str]:
         return command.split()
 
 
-# Commands whose first positional argument is a PATTERN, not a path. Both boundary checks below
-# reason about a command by reading its `/…` tokens as paths, and a regex is spelled like one:
-# `grep -v '/generated/' <in> > <out>` names two files, both in bounds, and was refused for the
-# third "path" — which was the pattern. `-e`/`--regexp` take the pattern as their VALUE, so they
-# are skipped in pairs, the same shape as git's global options.
+# Commands whose first positional argument is a PATTERN, not a path — a regex is spelled like one.
 _PATTERN_FIRST = frozenset({"grep", "egrep", "fgrep", "rg", "ag", "sed", "awk", "gawk"})
 _PATTERN_OPTS = frozenset({"-e", "--regexp"})
 
@@ -465,9 +421,8 @@ def _seg_path_tokens(seg: list[str]) -> list[str]:
 
 
 def _path_tokens(command: str) -> list[str]:
-    """Every token that could name a path. Split per LINE as well as on shell operators: `shlex`
-    treats a newline as whitespace, so a multi-line script's second command reads as the first's
-    argument."""
+    """Every token that could name a path. Split per LINE too: `shlex` reads a newline
+    as whitespace."""
     out: list[str] = []
     for line in command.splitlines() or [command]:
         seg: list[str] = []
@@ -481,12 +436,10 @@ def _path_tokens(command: str) -> list[str]:
 
 
 def _bash_scoped_into_boundary(command: str, roots: list[Path]) -> bool:
-    """True if the command EXPLICITLY scopes itself into a boundary root — `cd <root>…`,
-    `git -C <root>…`, or a command whose every absolute path sits inside one.
+    """True if the command EXPLICITLY scopes itself into a root — `cd <root>`,
+    `git -C <root>`, or every absolute path inside one.
 
-    The second form matters: `mkdir -p <item-dir>/scratch` is scoped by its ARGUMENTS, and refusing
-    it while allowing the identical work behind `cd` teaches a rule nobody can follow. A command
-    naming no absolute path stays unmatched — it resolves against a cwd this cannot see."""
+    A command naming no absolute path stays unmatched: it resolves against a cwd this cannot see."""
     toks = shlex_split_safe(command)
     for i, raw in enumerate(toks[:-1]):
         if raw.strip("'\"") in ("cd", "-C"):
@@ -515,10 +468,8 @@ def _bash_scoped_into_boundary(command: str, roots: list[Path]) -> bool:
     return named > 0
 
 
-# Bypassing the commit gate is denied for every session, in every phase — the one shell rule that
-# is not about the write boundary. An agent whose commit is refused WILL find `--no-verify`; it is
-# the first answer anywhere. Prose already lost this argument once (the trailer rule), so the flag
-# is taken away rather than discouraged, and the deny message carries the actual instruction.
+# An agent whose commit is refused WILL find `--no-verify`. Prose lost this argument once; take
+# the flag away.
 _NO_VERIFY_NUDGE = (
     "Skipping git hooks is not available here. A hook refused your commit for a reason, and "
     "bypassing it converts that reason into a defect someone finds later.\n\n"
@@ -528,21 +479,14 @@ _NO_VERIFY_NUDGE = (
     "and naming what you think the owner should do about it. Do not retry the same commit."
 )
 
-# Flags that turn hooks off, and the subcommands they'd turn them off for. Matched only AFTER the
-# subcommand token: `grep -n foo && git commit -m x` is an ordinary command, and reading `-n` there
-# as a bypass would deny it.
+# Matched only AFTER the subcommand token: `grep -n foo && git commit` is ordinary, not a bypass.
 _HOOK_BYPASS_FLAGS = {"--no-verify", "-n"}
 _HOOK_RUNNING_SUBCOMMANDS = {"commit", "merge", "rebase", "cherry-pick", "revert", "am"}
 _SHELL_BREAKS = {"&&", "||", ";", "|", "&"}
 
 
-# Stopping the host is denied for every session, in every phase. An agent working ON SuperMe reads
-# this project's own restart procedure and follows it — which is correct advice for a human at a
-# keyboard and fatal from inside a run: runs are the daemon's children, so the command kills the
-# agent that issued it, every sibling item mid-flight, and the replacement daemon it just started
-# (observed live, 2026-08-10: one hub build agent took down three items across two repos). Prose
-# cannot hold this line — the procedure is written down in the very repo being worked on — so the
-# command is taken away.
+# Runs are the daemon's children, so a restart kills the agent that issued it and every sibling
+# mid-flight.
 _KILL_VERBS = {"kill", "pkill", "killall"}
 _HOST_MARKERS = ("superme_agent.daemon", "web.bff")
 _KILL_HOST_NUDGE = (
@@ -558,9 +502,8 @@ _KILL_HOST_NUDGE = (
 )
 
 
-# The fan-out backstop's deny message (harness.policy.MAX_SUBAGENTS). It has to do two jobs: stop
-# the spawn, and make sure the CAP — not a quietly narrowed surface — is what the gate reads. An
-# agent told only "denied" carries on and reports as though it covered everything.
+# Must stop the spawn AND make the CAP visible: an agent told only "denied" reports as though it
+# covered everything.
 _SUBAGENT_CAP_NUDGE = (
     "Subagent limit reached — this run has already spawned {cap} of them, which is the ceiling for "
     "ONE run. Nothing is wrong with the brief; there are simply no more readers to hand it to.\n\n"
@@ -572,10 +515,8 @@ _SUBAGENT_CAP_NUDGE = (
 
 
 def kills_the_host(command: str) -> bool:
-    """True if this command would stop the daemon or BFF serving the dashboard.
-
-    A kill verb plus a HOST reference. The port test is narrow on purpose: a vet-env teardown kills
-    by port too, so only the host's own ports count."""
+    """True if this command would stop the daemon or BFF. The port test is narrow:
+    only the host's own ports."""
     from ..paths import DAEMON_PORT
     toks = [t.strip("'\"") for t in shlex_split_safe(command)]
     if not any(Path(t).name in _KILL_VERBS for t in toks):
@@ -600,9 +541,8 @@ _PUBLISH_NUDGE = (
 
 
 def publishes_outward(command: str) -> bool:
-    """True if this command would send local work to a remote. The write boundary and the OS
-    sandbox both reason about the filesystem, so a push is the one mutation that escapes every wall
-    by not touching disk. `git stash push` is local and is not this."""
+    """True if this command would send local work to a remote — the one mutation
+    that escapes every filesystem wall."""
     toks = [t.strip("'\"") for t in shlex_split_safe(command)]
     for i, tok in enumerate(toks[:-1]):
         if Path(tok).name in ("git", "gh") and "push" in toks[i + 1:]:
@@ -625,18 +565,15 @@ def bypasses_commit_hooks(command: str) -> bool:
     return False
 
 
-# Shell multiplexers whose SUBCOMMAND is the meaningful unit for approval memory (`git commit` vs
-# `git push`); everything else is keyed by its program name alone.
+# Multiplexers whose SUBCOMMAND is the meaningful unit for approval memory; everything else keys
+# on the program name.
 _BASH_MULTIPLEXERS = {"git", "npm", "yarn", "pnpm", "npx", "cargo", "go", "make", "python",
                       "python3", "pip", "pip3", "uv", "poetry", "conda", "docker", "node", "bun"}
 
 
 def approval_signature(tool_name: str, tool_input: dict) -> str:
-    """A stable key for "the owner already OK'd this KIND of call". Bash → program plus
-    subcommand for a known multiplexer, program alone otherwise, so approving one `pytest` clears
-    later ones while `git commit` and `git push` stay distinct.
-
-    Coarse ON PURPOSE: exact-command memory barely helps, since agents vary args every call."""
+    """A stable key for "the owner already OK'd this KIND of call". Coarse ON
+    PURPOSE: agents vary args every call."""
     if tool_name == "Bash":
         words = [t.strip("'\"") for t in shlex_split_safe(str(tool_input.get("command", "")))
                  if not t.startswith("-")]
@@ -651,8 +588,8 @@ _SKILL_TOOLS = {"Skill", "SlashCommand"}
 
 
 def _invoked_skill_names(tool_name: str, input_data: dict) -> list[str]:
-    """Best-effort: the skill identifiers a Skill/SlashCommand call targets, with the leading
-    `/` and any args dropped, and the bare name after a `<ns>:` also yielded."""
+    """Best-effort: the skill identifiers a Skill/SlashCommand call targets,
+    leading `/` and args dropped, bare name too."""
     if tool_name not in _SKILL_TOOLS:
         return []
     out: list[str] = []
@@ -676,35 +613,19 @@ def build_can_use_tool(approve: ApproveFn, *, blocked_skills: dict[str, str] | N
                        protected_paths: list[Path] | None = None,
                        protected_nudge: str | None = None,
                        subagent_cap: int | None = MAX_SUBAGENTS):
-    """Wrap a surface's ApproveFn into the SDK's `can_use_tool`. Safe tools auto-allow;
-    everything else defers to `approve`. The switches:
+    """Wrap a surface's ApproveFn into the SDK's `can_use_tool`. Safe tools auto-allow; everything
+    else defers to `approve`.
 
-      blocked_skills       skill → its own deny message. Checked before the safe-tool allow, since
-                           `Skill` is itself safe. Per-skill because the two blocks are unrelated.
-      read_roots + cwd     the L2 read-guard: a read outside the host's allowlist is denied.
-      gate_general_mutations   in a general dev session, file-WRITE tools deny WITH FEEDBACK and no
-                           prompt. `Bash` is not covered — a command is not path-checkable, and
-                           refusing what cannot be proven read-only refused reading too.
-      general_write_root   the one exception: writes into the project's `general/` memory home.
-      write_boundary       the build freeze boundary. Inside, writes auto-allow; outside they hard-
-                           deny. Governs `Bash` too, or the loop parks on a human every command.
-                           Accident-prevention, not security — but a run passing `sandbox_writes`
-                           hands the same roots to the OS, where an escape fails as a syscall.
-      deny_write_tools     removes file-write tools OUTRIGHT — vet's anti-self-report guarantee.
-                           `Bash` deliberately stays: vet must RUN checks.
-      shell_roots          directories the SHELL may name, and nothing else. Research is the one run
-                           whose source and destination are different trees, so every honest command
-                           names both. File writes stay confined by `write_boundary`.
-      subagent_cap         how many subagents ONE turn may spawn. The count lives in this closure,
-                           which is built per turn, and nested spawns come back through here too."""
+    `write_boundary` is accident-prevention, not security — a run passing `sandbox_writes` hands the
+    same roots to `core.sandbox`, where an escape fails as a syscall."""
     spawned = 0   # this turn's subagent tally — see `subagent_cap` above
 
     async def can_use_tool(
         tool_name: str, input_data: dict, context: ToolPermissionContext
     ) -> PermissionResultAllow | PermissionResultDeny:
         nonlocal spawned
-        # Set only by the Bash branch, and only when a command missed the write boundary. Bound
-        # here so every path below can read it without caring whether that branch ran.
+        # Set only by the Bash branch, and only on a boundary miss. Bound here so every path can
+        # read it.
         bash_boundary_miss: str | None = None
         if subagent_cap is not None and tool_name in SUBAGENT_TOOLS:
             if spawned >= subagent_cap:
@@ -712,31 +633,26 @@ def build_can_use_tool(approve: ApproveFn, *, blocked_skills: dict[str, str] | N
                             subagent_cap, tool_name)
                 return PermissionResultDeny(
                     message=_SUBAGENT_CAP_NUDGE.format(cap=subagent_cap))
-            # Counted on the ALLOW, not on the attempt: a spawn the SDK never runs must not spend
-            # a slot, and a refused one is already reported by its deny message.
+            # Counted on the ALLOW: a spawn the SDK never runs must not spend a slot.
             spawned += 1
         if blocked_skills and tool_name in _SKILL_TOOLS:
             for n in _invoked_skill_names(tool_name, input_data):
                 if n in blocked_skills:
                     log.info("blocked skill via %s: %s", tool_name, input_data)
                     # The deny message is the agent's ONLY feedback — it must be TRUE for THIS
-                    # block, or the agent self-corrects toward a wrong conclusion (an onboarding
-                    # skill told "this is learning-pipeline machinery" learns nothing useful).
+                    # block, or it self-corrects wrongly.
                     return PermissionResultDeny(message=blocked_skills[n])
         # Surface-unsupported tools (e.g. AskUserQuestion) → deny with a nudge to ask in plain text.
         if tool_name in _SURFACE_UNSUPPORTED:
             log.info("surface-unsupported tool denied: %s (ask in text)", tool_name)
             return PermissionResultDeny(message=_ASK_IN_TEXT_NUDGE)
-        # Vet read-only (§4 anti-self-report): file-write tools are denied OUTRIGHT — before the
-        # freeze boundary's in-boundary auto-allow and before any human prompt.
+        # Vet is read-only: file-write tools are denied OUTRIGHT, before the in-boundary auto-
+        # allow and any prompt.
         if deny_write_tools and tool_name in _WRITE_TOOLS:
             log.info("vet read-only denied %s", tool_name)
             return PermissionResultDeny(message=deny_write_tools)
-        # Per-FILE carve-out inside the boundary. Checked BEFORE the in-boundary auto-allow (the
-        # protected file lives inside it) and before `approve`, so it can never become a permission
-        # card. Today's only user is review's `plan.md` — and it is deliberately a caller-supplied
-        # path list, not a phase rule baked in here: the caller knows the phase, this layer only
-        # knows paths, exactly as `write_boundary` is passed in.
+        # Per-FILE carve-out INSIDE the boundary, checked before the auto-allow so it can never
+        # become a permission card.
         if protected_paths and tool_name in _WRITE_TOOLS \
                 and _target_in_any(input_data, protected_paths):
             log.info("protected path denied %s", tool_name)
@@ -747,26 +663,22 @@ def build_can_use_tool(approve: ApproveFn, *, blocked_skills: dict[str, str] | N
                 return PermissionResultAllow()
             log.info("freeze boundary denied %s outside the item worktree", tool_name)
             return PermissionResultDeny(message=_FREEZE_NUDGE)
-        # General-session guardrail: hard-deny mutating tools with a nudge, no user prompt. Placed
-        # before the safe-tool check and before `approve`, so the human is never interrupted — the
-        # agent self-corrects toward itemizing (the deny message is its feedback).
+        # Hard-deny with a nudge, before the safe-tool check and `approve`: the human is never
+        # interrupted.
         if gate_general_mutations and tool_name in _GENERAL_SESSION_BLOCKED:
-            # The one allowed write: authoring/maintaining the project's `general/` memory (onboarding
-            # + anchor-doc upkeep). Auto-allow it (autonomous, no prompt); deny everything else.
-            # No general_write_root at all = a fully read-only session (diagnosis) — its deny
-            # message must not claim general/ writes are allowed.
+            # The one allowed write: the project's `general/` memory. No root at all means a fully
+            # read-only session.
             if general_write_root is not None and _write_target_under(input_data, general_write_root):
                 return PermissionResultAllow()
             log.info("general-session guardrail denied %s (nudge to itemize)", tool_name)
             return PermissionResultDeny(message=_GENERAL_SESSION_NUDGE if general_write_root
                                         is not None else _READONLY_SESSION_NUDGE)
-        # Shell: read-only commands are the same access as Read/Grep/Glob → auto-allow (no prompt).
-        # Anything the classifier cannot PROVE read-only defers to approval — in every session,
-        # general ones included.
+        # Read-only commands are the same access as Read/Grep/Glob. Anything unprovable defers to
+        # approval.
         if tool_name == "Bash":
             command = input_data.get("command", "")
-            # Before everything else, including the read-only fast path: no session, in any phase,
-            # gets to run git with its hooks off.
+            # Before everything, including the read-only fast path: no session runs git with its
+            # hooks off.
             if bypasses_commit_hooks(command):
                 log.info("hook bypass denied: %s", command)
                 return PermissionResultDeny(message=_NO_VERIFY_NUDGE)
@@ -780,40 +692,15 @@ def build_can_use_tool(approve: ApproveFn, *, blocked_skills: dict[str, str] | N
                 return PermissionResultDeny(message=_PUBLISH_NUDGE)
             if is_read_only_bash(command):
                 return PermissionResultAllow()
-            # A general session's shell ASKS rather than refuses. The classifier proves read-only or
-            # it proves nothing — `sqlite3 db "SELECT …"` is unprovable for the same reason
-            # `sqlite3 db "DROP …"` is, so refusing the unprovable refused reading the project's own
-            # data while `cat` on the very same file sailed through. Denying also broke the premise
-            # the OS sandbox is skipped on: `core.sandbox` leaves interactive turns unsandboxed
-            # BECAUSE "a person is approving each command there" — which was false here, so neither
-            # the kernel nor the owner was in the loop and the command just died. Falling through to
-            # `approve` makes that premise true. The write TOOLS above still hard-deny: those are
-            # provably mutations, and the itemize nudge belongs to them.
-            # Freeze boundary (S4): a phase agent working inside its own worktree owns its shell.
-            # Running tests, installing deps and committing are the agent's job — the same autonomy
-            # the boundary already grants its writes, and the precondition for the build⟷vet
-            # loop (a loop that stops for a click on every test run is not a loop). The owner's gate
-            # is the merge, not each command.
-            # Auto-allow when the command lives in the boundary: either the session cwd is inside it
-            # (build/vet — worktree cwd), OR the command explicitly scopes itself into it via
-            # `cd <worktree>` / `git -C <worktree>` (review/close — repo cwd for transcript
-            # continuity, P4). Both require the command to name no path OUTSIDE the boundary.
-            # `reachable` is the shell's territory: the write boundary plus any `shell_roots` this
-            # run may also name. The write TOOLS above were already decided against `write_boundary`
-            # alone, so a shell root never becomes a place the agent can `Write` to.
+            # `reachable` is the shell's territory: the write boundary plus this run's
+            # `shell_roots`. Write TOOLS ignore it.
             reachable = [*(write_boundary or []), *(shell_roots or [])]
             if (reachable and not _bash_escapes_boundary(command, reachable)
                     and ((cwd is not None and _in_any(cwd, reachable))
                          or _bash_scoped_into_boundary(command, reachable))):
                 return PermissionResultAllow()
-            # Not read-only, and not scoped into the boundary. It still goes to `approve` — an owner
-            # at the keyboard may well want to allow it — but the REFUSAL now carries the remedy
-            # instead of the generic "a background run cannot ask anyone" sentence, which is true
-            # and useless here: the command was refusable on its own terms and fixable in one edit.
-            # Only when scoping it in WOULD work — the command names no path outside the boundary,
-            # it simply isn't anchored inside one. A command that does reach outside gets the plain
-            # refusal: telling it to `cd` in would be advice that cannot be followed, and for a
-            # destructive one it would be advice worth not giving.
+            # Only when scoping it in WOULD work: a command that truly reaches outside gets the
+            # plain refusal instead.
             if reachable and not _bash_escapes_boundary(command, reachable):
                 bash_boundary_miss = _BASH_OUTSIDE_BOUNDARY.format(
                     roots=", ".join(f"`{r}`" for r in reachable), first=reachable[0])
@@ -833,12 +720,11 @@ def build_can_use_tool(approve: ApproveFn, *, blocked_skills: dict[str, str] | N
         log.info("approval: %s -> %s", tool_name, "ALLOW" if verdict is True else "DENY")
         if verdict is True:
             return PermissionResultAllow()
-        # A shell command that missed its own write boundary is refused ABOUT ITSELF, and the agent
-        # can fix it — so that sentence wins over whatever generic wording the approver returned.
+        # A command refused ABOUT ITSELF, and fixable — that sentence wins over the approver's
+        # generic wording.
         if bash_boundary_miss:
             return PermissionResultDeny(message=bash_boundary_miss)
-        # A surface that KNOWS why hands back the sentence; one that only knows "no" gets the
-        # owner-refusal wording, which is what a plain False has always meant at this seam.
+        # A surface that KNOWS why hands back its sentence; a plain False means the owner refused.
         return PermissionResultDeny(
             message=verdict if isinstance(verdict, str) and verdict.strip() else _DENIED_BY_OWNER)
 
@@ -846,9 +732,8 @@ def build_can_use_tool(approve: ApproveFn, *, blocked_skills: dict[str, str] | N
 
     async def counted(tool_name: str, input_data: dict, context: ToolPermissionContext
                       ) -> PermissionResultAllow | PermissionResultDeny:
-        """Every refusal carries a running tally. Each deny message is read once, hundreds of calls
-        before the report is written — a run refused fourteen times reported "no tool was unavailable".
-        A count is the one thing the agent cannot reconstruct and the kernel cannot get wrong."""
+        """Every refusal carries a tally. A count is the one thing the agent cannot reconstruct
+        and the kernel cannot get wrong."""
         nonlocal refused
         result = await can_use_tool(tool_name, input_data, context)
         if isinstance(result, PermissionResultDeny):
