@@ -362,10 +362,12 @@ class AgentService:
                 protected_paths=protected_paths,
                 protected_nudge=protected_nudge,
             ),
-            # The CLI's native auto-memory is on by default and is not gated by setting_sources.
-            # SUPERME_PY pins the interpreter running SuperMe, so a script the agent shells out
-            # to uses it rather than whatever the inherited PATH happens to resolve.
-            env={"CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1", "SUPERME_PY": sys.executable},
+            env={
+                # On by default in the CLI, and not gated by setting_sources.
+                "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1",
+                # The interpreter SuperMe runs under, so a shelled-out script uses it, not PATH's.
+                "SUPERME_PY": sys.executable,
+            },
             **sandbox_options(sandbox_writes),
         )
 

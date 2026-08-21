@@ -208,6 +208,11 @@ cmd_status() {
    here is the HOST — every run is its child, so starting, stopping or sweeping it would kill the
    run asking. Run this from an item's worktree; there is no vet env to manage here."
 
+# Every lookup goes through $PY, so an interpreter that cannot parse the registry would make
+# them all read as "this repo declares no vet_env" — a misconfiguration wearing a valid answer.
+"$PY" -c "import yaml, sys; yaml.safe_load(open(sys.argv[1]))" "$INSTALL/config/repos.yaml" 2>/dev/null \
+    || die "cannot read config/repos.yaml with $PY — set SUPERME_PY to the interpreter running SuperMe"
+
 case "${1:-}" in
     start)  cmd_start ;;
     stop)   cmd_stop ;;
