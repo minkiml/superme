@@ -3,12 +3,10 @@ import TabBar from '@/ui/TabBar'
 import { MemoryGovernance, PublishedInventory } from '@/features/config/LearningGovernance'
 import { PaneHead } from '../controls'
 
-// Project › Learning — one repo's learning pipeline, in the two states it can be read in: the
-// REVIEW queue (candidates and proposals waiting at one of the two gates, which is work only the
-// owner can do) and the PUBLISHED inventory (what the loop has already landed in the live harness).
+// One repo's learning pipeline in its two readable states: the REVIEW queue, which only the owner
+// can clear, and the PUBLISHED inventory.
 //
-// Universal skills and agents are not here: they belong to no project, so they live under System
-// artifacts. What this shows is what THIS repo learned.
+// Universal artifacts belong to no project, so they live under System.
 
 export default function ProjectLearning({ contextId, repoLabel }: { contextId: string; repoLabel: string }) {
   const [view, setView] = useState<'review' | 'published'>('review')

@@ -6,10 +6,10 @@ import { REPO_ICONS, REPO_ICON_KEYS, RepoIcon } from '@/lib/repoIcons'
 import { setRepoMeta } from '@/lib/api'
 import type { OrbitRepo } from './useCommandStats'
 
-// The per-repo visual-tag editor. A repo's colored square is an owner-defined TAG: pick its color
-// and, optionally, an icon (from the curated lucide set) shown in its place. Purely presentational —
-// the tag color stays underneath an icon. Saving is optimistic (`onSaved` patches the live orbit
-// immediately) and persists to the spine (repo_meta) in the background.
+// A repo's coloured square is an owner-defined TAG: a colour and optionally an icon shown in its
+// place.
+//
+// Saving is optimistic and persists in the background.
 
 export default function TagEditor({
   repo,
@@ -26,9 +26,8 @@ export default function TagEditor({
   const [saving, setSaving] = useState(false)
 
   const defaultColor = colorFor(repo.id)
-  // Same diff rule as every other editor (ui/EditGate): Save is live only while something differs.
-  // The gate itself doesn't apply here — a swatch picker IS the edit mode, and making the owner
-  // press Edit before they can click a colour would add a step to the only thing this popover does.
+  // Same diff rule as every editor. The gate itself does not apply — a swatch picker IS the edit
+  // mode.
   const dirty = color !== repo.color || icon !== repo.icon
 
   async function save() {

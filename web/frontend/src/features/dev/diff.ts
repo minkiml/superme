@@ -1,13 +1,7 @@
-// Unified-patch → structured hunks, plus per-line syntax highlighting.
+// Unified patch to structured hunks, plus per-line syntax highlighting.
 //
-// The PR page used to render `git`'s raw text with one colour per line kind. That is fine for
-// someone already fluent in unified diffs and poor for everyone else (owner, 2026-08-09): a
-// replacement reads as a block of red followed by an unrelated block of green, the code inside it
-// has no syntax at all, and six lines of untouched context around a four-line change make the
-// change the smaller half of the page.
-//
-// So: PARSE here, RENDER in the component. Parsing is a pure function over text — which is the
-// only reason any of this is testable without a browser.
+// PARSE here, RENDER in the component: parsing is a pure function over text, which is the only
+// reason it is testable without a browser.
 
 import hljs from 'highlight.js/lib/core'
 import javascript from 'highlight.js/lib/languages/javascript'
@@ -23,9 +17,8 @@ import sql from 'highlight.js/lib/languages/sql'
 import go from 'highlight.js/lib/languages/go'
 import rust from 'highlight.js/lib/languages/rust'
 
-// Registered EXPLICITLY, not via the full bundle: `highlight.js`'s all-languages build is ~1MB of
-// grammars for languages no diff here will ever contain. These cover what our repos are written
-// in; an unlisted extension renders as plain text, which is exactly what it does today.
+// Registered explicitly: the all-languages build is a megabyte of grammars no diff here will
+// contain.
 const LANGS: Record<string, unknown> = {
   javascript, typescript, python, bash, json, yaml, markdown, css, xml, sql, go, rust,
 }
@@ -52,13 +45,12 @@ export function langFor(path: string): string | null {
   return lang && hljs.getLanguage(lang) ? lang : null
 }
 
-/** One line highlighted to HTML, or escaped plain text when the language is unknown.
+/**
+ * Per LINE, not per file: a diff is two interleaved programs, and a highlighter fed that as one
+ * unit loses its place.
  *
- *  Per LINE, not per file: a diff never holds a syntactically complete file — the `-` and `+`
- *  sides are two different programs interleaved, and feeding that to a highlighter as one unit
- *  makes it lose its place at the first hunk. Per-line highlighting misses multi-line constructs
- *  (a docstring's continuation lines read as plain), which is a fair trade for never colouring the
- *  rest of a file wrong because one hunk opened a bracket it does not close. */
+ * The trade is missing multi-line constructs, which beats colouring the rest of a file wrong.
+ */
 export function highlight(line: string, lang: string | null): string {
   if (!line) return ''
   if (!lang) return escapeHtml(line)
@@ -85,9 +77,10 @@ export type Hunk = {
   rows: Row[]
 }
 
-/** Parse a unified patch into hunks of numbered rows. File headers (`diff --git`, `index`, `---`,
- *  `+++`) are DROPPED: the page already names the file above the patch, so repeating it is a line
- *  of noise between the reader and the change. Text before the first `@@` is ignored. */
+/**
+ * File headers are DROPPED: the page already names the file above the patch. Text before the first
+ * hunk is ignored.
+ */
 export function parsePatch(text: string): Hunk[] {
   const hunks: Hunk[] = []
   let cur: Hunk | null = null
@@ -110,9 +103,8 @@ export function parsePatch(text: string): Hunk[] {
     } else if (line.startsWith('-')) {
       cur.rows.push({ kind: 'del', text: line.slice(1), oldNo: oldNo++, newNo: null })
     } else {
-      // A context line. Git writes it with a leading space; a trailing-whitespace-stripped patch
-      // can leave a bare empty line, which is still a context line and must still advance BOTH
-      // counters — dropping it desynchronises every line number below it.
+      // A stripped patch can leave a bare empty line, which is still a context line and must
+      // advance BOTH counters.
       cur.rows.push({ kind: 'ctx', text: line.startsWith(' ') ? line.slice(1) : line,
                       oldNo: oldNo++, newNo: newNo++ })
     }
@@ -124,11 +116,10 @@ export type Chunk =
   | { type: 'rows'; rows: Row[] }
   | { type: 'fold'; rows: Row[] }   // a collapsed run of untouched context
 
-/** Split a hunk's rows into rendered runs and FOLDED context.
- *
- *  Keeps `pad` context rows either side of every change; any longer untouched run in between (or
- *  at the edges) collapses to one expander. A run only folds when hiding it actually saves lines —
- *  a "show 1 more line" control costs the reader more than the line it hides. */
+/**
+ * Keeps context either side of every change. A run folds only when hiding it saves more lines than
+ * the expander costs.
+ */
 export function foldContext(rows: Row[], pad = 3): Chunk[] {
   const keep = new Array<boolean>(rows.length).fill(false)
   rows.forEach((r, i) => {
@@ -154,12 +145,12 @@ export function foldContext(rows: Row[], pad = 3): Chunk[] {
 
 export type Pair = { left: Row | null; right: Row | null }
 
-/** Rows re-arranged into left/right pairs for the split view.
+/**
+ * A deletion run followed by additions is a REPLACEMENT, paired row by row.
  *
- *  A run of deletions immediately followed by additions is a REPLACEMENT: pair them off row by row
- *  so "this line became that line" sits on one visual line. Unequal runs pad with nulls rather than
- *  stretching — an 8-for-3 replacement is not eight pairs, and pretending otherwise would put
- *  unrelated lines opposite each other, which is worse than an obvious gap. */
+ * Unequal runs pad with nulls rather than stretching: putting unrelated lines opposite each other
+ * is worse than a visible gap.
+ */
 export function pairRows(rows: Row[]): Pair[] {
   const out: Pair[] = []
   let i = 0

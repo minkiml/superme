@@ -3,10 +3,10 @@ import { Boxes, Database, Wrench, KeyRound, Loader2 } from 'lucide-react'
 import ArtifactTabs from '@/ui/ArtifactTabs'
 import { getInventory, type Inventory, type InvTable, type InvTool } from '@/lib/api'
 
-// TEMPORARY "Internals" surface — one read-only snapshot of SuperMe's live data model (every SQLite
-// table + columns + row counts) and the agent-facing tool surface (base + dev, with params). All of
-// it is introspected live by /system/inventory, so nothing here is hand-maintained. This whole
-// feature (tab + component + api + router) is a scaffold; delete it once it's served its purpose.
+// A read-only snapshot of SuperMe's live data model and agent-facing tool surface, introspected
+// live.
+//
+// A scaffold: delete the whole feature once it has served its purpose.
 
 type Tab = 'schema' | 'tools'
 

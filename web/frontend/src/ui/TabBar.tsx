@@ -1,6 +1,5 @@
-// The segmented tab / filter control used across drill-ins and filter rows. Two chromes:
-// `filled` (pill group on a hover fill — the drilldown default) and `outlined` (bordered surface —
-// used by inline filter rows). Generic over the tab key so callers keep their string-literal unions.
+// The segmented tab and filter control. Two chromes, and generic over the tab key so callers keep
+// their unions.
 export default function TabBar<T extends string>({
   tabs,
   value,
@@ -20,14 +19,11 @@ export default function TabBar<T extends string>({
 }) {
   const text = size === 'sm' ? 'text-[12px]' : 'text-[13px]'
   const pad = size === 'sm' ? 'px-2.5 py-1' : 'px-3 py-1'
-  // Each variant's selected fill contrasts its shell: a filled shell (bg-hover) raises to bg-surface;
-  // an outlined shell (bg-surface) recesses to bg-hover — so the active tab always reads as distinct.
+  // Each variant's selected fill contrasts its shell, so the active tab always reads as distinct.
   const shell = variant === 'outlined' ? 'border border-line bg-surface' : 'bg-hover'
   const selected = variant === 'outlined' ? 'bg-hover text-fg' : 'bg-surface text-fg'
   return (
-    // A bar too wide for its column WRAPS (`lib/layout`): it never scrolls sideways and never
-    // pushes the column wider. A tab hidden behind a horizontal scrollbar is a destination the
-    // reader cannot see exists, which is the one thing a set of tabs has to make obvious.
+    // A bar too wide for its column WRAPS: a tab behind a scrollbar cannot be seen to exist.
     <div className={`${full ? 'flex w-full' : 'inline-flex'} max-w-full flex-wrap rounded-lg ${shell} p-0.5 ${text} ${className}`}>
       {tabs.map(([t, lbl]) => (
         <button

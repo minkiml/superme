@@ -5,9 +5,10 @@ import {
 } from 'lucide-react'
 import { pairTrace, type PairedCall, type TraceRow } from '@/lib/trace'
 
-// The execution call-trail, shared by the Activity RunTraceModal and the work-item Execution tab.
-// One row per tool CALL (numbered 1..N so the count and the last row always agree); a call that
-// returned output is CLICKABLE — expanding it reveals the (capped) result inline beneath the row.
+// The execution call-trail, shared by both trace surfaces. One row per tool CALL, numbered so the
+// count and the last row agree.
+//
+// A call that returned output is clickable, revealing the capped result inline.
 
 // Icon + color per call, resolved by tool NAME first then by kind.
 const CALL_STYLE: Record<string, { icon: typeof Terminal; color: string }> = {
@@ -33,18 +34,17 @@ function callVisual(e: TraceRow) {
   return CALL_STYLE[(e.name ?? '').toLowerCase()] ?? KIND_STYLE[e.kind] ?? KIND_STYLE.tool
 }
 
-// A shell command is shown head-first and cut at the row's width, so the part that IDENTIFIES it —
-// the filename at the end of a long absolute path — is the first thing lost. A run reading its own
-// family guide rendered as a `cat` of something under `plugins`, and the trace could not answer
-// whether the guide had been read. Elide the middle of long paths instead, which is what
-// `_short_path` already does for the Read rows; the untouched command stays in the tooltip.
+// Cut at the row's width, the part that IDENTIFIES a command — the filename at the end of a long
+// path — is what is lost.
+//
+// Elide the middle instead; the untouched command stays in the tooltip.
 const LONG_PATH = /(?:~|\/[\w.@-]+)(?:\/[\w.@-]+){3,}/g
 function shortenPaths(cmd: string): string {
   return cmd.replace(LONG_PATH, (m) => '…/' + m.split('/').slice(-2).join('/'))
 }
 
-// Render an already-paired list of calls, numbered from `start` (default 1). `time(row)` renders the
-// per-row timestamp (each surface formats its own field).
+// Numbered from `start`. `time(row)` renders the per-row timestamp, since each surface formats its
+// own field.
 export function TraceRows<T extends TraceRow & { id?: number | string }>({
   rows, start = 1, time,
 }: {
@@ -67,9 +67,7 @@ function CallRow<T extends TraceRow>({ n, pair, time }: { n: number; pair: Paire
   const hasOutput = output.length > 0
   // Only the shell needs it: every other call's `detail` is already an elided path or a short name.
   const shown = call.name === 'Bash' ? shortenPaths(call.description ?? '') : call.description
-  // A sub-agent's call is indented behind a rail hanging off its spawn row above. Numbering stays
-  // continuous with the parent's — the rows really did happen in this order, and renumbering per
-  // agent would break the one thing the sequence is for (reading what happened when).
+  // Numbering stays continuous with the parent's: the rows really did happen in this order.
   const nested = depth === 1
   return (
     <li className={nested ? 'ml-4 border-l border-line pl-2' : undefined}>
@@ -81,25 +79,22 @@ function CallRow<T extends TraceRow>({ n, pair, time }: { n: number; pair: Paire
         className={`flex w-full items-baseline gap-2 rounded px-1 py-0.5 text-left text-[13px] ${hasOutput ? 'hover:bg-hover' : 'cursor-default'}`}
       >
         <span className="w-5 shrink-0 text-right font-mono text-[10px] text-faint">{n}</span>
-        {/* WHOSE call this is. Concurrent sub-agents interleave, so a child row sits under whichever
-            spawn scrolled past last — usually not its own. The tag carries the attribution the
-            position throws away, and matches the tag on that agent's own spawn row. */}
+        {/* WHOSE call this is: concurrent sub-agents interleave, so a child row sits under
+            whichever spawn scrolled past last. */}
         {agent !== undefined && (
           <span className="shrink-0 rounded-sm bg-hover px-1 font-mono text-[9px] leading-4 text-faint"
                 title={nested ? `Called by sub-agent A${agent}` : `Sub-agent A${agent}`}>
             A{agent}
           </span>
         )}
-        {/* The colored, per-tool icon is the row's identity — always shown. Expandable rows also get a
-            trailing chevron (below) as the disclosure affordance. */}
+        {/* The per-tool icon is the row's identity; a chevron is the disclosure affordance. */}
         <Icon size={12} className="shrink-0 translate-y-0.5" style={{ color }} />
         <span className="min-w-0 flex-1 truncate" title={`${call.name}${call.description ? ' - ' + call.description : ''}`}>
           <span className="text-fg">{call.name}</span>
           {call.description && <span className="text-faint"> - {shown}</span>}
         </span>
-        {/* A spawn's own total. The rows below it belong to whichever readers were running, not to
-            this one, so without the count a reader that made seventy calls can look like it made
-            three and stopped. */}
+        {/* A spawn's own total: without it a reader that made seventy calls looks like it made
+            three. */}
         {children !== undefined && (
           <span className="shrink-0 rounded bg-hover px-1.5 py-px font-mono text-[10px] text-muted"
                 title={`${children} tool call${children === 1 ? '' : 's'} by this sub-agent, wherever they appear below`}>

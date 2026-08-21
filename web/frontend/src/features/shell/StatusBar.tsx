@@ -2,17 +2,10 @@ import { useEffect, useState } from 'react'
 import { useConnection, useLiveStats } from '@/lib/live'
 import { isPushOnline } from '@/lib/live/store'
 
-// The slim full-width status bar — the app's answer to "is what I'm looking at real?"
+// The slim status bar — the app's answer to "is what I am looking at real?"
 //
-// It was a placeholder reading "live run & activity signal appears here" while `useCommandStats`
-// swallowed a dead daemon in a bare `catch {}`, so a backend that had stopped rendered as a quiet
-// system: zeros and stale numbers, asserted confidently, with nothing anywhere saying "not
-// connected". That is worse than a slow refresh — the same class of defect as a surface claiming a
-// state that isn't happening — and this bar is the fix.
-//
-// The distinction it draws is deliberate: the daemon ANSWERING is "connected", whatever it answers.
-// A 404 or a 409 is a working backend stating a fact. Only a transport failure — the fetch itself
-// rejecting — counts as down (see `lib/live/store.ts`).
+// The daemon ANSWERING is connected, whatever it answers: a 404 is a working backend stating a
+// fact. Only a transport failure counts as down.
 
 function ago(ms: number): string {
   const s = Math.round(ms / 1000)
@@ -26,8 +19,7 @@ function ago(ms: number): string {
 export default function StatusBar() {
   const conn = useConnection()
   const stats = useLiveStats(2000)
-  // Re-render on a clock so "12s ago" keeps counting up while nothing else changes. Local only —
-  // this never touches the network.
+  // Re-render on a clock so "12s ago" keeps counting. Local only: this never touches the network.
   const [, tick] = useState(0)
   useEffect(() => {
     const t = setInterval(() => tick((n) => n + 1), 1000)
@@ -35,15 +27,8 @@ export default function StatusBar() {
   }, [])
 
   const staleFor = conn.lastOkAt ? Date.now() - conn.lastOkAt : 0
-  // Green is not "we once connected" — it is "data arrived recently". A connection that has gone
-  // quiet for longer than any poll cadence is reported as such rather than left reading healthy.
-  //
-  // The threshold has to come FROM the cadence, not from a constant. A fixed 20s was right while
-  // everything polled at 5s, then push raised idle feeds to the 30s backstop and the bar started
-  // flashing "No update for 21s" for a third of every cycle on a perfectly healthy system — a
-  // false alarm, which costs an honesty indicator more than a missed one. `slowestMs` is the
-  // interval the slowest live feed is actually running at; a full cycle-and-a-half past it means a
-  // poll was genuinely missed. The floor keeps a screen of one fast feed from being twitchy.
+  // Green is not "we once connected" but "data arrived recently": a channel quiet past every
+  // cadence is reported as such.
   const quietAfter = Math.max(20_000, stats.slowestMs * 1.5 + 3000)
   const quiet = conn.online && conn.lastOkAt > 0 && staleFor > quietAfter
 
@@ -54,9 +39,8 @@ export default function StatusBar() {
       ? 'Connecting…'
       : quiet
         ? `No update for ${ago(staleFor)}`
-        // `push` vs plain `live` is the honest distinction between "the daemon tells us"
-        // and "we ask every few seconds" — and it is the one signal that says whether the slow
-        // backstop is in force or the ordinary cadence is carrying the screen.
+        // The honest distinction between the daemon telling us and us asking, and the one signal
+        // for the slow backstop.
         : `${isPushOnline() ? 'Push' : 'Live'} · updated ${ago(staleFor)}`
 
   return (
@@ -67,9 +51,7 @@ export default function StatusBar() {
         <span className={conn.online ? '' : 'text-danger'}>{text}</span>
       </span>
       {!conn.online && <span className="text-danger/70">nothing on screen is current</span>}
-      {/* The load this screen actually costs — the guarantee, measured rather than asserted.
-          `feeds` is how many endpoints are subscribed right now; `req/min` is the real request rate
-          since load. Both drop when a view unmounts, which is the property that makes routing safe. */}
+      {/* The load this screen actually costs, measured rather than asserted. */}
       <span className="ml-auto tabular-nums" title="Live data feeds subscribed · request rate since load">
         {stats.watched} feeds · {stats.perMinute.toFixed(0)} req/min
       </span>

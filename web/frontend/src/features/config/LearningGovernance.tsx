@@ -20,16 +20,11 @@ import {
 import { fmtLocalDate, fmtLocal } from '@/lib/format'
 import { Empty } from '@/features/dev/common'
 
-// Learning governance surfaces (PRD §4.10.4) — the tier-C pipeline behind System config's
-// Project · Learning section: `MemoryGovernance` (candidate gauges + the two-gate distill→forge→publish review
-// queue, each proposal carrying its execution trace) and `PublishedInventory` (the live inventory
-// of learned artifacts). `PublishedFileModal` is exported for Foundations' skills/agents surface.
-// Was split out of the old ManageHarness.
-// --- Published inventory (#6 runtime management) --------------------------------------------
-// The LEARNED artifacts the owner published into the live harness, keyed by their proposal (so
-// SuperMe's shipped skills never appear). Disable suspends one without losing it (constitution =
-// frontmatter flag; skill/agent = moved into a `.disabled/` shadow); delete removes it for good.
-// Effective on the next dev turn.
+// The tier-C pipeline behind Project Learning: the two-gate review queue, and the inventory of what
+// the loop published.
+//
+// Disable suspends a published artifact without losing it; delete removes it for good. Effective on
+// the next dev turn.
 const PUB_FORM_META: Record<PublishedForm, { label: string; icon: typeof Bot; blurb: string }> = {
   constitution: { label: 'Constitution', icon: FileText, blurb: 'Always-on rules in the system prompt.' },
   skill: { label: 'Skills', icon: Sparkles, blurb: 'Loaded via the dev plugin.' },
@@ -53,8 +48,7 @@ export function PublishedInventory({ contextId }: { contextId: string }) {
   }, [contextId])
   useEffect(() => { load() }, [load])
 
-  // Publishing happens at gate 2 in the sibling Review tab, and a background dev turn can retire
-  // an artifact. With no manual refresh, returning to the window is the refresh.
+  // With no manual refresh, returning to the window is the refresh.
   useEffect(() => {
     const onVisible = () => document.visibilityState === 'visible' && load()
     window.addEventListener('focus', load)
@@ -263,13 +257,10 @@ export function MemoryGovernance({ contextId }: { contextId: string }) {
   const [popup, setPopup] = useState<null | 'candidates' | 'knowledge'>(null)
   const poll = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // load() is referenced by the poll loop, which is itself created before load() is defined;
-  // a ref breaks that cycle without recreating the interval every render.
+  // The poll loop is created before `load` is defined, so a ref breaks that cycle.
   const loadRef = useRef<() => void>(() => {})
 
-  // Poll the server's distilling truth until it clears, then refetch the queue. Guarded so a
-  // remount (which re-syncs from stats) can't spawn a second interval. The spinner is driven
-  // ENTIRELY by server state, never a local shadow — so navigating away + back restores it.
+  // Guarded so a remount cannot spawn a second interval.
   const startPolling = useCallback(() => {
     if (poll.current) return
     const started = Date.now()
@@ -291,13 +282,12 @@ export function MemoryGovernance({ contextId }: { contextId: string }) {
   const load = useCallback(() => {
     Promise.all([getProposals(contextId), getMemoryStats(contextId)])
       .then(([p, s]) => {
-        // Keep every OPEN proposal in the queue — proposed (gate 1), writing (write run in flight),
-        // and drafted (gate 2, awaiting publish). Terminal ones drop off.
+        // Keep every OPEN proposal in the queue: at gate 1, mid-write, or at gate 2. Terminal ones
+        // drop off.
         setProps(p.proposals.filter((x) => ['proposed', 'writing', 'drafted'].includes(x.status)))
         setStats(s)
         setErr(null)
-        // Re-sync to server truth: if a distill is running (e.g. we just remounted mid-run),
-        // restore the spinner + resume polling; otherwise make sure we're cleared.
+        // Re-sync to server truth: a remount mid-run restores the spinner and resumes polling.
         if (s.distilling) { setDistilling(true); startPolling() }
         else setDistilling(false)
       })
@@ -313,8 +303,7 @@ export function MemoryGovernance({ contextId }: { contextId: string }) {
   // Stop polling if the component unmounts mid-distill.
   useEffect(() => () => { if (poll.current) { clearInterval(poll.current); poll.current = null } }, [])
 
-  // "Run distill": fire the background pass, then let the (server-truth) poll loop drive the
-  // spinner until it clears + refetch. `already_running` still tracks the in-flight pass.
+  // Fire the background pass, then let the server-truth poll drive the spinner until it clears.
   const onDistill = async () => {
     try {
       const r = await runDistill(contextId)
@@ -326,9 +315,7 @@ export function MemoryGovernance({ contextId }: { contextId: string }) {
     }
   }
 
-  // Refetch when the owner returns to the tab/window. Proposals can land from a background
-  // distill turn (or the daemon) while this surface stays mounted, and there is no manual
-  // refresh: returning to the window is the refresh.
+  // Proposals land from a background turn while this stays mounted, and there is no manual refresh.
   useEffect(() => {
     const refetch = () => load()
     const onVisible = () => document.visibilityState === 'visible' && load()
@@ -340,8 +327,8 @@ export function MemoryGovernance({ contextId }: { contextId: string }) {
     }
   }, [load])
 
-  // While any proposal is mid-forge (`writing`), poll the queue so its card narrates the live phase
-  // and flips to `drafted` the moment the run finishes.
+  // While any proposal is mid-forge, poll so its card narrates the live phase and flips when it
+  // finishes.
   const anyWriting = props.some((p) => p.status === 'writing')
   useEffect(() => {
     if (!anyWriting) return
@@ -355,8 +342,8 @@ export function MemoryGovernance({ contextId }: { contextId: string }) {
   return (
     <div>
       {/* Stat tiles — pipeline gauges. Click a tile for the drill-down popup. */}
-      {/* Two tiles side by side, one above the other when the pane is too narrow to hold both —
-          a tile squeezed until its label truncates to a letter is not a smaller tile. */}
+      {/* Stacked when the pane cannot hold both: a tile squeezed until its label truncates is not
+          a smaller tile. */}
       <div className="mb-4 grid grid-cols-[repeat(auto-fit,minmax(210px,1fr))] gap-3">
         <StatTile
           icon={Sparkles}
@@ -400,8 +387,7 @@ export function MemoryGovernance({ contextId }: { contextId: string }) {
         </div>
       )}
 
-      {/* The review queue is the whole Learning surface now — the live published inventory lives in
-          the Published tab; the legacy dev/memory "Applied facts" store is retired (WI-8). */}
+      {/* The review queue is the whole surface; the live inventory lives in the Published tab. */}
       {props.length > 0 ? (
         <ReviewQueue proposals={props} contextId={contextId} onChange={load} />
       ) : (
@@ -564,9 +550,7 @@ function ReviewQueue({
   onChange: () => void
 }) {
   const [open, setOpen] = useState<MemoryProposal | null>(null)
-  // The stats tile counts `pending` = every OPEN proposal (proposed + writing + drafted). This queue
-  // shows exactly that set, so we break it down by badge state here (proposed = gate-1, drafted =
-  // gate-2) rather than re-using the word "pending" — the sub-counts sum to the tile's pending total.
+  // The tile counts every OPEN proposal, so this queue breaks that same set down by badge state.
   const proposed = proposals.filter((p) => p.status === 'proposed').length
   const drafted = proposals.filter((p) => p.status === 'drafted').length
   const writing = proposals.filter((p) => p.status === 'writing').length
@@ -601,9 +585,7 @@ function ReviewQueue({
   )
 }
 
-// One proposal as a rectangular card (mirrors the System dashboard repo cards): status badge on top,
-// then title, then form/scope/confidence footer. Detail lives in the popup. While the proposal is
-// being forged (`writing`), the badge becomes a live phase indicator (forging → evaluating → polishing).
+// One proposal as a card: badge, title, then the footer. Detail lives in the popup.
 function ProposalCard({ p, onOpen }: { p: MemoryProposal; onOpen: () => void }) {
   const writing = p.status === 'writing'
   const [elapsed, setElapsed] = useState(0)
@@ -644,10 +626,8 @@ function ProposalCard({ p, onOpen }: { p: MemoryProposal; onOpen: () => void }) 
   )
 }
 
-// The proposal review popup (mirrors WorkItemModal) — the two-gate decision surface. Tabs:
-// Proposal (summary · body · spec · clarifications), Candidates (provenance), and — once the write
-// The per-proposal execution trace (reused from the events table, keyed on meta.proposal_id) — a
-// lifecycle timeline: filed by distill → approved → forge run start/end → artifact edits → publish.
+// The two-gate decision surface, in tabs. The action row belongs to whichever gate the proposal is
+// at.
 const STEP_META: Record<string, { label: string; tint: string }> = {
   'memory.proposed': { label: 'Filed', tint: 'text-muted' },
   'memory.merged': { label: 'Merged in', tint: 'text-accent-text' },
@@ -739,8 +719,7 @@ function ProposalModal({
     return () => clearInterval(t)
   }, [writing])
 
-  // While the write run is in flight, poll the proposal until it leaves `writing` (→ drafted, or
-  // back to proposed if the run failed). Then surface the staged artifact.
+  // Poll until the proposal leaves `writing`, then surface the staged artifact.
   useEffect(() => {
     if (!writing) return
     let alive = true
@@ -798,8 +777,7 @@ function ProposalModal({
     }
   }
 
-  // Execution trace — fetch when the tab opens; refetch as the proposal advances (the timeline
-  // grows: approve → write.start/end → edits → publish).
+  // Fetched when the tab opens and refetched as the proposal advances, because the timeline grows.
   useEffect(() => {
     if (tab !== 'execution') return
     let alive = true
@@ -1078,9 +1056,7 @@ function relArtifactPath(p: string): string {
   return i >= 0 ? '.' + p.slice(i) : p
 }
 
-// Render a STAGED artifact (pre-publish — not yet a file on disk) the same way PublishedFileModal
-// renders a live one: YAML frontmatter as a compact meta block, the markdown body as a real doc.
-// So the gate-2 preview reads like the published artifact will, not a raw text dump.
+// A staged artifact renders like a live one, so the gate-2 reader sees what will land.
 function StagedArtifactPreview({ content }: { content: string }) {
   const fm = content.match(/^---\n([\s\S]*?)\n---\n?/)
   const front = fm ? fm[1] : ''
@@ -1151,8 +1127,7 @@ function EvalReportView({ report }: { report: EvalReport }) {
           {issues.length === 0 ? 'no issues' : `${issues.length} issue${issues.length > 1 ? 's' : ''}${highs ? ` · ${highs} high` : ''}`}
         </span>
       </div>
-      {/* The artifact's OWN run cost — measured by exercising it once on a synthetic task.
-          'run' = skill/agent (tokens/time/cost); 'overhead' = constitution's always-on per-turn cost. */}
+      {/* The artifact's OWN run cost, measured by exercising it once on a synthetic task */}
       {m && (
         <div className="space-y-1.5 rounded-md border border-line bg-app px-3 py-2">
           <div className="text-[10px] uppercase tracking-wide text-faint">

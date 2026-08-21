@@ -18,11 +18,9 @@ import ConstitutionModal from '@/features/dev/ConstitutionModal'
 import { Empty } from '@/features/dev/common'
 import { PaneHead } from '../controls'
 
-// Artifacts — a host's OWN local-harness operational artifacts (Dev workspace tab, after Learning).
-// Mirrors Foundations' universal artifact management (Constitution / Skills / Agents) — same underline
-// tabs, same popups, same toggle — but scoped to THIS host's local harness. No dev/core split: the
-// dev workspace is already mode-scoped. Disabling a constitution flips the `enabled` flag the always-on
-// catalog and `pull_constitution` both honor.
+// A host's OWN local-harness artifacts, mirroring the universal surface but scoped to this host.
+//
+// No mode split: the dev workspace is already mode-scoped.
 
 // Drop the YAML frontmatter block for the preview (edit mode keeps the raw file).
 function stripFrontmatter(text: string): string {
@@ -380,12 +378,8 @@ function ConstitutionRow({ c, contextId, onToggled, onOpen }: { c: ManagedConsti
   )
 }
 
-// One verification-library entry. Promote/demote is the owner's only lever over what every future
-// plan inherits, so it sits on the row itself rather than behind a popup.
-// A ledger entry. NO actions, deliberately: this is append-only history, reversed by appending a
-// new entry, never edited or dropped — so a row that offered a button would be offering something
-// the contract forbids. It expands instead, because the WHY is the part worth reading and the one
-// thing a title cannot carry.
+// Promote and demote is the owner's only lever over what every future plan inherits, so it sits on
+// the row itself.
 function DecisionRow({ d }: { d: DecisionEntry }) {
   const [open, setOpen] = useState(false)
   const live = d.status === 'accepted'
@@ -521,9 +515,8 @@ function LocalFileModal({ contextId, entry, onClose }: { contextId: string; entr
   )
 }
 
-// The deputy mandate — this repo's standing acceptance bar (a governance artifact in the harness
-// cell). One file, so an inline preview + edit panel (not a list): the deputy reads it at every gate
-// it judges while the owner is away. Seeded from a template on connect; edits take effect next dispatch.
+// This repo's standing acceptance bar. One file, so an inline preview and edit panel rather than a
+// list.
 function DeputyPanel({ contextId }: { contextId: string }) {
   const [content, setContent] = useState<string | null>(null)
   const [loadErr, setLoadErr] = useState<string | null>(null)

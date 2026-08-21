@@ -1,14 +1,10 @@
 import { useEffect, useRef } from 'react'
 
-// The one scroll rule for every message column in the app (chat rail · work-item timeline).
+// The one scroll rule for every message column: auto-scroll ONLY when the reader is already at the
+// bottom.
 //
-// Auto-scroll ONLY when the reader is already at the bottom. If they scrolled up to read history,
-// arriving content must not yank them back down — during a live run that made earlier messages
-// unreadable, because a frame lands every few seconds. `stick` tracks "near the bottom", updated on
-// every user scroll; it starts true, so a freshly opened column opens pinned to the newest.
-//
-// `preserve()` is for prepending older content ("See more"): it banks the pre-load height, and the
-// next effect restores the viewport by the delta instead of jumping anywhere.
+// `preserve()` is for prepending older content: it banks the height and restores the viewport by
+// the delta.
 export function useStickyScroll(deps: unknown[]) {
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const stickRef = useRef(true)

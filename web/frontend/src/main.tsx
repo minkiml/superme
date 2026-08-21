@@ -13,21 +13,15 @@ import { parse } from '@/lib/router'
 
 initTheme()
 
-// `/repo/<id>/item/<item>/pr` is its OWN page, not the cockpit with an overlay laid over it. Reading
-// a diff wants the whole screen, and the owner wants the board and the item's chat still alive
-// behind it — so the PR surface opens in a separate browser tab and this is where that tab forks.
-// Mounted at the root, above App, so the PR tab carries NONE of the cockpit: no orbit poll, no
-// attention poll, no chat socket. One view, its own fetches, nothing else running.
+// The PR route is its OWN page, not the cockpit with an overlay over it: a diff wants the whole
+// screen.
 //
-// It is a path now (slice 4) rather than `?repo=&pr=`, but the fork stays HERE rather than becoming
-// a route inside the shell — being a path and being its own document are independent decisions, and
-// §3.1 wants both.
+// Mounted above App, so the PR tab carries no polls and no chat socket.
 const q = new URLSearchParams(window.location.search)
 const legacyRepo = q.get('repo')
 const legacyItem = q.get('pr')
 if (legacyRepo && legacyItem) {
-  // A PR tab parked before this change is still open somewhere. Rewrite it to the path form in
-  // place — no history entry, and the same page renders either way, so the owner sees nothing.
+  // Rewrite an older PR address in place — no history entry, and the same page renders either way.
   window.history.replaceState(
     null, '',
     `/repo/${encodeURIComponent(legacyRepo)}/item/${encodeURIComponent(legacyItem)}/pr`,

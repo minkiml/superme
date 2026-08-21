@@ -116,7 +116,7 @@ export {
   type InboxOrigin,
   type PushResult,
   type DevGlance,
-  // workspace-workflow S6/S7: gates, git surface, attention engine, graph, drilldown feeds
+  // gates, git surface, attention engine, graph, drilldown feeds
   getWorkItemDrilldown,
   getWorkItemReport,
   abandonWorkItem,

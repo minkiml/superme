@@ -1,29 +1,15 @@
 import { useCallback, useState } from 'react'
 import { Loader2, Pencil, Save } from 'lucide-react'
 
-// ── The app's ONE editing pattern ────────────────────────────────────────────────────────────
-// Every editable artifact in the dashboard — anchor docs, skills, agents, constitutions, published
-// files, work-item artifacts, an inbox row and its brief — is read far more often than it is
-// written, and every one of them is a file some agent reads next turn. So they all open in a
-// READING state and one button changes that:
+// ── the app's ONE editing pattern ──
 //
-//   View → a single `Edit`. Nothing else competes with reading, and nothing can be changed by a
-//   stray keystroke on a surface the owner opened to look at.
+// Every editable artifact is read far more often than written, so they all open in a READING state.
 //
-//   Edit → `Close` and `Save`, and Save is LIVE ONLY WHILE A DIFF EXISTS. A Save that is always
-//   clickable says nothing about whether anything happened; one that lights up when the text
-//   diverges and goes dark again when it matches IS the diff indicator, so there is never a
-//   pointless write, and re-typing a value back to what it was is correctly a no-op.
-//
-// `Close` leaves edit mode and drops the draft — the artifact on disk is untouched, which is
-// exactly what a dark Save already told you.
-//
-// The baseline is whatever was in the box when Edit was pressed, not the prop the modal renders
-// from. Several surfaces render a stripped body but edit the RAW file (frontmatter kept), and
-// diffing a draft against the wrong text would light Save the instant edit mode opened.
+// Save is LIVE ONLY WHILE A DIFF EXISTS, which makes it the diff indicator.
 
-/** Everything the buttons need. Stated apart from the draft so one `<EditActions>` can serve
- *  gates over different draft types — a raw markdown string here, a whole row record there. */
+/**
+ * Stated apart from the draft, so one `EditActions` serves gates over different draft types.
+ */
 export type GateControls = {
   editing: boolean
   /** The draft differs from what Edit started with. This is what arms Save. */
@@ -41,11 +27,10 @@ export type EditGate<T> = GateControls & {
 }
 
 /**
- * `saved` is the current on-disk value. `commit` writes a draft and resolves when it landed.
- * `load` is for surfaces that render one form and edit another (a stripped body vs the raw file):
- * it fetches the editable text at Edit-time, and its result — not `saved` — becomes the baseline.
- * `valid` rejects a draft that is well-formed-empty (a blank required field), independently of
- * whether it differs.
+ * `load` is for surfaces that render one form and edit another: its result, not `saved`, becomes
+ * the baseline.
+ *
+ * `valid` rejects a well-formed-empty draft, independently of whether it differs.
  */
 export function useEditGate<T>({ saved, commit, load, valid }: {
   saved: T
@@ -64,8 +49,7 @@ export function useEditGate<T>({ saved, commit, load, valid }: {
       setDraft(saved); setBase(saved); setErr(null); setEditing(true)
       return
     }
-    // A loading Edit still enters edit mode only once the text is in hand — an empty textarea that
-    // fills a moment later is a box the owner can type into and lose.
+    // Enter edit mode only once the text is in hand; a box that fills later can be typed into.
     setBusy(true); setErr(null)
     load()
       .then((text) => { setDraft(text); setBase(text); setEditing(true) })
@@ -89,18 +73,15 @@ export function useEditGate<T>({ saved, commit, load, valid }: {
   }
 }
 
-// Structural equality by serialisation — the drafts here are strings or flat records of scalars,
-// and both compare correctly this way. Key order is stable because every draft is built from the
-// same object literal each render.
+// Structural equality by serialisation: the drafts here are strings or flat records, and key order
+// is stable.
 function same<T>(a: T, b: T): boolean {
   return a === b || JSON.stringify(a) === JSON.stringify(b)
 }
 
 /**
- * The gate's buttons. Drop it wherever the surface keeps its actions — a modal header, a footer
- * row — and the two states render themselves. `readOnly` withholds Edit for an artifact that can
- * no longer be written, with `readOnlyNote` saying why: an absent button that explains itself
- * beats a live one that fails at the route.
+ * Drop it wherever the surface keeps its actions. `readOnly` withholds Edit and says why: an
+ * absent button that explains itself beats a live one that fails.
  */
 export function EditActions({ gate, tone = 'accent', readOnly = false, readOnlyNote }: {
   gate: GateControls

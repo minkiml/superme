@@ -2,11 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import { listSessions, readSession, renameSession, deleteSession, type SessionMeta, type ChatMode } from '@/lib/api'
 import type { Msg } from '../types'
 
-// Owns the conversation list + the active session's replayed bubbles, and the
-// localStorage continuity that survives a refresh. The ChatPanel remounts (parent `key`)
-// when the context OR mode changes, so `contextId`/`mode` are fixed for this hook's
-// lifetime and the mount effect can stay `[]`. The list + stored session are scoped by
-// mode (core|dev) so each mode shows only its own threads.
+// Owns the conversation list, the active session's replayed bubbles, and the continuity that
+// survives a refresh.
+//
+// The panel remounts when context or mode changes, so both are fixed for this hook's lifetime.
 export function useSessions(contextId: string, mode: ChatMode = 'core') {
   const STORE_KEY = `superme.session.${contextId}.${mode}`
   const [sessions, setSessions] = useState<SessionMeta[]>([])
@@ -15,10 +14,8 @@ export function useSessions(contextId: string, mode: ChatMode = 'core') {
   const [olderHidden, setOlderHidden] = useState(0) // # of replayed-but-skipped older bubbles
   const sessionRef = useRef<string | null>(null) // synchronous read for ws sends
 
-  // Keep the active id in sync across ref (sends), state (picker), and localStorage. `persist`
-  // controls whether this becomes the context's remembered "general" session: TRUE for the
-  // owner's own general chat, FALSE for a work-item binding (transient — it must not clobber the
-  // general session so unbinding can restore it). See resumeStored().
+  // Keep the active id in sync. `persist` decides whether it becomes the remembered general
+  // session.
   function setSession(id: string | null, persist = true) {
     sessionRef.current = id
     setActiveId(id)
@@ -35,8 +32,7 @@ export function useSessions(contextId: string, mode: ChatMode = 'core') {
     }
   }
 
-  // The replay window grows in pages of 10 via "See more" (limitRef is the synchronous truth for
-  // loadMore; msgLimit isn't needed as state — the message list itself drives rendering).
+  // The replay window grows in pages; `limitRef` is the synchronous truth for loading more.
   const PAGE = 10
   const limitRef = useRef(PAGE)
 
@@ -77,16 +73,14 @@ export function useSessions(contextId: string, mode: ChatMode = 'core') {
     setOlderHidden(0)
   }
 
-  // Restore the context's remembered general session (used when a work-item binding is dropped) —
-  // the last non-work-item thread, or a blank new chat if there's none.
+  // Restore the remembered general session, or a blank new chat when there is none.
   function resumeStored() {
     const stored = localStorage.getItem(STORE_KEY)
     if (stored) openSession(stored)
     else newChat()
   }
 
-  // One hard delete: drops the session row + its transcript from disk (its run trace is preserved
-  // server-side). If the deleted session is the one open here, fall back to a fresh chat.
+  // One hard delete of the row and its transcript; the run trace is preserved server-side.
   async function removeSession(id: string) {
     try {
       await deleteSession(id, contextId)
@@ -97,8 +91,7 @@ export function useSessions(contextId: string, mode: ChatMode = 'core') {
     refreshSessions()
   }
 
-  // Set (or clear, with a blank title) an owner title override. Optimistic — patch the list row
-  // immediately, then reconcile with the server's effective title (a clear re-derives it).
+  // Optimistic: patch the row immediately, then reconcile with the server's effective title.
   async function renameSessionTitle(id: string, title: string) {
     setSessions((xs) => xs.map((s) => (s.id === id ? { ...s, title } : s)))
     try {
@@ -109,12 +102,10 @@ export function useSessions(contextId: string, mode: ChatMode = 'core') {
     }
   }
 
-  // A finished turn may mint a brand-new session id — claim it (and list it if new). `persist`
-  // is false for bound (work-item) turns so they don't overwrite the general session.
+  // A finished turn may mint a new id. `persist` is false for bound turns.
   function claimSession(id: string, persist = true) {
-    // Refresh when the list has never heard of this id — a first session, or a work-item channel
-    // whose phase just moved and answered from a thread minted this turn. Without it the row stays
-    // stale and the rail cannot tell the new thread belongs to a channel it is already showing.
+    // Refresh when the list has never heard of this id — a first session, or a freshly minted
+    // thread.
     const known = sessions.some((s) => s.id === id || (s.thread_ids ?? []).includes(id))
     setSession(id, persist)
     if (!sessionRef.current || !known) refreshSessions()

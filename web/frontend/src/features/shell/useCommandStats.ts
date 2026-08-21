@@ -4,8 +4,8 @@ import { colorFor } from '@/lib/palette'
 import { useLive } from '@/lib/live'
 import { K } from '@/lib/live/keys'
 
-// One repo as an orbit node: identity + its token signal (total + core/dev split) plus the
-// richer per-scope + per-feature detail the inspector popup needs.
+// One repo as an orbit node: identity, its token signal, and the per-scope detail the inspector
+// needs.
 export type OrbitRepo = {
   id: string
   label: string
@@ -15,14 +15,13 @@ export type OrbitRepo = {
   core: number
   running: number
   agents: number
-  // The per-repo category tree — the operation list reads it through lib/tokens, the same
-  // way the token drill-in does, so the two can never disagree about one repo's split.
+  // Read through `lib/tokens`, the same way the drill-in does, so the two cannot disagree about one
+  // repo's split.
   byCategory: Record<string, { total?: number; features?: Record<string, number>; label?: string; collapsed?: boolean }>
   scopes: Record<string, ScopeStatus>
   modelOverride: string | null
   effortOverride: string | null
-  // The `vet` role's own tier for this repo (null = unset → the floor). Separate from the two
-  // above on purpose: vet checks what build produced and does not inherit the project's tier.
+  // Separate on purpose: vet checks what build produced and does not inherit the project's tier.
   vetModel: string | null
   vetEffort: string | null
   learningEnabled: boolean
@@ -44,8 +43,8 @@ export type CommandStats = {
   learn: { candidates: number; pending: number; drafted: number; learned: number }
   hub: OrbitRepo | null // Me / global — the orbit center
   nodes: OrbitRepo[] // connected projects orbiting the hub
-  // Disconnected projects, by former id → label. They have no orbit node, but their runs live on,
-  // so the activity log and the token drill-in can still name them ("Old projects").
+  // Disconnected projects have no orbit node, but their runs live on, so the log can still name
+  // them.
   archived: Record<string, string>
 }
 
@@ -62,19 +61,10 @@ const EMPTY: CommandStats = {
   archived: {},
 }
 
-// Composes the command-centre's live numbers from three real sources: token aggregation
-// (/tokens), the repo roster (/repos), and global learning stats (/dev/memory/stats).
+// Composes the command-centre's numbers from three sources, each its OWN cache key, so views cost
+// nothing extra.
 //
-// Each is its OWN cache key rather than one fused `load()` — the roster and the token aggregate are
-// wanted independently all over the app (the inspector, the drilldowns, the config surface), and
-// keying them separately is what lets those views cost zero extra requests. The three land at
-// different moments, so this composes over whatever has arrived: a partial view renders with the
-// pieces it has, exactly as the old single-shot version rendered placeholders before its first
-// response.
-//
-// No longer fails silently: a transport failure marks the app disconnected (see `useConnection` /
-// StatusBar). The numbers still hold their last good values — the difference is that the owner is
-// now told they are last-known rather than current.
+// They land at different moments, so this composes over whatever has arrived.
 export function useCommandStats(pollMs = 5000): CommandStats {
   const tokensQ = useLive(K.tokens, getTokens, pollMs)
   const reposQ = useLive(K.repos, getRepos, pollMs)

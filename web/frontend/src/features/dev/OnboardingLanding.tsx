@@ -1,22 +1,13 @@
 import { Sparkles } from 'lucide-react'
 
-// The onboarding front door (S5 · slice B). A repo whose project memory isn't established yet (its
-// PRD defines no deliverables) shows THIS instead of the work tabs — a hard gate: the first thing
-// you can do in a new repo's dev workspace is establish its memory, not take on work.
+// A repo with no established memory shows THIS instead of the work tabs — a hard gate.
 //
-// There is deliberately NO start button. Onboarding is a repo STATE, not an action: while the repo
-// is unestablished, every session in it already IS an onboarding session (ws.py `is_onboarding`),
-// and `onboarding_preamble(mode)` already carries the skill directive in the system prompt. So a
-// "Start" button that typed a canned "Run **retrofit**: …" into the chat only said out loud what
-// the system was already saying privately — noise in the owner's transcript, and a worse opening
-// than the one thing we actually want from them: what this project IS. This page's job is to say
-// that, and get out of the way. The repo leaves this state on its own when the anchor docs land.
+// There is deliberately NO start button: onboarding is a repo STATE, and every session in an
+// unestablished repo already IS one.
 
 export type OnboardMode = 'project-init' | 'retrofit'
 
-// What SuperMe will DO, per connect-time mode — in the owner's words, not ours. Deliberately does
-// NOT name the skill (`retrofit`/`project-init`): those are our internal identifiers, and a user
-// reading "I'll retrofit" learns nothing the phrase "I'll read the code" doesn't say plainly.
+// In the owner's words, not ours: naming the skill teaches nothing the plain phrase does not say.
 const WILL_DO: Record<OnboardMode, string> = {
   'project-init': "I'll draft the anchor docs with you from there",
   retrofit: "I'll read the code and draft the anchor docs with you",

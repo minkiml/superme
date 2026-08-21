@@ -13,10 +13,11 @@ import {
 import { Loading, PaneHead } from '../controls'
 import { useUniversalPublished } from './published'
 
-// System artifacts › Skills and › Agents — SuperMe's own universal plugins, one column per loading
-// scope, grouped by their `category` frontmatter. Both sections are this component with a different
-// `only`, because they differ by one field and nothing else; per-repo plugins are a different scope
-// and live under Project.
+// SuperMe's own universal plugins, one column per loading scope, grouped by their `category`
+// frontmatter.
+//
+// Both sections are this component with a different filter, because they differ by one field and
+// nothing else.
 
 const FALLBACK_CATEGORY = 'uncategorized'
 // Shared reads as the universal scope (purple), then dev, then core — the same order and tints the
@@ -72,8 +73,8 @@ export default function Plugins({ only }: { only: 'skill' | 'agent' }) {
               return {
                 key: e.name,
                 name: e.name,
-                // A published artifact opens its GOVERNOR (edit · disable · delete), not the plain
-                // file editor: what the loop wrote is governed, not just edited.
+                // A published artifact opens its GOVERNOR: what the loop wrote is governed, not
+                // just edited.
                 onClick: () => (published ? setOpenPub(published) : setOpenFile({ scope: s.scope, entry: e })),
                 badges: e.kind === 'agent' && e.model
                   ? <span className="shrink-0 text-[11px] text-faint">{e.model}</span>

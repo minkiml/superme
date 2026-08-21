@@ -1,7 +1,7 @@
 import { getJSON, sendJSON } from './client'
 import type { Schema } from './generated'
 
-// Sessions: list + replay. History comes from the SDK transcripts, not a parallel log.
+// Sessions: list and replay. History comes from the SDK transcripts, not a parallel log.
 // Transport shapes derive from the daemon OpenAPI; the FE narrows the loose `surface`/`mode`/
 // `role` strings (R5 tightens these server-side later).
 

@@ -16,23 +16,16 @@ import { PHASE_LABEL, PHASE_VERB, STATUS_COLOR, STATUS_LABEL, STATUS_STRIPE, pri
          agoLabel, researchKindLabel, KIND_TEXT, workKindLabel } from './common'
 import { useContainerWidth } from '@/lib/layout'
 
-// Phase accent → literal dot class (Tailwind needs the full string present in source).
-// (the per-lane dot colour map lived here until 2026-07-31 — see KANBAN_GROUPS for why it went)
+// Phase accent to a literal dot class — Tailwind needs the full string present in source.
 
-// Models selectable per run on a work-item card. Values are the canonical catalog's concrete ids; the
-// daemon normalizes any value to the latest concrete at consumption. Labels come from the catalog.
+// The catalog's concrete ids; the daemon normalizes any value to the latest at consumption.
 export const RUN_MODELS = MODEL_CATALOG.map((m) => ({ value: m.key, label: m.label }))
 export const DEFAULT_RUN_MODEL = DEFAULT_MODEL
 // Reasoning-effort levels selectable per run, alongside the model. Default "medium".
 export const RUN_EFFORTS = EFFORT_CATALOG.map((e) => ({ value: e.key, label: e.label }))
 export const DEFAULT_RUN_EFFORT = DEFAULT_EFFORT
-// The PROPOSED work-item kind. "Undecided" is a first-class option, not a placeholder — leaving it
-// there is a real answer (triage judges alone), so it leads the list rather than sitting under one.
-// WHO runs, as data. A row's run config is not one model and one effort any more — it is a model
-// and an effort PER ROLE, because vet and the deputy deliberately do not run on what the work runs
-// on. Listing each role's two pickers by hand made the tab six near-identical rows and would make
-// it eight the next time a role appears; this is the list, and the Setting tab is a loop over it.
-// A new role is an entry here plus its two columns on the row.
+// WHO runs, as data: a row's config is a model and an effort PER ROLE, because vet and the deputy
+// deliberately do not run on what the work runs on. The Setting tab is a loop over this list.
 export const RUN_ROLES = [
   { key: '', label: 'Work', hint: 'Every phase run of this item' },
   { key: 'vet', label: 'Vet', hint: 'Checks what build produced' },
@@ -44,15 +37,15 @@ export const roleField = (role: RunRole, f: 'model' | 'effort') =>
   (role ? `${role}_${f}` : f) as 'model' | 'effort' | 'vet_model' | 'vet_effort' | 'deputy_model' | 'deputy_effort'
 /** What each role runs when this row says nothing — the chain's answer, resolved by the caller. */
 export type RoleDefaults = Partial<Record<RunRole, { model: string; effort: string }>>
+// The PROPOSED kind. "Undecided" is a real answer — triage judges alone — so it leads the list.
 export const WORK_KIND_OPTS = [
   { value: '', label: 'Undecided' },
   { value: 'implementation', label: 'Implementation' },
   { value: 'research', label: 'Research' },
 ]
 
-// What Save on an inbox card writes back. Content and setting travel together because the card has
-// one Save. `model`/`effort` are always concrete — the picker offers the three catalog options and
-// opens on the repo's default, so saving states a pick rather than an inheritance.
+// Content and setting travel together, because the card has one Save. `model` and `effort` are
+// always concrete.
 type InboxConfigPatch = {
   title: string | null
   text: string
@@ -61,26 +54,22 @@ type InboxConfigPatch = {
   effort: string
   autopilot: boolean
   work_kind: string
-  // The two roles that do NOT run on this item's model: `vet` checks what build produced, the
-  // `deputy` judges the gates. "" = follow the project's vet tier / the system deputy tier, which
-  // is why these carry an empty option and `model`/`effort` above do not.
+  // The two roles that do NOT run on this item's model, which is why these carry an empty option.
   vet_model: string
   vet_effort: string
   deputy_model: string
   deputy_effort: string
 }
 
-// Shared dev-knowledge store views — the bodies for Workspace (work-items) and Inbox. Rendered
-// both by the main Development map (in-panel zooms) and reusable elsewhere. Workspace-workflow
-// model: phase = the per-kind pipeline (triage→plan→…→close); status = the runnable axis
-// (active/awaiting_*/done), where `done` is the derived terminal display state.
+// Shared dev-knowledge store views — the bodies for the board and the capture queue.
+//
+// `phase` is the per-kind pipeline; `status` the runnable axis, with `done` derived.
 
 // --- status / branch-off chrome -------------------------------------------------
 
-// The badge answers "what is this item doing?" — so a live run wins over the status word: an item
-// with an agent on it reads "triaging…", not "in progress". `running` covers both a background run
-// fired from the board and a bound session's turn. `bucket` is the item's attention tier, which is
-// where the "parked at a gate" verdict comes from (D2 — one rule, computed by the daemon).
+// The badge answers "what is this item doing", so a live run wins over the status word.
+//
+// `bucket` is the item's attention tier, which is where the parked-at-a-gate verdict comes from.
 export function StatusBadge({ it, running, bucket }: { it: WorkItem; running?: boolean; bucket?: string }) {
   const s = primaryStatus(it, bucket)
   const live = running && s !== 'done' ? PHASE_VERB[it.phase ?? ''] : null
@@ -121,8 +110,8 @@ export type WorkActions = {
   onOpen?: (it: WorkItem) => void // open the review popup (card click)
   onBind?: (it: WorkItem) => void // bind the chat to the item (review popup's "Discuss")
   onPlan?: (it: WorkItem, model?: string) => void
-  // R4: re-fire the run of a STOPPED item. Offered on the card because that item's next act is
-  // unambiguous; every other control still lives in the popup.
+  // Re-fire a STOPPED item's run: its next act is unambiguous. Every other control lives in the
+  // popup.
   onResume?: (it: WorkItem) => void
   running?: string[]
   boundItemId?: string | null
@@ -130,27 +119,10 @@ export type WorkActions = {
 
 // --- workspace: kanban by phase group -------------------------------------------
 
-// The 8-stage union pipeline collapsed to FOUR board columns so the whole board fits one view
-// (no horizontal scroll). Adjacent phases that read as one stage of work merge: intake (triage +
-// plan) and the doing (build/vet for implementation, investigate/report for research). Review and
-// close stay their own columns — they're the human gates. An item keeps its real phase; it's just
-// placed in the column whose group owns that phase.
+// The union pipeline collapsed to FOUR columns, so the whole board fits one view.
 //
-// That middle column is labelled `Work`, not `Build & Vet` (owner, 2026-08-18). A column label
-// names the whole lane, and this lane holds two different machineries: a research item in it is
-// investigating or reporting, never building or vetting, so half the board's items sat under a
-// heading that described the other kind. Naming both pairs would need four words and still leave
-// a reader matching card to clause. The card already prints the item's real phase, so the column
-// only has to say WHICH STAGE of the pipeline this is — the one where the work is actually done.
-//
-// The lane dots CARRY NO COLOUR (2026-07-31). They used to walk the status palette — dev-blue,
-// warn-amber, success-green — and that palette already means something everywhere else on this
-// screen: green is completed work (`21 done`, `21 shipped`), amber is needs-you, red is stopped.
-// So `success` meant "review lane" here and "finished" ten pixels away, and review + close were
-// literally the same green. Two fixes were tried before this one (recolour close, then grey it);
-// both just moved the collision. The lane's identity is its LABEL and its position in the row —
-// left-to-right already IS the progression — so the dot is a bullet, not a signal, and the palette
-// goes back to meaning one thing per colour.
+// The middle column is labelled for the STAGE, not the machinery, and the lane dots carry NO
+// COLOUR.
 const KANBAN_GROUPS: { key: string; label: string; phases: string[] }[] = [
   { key: 'intake', label: 'Triage & Plan', phases: ['triage', 'plan'] },
   { key: 'work', label: 'Work', phases: ['build', 'investigate', 'vet', 'report'] },
@@ -161,24 +133,12 @@ const KANBAN_GROUPS: { key: string; label: string; phases: string[] }[] = [
 export function WorkspaceKanban({ items, onOpen, onResume, running, boundItemId, buckets }: { items: WorkItem[]; buckets?: Record<string, string> } & WorkActions) {
   const visible = items.filter(isActive)
   const [boardRef, boardW] = useContainerWidth<HTMLDivElement>()
-  // NO whole-board empty state (owner, 2026-08-09). An empty board used to collapse to one line of
-  // prose, so the four columns — the shape of the pipeline itself — vanished exactly when the owner
-  // had the most room to learn them, and the board appeared to be a different component each time
-  // work drained. Every column already renders its own `—`, and the header above already says
-  // `0 active`, so the lanes ARE the empty state and the layout never moves.
+  // No whole-board empty state: the columns are the pipeline's shape, and every one already renders
+  // its own dash.
   const inGroup = (phases: string[]) => visible.filter((it) => phases.includes(it.phase ?? 'triage'))
-  // The four lanes REFLOW; the board never scrolls sideways (owner, 2026-08-18). A lane past the
-  // right edge is a stage of the pipeline the owner cannot see they have, and showing the whole
-  // pipeline at once is the board's entire job.
-  //
-  // 4 → 2 → 1, and never 3: `auto-fit` would have packed three lanes and left `Close` alone on a
-  // second row, which reads as a wrap accident rather than a layout. Halving keeps the rows even
-  // and keeps the pairs meaningful — intake beside work, then review beside close.
+  // The lanes REFLOW: a lane past the edge is a stage the owner cannot see.
   const lanes = boardW === 0 || boardW >= 716 ? 4 : boardW >= 552 ? 2 : 1
-  // A card in a 170px lane cannot carry four rows of prose; it carried them anyway, one word per
-  // line. The board knows how wide a lane came out, so it is the board that tells the card how
-  // much of itself to say. (2 lanes wait for 552 for the same reason: two 190px lanes are two
-  // unreadable columns, and one readable one beats them.)
+  // The board knows how wide a lane came out, so it tells the card how much to say.
   const laneW = lanes ? (boardW - 12 * (lanes - 1)) / lanes : 0
   const tightCards = laneW > 0 && laneW < 215
   return (
@@ -229,34 +189,26 @@ function WorkCard({
   onOpen?: (it: WorkItem) => void
   planning?: boolean
   bound?: boolean
-  bucket?: string // attention tier (S7): error | needs_you | deputy_working | running | unread — tints the card ring
-  onResume?: (it: WorkItem) => void // R4: only ever called for a STOPPED card (see below)
+  bucket?: string // attention tier: error | needs_you | deputy_working | running | unread — tints the card ring
+  onResume?: (it: WorkItem) => void // only ever called for a STOPPED card (see below)
   tight?: boolean // the lane is too narrow for the full four rows — see below
 }) {
   const clickable = !!onOpen
   const running = !!planning || !!it.running
-  // Fixed 4-row card (owner-specced): status · name · model|ctx · tokens|time. Live values win
-  // while a run is in flight; otherwise the settled figures. Tokens = the item's grand-total spend
-  // (same figure the drilldown leads with); time = the last run's duration (shows once this phase's
-  // run has started and persists through the phase — a fresh phase has no run yet, so it's hidden
-  // until one lands). The card is a pure glance + entry point — every action lives in the popup.
+  // A fixed four-row card; live values win while a run is in flight. A pure glance and entry point.
   const model = (running ? it.run_model : null) ?? it.model
   const ctx = running ? it.run_ctx_pct : it.ctx_pct
   const tokens = running ? it.run_tokens : it.total_tokens
   const hasTokens = (tokens ?? 0) > 0
   const settledTime = it.last_run?.duration_ms != null ? fmtDuration(it.last_run.duration_ms) : null
   const showMeter = running || hasTokens || !!settledTime
-  // A LIVE RUN WINS OVER THE STATUS WORD — the same rule StatusBadge and attnRing already follow.
-  // Without this the stripe was the one element that didn't know an agent was on the card: the badge
-  // read green ("triaging…"), the attention ring read green, and the left edge stayed `active`-blue.
-  // Three colours for one fact, and the odd one out was the fastest scan cue on the board.
+  // A live run wins over the status word, the same rule the badge and ring follow.
   const liveNow = running && primaryStatus(it, bucket) !== 'done'
   const stripe = liveNow ? 'border-l-success'
     : STATUS_STRIPE[primaryStatus(it, bucket)] ?? 'border-l-line'
   const stopped = primaryStatus(it, bucket) === 'error'
-  // Attention tint (S7): the card carries its bucket color as a soft ring — orange pages, purple =
-  // the deputy is covering it, green = a phase agent is on it. (Unread applies to terminal items,
-  // which live off-board in the strip.)
+  // The card carries its bucket colour as a soft ring. Unread applies to terminal items, which live
+  // off-board.
   const attnRing = bucket === 'error' ? 'ring-1 ring-danger/80'
     : bucket === 'needs_you' ? 'ring-1 ring-warn/70'
     : bucket === 'deputy_working' ? 'ring-1 ring-deputy/60'
@@ -272,11 +224,8 @@ function WorkCard({
       {/* 1 · status (+ branch provenance) */}
       <div className="flex min-w-0 items-center gap-1.5">
         <StatusBadge it={it} running={running} bucket={bucket} />
-        {/* RESEARCH ONLY. A kanban card is a few centimetres wide and the status badge already
-            fills most of the row — adding "IMPLEMENTATION" to the majority of cards truncated the
-            status it sits beside and said nothing (implementation is the default). The FAMILY is
-            the half that carries information, so that is the half the card spends its width on;
-            the drilldown header states both in full. */}
+        {/* Research only: a card is centimetres wide, and the FAMILY is the half that carries
+            information. */}
         {!tight && researchKindLabel(it.research_kind) && (
           <span className="min-w-0 truncate rounded bg-kind-research/10 px-1 py-px text-[9.5px] font-medium uppercase tracking-wide text-kind-research">
             {researchKindLabel(it.research_kind)}
@@ -286,11 +235,8 @@ function WorkCard({
       </div>
       {/* 2 · name — one line, ellipsis when long */}
       <div className="truncate text-[12.5px] leading-snug text-fg" title={it.title}>{it.title}</div>
-      {/* 3 + 4, NARROW · one unlabelled row: fill, spend, age. The model name is the first thing to
-          go (it is the same on nearly every card and changes nothing you'd do next), then the
-          words — "ctx", "tok", "ago" are three labels for figures whose units are already obvious
-          from their shape. What survives is what a glance is FOR: how full it is, what it cost,
-          how stale it is. Every dropped label is in the drilldown. */}
+      {/* Narrow, one unlabelled row: the units are obvious from their shape, and every dropped
+          label is in the drilldown. */}
       {tight && (ctx != null || hasTokens || agoLabel(it.last_run?.ended_at)) && (
         <div className="flex items-center gap-1.5 whitespace-nowrap text-[10.5px] text-muted">
           {running && <Loader2 size={10} className="animate-spin text-accent-text" />}
@@ -330,8 +276,8 @@ function WorkCard({
           {running
             ? <LiveTimer startedAt={it.run_started_at} />
             : <span className="tabular-nums" title="Duration of the last run">{settledTime ?? '—'}</span>}
-          {/* HOW LONG SINCE it last moved — only when nothing is running, because a live timer
-              already answers "is this warm?" and two clocks on one row invite comparing them. */}
+          {/* How long since it moved, only when nothing runs: two clocks on one row invite
+              comparing them. */}
           {!running && agoLabel(it.last_run?.ended_at) && (
             <>
               <span>·</span>
@@ -340,10 +286,8 @@ function WorkCard({
           )}
         </div>
       )}
-      {/* 5 · the ONE action a card carries (R4). The card is otherwise a pure glance — every other
-          control lives in the popup — but a STOPPED item is the one case where the owner's next act
-          is unambiguous and shouldn't cost a click to reach. Rendered only when stopped, so the
-          exception can't spread. `stopPropagation` keeps it from also opening the drilldown. */}
+      {/* The ONE action a card carries: a STOPPED item's next act is unambiguous and should not
+          cost a click. */}
       {stopped && onResume && (
         <button
           onClick={(e) => { e.stopPropagation(); onResume(it) }}
@@ -370,10 +314,7 @@ function LiveTimer({ startedAt }: { startedAt?: number | null }) {
 
 // --- inbox ----------------------------------------------------------------------
 
-// TWO kinds, and they differ in what the row can DO. `item` becomes a work-item when pushed;
-// `note` is the owner's own thought, never pushed, there to be picked up in conversation. The
-// predecessors — todo/idea/note/question — were a flavour nothing read: no code anywhere branched
-// on the value, so four columns bought a decision at capture time and paid nothing back.
+// Two kinds, differing in what the row can DO: an `item` becomes a work-item, a `note` never is.
 const KIND_OPTS = [
   { value: 'item', label: 'item' },
   { value: 'note', label: 'note' },
@@ -407,14 +348,13 @@ export function InboxView({
   const [title, setTitle] = useState('')
   const [kind, setKind] = useState<InboxKind>('item')
   const [busy, setBusy] = useState(false)
-  // The repo's Quick-config defaults, so a card's Config tab can NAME what an unset row inherits
-  // ("Repo default — Sonnet 5") instead of showing a blank that looks like nothing is configured.
+  // So the Config tab can NAME what an unset row inherits, instead of a blank that looks
+  // unconfigured.
   const repos = useLive(K.repos, getRepos).data
   const repo = repos?.find((r) => r.id === contextId)
   const sys = useLive(K.systemOverview, getSystem, 0).data
-  // What each role ALREADY runs for this repo, so an untouched picker states the answer instead of
-  // deferring it one level. Each role reads its OWN chain — the work role the repo's tier, vet the
-  // repo's vet tier, the deputy the system's — which is the same precedence the daemon resolves.
+  // What each role ALREADY runs, so an untouched picker states the answer instead of deferring it
+  // one level.
   const roleDefaults: RoleDefaults = {
     '': { model: toModelKey(repo?.model_override) || DEFAULT_RUN_MODEL,
           effort: repo?.effort_override || DEFAULT_RUN_EFFORT },
@@ -461,9 +401,8 @@ export function InboxView({
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), submit())}
         />
-        {/* Model/effort are NOT chosen here (owner, 2026-08-02). Capture is a one-line act; a row
-            is born inheriting the repo's Quick-config defaults, and the per-item config lives in
-            the card's Config tab — where it sits next to autopilot and the row's metadata. */}
+        {/* Not chosen here: capture is a one-line act, and the per-item config lives in the card's
+            own tab. */}
         <button
           onClick={submit}
           disabled={busy || !text.trim()}
@@ -530,12 +469,8 @@ function InboxCard({
   const [editing, setEditing] = useState(false)
   const [confirmDel, setConfirmDel] = useState(false)
 
-  // The whole card is the click target (like a work-item card) → opens the edit view. Action
-  // controls stop propagation so they don't also trip the edit-open. The edit modal is a SIBLING
-  // of the card, never a descendant: if it lived inside the card's onClick, every click within the
-  // modal (Cancel / Save / the X) would bubble up and re-fire setEditing(true) — so the modal could
-  // never close. (The card isn't positioned, so it was never the `contain` modal's containing block;
-  // moving the modal out of it doesn't change where the modal renders.)
+  // The modal is a SIBLING of the card, never a descendant: inside it, every click would re-open
+  // it.
   return (
     <>
     <div
@@ -545,19 +480,11 @@ function InboxCard({
     >
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
-          {/* The id, on the CARD and not only inside the edit view. It is how the owner names a
-              row out loud — in chat, in a message, to me — and one buried a click deep cannot do
-              that job. Monospace + muted so it labels without competing with the title. */}
-          {/* NO body preview under the title (owner, 2026-08-18). A row's title is written to be
-              the whole row — two clamped lines of the body under it repeated the same sentence in
-              grey, and a card whose second line is always a truncated version of its first reads as
-              unfinished. A title-less row falls back to the body IN the title slot, so the fallback
-              is the identity line rather than a second one. */}
+          {/* On the CARD, because the id is how the owner names a row out loud. */}
+          {/* No body preview: a grey echo of the title reads as unfinished. */}
           <div className="flex items-baseline gap-1.5">
             <span className="shrink-0 font-mono text-[11px] text-faint">#{e.id}</span>
-            {/* `overflow-wrap:anywhere` because these strings are written by an agent or by the
-                owner: a title can be one unbroken token (a path, an identifier) longer than the
-                column, and a word that cannot break pushes the whole card wider than its lane. */}
+            {/* One unbreakable token would push the card wider than its lane. */}
             {e.title ? (
               <span className="min-w-0 text-[14px] font-medium leading-snug text-fg [overflow-wrap:anywhere]">{e.title}</span>
             ) : (
@@ -581,9 +508,8 @@ function InboxCard({
             </>
           ) : (
             <>
-              {/* Push — the primary action, made prominent (tinted pill, always visible), and
-                  absent on a NOTE. A note has no work to become, so the button would be a promise
-                  the route refuses anyway; the honest surface is not to offer it. */}
+              {/* Absent on a NOTE: a note has no work to become, so the button would promise what
+                  the route refuses. */}
               {e.kind === 'note' && onDiscuss && (
                 <button
                   title="Discuss — opens a new general chat about this note"
@@ -613,9 +539,7 @@ function InboxCard({
           )}
         </div>
       </div>
-      {/* The footer reads left-to-right as WHO · WHAT · WHEN, and the time is pushed to the far
-          edge by `ml-auto`: it is the one field every row carries and the only one worth scanning
-          down a column, which a ragged position defeats. */}
+      {/* The time is pushed to the far edge: it is the one field worth scanning down a column. */}
       <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-faint">
         {e.origin?.includes('user') && (
           <span className="inline-flex items-center gap-0.5 text-success" title="Created / contributed by you">
@@ -627,9 +551,8 @@ function InboxCard({
             <Bot size={11} /> Agent
           </span>
         )}
-        {/* The proposed work kind, shown ONLY when one was filed: an absent label means undecided,
-            which is a real state and not worth a word of its own on every row. It carries the same
-            hue the work-item board gives that kind, so the row and the card it becomes agree. */}
+        {/* Only when one was filed: absent means undecided, a real state. It carries the board's
+            hue for that kind. */}
         {e.work_kind && (
           <span className={KIND_TEXT[e.work_kind] ?? 'text-muted'} title="Proposed work kind — triage confirms it">
             {workKindLabel(e.work_kind)}
@@ -650,15 +573,10 @@ function InboxCard({
   )
 }
 
-// The inspector for one inbox row. THREE tabs, because a row is three separable things: WHAT it
-// says (Content), the cold-start context it hands the work-item it becomes (Brief), and HOW it will
-// be worked (Setting). Mixing the last into the first put run config in the capture row, where it
-// was answered by accident on every keystroke.
+// The inspector for one inbox row, in THREE tabs: what it says, the context it hands on, and how it
+// is worked.
 //
-// Two independent artifacts, so two independent edit gates: the ROW (content + setting travel
-// together — one PATCH, one Save) and the BRIEF (its own file, its own route). The action row shows
-// the gate belonging to whatever tab is open, because the buttons should act on what you are
-// looking at and nothing else.
+// Two artifacts, two edit gates; the action row shows the gate for whichever tab is open.
 function InboxItemModal({
   e,
   roleDefaults,
@@ -672,12 +590,8 @@ function InboxItemModal({
 }) {
   const [tab, setTab] = useState<'content' | 'brief' | 'setting'>('content')
 
-  // Every model/effort pick is CONCRETE — three options each, no "inherit" row (owner, 2026-08-02,
-  // extended to the roles 2026-08-20). A picker that has never been touched shows what that role
-  // ALREADY runs, so it states the answer instead of deferring it one level, and an "inherit" row
-  // beside the value it inherits would be one answer wearing two labels.
-  // `work_kind` is the exception: "" is a real value, not an empty control — nobody has judged,
-  // and triage then decides alone, which is what every row did before the field.
+  // Every pick is CONCRETE. `work_kind` is the exception: an empty value means triage decides
+  // alone.
   const roleSaved = Object.fromEntries(RUN_ROLES.flatMap((r) => {
     const d = roleDefaults[r.key] ?? { model: DEFAULT_RUN_MODEL, effort: DEFAULT_RUN_EFFORT }
     return [
@@ -700,12 +614,10 @@ function InboxItemModal({
   })
   const d = row.draft
   const set = (patch: Partial<InboxConfigPatch>) => row.setDraft({ ...d, ...patch })
-  // Outside edit mode the tabs read the ROW, not the draft — a draft the owner abandoned must not
-  // decide which tabs exist.
+  // Outside edit mode the tabs read the ROW: an abandoned draft must not decide which tabs exist.
   const kind = row.editing ? d.kind : e.kind
 
-  // The handoff brief. Loaded when its tab is first opened rather than with the modal: most opens
-  // of this dialog never look at it, and a row that has no brief is the common case.
+  // Loaded when its tab first opens: most opens never look at it, and most rows have none.
   const [brief, setBrief] = useState<InboxBrief | null>(null)
   const [briefErr, setBriefErr] = useState<string | null>(null)
   useEffect(() => {
@@ -722,10 +634,7 @@ function InboxItemModal({
     commit: async (t) => { await saveInboxBrief(e.id, t); setBrief({ ...brief!, content: t }) },
   })
 
-  // A NOTE is the owner's own thought and is never pushed, so no work-item is ever born to carry a
-  // brief or a run config. Both tabs are withheld rather than shown empty — a card explaining its
-  // own absence is still a card — and the third renames to Info, which is all a note's second tab
-  // ever holds.
+  // A note is never pushed, so both tabs are withheld rather than shown empty.
   const tabs = kind === 'note'
     ? ([['content', 'Content'], ['setting', 'Info']] as const)
     : ([['content', 'Content'], ['brief', 'Brief'], ['setting', 'Setting']] as const)
@@ -733,8 +642,7 @@ function InboxItemModal({
   const err = tab === 'brief' ? (briefGate.err ?? briefErr) : row.err
 
   return (
-    // Contained (not viewport-fixed) so it overlays the dashboard column and leaves the chat rail
-    // interactive — same containment as the work-item review popup.
+    // Contained, so it overlays the dashboard column and leaves the chat rail interactive.
     <Modal onClose={onClose} title="Inbox item" maxW="max-w-lg" z="z-40" contain dismissable={false}>
       <div className="p-4">
         <TabBar
@@ -745,8 +653,7 @@ function InboxItemModal({
           className="mb-3"
         />
 
-        {/* One fixed body height for every tab — switching tabs must not resize the dialog under
-            the cursor (the action row would jump out from under a click). */}
+        {/* One fixed body height, so switching tabs cannot resize the dialog under the cursor. */}
         <div className="h-[21rem] overflow-y-auto">
         {tab === 'content' ? (
           row.editing ? (
@@ -797,9 +704,8 @@ function InboxItemModal({
           )
         ) : (
           <div className="space-y-4">
-            {/* ── how this item will be worked ───────────────────────────────────────────────
-                ALL FOUR describe a RUN — which gates drive themselves, which machinery the item
-                becomes, which model and effort its runs spend. */}
+            {/* ── how this item will be worked ── All four describe a RUN, and what its runs
+                spend. */}
             {kind !== 'note' && (
             <section className="rounded-md border border-line bg-sunken px-3 py-2.5">
               <SectionHeader>Setting</SectionHeader>
@@ -872,11 +778,8 @@ function optLabel(opts: { value: string; label: string }[], value: string): stri
   return opts.find((o) => o.value === value)?.label ?? value ?? '—'
 }
 
-// The run config, as a TABLE: one row per role, two columns, one header. Read as a list of eight
-// labelled controls it was six near-identical rows saying "model" and "effort" over and over, and
-// the thing that actually varies — WHO — was buried in the prefix of each label. As a table the
-// question is asked once per column and answered once per row, and a new role is one more row.
-// Same grid renders read-only, so the tab does not change shape when you open it.
+// A TABLE, so the question is asked once per column and answered once per row, and a new role is
+// one more row.
 function RoleGrid({ draft, onSet }: {
   draft: InboxConfigPatch
   onSet?: (patch: Partial<InboxConfigPatch>) => void

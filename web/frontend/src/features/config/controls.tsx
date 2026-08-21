@@ -1,12 +1,10 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Check, Loader2 } from 'lucide-react'
 
-// The shared control vocabulary of the System config popup.
+// The shared control vocabulary of the config popup.
 //
-// Two things live here rather than in each section, and both are alignment rules: a settings pane
-// is read down its RIGHT edge, so every control in it must start at the same x. A picker sized to
-// its own word ("Opus 5" vs "System default") puts every row's control somewhere different, which
-// is exactly what made the first draft look unfinished. Widths are fixed per ROLE, not per value.
+// A settings pane is read down its RIGHT edge, so every control starts at the same x and widths are
+// fixed per ROLE, not per value.
 
 /** The primary picker on a row (model, review mode, anchor). */
 export const W_MAIN = 'w-36'
@@ -16,19 +14,13 @@ export const W_SUB = 'w-32'
 export const W_WIDE = 'w-44'
 
 /**
- * One labeled setting: name + hint on the left, its control cluster on the right.
- *
- * MODULE-LEVEL on purpose. Defining this inside a card component gives it a new identity every
- * render, and a poll re-renders the pane every few seconds — React then REMOUNTS the row's subtree
- * each cycle, resetting inputs and stealing focus mid-typing.
+ * MODULE-LEVEL on purpose: defined inside a card, it gets a new identity every render, so a poll
+ * remounts the row and steals focus.
  */
 export function ConfigRow({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
   return (
-    // The control WRAPS below the label rather than squeezing it. Without a floor on the label,
-    // a narrow pane crushed it to one word per line while the control kept its full width, which
-    // is the sideways-scrollbar mistake in miniature: the layout adapted by making the content
-    // unreadable. `ml-auto` keeps the control on the right edge on both one line and two, so the
-    // pane still reads down that edge.
+    // The control WRAPS below the label rather than squeezing it, and `ml-auto` keeps it on the
+    // right edge either way.
     <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
       <div className="min-w-[9rem] flex-1">
         <div className="text-[14px] text-fg">{title}</div>
@@ -57,9 +49,8 @@ export function SectionLabel({ title, hint }: { title: string; hint?: string }) 
 }
 
 /**
- * The pane's own header. Title and one line, no scope chip: the sidebar group already names the
- * scope and the picker already names the project, so a chip repeating either was the same fact
- * written twice on one screen.
+ * Title and one line, no scope chip: the sidebar already names the scope and the picker already
+ * names the project.
  */
 export function PaneHead({ title, lede }: { title: string; lede: string }) {
   return (
@@ -99,20 +90,10 @@ export const Loading = () => (
 )
 
 /**
- * A compact labeled integer stepper with a unit suffix.
+ * A compact integer stepper. The text is FREE while typing, because clamping per keystroke makes a
+ * high minimum untypeable.
  *
- * Two rules, and they fought each other twice:
- *
- * 1. The text is FREE while typing — CLAMPING per keystroke makes a field with a high `min`
- *    untypeable (typing "60" into min=26 became 26 → 260 → 95).
- * 2. But an in-range keystroke must still REACH the parent, because the parent's `dirty` flag is
- *    what enables Apply. Deferring every commit to blur/Enter (the fix for rule 1) broke that: the
- *    owner typed 55, Apply stayed grey, and clicking it did nothing — the mousedown blurs the input
- *    and commits, but the browser does not dispatch a click to a button that was disabled when the
- *    press began, so the first click was always swallowed.
- *
- * So: propagate on every keystroke that parses INTO range, and clamp only on blur/Enter. An
- * out-of-range draft (mid-typing "6" toward "60") stays local until then, which is rule 1 intact.
+ * But an in-range keystroke must still reach the parent, whose dirty flag enables Apply.
  */
 export function NumberField({ value, min, max, unit, onChange }: {
   value: number; min: number; max: number; unit: string; onChange: (v: number) => void

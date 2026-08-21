@@ -10,11 +10,10 @@ import {
   type WorkGraphData, type WorkGraphNode, type DevData, type AttentionData, type WorkItem,
 } from '@/lib/api'
 
-// The WorkGraph view (S7/D3/D10) — "how does everything relate". Renders the DERIVED graph
-// projection (repo root → deliverables → work-items, with spawned_from/supersedes edges) via
-// React Flow + a dagre layout. Spawn rows waiting in the inbox appear as TRANSPARENT pushable
-// nodes (push + start right here); pure inbox items stay invisible. Impl nodes carry git
-// decoration (branch / merged); node click opens the same drilldown as the kanban.
+// How everything relates: the derived graph projection, laid out with dagre.
+//
+// Spawn rows waiting in the inbox appear as transparent pushable nodes; pure inbox items stay
+// invisible.
 
 const NODE_SIZE: Record<string, { w: number; h: number }> = {
   repo_root: { w: 150, h: 40 },
@@ -34,8 +33,7 @@ function layout(gnodes: WorkGraphNode[], gedges: WorkGraphData['edges']): { node
     g.setNode(n.id, { width: s.w, height: s.h })
   }
   for (const e of gedges) {
-    // Layout direction: containment flows down; provenance/supersedes point AT the parent, so
-    // reverse them for rank placement (children sit below what they spawned from).
+    // Containment flows down; provenance points AT the parent, so reverse it for rank placement.
     if (e.kind === 'contains') g.setEdge(e.src, e.dst)
     else g.setEdge(e.dst, e.src)
   }
@@ -100,7 +98,7 @@ export default function WorkGraphView({
     return () => clearTimeout(t)
   }, [data?.running, load])
 
-  // Push a spawn row into a real work-item straight from the graph (D10: push + start here).
+  // Push a spawn row into a real work-item straight from the graph.
   const push = useCallback(async (inboxId: number) => {
     setPushing(inboxId)
     try {
@@ -147,8 +145,8 @@ export default function WorkGraphView({
   const reviewItem = reviewId ? (data?.work_items.find((w) => w.id === reviewId) ?? null) : null
 
   return (
-    // The explicit height when embedded matters: React Flow's zoom/pan transform needs a sized
-    // container — an auto-height parent is exactly the old zoom-mismatch bug.
+    // The explicit height matters: the zoom transform needs a sized container, not an auto-height
+    // parent.
     <div className={embedded ? 'relative h-[540px] overflow-hidden rounded-lg border border-line bg-app' : 'relative h-full'}>
       {reviewItem && (
         <WorkItemModal

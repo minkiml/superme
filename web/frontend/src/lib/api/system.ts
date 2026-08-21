@@ -1,13 +1,10 @@
 import { getJSON, sendJSON } from './client'
 import type { Schema } from './generated'
 
-// The system spine read-surface (PRD §4.11.3, WI-5). Three read-only views over the
-// System / Repo / Session / Run model: what the system IS (config), what it HAS (the repo ×
-// scope lattice), and what it's DOING / HAS DONE (live + recent runs). Powers the Monitor.
+// The system spine's read surface: what the system IS, what it HAS, and what it is DOING.
 //
-// Transport shapes come from the daemon OpenAPI (`Schema<...>`). After R5 the backend pins the
-// run mode/status enums to Literals, so these derive directly — the only remaining override is
-// `RepoOverview.scopes`, narrowed to the {core, dev} keyset the UI indexes by.
+// Transport shapes come from the daemon OpenAPI; the one override is the scope keyset the UI
+// indexes by.
 
 export type Scope = 'core' | 'dev'
 
@@ -26,8 +23,8 @@ export type RepoOverview = Omit<Schema<'RepoOverview'>, 'scopes'> & { scopes: Re
 
 export type RunsData = Schema<'RunsResponse'>
 
-// System-wide token usage (v1 observability): global bucket + one per repo. `global` is aliased
-// to `global_` on the wire (reserved word), so the generated type carries `global`.
+// `global` is aliased on the wire because it is a reserved word, so the generated type carries
+// `global`.
 export type TokenUsage = Schema<'TokenUsageResponse'>
 export type RepoTokens = Schema<'RepoTokens'>
 export type TokenBucket = Schema<'TokenBucket'>
@@ -44,14 +41,13 @@ export function getRepos(): Promise<RepoOverview[]> {
   return getJSON('/api/repos')
 }
 
-// --- top-of-SuperMe attention center (Pass 2 · Q2) --------------------------------------------
-// System-wide (distinct from the per-repo `/dev/attention` engine): every `awaiting_human` hold
-// across EVERY connected repo, each classified by WHY it's parked so the notification center can
-// offer the right quick action. `kind` drives the action set; `actor` says who parked it.
-// Types are inlined until the next `gen:api` picks up AttentionHold/RepoAttention from the daemon.
+// --- the attention centre ---
+//
+// System-wide, distinct from the per-repo engine: every hold across every connected repo,
+// classified by WHY it is parked. `kind` drives the action set, `actor` says who parked it.
 export type SystemHoldKind = 'question' | 'escalation' | 'paged' | 'review' | 'gate'
-// One grill question, in the four fields report_completion enforces — the card renders them as
-// labelled rows. Only `question` is guaranteed: a report predating the typed shape carries prose.
+// The four fields the tool enforces. Only `question` is guaranteed: a report predating the typed
+// shape carries prose.
 export type SystemHoldQuestion = { question: string; recommend?: string; why?: string; instead?: string }
 export type SystemHold = {
   id: string
@@ -65,8 +61,8 @@ export type SystemHold = {
   questions?: SystemHoldQuestion[] // kind 'question' only — the plan agent's clarifying questions (ask-card)
 }
 export type SystemRepoAttention = { repo_id: string; repo_label: string; holds: SystemHold[] }
-// Fail-soft to []: the route 404s until the daemon restart that ships it, and a down daemon should
-// never blank the whole shell — the bell just shows nothing until the feed resolves.
+// Fail-soft: a down daemon should never blank the whole shell, so the bell shows nothing until the
+// feed resolves.
 export function getSystemAttention(): Promise<SystemRepoAttention[]> {
   return getJSON<SystemRepoAttention[]>('/api/system/attention').catch(() => [])
 }
@@ -79,16 +75,17 @@ export type ConnectedRepo = Schema<'RepoConnectResponse'>
 export function browseFs(path?: string): Promise<FsBrowse> {
   return getJSON(`/api/fs/browse${path ? `?path=${encodeURIComponent(path)}` : ''}`)
 }
-// Register a new repo. kind='new' creates an (empty) dir → project-init; 'existing' points at
-// code → retrofit. The choice is stored and drives the repo's onboarding front door.
+// `new` creates an empty dir, `existing` points at code. The choice is stored and drives the
+// onboarding front door.
 export function connectRepo(body: { path: string; label?: string; kind: 'new' | 'existing' }): Promise<ConnectedRepo> {
   return sendJSON('/api/repos', 'POST', body)
 }
 
 export type DisconnectReceipt = Schema<'RepoDisconnectResponse'>
-// Disconnect a project — IRREVERSIBLE: forgets the registration, knowledge home, harness cell,
-// pipeline state and sessions (run traces are preserved). The project folder itself is untouched;
-// reconnecting later is a fresh connect. `confirm` must be the repo id (the typed-confirmation gate).
+// IRREVERSIBLE: forgets the registration, knowledge home, harness cell and sessions, though run
+// traces are preserved.
+//
+// The project folder itself is untouched. `confirm` must be the repo id.
 export function disconnectRepo(id: string): Promise<DisconnectReceipt> {
   return sendJSON(`/api/repos/${id}?confirm=${encodeURIComponent(id)}`, 'DELETE')
 }
@@ -153,12 +150,11 @@ export function setSystemLearning(enabled: boolean): Promise<{ ok: boolean; lear
   return sendJSON('/api/system/learning', 'POST', { enabled })
 }
 
-// The global deputy dial (autopilot slice 4): whether a deputy judges autopilot gates, and how
+// The global deputy dial: whether a deputy judges autopilot gates, and how
 // readily it escalates PER GATE (triage/plan/review, each low·medium·high·extra). Partial — send
 // only what changes; `strictness` is a partial map (only the gates that moved).
 export function setSystemDeputy(
-  // `model`/`effort` are the deputy's OWN tier — one judge across every project, so it is set
-  // here rather than per repo, and "" clears it back to the floor. It never follows a project's.
+  // The deputy's OWN tier: one judge across every project, set here and never following one.
   patch: { enabled?: boolean; strictness?: Record<string, string>; model?: string | null; effort?: string | null },
 ): Promise<{ ok: boolean; deputy_enabled: boolean; deputy_strictness: Record<string, string>
              deputy_model: string | null; deputy_effort: string | null }> {
@@ -187,7 +183,7 @@ export function setSweepConfig(patch: { idle_seconds?: number; poll_seconds?: nu
   return sendJSON('/api/system/sweep', 'POST', patch)
 }
 
-// Compaction runtime knobs (workspace-workflow S8/D11): the fill % at which a work-item session
+// Compaction runtime knobs: the fill % at which a work-item session
 // auto-compacts (per-kind overrides) + the effectiveness threshold. The backend refuses (409)
 // any trigger at/below the incompressible floor (floor_pct) — the knob is safe by construction.
 export type CompactionConfig = Schema<'CompactionConfigResponse'>
@@ -198,19 +194,15 @@ export function setCompactionConfig(patch: { trigger_pct?: number; by_kind?: Rec
   return sendJSON('/api/system/compaction', 'POST', patch)
 }
 
-// The repo's two git knobs (workflow-renovation-v2 §2.2): `review_mode` — 'fast' (approving an item
-// merges it) | 'strict' (approve opens a PR; the owner merges from the PR page) — and `anchor_branch`,
-// the branch every git site targets ('' clears it back to the repo's own default branch). Both apply
-// immediately, including to items already sitting at review. A named branch that doesn't exist comes
-// back as `anchor_error`: it is accepted and then refused at every git site, never silently ignored.
+// The two knobs that govern how work lands: whether the diff gets its own review gate, and what it
+// lands on.
 export type RepoGit = Schema<'RepoGitResponse'>
 export function setRepoGit(repoId: string, patch: { review_mode?: string; anchor_branch?: string }): Promise<RepoGit> {
   return sendJSON(`/api/repos/${encodeURIComponent(repoId)}/git`, 'POST', patch)
 }
 
-// The anchor picker's option set — this repo's real local branches (work-item branches excluded),
-// read live off git. The anchor REFUSES on a branch that doesn't exist, so picking from the real
-// list is what keeps a typo from becoming a merge-time failure.
+// Read live off git: the anchor REFUSES on a branch that does not exist, so a stale list offers a
+// failing setting.
 export type RepoBranches = Schema<'RepoBranchesResponse'>
 export function getRepoBranches(repoId: string): Promise<RepoBranches> {
   return getJSON(`/api/repos/${encodeURIComponent(repoId)}/branches`)

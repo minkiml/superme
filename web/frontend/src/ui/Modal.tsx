@@ -1,12 +1,10 @@
 import { useRef, type ReactNode } from 'react'
 import { X } from 'lucide-react'
 
-// The one modal shell — a full-viewport scrim + a centered content card. Every drill-in / editor /
-// inspector renders through this so overlay chrome (scrim, blur, radius, border, shadow) lives in
-// one place. `title` opts into the standard header row (title + close X); omit it for a fully
-// custom body. Click-outside and the X both call onClose; inner clicks don't bubble to the scrim.
-// `contain` swaps the viewport-filling `fixed` for `absolute` so the scrim fills the nearest
-// positioned ancestor instead — used by the dev column popups that must leave the chat rail live.
+// The one modal shell — a scrim and a centred card, so overlay chrome lives in one place.
+//
+// `contain` swaps `fixed` for `absolute`, so the scrim fills the nearest positioned ancestor and
+// leaves the chat rail live.
 export default function Modal({
   onClose,
   title,
@@ -31,13 +29,9 @@ export default function Modal({
   column?: boolean // cap the card to the viewport/column and lay it out as a flex column, so a
   // caller with a pinned header/footer + a `flex-1 min-h-0 overflow-y-auto` body scrolls internally
   fill?: boolean // with `column`: TAKE the full height rather than just capping it, so the card is
-  // a stable frame instead of resizing to each tab's content (adaptive — it's the scrim's height,
-  // which the viewport/column drives). Use for multi-tab inspectors; omit for short prompts.
+  // A stable frame instead of resizing to each tab's content. Use for multi-tab inspectors.
 }) {
-  // Close on a true backdrop click only. A `click` resolves to the common ancestor of its mousedown
-  // and mouseup, so a press that STARTS inside the card and releases on the scrim (e.g. dragging a
-  // text selection out) would otherwise resolve to the scrim and close it. Guard on both ends: the
-  // press must start on the scrim (downOnScrim) AND the click must target the scrim itself.
+  // A click resolves to the common ancestor of its press and release, so guard on both ends.
   const downOnScrim = useRef(false)
   return (
     <div

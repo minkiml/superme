@@ -86,8 +86,7 @@ function FileViewer({ file, onClose, onSaved }: { file: FoundationFile; onClose:
   })
   const { editing, draft, err } = gate
   return (
-    // While editing, an outside click never closes — only the X does, so unsaved input cannot be
-    // discarded by a stray click on the scrim.
+    // While editing, only the X closes: unsaved input must survive a stray click on the scrim.
     <Modal onClose={onClose} column maxW={editing ? 'max-w-4xl' : 'max-w-3xl'} z="z-[60]" dismissable={!editing}>
       <div className="flex shrink-0 items-center gap-2 border-b border-line px-5 py-3.5">
         <FileText size={15} className={SCOPE_COLOR[file.scope] ?? 'text-muted'} />

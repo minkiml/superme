@@ -6,13 +6,13 @@ import { getSystemAttention, advanceWorkItem, type SystemHold, type SystemHoldKi
 import { invalidate, useLive } from '@/lib/live'
 import { K, topicRepo } from '@/lib/live/keys'
 
-// The top-of-SuperMe attention center (Pass 2 · Q2) — one bell beside the brand that surfaces every
-// `awaiting_human` hold across EVERY connected repo. Owner principle: nothing auto-stops forever; a
-// hold notifies and offers a next move (Open · Approve & merge), it never disposes silently. Clicking
-// the bell opens a popover that STAYS OPEN until the owner clicks elsewhere (their explicit spec).
+// One bell beside the brand, surfacing every hold across EVERY connected repo.
+//
+// Nothing auto-stops forever: a hold notifies and offers a next move, it never disposes silently.
+// The popover stays open until the owner clicks elsewhere.
 
-// Per-kind chrome: icon + dot color + a one-word label. `kind` is the daemon's classification of WHY
-// the item is parked; it drives which quick actions the row offers.
+// `kind` is the daemon's classification of WHY the item is parked, and it drives which quick
+// actions a row offers.
 const KIND: Record<SystemHoldKind, { icon: LucideIcon; dot: string; label: string }> = {
   question: { icon: MessageCircleQuestion, dot: 'bg-accent', label: 'Questions' },
   escalation: { icon: AlertTriangle, dot: 'bg-danger', label: 'Escalated' },
@@ -42,8 +42,7 @@ export default function AttentionCenter({ onGoto }: { onGoto: (repoId: string, h
 
   useEffect(() => {
     if (!open) return
-    // Outside-click closes (their spec: "stay until user release it by clicking other places").
-    // A click inside the trigger or the portalled popover must NOT close it.
+    // Outside-click closes; a click inside the trigger or the portalled popover must NOT.
     const onDoc = (e: MouseEvent) => {
       const t = e.target as Node
       if (ref.current?.contains(t) || menuRef.current?.contains(t)) return
@@ -55,15 +54,13 @@ export default function AttentionCenter({ onGoto }: { onGoto: (repoId: string, h
     return () => { document.removeEventListener('mousedown', onDoc); window.removeEventListener('resize', onScroll) }
   }, [open])
 
-  // Approve & merge from the popover — the review gate's one-click action. advance_item on a review
-  // item runs the same merge body the modal's button does (Pass 1 B2); on a merge conflict it 409s,
-  // surfaced inline, and the item stays at review (never force-merged).
+  // The review gate's one-click action, running the same merge body the modal's button does. A
+  // conflict surfaces inline.
   async function approveMerge(repoId: string, h: SystemHold) {
     setBusy(h.id)
     try {
       await advanceWorkItem(h.id, repoId)
-      // The merge changed this repo's whole dev surface, not just the bell — refresh every view of
-      // it at once rather than letting each one discover the change on its own clock.
+      // The merge changed this repo's whole dev surface, so refresh every view of it at once.
       refresh()
       invalidate(topicRepo(repoId))
     } catch (e) {
@@ -162,8 +159,8 @@ function HoldRow({
               {h.questions!.map((q, i) => (
                 <li key={i} className="text-fg">
                   <span className="font-medium">{q.question}</span>
-                  {/* The recommendation is the point of the card — the owner accepts it or names
-                      the alternative, without reading back through the agent's reasoning. */}
+                  {/* The recommendation is the point: the owner accepts it or names the
+                      alternative. */}
                   {q.recommend && (
                     <span className="mt-1 block text-muted">
                       <span className="text-fg">Recommend</span> — {q.recommend}

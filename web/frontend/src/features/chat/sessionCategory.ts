@@ -1,10 +1,8 @@
 import { Hammer, Stethoscope, Sparkles, MessageSquareText, type LucideIcon } from 'lucide-react'
 import type { SessionMeta } from '@/lib/api'
 
-// A session's display CATEGORY — the chip shown in the collapsed chat rail. Derivation mirrors the
-// daemon's session_kind resolution (session-kinds-diagnose): a work-item stamp (item_id) wins, then
-// the durable `kind` (diagnosis / onboarding), else general. `kind` may be null on legacy sessions
-// (pre-stamp) → general.
+// A session's display CATEGORY, mirroring the daemon's own resolution: a work-item stamp wins, then
+// the durable kind, else general.
 export type SessionCategory = {
   key: 'work_item' | 'diagnosis' | 'onboarding' | 'general'
   label: string

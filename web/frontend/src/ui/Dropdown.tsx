@@ -4,12 +4,10 @@ import { ChevronDown, Check } from 'lucide-react'
 
 export type Option = { value: string; label: string }
 
-// A small, themed dropdown — replaces the native <select> so it reads as one connected
-// control. `bare` makes the trigger look like an inline heading (used for the chat
-// context); default is a boxed control.
+// A small themed dropdown, so it reads as one connected control.
 //
-// The open menu renders in a PORTAL (fixed-positioned from the trigger's rect) so it is never
-// clipped by an `overflow-hidden` ancestor (e.g. a rounded card) — the trigger stays in place.
+// The open menu renders in a PORTAL, fixed-positioned from the trigger's rect, so an
+// `overflow-hidden` ancestor can never clip it.
 export default function Dropdown({
   value,
   options,
@@ -30,8 +28,7 @@ export default function Dropdown({
   width?: string // a Tailwind width class (e.g. 'w-36') — gives a fixed, aligned trigger
 }) {
   const [open, setOpen] = useState(false)
-  // Menu placement in viewport coords (fixed positioning), decided from the trigger's rect so the
-  // list is never clipped off the bottom (or top) of the screen — nor by an overflow-hidden parent.
+  // Decided from the trigger's rect, so the list is never clipped off the bottom of the screen.
   const [pos, setPos] = useState({ left: 0, top: 0, bottom: 0, width: 0, up: false, maxH: 240 })
   const ref = useRef<HTMLDivElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -68,9 +65,8 @@ export default function Dropdown({
       if (ref.current?.contains(t) || menuRef.current?.contains(t)) return
       setOpen(false)
     }
-    // The menu is fixed-positioned from a one-time rect; an ANCESTOR scroll/resize detaches it →
-    // close. But scrolling INSIDE the menu's own list must NOT close it (the capture listener sees
-    // that scroll too), so exempt targets within the menu.
+    // An ancestor scroll detaches a fixed menu, so close on one — but exempt scrolling inside the
+    // menu's own list.
     const onMove = (e?: Event) => {
       const t = e?.target
       if (t instanceof Node && menuRef.current?.contains(t)) return
@@ -86,9 +82,7 @@ export default function Dropdown({
     }
   }, [open])
 
-  // Both variants share ONE width so the trigger and menu edges line up. With an explicit `width`
-  // the container is fixed; otherwise a hidden sizer (all option labels, non-wrapping, padded for
-  // the chevron + check) sets the container to the widest option so nothing truncates.
+  // One width, so the trigger and menu edges line up; a hidden sizer takes the widest option.
   const triggerCls =
     variant === 'bare'
       ? 'flex w-full items-center justify-between gap-1 text-sm font-medium text-fg disabled:opacity-50'

@@ -13,31 +13,15 @@ import {
 } from '@/lib/api'
 import { useViewportWidth, PANE } from '@/lib/layout'
 
-// The dedicated PR page (renovation §4.4) — `strict`'s review surface, and readable in any mode.
+// The dedicated PR page. A PAGE, not a panel: a diff read in a third of a screen is a diff nobody
+// reads.
 //
-// It is a PAGE, not a panel: `main.tsx` mounts it as the whole document when the URL carries
-// `?repo=&pr=`, and the Git tab's button opens that URL in a new browser tab. It was an in-app
-// overlay first, squeezed between the cockpit behind it and the chat rail beside it, and a diff
-// read in a third of a screen is a diff nobody reads. The cockpit stays where it was, in its own
-// window, with the item's chat — the place the opinion is voiced, since `revise` is the only way
-// back (§2.1).
-//
-// Left: `report-review.md`, the arc the review run wrote. Right: the branch, GROUPED BY TASK off
-// the commits' `SuperMe-Task` trailers — the thing an ordinary forge cannot do, because ordinary
-// branches aren't task-labelled by construction. Inside a group, files are churn-ranked: the
-// biggest change is where the risk is, and it's what a reader who stops after two files should
-// have seen.
-//
-// One action: Merge, which is the ordinary review approve (approve = merge, §2.3). There is no
-// Reject — a change that isn't good enough is said in the item's chat. Slice 6 restyles this page.
+// Left the review report, right the branch GROUPED BY TASK. One action, Merge.
 
 const SPLIT_KEY = 'superme.pr.split'
 
-// The draggable divider. Pointer events (not mouse) so a trackpad, a pen and a touchscreen all
-// work, and `setPointerCapture` so a fast drag that outruns the 5px bar keeps dragging instead of
-// dropping the moment the cursor leaves it. Clamped to 20–80% — a pane dragged to nothing is a
-// pane the reader then has to discover how to bring back. Arrow keys move it too: the bar is a
-// real control, so it takes focus and answers the keyboard like one.
+// Pointer events with capture, so a fast drag does not drop. Clamped, because a pane dragged to
+// nothing is hard to restore.
 function Splitter({ split, onSplit }: {
   split: number
   onSplit: Dispatch<SetStateAction<number>>
@@ -64,9 +48,8 @@ function Splitter({ split, onSplit }: {
         window.addEventListener('pointermove', move)
         window.addEventListener('pointerup', up)
       }}
-      // Updater form, not `clamp(split - 2)`: a HELD arrow key auto-repeats faster than React
-      // commits, and every repeat in one batch would read the same stale `split` and land on the
-      // same value — the key would appear to move it once and then stick.
+      // Updater form: a held arrow key repeats faster than React commits, so every repeat would
+      // read the same stale value.
       onKeyDown={(e) => {
         if (e.key === 'ArrowLeft') { e.preventDefault(); onSplit((s) => clamp(s - 2)) }
         if (e.key === 'ArrowRight') { e.preventDefault(); onSplit((s) => clamp(s + 2)) }
@@ -75,8 +58,7 @@ function Splitter({ split, onSplit }: {
       title="Drag to resize · double-click to reset"
       className="group relative w-px shrink-0 cursor-col-resize bg-line outline-none"
     >
-      {/* The hit area is 9px wide while the LINE stays 1px — a 1px grab target is a 1px target.
-          The wider strip is invisible until hover/focus, so the layout reads as one hairline. */}
+      {/* The hit area is 9px while the LINE stays 1px, and the strip is invisible until hover */}
       <span className="absolute inset-y-0 -left-1 -right-1 transition-colors group-hover:bg-accent/40 group-focus:bg-accent/60" />
     </div>
   )
@@ -89,10 +71,7 @@ export default function PrPage({ itemId, contextId }: {
   const [pr, setPr] = useState<PrView | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [merging, setMerging] = useState(false)
-  // The divider position, as the LEFT pane's % of the page (owner, 2026-08-09). Which side needs
-  // the room is the reader's question, not ours: a prose-heavy review wants the left, a wide diff
-  // wants the right, and the same fixed 44/56 is wrong for both. Persisted per browser so the
-  // choice survives the reload a merge triggers and every later PR tab opens where they left it.
+  // Which side needs the room is the reader's question, so it is persisted per browser.
   const [split, setSplit] = useState<number>(() => {
     const saved = Number(localStorage.getItem(SPLIT_KEY))
     return Number.isFinite(saved) && saved >= 20 && saved <= 80 ? saved : 44
@@ -101,11 +80,7 @@ export default function PrPage({ itemId, contextId }: {
   // The PR page owns the whole window, so the window IS its container.
   const narrow = useViewportWidth() < PANE.mid + PANE.narrow
 
-  // `keepErr` is what makes a refused merge readable: the refusal itself CHANGES the item (the
-  // freshness re-vet syncs the branch and moves the phase), so the catch below reloads — and a
-  // plain reload used to clear `err` on success, erasing the daemon's explanation in the same tick
-  // it was set. The owner then saw a Merge that did nothing and said nothing. A reload the OWNER
-  // triggers still clears; only the one a refusal triggers keeps it.
+  // A refusal CHANGES the item, so the catch reloads — but must not clear the explanation with it.
   const load = (keepErr = false) => {
     getWorkItemPr(itemId, contextId).then((d) => { setPr(d); if (!keepErr) setErr(null) })
       .catch((e) => setErr(String(e)))
@@ -154,10 +129,8 @@ export default function PrPage({ itemId, contextId }: {
             <Check size={14} /> merged {pr.merge_commit?.slice(0, 10)}
           </span>
         ) : pr?.terminal ? (
-          // Finished WITHOUT landing — abandoned or superseded. The branch is still there and the
-          // diff is still worth reading, but the decision has been taken and it was "no". Offering
-          // Merge here contradicts it; the daemon refuses the call anyway (409), so a button would
-          // only be a way to be told no.
+          // Finished WITHOUT landing: the diff is still worth reading, but the decision was taken
+          // and it was no.
           <span className="inline-flex items-center gap-1.5 text-xs text-muted">
             <Check size={14} /> {pr.outcome ?? 'finished'} — never merged, branch left in place
           </span>
@@ -171,23 +144,17 @@ export default function PrPage({ itemId, contextId }: {
             {merging ? <Loader2 size={14} className="animate-spin" /> : <GitMerge size={14} />} Merge
           </button>
         )}
-        {/* No close button: this is a browser tab, and the browser already has one. A script
-            `window.close()` is refused for tabs the page didn't itself open, so the control would
-            have looked live and done nothing. */}
+        {/* No close button: a scripted close is refused for a tab the page did not open. */}
       </header>
 
       {err && (
         <div className="shrink-0 border-b border-line bg-danger/10 px-4 py-2 text-xs text-danger">{err}</div>
       )}
 
-      {/* Below the width where two readable panes fit, they STACK and the splitter goes with them
-          (`lib/layout`): the report reads first, the walkthrough under it, both full width. Two
-          200px columns of prose and code side by side is not a smaller version of this page — it
-          is a different, unreadable one. */}
+      {/* Below the width where two readable panes fit they STACK, and the splitter goes with them. */}
       <div className={`flex min-h-0 flex-1 ${narrow ? 'flex-col overflow-y-auto' : ''}`}>
-        {/* Left — the review report: whether this should land at all. What to know while READING a
-            task's code lives with that task on the right, so the two panes never say the same thing
-            twice. */}
+        {/* Left, whether this should land at all; what to know while READING a task lives with
+            that task. */}
         <div
           className={narrow ? 'shrink-0 border-b border-line px-5 py-4' : 'min-w-0 overflow-y-auto px-5 py-4'}
           style={narrow ? undefined : { width: `${split}%` }}
@@ -222,23 +189,15 @@ export default function PrPage({ itemId, contextId }: {
 
 type Group = PrView['groups'][number]
 
-// The review notes, above this task's own commits (owner, 2026-08-09). They answer the question you
-// have while reading a diff — what did THIS task have to make true, what should I look at, what
-// proves it — and deliberately not the question the review report answers, which is whether to
-// merge at all. Nothing here is repeated from that report: an owner moving between the two panes
-// should never meet the same sentence twice.
-//
-// Every row renders only when it has something to say. A task where build found nothing to point at
-// and nothing deviated shows just its requirement and its checks, which is the honest picture of an
-// unremarkable task — and padding it would teach the owner to skip the block entirely.
+// The review notes answer the question you have while reading a diff: what this task had to make
+// true, and what proves it.
 function Notes({ group }: { group: Group }) {
   const checks = group.checks ?? []
   if (!group.needed && !group.look && !group.deviated && !checks.length) return null
   return (
     <dl className="mb-2.5 space-y-1.5 rounded-md bg-hover/40 px-2.5 py-2 text-[12px]">
       {group.needed && <Row label="Had to make true">{group.needed}</Row>}
-      {/* Marked, because it is the one line here nobody could derive — a person wrote it down
-          because the diff cannot show it. */}
+      {/* Marked, because it is the one line nobody could derive from the diff. */}
       {group.look && <Row label="Look at" tone="text-warn">{group.look}</Row>}
       {group.deviated && <Row label="Left the plan">{group.deviated}</Row>}
       {checks.length > 0 && (
@@ -371,10 +330,9 @@ function FileRow({ file, task, itemId, contextId }: {
   )
 }
 
-// --- the patch ------------------------------------------------------------------
-// Three things the plain one-colour-per-line version could not do (owner, 2026-08-09): the code
-// carries SYNTAX, a replacement reads side by side as "this became that", and untouched context
-// folds away so the change is the page. Parsing lives in `./diff`; this is presentation only.
+// --- the patch ---
+//
+// The code carries syntax, a replacement pairs old against new, and untouched context folds away.
 
 const GUTTER = 'w-8 shrink-0 select-none px-1 text-right text-[9.5px] tabular-nums text-faint'
 const ROW_BG: Record<Row['kind'], string> = {
@@ -384,31 +342,20 @@ const ROW_BG: Record<Row['kind'], string> = {
 // distinguish the two tints - colour is never the only channel.
 const MARK: Record<Row['kind'], string> = { add: '+', del: '\u2212', ctx: ' ' }
 
-// A COLUMN is one scroll container holding one grid track (owner, 2026-08-09). Three requirements
-// settle this shape between them:
+// A COLUMN is one scroll container holding one grid track.
 //
-//  - Scrolling is per column, never per row and never shared. Split shows the before and the after
-//    side by side on ONE screen, and each side scrolls to its own longest line; a shared scroller
-//    pushed the "after" column off-screen whenever the "before" had a long line.
-//  - `minmax(100%, max-content)` + grid stretch is what makes the tints RECTANGULAR. Sizing each
-//    row to its own content (`w-max`) gave every row a different width, so a block of deletions
-//    had a ragged right edge that traced the code instead of marking the block.
-//  - Rows stay one line tall, which is the only reason two independent columns can be trusted to
-//    line up without measuring anything.
+// Scrolling is per column, never per row; every row must reach the full width so a highlight is
+// unbroken; and the track sizes to its widest row.
 const COLUMN = 'min-w-0 flex-1 overflow-x-auto'
-// `w-max` sizes the track to its WIDEST row, `min-w-full` floors it at the column, and the single
-// implicit grid column then stretches every row to that one width. A percentage-minimum track
-// (`minmax(100%, max-content)`) does NOT work here: inside a scroll container the percentage
-// resolves against the visible width, so the rows all agreed on the wrong number — uniform, but
-// clipped at the fold instead of covering the longest line.
+// `w-max` sizes the track to its widest row and `min-w-full` floors it at the column, so every row
+// stretches to one width.
 const TRACK = 'grid w-max min-w-full'
 
 function Code({ text, lang }: { text: string; lang: string | null }) {
   return (
     <code
-      // `shrink-0` is load-bearing: a flex item defaults to shrinking, so a non-wrapping line was
-      // squeezed to the column width and clipped — which is why the track never grew past 100%
-      // and nothing scrolled. Sized to its content, it pushes the track out instead.
+      // `shrink-0` is load-bearing: a flex item defaults to shrinking, so a long line was squeezed
+      // and clipped.
       className="shrink-0 whitespace-pre pr-3"
       dangerouslySetInnerHTML={{ __html: highlight(text, lang) || '&nbsp;' }}
     />
@@ -486,9 +433,8 @@ function Patch({ text, path }: { text: string; path: string }) {
           ))}
         </span>
       </div>
-      {/* Hunks are separated, not merely stacked: consecutive hunks ran together into one wall in
-          which the `@@` lines were the only cue that the reader had jumped somewhere else in the
-          file. A gap plus a rule makes each hunk a block you can see the edges of. */}
+      {/* Separated, not merely stacked: run together, the `@@` lines were the only cue the reader
+          had jumped. */}
       <div className="space-y-2 py-1">
         {hunks.map((h, hi) => {
           const chunks = foldContext(h.rows)
@@ -497,8 +443,8 @@ function Patch({ text, path }: { text: string; path: string }) {
             c.type === 'fold' && !shown.has(key)
           return (
             <div key={hi} className={hi ? 'border-t border-line/60 pt-2' : ''}>
-              {/* Outside the scrollers on purpose: the `@@` line names the enclosing function,
-                  which is the answer to "where am I" — it must not slide away with the code. */}
+              {/* Outside the scrollers: the hunk line answers "where am I" and must not slide away
+                  with the code. */}
               <div className="bg-hover/30 px-2.5 py-0.5 text-[10px] text-accent-text">{h.header}</div>
               {split ? (
                 <div className="flex gap-px">

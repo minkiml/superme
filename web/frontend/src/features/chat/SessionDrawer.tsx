@@ -26,8 +26,7 @@ export default function SessionDrawer({
 }) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
-  // Enter and blur can both fire (Enter → we close the input → blur); this guards to a single commit
-  // per edit. Reset when a new edit starts.
+  // Enter and blur can both fire, so this guards to a single commit per edit.
   const doneRef = useRef(false)
 
   function startEdit(s: SessionMeta) {
@@ -46,9 +45,8 @@ export default function SessionDrawer({
     setEditingId(null)
   }
 
-  // Close only on a true scrim click — press AND release both on the dim area (not a drag that
-  // starts inside the drawer and ends on the scrim). The scrim is the `flex-1` child, so match the
-  // event target against it directly.
+  // Press AND release both on the dim area, so a drag that starts inside the drawer does not close
+  // it.
   const scrimRef = useRef<HTMLDivElement>(null)
   const downOnScrim = useRef(false)
   return (

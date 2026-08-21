@@ -1,11 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { getPublished, type PublishedItem } from '@/lib/api'
 
-// Which universal artifacts the learning loop published, and which published record each one has.
-//
-// Two surfaces need this and neither owns it: Constitution badges a learned rule, and Skills/Agents
-// open a learned file through the published-artifact governor rather than the plain file editor.
-// Keyed `${form}:${slug}` — the same key both sides already build.
+// Which universal artifacts the loop published, and their published record. Two surfaces need this
+// and neither owns it.
 export function useUniversalPublished() {
   const [learned, setLearned] = useState<Set<string>>(new Set())
   const [byKey, setByKey] = useState<Map<string, PublishedItem>>(new Map())

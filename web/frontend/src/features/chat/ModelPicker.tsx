@@ -2,10 +2,8 @@ import { useState } from 'react'
 import { Check, ChevronLeft } from 'lucide-react'
 import { MODELS, EFFORTS, toModelKey } from '@/lib/format'
 
-// The chat model+effort picker — replaces the generic "/" palette once the input resolves to
-// exactly "/model". Two steps: pick a model, then pick a reasoning effort. On the effort pick it
-// fires ONE combined `/model <model> <effort>` command (no separate /effort). "Default" = reset
-// that override. Picking a model advances to the effort step; ◂ goes back.
+// The model and effort picker, in two steps, firing ONE combined command on the effort pick.
+// Default resets the override.
 export default function ModelPicker({
   currentModel,
   currentEffort,

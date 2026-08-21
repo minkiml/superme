@@ -14,11 +14,10 @@ import WorkGraphView from './WorkGraphView'
 import { STATUS_LABEL, primaryStatus } from './common'
 import WorkItemModal from './WorkItemModal'
 
-// The Development dashboard — a live environment for one context's dev-knowledge. Today it shows
-// the active pipeline: Inbox → Workspace (the work in flight). Clicking a store zooms its working
-// surface into the panel in place (back button). Decisions/Learnings were removed from the surface
-// pending a clearer model; the abstract schema lives on "Model". Built context-parameterized
-// (D-011) — only global is wired today.
+// The Development dashboard — one context's dev-knowledge, live: the capture queue and the work in
+// flight.
+//
+// Clicking a store zooms its working surface into the panel in place.
 
 type Zoom = 'workspace' | 'inbox'
 
@@ -37,19 +36,12 @@ export default function DevDashboard({
   boundItemId?: string | null
   embedded?: boolean // hosted inside the Dev workspace shell — the shell owns the header
 }) {
-  // Which item is drilled into is an ADDRESS (`/repo/:id/item/:itemId`), read straight off the
-  // router rather than threaded down as a prop. That is what retired `focusItem`: the attention
-  // centre used to hand an id across a mount boundary for this view to consume once, which is
-  // exactly the job a path does natively.
+  // Which item is drilled into is an ADDRESS, read off the router rather than threaded down as a
+  // prop.
   const route = useRoute()
   const openId = route.name === 'item' && route.repoId === contextId ? route.itemId : null
-  // Which store is zoomed in is an ADDRESS too: `/repo/:id/dev` is the capture queue (the landing
-  // pane, unchanged) and `/repo/:id/dev/workspace` is the board. They are PEERS in the tab slot
-  // rather than nested under `pipeline` — you are looking at one or the other, never at a workspace
-  // inside an inbox (§6.1).
-  //
-  // An open item drilldown implies the board: an item lives on it, so closing the drilldown should
-  // land on the card you were reading, not back on the queue.
+  // An ADDRESS too, and the two are PEERS. An open drilldown implies the board, so closing it lands
+  // there.
   const zoom: Zoom =
     route.name === 'item' ? 'workspace'
       : route.name === 'dev' && route.tab === 'workspace' ? 'workspace'
@@ -60,29 +52,25 @@ export default function DevDashboard({
   const [showShipped, setShowShipped] = useState(false) // the completed-items list overlay
   const [mutErr, setMutErr] = useState<string | null>(null) // a write this view attempted and failed
 
-  // The board keeps a faster cadence while ANY item has a run in flight, and the ordinary one when
-  // the repo is idle — the same rule as before, now expressed as the subscription's interval rather
-  // than a self-re-arming `setTimeout` chain. Because the cache takes the FASTEST interval any
-  // subscriber asks for, a live run speeds the shared key up for every view of it at once.
+  // The cache takes the fastest interval asked for, so a live run speeds every view at once.
   const boardQ = useLive<DevData>(K.dev(contextId), () => getDev(contextId), 5000)
   const data = boardQ.data ?? null
   const running = !!data?.running?.length
   const fast = useLive<DevData>(running ? K.dev(contextId) : null, () => getDev(contextId), 2500)
   void fast // subscription only — it speeds the shared key up; `data` above is the single reader
 
-  // Attention buckets (S7). The SAME key DevWorkspace's badge subscribes to: one request feeds both.
+  // Attention buckets. The SAME key DevWorkspace's badge subscribes to: one request feeds both.
   const attn = useLive<AttentionData>(K.devAttention(contextId), () => getAttention(contextId)).data ?? null
 
   const loading = boardQ.loading
   const err = mutErr ?? (boardQ.data ? null : boardQ.error ? String(boardQ.error) : null)
 
-  // A write this view made — refresh the whole repo topic so the board, the attention feed and any
-  // open drilldown all reflect it at once, instead of each waiting out its own tick.
+  // Refresh the whole repo topic, so the board, the feed and any open drilldown reflect a write at
+  // once.
   const load = () => invalidate(topicRepo(contextId))
 
-  // Resume a STOPPED item straight from its card (R4) — the one card-level action, because a
-  // stopped item's next act is unambiguous. Failures surface in the same error slot every other
-  // write on this view uses; the board refresh then shows whether the run actually took.
+  // The one card-level action, because a stopped item's next act is unambiguous. Failures use the
+  // same error slot.
   async function resumeItem(it: WorkItem) {
     try {
       await resumeWorkItem(it.id, contextId)
@@ -92,36 +80,29 @@ export default function DevDashboard({
     load()
   }
 
-  // The item open in the review popup — looked up live so it reflects the latest poll/reload
-  // (and auto-closes if the item disappears, e.g. after a delete).
+  // Looked up live, so it reflects the latest poll and auto-closes if the item disappears.
   const reviewItem = openId ? (data?.work_items.find((w) => w.id === openId) ?? null) : null
 
-  // id → attention tier. The card tint (S7), and — since D2 — the one source every surface on this
-  // screen reads its "needs you" verdict from: the cards, the stat row, the deputy strip and the
-  // drilldown badge. When three of them derived it independently they disagreed by two.
+  // The one source every surface on this screen reads its needs-you verdict from; derived
+  // independently they disagreed.
   const bucketOf: Record<string, string> = {}
   for (const tier of ['error', 'needs_you', 'deputy_working', 'running', 'unread'] as const) {
     for (const r of attn?.buckets?.[tier] ?? []) bucketOf[r.id] = tier
   }
-  // Opening an item is a navigation, nothing more. The chat binding is NOT done here — the arrival
-  // effect below owns it, so a click and a deep link produce the same result instead of each
-  // carrying its own copy of the rule.
+  // A navigation, nothing more: the arrival effect owns the binding, so click and link agree.
   const openItem = (id: string) =>
     navigate({ name: 'item', repoId: contextId, itemId: id, tab: null, sub: null })
   // Back to the board the card came from, not to the capture queue.
   const closeItem = () => navigate({ name: 'dev', repoId: contextId, tab: 'workspace' })
 
-  // Arriving at an item address — by click, by the attention centre's Open, or by a pasted link.
-  // Two jobs, both of which used to live in the click handler and so didn't happen for deep links:
-  // bind the chat rail to the item's thread, and refuse to sit on an address for an item that
-  // isn't there (deleted, or a mistyped id) rather than showing the board under a URL that lies.
+  // Two jobs: bind the chat rail, and refuse to sit on an address for an item that is not there.
   useEffect(() => {
     if (!openId || !data) return
     const it = data.work_items.find((w) => w.id === openId)
     // `replace`, not push: this is a correction, and `back` must not walk into the dead address.
     if (!it) { navigate({ name: 'dev', repoId: contextId, tab: 'workspace' }, { replace: true }); return }
-    // `gotoItem` binds BEFORE navigating (it has the hold's session_id and the board's data may not
-    // have landed yet — Fix C), so this must not clobber a binding that is already correct.
+    // `gotoItem` binds BEFORE navigating, so this must not clobber a binding that is already
+    // correct.
     if (boundItemId !== openId) onBindItem?.(it, contextId)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openId, data])
@@ -134,8 +115,8 @@ export default function DevDashboard({
           contextId={contextId}
           onClose={closeItem}
           onChanged={load}
-          // The ask-card's one-click "answer in chat". Binding is already done on arrival (the effect
-          // above); re-firing it is what REVEALS the rail, which is the part the owner needs.
+          // Binding is already done on arrival; re-firing is what REVEALS the rail, which is the
+          // point.
           onOpenChat={() => onBindItem?.(reviewItem, contextId)}
           bucket={bucketOf[reviewItem.id]}
         />
@@ -177,8 +158,8 @@ export default function DevDashboard({
               selected={zoom}
               onSelect={(z) => {
                 setZoom(z)
-                // Leaving the workspace for the Inbox means you're no longer on a work-item —
-                // drop the chat binding so the rail falls back to the general dev session.
+                // Leaving for the Inbox means no work-item, so drop the binding and fall back to
+                // the general session.
                 if (z === 'inbox') onUnbindItem?.()
               }}
             />
@@ -214,9 +195,7 @@ export default function DevDashboard({
                 ) : (
                 <WorkspaceKanban
                   items={data.work_items}
-                  // Clicking a card navigates to the item's address; the arrival effect binds the
-                  // chat to its session — read + discuss side by side (the popup overlays only the
-                  // dashboard column).
+                  // The arrival effect binds the chat, so reading and discussing sit side by side.
                   onOpen={(it) => openItem(it.id)}
                   onResume={resumeItem}
                   running={data.running}
@@ -237,16 +216,11 @@ export default function DevDashboard({
   )
 }
 
-// The deputy-activity strip (autopilot slice 4b) — fills the space above the stat cards ONLY when
-// the deputy is shepherding autopilot items, so it's silent on a hand-driven board. Two counts a
-// glance answers: how many the deputy is carrying, and how many it has handed back to you. Derived
-// from the already-loaded items (no extra fetch); `awaiting_human` on an autopilot item is a deputy
-// escalation (the deputy is the one that paged you).
+// Shown only when the deputy is shepherding autopilot items, so it is silent on a hand-driven
+// board.
 //
-// D2: this read the RAW `w.status` while the board beside it applied the derived gate rule, so it
-// under-counted by the number of stalled items — 5 sitting next to a 7 next to a badge of 6. It now
-// reads the same bucket map as everything else; only the DENOMINATOR is legitimately different
-// (autopilot items only), never the rule.
+// It reads the same bucket map as everything else; only the DENOMINATOR is legitimately different,
+// never the rule.
 function DeputyStrip({ items, buckets }: { items: WorkItem[]; buckets: Record<string, string> }) {
   const auto = items.filter((w) => w.autopilot && w.status !== 'done' && !w.outcome)
   if (auto.length === 0) return null
@@ -265,10 +239,10 @@ function DeputyStrip({ items, buckets }: { items: WorkItem[]; buckets: Record<st
   )
 }
 
-// --- attention strip (S7/D10) -----------------------------------------------------
-// Strict-priority rows derived from durable state: what needs YOU (orange) > what's running
-// (green) > unread closeouts (blue). Terminal items live only here (they're off the board) —
-// clicking a row opens its drilldown, which stamps it seen and clears the blue.
+// --- attention strip ---
+//
+// Strict-priority rows from durable state. Terminal items live only here, and opening one stamps it
+// seen.
 
 const TIER_STYLE: Record<string, { dot: string; label: string }> = {
   error: { dot: 'bg-danger', label: 'Error' },
@@ -280,10 +254,7 @@ const TIER_STYLE: Record<string, { dot: string; label: string }> = {
 
 function AttentionStrip({ attn, onOpen }: { attn: AttentionData; onOpen: (id: string) => void }) {
   const [ref, w] = useContainerWidth<HTMLDivElement>()
-  // Narrow, a row is one thing: WHICH item. The reason ("at the review gate") is the half that
-  // costs the most width and says the least — the tier label above already gives the state, and
-  // the reason is still one hover away. Keeping both truncated the title to "Housekeepi…", which
-  // is the one part of the row you cannot act without.
+  // Narrow, a row is one thing: WHICH item. The reason costs the most width and says the least.
   const tight = w > 0 && w < PANE.narrow
   const tiers = (['error', 'needs_you', 'deputy_working', 'running', 'unread'] as const)
     .map((t) => ({ tier: t, rows: attn.buckets?.[t] ?? [] }))
@@ -323,11 +294,7 @@ function EnvMap({ data, selected, onSelect }: { data: DevData; selected: Zoom; o
   const g = data.glance
   const openInbox = data.inbox.filter((e) => e.status === 'open')
   const activeCount = data.work_items.filter(isActive).length
-  // The two stores and the arrow between them are one sentence, and a sentence that wraps in the
-  // middle stops being one. `flex-wrap` left the arrow stranded beside the first card, pointing at
-  // white space, with the second card on a line of its own below it. Below the width where the
-  // three fit in a row, the whole sentence TURNS: both stores go full width and the arrow points
-  // down, between them, where the flow it describes actually goes.
+  // One sentence: below the width where all three fit, it TURNS and the arrow points down.
   const [ref, w] = useContainerWidth<HTMLDivElement>()
   const down = w > 0 && w < 460
   return (
@@ -451,11 +418,8 @@ function StatusDots({ item, total, done }: {
       <div className="flex items-baseline gap-1.5">
         <span className="text-xl font-semibold tabular-nums text-fg">{total}</span>
         <span className="text-[11px] text-muted">work-items</span>
-        {/* DONE IS THE SAME NUMBER AS SHIPPED, deliberately (owner, 2026-08-14). It read
-            `by_status.done` — every item that ENDED, abandoned and superseded included — while the
-            Shipped tile counted only the ones that landed, so the header could say "1 done" above
-            "0 shipped" and both were right about different questions. Work that was dropped is
-            neither done nor completed; it just leaves the board. One question, one number. */}
+        {/* Done is the same number as shipped: work that was dropped is neither, it just leaves
+            the board. */}
         <span className="text-[11px] text-faint">· <span className="tabular-nums text-success">{done}</span> done</span>
       </div>
       <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted">
@@ -466,11 +430,10 @@ function StatusDots({ item, total, done }: {
   )
 }
 
-// The work-item stat row — moved out of the page top to sit under the Workspace panel header.
-// Counted from the SAME verdict the cards render by (the item's attention bucket), not from the
-// backend's `by_status` roll-up over stored status: those two disagreed on any item whose hold was
-// derived rather than stored, so the row could read "1 in progress" above three NEEDS YOU cards.
-// One rule, one screen. `shipped` still comes from the roll-up — terminal items leave the board.
+// Counted from the SAME verdict the cards render by, not a roll-up over stored status — those
+// disagreed.
+//
+// `shipped` still comes from the roll-up, because terminal items leave the board.
 function WorkspaceStats({ items, buckets, shipped, onShowShipped }: {
   items: WorkItem[]; buckets: Record<string, string>; shipped: number; onShowShipped: () => void
 }) {
@@ -484,10 +447,7 @@ function WorkspaceStats({ items, buckets, shipped, onShowShipped }: {
       <span className="mt-1 text-[10px] uppercase tracking-wide text-muted">{label}</span>
     </div>
   )
-  // Five captions do not fit a narrow pane, and wrapping them into a ragged block is worse than
-  // not showing them: the numbers stop being a row you read across. Narrow, each stat keeps its
-  // MARK and its number and loses its words — the icon carries the meaning, the tooltip spells it
-  // out, and five figures stay on one line where they can still be compared at a glance.
+  // Narrow, each stat keeps its MARK and number: five figures on one line stay comparable.
   const chip = (Icon: LucideIcon, label: string, n: number, tone: string) => (
     <span title={`${n} ${label}`} className={`inline-flex items-center gap-1 ${n > 0 ? tone : 'text-faint'}`}>
       <Icon size={13} />
@@ -515,20 +475,14 @@ function WorkspaceStats({ items, buckets, shipped, onShowShipped }: {
   }
   return (
     <div ref={ref} className="mb-4 flex flex-wrap items-center gap-x-7 gap-y-3 rounded-xl bg-sunken px-4 py-3">
-      {/* Stopped work leads the row and is ALWAYS rendered, greyed at zero (owner, 2026-08-14).
-          It used to appear only when non-zero, on the reasoning that a permanent "0 stopped" tile
-          trains the eye to skip it — but a row that changes width between visits is worse: every
-          other number shifts one label leftward, and the owner read "1 stopped, 4 needs you" off a
-          row that said exactly that, mapped onto the wrong tiles. A stat row's positions must be
-          fixed or its numbers cannot be trusted at a glance, which is the only way they are read. */}
+      {/* Always rendered, greyed at zero: a row that changes width shifts every other number
+          leftward. */}
       {cell('stopped', n('error'), n('error') > 0 ? 'text-danger' : 'text-faint')}
       {cell(STATUS_LABEL.active, n('active'), 'text-accent-text')}
       {cell(STATUS_LABEL.awaiting_human, n('awaiting_human'), 'text-warn')}
       {cell(STATUS_LABEL.awaiting_child, n('awaiting_child'))}
-      {/* Shipped is a TILE, not a footnote. It carried the same weight as a caption — 11px, faint,
-          no affordance — while being the only way into completed work and its execution traces, so
-          it read as decoration and went unclicked. It keeps the row's tile shape (count over label)
-          and gains the chevron + hover that say it opens something. */}
+      {/* A TILE, not a footnote: as a caption, the only way into completed work read as
+          decoration. */}
       {shipped > 0 ? (
         <button
           onClick={onShowShipped}
@@ -566,18 +520,12 @@ function ShippedList({
   onClose: () => void
 }) {
   const sorted = [...items].sort((a, b) => (b.done_at ?? '').localeCompare(a.done_at ?? ''))
-  // Opening this list IS reading the notice — every completed item is named on screen, so they all
-  // get their read receipt here. Before this, `seen_at` was stamped in ONE place: opening an item's
-  // own drilldown. So the `unread` attention tier (terminal + no `seen_at`) could only ever grow —
-  // 21 shipped items meant 21 chips that no amount of looking at the list would clear, and the only
-  // way down was opening 21 modals one at a time. The tier still does its job for the NEXT thing
-  // that lands overnight; it just stops accumulating what the owner has already been shown.
+  // Opening this list IS reading the notice, so the unread tier stops accumulating what was shown.
   useEffect(() => {
     const unseen = sorted.filter((it) => !it.seen_at)
     if (!unseen.length) return
     Promise.allSettled(unseen.map((it) => markWorkItemSeen(it.id, contextId))).then(onSeen)
-    // Mount-only: the list is a snapshot of what was on screen when it opened. Re-running as
-    // `sorted` changes underneath would re-stamp on every board poll.
+    // Mount-only: re-running as the list changes would re-stamp on every poll.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   return (
@@ -604,11 +552,8 @@ function ShippedList({
               className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left hover:bg-hover"
             >
               <Check size={13} className="shrink-0 text-success" />
-              {/* The id under the title, not instead of it. Titles here are the owner's own words
-                  and several read alike ("tally count should…", "tally list should…"), so the row
-                  the owner clicked and the item they then talk about were only joinable by opening
-                  it. The id is what every other surface — branch name, worktree path, artifacts
-                  folder, the log — keys on. */}
+              {/* The id under the title: several titles read alike, and the id is what every other
+                  surface keys on. */}
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm text-fg">{it.title || it.id}</span>
                 <span className="block font-mono text-[10px] text-faint">{it.id}</span>

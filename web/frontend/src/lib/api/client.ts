@@ -1,10 +1,10 @@
-// All FE I/O goes to the same-origin /api surface (Vite proxies to the BFF → daemon).
-// Two tiny helpers so each resource module isn't repeating fetch + status-check + parse.
+// All FE I/O goes to the same-origin `/api` surface. Two helpers, so each resource module is not
+// repeating fetch, status-check and parse.
 
-// The daemon writes genuinely useful failure messages into FastAPI's `detail` (a 409 explains the
-// merge/gate/plan reason, a runbook, the retry shape). Swallowing it for a bare status left the
-// owner staring at "409" (P7). Read the body and surface `detail` verbatim as the Error message, so
-// every catch site's banner shows the daemon's own words; fall back to the status when there's none.
+// The daemon writes genuinely useful failure messages into `detail` — a 409 explains the reason.
+//
+// Surface it verbatim as the Error message, so every catch site's banner shows the daemon's own
+// words.
 class ApiError extends Error {
   status: number
   detail: string
@@ -14,8 +14,8 @@ class ApiError extends Error {
     this.detail = detail
     this.name = 'ApiError'
   }
-  // Catch sites render errors with `String(e)` / `${e}` → without this they'd read "ApiError: …".
-  // Return the daemon's words alone so the banner is exactly the detail.
+  // Catch sites stringify the error, so return the daemon's words alone rather than a class-name
+  // prefix.
   toString() { return this.detail }
 }
 

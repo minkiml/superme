@@ -3,10 +3,10 @@ import { fmtTokens } from '@/lib/format'
 import { RepoIcon } from '@/lib/repoIcons'
 import type { CommandStats, OrbitRepo } from './useCommandStats'
 
-// Nexus — the orbit command centre. The hub IS SuperMe (Me/global); connected projects orbit it,
-// each tile carrying its real token signal (total + core/dev split). Clicking a node selects it —
-// its connector + outline light up — and opens the inspector. Positions are on a percentage grid
-// so the SVG connectors line up with the absolutely-placed cards.
+// The orbit command centre: the hub IS SuperMe, and connected projects orbit it carrying their
+// token signal.
+//
+// Positions are on a percentage grid, so the connectors line up with the absolutely-placed cards.
 const RX = 33
 const RY = 34
 
@@ -15,10 +15,9 @@ function pos(i: number, n: number): { x: number; y: number } {
   return { x: 50 + RX * Math.cos(a), y: 50 + RY * Math.sin(a) }
 }
 
-// A live-status ring around a node: pulsing "heartbeat" while an agent is actively RUNNING (real
-// operations), a static ring when the repo has a LIVE-but-idle agent, nothing otherwise. The ring
-// color follows the repo's tag color. `shape` matches the node it wraps (card = rounded-rect, hub
-// = full circle).
+// A pulsing ring while an agent is actively running, a static one when the repo is live but idle.
+//
+// The colour follows the repo's tag, and `shape` matches the node it wraps.
 function LiveRing({ color, running, live, shape }: { color: string; running: boolean; live: boolean; shape: string }) {
   if (!running && !live) return null
   return (

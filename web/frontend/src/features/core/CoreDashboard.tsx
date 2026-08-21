@@ -2,10 +2,8 @@ import { ArrowLeft, LayoutDashboard } from 'lucide-react'
 import { colorFor } from '@/lib/palette'
 import type { OrbitRepo } from '@/features/shell/useCommandStats'
 
-// The Core dashboard — the per-repo Tier-1 functional surface (the owner's day-to-day view of one
-// SuperMe: its knowledge, artifacts, and core-mode work). Deliberately a placeholder this
-// renovation (the functional tier is shell-only for now); the shell + entry are wired so the
-// destination is real the moment its contents land.
+// The Core dashboard — the owner's day-to-day view of one SuperMe. A placeholder for now, with the
+// shell and entry wired.
 
 export default function CoreDashboard({ repo, onExit }: { repo: OrbitRepo; onExit: () => void }) {
   const isHub = repo.id === 'global'

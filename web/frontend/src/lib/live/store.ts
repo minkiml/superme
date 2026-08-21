@@ -1,27 +1,13 @@
-// The shared endpoint cache — one fetch per endpoint per interval, fanned out to every component
-// that wants it (routing audit §3.2).
+// The shared endpoint cache — one fetch per endpoint per interval, fanned out to everyone who wants
+// it.
 //
-// The problem it replaces: fifteen independent `setInterval`s, each owned by whichever component
-// happened to want the data, with no knowledge of each other. One screen fetched `/dev/attention`
-// three times per cycle and `/dev/work-items/{id}/detail` three-to-four times, because
-// `DevWorkspace`, `DevDashboard` and `WorkItemModal` each ran their own clock over the same URL.
-//
-// Three properties matter, and they are the reason this exists rather than a helper hook:
-//
-//   1. ONE request per key. Subscribers share an entry; concurrent asks share the in-flight promise.
-//   2. Polling is SUBSCRIPTION-DRIVEN. A key nobody watches has no timer. That is what makes a
-//      router safe: unmounting a view drops its load, mounting one costs one request, not fifteen.
-//   3. Data OUTLIVES its subscribers (briefly). Returning to a board you left two seconds ago
-//      renders from cache and revalidates, instead of blanking. A naive router breaks exactly here.
-//
-// Deliberately not a query library: the whole surface is subscribe/read/invalidate, and being ours
-// is what lets `invalidate()` be driven by a server push later (§3.3) without touching a component.
+// ONE request per key, polling that is SUBSCRIPTION-DRIVEN, and data that briefly outlives its
+// subscribers.
 
-// ── connection ───────────────────────────────────────────────────────────────────────────────────
-// A daemon that ANSWERS is connected, whatever it answers: a 404 or a 409 is a working backend
-// stating a fact, and `client.ts` raises those as `ApiError`. Only a transport failure — fetch
-// itself rejecting — means the daemon is unreachable. Conflating the two would flash "disconnected"
-// every time a route legitimately 404s.
+// ── connection ──
+//
+// A daemon that ANSWERS is connected, whatever it answers: a 404 is a working backend stating a
+// fact. Only a transport failure means it is unreachable.
 export type Connection = {
   online: boolean
   lastOkAt: number // epoch ms of the last successful response (0 = never)
@@ -45,16 +31,13 @@ export function watchConnection(notify: () => void): () => void {
   return () => connWatchers.delete(notify)
 }
 
-// A gateway telling us it could not reach the daemon is NOT the daemon answering. The BFF sits
-// between the browser and the daemon and replies `502 {"detail":"daemon unreachable"}` when the
-// daemon is down — an `ApiError` with a status, which would otherwise read as a healthy backend.
-// Verified live: killing the daemon with the BFF still up left the bar reading "Live" while nothing
-// on screen was current. 5xx gateway statuses mean exactly "upstream is unreachable", so they count
-// as transport failures.
+// A gateway saying it could not reach the daemon is NOT the daemon answering.
+//
+// The BFF replies 502 when the daemon is down, which would otherwise read as a healthy backend, so
+// gateway statuses count as transport failures.
 const GATEWAY_DOWN = new Set([502, 503, 504])
 
-// `ApiError` carries a status: something replied. Anything else (TypeError from fetch, an abort)
-// is the transport being down — as is a gateway status, per above.
+// `ApiError` carries a status, so something replied. Anything else is the transport being down.
 function isTransportFailure(e: unknown): boolean {
   const status = e && typeof e === 'object' ? (e as { status?: number }).status : undefined
   if (typeof status !== 'number') return true
@@ -73,8 +56,7 @@ function markDown() {
 
 // ── the cache ────────────────────────────────────────────────────────────────────────────────────
 
-// What a subscriber reads. Immutable and replaced wholesale on change, so `useSyncExternalStore`
-// can compare by reference (returning a fresh object each read would loop forever).
+// Immutable and replaced wholesale, so `useSyncExternalStore` can compare by reference.
 export type Snapshot<T> = {
   data: T | undefined
   error: Error | undefined
@@ -99,24 +81,21 @@ type Entry = {
 
 const entries = new Map<string, Entry>()
 
-// How long an unsubscribed entry's data survives. Long enough that navigating away and back is
-// instant; short enough that a parked tab isn't holding a snapshot of a world that moved on.
+// Long enough that navigating away and back is instant, short enough that a parked tab is not
+// holding a stale world.
 const GC_MS = 120_000
 
 // Counters, for proving the guarantee rather than asserting it (see `stats()`).
 let requestCount = 0
 let startedAt = Date.now()
 
-// ── the push backstop ────────────────────────────────────────────────────────────────────────────
-// While `/ws/dashboard` is delivering invalidations, polling stops being the mechanism and becomes
-// insurance against a dropped frame — so idle feeds slow right down. Losing the socket releases the
-// backstop on the spot, which is what makes the degradation honest: a dead channel falls back to
-// exactly the pre-push cadence rather than to a screen that has quietly stopped updating.
+// ── the push backstop ──
+//
+// While the socket delivers invalidations, polling is insurance against a dropped frame, so idle
+// feeds slow right down. Losing the socket releases the backstop on the spot.
 const BACKSTOP_MS = 30_000
-// …but only for feeds that were on the ORDINARY cadence. A subscriber asking for sub-5s is saying
-// "this is changing continuously and I am watching it" — a live run's token counter, which ticks
-// without writing a dev event and so has nothing to push. Slowing that to 30s would trade a real
-// regression for a number.
+// Only for feeds on the ORDINARY cadence: a sub-5s subscriber is watching something that ticks
+// without writing an event.
 const BACKSTOP_FLOOR_MS = 5000
 
 let pushOnline = false
@@ -145,9 +124,7 @@ function publish(e: Entry, snap: Snapshot<unknown>) {
 }
 
 function run(e: Entry): Promise<void> {
-  // Dedup: a second caller during an in-flight request joins it rather than issuing its own. This
-  // is what collapses the three-way `/dev/attention` fetch even when the three components mount in
-  // the same tick.
+  // A second caller during an in-flight request joins it rather than issuing its own.
   if (e.inflight) return e.inflight
   requestCount += 1
   const p = e.fetcher()
@@ -159,10 +136,7 @@ function run(e: Entry): Promise<void> {
     .catch((err: unknown) => {
       if (isTransportFailure(err)) markDown()
       else markOk() // the daemon answered — it is up, this key just failed
-      // KEEP the last good data. The caller decides what to show; `fetchedAt` is how it knows the
-      // data is old, and the connection banner is how the owner knows why. Silently rendering
-      // stale numbers as current is the defect this whole layer exists to remove — but throwing the
-      // data away on one blip is not the fix either.
+      // KEEP the last good data: `fetchedAt` is how the caller knows it is old.
       publish(e, { ...e.snap, error: err as Error, loading: false })
     })
     .finally(() => { e.inflight = null })
@@ -189,8 +163,8 @@ export function subscribe(
     e = { key, fetcher, snap: EMPTY, inflight: null, timer: null, intervalMs, subs: new Map(), gc: null }
     entries.set(key, e)
   }
-  // The key encodes the endpoint AND its params, so every subscriber's fetcher is the same request;
-  // taking the latest keeps closures from going stale without changing what is fetched.
+  // The key encodes the endpoint AND its params, so taking the latest fetcher cannot change what is
+  // fetched.
   e.fetcher = fetcher
   if (e.gc) { clearTimeout(e.gc); e.gc = null }
 
@@ -198,8 +172,7 @@ export function subscribe(
   e.subs.set(id, { intervalMs, notify })
   e.intervalMs = effectiveInterval(e)
 
-  // Revalidate on subscribe only when the cached copy is older than the cadence asked for. Mounting
-  // a view that another view already keeps warm costs zero requests.
+  // Revalidate on subscribe only when the cached copy is older than the cadence asked for.
   const age = e.snap.fetchedAt ? Date.now() - e.snap.fetchedAt : Infinity
   if (age >= (intervalMs || Infinity) || !e.snap.fetchedAt) run(e)
   schedule(e)
@@ -226,12 +199,9 @@ export function refresh(key: string): void {
 }
 
 /**
- * Refetch every WATCHED key whose name starts with one of `prefixes` — the topic channel.
+ * Refetch every WATCHED key under one of `prefixes` — the seam the server push lands on.
  *
- * This is the seam the server push lands on (§3.3): a socket frame saying "work-items in
- * test-playground changed" becomes `invalidate(['dev:test-playground'])`, and every subscribed view
- * of that repo refetches at once. Push carries a TOPIC, never data, so push and poll can never
- * disagree about a value — the only failure mode a push channel would otherwise add.
+ * Push carries a TOPIC, never data, so push and poll can never disagree about a value.
  */
 export function invalidate(prefixes: string[]): void {
   entries.forEach((e) => {
@@ -243,9 +213,7 @@ export function invalidate(prefixes: string[]): void {
 export function stats() {
   let watched = 0
   let timers = 0
-  // The slowest cadence anything on screen is actually running at. "Nothing has arrived recently"
-  // is only alarming relative to how often anything was DUE — a fixed threshold cannot know that,
-  // and got it wrong the moment the push backstop stretched idle feeds to 30s.
+  // "Nothing has arrived recently" is only alarming relative to how often anything was DUE.
   let slowestMs = 0
   entries.forEach((e) => {
     if (!e.subs.size) return

@@ -4,28 +4,24 @@ import type { WsFrames, TurnFrame, ApprovalResponseFrame, TimelineFrame as GenTi
 import type { Approval, RunMeta } from '../types'
 import { SEED_COMMANDS } from '../util'
 
-// The WS frame contract is generated from the daemon's frame models (R6) — `npm run gen:ws`.
+// The WS frame contract is generated from the daemon's frame models — `npm run gen:ws`.
 type OutboundFrame = WsFrames['outbound'] // daemon → client (discriminated on `type`)
 
-// A live timeline frame (F2): one event from a WATCHED item's run (build/vet/other phase), pushed
-// from the daemon's item broker independent of any turn this panel fired. (The generated union's
-// `type` discriminant is optional, so we alias the frame interface directly rather than Extract.)
+// One event from a WATCHED item's run, pushed from the daemon's broker independent of any turn this
+// panel fired.
 export type TimelineFrame = GenTimelineFrame
 
 type Handlers = {
   onResult: (text: string, sessionId: string | null) => void
   onError: (message: string) => void
-  onTimeline?: (frame: TimelineFrame) => void  // F2: a watched item's live run event
+  onTimeline?: (frame: TimelineFrame) => void  // A watched item's live run event
 }
 
-// Owns the chat WebSocket and everything that's turn-streaming state: the live assistant
-// text, busy/elapsed, the current tool status + approval request, the cached slash
-// commands, and the per-turn run metadata. Completed turns are handed back through
-// `handlers` so the caller can append to the message list / claim a session id.
+// Owns the chat WebSocket and every piece of turn-streaming state, handing completed turns back
+// through `handlers`.
 //
-// Like useSessions, this assumes the ChatPanel remounts on context change, so the WS
-// effect stays `[]` and `contextId` is captured once. `handlers` is read through a ref so
-// changing callbacks never tears down the socket.
+// The panel remounts on context change, and `handlers` is read through a ref, so changing callbacks
+// never tear down the socket.
 export function useAgentSocket(contextId: string, mode: 'core' | 'dev', handlers: Handlers) {
   const CMDS_KEY = `superme.commands.${contextId}.${mode}` // dev/core have different palettes
   const [ready, setReady] = useState(false)
@@ -41,9 +37,7 @@ export function useAgentSocket(contextId: string, mode: 'core' | 'dev', handlers
   const liveRef = useRef('')
   const handlersRef = useRef(handlers)
   handlersRef.current = handlers
-  // `busy` as a ref too: the socket handlers are installed once (the WS effect is `[]`), so they
-  // close over the FIRST `busy` and can never read the current one. Anything inside them that has
-  // to know whether a turn is in flight reads this.
+  // A ref too: the handlers are installed once, so they close over the FIRST `busy`.
   const busyRef = useRef(false)
   const markBusy = useCallback((v: boolean) => {
     busyRef.current = v
@@ -51,15 +45,10 @@ export function useAgentSocket(contextId: string, mode: 'core' | 'dev', handlers
   }, [])
   // What `flush` most recently turned into a permanent bubble — see the dedupe in `text_delta`.
   const committedRef = useRef('')
-  // Set while WE are the ones closing the socket (effect teardown: unmount, context switch). Only
-  // an UNEXPECTED close means the turn was cut; a deliberate one must stay silent, or every repo
-  // switch mid-turn would accuse the connection of dropping.
+  // Set while WE are closing: only an UNEXPECTED close means the turn was cut.
   const closingRef = useRef(false)
 
-  // The "/" palette is computed server-side per (context, mode): mode-correct, fresh from disk
-  // (publish/disable/delete reflect at once), internal skills filtered out. Restore the localStorage
-  // copy for an instant first paint, then fetch the authoritative list. `refreshCommands` lets the
-  // caller re-pull (e.g. when the palette opens) so it never lags a publish.
+  // Restore the stored copy for an instant first paint, then fetch the authoritative list.
   const refreshCommands = useCallback(async () => {
     try {
       const { commands: cmds } = await getPalette(contextId, mode)
@@ -81,11 +70,7 @@ export function useAgentSocket(contextId: string, mode: 'core' | 'dev', handlers
     refreshCommands()
   }, [CMDS_KEY, refreshCommands])
 
-  // Commit whatever the agent has said but not yet had turned into a bubble, and clear the live
-  // buffer. The ONE place a streamed message becomes a permanent one — every exit from a turn
-  // (next message, result, error, socket close) routes through here, so no path can drop text the
-  // owner already read. `force` still fires the handler on empty text so a bare command reply can
-  // carry its session claim.
+  // The ONE place a streamed message becomes permanent: every exit from a turn routes through here.
   const flush = useCallback((sessionId: string | null, opts?: { force?: boolean }) => {
     const text = liveRef.current
     liveRef.current = ''
@@ -97,20 +82,14 @@ export function useAgentSocket(contextId: string, mode: 'core' | 'dev', handlers
   }, [])
 
   useEffect(() => {
-    // Reset per socket. The ref outlives the effect (React keeps refs across a hot update), so a
-    // teardown that set it would otherwise latch it ON for the socket that replaces it — and every
-    // later drop would be read as deliberate and pass in silence.
+    // Reset per socket: the ref outlives the effect, so a teardown would latch it on for the next.
     closingRef.current = false
     const ws = new WebSocket(agentSocketUrl())
     wsRef.current = ws
     ws.onopen = () => setReady(true)
     ws.onclose = () => {
       setReady(false)
-      // A socket that dies mid-turn ENDS the turn — nothing more can arrive on it, and the daemon
-      // has already aborted the run on its side. Clearing `ready` alone left `busy` set forever:
-      // the rail sat at "thinking… 3m 0s" against a run that had been dead for half an hour, with
-      // no way to tell working from gone but a page refresh. Commit what the agent already said
-      // (same rule as `error` — it spoke, the words stay), stop the clock, and say what happened.
+      // A socket that dies mid-turn ENDS it: clearing `ready` alone left `busy` set forever.
       if (closingRef.current || !busyRef.current) return
       flush(null)
       markBusy(false)
@@ -122,20 +101,14 @@ export function useAgentSocket(contextId: string, mode: 'core' | 'dev', handlers
       const f = JSON.parse(ev.data) as OutboundFrame
       switch (f.type) {
         case 'init':
-          // The WS init carries the daemon's mode-blind cached list (includes internal skills + the
-          // other mode's). The "/" palette is now served by /dev/palette (mode-correct + filtered),
-          // so we ignore init for commands and let refreshCommands own the list.
+          // The init list is mode-blind, so it is ignored and the palette route owns the commands.
           break
         case 'text_delta':
-          // A `text_delta` is one WHOLE assistant message, not a token — and one turn can produce
-          // several: the agent speaks, does more work (a tool call, or an async subagent that
-          // notifies on completion), then speaks again. So a new delta means the PREVIOUS message
-          // is finished: commit it as its own bubble right now rather than gluing the turn's
-          // speeches into one blob and splitting them retroactively at `result`.
+          // A delta is one WHOLE message, and a turn can produce several, so a new one ends the
+          // previous.
           flush(null)
-          // …unless this delta IS the message we just committed. A re-emitted message would open a
-          // live buffer holding text that is already a bubble, and the rail draws both — the same
-          // sentence twice, one permanent and one live. Committed once is the honest render.
+          // Unless this delta IS the message just committed: the rail would draw the same sentence
+          // twice.
           if (f.text.trim() && f.text.trim() === committedRef.current) break
           liveRef.current = f.text
           setLive(f.text)
@@ -148,9 +121,8 @@ export function useAgentSocket(contextId: string, mode: 'core' | 'dev', handlers
           setApproval({ id: f.id, tool_name: f.tool_name, tool_input: f.tool_input })
           break
         case 'result': {
-          // Commit the turn's last message. Everything before it was already committed at its own
-          // boundary. Fall back to the Result's own text when nothing streamed — command replies
-          // and error subtypes arrive as a bare Result with no preceding text_delta.
+          // Commit the turn's last message. Fall back to the Result's own text, since a command
+          // reply streams nothing.
           if (!liveRef.current.trim() && f.text?.trim()) liveRef.current = f.text
           // The session claim rides this final flush: one claim per turn.
           flush(f.session_id ?? null, { force: true })
@@ -163,17 +135,16 @@ export function useAgentSocket(contextId: string, mode: 'core' | 'dev', handlers
           break
         }
         case 'error':
-          // Keep what the agent already said. A turn that fails after speaking still spoke — the
-          // words are on screen and in the run trail, so discarding them here would recreate the
-          // same "it said it, then it vanished" defect through a different door.
+          // A turn that fails after speaking still spoke, so the words stay on screen and in the
+          // trail.
           flush(null)
           setStatusLabel(null)
           markBusy(false)
           handlersRef.current.onError(f.message)
           break
         case 'timeline':
-          // F2: a live event from a work-item this panel is WATCHING (a background build/vet/other
-          // phase run). Handed to the timeline view to append — never touches the turn-streaming state.
+          // A live event from a WATCHED item, handed to the timeline; it never touches
+          // turn-streaming state.
           handlersRef.current.onTimeline?.(f)
           break
       }
@@ -185,8 +156,8 @@ export function useAgentSocket(contextId: string, mode: 'core' | 'dev', handlers
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Live response timer: ticks every 100ms while a turn is in flight, so the user sees a
-  // moving "thinking… 2.4s" rather than a static label.
+  // Ticks while a turn is in flight, so the user sees a moving "thinking…" rather than a static
+  // label.
   useEffect(() => {
     if (!busy) {
       setElapsed(0)
@@ -197,9 +168,7 @@ export function useAgentSocket(contextId: string, mode: 'core' | 'dev', handlers
     return () => clearInterval(id)
   }, [busy])
 
-  // Fire a turn. Returns false (no-op) if a turn is in flight or the socket isn't open.
-  // `opts` carries the dev binding: mode="dev" + the work-item id (the item owns its thread,
-  // so the daemon persists the session back onto it).
+  // Returns false when a turn is in flight or the socket is closed. `opts` carries the dev binding.
   function send(
     prompt: string,
     resume: string | null,
@@ -210,9 +179,7 @@ export function useAgentSocket(contextId: string, mode: 'core' | 'dev', handlers
   ): boolean {
     const ws = wsRef.current
     if (busy || !ws || ws.readyState !== WebSocket.OPEN) return false
-    // model/effort are the SESSION runtime override (the composer picker) — sent per-turn; they never
-    // persist a default. null = fall to the server precedence (work-item → repo → system). kind +
-    // subject_run_id only matter at a session's BIRTH (the daemon stamps them write-once).
+    // The SESSION runtime override, sent per turn; they never persist a default.
     const frame: TurnFrame = {
       type: 'turn',
       prompt,
@@ -227,9 +194,8 @@ export function useAgentSocket(contextId: string, mode: 'core' | 'dev', handlers
     }
     ws.send(JSON.stringify(frame))
     markBusy(true)
-    // Commit any orphan from a turn that ended without a result/error frame (a socket hiccup)
-    // rather than clearing it — clearing loses it, and carrying it forward would attach the last
-    // turn's words to this one.
+    // Commit an orphan from a turn that ended without a result frame: clearing loses it, carrying
+    // it misattributes it.
     flush(null)
     return true
   }
@@ -243,8 +209,8 @@ export function useAgentSocket(contextId: string, mode: 'core' | 'dev', handlers
     setApproval(null)
   }
 
-  // F2: (un)subscribe this panel to a work-item's live event broker. `itemId=null` stops watching.
-  // Independent of turns — passive observation, so it works while a background phase run is in flight.
+  // Subscribe this panel to an item's live broker. Passive, so it works while a background run is
+  // in flight.
   const watch = useCallback((itemId: string | null) => {
     const ws = wsRef.current
     if (ws && ws.readyState === WebSocket.OPEN) {
@@ -261,8 +227,8 @@ export function useAgentSocket(contextId: string, mode: 'core' | 'dev', handlers
   function clearMeta() {
     setMeta(null)
   }
-  // Seed the model·context% readout for a session we're OPENING (not a live turn) — e.g. from that
-  // session's last recorded run — so the header shows its model persistently instead of "history".
+  // Seed the readout for a session being OPENED, so the header shows its model rather than
+  // "history".
   const seedMeta = useCallback((m: RunMeta | null) => setMeta(m), [])
 
   return { ready, live, busy, statusLabel, elapsed, approval, commands, meta, send, answer, watch, clearStream, clearMeta, seedMeta, refreshCommands }

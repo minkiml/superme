@@ -12,10 +12,9 @@ function stripFrontmatter(text: string): string {
   return m ? text.slice(m[0].length) : text
 }
 
-// The preview popup for one constitution — universal or local, learned or hand-authored. Mirrors the
-// skill/agent file modals: opens over the row, shows the description + body, carries the same
-// enable/disable Toggle, and now an Edit mode. Edit pulls the RAW file (frontmatter intact) so
-// `enabled`/`description` survive the save. Keyed by (scope, slug) via the constitution-file routes.
+// The preview popup for one constitution, mirroring the skill and agent modals.
+//
+// Edit pulls the RAW file, frontmatter intact, so `enabled` and `description` survive the save.
 export default function ConstitutionModal({
   slug, scope, title, mode, description, body, enabled, foundational = false, learned = false, contextId = 'global', tint = 'dev',
   onClose, onToggled,
@@ -38,8 +37,8 @@ export default function ConstitutionModal({
   const [busy, setBusy] = useState(false)
   // After a save, show the freshly-saved (stripped) body instead of the now-stale `body` prop.
   const [savedBody, setSavedBody] = useState<string | null>(null)
-  // The modal RENDERS the stripped body but EDITS the raw file, so the gate loads its own baseline
-  // at Edit-time — diffing a draft against the stripped text would arm Save on the frontmatter.
+  // It renders the stripped body but EDITS the raw file, so the gate loads its own baseline at
+  // Edit-time.
   const gate = useEditGate({
     saved: '',
     valid: (d) => !!d.trim(),

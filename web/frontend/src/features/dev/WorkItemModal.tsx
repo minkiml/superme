@@ -29,33 +29,17 @@ import { StatusBadge, DEFAULT_RUN_MODEL, DEFAULT_RUN_EFFORT } from './panels'
 import { PHASE_LABEL, STATUS_LABEL, kindChipClass, researchKindLabel } from './common'
 import { useContainerWidth, railTight } from '@/lib/layout'
 
-// The work-item drilldown (renovation v2 §4) — "what is needed from me, and what has this produced".
+// The work-item drilldown: what is needed from me, and what has this produced.
 //
-// Header band → PROGRESS BAR (not clickable: reading a past stage is what Reports is for) → four
-// tabs (Quick View · Reports · Trace · Git) → the action bar.
+// TYPE SCALE — four steps only; anything wanting a size between two wants a different weight.
 //
-// ★ TYPE SCALE — four steps, and only four (owner, 2026-08-01). This file had reached NINE sizes
-// (9.5 / 10 / 10.5 / 11 / 12 / 12.5 / 13 / 14 / 15), most of them a half-pixel apart and picked
-// per-component, which is why sibling rows kept looking mis-set rather than deliberately ranked.
-//     15px  the item title — one use, the modal's only headline
-//     13px  BODY: every normal sentence, value, list row, button, input, empty state
-//     11px  META: labels, mono ids, timestamps, annotations hanging off a body line
-//     10px  MICRO: badges, pills, uppercase stamps
-// Anything new picks one of these. If a thing seems to need a size between two of them, it wants a
-// different WEIGHT or COLOUR — see the colour rule (fg = fact, muted = label, faint = provenance).
-//
-// ★ This component derives almost nothing. Which controls are live, why they are greyed, why the item
-// is parked, what the owner should do about it, and how the proof rows join — all of that arrives
-// computed on `GET /dev/work-items/:id/drilldown`. The surface it replaced pulled a markdown gate
-// brief and re-decided activation locally, next to `approve_blocked_by` that it never read: two
-// writers for one question, one of them in TypeScript. **If you find yourself computing `disabled`
-// here, the rule belongs in `services/drilldown.py`.**
+// If you compute `disabled` here, the rule belongs in `services/drilldown.py`.
 
-// One icon per gate criterion — the SUBJECT of the check (evidence, the plan, the children),
-// beside the ✓/✗/– that carries its verdict. Mono slugs look alike in a list; a shield and a
-// clipboard tell two of them apart before you read either. Every criterion `gate_briefs` can emit
-// is listed; an unmapped one falls back rather than blanking, because the kernel emits an
-// unknown-slug check on purpose when it has no evaluator.
+// The SUBJECT of each check, beside the mark carrying its verdict — mono slugs look alike in a
+// list.
+//
+// An unmapped criterion falls back rather than blanking: the kernel emits an unknown slug when it
+// has no evaluator.
 const CHECK_ICON: Record<string, typeof FileText> = {
   required_artifacts: FileText,
   children_terminal: Network,
@@ -70,10 +54,7 @@ const CHECK_ICON: Record<string, typeof FileText> = {
   owner_rulings: Gavel,
 }
 
-// Per-kind pipeline (mirrors the backend KIND_PROFILES) — the progress bar's stops.
-// ⚠ HAND-COPIED, and it has drifted once: research kept a `plan` stop for weeks after the phase was
-// removed from the backend profile (research-sweep-model §3), so every sweep showed a step that
-// cannot happen. Nothing enforces the mirror — when a pipeline changes, change it here too.
+// The progress bar's stops, HAND-COPIED from the backend profiles. Nothing enforces the mirror.
 const PIPELINES: Record<string, string[]> = {
   implementation: ['triage', 'plan', 'build', 'vet', 'review', 'close'],
   research: ['triage', 'investigate', 'review', 'close'],
@@ -85,33 +66,21 @@ const TABS: { id: ItemTab; label: string; icon: typeof FileText }[] = [
   { id: 'trace', label: 'Trace', icon: Terminal },
   { id: 'git', label: 'Git', icon: GitBranch },
 ]
-// The bar has THREE slots and only three (owner, 2026-07-31): the PRIMARY, then Drop, then Re-run.
-// The primary resolves in this order — a gate decision outranks a recovery, which outranks a launch:
-//   approve  the item is AT a gate and the decision is yours
-//   resume   its run stopped (R2/R4)
-//   run      nothing has fired for this phase and nothing is on autopilot
-// Exactly one of the three is rendered as the primary; the other two are NOT rendered anywhere,
-// because a control that cannot apply in this state is not information, it is a fourth thing to
-// read. That is different from GREYING: the resolved primary is always rendered, greyed with its
-// server-written reason when it isn't workable, so the slot never goes empty.
+// THREE slots only: a gate decision outranks a recovery, which outranks a launch.
+//
+// The other two are not rendered at all, which is different from greying the one that is.
 const PRIMARY_ORDER = ['approve', 'resume', 'run'] as const
 
 const QUICK_SUBS: { id: ItemSub; label: string }[] = [
   { id: 'now', label: 'Now' },
   { id: 'deputy', label: 'Deputy' },
-  // Labelled "Task", id still `proof` — the id is an ADDRESS (`?sub=proof`), and renaming it would
-  // dead-link every drilldown URL anyone saved. The pane is a per-task list, which is what the tab
-  // should say; the payload keeps the name the backend gives it.
+  // The id is an ADDRESS, so renaming it would dead-link every saved drilldown URL.
   { id: 'proof', label: 'Task' },
-  // Authorization is CONDITIONAL — appended only when the item has one (see `subs`). It was a
-  // permanent banner above the tabs, which cost a third of the modal's height on every tab of every
-  // item, most of which never have one. As a sub tab it costs nothing until it exists, and the
-  // header's blinking flag is what makes sure a pending one is still impossible to miss.
+  // Appended only when the item has one, so it costs nothing until it exists.
   { id: 'auth', label: 'Authorization' },
 ]
-// Trace's two panes. They answer different questions and are different lengths — Runs is what the
-// AGENTS did (every tool call, per run), Timeline is what HAPPENED TO the item (phase advances,
-// merges, gate decisions). Stacked, the long one buried the short one; as peers each shows whole.
+// Runs is what the AGENTS did; Timeline is what HAPPENED TO the item. Stacked, the long one buried
+// the short.
 const TRACE_SUBS: { id: ItemSub; label: string }[] = [
   { id: 'runs', label: 'Runs' },
   { id: 'timeline', label: 'Timeline' },
@@ -128,21 +97,15 @@ export default function WorkItemModal({
   onChanged: () => void // reload the board after a mutation
   // The ask-card's one-click "answer in chat". Optional: without it the card still says WHERE to go.
   onOpenChat?: () => void
-  // The item's attention tier, passed down so the drilldown's status badge reads the SAME verdict as
-  // the card behind it — otherwise the header falls back to the stored word and re-opens the D2
-  // split, a card saying NEEDS YOU over a popup saying IN PROGRESS.
+  // Passed down so the badge reads the SAME verdict as the card behind it, not the stored word.
   bucket?: string
 }) {
-  // Cadence: 2.5s while a run is in flight, 10s at rest. The drilldown payload is ONE call covering
-  // every tab, so the old four-feed fan-out is down to two (payload + the trace/log the other tabs
-  // read lazily).
+  // Brisk while a run is in flight, slow at rest. The payload is ONE call covering every tab.
   const rate = it.running ? 2500 : 10000
   const dQ = useLive<Drilldown>(K.itemDrilldown(contextId, it.id),
                                 () => getWorkItemDrilldown(it.id, contextId), rate)
-  // The item's WHOLE event history, not a window. The old 50 silently dropped the early rows — the
-  // triage/plan decisions, which are exactly what you go looking for months later. Scoped to one
-  // item, so this is bounded by how much work the item did (the busiest to date: ~135 rows); the cap
-  // is a runaway guard, and TimelinePane says so out loud if it is ever reached.
+  // The whole history, not a window: a cap drops the triage and plan decisions. The pane says so if
+  // reached.
   const logQ = useLive(K.devLog(contextId, it.id, EVENT_CAP),
                        () => getDevLog(contextId, { itemId: it.id, limit: EVENT_CAP }), rate)
   const d = dQ.data ?? null
@@ -152,7 +115,7 @@ export default function WorkItemModal({
   const [busy, setBusy] = useState<string | null>(null)
   const [abandoning, setAbandoning] = useState(false)
   const [abandonReason, setAbandonReason] = useState('')
-  const [rerunning, setRerunning] = useState(false)   // the re-run confirm bar (R5)
+  const [rerunning, setRerunning] = useState(false)   // the re-run confirm bar
   const [authBusy, setAuthBusy] = useState<string | null>(null)
   const [model] = useState(toModelKey(it.model) || DEFAULT_RUN_MODEL)
   const [effort] = useState(it.effort ?? DEFAULT_RUN_EFFORT)
@@ -168,28 +131,25 @@ export default function WorkItemModal({
   const tab: ItemTab = (route.name === 'item' && route.tab) || 'quick'
   const routeSub = route.name === 'item' ? route.sub : null
   const reportPhases = d?.reports ?? []
-  // The feed carries PENDING requests only, and only at the review gate (`gate_briefs.gate_state`) —
-  // so a non-empty list IS "something is waiting on you", with no second rule deciding that here.
+  // Pending requests only, and only at the review gate, so a non-empty list IS "something is
+  // waiting on you".
   const auths = d?.authorizations ?? []
-  // The tab rail measures itself — the drilldown is as wide as the surface it sits in, which the
-  // window's width does not tell you.
+  // The tab rail measures itself: the drilldown is as wide as the surface it sits in.
   const [railRef, railW] = useContainerWidth<HTMLDivElement>()
   const tightRail = railTight(railW, TABS.length, auths.length > 0 ? 130 : 0)
-  // The Authorization sub exists only on an item that HAS one — a tab that opens empty on every
-  // other item teaches the owner to ignore the row it sits in.
+  // A tab that opens empty on every other item teaches the owner to ignore the row it sits in.
   const subs: ItemSub[] = tab === 'quick'
                           ? QUICK_SUBS.filter((s) => s.id !== 'auth' || auths.length > 0)
                                       .map((s) => s.id)
                         : tab === 'reports' ? (reportPhases as ItemSub[])
                         : tab === 'trace' ? TRACE_SUBS.map((s) => s.id)
                         : []
-  // An address naming a sub that is real but wrong for its tab (a hand-edited URL, a link from before
-  // the tab set changed) falls back to the tab's first sub rather than rendering blank.
+  // An address naming a sub wrong for its tab falls back to the tab's first, not to blank.
   const sub: ItemSub | null = routeSub && subs.includes(routeSub) ? routeSub : (subs[0] ?? null)
   const go = (t: ItemTab, s: ItemSub | null) =>
     navigate({ name: 'item', repoId: contextId, itemId: it.id, tab: t, sub: s })
 
-  // Read receipt (S7 attention): opening a terminal item's drilldown stamps it seen.
+  // Read receipt: opening a terminal item's drilldown stamps it seen.
   useEffect(() => {
     if (completed && !it.seen_at) markWorkItemSeen(it.id, contextId).then(onChanged).catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -201,16 +161,14 @@ export default function WorkItemModal({
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  // ONE dispatcher for every control. The server said which are live; this only says what they DO,
-  // so adding a control means adding it in `services/drilldown.py` and one line here.
+  // ONE dispatcher. The server said which are live; this only says what they DO.
   async function act(id: string) {
     if (id === 'drop') { setAbandoning(true); return }
-    // Re-run DELETES this item's work. It is the one control here whose damage cannot be undone by
-    // clicking something else, so it asks first — in the same bar, the same shape as Drop's confirm.
+    // Re-run DELETES this item's work, and nothing else undoes it, so it asks first — same shape as
+    // Drop's confirm.
     if (id === 'rerun') { setRerunning(true); return }
     if (id === 'chat') { onOpenChat?.(); return }
-    // `merge` was a second key onto this same `advanceWorkItem` call — the identical request, with
-    // a weaker activation rule behind it. Deleted with its action (owner, 2026-08-03).
+    // Every control here routes through one call; landing the work is the review gate's own act.
     const run: Record<string, () => Promise<unknown>> = {
       approve: () => advanceWorkItem(it.id, contextId),
       run: () => runWorkItem(it.id, contextId),
@@ -223,8 +181,7 @@ export default function WorkItemModal({
       await run[id]()
       onChanged()
       dQ.refresh()
-      // A gate decision moves the item out of this view; a launch keeps it open so the owner can
-      // watch the run they just started.
+      // A gate decision closes this view; a launch keeps it open so the owner watches the run.
       if (id === 'approve') onClose()
     } catch (e) {
       setMutErr(`${id} failed — ${e}`)
@@ -246,8 +203,7 @@ export default function WorkItemModal({
     }
   }
 
-  // Re-run, confirmed. The drilldown stays OPEN afterwards (unlike Drop, which closes it): the item
-  // still exists and a fresh run is starting in it, so the owner watches it come back to life.
+  // The drilldown stays OPEN afterwards, unlike Drop: a fresh run is starting in the same item.
   async function rerun() {
     setBusy('rerun')
     try {
@@ -262,8 +218,7 @@ export default function WorkItemModal({
     }
   }
 
-  // BV-A2: the owner's grant/deny on a deferred contract change. A grant routes the item back into
-  // build to perform it; a deny waives the deferred check so it can close with the gap on record.
+  // A grant routes the item back into build to perform it; a deny waives the check, gap on record.
   async function decideAuth(authId: string, decision: 'granted' | 'denied') {
     setAuthBusy(authId)
     try {
@@ -277,26 +232,22 @@ export default function WorkItemModal({
   }
 
   const barActions = (d?.actions ?? []).filter((a) => a.home === 'actions')
-  // The primary slot. First MATCH by state, not first ACTIVE: a greyed Resume on a stopped item
-  // whose phase can't be re-fired still has to be the button the owner sees (with the reason why),
-  // which is exactly the case the owner called out. So `approve` claims the slot whenever the item
-  // is at a gate, `resume` whenever it has stopped, and `run` otherwise.
+  // First MATCH by state, not first ACTIVE: a greyed Resume is still the button the owner needs.
   const byId = Object.fromEntries(barActions.map((a) => [a.id, a]))
   const primaryId = d?.at_gate ? 'approve' : String(it.status) === 'error' ? 'resume' : 'run'
   const primary = byId[primaryId] ?? byId[PRIMARY_ORDER.find((k) => byId[k]?.active) ?? 'approve']
 
   return (
     <Modal onClose={onClose} contain column fill maxW="max-w-3xl" z="z-40">
-      {/* Header band — id · badges · title · model/ctx/token chips (kept from S7). */}
+      {/* Header band — id · badges · title · model/ctx/token chips. */}
       <div className="shrink-0 border-b border-line px-4 py-3">
         <div className="flex items-start gap-2">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5">
               <span className="font-mono text-[10px] text-faint">{it.id}</span>
               <StatusBadge it={it} running={running} bucket={bucket} />
-              {/* ONE chip, not two: kind and family are a single fact read left to right
-                  ("RESEARCH: AUDIT"), and splitting them invited reading the family as a second,
-                  unrelated badge. */}
+              {/* ONE chip: kind and family are one fact read left to right, and splitting them
+                  invites reading the family alone */}
               <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${
                 kindChipClass(it.kind)}`}
                     title={researchKindLabel(it.research_kind)
@@ -326,12 +277,9 @@ export default function WorkItemModal({
         <ProgressBar pipeline={pipeline} phase={phase} running={running} done={completed} />
       </div>
 
-      {/* Tabs. The authorization FLAG rides at the end of this row (owner, 2026-08-08): the request
-          itself lives in its own Quick View sub, and this is what makes a pending one impossible to
-          miss from any tab without spending a third of the modal on a card most items never have.
-          It is a pointer, not a second renderer — it carries no detail and takes no decision. */}
-      {/* Narrow: labels off, the current tab keeps its word — the same rule every rail in the app
-          follows, and no rail ever scrolls sideways (`lib/layout`). */}
+      {/* The authorization FLAG rides here so a pending one is visible from any tab. A pointer,
+          not a second renderer. */}
+      {/* Narrow, labels off and the current tab keeps its word — no rail ever scrolls sideways. */}
       <div ref={railRef} className="flex shrink-0 flex-wrap items-center gap-1 border-b border-line px-4">
         {TABS.map(({ id, label, icon: Icon }) => (
           <button key={id} onClick={() => go(id, null)} title={label} aria-label={label}
@@ -409,9 +357,8 @@ export default function WorkItemModal({
             <button onClick={() => setAbandoning(false)} className="text-[13px] text-muted hover:text-fg">Cancel</button>
           </div>
         ) : rerunning ? (
-          // The re-run confirm — one line, one click, no typing (same shape as Drop's). It NAMES
-          // what goes rather than asking "are you sure?": an owner cannot weigh an act they have to
-          // remember the definition of.
+          // The re-run confirm NAMES what goes rather than asking "are you sure": an owner cannot
+          // weigh a definition.
           <div className="flex flex-1 flex-wrap items-center gap-2">
             <span className="min-w-0 flex-1 text-[13px] text-muted">
               Re-run this item? Its artifacts, reports, checkpoints and sessions are{' '}
@@ -427,19 +374,14 @@ export default function WorkItemModal({
           </div>
         ) : (
           <>
-            {/* The run config (model · effort) is NOT repeated here. It is fixed at capture and
-                already stated in the header — an action bar should carry acts, not read-only facts. */}
+            {/* Not repeated here: an action bar should carry acts, not read-only facts. */}
             {running && (
               <span className="inline-flex items-center gap-1.5 text-[13px] text-accent-text">
                 <Loader2 size={14} className="animate-spin" /> Agent working…
               </span>
             )}
-            {/* THREE slots: primary · Drop · Re-run. The primary is the first of approve/resume/run
-                that applies to this state, greyed with its own reason when it isn't workable.
-                A TERMINAL item gets NONE of them — every one is inactive by definition (finished ·
-                already terminal · finished), so the row was three dead controls saying the same
-                thing three ways. A greyed button is information while an action is still POSSIBLE
-                and merely blocked; once the item is over, it is just clutter on top of a record. */}
+            {/* THREE slots. A TERMINAL item gets none: a greyed button informs only while an act
+                is possible. */}
             {!d?.terminal && primary && (
               <ActionButton a={primary} busy={busy === primary.id} primary
                             onClick={() => act(primary.id)} />
@@ -455,14 +397,8 @@ export default function WorkItemModal({
                               onClick={() => act(a.id)} />
               ))}
             </span>
-            {/* Disposal is ONE button — Drop (owner, 2026-08-02). A second "Delete" lived here that
-                hard-erased the folder, the session transcripts and the originating inbox row. It
-                went for three reasons: it only worked pre-build, so it could never be THE disposal
-                act; every wedge it could cause (parent stuck at awaiting_child, downstream parked on
-                a vanished id) had to be hand-simulated because no terminal event ever fires for a
-                deleted item; and erasing the inbox row contradicts inbox_flow's own contract that
-                the pushed row survives as trace. A mis-capture now leaves an `abandoned` record —
-                cheap, since `done_at` already clears terminal items off the board. */}
+            {/* Disposal is ONE button. A mis-capture leaves an `abandoned` record, which is cheap:
+                `done_at` clears terminal items off the board. */}
           </>
         )}
       </div>
@@ -472,9 +408,10 @@ export default function WorkItemModal({
 
 // ── the frame ───────────────────────────────────────────────────────────────────────────────────
 
-// The progress indicator — deliberately NOT tabs (§4.1). The old clickable stepper made every phase
-// an address and a decision-button context; a button under a stage that already happened acts on the
-// LIVE phase behind the owner's back. Reading a past stage is what the Reports tab is for.
+// The progress indicator, deliberately NOT tabs: a button under a stage that already happened acts
+// on the LIVE phase.
+//
+// Reading a past stage is what the Reports tab is for.
 function ProgressBar({ pipeline, phase, running, done }: {
   pipeline: string[]; phase: string; running: boolean; done: boolean
 }) {
@@ -485,9 +422,8 @@ function ProgressBar({ pipeline, phase, running, done }: {
         const state = done || i < idx ? 'done' : i === idx ? 'current' : 'future'
         const last = i === pipeline.length - 1
         return (
-          // The last stage carries no connector, so giving it an equal `flex-1` slot parked its dot
-          // a sixth of the width short of the right edge and the whole track read as left-shifted.
-          // It sizes to its label instead; the connectors absorb the width, edge to edge.
+          // The last stage carries no connector, so it sizes to its label and the connectors absorb
+          // the width.
           <div key={p} className={`flex items-center ${last ? 'min-w-0 shrink-0' : 'min-w-0 flex-1'}`}>
             <div className="flex flex-col items-center gap-1">
               <span className={`grid h-3 w-3 place-items-center rounded-full ${
@@ -514,13 +450,7 @@ function ProgressBar({ pipeline, phase, running, done }: {
 function ActionButton({ a, busy, primary, quiet, onClick }: {
   a: DrilldownAction; busy: boolean; primary?: boolean; quiet?: boolean; onClick: () => void
 }) {
-  // `active` and `reason` both come from the server. Never re-decide either here.
-  //
-  // An INACTIVE primary drops the accent fill. `disabled:opacity-40` alone left a filled accent
-  // button on a dark ground still reading as "do this" — on a shipped item, `Run Review` looked
-  // live while being unclickable, which is worse than either state on its own: the owner tries it,
-  // nothing happens, and nothing says why (the reason is in a `title`, which needs a hover to
-  // find). Greyed has to LOOK greyed for the disabled state to be information.
+  // Both come from the server. Greyed has to LOOK greyed, or it still reads as "do this".
   const cls = primary && a.active
     ? 'bg-accent font-medium text-on-accent hover:opacity-90 px-3'
     : quiet
@@ -551,27 +481,13 @@ function NowPane({ d, it, contextId, busy, onAct }: {
   d: Drilldown; it: WorkItem; contextId: string
   busy: string | null; onAct: (id: string) => void
 }) {
-  // EVERY block on this pane is a card (owner, 2026-08-01). The pane spent a while the other way —
-  // one box for the decision, everything else flat text on the pane background separated by
-  // hairlines — on the theory that a frame reads as "a unit you act on". In practice a hairline
-  // between two blocks of similar-sized text is not a boundary anyone sees, and the pane read as one
-  // undifferentiated column. So: uniform cards carry SEPARATION, and COLOUR alone carries urgency —
-  // the attention card is the only one wearing warn. Same `rounded-md border-line bg-sunken`
-  // vocabulary the Proof pane already uses, so the two Quick View panes read as one surface.
+  // EVERY block is a card: cards carry separation, and colour alone carries urgency.
   return (
     <div className="space-y-3">
-      {/* ABOUT FIRST (owner, 2026-08-08). What this item IS precedes what is happening to
-          it: a reader opening a strange item needs the subject before the verb, and the
-          Problem row is the one line that makes every card under it legible. */}
-      {/* ABOUT THIS WORK-ITEM — what it IS, for a reader who has just opened a strange item. It
-          replaced `Item at a glance`, whose two rows restated the title in the header two inches up
-          and the tasks/checks the Task tab renders in full. Rows are server-composed and rendered
-          in order; this reads no label by name, which is what kept a backend relabel from turning
-          into three blank rows. */}
-      {/* COLLAPSED by default (owner, 2026-08-08). What the item IS is read once, when you first
-          open a strange item — after that it is four rows of unchanging text standing between the
-          owner and the thing that is actually asking for them. Closed it costs one line and stays
-          first, so the subject is still named before the verb; open it is the same card as before. */}
+      {/* About first: what this item IS precedes what is happening to it. */}
+      {/* Rows are server-composed and rendered in order; this reads no label by name, so a relabel
+          cannot blank them. */}
+      {/* Collapsed: what the item IS is read once, then it stands between the owner and the ask. */}
       {d.about.length > 0 && (
         <details className="group rounded-md border border-line bg-sunken px-3 py-2.5">
           <summary className="flex cursor-pointer list-none items-center gap-1.5">
@@ -591,12 +507,7 @@ function NowPane({ d, it, contextId, busy, onAct }: {
         </details>
       )}
 
-      {/* WHAT YOUR RULING ESTABLISHED. Most rulings are spent when the work is done and record
-          nothing; the rare one that states a STANDING RULE is written into the project's decision
-          ledger, and from then on every later run reads it before asking anything — which is
-          invisible from here unless this card says so. Shown on the item where the ruling was
-          GIVEN, so the consequence lands next to the act rather than in a tab nobody opened, and
-          the owner can see the rule reaches no further than what they actually said. */}
+      {/* Shown where the ruling was GIVEN, so the consequence lands beside the act. */}
       {d.decisions.length > 0 && (
         <section className="rounded-md border border-line bg-sunken px-3 py-2.5">
           <SectionHeader className="flex items-center gap-1.5">
@@ -616,40 +527,22 @@ function NowPane({ d, it, contextId, busy, onAct }: {
         </section>
       )}
 
-      {/* The CURRENT PHASE card: the live line is its title, and the ask lives inside it. The live
-          line has always been the attention card's header — "Review · cycle 1" says which phase is
-          asking — and splitting them into two peer cards broke that sentence in half. The phase name
-          wears the SectionHeader treatment like every other block's title, so the cards all start on
-          the same typographic beat.
-
-          The ask is hidden entirely when nothing needs the owner, rather than rendered as an empty
-          shell — so this card is a status line alone whenever the item is just working. */}
+      {/* The live line is this card's title and the ask lives inside it; split apart, that
+          sentence breaks in half. */}
       <section className="rounded-md border border-line bg-sunken px-3 py-2.5">
         <div className="flex flex-wrap items-center gap-2">
           <CircleDot size={13} className={d.now.running ? 'animate-pulse text-accent' : 'text-faint'} />
           <SectionHeader>{PHASE_LABEL[d.now.phase] ?? d.now.phase}</SectionHeader>
           {d.now.cycle > 0 && <span className="text-[13px] text-muted">· cycle {d.now.cycle}</span>}
-          {/* No telemetry here: model · ctx · Σtok is the HEADER's line (RunMeta), and printing the
-              same three numbers twice on one screen invites the reader to look for the difference.
-              And no live line either (owner, 2026-08-08): the newest event's own sentence sat here,
-              truncated mid-word, restating the attention card one inch below it. The phase name,
-              the cycle and the running dot are the whole status read; the event stream is Activity's
-              job and the reason it is parked is the card's. */}
+          {/* No telemetry here: it is the header's line, and the same numbers twice invite a hunt
+              for the difference. */}
         </div>
-        {/* WHAT THIS PHASE CONCLUDED, in its own report's words — the reason every user-facing
-            report opens with `**Summary:**`. It sits directly under the phase line because it
-            finishes that sentence: "Vet · cycle 2" then what vet found. Absent while the phase is
-            still working: a phase writes its report as its closing act, so there is nothing to
-            show yet and a placeholder would read as a conclusion. */}
-        {/* LABELLED `Summary:` (owner, 2026-08-08). The sentence is a quotation from another
-            document — the phase's own report — and unlabelled it read as the pane's own narration,
-            indistinguishable from the live line above it. The reports name this block the same way
-            (`**Summary:**`), so the label is the one already in the source. */}
-        {/* HELD OVER while the phase works (owner, 2026-08-08). A phase writes its report as its
-            closing act, so a running phase has no summary and this card used to go blank — which in
-            autopilot is most of what the owner ever sees. It now holds the last completed phase's
-            conclusion, LABELLED with that phase, so nothing is passed off as the running phase's
-            own. `summary_phase` is the server's answer to "whose line is this". */}
+        {/* What this phase concluded, in its report's words. Absent while it works: a placeholder
+            reads as a conclusion. */}
+        {/* Labelled, because the sentence is a quotation from another document and unlabelled it
+            reads as this pane's own. */}
+        {/* A running phase has no summary, so this holds the last completed one, labelled with
+            whose it is. */}
         {d.now.summary && (
           <p className="mt-1.5 text-[13px] leading-snug text-fg">
             <span className="font-semibold text-warn">
@@ -668,37 +561,19 @@ function NowPane({ d, it, contextId, busy, onAct }: {
         )}
       </section>
 
-      {/* THE OWNER'S OWN INPUT, and only while it can still land. Second on the pane because
-          during triage it is the one thing on this screen the owner can ADD — everything below is
-          something to read. It disappears the moment plan starts, which is the honest shape: the
-          section is read once, cold, on plan's way in, and a form still offering to change it
-          afterwards would be offering nothing. */}
+      {/* Only while it can still land: after plan starts, a form offering to change it offers
+          nothing. */}
       {d.now.phase === 'triage' && <FromYouCompose itemId={it.id} contextId={contextId} />}
 
-      {/* WHAT MUST RESOLVE — and ONLY that (owner, 2026-08-07). The standing Mechanical-checks
-          block is gone: it rendered on every item at every moment, mostly as a list of green rows
-          and off-gate previews, and it was the largest thing on the pane while being, almost always,
-          a list of things nobody had to do. What survives is the case that actually costs the owner
-          something: Approve is greyed and the button alone can't say why.
-
-          Three conditions, all necessary. `blocked_by` non-empty is the same set that greys the
-          button — one rule, one writer. `at_gate`, because off-gate the server grades the gate
-          AHEAD, so these are things the loop is still working through, not the owner's. And
-          `!running`, because a check measured mid-write is a measurement of an unfinished file —
-          that one shipped as a red "plan.md does not exist" beside its own "Agent working…" label.
-
-          Nothing was lost: `d.checks` still ships and the Task tab reads the same gate's evidence
-          in full. This pane answers one question — is anything stopping me. */}
+      {/* What must resolve, and only that: Approve is greyed and the button alone cannot say why. */}
       {d.blocked_by.length > 0 && d.at_gate && !d.now.running && (
         <section className="rounded-md border border-danger/40 bg-danger/5 px-3 py-2.5">
           <SectionHeader className="mb-1.5 flex items-center gap-1.5 text-danger">
             <ListChecks size={13} /> Must resolve before {d.gate_label}
           </SectionHeader>
           <ul>
-            {/* The named rows, filtered to the blocking failures. Every row here stops the button,
-                so none of them carries a severity badge — a badge that says the same thing on every
-                row is a column of ink saying nothing. The criterion is the LABEL and the detail is
-                the fact, so the sentence reads at full contrast and the slug stays quiet. */}
+            {/* Every row here stops the button, so none carries a severity badge — the same badge
+                everywhere says nothing. */}
             {d.checks.filter((c) => !c.ok && c.blocking).map((c) => {
               const Icon = CHECK_ICON[c.criterion] ?? ListChecks
               return (
@@ -717,56 +592,38 @@ function NowPane({ d, it, contextId, busy, onAct }: {
         </section>
       )}
 
-      {/* The gate's `facts` chip row lived here and is gone (owner, 2026-08-02). Every chip it drew
-          was already on screen: KIND and DELIVERABLE are in the header two inches up, and TRIAGED
-          restated the date the mechanical check states in a full sentence directly above. The whole
-          `facts` computation went with it — the drilldown was its only reader. */}
+      {/* No facts chips: kind and deliverable are in the header, and triaged restated the check
+          directly above. */}
     </div>
   )
 }
 
-// §4.2's attention card: WHY (back story) · WHAT (the act) · REFERENCE (where to look). Every field
-// is server-composed — this only lays it out. No leading icon: the card is already the only tinted
-// block on the pane, so an alert glyph next to the word "attention" is the third thing saying it.
+// The attention card: WHY, WHAT and REFERENCE, every field server-composed. No leading icon — the
+// tint already says it.
 function AttentionCardView({ card, busy, onAct, contextId }: {
   card: NonNullable<Drilldown['attention']>; busy: string | null
   onAct: (id: string) => void; contextId: string
 }) {
   const waiting = card.kind === 'awaiting_child'
   return (
-    // WAITING IS NOT NEEDING (owner, 2026-08-09). An `awaiting_child` card asks nothing of the
-    // owner — the last child terminating releases it automatically — so it must not wear the warn
-    // frame that means "you are the blocker". Same card, quieter clothes and an honest heading.
+    // Waiting is not needing: this card asks nothing, so it must not wear the you-are-the-blocker
+    // frame.
     <div className={waiting
       ? 'rounded-lg border border-line bg-sunken px-3.5 py-3'
       : 'rounded-lg border border-warn/40 bg-warn/10 px-3.5 py-3'}>
       <div className="flex items-start gap-2.5">
         <div className="min-w-0 flex-1 space-y-2">
-          {/* The card's TITLE, so it uses the same SectionHeader as "About this work-item" and
-              "Mechanical checks" — only the colour differs. It was a bespoke 11px bold span, which
-              made the loudest card on the pane carry the quietest heading. */}
+          {/* The card's TITLE, so it uses the shared heading and only the colour differs. */}
           <SectionHeader className={waiting ? 'text-muted' : 'text-warn'}>
             {waiting ? 'Waiting on a sub-item' : 'Need your attention'}
           </SectionHeader>
-          {/* Why / What / Reference are PEERS — a numbered list with parallel labels — so they are
-              one size and one weight (owner, 2026-08-01). They were 14px/medium, 12.5px/normal and
-              12px/normal, which read as a heading followed by two footnotes and made the three rows
-              look mis-set rather than enumerated. The `n label` column already carries the ordering;
-              the type doesn't need to re-state it. */}
+          {/* Peers in a numbered list, so one size and one weight: the `n label` column already
+              carries the ordering. */}
           <Row n="1" label="Why">
-            {/* MARKDOWN, not pre-wrapped text (owner, 2026-08-08). BOTH lines: the deputy writes
-                its headline as `…at the **review** gate` and its escalation as `**Issue summary:**`
-                over bulleted concerns, so raw text printed the asterisks and lost the one structure
-                that makes a page card scannable. `report` is the variant, not `chat`: it is the
-                panel's own voice (13px, matching the What/Reference rows beside it, where `chat`
-                is 14px and made the card two sizes), and it reserves its warn tint for a bold that
-                opens a paragraph — the block-label role `**Issue summary:**` and `**Concern:**`
-                play. `**review**` takes the same tint (CSS `:first-child` counts elements, so the
-                first bold in a paragraph is "first" even mid-sentence), which is right here: the
-                card is warn-framed and the deputy's chat bubble tints that word too. */}
-            {/* The variant is calibrated for a scrolling report, where a paragraph earns its
-                10px of air. Inside a card row the outer margins fight the row's own rhythm, so
-                the first and last block give theirs back. */}
+            {/* Markdown, because raw text prints the deputy's bold labels as asterisks. `report`,
+                not `chat`: the panel's own voice. */}
+            {/* The variant is calibrated for a scrolling report, so the first and last block give
+                their margins back. */}
             <div className="space-y-2 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0">
               <Markdown text={card.why} variant="report" tone="dev" />
               {card.detail && <Markdown text={card.detail} variant="report" tone="dev" />}
@@ -774,12 +631,7 @@ function AttentionCardView({ card, busy, onAct, contextId }: {
           </Row>
           <Row n="2" label="What">
             <p className="text-[13px] leading-snug text-fg">{card.do}</p>
-            {/* ONE button per act, app-wide (owner rule). Every act this card can name — approve,
-                drop, continue, resume, rerun, merge, pr — already has exactly one button, in the
-                action bar below; repeating it here made the bar's copy look like a different control
-                and split "is it live?" across two renderers. The card SAYS what to do and the bar is
-                where you do it. `chat` is the one exception: answering a question has no bar button,
-                so the card carries the only one there is. */}
+            {/* One button per act: the card says what to do, the bar is where you do it. */}
             {card.click === 'chat' && (
               <button onClick={() => onAct(card.click)} disabled={busy === card.click}
                       className="mt-1.5 inline-flex items-center gap-1.5 rounded-md bg-warn px-2.5 py-1 text-[13px] font-semibold text-white transition hover:brightness-110 disabled:opacity-50">
@@ -789,9 +641,7 @@ function AttentionCardView({ card, busy, onAct, contextId }: {
               </button>
             )}
           </Row>
-          {/* THE SUB-ITEMS THEMSELVES (owner, 2026-08-09) — id AND title AND where each one is,
-              because "open children: 7f2a1c9b4e02" is a join key, not an answer. Each row navigates
-              to that item, so following the chain is a click rather than a search of the board. */}
+          {/* The sub-items themselves, because an id alone is a join key, not an answer. */}
           {card.children.length > 0 && (
             <Row n="2" label="Blocked on">
               <ul className="space-y-1">
@@ -817,8 +667,7 @@ function AttentionCardView({ card, busy, onAct, contextId }: {
           )}
           {card.basis.length > 0 && (
             <Row n="3" label="Reference">
-              {/* No bullet glyph: the label column already separates these from the row above,
-                  and a "·" in front of a one-line list is decoration pretending to be structure. */}
+              {/* No bullet glyph: the label column already separates these from the row above. */}
               <ul className="space-y-0.5 text-[13px] leading-snug text-fg">
                 {card.basis.map((b, i) => <li key={i}>{b}</li>)}
               </ul>
@@ -843,16 +692,12 @@ function AttentionCardView({ card, busy, onAct, contextId }: {
   )
 }
 
-// The label column is a FIXED width, so the content of every row starts at the same x. Ragged
-// labels ("Why" vs "Reference") pushed each row's text to its own indent and the card read as three
-// unrelated fragments instead of one instruction.
+// A fixed width, so every row's content starts at the same x; ragged labels read as unrelated
+// fragments.
 function Row({ n, label, children }: { n: string; label: string; children: React.ReactNode }) {
   return (
     <div className="flex gap-2">
-      {/* 11px, the META step — these are row LABELS. 10px is reserved for badges and stamps, and at
-          that size a label sitting beside 13px prose read as a typo rather than a column. Wide
-          enough for the longest of them (`3 Reference`) on ONE line: a two-line label beside a
-          one-line value is a column that looks broken, not a column that wrapped. */}
+      {/* The META step, since these are row LABELS, and wide enough for the longest on ONE line. */}
       <span className="mt-px w-[5.75rem] shrink-0 whitespace-nowrap font-mono text-[11px] tracking-wide text-warn">
         {n} {label}
       </span>
@@ -863,21 +708,16 @@ function Row({ n, label, children }: { n: string; label: string; children: React
 
 // ── Quick View › Proof ──────────────────────────────────────────────────────────────────────────
 
-// The connected view (§4.2): one row per BUILT THING, each carrying its own validation →
-// verification. A bare grid of check ids tells the owner nothing; "this feature, proven this way"
-// does. The join is mechanical (plan task ids) — assembled server-side, never by an LLM.
+// One row per BUILT THING, each carrying its own validation and verification.
+//
+// The join is mechanical, on plan task ids, and assembled server-side.
 type Verified = ProofRow['verified'][number]
 
-/* The pane's CHROME. A CARD, in the same `rounded-md border-line bg-sunken` vocabulary every other
-   Quick View block uses, titled with the shared `SectionHeader` — because this tab has to read as
-   the same surface as Now, one click away (owner, 2026-08-01, and again 2026-08-08: "why do we have
-   to have the design of this task subtab different from others?").
-
-   I briefly rebuilt this as flat ruled sections. That is precisely the arrangement the 2026-08-01
-   ruling had already tried and discarded: "a hairline between two blocks of similar-sized text is
-   not a boundary anyone sees, and the pane read as one undifferentiated column." Cards carry the
-   separation; colour is reserved for urgency. The refinements that DID help — a progress rail, one
-   aligned glyph column, state as a pill, id chips — live inside the card, where they belong. */
+/* A CARD, in the same vocabulary every other Quick View block uses, because this tab must read as
+   the same surface.
+   
+   Flat ruled sections were tried and discarded: cards carry the separation, and colour is reserved
+   for urgency. */
 
 function ProofSection({ title, meta, children }: {
   title: string; meta?: React.ReactNode; children: React.ReactNode
@@ -899,9 +739,8 @@ function Glyph({ tone, children }: { tone: string; children: React.ReactNode }) 
   return <span className={`w-3.5 shrink-0 text-center text-[12px] leading-[1.45] ${tone}`}>{children}</span>
 }
 
-/* State as a PILL, not a right-floating word: the words differ in length ("not run yet" vs "✓"),
-   so a bare span left a ragged right edge down the column. A pill is fixed-shape and colour-carried,
-   which is the read the owner wants at a glance. */
+/* A PILL, not a floating word: the words differ in length, so a bare span left a ragged right
+   edge. */
 function StatePill({ v }: { v: Verified }) {
   const [tone, label] =
     !v.ran ? ['border-line text-faint', 'not run yet']
@@ -925,12 +764,7 @@ function ProofPane({ rows, auths, lenses }: {
   const tasks = rows.filter((r) => r.task)
   const doneCount = tasks.filter((r) => r.done).length
   const itemWide = rows.find((r) => !r.task)
-  // THE JOIN RUNS check → tasks, so render it that way (owner: "very uglily layouted", 2026-08-08).
-  // `proof_rows` fans each check out under every task its `covers:` names, which is right for the
-  // payload and wrong for the eye: one check covering t1/t2/t4 printed its full `proves` sentence
-  // three times, and each task's title printed twice more (tracker, then block header). Four tasks
-  // and four checks rendered as ~20 blocks of mostly repeated prose. Folding the fan-out back here
-  // costs nothing — the covered ids are exactly the keys it was fanned out under.
+  // The join runs check to tasks, so render it that way and fold the fan-out back.
   const byCheck = new Map<string, { v: Verified; covers: string[] }>()
   for (const r of rows) {
     for (const v of r.verified) {
@@ -943,19 +777,13 @@ function ProofPane({ rows, auths, lenses }: {
   const checks = [...byCheck.values()]
   return (
     <div className="space-y-3">
-      {/* ONE CONTRAST RULE across this pane (owner, 2026-08-06): the SENTENCE reads at `text-fg`,
-          its NAME stays quiet at `text-faint`. Lens name / check id / section label are addressing —
-          you scan them to find your place — while what a check proves and what a lens probed are the
-          thing you opened the tab to read.
-
-          READING ORDER (owner, 2026-08-07): what was committed to → whether it holds → what nobody
-          had to remember to ask. THREE sections, one per question — not a block per task carrying a
-          copy of every check that touches it (owner, 2026-08-08). */}
+      {/* One contrast rule: the SENTENCE reads at full strength, its NAME stays quiet.
+          
+          Three sections, in reading order. */}
       {tasks.length > 0 && (
         <ProofSection title="Tasks"
                  meta={<span className="text-[11px] tabular-nums text-muted">{doneCount}/{tasks.length}</span>}>
-          {/* A 2px rail instead of a second sentence about progress: "how much of this is done" is
-              the question asked on the way in, and a bar answers it before any word is read. */}
+          {/* A rail instead of a sentence: "how much is done" is answered before any word is read. */}
           <div className="mb-2 h-[3px] overflow-hidden rounded-full bg-hover">
             <div className="h-full rounded-full bg-success transition-[width]"
                  style={{ width: `${Math.round((doneCount / tasks.length) * 100)}%` }} />
@@ -966,20 +794,14 @@ function ProofPane({ rows, auths, lenses }: {
                 <Glyph tone={r.done ? 'text-success' : 'text-faint'}>{r.done ? '✓' : '·'}</Glyph>
                 <div className="min-w-0 flex-1">
                   <div className="text-[13px] leading-snug">
-                    {/* The id is ADDRESSING: it is what a check's `covers` chips point back at, so
-                        it has to be visible here or those chips resolve to nothing. Set inline and
-                        quiet, it labels the sentence without taking a column of its own. */}
+                    {/* The id is what a check's `covers` chips point at, so it has to be visible. */}
                     <span className="mr-1.5 font-mono text-[10px] text-faint">{r.task}</span>
-                    {/* A done task goes QUIET, not struck through: the ticks are a progress read,
-                        and a column of struck-out text reads as cancelled work. */}
+                    {/* Quiet, not struck through: a column of struck-out text reads as cancelled
+                        work. */}
                     <span className={r.done ? 'text-muted' : 'text-fg'}>{codeSpans(sentence(r.text))}</span>
                   </div>
-                  {/* The SPECIFICATION, folded — the same `▸` affordance the checks use, because it
-                      is the same kind of thing: real detail that is not the answer to the question
-                      the tab is open for. Printed inline it was 340 characters and eight code spans
-                      per row, and four of them made the pane a wall (owner, 2026-08-08). The plan
-                      writes it on the indented lines under the task's name; `parse_tasks` keeps the
-                      two apart so the name can be a name. */}
+                  {/* The specification, folded: real detail, but not the answer the tab is open
+                      for. */}
                   {r.detail && (
                     <details className="group mt-0.5">
                       <summary className="cursor-pointer list-none text-[11px] text-faint
@@ -992,20 +814,10 @@ function ProofPane({ rows, auths, lenses }: {
                       </p>
                     </details>
                   )}
-                  {/* Validation is the BUILD's own evidence for this task — it belongs under the
-                      task it evidences, hung off a rule so it reads as support rather than as more
-                      tasks. The `built` prose stays out (owner, 2026-08-01): it is the build
-                      report's §Built bullets verbatim, one tab over under Reports → Build. */}
-                  {/* REAL BULLETS (owner, 2026-08-08). This was a rule on the left and nothing
-                      else, so four separate observations read as one wrapped paragraph and the
-                      owner asked where the bullets were. The rule groups; the disc separates. Same
-                      `list-disc` + faint marker the report renderer uses, so a list is one object
-                      whether it arrives as markdown or as payload.
-
-                      `space-y-2`, and the same value on every evidence list in this pane (owner,
-                      2026-08-08): these entries WRAP, so the gap between two bullets has to beat
-                      the gap between two lines of one bullet or the disc is the only thing telling
-                      them apart. At `0.5` the two were within a pixel of each other. */}
+                  {/* Build's own evidence, under the task it evidences, so it reads as support
+                      rather than more tasks. */}
+                  {/* Real bullets. These entries WRAP, so the gap between them must beat the gap
+                      inside one. */}
                   {r.validated.length > 0 && (
                     <ul className="mt-1 list-disc space-y-2 border-l border-line pl-5 text-[12px]
                                    leading-snug text-muted marker:text-faint">
@@ -1016,12 +828,8 @@ function ProofPane({ rows, auths, lenses }: {
               </li>
             ))}
           </ul>
-          {/* Work that named no task — a whole-suite run is not per-task and never was. It used to
-              get a card of its own titled `Item-wide`, which read as a fifth task. */}
-          {/* ONE label for the GROUP, not a tag on every row (owner, 2026-08-08). Each row wore a
-              bare `across`, which named nothing on its own — the reader had to infer that the word
-              meant "this evidence belongs to no single task". Said once, in full, above the list,
-              it is a heading instead of a riddle. */}
+          {/* Work that named no task: a whole-suite run is not per-task and never was. */}
+          {/* One label for the GROUP: a bare tag on every row named nothing on its own. */}
           {itemWide && itemWide.validated.length > 0 && (
             <div className="mt-2 border-l border-line pl-2">
               <div className="text-[10px] uppercase tracking-wide text-faint">Across the whole item</div>
@@ -1033,10 +841,9 @@ function ProofPane({ rows, auths, lenses }: {
           )}
         </ProofSection>
       )}
-      {/* THE EXAM, once. Every check the plan declared, in plan order, each naming the tasks it
-          defends rather than being reprinted under each of them. */}
-      {/* The ACTIVITY, not a past-tense claim: these rows exist from the plan gate on, and
-          "Verified" above a check nobody has run yet is a lie the layout tells. */}
+      {/* THE EXAM, once: every check in plan order, each naming the tasks it defends. */}
+      {/* The ACTIVITY, not a past-tense claim: "Verified" above an unrun check is a lie the layout
+          tells. */}
       {checks.length > 0 && (
         <ProofSection title="Verification"
                  meta={<span className="text-[11px] tabular-nums text-muted">
@@ -1045,24 +852,18 @@ function ProofPane({ rows, auths, lenses }: {
           <ul className="space-y-3">
             {checks.map(({ v, covers }) => (
               <li key={v.check}>
-                {/* THE ROW LEADS WITH WHAT IT PROVES (owner, 2026-08-07) — the plan's own
-                    sentence for what is true of the product when this check passes. It used
-                    to lead with the check id and `expect`, which meant the owner read a slug
-                    and a shell expectation and had to reconstruct the meaning from them.
-                    Older plans have no `proves:` (it became a field in this same phase), so
-                    the row falls back to `expect` and then to the id rather than blanking. */}
+                {/* Leads with what it PROVES, the plan's own sentence. Older plans fall back
+                    rather than blanking. */}
                 <div className="flex items-baseline justify-between gap-3">
                   <span className="min-w-0 text-[13px] leading-snug text-fg">
                     {codeSpans(sentence(v.proves || v.expect || v.check))}
                   </span>
-                  {/* A check the loop hasn't reached is NOT a failure — it reads "not run
-                      yet" in the quiet colour. Rendering it as ✗ would tell the owner
-                      approving a plan that their exam had already failed. */}
+                  {/* A check the loop has not reached is NOT a failure, and a cross would say the
+                      exam failed. */}
                   <StatePill v={v} />
                 </div>
-                {/* Which tasks this defends, as ids rather than as repetition. This is the whole
-                    reason the pane can show each check once: the connection §4.2 asks for is
-                    preserved by naming the tasks, not by reprinting the check under each. */}
+                {/* Ids rather than repetition — naming the tasks is what lets the pane show each
+                    check once. */}
                 {covers.length > 0 && (
                   <div className="mt-1 flex flex-wrap items-center gap-1">
                     <span className="text-[10px] text-faint">covers</span>
@@ -1073,12 +874,8 @@ function ProofPane({ rows, auths, lenses }: {
                     ))}
                   </div>
                 )}
-                {/* HOW it was checked, one click away. The id, the mode, the expectation and
-                    the captured output are all real evidence and none of them is the answer
-                    to "did this hold" — folded away, they stop competing with the sentence
-                    above for the reader's first pass, and a `<details>` costs one click to
-                    get back. A failure's DIAGNOSIS is deliberately NOT in here: that is the
-                    actionable finding, and it stays open below. */}
+                {/* Folded away: all evidence, none of it the answer to "did this hold". The
+                    DIAGNOSIS stays open. */}
                 <details className="mt-0.5 group">
                   <summary className="cursor-pointer list-none text-[11px] text-faint
                                       transition hover:text-muted">
@@ -1089,10 +886,8 @@ function ProofPane({ rows, auths, lenses }: {
                     <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[11px] text-faint">
                       <span className="font-mono">{v.check}</span>
                       {v.mode && <span>· {v.mode}</span>}
-                      {/* Provenance, only when it is the stronger claim: the kernel ran this
-                          one itself, so no model sits between the exit code and the verdict.
-                          Agent-attested is the norm and needs no badge — labelling both
-                          would spend a row of ink to say nothing. */}
+                      {/* Provenance only when it is the stronger claim: agent-attested is the norm
+                          and needs no badge. */}
                       {v.by === 'machine' && (
                         <span className="rounded bg-hover px-1 tracking-wide"
                               title="Run by the kernel in the sandbox — no agent between the exit code and this verdict">
@@ -1111,10 +906,8 @@ function ProofPane({ rows, auths, lenses }: {
                     )}
                   </div>
                 </details>
-                {/* A rubric is judged criterion by criterion, so it is shown that way: the
-                    plan's list before anything runs, each line marked once it has been
-                    judged. A bare "2/3" would hide the only part that is actionable —
-                    WHICH one missed. */}
+                {/* A rubric is judged criterion by criterion, so it shows that way: "2/3" would
+                    hide which one missed. */}
                 {(v.criteria.length > 0 || v.rubric.length > 0) && (
                   <ul className="mt-1 space-y-2">
                     {(v.criteria.length ? v.criteria
@@ -1133,9 +926,8 @@ function ProofPane({ rows, auths, lenses }: {
                     ))}
                   </ul>
                 )}
-                {/* The located cause, above the raw output: "where it broke" is the line
-                    the reader wants, and the output is the supporting evidence under it.
-                    Vet never names the fix, so there is none to render. */}
+                {/* The located cause first: "where it broke" is the line the reader wants, output
+                    is the support. */}
                 {!v.passed && !v.deferred && v.why && (
                   <p className="mt-0.5 text-[13px] leading-snug text-muted">
                     <span className="font-medium text-fg">{codeSpans(v.where)}</span>
@@ -1145,9 +937,8 @@ function ProofPane({ rows, auths, lenses }: {
                     )}
                   </p>
                 )}
-                {/* A failing row shows the vet's captured output verbatim — the failure IS the
-                    expected-vs-actual, and hiding it behind a tooltip is what made the old
-                    check grid say nothing. */}
+                {/* Verbatim, because the failure IS the expected-versus-actual, and a tooltip says
+                    nothing. */}
                 {!v.passed && !v.deferred && v.result && (
                   <pre className="mt-0.5 max-h-28 overflow-auto whitespace-pre-wrap rounded bg-hover px-1.5 py-1 font-mono text-[11px] leading-relaxed text-muted">{v.result}</pre>
                 )}
@@ -1156,34 +947,14 @@ function ProofPane({ rows, auths, lenses }: {
           </ul>
         </ProofSection>
       )}
-      {/* THE LENSES, last and under the QUESTION each one asks. They answer what nobody had to
-          remember to ask, so they belong after the plan's own exam rather than above it — the
-          reading order is: what was committed to, whether it holds, then what else was looked for.
-          The slug alone (`intent`, `robustness`) named a category without saying what was asked of
-          the work; the question says it in the words the owner would use.
-
-          A lens with nothing to report still shows what it probed — that is the difference between
-          "nothing is wrong" and "nobody looked" — and one probe per LINE, because the owner reads
-          this list to count what was actually tried. */}
+      {/* The lenses, last, under the QUESTION each asks. One with nothing to report still shows
+          what it probed. */}
       {lenses.length > 0 && (
         <ProofSection title="Also looked at">
           <ul className="space-y-3">
             {lenses.map((l) => (
               <li key={l.lens}>
-                {/* The QUESTION is the heading here, so it takes heading treatment — medium weight
-                    at `text-fg`. Set at the same 13px muted as the probes under it, the list read
-                    as one undifferentiated paragraph of sentences.
-
-                    NAMED as well as asked (owner, 2026-08-08). The question alone said what was
-                    looked for but never which lens looked, so four questions in a row read as a
-                    list of unrelated concerns rather than as the four standing lenses — and the
-                    name is what the vet plan, the reports and the ledger all call this thing. An
-                    unmapped lens shows its name alone rather than printing the slug twice.
-
-                    The name reads at FULL contrast, not `text-faint` (owner, 2026-08-08). The
-                    pane's quiet-name rule is for addressing you scan PAST — a check id, a lens
-                    slug in a corner. This name is part of the heading itself: greyed, it read as a
-                    caption in front of the sentence rather than as the first half of it. */}
+                {/* The question is the heading and is NAMED as well as asked, at full contrast. */}
                 <div className="text-[12.5px] font-medium leading-snug text-fg">
                   <span>{sentence(l.lens)}:</span>{' '}
                   {LENS_QUESTION[l.lens] ?? ''}
@@ -1192,27 +963,13 @@ function ProofPane({ rows, auths, lenses }: {
                                leading-snug text-muted marker:text-faint">
                   {l.probed.map((probe, i) => <li key={i}>{codeSpans(sentence(probe))}</li>)}
                 </ul>
-                {/* FINDINGS STAND OFF the probe list (owner, 2026-08-08). At `mt-1` the first
-                    finding sat 4px under the last probe — closer to it than two probes are to each
-                    other — so the one line in the section that reports a PROBLEM read as one more
-                    thing that was looked at. A finding is a different kind of statement from a
-                    probe, and the gap is what says so.
-
-                    `items-baseline` on the row: the label is 10px against a 12.5px sentence, and
-                    stretched from the top the two sat on different lines by a pixel or two — enough
-                    to read as misaligned rather than as a label on a sentence. */}
+                {/* Findings stand off the probe list: a finding is a different kind of statement. */}
                 {l.findings.length > 0 && (
                 <div className="mt-3 space-y-2">
                 {l.findings.map((f, i) => (
                   <p key={i} className="flex items-baseline gap-1.5 text-[12.5px] leading-snug">
-                    {/* A LABEL, not a chip (owner, 2026-08-08). Given `bg-hover` it wore the exact
-                        background a code span wears, so `low` sitting beside `tally rename food ""`
-                        read as another typable token. `bg-hover` belongs to code alone; severity is
-                        carried by colour and case.
-
-                        And it says WHAT it is a measure of: a bare `LOW` beside a sentence named
-                        no quantity, and the owner had to ask (2026-08-08). One extra word answers
-                        it without a legend anywhere else on the page. */}
+                    {/* A label, not a chip: `bg-hover` belongs to code alone, and severity is
+                        carried by colour and case. */}
                     <span className={`shrink-0 text-[10px] font-semibold uppercase tracking-wide ${
                       f.severity === 'high' ? 'text-danger'
                       : f.severity === 'medium' ? 'text-warn' : 'text-faint'}`}>
@@ -1228,10 +985,8 @@ function ProofPane({ rows, auths, lenses }: {
           </ul>
         </ProofSection>
       )}
-      {/* Only the state that ASKS something of you gets a line. "none pending" is a footer that
-          reports the absence of work on every item that never had any — it spends a permanent row
-          telling the reader nothing happened. The grant/deny surface is where a real one is acted
-          on; this line exists to point at it. */}
+      {/* Only the state that ASKS something gets a line: an absence footer spends a permanent row
+          saying nothing happened. */}
       {auths.length > 0 && (
         <p className="text-[11px] text-warn">
           {auths.length} authorization{auths.length === 1 ? '' : 's'} pending your grant/deny
@@ -1241,10 +996,8 @@ function ProofPane({ rows, auths, lenses }: {
   )
 }
 
-// What each standing lens actually ASKS of the work, in the owner's words. The slug is the vet
-// tool's vocabulary; this is the question a person would ask, and it is what makes a list of probes
-// legible to someone who has never read the verification design. An unmapped lens falls back to its
-// slug rather than blanking — `performance` is recordable and the set can grow.
+// What each lens ASKS, in the owner's words — the slug is the tool's vocabulary. An unmapped lens
+// falls back to it.
 const LENS_QUESTION: Record<string, string> = {
   intent: 'Does this actually solve the problem the item was filed for?',
   safety: 'Can this hurt anything — unsafe evaluation, destructive paths, secrets in the open?',
@@ -1252,28 +1005,21 @@ const LENS_QUESTION: Record<string, string> = {
   performance: 'Is it fast enough, against a budget the plan named?',
 }
 
-// Sentence-case the first character — for lines that ARE sentences but reach us lowercase: a task
-// written "add the --category flag", a validation bullet, an enum rendered as a value. Owner-flagged
-// 2026-08-07 across the About card and the Task tab.
+// Sentence-case lines that ARE sentences but reach us lowercase — only when the string starts with
+// a LETTER.
 //
-// Only when the string starts with a LETTER. A line beginning with a backtick opens a code span
-// (`` `tally list --category groceries` prints only… ``), and capitalising into it would rewrite a
-// command the reader is meant to be able to type.
+// A line opening with a backtick starts a code span, and capitalising into it would rewrite a
+// command.
 function sentence(text: string): string {
   return /^[a-z]/.test(text) ? text[0].toUpperCase() + text.slice(1) : text
 }
 
-// Plan lines are markdown-flavoured prose, and `code` is the only inline markup our templates use —
-// paths, flags, function names. Rendering the raw backticks made every one of them read as a quote.
-// Code is 12px absolute here, as in the reports: never `em`, so one token is one size app-wide.
+// `code` is the only inline markup our templates use, and raw backticks read as quotes. 12px
+// absolute, never `em`.
 function codeSpans(text: string) {
   return text.split('`').map((part, i) => (i % 2
-    // TINTED, like every other code span the owner sees (owner, 2026-08-08). The drilldown rendered
-    // `code` as plain `text-fg` while the Reports tab one click away and the standalone .md pages
-    // rendered the same token in accent — so the one thing on the screen the reader can actually
-    // type changed colour depending on which tab it appeared in. `bg-hover` (not `bg-sunken`) is
-    // the background, because these panes ARE `bg-sunken` cards and a sunken chip inside one is
-    // invisible; hover separates from every container in both themes.
+    // Tinted like every other code span, so the one token the owner can type keeps its colour
+    // across tabs.
     ? <code key={i} className="rounded bg-hover px-1 font-mono text-[12px] text-accent-text">{part}</code>
     : <span key={i}>{part}</span>))
 }
@@ -1288,19 +1034,12 @@ function historyGlyph(history: { cycle: number | null; passed: boolean }[], pass
 
 // ── Reports ─────────────────────────────────────────────────────────────────────────────────────
 
-// One phase's report, rendered 1:1, with the link to the full agent-facing contract behind it
-// (§4.3). The report is the compact read; the contract is the whole thing, one click away, never
-// pasted in — that separation is what keeps the report worth reading.
+// One phase's report, rendered 1:1, with a link to the full contract behind it.
 //
-// The leading `# <Phase> — <item title>` is dropped. It's right in the FILE, which is read on its
-// own on disk; in this pane the modal header already carries the title and the sub-tab already says
-// the phase, so it rendered as the same sentence three times over.
+// The leading title heading is dropped: the header and sub-tab already say it.
 const LEAD_H1 = /^\s*#\s+.*\n+/
 
-// `## From you` is rendered by the editor below, not twice. The section stays in the FILE and in
-// `report_text` — the deputy reads the owner's input there — but on this pane the markdown copy and
-// the textarea holding the same words sat one inch apart, and the owner had to work out which of
-// the two they were supposed to edit.
+// Rendered by the editor below, not twice: the markdown and the textarea sat an inch apart.
 const FROM_YOU_SECTION = /\n##\s+From you\s*\n[\s\S]*?(?=\n##\s|$)/
 
 function ReportPane({ itemId, contextId, phase, itemPhase }: {
@@ -1315,8 +1054,7 @@ function ReportPane({ itemId, contextId, phase, itemPhase }: {
       <div className="flex flex-wrap items-center gap-2 text-[10px] text-faint">
         <span className="rounded bg-hover px-1.5 py-0.5 font-mono">reports/{r.name}.md</span>
         <span>updated {fmtLocal(new Date(r.mtime * 1000).toISOString())}</span>
-        {/* The contract is a DOC, so it opens as one — its own browser tab, served verbatim by
-            `doc.html`. It used to be inert text naming a path the owner had no way to reach. */}
+        {/* The contract is a DOC, so it opens as one: its own browser tab, served verbatim */}
         {r.contract && (
           <a href={`/api/dev/work-items/${encodeURIComponent(itemId)}/doc.html`
                  + `?path=${encodeURIComponent(r.contract)}&context_id=${encodeURIComponent(contextId)}`}
@@ -1336,23 +1074,12 @@ function ReportPane({ itemId, contextId, phase, itemPhase }: {
   )
 }
 
-// ── `## From you` — the owner's own section ─────────────────────────────────────────────────────
+// ── the owner's own section ──
 //
-// The ONE section of any report the owner writes, and the only place their own words reach the plan
-// phase as instruction rather than as chat. Two surfaces, split by what they are for (owner,
-// 2026-08-08):
+// The ONE section of any report the owner writes, and the only place their words reach plan as
+// instruction.
 //
-//   COMPOSE lives on Quick View › Now, and only while the item is in TRIAGE. That is the whole
-//   window in which writing here changes anything — plan reads the section once, cold, on its way
-//   in — and on autopilot it may never be open at all. Putting the only thing the owner CAN add
-//   beside the only phase where adding it lands is what makes the window legible.
-//
-//   THE SLOTS themselves live under Reports › Triage, with the report they belong to, where each
-//   can be removed. Deleting is writing, so it obeys the same triage-only window; afterwards the
-//   list stays visible as part of the record.
-//
-// Both talk to one endpoint and PUT the whole pair of lists — the owner is the section's only
-// writer, so there is no concurrent edit for a delta to protect.
+// COMPOSE lives on Now and only during TRIAGE.
 const FROM_YOU_HINT = 'Whatever is here when plan starts is authority it follows, not input it weighs.'
 
 function useOwnerInput(itemId: string, contextId: string) {
@@ -1368,9 +1095,8 @@ function useOwnerInput(itemId: string, contextId: string) {
 const FY_BOX = 'w-full rounded border border-line bg-panel px-2 py-1 text-[13px] text-fg '
              + 'outline-none transition placeholder:text-faint focus:border-accent'
 
-// Add · Clear, the pair every block on this card carries. Add stays inert until every field it
-// needs is filled — a half-typed reference is not a reference, and an empty slot on disk would read
-// to the plan phase as an instruction with nothing in it.
+// Add stays inert until every field it needs is filled: an empty slot reads to plan as an
+// instruction with nothing in it.
 function AddClear({ ready, busy, onAdd, onClear }: {
   ready: boolean; busy: boolean; onAdd: () => void; onClear: () => void
 }) {
@@ -1429,8 +1155,7 @@ function FromYouCompose({ itemId, contextId }: { itemId: string; contextId: stri
                       onAdd={() => add({ references: [...saved.references, ref], notes: saved.notes },
                                        () => setRef({ source: '', description: '' }))} />
           </div>
-          {/* The hairline is the only separator: two labelled blocks in one card, not two cards —
-              they are the same act (handing plan something it can't derive) at two grains. */}
+          {/* One card, not two: they are the same act at two grains. */}
           <div className="space-y-1.5 border-t border-line pt-2.5">
             <div className="text-[11px] font-medium text-muted">Verification notes</div>
             <input className={FY_BOX} value={note} disabled={busy}
@@ -1441,9 +1166,7 @@ function FromYouCompose({ itemId, contextId }: { itemId: string; contextId: stri
                                          notes: [...saved.notes, { description: note }] },
                                        () => setNote(''))} />
           </div>
-          {/* What is already in — a count, not the list. The slots live under Reports › Triage
-              with the report they belong to, and duplicating them here would give the owner two
-              places to reconcile for one short list. */}
+          {/* A count, not the list: the slots live with the report they belong to. */}
           {(saved.references.length > 0 || saved.notes.length > 0) && (
             <p className="border-t border-line pt-2 text-[11px] text-faint">
               {saved.references.length} reference{saved.references.length === 1 ? '' : 's'} ·{' '}
@@ -1458,9 +1181,8 @@ function FromYouCompose({ itemId, contextId }: { itemId: string; contextId: stri
   )
 }
 
-// The slots as they stand, under the triage report. Removal is the only act here: composing belongs
-// beside the phase that reads it. `editable` is the triage window — afterwards this is the record of
-// what the plan phase was handed, and a record you can still edit is not one.
+// Removal is the only act here; composing belongs beside the phase that reads it. `editable` is the
+// triage window.
 function FromYouSlots({ itemId, contextId, editable }: {
   itemId: string; contextId: string; editable: boolean
 }) {
@@ -1548,8 +1270,7 @@ function TraceTab({ it, contextId, rate, events, pane }: {
   it: WorkItem; contextId: string; rate: number; events: DevEvent[]
   pane: 'runs' | 'timeline'
 }) {
-  // Lazy TWICE over: the call-trail is the heaviest feed, only this tab reads it, and only the Runs
-  // pane renders it — so opening Timeline on a long-lived item costs nothing.
+  // Lazy twice over: the call-trail is the heaviest feed and only one pane renders it.
   const artQ = useLive(pane === 'runs' ? K.itemArtifacts(contextId, it.id) : null,
                        () => getWorkItemArtifacts(it.id, contextId), rate)
   const detailQ = useLive<WorkItemDetail>(pane === 'runs' ? K.itemDetail(contextId, it.id) : null,
@@ -1563,11 +1284,8 @@ function TraceTab({ it, contextId, rate, events, pane }: {
 
 type AuthRow = Drilldown['authorizations'][number]
 
-// Quick View › Authorization. It was a permanent banner above the tabs; it is a sub now (owner,
-// 2026-08-08), reached from the blinking flag in the tab row. Same card, same two buttons — what
-// changed is that it costs nothing on the items that have no request, which is nearly all of them.
-//
-// The feed carries PENDING requests only, so every row here is a decision the owner still owes.
+// A sub rather than a banner, so it costs nothing on the items with no request. Every row is a
+// decision still owed.
 function AuthorizationsPane({ auths, busy, onDecide }: {
   auths: AuthRow[]
   busy: string | null
@@ -1659,20 +1377,18 @@ function TimelinePane({ events }: { events: DevEvent[] }) {
   )
 }
 
-// The Deputy log — the owner's stand-in's governance trail on this item, in one place and OUT of the
-// chat: every gate call it made, with the rationale. The conversation lives in the chat; this is the
-// accountability record the owner reads to see WHY the deputy did what it did.
+// The deputy's governance trail, in one place and OUT of the chat: the conversation lives there,
+// this is the record of why.
 const DEPUTY_ROW: Record<string, { icon: typeof ShieldCheck; label: string; tint: string }> = {
   'deputy.approve': { icon: Check, label: 'Approved', tint: 'text-success' },
   'deputy.escalate': { icon: AlertTriangle, label: 'Escalated to you', tint: 'text-danger' },
   'deputy.query': { icon: MessageSquare, label: 'Sent feedback to the agent', tint: 'text-accent-text' },
   'deputy.send_back': { icon: CornerUpLeft, label: 'Sent back', tint: 'text-warn' },
 }
-// An escalation is RESOLVED once the item leaves the gate it was raised at — the owner answered by
-// advancing (or by sending it back), and nothing about that decision is recorded on the escalation
-// event itself. Unmarked, a log of past pages reads as a queue of things still owed (owner,
-// 2026-08-08): "why do we keep having this previously escalated to you?" So the row is marked, and
-// only the one still standing keeps the alarm colour.
+// An escalation is resolved once the item leaves the gate it was raised at, and nothing records
+// that on the event.
+//
+// Unmarked, a log of past pages reads as a queue of things still owed.
 function isSettled(gate: string | undefined, phase: string): boolean {
   const at = PHASES.indexOf(gate as Phase)
   const now = PHASES.indexOf(phase as Phase)
@@ -1682,8 +1398,7 @@ function isSettled(gate: string | undefined, phase: string): boolean {
 function DeputyLogPane({ events, phase }: { events: DevEvent[]; phase: string }) {
   const rows = events
     .filter((e) => String(e.kind).startsWith('deputy') && !e.kind.endsWith('.start') && !e.kind.endsWith('.end'))
-    // NEWEST FIRST — every log surface in this app reads that way (the event feed arrives DESC and
-    // Timeline honours it), and the deputy row the owner needs is always the one it just wrote.
+    // Newest first, like every log surface here: the row the owner needs is the one just written.
     .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
   if (!rows.length) return <Empty>The deputy hasn’t acted on this item yet.</Empty>
   return (
@@ -1693,15 +1408,13 @@ function DeputyLogPane({ events, phase }: { events: DevEvent[]; phase: string })
           const m = (e.meta ?? {}) as Record<string, unknown>
           let row = DEPUTY_ROW[e.kind] ?? { icon: ShieldCheck, label: e.kind, tint: 'text-muted' }
           const gate = (m.gate ?? m.phase ?? m.origin_gate) as string | undefined
-          // A page the owner has already answered goes QUIET and says so. It stays in the log —
-          // it is real history — but it stops competing with the one that still needs them.
+          // An answered page goes quiet and says so: it is real history, but it stops competing.
           const settled = e.kind === 'deputy.escalate' && isSettled(gate, phase)
           if (settled) row = { ...row, icon: Check, label: 'Escalated to you · resolved',
                                tint: 'text-muted' }
           const Icon = row.icon
           const str = (k: string) => (typeof m[k] === 'string' ? String(m[k]).trim() : '')
-          // `because` is the headline the owner read in the chat; the rest expands. Two levels,
-          // because the tool caps `because` at 200 chars and puts the detail in `checked`.
+          // `because` is the headline the owner read; the detail lives in `checked`.
           const because = str('because') || str('escalation') || str('speech') || e.summary
           const more = [['checked', str('checked')], ['asked for', str('change')],
                         ['escalation', str('escalation')]].filter(([, v]) => v && v !== because)
@@ -1713,8 +1426,8 @@ function DeputyLogPane({ events, phase }: { events: DevEvent[]; phase: string })
                 {gate && <span className="rounded bg-hover px-1.5 py-px text-[10px] font-medium text-muted">{gate}</span>}
                 <span className="ml-auto shrink-0 font-mono text-[10px] tabular-nums text-faint">{fmtLocal(e.created_at)}</span>
               </div>
-              {/* Body copy reads at full contrast. The dim tier is for CHROME — labels, keys,
-                  timestamps — and the deputy's reasoning is the thing you came here to read. */}
+              {/* Body copy reads at full contrast: the dim tier is for chrome, and this is what
+                  you came to read. */}
               {because && <div className="mt-1 text-[13px] leading-snug text-fg"><Markdown text={because} tone="dev" /></div>}
               {more.length > 0 && (
                 <details className="mt-1">
@@ -1739,13 +1452,10 @@ function DeputyLogPane({ events, phase }: { events: DevEvent[]; phase: string })
   )
 }
 
-// What a git action DID, in a sentence (owner, 2026-08-01). The pane used to print the raw response
-// — `{"ok":true,"merged":false,"up_to_date":true}` — which is a debugging artifact, not a result:
-// the reader has to know that `merged:false` there means "nothing to merge", not "the merge failed".
+// What a git action DID, in a sentence: the raw response is a debugging artifact, not a result.
 //
-// An unrecognised shape still shows its JSON rather than a reassuring guess: this line is the only
-// feedback these buttons give, and inventing a success sentence for a response we don't model is
-// exactly how a silent failure gets reported as a success.
+// An unrecognised shape still shows its JSON — inventing a success sentence is how a silent failure
+// gets reported as one.
 function describeGit(action: string, r: unknown, trunk: string): string {
   const d = (r ?? {}) as Record<string, unknown>
   const conflicts = Array.isArray(d.conflicts) ? (d.conflicts as string[]) : []
@@ -1788,9 +1498,7 @@ function GitPane({ it, contextId, actions, busy, onAct, onChanged }: {
   if (!it.git_branch && !it.git_worktree) {
     return <Empty>No git record yet — the branch + worktree are created when build starts.</Empty>
   }
-  // A worktree with NO branch is a scratch checkout (a research item's detached read-only tree).
-  // Every row below is about a branch and a landing, and this one has neither — rendering them
-  // would answer "merged? not yet" about an item that will never merge.
+  // A worktree with no branch is a scratch checkout, so no landing row below applies.
   if (!it.git_branch) {
     return (
       <Empty>
@@ -1809,9 +1517,8 @@ function GitPane({ it, contextId, actions, busy, onAct, onChanged }: {
     [`vs ${health.trunk ?? 'anchor'}`, `ahead ${health.ahead ?? 0} · behind ${health.behind ?? 0}${health.behind ? ' — sync first' : ''}`],
     ['merged', health.merged ? `yes${it.git_merge_commit ? ` (${String(it.git_merge_commit).slice(0, 10)})` : ''}` : 'not yet'],
     ['dirty', health.dirty?.length ? health.dirty.join(', ') : 'clean'],
-    // The repo's rule, echoed read-only. NAME THE ACTOR: the owner's approve merges in BOTH modes
-    // (gates.py keys the PR branch off `actor != "owner"`). Read as a statement about the reader's
-    // own click, "strict — approving opens a PR" contradicted the gate button one tab away.
+    // NAME THE ACTOR: the owner's approve merges in BOTH modes, so a mode-only sentence contradicts
+    // the gate button.
     ['landing', health.review_mode === 'strict'
       ? "strict — the deputy's approval only opens a PR; yours merges"
       : 'fast — either approval merges it'],
@@ -1827,32 +1534,22 @@ function GitPane({ it, contextId, actions, busy, onAct, onChanged }: {
         ))}
       </dl>
       <div className="flex flex-wrap items-center gap-2">
-        {/* There is NO owner-facing freshness-sync control (owner, 2026-08-01 — button, api fn and route
-            all deleted). Sync already happens at all three moments that matter, each better timed
-            than a manual press: the build agent syncs itself on long builds
-            (`mcp__dev__sync_from_main`); the merge act syncs at Approve and only forces a re-vet
-            when the incoming changes OVERLAP files this item touched; and Resolve-with-Agent below
-            runs the same sync for the conflict case. A manual press skipped the overlap test and
-            paid a vet cycle unconditionally — it had no moment where it was the right call.
-
-            The park path's exit (§2.3): a conflicting sync holds the item at review. The human
-            decides WHETHER; the agent resolves in the worktree (D4) — nobody hand-edits markers. */}
+        {/* No manual freshness sync: the build agent syncs itself, and the merge act only re-vets
+            on overlap */}
         <GitBtn icon={GitMerge} label="Resolve with agent" busy={localBusy === 'resolve'}
                 disabled={!!health.merged || !health.behind}
                 onClick={() => local('resolve', () => resolveWorkItemGit(it.id, contextId))}
                 title={health.merged ? 'Already merged — nothing to resolve'
                   : !health.behind ? 'Offered when the branch is behind, which is when a conflict is possible'
                   : 'Re-runs the sync leaving conflicts in the worktree, then an agent resolves them there. The daemon completes the merge and the item re-enters vet.'} />
-        {/* Opens in its OWN browser tab — a diff wants the whole screen, and this window keeps the
-            board and the item's chat where they are. A real path, so ⌘-click works too. */}
+        {/* Its own browser tab, because a diff wants the whole screen. A real path, so cmd-click
+        {   works */}
         {pr && (
           <GitBtn icon={ExternalLink} label={pr.label} busy={false} disabled={!pr.active}
                   href={build({ name: 'pr', repoId: contextId, itemId: it.id })} title={pr.reason} />
         )}
-        {/* No Merge button here. It fired the SAME request as the review gate's Approve while
-            skipping Approve's two locks (an agent still running; a non-empty must-resolve set) —
-            a duplicate control that was also the way around the gate it duplicated. This tab shows
-            git STATE and repairs git PROBLEMS; landing the work is the gate's act. */}
+        {/* No Merge button: this tab shows git state and repairs git problems; landing the work is
+            the gate's act */}
         {it.git_backup_ref && (
           <GitBtn icon={Undo2} label="Revert merge" busy={localBusy === 'revert'}
                   onClick={() => local('revert', () => revertWorkItemGit(it.id, contextId))}
@@ -1866,9 +1563,8 @@ function GitPane({ it, contextId, actions, busy, onAct, onChanged }: {
 
 function GitBtn({ icon: Icon, label, onClick, href, busy, title, accent, disabled }: {
   icon: typeof GitMerge; label: string; onClick?: () => void; busy?: boolean; title?: string
-  // A real link, opened in a new tab. `window.open` is a scripted popup — browsers and embedded
-  // panes are entitled to refuse it, and one of ours does. An anchor is navigation: it always opens,
-  // and it comes with ⌘-click, middle-click and "open in new window" for free.
+  // An anchor, not `window.open`: a scripted popup can be refused, and navigation comes with
+  // cmd-click for free.
   href?: string
   accent?: boolean
   disabled?: boolean
@@ -1934,10 +1630,8 @@ function Loading() {
   )
 }
 
-// What each run WAS, for the group header. A run that opens with a shell command instead of a phase
-// skill is not a bug and not a mystery — it is one of these, and saying which is the whole job of
-// this map. (`build` appears twice on purpose: cycle 1 invokes the skill, later cycles RESUME that
-// same thread, so only the first carries a `skill` row.)
+// What each run WAS. `build` appears twice on purpose: cycle 1 invokes the skill, later cycles
+// resume that thread.
 const RUN_KIND: Record<string, string> = {
   chat: 'chat',
   resolve: 'conflict resolver',
@@ -1947,10 +1641,10 @@ const RUN_KIND: Record<string, string> = {
   investigate: 'investigate',
 }
 
-// The raw call-trail — tools / sub-agents / skills the item's runs invoked, grouped by run;
-// completed items fall back to the execution SNAPSHOT clearance wrote at terminal. That file is
-// NOT the retired folder-archive (deleted 2026-07-31) — it is the run trail rendered once and
-// kept, because a cleared item's live rows are released while its history must still be readable.
+// The raw call-trail, grouped by run; a completed item falls back to the execution snapshot
+// clearance wrote.
+//
+// A cleared item's live rows are released, but its history must still be readable.
 function TracePane({ artifacts, runs, execution }: {
   artifacts: RunArtifact[]; runs: RunHeader[]; execution: string | null
 }) {
@@ -1980,9 +1674,8 @@ function TracePane({ artifacts, runs, execution }: {
       {groups.map((g, gi) => {
         const calls = pairTrace(g.items)
         const meta = g.run != null ? byId.get(g.run) : undefined
-        // A chat turn is named for the lane it interrupted — `review:chat`, not `your chat turn`.
-        // Every other run in the list is titled by the phase that fired it, so an owner turn with
-        // no phase on it was the one row that could not be placed against the ones around it.
+        // A chat turn is named for the lane it interrupted, so it can be placed against the runs
+        // around it.
         const kind = meta?.feature ? RUN_KIND[meta.feature] ?? meta.feature : null
         const what = kind && meta?.feature === 'chat' && meta.phase ? `${meta.phase}:${kind}` : kind
         return (

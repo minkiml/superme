@@ -23,8 +23,7 @@ export default function ConfirmDialog({
   onSecondary?: () => void
   onConfirm: () => void
   onCancel: () => void
-  // Stacking layer — bump above a modal that's meant to stay open behind the confirm (e.g. the
-  // work-item drilldown, which sits at z-40).
+  // Stacking layer: bump above a modal that is meant to stay open behind the confirm.
   z?: string
 }) {
   return (

@@ -1,9 +1,8 @@
 import type { LucideIcon } from 'lucide-react'
 import { useContainerWidth, railTight } from '@/lib/layout'
 
-// The underline tab strip used across the artifact-management surfaces (Foundations, the per-repo
-// Artifacts tab, the Published inventory) so Constitution / Skills / Agents read identically
-// everywhere. Icon + label + optional count; the active tab underlines in the given scope tint.
+// The underline tab strip the artifact surfaces share, so Constitution, Skills and Agents read
+// identically everywhere.
 export type ArtifactTab<T extends string> = {
   key: T
   label: string
@@ -31,9 +30,8 @@ export default function ArtifactTabs<T extends string>({
   className?: string
 }) {
   const t = TINT[tint] ?? TINT.universal
-  // Narrow: the labels go and the icons stay, with the current tab keeping its word and its count
-  // (`lib/layout`). The rail measures itself — it can be 400px inside a wide window — and it never
-  // scrolls sideways, because a tab you cannot see is a surface you cannot know exists.
+  // Narrow, the labels go and the icons stay, with the current tab keeping its word. It never
+  // scrolls sideways.
   const [ref, w] = useContainerWidth<HTMLDivElement>()
   const tight = railTight(w, tabs.length)
   return (

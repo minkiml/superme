@@ -8,14 +8,12 @@ import Modal from '@/ui/Modal'
 import TagEditor from './TagEditor'
 import type { OrbitRepo } from './useCommandStats'
 
-// Per-repo drill-in popup: a summary + launchpad. Token usage (card) + by-operation breakdown
-// (scrollable) + per-scope live stats, then the two navigators into the Core dashboard / Dev
-// workspace. Per-repo config lives in the Quick config dashboard now, not here. Opens over a scrim.
+// A per-repo summary and launchpad: token usage, the by-operation breakdown, and the two navigators
+// into the repo's surfaces.
 
 function ScopeCol({ name, color, s }: { name: string; color: string; s?: { sessions?: number; agents?: number; running?: number } }) {
   const rows: [string, number][] = [
-    // "conversations", not "sessions": the count excludes the headless build/vet agent threads,
-    // so it matches the list in the session picker exactly (kind_profiles.AGENT_THREAD_KINDS).
+    // Conversations, not sessions: the count excludes headless agent threads, matching the picker
     ['conversations', s?.sessions ?? 0],
     ['agents', s?.agents ?? 0],
     ['running', s?.running ?? 0],
@@ -176,10 +174,8 @@ export default function RepoInspector({
   )
 }
 
-// The final-confirmation gate for disconnecting a project. Irreversible by design (the API also
-// demands ?confirm=<id>), so the owner must type the repo's label before the button arms. Spells
-// out exactly what goes and what stays: the project folder is untouched, run traces are kept, and
-// reconnecting later simply starts a fresh connect (retrofit onboarding).
+// Irreversible by design, so the owner types the repo's label; the API demands the same
+// confirmation.
 function DisconnectConfirm({
   repo,
   onClose,
@@ -202,8 +198,7 @@ function DisconnectConfirm({
       await disconnectRepo(repo.id)
       onDisconnected(repo.id)
     } catch (e) {
-      // 409 = work still running; anything else = daemon hiccup. Either way, nothing was removed
-      // past the failure point — the repo stays connected and the owner can retry.
+      // Either way nothing was removed past the failure point, so the repo stays connected.
       setBusy(false)
       setError(e instanceof Error && e.message.includes('409')
         ? 'Work is still running in this project — stop or finish it first.'

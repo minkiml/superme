@@ -8,23 +8,19 @@ export type NavRow = { id: string; label: string; icon: LucideIcon; badge?: stri
 type Props = {
   items: NavRow[]
   active: string
-  // Collapsed is decided by the SHELL, not here: it is the owner's stored choice OR the frame's,
-  // when the window can no longer afford the labels (`lib/layout`). This rail renders the answer
-  // and reports the click; it does not hold the state, because two owners for one flag is how a
-  // rail ends up expanded on a window with no room for it.
+  // Collapsed is decided by the SHELL: this rail renders the answer and reports the click.
   collapsed: boolean
   onToggle: () => void
   onSelect: (id: string) => void
 }
 
-// The System & Dev local nav (left column). The orbit is the repo navigator, so there's
-// no separate Functional tier here — Me + projects are reached from orbit nodes. Collapsible to an
-// icon rail; collapsed hides the labels + the light/dark toggle.
+// The left nav column. The orbit is the repo navigator, so there is no separate tier here.
+//
+// Collapsible to an icon rail, which hides the labels and the theme toggle.
 export default function NavColumn({ items, active, collapsed, onToggle, onSelect }: Props) {
 
-  // Collapsed-rail hover tooltip (same pattern as the chat rail): fixed-position so it's never clipped
-  // and shows instantly. Anchored to the RIGHT of the icon since this rail sits on the left. `top` is
-  // the button's vertical centre. Only used while collapsed (expanded shows the label inline).
+  // Fixed-position, so it is never clipped, and anchored to the RIGHT since this rail sits on the
+  // left.
   const [hover, setHover] = useState<{ id: string; top: number; left: number } | null>(null)
 
   return (
@@ -81,8 +77,7 @@ export default function NavColumn({ items, active, collapsed, onToggle, onSelect
         </div>
       )}
 
-      {/* Fixed-position hover tooltip for the collapsed rail — shows the label to the right of the icon,
-          rendered outside the nav so it never gets clipped and appears instantly. */}
+      {/* Fixed-position, to the right of the icon and outside the nav, so it is never clipped. */}
       {collapsed &&
         hover &&
         (() => {

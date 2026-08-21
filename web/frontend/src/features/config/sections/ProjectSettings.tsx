@@ -13,14 +13,12 @@ import { Card, ConfigRow, Divider, PaneHead, SectionLabel, W_WIDE } from '../con
 // and how its work lands. "" means inherit, so the per-repo pickers carry a System-default option
 // the system-level ones cannot have.
 
-// A picker shows the value IN FORCE, never an "inherit" row beside the value it inherits. The row
-// said "Default · Sonnet 5" while Sonnet 5 also sat two lines below it — one answer wearing two
-// labels, and picking either did the same thing. What an unset setting runs is the default, so the
-// default is what the control shows; choosing it explicitly just writes down what was already true.
+// A picker shows the value IN FORCE, never an "inherit" row beside the value it inherits — one
+// answer wearing two labels.
 const MODEL_OPTS = MODEL_CATALOG.map((m) => ({ value: m.key, label: m.label }))
 const EFFORT_OPTS = EFFORT_CATALOG.map((e) => ({ value: e.key, label: e.label }))
 
-// HOW this repo's work lands (workflow-renovation-v2 §2.2): does the diff get its own review gate
+// HOW this repo's work lands: does the diff get its own review gate
 // before it lands. Every repo starts on `fast`.
 const REVIEW_MODES = [
   { value: 'fast', label: 'Fast' },
@@ -51,11 +49,9 @@ export default function ProjectSettings({ repo }: { repo: OrbitRepo }) {
 }
 
 function Inheritance({ repo, name }: { repo: OrbitRepo; name: string }) {
-  // What this repo runs if it overrides nothing. Same cached key General reads, so naming it here
-  // costs no extra request.
+  // What this repo runs if it overrides nothing, on the key General already reads.
   const sys = useLive(K.systemOverview, getSystem, 0)
-  // Unset shows what unset RUNS. `??` on the resolved value, not `||` on a blank: an empty pick and
-  // an unresolved default are different states, and only the second may fall through to the floor.
+  // Unset shows what unset RUNS. An empty pick and an unresolved default are different states.
   const fallbackModel = toModelKey(sys.data?.default_model) || DEFAULT_MODEL
   const fallbackEffort = sys.data?.default_effort || DEFAULT_EFFORT
   const [model, setModel] = useState(toModelKey(repo.modelOverride) || fallbackModel)
@@ -105,11 +101,8 @@ function Inheritance({ repo, name }: { repo: OrbitRepo; name: string }) {
   )
 }
 
-// The VET role's own tier. Deliberately NOT under Inheritance: everything there is what this
-// project runs, and vet is the check ON what this project runs. Inheriting made the reviewer a
-// function of the reviewed — move a project to Opus and its own judge moved with it, so the one
-// pairing worth configuring (cheap builder, sharp judge, or the reverse) could not be expressed.
-// Default here therefore means the FLOOR, and the picker says so rather than leaving you to guess.
+// Deliberately NOT under Inheritance: everything there is what this project runs, and vet is the
+// check ON what it runs.
 function Vet({ repo, name }: { repo: OrbitRepo; name: string }) {
   const sys = useLive(K.systemOverview, getSystem, 0)
   const fallbackModel = toModelKey(sys.data?.default_model) || DEFAULT_MODEL
@@ -148,24 +141,20 @@ function Vet({ repo, name }: { repo: OrbitRepo; name: string }) {
   )
 }
 
-// The two landing knobs. They lived in the dev-workspace header — beside the work they govern —
-// until every other per-repo setting had a home here and they were the only two you had to go
-// somewhere else for. One project, one page.
+// The two landing knobs, here because every other per-repo setting has a home here.
 function Landing({ repo }: { repo: OrbitRepo }) {
   const [mode, setMode] = useState(repo.reviewMode)
   useEffect(() => { setMode(repo.reviewMode) }, [repo.id, repo.reviewMode])
 
   // The anchor shows what git actually targets — the RESOLVED branch, not the stored setting, which
-  // is null until someone pins one. Options come from the repo's real branches: the anchor refuses
-  // on a branch that doesn't exist, so a free-text field could only ever store a future failure.
+  // is null until pinned.
   const branches = useLive(K.repoBranches(repo.id), () => getRepoBranches(repo.id), 0)
   const [anchor, setAnchor] = useState('')
   useEffect(() => {
     setAnchor(repo.anchorBranch ?? branches.data?.anchor ?? repo.resolvedAnchor ?? '')
   }, [repo.id, repo.anchorBranch, repo.resolvedAnchor, branches.data?.anchor])
-  // The list is fetched once (branches change rarely), so it can be older than the anchor the
-  // server just told us about. Keep the CURRENT anchor in the options whatever the list says: a
-  // dropdown showing a value it cannot offer is a one-way door.
+  // The list is fetched once, so keep the CURRENT anchor in the options even when the list predates
+  // it.
   const options = Array.from(
     new Set([...(branches.data?.branches ?? []), ...(anchor ? [anchor] : [])]),
   ).map((b) => ({ value: b, label: b }))
@@ -207,8 +196,7 @@ function Landing({ repo }: { repo: OrbitRepo }) {
             title="Anchor branch"
           />
         ) : (
-          // No branch list yet (still loading, or git can't answer) — say so rather than showing an
-          // empty picker that looks like a repo with no branches.
+          // No branch list yet, so say so: an empty picker looks like a repo with no branches.
           <span className="text-[12px] text-faint">{branches.error ? 'no branches readable' : 'reading branches…'}</span>
         )}
       </ConfigRow>

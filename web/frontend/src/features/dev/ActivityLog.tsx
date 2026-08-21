@@ -6,16 +6,10 @@ import { Empty } from './common'
 
 const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000
 
-// Activity — the per-repo slice of the append-only event log (PRD §4.9). ONE read, no scope chips
-// (owner, 2026-08-06): every dev-native row plus the item-scoped kinds that are milestones of the
-// project — a branch cut, a PR opened, a diff merged, work pushed in, a deliverable finished.
+// The per-repo slice of the event log: every dev-native row plus the item-scoped kinds that are
+// PROJECT milestones.
 //
-// The chips are gone because two of the three answered a question nobody has. "Work-items" showed
-// every phase start/end and run report across every item at once — a per-item trace read outside
-// the one place it makes sense (that item's drilldown), and unreadable the moment two items run
-// together. "All" was that same noise mixed into the dev rows. What is left is the view the owner
-// actually wanted, so it no longer needs choosing. The global command-centre log (all repos) still
-// lives up in the Activity nav.
+// A per-item trace belongs in that item's drilldown, where it is readable.
 
 const ACTOR_META: Record<string, { icon: typeof User; tint: string }> = {
   owner: { icon: User, tint: 'text-core' },
@@ -32,8 +26,7 @@ export default function ActivityLog({ contextId }: { contextId: string }) {
   const load = useCallback(() => {
     setLoading(true)
     setErr(null)
-    // `repo` is the server-side filter, not a client trim: the per-item trace outnumbers everything
-    // else, so filtering after the fact would spend the whole window on rows we then throw away.
+    // A server-side filter, not a client trim: the per-item trace would spend the whole window.
     getDevLog(contextId, { scope: 'repo', limit: showAll ? 500 : 200 })
       .then((d) => setEvents(d.events))
       .catch((e) => setErr(String(e)))

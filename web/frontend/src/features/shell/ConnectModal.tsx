@@ -2,11 +2,11 @@ import { useEffect, useRef, useState } from 'react'
 import { Sparkles, FolderGit2, Folder, ArrowLeft, ArrowUp, Loader2, Check, Home, Lock, CornerDownRight } from 'lucide-react'
 import { browseFs, connectRepo, type FsBrowse, type ConnectedRepo } from '@/lib/api'
 
-// Connect a domain (S5) — link a directory as a new repo/project, Finder-style: a sidebar of quick
-// locations + a folder list you navigate. Two kinds: NEW (greenfield → project-init) creates a folder
-// you name; EXISTING (has code → retrofit) selects a folder you're in. The kind is stored on the repo
-// and drives its onboarding front door. Registration seeds the knowledge home; the orbit poll then
-// surfaces the node, from which the owner opens onboarding.
+// Link a directory as a new project, Finder-style: quick locations beside a folder list you
+// navigate.
+//
+// NEW creates a folder you name, EXISTING selects one you are in. The kind is stored and drives the
+// onboarding front door.
 
 type Kind = 'new' | 'existing'
 
@@ -15,8 +15,7 @@ export default function ConnectModal({ onClose, onConnected }: {
   onConnected: (repo: ConnectedRepo) => void
 }) {
   const [kind, setKind] = useState<Kind | null>(null)
-  // Close only on a true backdrop click — press AND release both on the scrim (not a drag that
-  // begins inside the card and ends outside it).
+  // Close only on a true backdrop click: press AND release both on the scrim.
   const downOnScrim = useRef(false)
   return (
     <div

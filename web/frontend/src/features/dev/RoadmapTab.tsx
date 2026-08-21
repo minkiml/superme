@@ -8,10 +8,10 @@ import ProjectPortrait from './ProjectPortrait'
 import { fmtLocal } from '@/lib/format'
 import { STATUS_COLOR, STATUS_LABEL, Empty } from './common'
 
-// The Roadmap board (S4) — GET /dev/roadmap rendered as a vertical spine: deliverables are SQUARE
-// nodes, their waves are CIRCLE nodes strung on a connecting line top-to-bottom, each wave's live
-// work-items listed beside it. Wave status is the curated glyph from roadmap.md; the rollup is
-// computed live from the items. First-cut; iterate on feedback.
+// The roadmap as a vertical spine: deliverables are square nodes, their waves circles strung on a
+// line, with each wave's live items beside it.
+//
+// Wave status is the curated glyph from the doc; the rollup is computed live.
 
 // Curated wave-status → the circle's fill/outline.
 const WAVE_DOT: Record<string, string> = {
@@ -159,10 +159,8 @@ function RoadmapBoardView({ contextId }: { contextId: string }) {
   )
 }
 
-// Project — the general knowledge this project runs on, in two views. The PORTRAIT (what the
-// project is) is the front door; the ROADMAP (what's coming) sits beside it. Nothing here reports
-// status, health or work in motion — the pipeline and dashboard already answer those, and
-// repeating them would make this a console instead of a picture.
+// The general knowledge this project runs on, in two views: the PORTRAIT is the front door, the
+// ROADMAP sits beside it.
 const VIEWS = [
   { key: 'portrait', label: 'Overview', hint: 'what this project is' },
   { key: 'roadmap', label: 'Roadmap', hint: "what's coming" },

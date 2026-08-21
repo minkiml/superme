@@ -1,76 +1,68 @@
 import { getJSON, sendJSON } from './client'
 import type { Schema } from './generated'
 
-// Dev knowledge — the dev-dashboard surface (v2 work-item model, D-018). One context's
-// work-items/ tree (each folder a work-item, nesting = branch-off) + the inbox queue +
-// the BE-derived glance view.
+// Dev knowledge — one context's work-items tree, its inbox queue, and the derived glance view.
 //
-// Transport shapes derive from the daemon OpenAPI (`Schema<...>`, regenerate via `npm run gen:api`).
-// STRICT schemas are derived directly; LOOSE schemas (`extra="allow"`: WorkItem, the memory
-// Proposal, the model manifest, the glance) stay as hand-written VIEW types — the backend itself
-// permits any key on those until R5 tightens them — with FE enum-narrowing layered on top.
+// Transport shapes derive from the daemon OpenAPI; loose ones stay hand-written VIEW types with FE
+// narrowing on top.
 
-// Workspace-workflow enums (S1, 2026-07-15). `phase` = the per-KIND pipeline stage
-// (implementation: triage→plan→build→vet→review→close · research: triage→plan→investigate→
-// report→close; the union type below). `status` = the runnable axis — only `awaiting_human` pages
-// the owner; running-right-now is derived from live runs, not a status. `outcome` stamps how a
-// terminal (status done) item ended.
+// `phase` is the per-kind pipeline stage; `status` the runnable axis; `outcome` how a terminal item
+// ended.
 export type WorkKind = 'implementation' | 'research'
 export type WorkPhase =
   | 'triage' | 'plan' | 'build' | 'vet' | 'review' | 'investigate' | 'close'
 export type WorkStatus = 'active' | 'awaiting_child' | 'awaiting_upstream' | 'awaiting_slot' | 'awaiting_human' | 'done'
 export type WorkOutcome = 'completed' | 'abandoned' | 'superseded'
 export type SpawnRelation = 'blocking' | 'parallel' | 'spawn'
-// D3 branch-off provenance, child-side: which item this one spawned from and how.
+// Branch-off provenance, child-side: which item this one spawned from and how.
 export type SpawnedFrom = { item: string; relation: SpawnRelation; note?: string | null }
 
-// An item.md `artifacts` entry, NORMALIZED on read by the daemon (R5): always `{type, path}` on the
-// wire now (the legacy bare-string form is coerced server-side). `artifactPath` stays as the accessor.
+// Normalized on read by the daemon: always `{type, path}` on the wire, with the legacy bare string
+// coerced server-side.
 export type Artifact = Schema<'ArtifactRef'>
 export function artifactPath(a: Artifact): string {
   return a.path
 }
 
-// VIEW type over Schema<'WorkItem'> (extra='allow'). Carries the base item.md fields plus the
-// BE-derived tree fields (depth/children) and run telemetry the daemon attaches at read
-// time. Kept hand-written so the FE can rely on narrowed phase/status/children (R5 will pin these
-// server-side, at which point this can re-derive from the generated type directly).
+// A VIEW type over the generated one, carrying the base fields plus the tree fields and run
+// telemetry the daemon attaches.
+//
+// Hand-written so the FE can rely on narrowed phase, status and children.
 export type WorkItem = {
   id: string
   root_id: string
   parent_id: string | null // presence = a branch-off
   wave?: string | null // anchor-scaffold pointer on a root: the roadmap wave this item instances
-  deliverable?: string | null // …or a deliverable directly when no wave applies (set in S2)
+  deliverable?: string | null // …or a deliverable directly when no wave applies
   title?: string
   description?: string // the item.md body
   kind?: WorkKind | null // machinery selector (null on pre-workflow items = implementation)
-  // Which research FAMILY, on a research item: audit | refactoring | housekeeping | security |
-  // deep-diagnosis | study. Absent on implementation items. Free-form on purpose — a family added
-  // to the backend renders unstyled rather than making this type a second place to update.
+  // Absent on implementation items. Free-form, so a new family renders unstyled rather than needing
+  // an edit.
   research_kind?: string | null
   phase: WorkPhase
   status: WorkStatus | null // runnable axis (done = terminal); null only on pre-workflow items
-  // Why the work stopped, one owner-facing line. Present ONLY while status is `error` (R2) —
-  // cleared the moment the item leaves it, so it never describes an already-resolved stop.
+  // Present ONLY while status is `error`, cleared as the item leaves it, so it never describes a
+  // resolved stop.
   error_reason?: string | null
   outcome?: WorkOutcome | null // set with status done: how the item ended
-  after?: string[] | null // peer-sequencing edge (slice 1): ids this item may not start before
-  autopilot?: boolean | null // per-item policy (slice 2): drive its gates without a click
-  spawned_from?: SpawnedFrom | null // branch-off provenance edge (D3)
+  after?: string[] | null // peer-sequencing edge: ids this item may not start before
+  autopilot?: boolean | null // per-item policy: drive its gates without a click
+  spawned_from?: SpawnedFrom | null // branch-off provenance edge
   superseded_by?: string | null // set when outcome = superseded
   inbox_id?: number | null // originating inbox row (trace)
   done_at?: string | null // terminal stamp
-  // Git record (S4/D4) — written at build entry / the review merge; kept at terminal (trace):
+  // Git record — written at build entry / the review merge; kept at terminal (trace):
   git_branch?: string | null
   git_worktree?: string | null
   git_base?: string | null
   git_merge_commit?: string | null
   git_merged_at?: string | null
   git_backup_ref?: string | null
-  // `strict` repos (§2.2): when the deputy approved and handed the merge over. Set ∧ no merge
-  // commit = the PR is open, which is what activates the Git tab's PR actions.
+  // Set with no merge commit means the PR is open, which is what activates the Git tab's PR
+  // actions.
   git_pr_opened_at?: string | null
-  artifacts?: Artifact[] // normalized {type, path} refs (R5); read the path via artifactPath
+  artifacts?: Artifact[] // normalized {type, path} refs; read the path via artifactPath
   session_id?: string | null // the agent session this item originated in (session:<id>)
   created_at?: string | null
   updated_at?: string | null
@@ -91,12 +83,12 @@ export type WorkItem = {
   total_tokens?: number // accumulated tokens across all finished runs
   phase_tokens?: Record<string, number> // per-phase 3-type Σ {phase → tokens}; card shows current phase's
   phase_tokens_4type?: Record<string, number> // per-phase 4-type Σ (3-type + cache_read), recorded behind
-  // `ended_at` is epoch SECONDS (like run_started_at) — the card renders "3m ago" from it locally,
-  // so the label keeps counting between polls instead of freezing at fetch time.
+  // `ended_at` is epoch SECONDS, so the card can count between polls instead of freezing at fetch
+  // time.
   last_run?: { tokens: number; duration_ms: number | null; model?: string | null
                ctx_pct?: number | null; ended_at?: number | null } | null
   tasks?: { done: number; total: number } | null // tasks.md checklist progress (null = no tasks.md)
-  seen_at?: string | null // owner-opened read receipt (S7 attention: terminal + unseen = unread)
+  seen_at?: string | null // owner-opened read receipt: terminal and unseen means unread
 }
 
 // `item` becomes a work-item when pushed; `note` is the owner's own, never pushed.
@@ -105,12 +97,10 @@ export type InboxKind = 'item' | 'note'
 export type InboxStatus = 'open' | 'pushed'
 export type InboxOrigin = 'user' | 'agent' // who created it (user-made vs agent branch-off proposal)
 
-// Derived straight from the transport type — kind/status/origin are now backend Literals (R5).
+// Derived straight from the transport type; kind, status and origin are backend enums.
 export type InboxEntry = Schema<'InboxRow'>
 
-// SHIPPED is the one predicate for "this got delivered", and the daemon owns the COUNT
-// (`glance.shipped`). This mirror exists for the list, so the tile's number and the list's rows can
-// never disagree — an item that ended without landing (abandoned · superseded) is not shipped.
+// The daemon owns the count; this mirror keeps the tile's number and the list's rows agreeing.
 export function isShipped(w: { done_at?: string | null; outcome?: WorkOutcome | null }): boolean {
   return !!w.done_at && (w.outcome ?? 'completed') === 'completed'
 }
@@ -135,15 +125,13 @@ export type DevData = {
   running?: string[] // work-item ids with a background /plan turn in flight
 }
 
-// The event LOG (PRD §4.9) — the append-only activity firehose. `scope`/`item_id` give the
-// containment read: item view = events for one work-item; dev view = all repo events incl.
-// dev-native (item_id null: inbox triage / merges / cleanups).
-// Derived straight from the transport types — scope/actor are now backend Literals (R5).
+// The append-only activity firehose. `scope` and `item_id` give the containment read: one item's
+// timeline, or the whole repo.
 export type DevEvent = Schema<'DevLogEvent'>
 export type DevLogData = Schema<'DevLogResponse'>
 
-// Selective read over the log — never a full dump. Pass `itemId` for one item's timeline,
-// `since`/`until` (ISO) for a date window (e.g. "what happened yesterday").
+// Selective read, never a full dump: pass `itemId` for one timeline, or `since`/`until` for a
+// window.
 export function getDevLog(
   contextId = 'global',
   opts: { since?: string; until?: string; scope?: string; itemId?: string; limit?: number } = {},
@@ -218,10 +206,11 @@ export function saveHarnessFile(scope: string, kind: string, name: string, conte
   return sendJSON('/api/dev/harness/plugin-file', 'PUT', { scope, kind, name, content, context_id: contextId })
 }
 
-// Published inventory (#6 runtime management) — the LEARNED artifacts the owner published, keyed by
-// their proposal (so SuperMe's shipped harness skills never appear). Constitution disables via a
-// frontmatter flag the loader honors; skills/agents disable by moving into a `.disabled/` shadow the
-// plugin scanner ignores. Delete removes the file and retires the proposal (history kept).
+// The LEARNED artifacts the owner published, keyed by proposal, so shipped harness skills never
+// appear.
+//
+// A constitution disables via a frontmatter flag; a skill or agent moves into a `.disabled/` shadow
+// the scanner ignores.
 export type PublishedForm = 'constitution' | 'skill' | 'agent'
 export type PublishedItem = {
   proposal_id: number
@@ -255,9 +244,8 @@ export function deletePublished(
 ): Promise<{ ok: boolean; proposal_id: number; removed: boolean }> {
   return sendJSON(`/api/dev/harness/published/${proposalId}?context_id=${q(contextId)}`, 'DELETE', undefined)
 }
-// Constitutions — govern ALL constitutions by (scope, slug), not just learning-published ones.
-// A disk scan, so it covers hand-authored + system + learned alike: universal (dev) + this host's
-// local. Disabling flips the `enabled` frontmatter flag the catalog + pull both honor (fully inert).
+// All constitutions by scope and slug, from a disk scan, so hand-authored, system and learned alike
+// are covered.
 export type ManagedConstitution = Schema<'ManagedConstitution'>
 export function getConstitutions(contextId = 'global'): Promise<{ context_id: string; constitutions: ManagedConstitution[] }> {
   return getJSON(`/api/dev/harness/constitutions?context_id=${q(contextId)}`)
@@ -332,10 +320,10 @@ export type VerificationLibrary = Schema<'VerificationLibraryResponse'>
 export function getVerificationLibrary(contextId = 'global'): Promise<VerificationLibrary> {
   return getJSON(`/api/dev/verification?context_id=${q(contextId)}`)
 }
-// The DECISION LEDGER — every call the owner has ruled on, newest first. Read-only by contract:
-// entries are append-only history, reversed by appending a new one, never edited in place. The
-// kernel is the only writer (it records a ruling the moment it is given at a review gate), so
-// there is no save/patch counterpart here and there should never be one.
+// Every call the owner has ruled on, newest first. Read-only by contract: entries are append-only
+// and reversed by appending.
+//
+// The kernel is the only writer, so there is no save counterpart here and should never be one.
 export type DecisionEntry = Schema<'DecisionEntry'>
 export function getDecisions(contextId = 'global'): Promise<{ decisions: DecisionEntry[] }> {
   return getJSON(`/api/dev/decisions?context_id=${q(contextId)}`)
@@ -388,11 +376,8 @@ export function runDistill(contextId = 'global'): Promise<DistillResult> {
   return sendJSON(`/api/dev/memory/distill?context_id=${q(contextId)}`, 'POST', {})
 }
 
-// Tier-C review queue (PRD §4.10) — the `distill` sub-agent files proposals; the owner gate
-// (accept → apply to memory/, reject) lives here.
-// `output_form` is a loose backend string (R5 will pin it to the WI-8 set: constitution|skill|agent).
-// The pre-WI-8 `ProposalForm` ('fact' | 'contract' | …) and `RecallType` enums are RETIRED (WI-8) —
-// decision/reference are now auto-accrued knowledge, not gated proposals.
+// The review queue: the distill agent files proposals, and the owner gate lives here. `output_form`
+// is a loose backend string.
 export type ProposalScope = 'repo_dev' | 'universal_dev' | 'core'
 export type ProposalStatus =
   | 'proposed' | 'writing' | 'drafted' | 'published' | 'rejected' | 'dropped' | 'superseded' | 'retired'
@@ -402,8 +387,8 @@ export type EvalReport = {
   summary?: string | string[] // bullets (new) or a single sentence (legacy)
   checks?: { name?: string; score?: number; note?: string }[]
   issues?: { severity?: 'high' | 'low' | string; what?: string; fix?: string }[]
-  // The artifact's OWN run cost on a synthetic task. kind 'run' = skill/agent measured once
-  // (tokens/time/cost); kind 'overhead' = constitution's always-on per-turn token cost (no run).
+  // The artifact's OWN cost: `run` is measured once, `overhead` is a constitution's always-on
+  // per-turn cost.
   metrics?: {
     kind?: 'run' | 'overhead'
     // run footprint (skill/agent): the honest figures, not the misleading cumulative re-read total
@@ -439,7 +424,7 @@ export type MemoryProposal = {
   id: number
   context_id: string
   created_at: string
-  output_form: string // loose (WI-8 set: constitution|skill|agent; R5 pins it)
+  output_form: string // loose: constitution | skill | agent
   target_scope: ProposalScope | string
   recall_type: string | null // retired field, still column-present on legacy rows
   apply_target: string | null
@@ -521,13 +506,10 @@ export function getDev(contextId = 'global'): Promise<DevData> {
   return getJSON(`/api/dev?context_id=${q(contextId)}`)
 }
 
-// Quick-capture: add an item to the context's inbox queue (no approval gate). Title is
-// entered manually; origin defaults to 'user' (manual capture).
+// Quick capture, deliberately bare: kind, title, text. The per-item config is NOT set here.
 //
-// Capture stays deliberately bare — kind, title, text. The per-item config (model, effort,
-// autopilot) is NOT set here: a row is born inheriting the repo's Quick-config defaults, and the
-// drilldown's Config tab is where you override one. Sending a concrete model on every capture is
-// what used to pin every item to the FE's constant instead of the repo's choice.
+// A row is born inheriting the repo's defaults; sending a concrete model on every capture pins the
+// item to the FE's constant.
 export function addInbox(
   input: {
     text: string; title?: string | null; kind?: InboxKind; tag?: string | null; origin?: InboxOrigin
@@ -544,10 +526,11 @@ export function addInbox(
   })
 }
 
-// Edit an inbox item: title, text, kind, tag, status, or the per-item setting (model, effort,
-// autopilot, work_kind, and the two roles that run on their own tier) that push locks into the
-// work-item. An absent field is left alone. `work_kind` is the one field with a meaningful cleared
-// state: '' puts it back to undecided, which is why it is typed wider here than the row's own union.
+// Edit an inbox row or the per-item setting push locks into the work-item. An absent field is left
+// alone.
+//
+// `work_kind` is the one field with a meaningful cleared state, which is why it is typed wider than
+// the row's union.
 export function updateInbox(
   id: number,
   patch: Partial<Pick<InboxEntry,
@@ -562,9 +545,9 @@ export function deleteInbox(id: number): Promise<{ ok: boolean; id: number }> {
   return sendJSON(`/api/dev/inbox/${id}`, 'DELETE')
 }
 
-// The row's HANDOFF BRIEF (D5) — the cold-start context the work-item it becomes reads first.
-// `content: null` means no brief was filed, which is legal (a bare capture) rather than missing.
-// `editable` goes false at push: the file has moved into the item's read-only `preliminary/`.
+// The cold-start context the work-item it becomes reads first. A null body is legal, not missing.
+//
+// `editable` goes false at push: the file has moved into the item's read-only folder.
 export type InboxBrief = { id: number; content: string | null; editable: boolean; path: string }
 export function getInboxBrief(id: number): Promise<InboxBrief> {
   return getJSON(`/api/dev/inbox/${id}/brief`)
@@ -581,7 +564,7 @@ export function pushInbox(id: number, contextId = 'global'): Promise<PushResult>
   return sendJSON(`/api/dev/inbox/${id}/push`, 'POST', { context_id: contextId })
 }
 
-// The DERIVED WorkGraph projection (D3): repo root · deliverables · work-items · unpushed
+// The DERIVED work-graph projection: repo root · deliverables · work-items · unpushed
 // spawn rows, with contains / spawned_from(relation) / supersedes edges. Assembled on demand —
 // nothing stored. Cycles are reported as data. The graph view (S7) renders this.
 export type WorkGraphNode = {
@@ -595,7 +578,7 @@ export type WorkGraphNode = {
   outcome?: WorkOutcome | null
   inbox_id?: number
   slug?: string
-  git_branch?: string | null // S4 decoration on work_item nodes
+  git_branch?: string | null // git decoration on work-item nodes
   git_merged?: boolean
 }
 export type WorkGraphEdge = {
@@ -615,7 +598,7 @@ export function getWorkGraph(contextId = 'global'): Promise<WorkGraphData> {
   return getJSON(`/api/dev/workgraph?context_id=${q(contextId)}`)
 }
 
-// --- attention engine (S7/D10) ------------------------------------------------------------
+// --- attention engine ------------------------------------------------------------
 // Every item in at most one bucket, strict priority needs_you > running > unread, derived from
 // durable state. `badge` = the top non-empty tier only (one color, one count).
 export type AttentionRow = Schema<'AttentionRow'>
@@ -625,7 +608,7 @@ export function getAttention(contextId = 'global'): Promise<AttentionData> {
   return getJSON(`/api/dev/attention?context_id=${q(contextId)}`)
 }
 
-// Compact NOW (S8): run the checkpoint-first compaction sequence on the item's bound session.
+// Compact NOW: run the checkpoint-first compaction sequence on the item's bound session.
 export function compactWorkItem(itemId: string, contextId = 'global'): Promise<PlanResult> {
   return sendJSON(`/api/dev/work-items/${q(itemId)}/compact`, 'POST', { context_id: contextId })
 }
@@ -635,11 +618,10 @@ export function markWorkItemSeen(itemId: string, contextId = 'global'): Promise<
   return sendJSON(`/api/dev/work-items/${q(itemId)}/seen?context_id=${q(contextId)}`, 'POST')
 }
 
-// "Run <Phase>" — fire the CURRENT phase's own background run (owner, 2026-07-31). One call for
-// every phase, replacing `planWorkItem` + `vetWorkItem`, which were two doors onto one dispatcher.
-// Returns immediately; the agent works in the background and the item updates on its own. The
-// backend 409s a terminal / stopped / at-a-gate / already-running item — the same rule the
-// drilldown's `run` button reads, so a live-looking button can never 409.
+// Fire the CURRENT phase's own background run — one call for every phase, returning immediately.
+//
+// The backend refuses a terminal, stopped, at-a-gate or already-running item, which is the rule the
+// button reads.
 export type PlanResult = Schema<'PlanResponse'>
 // `model` / `effort` are the per-run picks; omit for the item's stored values.
 export function runWorkItem(itemId: string, contextId = 'global', model?: string, effort?: string): Promise<PlanResult> {
@@ -650,31 +632,27 @@ export function runWorkItem(itemId: string, contextId = 'global', model?: string
   })
 }
 
-// "Resume" — the owner's restart of a work-item whose RUN stopped (recovery R4: an outage, a crash,
-// a daemon restart mid-run). Re-fires the phase's own background run; nothing is rewound, so the
-// branch, worktree and every artifact stand. Reads alike to `rerunWorkItem` and does the opposite:
-// Resume re-runs a run that never finished (the work is fine, the run stopped); Re-run DELETES the
-// work and starts the item over.
-// Backend 409s when the item isn't stopped, is terminal, or already has a run in flight.
+// The owner's restart of an item whose RUN stopped. Nothing is rewound: branch, worktree and
+// artifacts stand.
+//
+// Reads alike to re-run and does the opposite — Resume re-runs a run that never finished.
 export function resumeWorkItem(itemId: string, contextId = 'global'): Promise<PlanResult> {
   return sendJSON(`/api/dev/work-items/${q(itemId)}/resume`, 'POST', { context_id: contextId })
 }
 
-// "Re-run" — start the item over in place (recovery R5). DESTRUCTIVE and irreversible: artifacts,
-// reports, checkpoints, the deputy log and every session are deleted, the worktree dir is removed,
-// and the item re-enters at its first phase. The id, the branch, the run
-// history and every graph relation stay — that is what makes it a re-run and not a new item.
-// Reach for it only when there is no run worth resuming. Backend 409s on a terminal item or one
-// with a run in flight. The caller confirms first.
+// Start the item over in place. DESTRUCTIVE and irreversible: artifacts, reports, checkpoints and
+// sessions go.
+//
+// The id, branch, run history and graph relations stay — that is what makes it a re-run and not a
+// new item.
 export function rerunWorkItem(itemId: string, contextId = 'global'): Promise<PlanResult> {
   return sendJSON(`/api/dev/work-items/${q(itemId)}/rerun`, 'POST', { context_id: contextId })
 }
 
-// The owner's grant/deny on a deferred authorization at the review gate (BV-A2). A grant routes
-// the item back through build⟷vet to PERFORM the now-allowed contract change (grant-as-send_back),
-// then it re-vets and returns to review; a deny waives the deferred check (the gap is accepted, on
-// the record) so the item can close. The owner grants unconditionally — the delegated-authority
-// floor binds only the deputy. Backend 409s off-review / unknown or already-decided auth id.
+// The owner's grant or deny on a deferred authorization at review.
+//
+// A grant routes the item back to perform the change; a deny waives the check, on the record. The
+// owner grants unconditionally.
 export function authorizeWorkItem(
   itemId: string, authId: string, decision: 'granted' | 'denied', contextId = 'global',
 ): Promise<PlanResult> {
@@ -685,7 +663,7 @@ export function authorizeWorkItem(
 // A work-item's review payload — the structured artifact content the review popup renders:
 // plan.md / prd.md as Markdown bodies (frontmatter stripped), tasks.md as a checklist.
 export type TaskItem = Schema<'TaskItem'>
-// COMPUTED per-artifact status (S2): derived at read time from file existence + self-check +
+// COMPUTED per-artifact status, derived at read time from file existence + self-check +
 // evidence freshness — never stored, so it can't drift.
 export type ArtifactStatusRow = {
   required: boolean
@@ -701,7 +679,7 @@ export type WorkItemDetail = {
   tasks: TaskItem[] | null
   execution: string | null // the execution SNAPSHOT clearance writes at terminal (artifacts/execution.md)
   artifact_status?: Record<string, ArtifactStatusRow> | null
-  // S7 drilldown: raw gate-doc texts (null while un-emitted) + the checkpoint continuity feed.
+  // Raw gate-doc texts (null while un-emitted) + the checkpoint continuity feed.
   docs?: Record<string, string | null> | null
   checkpoints?: CheckpointStub[] | null
 }
@@ -722,7 +700,7 @@ export function getWorkItemArtifacts(
   return getJSON(`/api/dev/work-items/${q(itemId)}/artifacts?context_id=${q(contextId)}`)
 }
 
-// F2 unified timeline: every run of this item, oldest-first, phase/role-tagged with its turn events —
+// The unified timeline: every run of this item, oldest-first, phase/role-tagged with its turn events —
 // the read-only history the chat panel loads before live-streaming new frames from the socket.
 export type WorkItemTimeline = Schema<'WorkItemTimelineResponse'>
 export type TimelineRun = Schema<'TimelineRun'>
@@ -752,7 +730,7 @@ export function advanceWorkItem(itemId: string, contextId = 'global'): Promise<A
   return sendJSON(`/api/dev/work-items/${q(itemId)}/advance?context_id=${q(contextId)}`, 'POST')
 }
 
-// Enrol / un-enrol a work-item in autopilot (slice 2). Pre-build only (triage/plan) — 409 past that.
+// Enrol or un-enrol a work-item in autopilot. Pre-build only (triage/plan) — 409 past that.
 export type AutopilotResult = Schema<'WorkItemAutopilotResponse'>
 export function setWorkItemAutopilot(
   itemId: string, on: boolean, contextId = 'global',
@@ -762,10 +740,10 @@ export function setWorkItemAutopilot(
 }
 
 
-// --- work-item git layer (workspace-workflow S4/D4) -------------------------------------
-// The worktree is created automatically at build entry (the advance route); these are the
-// owner's git surface: live health, freshness sync, the review merge (auto-routed: blocking
-// child → parent branch, else → trunk with a backup ref), revert, and Resolve-with-Agent.
+// --- work-item git layer ---
+//
+// The worktree is created automatically at build entry; these are the owner's surface: health,
+// sync, the merge, revert and resolve.
 
 export type GitHealth = Schema<'GitHealthResponse'>
 export function getWorkItemGit(itemId: string, contextId = 'global'): Promise<GitHealth> {
@@ -782,10 +760,10 @@ export function revertWorkItemGit(itemId: string, contextId = 'global'): Promise
   return sendJSON(`/api/dev/work-items/${q(itemId)}/git/revert`, 'POST', { context_id: contextId })
 }
 
-// The dedicated PR page (renovation §4.4): the review report + the branch's diff walkthrough,
-// GROUPED BY TASK off the commits' `SuperMe-Task` trailers. Read-only — the page's one action is
-// the ordinary review advance (approve = merge). The per-file patches are fetched separately, on
-// expand: a branch's whole diff is the one thing a review page must not make the reader wait for.
+// The review report plus the branch's diff walkthrough, GROUPED BY TASK off the commits' trailers.
+//
+// Per-file patches are fetched on expand: a whole diff is the one thing a review page must not make
+// the reader wait for.
 export type PrView = Schema<'PrViewResponse'>
 export function getWorkItemPr(itemId: string, contextId = 'global'): Promise<PrView> {
   return getJSON(`/api/dev/work-items/${q(itemId)}/pr?context_id=${q(contextId)}`)
@@ -806,12 +784,12 @@ export function resolveWorkItemGit(itemId: string, contextId = 'global'): Promis
   return sendJSON(`/api/dev/work-items/${q(itemId)}/git/resolve`, 'POST', { context_id: contextId })
 }
 
-// --- the drilldown + lifecycle (renovation v2 §4) -----------------------------------------
-// ONE payload for the whole work-item surface, computed server-side: the live strip · the
-// WHAT-YOU-NEED-TO-DO card · what this item IS · what must resolve · every control's activation
-// AND its reason · the Proof rows · which phases have a report. The gate brief it replaced shipped
-// `approve_blocked_by` that no component read, so the greying rule lived here in TypeScript beside
-// the rule the backend enforces — never derive activation from this payload, read `active`.
+// --- the drilldown ---
+//
+// ONE payload for the whole work-item surface, computed server-side, including every control's
+// activation AND its reason.
+//
+// Never derive activation from this payload — read `active`.
 
 export type Drilldown = Schema<'DrilldownResponse'>
 export type DrilldownAction = Drilldown['actions'][number]
@@ -823,7 +801,7 @@ export function getWorkItemDrilldown(itemId: string, contextId = 'global'): Prom
 }
 
 // One phase's user-facing report for the Reports tab, plus the path to the full agent-facing
-// contract behind it (§4.3's "Open full contract"). Only called for phases `drilldown.reports`
+// contract behind it. Only called for phases `drilldown.reports`
 // lists — the tab greys the rest rather than probing for a 404.
 export type PhaseReport = Schema<'PhaseReportResponse'>
 export function getWorkItemReport(itemId: string, phase: string,
@@ -831,11 +809,11 @@ export function getWorkItemReport(itemId: string, phase: string,
   return getJSON(`/api/dev/work-items/${q(itemId)}/report/${q(phase)}?context_id=${q(contextId)}`)
 }
 
-// `reports/report-triage.md` § From you — the one section of any report the OWNER writes, and the
-// only place their own words reach the plan phase as instruction rather than as chat. HUMAN-ONLY:
-// there is no agent tool behind the write, because an agent-written authority is not one.
-// Slots, not prose: adding and deleting both PUT the WHOLE pair of lists, because the owner is the
-// section's only writer and there is no concurrent edit for a delta to protect.
+// The one section of any report the OWNER writes, and the only place their words reach plan as
+// instruction.
+//
+// HUMAN-ONLY, with no agent tool behind the write. Adding and deleting both PUT the whole pair of
+// lists.
 export type OwnerInput = Schema<'OwnerInputResponse'>
 export type OwnerReference = Schema<'OwnerReference'>
 export type OwnerNote = Schema<'OwnerNote'>
@@ -849,10 +827,10 @@ export function saveWorkItemOwnerInput(itemId: string, references: OwnerReferenc
                   { context_id: contextId, references, notes })
 }
 
-// Abandon (human-only, any non-terminal phase): ends runs/session, removes the worktree (branch
-// kept), notes the reason into closeout.md, flips terminal. Pass supersededBy to record a
-// `superseded` outcome instead. The response is the abandon brief — blocking children listed
-// for the owner's disposal; parallel children continue untouched.
+// Human-only, from any non-terminal phase: ends runs, removes the worktree, notes the reason, flips
+// terminal.
+//
+// The response is the abandon brief — blocking children listed for the owner's disposal.
 export type AbandonResult = Schema<'AbandonResponse'>
 export function abandonWorkItem(itemId: string, reason = '', contextId = 'global',
                                 supersededBy?: string): Promise<AbandonResult> {
@@ -860,5 +838,5 @@ export function abandonWorkItem(itemId: string, reason = '', contextId = 'global
     { context_id: contextId, reason, superseded_by: supersededBy ?? null })
 }
 
-// F3: per-work-item model/effort setters REMOVED — run config is chosen at capture (addInbox
+// Per-work-item model and effort setters are gone — run config is chosen at capture (addInbox
 // model/effort) and locked in at push. The work-item carries it immutably from then on.

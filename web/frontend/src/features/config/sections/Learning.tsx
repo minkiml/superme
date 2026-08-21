@@ -13,14 +13,12 @@ import {
   ApplyBar, Card, ConfigRow, Divider, Loading, NumberField, PaneHead, SectionLabel, W_MAIN, W_SUB,
 } from '../controls'
 
-// System › Learning — everything that governs how SuperMe learns, in the order it happens: whether
-// learning runs at all, when the sweep fires, and which model each learning agent runs on. These
-// were three separate places (a switch on one page, a card below it, a table below that, all named
-// after mechanism rather than subject); the subject is one thing, so it is one pane.
+// Everything that governs how SuperMe learns, in the order it happens: whether it runs, when the
+// sweep fires, and on which model.
 
 const EFFORTS = EFFORT_CATALOG.map((e) => ({ value: e.key, label: e.label }))
-// The agent pickers store a TIER (`sonnet` — the daemon auto-tracks it to the latest concrete), but
-// the label shows the concrete version so it reads consistently with every other model picker.
+// The pickers store a TIER, but the label shows the concrete version, so it reads like every other
+// model picker.
 const familyOf = (id: string) => (id.startsWith('claude-') ? id.split('-')[1] : id)
 const TIERS = MODEL_CATALOG.map((m) => ({ value: familyOf(m.key), label: m.label }))
 
@@ -70,8 +68,7 @@ function MasterSwitch({ sys }: { sys: SystemOverview }) {
   )
 }
 
-// Idle threshold + heartbeat cadence (both shown in minutes; stored as seconds) and the
-// min-new-user-messages gate. Edits stage into a draft; Apply is what writes to the spine.
+// Shown in minutes, stored as seconds. Edits stage into a draft; Apply is what writes to the spine.
 function Sweep({ sys }: { sys: SystemOverview }) {
   const saved = {
     idle: Math.round(sys.sweep_idle_seconds / 60),
@@ -111,8 +108,7 @@ function Sweep({ sys }: { sys: SystemOverview }) {
   )
 }
 
-// One row per autonomous learning agent. Each runs its code-level preset unless overridden; the
-// response carries the re-read rows, because the frontmatter is the source of truth.
+// Each runs its code-level preset unless overridden; the response carries the re-read rows.
 function Agents() {
   const [data, setData] = useState<AgentModels | null>(null)
 

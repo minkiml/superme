@@ -9,19 +9,12 @@ import Empty from '@/ui/Empty'
 import { getTokens, getTokenTimeseries, type TokenUsage, type TokenTimeseries } from '@/lib/api'
 import type { CommandStats } from './useCommandStats'
 
-// The Tokens tile drill-in — full-visibility accounting (token-usage-tracking-spec). Three lenses over
-// the SAME total: Per repo, By operation, Over time. The systematic token-type split is not a fourth
-// lens: it is ONE number per type with no parts to compare, so it reads as a figure line under the
-// trend that already plots those types, and a tab holding three bars is a tab holding a caption.
+// The Tokens drill-in — three lenses over the SAME total.
 //
-// A single MODE toggle governs the whole popup (2026-07-07): OFF = 3-type (input + cache write +
-// output — the "new work" the tile shows, default); ON = 4-type (also counts cache_read, the cheap
-// re-reads of already-cached context = the full window volume). Every breakdown value — headline,
-// per-repo, per-operation, per-day, and the type split — is computed w.r.t. the active mode. In
-// 3-type mode the cache_read row/layer simply isn't shown.
+// The type split is not a fourth lens: it is one number per type with no parts to compare. One MODE
+// toggle governs the popup.
 
-// The token-type palette. `cache_read` only appears in 4-type mode. There is no fifth bucket: a run
-// with no typed usage (aborted, killed, errored) contributes nothing — see spine.token_timeseries.
+// There is no fifth bucket: a run with no typed usage contributes nothing at all.
 const TYPE_META: { key: string; label: string; color: string }[] = [
   { key: 'input', label: 'Input', color: '#6ea8fe' },
   { key: 'cache_creation', label: 'Cache write', color: '#e0a35a' },
@@ -31,8 +24,8 @@ const TYPE_META: { key: string; label: string; color: string }[] = [
 // Types visible in the active mode: cache_read is 4-type-only.
 const typesFor = (full: boolean) => TYPE_META.filter((t) => full || t.key !== 'cache_read')
 
-// Breakdown 1 — per-operation. The shape comes from the payload's category tree (see lib/tokens),
-// shared with every other surface that lists operations, so they cannot drift apart.
+// The shape comes from the payload's category tree, shared with every other surface that lists
+// operations.
 function OperationBars({ tokens, full }: { tokens: TokenUsage; full: boolean }) {
   const rows = operationRows(
     tokens.global?.by_category,
@@ -42,9 +35,8 @@ function OperationBars({ tokens, full }: { tokens: TokenUsage; full: boolean }) 
   return <Bars rows={rows} />
 }
 
-// Over time — per-day usage. Two modes: a stacked by-type breakdown (each day's bar split by token
-// type, with a hover popover of the exact values) and a cumulative line. Both respect the 3/4-type
-// mode. ("Per day" was dropped — the stacked by-type view already IS the per-day total, split.)
+// Two modes: a stacked by-type breakdown with a hover popover, and a cumulative line. Both respect
+// the type mode.
 function OverTime({ ts, tokens, full }: { ts: TokenTimeseries; tokens: TokenUsage | null; full: boolean }) {
   const [mode, setMode] = useState<'type' | 'cumulative'>('type')
   const days = ts.days ?? []
@@ -64,8 +56,7 @@ function OverTime({ ts, tokens, full }: { ts: TokenTimeseries; tokens: TokenUsag
       <TabBar size="sm" value={mode} onChange={setMode} tabs={[['type', 'By type'], ['cumulative', 'Cumulative']] as const} />
       <div className="flex h-40 items-end gap-1 border-b border-line pb-0">
         {series.map(({ d, total }, i) => {
-          // Edge-aware popover anchor so it never clips out of the modal: left third opens rightward,
-          // right third opens leftward, the middle stays centered over the column.
+          // Edge-aware, so it never clips out of the modal: the outer thirds open inward.
           const f = series.length <= 1 ? 0.5 : i / (series.length - 1)
           const anchorX = f < 0.34 ? 'left-0' : f > 0.66 ? 'right-0' : 'left-1/2 -translate-x-1/2'
           return (
@@ -76,9 +67,8 @@ function OverTime({ ts, tokens, full }: { ts: TokenTimeseries; tokens: TokenUsag
                   return v ? <div key={t.key} style={{ height: heightOf(v, dayMax), backgroundColor: t.color }} /> : null
                 })
               : <div className="rounded-t-sm bg-iris" style={{ height: heightOf(cum[i], cumMax) }} />}
-            {/* hover popover — over the hovered column, edge-anchored. In `type` mode: the day's
-                per-type breakdown + day total. In `cumulative` mode: the running total the bar shows
-                (cum through this day) + that day's own contribution. */}
+            {/* over the hovered column: the day's breakdown and total, or the running total and
+                that day's share */}
             <div className={`pointer-events-none absolute top-1/2 z-20 hidden -translate-y-1/2 whitespace-nowrap rounded-md border border-line bg-surface px-2.5 py-1.5 text-[11px] shadow-lg group-hover:block ${anchorX}`}>
               <div className="mb-1 font-medium text-fg">{d.day}</div>
               {mode === 'type' ? (
@@ -121,11 +111,7 @@ function OverTime({ ts, tokens, full }: { ts: TokenTimeseries; tokens: TokenUsag
         <span>{days[0].day}</span>
         <span>{days[days.length - 1].day}</span>
       </div>
-      {/* The legend carries each type's RUNNING TOTAL, not just its colour. It is the same key the
-          chart needs, and the systematic split has no parts to compare within a type — one figure
-          per line says everything a bar chart of three bars was saying, in the place the reader is
-          already looking. Shown in both modes: the totals are the period's, which the cumulative
-          view is also about. */}
+      {/* The legend carries each type's running total — the same key the chart needs. */}
       <div className="flex flex-wrap gap-x-5 gap-y-1.5 border-t border-line pt-2.5 text-[11px]">
         {types.map((t) => (
           <span key={t.key} className="flex items-center gap-1.5">
@@ -162,9 +148,7 @@ export default function TokenDrilldown({ stats, onClose }: { stats: CommandStats
   const cacheRead = tokens?.global?.by_type?.cache_read ?? 0
   const headlineTotal = full ? total3 + cacheRead : total3
 
-  // Per-repo rows: 3-type from the orbit stats; 4-type adds each repo's cache_read from the token API.
-  // Disconnected repos have no orbit node, so their preserved spend rolls into one "Old projects" bar
-  // — otherwise these rows wouldn't sum to the headline total.
+  // Disconnected repos have no orbit node, so their preserved spend rolls up separately.
   const repoRows: Row[] = useMemo(() => {
     const live = [stats.hub, ...stats.nodes]
       .filter((r): r is NonNullable<typeof r> => !!r)

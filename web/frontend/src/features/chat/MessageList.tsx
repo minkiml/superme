@@ -5,10 +5,10 @@ import { useStickyScroll } from './useStickyScroll'
 import { fmtElapsed } from '@/lib/format'
 import type { Approval, Msg } from './types'
 
-// The three talkers in a work-item thread (N4): you · the work-item agent · the deputy. Each row is
-// a small talker icon + a minimal bubble — same clean shape for all, distinguished by icon and a
-// restrained tint, so the owner can tell at a glance who spoke without the bubbles shouting. You sits
-// on the right (chat convention); the agent and the deputy on the left.
+// The three talkers in a work-item thread, each a small icon and a minimal bubble, distinguished by
+// icon and a restrained tint.
+//
+// You sits on the right by chat convention; the agent and the deputy on the left.
 const TALKER: Record<string, { icon: LucideIcon; label: string; right: boolean; avatar: string; bubble: string }> = {
   you: {
     icon: User, label: 'You', right: true, avatar: 'border-[var(--chat-accent)]/50 text-[var(--chat-accent)]',
@@ -25,8 +25,7 @@ const TALKER: Record<string, { icon: LucideIcon; label: string; right: boolean; 
 }
 
 function Row({ m, tone }: { m: Msg; tone?: 'dev' | 'core' }) {
-  // A system notice is not a talker: no avatar, no bubble, centred and quiet. The shape itself is
-  // the signal — nothing about it can be mistaken for something the agent said.
+  // A system notice is not a talker: the shape itself is what keeps it from reading as the agent.
   if (m.role === 'system') {
     return (
       <div className="flex items-center justify-center gap-1.5 py-0.5 text-xs text-muted">
@@ -55,10 +54,8 @@ function Row({ m, tone }: { m: Msg; tone?: 'dev' | 'core' }) {
   )
 }
 
-// NOTE (renovation §3.2): a run's closing report is no longer prose to be parsed out of the reply.
-// It arrives as the `report_completion` tool's `user` payload and is persisted as the `run.report`
-// event; the card that renders it lives in TimelineView, which is what a work-item thread uses.
-// This list renders general chats, which have no phase runs and so no report — plain Markdown.
+// A run's closing report is not prose parsed out of the reply: it arrives as a tool payload and is
+// persisted.
 
 // The scrollable transcript: replayed + live bubbles, the typing indicator while a turn
 // is in flight, and any pending approval. Owns its own scroll element and keeps it pinned

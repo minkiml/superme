@@ -11,27 +11,21 @@ import type { CommandStats, OrbitRepo } from '@/features/shell/useCommandStats'
 import { Empty } from '@/features/dev/common'
 import RunTraceModal from './RunTraceModal'
 
-// Global Activity — the command-centre run feed across ALL repos (SuperMe's own agent work; the
-// owner's external Claude Code sessions are excluded). One row per spine run: repo · feature ·
-// scope · model · tokens · took · when. Newest-first, paged on demand ("Load 30 more") so
-// history is always reachable regardless of recency. Click a row to open its trace (transcript +
-// telemetry). Colored by repo (swatch) + feature (chip) so it stays scannable.
+// The command-centre run feed across ALL repos — one row per spine run, newest first, paged on
+// demand.
+//
+// SuperMe's own agent work only; the owner's external sessions are excluded. Click a row for its
+// trace.
 
 const PAGE = 30
-// Shared column template so the header and every row align exactly.
-// The run table SHEDS COLUMNS as it narrows; it never scrolls sideways (`lib/layout`). Sideways is
-// the worst answer for a table — the columns that vanish are the right-hand ones, which is exactly
-// where the numbers are, and nothing on screen says they exist. Dropping them is the same loss made
-// visible, and every row opens its full trace on click, so nothing shed here is unreachable.
+// Shared column template, so the header and every row align exactly.
 //
-// What goes, in order: `Scope` and `Took` (a mode and a duration, neither of which anyone scans a
-// feed for), then `Model`. What never goes: which repo, what ran, how much it cost, and when.
+// The table SHEDS COLUMNS as it narrows and never scrolls sideways. What never goes: which repo,
+// what ran, what it cost, and when.
 type Density = 'full' | 'mid' | 'tight'
 
-// Every flexible column is `minmax(0, …)`: a bare `fr` floors at its content, so a repo whose name
-// does not fit pushes the grid wider than its container and the right-hand columns get CLIPPED —
-// shedding turns into hiding, which is the failure this whole scheme exists to avoid. With a zero
-// floor the cell truncates instead, and the columns that are meant to survive always do.
+// A bare `fr` floors at its content, so a long name pushes the grid wider and CLIPS the right-hand
+// columns.
 const COLS: Record<Density, string> = {
   full: 'grid grid-cols-[minmax(0,1.4fr)_72px_48px_minmax(0,1fr)_84px_64px_112px] items-center gap-3',
   mid: 'grid grid-cols-[minmax(0,1.4fr)_72px_minmax(0,1fr)_84px_112px] items-center gap-3',
@@ -58,35 +52,27 @@ export default function GlobalActivity({
   const [limit, setLimit] = useState(PAGE) // grows by PAGE each "Load more"; the fetch pulls this many
   const [openRun, setOpenRun] = useState<Run | null>(null)
 
-  // `limit` is part of the cache key: growing the page is a different request, and the previous
-  // page's data stays cached under its own key (so collapsing back is instant).
+  // `limit` is part of the cache key, so the previous page stays cached under its own.
   const feed = useLive(K.runs(limit), () => getRuns(undefined, limit))
   const loading = feed.loading
   const err = feed.data ? null : feed.error ? String(feed.error) : null
 
-  // `history` (recent_runs) already includes in-flight runs, and `live` repeats them — so the naive
-  // [...live, ...history] double-lists a running run (same id → duplicate React key, which also
-  // breaks reconciliation so the stale row lingered until a full reload). Dedup by id, live first
-  // so the running row wins.
+  // History already includes in-flight runs and `live` repeats them, so dedup by id, live first.
   const rows: Run[] | null = useMemo(() => {
     const d = feed.data
     if (!d) return null
     const seen = new Set<number>()
     return [...d.live, ...d.history].filter((r) => !seen.has(r.id) && seen.add(r.id))
   }, [feed.data])
-  // KEEP THE LAST GOOD PAGE ON SCREEN while a bigger one loads. `limit` is part of the cache key, so
-  // growing the page is a cache MISS: `feed.data` went undefined, the whole table unmounted for the
-  // "Loading…" spinner, and remounting reset the scroll container to the top — the owner clicked
-  // "Load 30 more" and got thrown back to row 1. Rows are keyed by id, so React reuses the existing
-  // DOM and only appends; the button's own spinner is the loading signal.
+  // KEEP THE LAST GOOD PAGE: a cache miss would unmount the table and reset the scroll.
   const lastGood = useRef<Run[] | null>(null)
   if (rows) lastGood.current = rows
   const runs = rows ?? lastGood.current
   // A full page of history back means there may be more to fetch.
   const hasMore = (feed.data?.history.length ?? 0) >= limit
 
-  // Live roster first; a run whose repo was disconnected falls through to its tombstoned label
-  // (so history keeps reading "Dummy Project", not the bare id) and is marked as gone.
+  // Live roster first; a disconnected repo falls through to its tombstoned label rather than a bare
+  // id.
   const metaFor = useCallback(
     (id: string): { label: string; color: string; icon: string | null; archived?: boolean } => {
       const r = ([stats.hub, ...stats.nodes].filter(Boolean) as OrbitRepo[]).find((x) => x.id === id)
@@ -153,8 +139,8 @@ export default function GlobalActivity({
           meta={metaFor(openRun.repo_id)}
           onClose={() => setOpenRun(null)}
           onDiagnose={
-            // A diagnosis run is already a read-only investigation — offering to diagnose it
-            // recursively nests without adding signal, so suppress the affordance on those rows.
+            // A diagnosis run is already an investigation, so diagnosing it nests without adding
+            // signal.
             onDiagnose && openRun.feature !== 'diagnosis'
               ? (query) => { onDiagnose(openRun, query); setOpenRun(null) }
               : undefined
@@ -174,9 +160,8 @@ function RunRow({ r, meta, density, last, onOpen }: { r: Run; meta: { label: str
       title="View trace"
       className={`${COLS[density]} w-full bg-surface px-4 py-2.5 text-left transition hover:bg-hover ${last ? '' : 'border-b border-line'}`}
     >
-      {/* Tight keeps the repo's MARK and drops its name: a label truncated to one letter identifies
-          nothing, while the colour still does and the tooltip still says it in full. The
-          disconnected-origin marker sheds with the name — it is a footnote on a row you can open. */}
+      {/* Tight keeps the MARK and drops the name: a label truncated to one letter identifies
+          nothing, the colour still does. */}
       <span
         className="flex min-w-0 items-center gap-2"
         title={meta.archived ? `${meta.label} — disconnected project` : meta.label}
@@ -205,9 +190,8 @@ function RunRow({ r, meta, density, last, onOpen }: { r: Run; meta: { label: str
           </>
         )}
       </span>
-      {/* Op = the feature chip + the work-item PHASE beneath it. An interactive triage/build/review
-          turn is feature `chat`; the phase is the real signal, so surface it (else the feed reads
-          all-`chat` and hides the pipeline work). Phase is absent on non-item runs. */}
+      {/* The feature chip plus the work-item PHASE: an interactive turn's feature is `chat`, so
+          the phase is the real signal */}
       <span className="flex min-w-0 flex-col items-start gap-0.5">
         <span
           className="rounded px-1.5 py-0.5 text-[11px] font-medium"
@@ -221,16 +205,11 @@ function RunRow({ r, meta, density, last, onOpen }: { r: Run; meta: { label: str
       {density !== 'tight' && (
         <span className="truncate text-[11px] text-muted" title={r.model ?? undefined}>{r.model ? fmtModel(r.model) : '—'}</span>
       )}
-      {/* `r.tokens` is ALREADY the 3-type display amount — `spine._run_dict` overrides it through
-          `_display_tokens` (input + cache_write + output, excluding cache_read) so every
-          run-returning surface reconciles with the token dashboard's default. Do NOT recompute it
-          here from typed columns: they are not on the wire, and a second definition of one number is
-          how the two surfaces drift apart. */}
+      {/* `r.tokens` is ALREADY the display amount, so do not recompute it from typed columns that
+          are not on the wire */}
       <span className="text-right font-mono text-[11px] text-muted">{fmtTokens(r.tokens)}</span>
       {density === 'full' && <span className="text-right font-mono text-[11px] text-faint">{took(r)}</span>}
-      {/* Tight trades the stamp for an AGE ("4m", "3d"): at this width a full date wraps to two
-          lines, and a feed is read for how recent a run is more than for the minute it started.
-          The stamp stays in the tooltip. */}
+      {/* Tight trades the stamp for an AGE; the stamp stays in the tooltip */}
       <span className="truncate text-right font-mono text-[11px] text-faint" title={fmtLocal(r.started_at)}>
         {density === 'tight' ? fmtAge(r.started_at) : fmtLocal(r.started_at)}
       </span>

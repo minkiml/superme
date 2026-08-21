@@ -2,13 +2,10 @@ import type { LucideIcon } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useContainerWidth, PANE } from '@/lib/layout'
 
-// One column per LOADING SCOPE, each grouped by category — the layout every system-artifact surface
-// uses. It exists as one component because the same three nouns (constitution, skills, agents) are
-// rendered at two scopes by two different callers: when each drew its own list, the universal and
-// per-repo views of the same artifact drifted into looking like different things.
+// One column per LOADING SCOPE, grouped by category — the layout every system-artifact surface
+// uses.
 //
-// The shape is given, not decided here. A caller passes its columns and groups already ordered;
-// this only lays them out, so the ordering rule stays with the data that knows it.
+// Separate lists drifted into looking like different things. The shape is given, not decided here.
 
 export type ScopeCard = {
   key: string
@@ -56,8 +53,7 @@ const TEXT: Record<string, string> = {
 }
 
 export default function ScopeColumns({ columns }: { columns: ScopeColumn[] }) {
-  // The pane measures itself: this can be 500px wide inside a 1400px window, and a pane never
-  // adapts by growing a sideways scrollbar (`lib/layout`) — the columns stack instead.
+  // The pane measures itself, and never adapts by growing a sideways scrollbar — the columns stack.
   const [ref, w] = useContainerWidth<HTMLDivElement>()
   const cols = w && w < PANE.narrow ? 1 : w && w < PANE.mid ? Math.min(2, columns.length) : columns.length
   return (
@@ -122,8 +118,8 @@ function Card({ card, icon: Icon }: { card: ScopeCard; icon: LucideIcon }) {
         {card.sub && <span className="mt-0.5 block text-[11.5px] leading-snug text-muted line-clamp-2">{card.sub}</span>}
       </span>
       {card.badges}
-      {/* A control inside a clickable row must not also open it — flipping a toggle is not a request
-          to read the file. */}
+      {/* A control inside a clickable row must not also open it: a toggle is not a request to
+          read. */}
       {card.trailing && (
         <span className="shrink-0" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
           {card.trailing}

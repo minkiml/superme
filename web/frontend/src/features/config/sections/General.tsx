@@ -12,19 +12,15 @@ import {
   ApplyBar, Card, ConfigRow, Divider, GaugeBar, Loading, NumberField, PaneHead, SectionLabel, W_WIDE,
 } from '../controls'
 
-// System › General — the settings that are genuinely system-shaped: who judges the autopilot gates
-// and how readily, and when a long session compacts itself.
+// System settings that are genuinely system-shaped: who judges the autopilot gates, and when a long
+// session compacts.
 //
-// Model and effort are NOT here. They were, and every repo overrode them — three projects choosing
-// the same value independently, which is what a default is, set one tier too low. A repo picks its
-// own; one that picks nothing runs the declared default (config/system.yaml, else the built-in
-// floor), which is what Project · Settings names in its inherit option.
+// Model and effort are NOT here. Every repo overrode them, which is what a default set one tier too
+// low looks like.
 
-// The deputy escalation dial is set PER GATE, because a project can want a light touch at triage
-// and a cautious hand at review. The refusal floor holds at every level; this only moves the
-// discretionary band.
-// A picker shows the value in force, not an "inherit" row beside the value it inherits — see the
-// same note in Project · Settings. Unset resolves to the default, so the default is what it shows.
+// Per gate, because a project can want a light touch at triage and a cautious hand at review.
+//
+// The refusal floor holds at every level; this only moves the discretionary band.
 const MODEL_OPTS = MODEL_CATALOG.map((m) => ({ value: m.key, label: m.label }))
 const EFFORT_OPTS = EFFORT_CATALOG.map((e) => ({ value: e.key, label: e.label }))
 
@@ -85,9 +81,8 @@ function Defaults({ sys }: { sys: SystemOverview }) {
             onChange={(v) => { setDeputy(v); setSystemDeputy({ enabled: v }).then(after).catch(() => {}) }}
           />
         </ConfigRow>
-        {/* The deputy's OWN tier. It sits here, at system scope, because there is one deputy across
-            every project — and it never follows a project's model, because a judge promoted
-            alongside the thing it judges has stopped being a second opinion. Default is the floor. */}
+        {/* The deputy's OWN tier: a judge promoted alongside what it judges is not a second
+            opinion */}
         <Divider />
         <ConfigRow title="Deputy model" hint="The model the deputy judges on. Never the project's.">
           <Dropdown
@@ -140,9 +135,8 @@ function Defaults({ sys }: { sys: SystemOverview }) {
   )
 }
 
-// Compaction is global by design — per-session floors already adapt the effective trigger, so a
-// per-repo override would add config surface without adding control. Edits stage into a draft; a
-// floor-violating trigger is REFUSED by the daemon (409) and the reason is surfaced inline.
+// Global by design: per-session floors already adapt the effective trigger. A floor-violating
+// trigger is refused by the daemon.
 function Compaction() {
   const [cfg, setCfg] = useState<CompactionConfig | null>(null)
   const [draft, setDraft] = useState({ trigger: 80, auto: true, gain: 30 })
@@ -186,9 +180,8 @@ function Compaction() {
 
   return (
     <Card>
-      {/* `min` is the SERVER's accepted minimum, never `floor_pct + 1`. Clearing the incompressible
-          floor is not the same as leaving working room: a trigger just above it lands the session
-          near the floor and one exchange puts it straight back over, so it re-fires every turn. */}
+      {/* `min` is the SERVER's accepted minimum: clearing the floor is not the same as leaving
+          working room */}
       <ConfigRow
         title="Trigger"
         hint="Context fill that fires auto-compaction"

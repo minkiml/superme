@@ -1,31 +1,24 @@
 import { featureColor, featureLabel } from '@/lib/palette'
 import { fmtTokens } from '@/lib/format'
 
-// How token spend reads as a list of OPERATIONS — one rule, used by every surface that shows one
-// (the Tokens drill-in, the repo inspector). The shape is not decided here: each category in the
-// payload says whether it renders as ONE bar or one bar per feature, because that is a taxonomy
-// call (superme_agent/core/token_taxonomy) and a renderer re-deciding it is how two surfaces come
-// to disagree about the same number.
+// How token spend reads as a list of OPERATIONS, used by every surface that shows one.
 //
-// A collapsed row carries its members in `title`, so the group can be opened by hovering it. A bar
-// that stands for several things and can never be opened is a bar you cannot act on.
+// Each category says whether it renders as one bar or one per feature; a renderer re-deciding that
+// is how surfaces disagree.
 
 export type OperationRow = { key: string; label: string; value: number; color: string; title?: string }
 
 type Category = { total?: number; features?: Record<string, number>; label?: string; collapsed?: boolean }
 
-// A collapsed category is a bar in its own right, so it needs a colour clearly not one of the
-// operations beside it: grey for maintenance, one muted hue for the background habit.
+// A collapsed category needs a colour clearly not one of the operations beside it.
 const CATEGORY_COLOR: Record<string, string> = {
   learning: '#7c8cf8',
   other: '#8b93a7',
 }
 
 /**
- * `byCategory` is a bucket's category tree. `cacheRead` adds each feature's cache_read on top —
- * pass it only in 4-type mode, and only where the bucket actually carries the map (the global
- * bucket does; per-repo ones don't, and read 3-type).
- * Sorted largest-first, zero rows dropped.
+ * `cacheRead` adds each feature's cache_read on top: pass it only in 4-type mode, and only where
+ * the bucket carries the map.
  */
 export function operationRows(
   byCategory: Record<string, Category> | undefined,

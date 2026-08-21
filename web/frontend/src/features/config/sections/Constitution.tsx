@@ -7,13 +7,10 @@ import { getFoundation, toggleConstitution, type FoundationConstitution } from '
 import { Loading, PaneHead } from '../controls'
 import { useUniversalPublished } from './published'
 
-// System artifacts › Constitution — the universal always-on rules, in the two columns that decide
-// when they load. There is no Shared column and there never will be: a constitution is mode-scoped
-// by construction, so a rule with no mode has nowhere to be loaded from.
+// The universal always-on rules, in the two columns that decide when they load. There is no Shared
+// column: a constitution is mode-scoped by construction.
 //
-// Within a column, foundational rules come first and carry a PIN instead of a switch. A charter
-// consults them by name, so they cannot be turned off — and a toggle that refuses to move is a lie
-// about what the owner controls.
+// Foundational rules carry a PIN, because a toggle that refuses to move is a lie.
 
 export default function Constitution() {
   const [rows, setRows] = useState<FoundationConstitution[] | null>(null)

@@ -31,16 +31,14 @@ export default function Composer({
   modelOverride?: string | null // the context's current model selection (for the picker's check)
   effortOverride?: string | null // the context's current effort selection (for the picker's check)
   onSelectModel?: (model: string, effort: string) => void // sends `/model <model> <effort>` directly
-  // F2: input greyed during autonomous phases (build/vet) — there's no live intake worker to
-  // receive a message, so sending is disabled and the reason shown. `null` = normal.
+  // Greyed during autonomous phases: there is no live intake worker to receive a message.
   locked?: { reason: string } | null
 }) {
   const [palIdx, setPalIdx] = useState(0)
   const [palHidden, setPalHidden] = useState(false) // dismissed with Esc until next edit
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
 
-  // Once the input resolves to exactly "/model" (optionally a trailing space, no arg yet), swap
-  // the generic "/" palette for the rich model picker.
+  // Once the input resolves to exactly the model command, swap the generic palette for the picker.
   const modelOpen = !!onSelectModel && /^\/model\s*$/.test(value) && !palHidden
 
   // Open while the input is a single "/token" (no space yet).

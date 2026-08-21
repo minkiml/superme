@@ -19,19 +19,10 @@ import ProjectLearning from './sections/ProjectLearning'
 import ProjectArtifacts from './sections/ProjectArtifacts'
 import ProjectXray from './sections/ProjectXray'
 
-// The System config popup — every knob SuperMe has, in one overlay, grouped by the SCOPE it acts at.
+// The System config popup — every knob SuperMe has, grouped by the SCOPE it acts at.
 //
-// Scope is the organising axis because it is the only thing that actually distinguished the five
-// surfaces this replaces: the same three artifact nouns existed twice (once universal, once
-// per-repo) and a repo's own settings were split across three screens. So each sidebar GROUP
-// declares a scope and the rows under it are sections at that scope.
-//
-// The scope lives on the group rather than in a popup-wide switch: sections that don't take a repo
-// would leave such a switch inert, and a control that sometimes does nothing is worse than one that
-// only appears where it applies.
-//
-// It is an OVERLAY (`?config=<section>`), not a page — it opens over whatever you were looking at,
-// the way `?stats=` does, so closing it returns you there rather than guessing.
+// Scope lives on the GROUP: a control that sometimes does nothing is worse than one that appears
+// only where it applies.
 
 type Row = { id: ConfigSection; label: string; icon: LucideIcon }
 type Group = { name: string; rows: Row[]; project?: boolean }
@@ -69,9 +60,8 @@ const GROUPS: Group[] = [
 const PROJECT_SECTIONS = new Set(GROUPS.filter((g) => g.project).flatMap((g) => g.rows.map((r) => r.id)))
 
 /**
- * What each section renders. A RECORD keyed by the router's vocabulary rather than a chain of
- * conditionals, so a section that is addressable but has no pane is a type error rather than a
- * blank popup. Project sections receive the picked repo; system ones ignore it.
+ * A RECORD keyed by the router's vocabulary, so an addressable section with no pane is a type
+ * error, not a blank popup.
  */
 const PANES: Record<ConfigSection, (repo: OrbitRepo, label: string) => ReactNode> = {
   general: () => <General />,
@@ -93,8 +83,8 @@ export default function SystemConfig({ repos, initialRepoId, onClose }: {
   onClose: () => void
 }) {
   const param = useParam('config')
-  // An unknown section is corrected in place rather than rendered blank: the popup is addressable,
-  // so a stale or mistyped link must still land somewhere real.
+  // An unknown section is corrected in place: the popup is addressable, so a stale link must land
+  // somewhere real.
   const section = (CONFIG_SECTIONS as readonly string[]).includes(param ?? '')
     ? (param as ConfigSection)
     : 'general'
@@ -102,31 +92,23 @@ export default function SystemConfig({ repos, initialRepoId, onClose }: {
     if (param && param !== section) setParam('config', section)
   }, [param, section])
 
-  // The picked repo is popup state, not an address: the SECTION is what you link to, and carrying
-  // a repo in the URL would fight the repo already named by the path you opened this over.
+  // The SECTION is what you link to; a repo in the URL would fight the path you opened this over.
   const [repoId, setRepoId] = useState(initialRepoId ?? 'global')
   const repo = repos.find((r) => r.id === repoId) ?? repos.find((r) => r.id === 'global') ?? repos[0] ?? null
 
-  // What is waiting on YOU in the picked repo — proposals at gate 1 plus drafts at gate 2. It is
-  // read by the SHELL rather than the pane, because the point of a badge is to be seen before you
-  // click: a queue you only discover by opening it is a queue you forget. Same cache key the
-  // Learning pane subscribes to, so the two cost one request between them.
+  // Read by the SHELL: a queue you only discover by opening it is a queue you forget.
   const mem = useLive(repo ? K.memoryStats(repo.id) : null, () => getMemoryStats(repo!.id), 0)
   const gateCount = (mem.data?.candidates.pending_proposals ?? 0) + (mem.data?.candidates.drafted_proposals ?? 0)
   const badges: Partial<Record<ConfigSection, number>> = { plearning: gateCount }
 
   function name(r: OrbitRepo) { return r.id === 'global' ? 'SuperMe Hub' : r.label }
 
-  // The popup measures ITSELF, not the window: it lives inside the frame's main band, so the width
-  // it actually got is the only honest input. Two steps, in the app's own order — the rail yields
-  // before the content does. Tight, it is an ICON STRIP: every row keeps its icon and its tooltip,
-  // and the group headings become hairlines, since a heading is the first thing a strip cannot hold.
+  // It lives inside the frame's main band, so the width it got is the only honest input.
   const [bodyRef, bodyW] = useContainerWidth<HTMLDivElement>()
   const railIcons = bodyW > 0 && bodyW < 520
   const railNarrow = bodyW > 0 && bodyW < 760
 
-  // The project picker rides with the sections it governs. In the strip there is no room for it, so
-  // it moves to the top of the pane — the same control, still next to what it changes.
+  // In the strip there is no room for the picker, so it moves to the top of the pane.
   const picker = repo && (
     <Dropdown
       value={repo.id}
@@ -169,8 +151,8 @@ export default function SystemConfig({ repos, initialRepoId, onClose }: {
                   >
                     <span className="relative shrink-0">
                       <Icon size={15} className={on ? 'text-fg' : 'text-faint'} />
-                      {/* In the strip the count has nowhere to sit, so it becomes a dot on the icon:
-                          the point of the badge is that something is waiting, not how many. */}
+                      {/* In the strip the count becomes a dot: the point is that something waits,
+                          not how many. */}
                       {railIcons && !!badges[r.id] && (
                         <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-warn" />
                       )}
@@ -199,8 +181,8 @@ export default function SystemConfig({ repos, initialRepoId, onClose }: {
         </nav>
 
         <div className={`min-w-0 flex-1 overflow-y-auto py-5 ${railIcons ? 'px-4' : 'px-6'}`}>
-          {/* A project section with no roster yet has nothing to configure — the picker above it is
-              empty for the same reason, so say so rather than rendering controls bound to nothing. */}
+          {/* With no roster there is nothing to configure, so say so rather than render controls
+              bound to nothing. */}
           {PROJECT_SECTIONS.has(section) && !repo ? (
             <p className="py-8 text-center text-[13px] text-faint">No projects connected yet.</p>
           ) : (

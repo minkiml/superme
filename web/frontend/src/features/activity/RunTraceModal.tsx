@@ -9,10 +9,10 @@ import { pairTrace } from '@/lib/trace'
 import { TraceRows } from '@/features/dev/ExecutionTrace'
 import { getRunTrace, type Run, type RunEvent } from '@/lib/api'
 
-// Run trace — the popup for one Activity row. Two tabs (mirroring the work-item detail's
-// Review/Execution): CONVERSATION (the prompt + assistant reply, readable — the default) and EXECUTION
-// (the call-trail of tools / sub-agents / skills, same layout as the work-item Execution tab). Everything
-// is scoped to THIS run (not the whole session), so each row has its own thread — works for background runs.
+// The popup for one Activity row, in two tabs: the CONVERSATION and the EXECUTION call-trail.
+//
+// Everything is scoped to THIS run rather than the whole session, so it works for background runs
+// too.
 
 type Tab = 'trace' | 'conversation'
 
@@ -25,8 +25,8 @@ export default function RunTraceModal({
   run: Run
   meta: { label: string; color: string; icon: string | null }
   onClose: () => void
-  // Launch a read-only diagnosis session pointed at THIS run (session-kinds-diagnose). Absent ⇒ the
-  // Diagnose affordance is hidden (e.g. surfaces with no chat rail to receive the session).
+  // Absent means the Diagnose affordance is hidden — a surface with no chat rail cannot receive the
+  // session.
   onDiagnose?: (query: string) => void
 }) {
   const [events, setEvents] = useState<RunEvent[] | null>(null)
@@ -81,8 +81,8 @@ export default function RunTraceModal({
           </div>
         </div>
 
-        {/* diagnosis launcher — a read-only diagnosis session, pointed at this run, seeded with the
-            owner's question. The daemon injects this run's trace so the session starts oriented. */}
+        {/* A read-only diagnosis session pointed at this run; the daemon injects its trace, so it
+            starts oriented */}
         {onDiagnose && diagOpen && (
           <div className="mt-2.5 rounded-lg border border-dev/40 bg-dev/5 p-2.5">
             <textarea

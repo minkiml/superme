@@ -17,24 +17,20 @@ import { useLive } from '@/lib/live'
 import { K } from '@/lib/live/keys'
 import type { Msg } from './types'
 
-// F2: the phases whose session is the item's own worker (not the intake thread the owner talks in).
-// While the item sits in one of these, the chat input is greyed — there's no live intake worker to
-// receive a message; the owner watches the build/vet stream read-only.
+// The phases whose session is the item's own worker, not the intake thread. The input greys here.
 const AUTONOMOUS_PHASES = new Set(['build', 'vet'])
 
 // A dev-mode binding: the chat is taken over as one work-item's dev thread.
 export type DevBinding = { workItemId: string; sessionId: string | null; title: string; contextId: string }
-// A one-shot turn that BIRTHS a fresh session (never inherits the open one). `kind`/`subjectRunId`
-// stamp its agent identity — v1: kind='diagnosis' pointed at the Activity run it inspects.
+// A one-shot turn that BIRTHS a fresh session, never inheriting the open one. `kind` and
+// `subjectRunId` stamp its identity.
 export type SeedTurn = { prompt: string; kind?: string; subjectRunId?: number }
 
-// The persistent chat rail. Its context is selectable and detached from whichever
-// dashboard page is active — the parent remounts it via a `key` on context change, so the
-// two hooks below capture `contextId` once and their `[]` effects re-run for the new one.
+// The persistent chat rail, and just the conductor: `useSessions` owns the conversation list,
+// `useAgentSocket` the live turn.
 //
-// This component is just the conductor: useSessions owns the conversation list + replayed
-// bubbles, useAgentSocket owns the live WebSocket turn, and the presentational children
-// render them.
+// The parent remounts it via a `key` on context change, so the hooks below capture `contextId`
+// once.
 export default function ChatPanel({
   contextId = 'global',
   contexts = [GLOBAL],
@@ -70,19 +66,17 @@ export default function ChatPanel({
   const [input, setInput] = useState('')
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [confirmId, setConfirmId] = useState<string | null>(null) // session pending "forget"
-  // The per-session model/effort runtime override (the composer picker). Held here and sent per-turn
-  // as msg.model / msg.effort — it NEVER writes a persisted default. Model re-derives from the
-  // session's last run on open (session-model-precedence); effort resets per session (runs don't
-  // record effort). null = follow the server precedence (work-item → repo → system).
+  // The composer picker's runtime override, sent per turn and NEVER written as a persisted default.
+  // `null` follows the server precedence.
   const [sessionModel, setSessionModel] = useState<string | null>(null)
   const [sessionEffort, setSessionEffort] = useState<string | null>(null)
-  // F2 unified timeline state (only used when bound to a work-item).
+  // Unified timeline state (only used when bound to a work-item).
   const [liveFrames, setLiveFrames] = useState<TimelineFrame[]>([])
   const [timelineKey, setTimelineKey] = useState(0)   // parent bumps → TimelineView re-fetches history
   const [boundPhase, setBoundPhase] = useState<string | null>(null)
   const [boundRunning, setBoundRunning] = useState(false)
-  // Terminal = the item is finished (done / abandoned / superseded). Its phase threads were
-  // reclaimed at clearance, so there is no conversation left to continue — see the composer lock.
+  // A terminal item's phase threads were reclaimed at clearance, so there is no conversation left
+  // to continue.
   const [boundTerminal, setBoundTerminal] = useState(false)
   const [runFeature, setRunFeature] = useState<string | null>(null) // the live run's role → the chat verb (Building… / Deputy reviewing…)
   // Edge-detector for the bound item's detail feed (phase moved / run ended / heartbeat).
@@ -95,9 +89,8 @@ export default function ChatPanel({
     onResult: (text, sessionId) => {
       sessions.appendMessage({ role: 'superme', text })
       if (sessionId) {
-        // A bound turn's session belongs to the work-item, not the context's general chat —
-        // claim it transiently (persist=false) so it doesn't overwrite the remembered general
-        // session; the item owns it (surfaced up + persisted onto the work-item below).
+        // A bound turn's session belongs to the work-item, so claim it transiently — persisting
+        // would overwrite the general session.
         sessions.claimSession(sessionId, !binding)
         if (binding && sessionId !== binding.sessionId) onBindingSession?.(sessionId)
       }
@@ -105,18 +98,12 @@ export default function ChatPanel({
       if (binding) setTimelineKey((k) => k + 1)
     },
     onError: (message) => sessions.appendMessage({ role: 'system', text: message }),
-    // F2: a watched item's live background run event → buffer it for the timeline view.
+    // A watched item's live background run event → buffer it for the timeline view.
     onTimeline: (f) => setLiveFrames((prev) => [...prev, f]),
   })
 
-  // The work-item this chat is actually on — derived from the ACTIVE SESSION's durable stamp (server
-  // truth, work-item-session-recognition-prd), so the indicator is correct however the session was
-  // opened (work-item card OR picker) and clears when you switch to a general session. `binding` is
-  // only an OPTIMISTIC fallback for a just-clicked card whose session isn't listed yet (or an item
-  // that has no session at all yet).
-  // Matched against the channel's THREADS, not just its row id: a work-item row stands for one
-  // thread per phase, and a finished turn hands back whichever thread the phase named — so an id
-  // that is not the row's own is still this same channel, and the timeline must not blink out.
+  // Derived from the ACTIVE SESSION's durable stamp, and matched against the channel's THREADS, not
+  // just its row id.
   const activeSess = sessions.sessions.find(
     (s) => s.id === sessions.activeId || (s.thread_ids ?? []).includes(sessions.activeId ?? ''),
   )
@@ -129,8 +116,8 @@ export default function ChatPanel({
       : null
   const chipItem = stampedItem ?? optimisticItem
 
-  // F2: subscribe this panel to the bound item's live event broker (build/vet/other-phase runs
-  // stream in), and drop the subscription when the binding changes/clears.
+  // Subscribe this panel to the bound item's live event broker, and drop the subscription when the
+  // binding clears.
   useEffect(() => {
     const id = chipItem?.id && mode === 'dev' ? chipItem.id : null
     if (!socket.ready) return
@@ -141,12 +128,8 @@ export default function ChatPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chipItem?.id, mode, socket.ready])
 
-  // F2: track the bound item's phase + running so the timeline attributes live frames to the right
-  // lane and the composer greys during build/vet. On a run-end (running true→false) reload the
-  // authoritative history and drop the reconciled live-frame tail.
-  // Shares the drilldown's `itemDetail` key — with the modal open over the same item this is one
-  // request between them, not two on different clocks. Cadence follows the item: brisk while a run
-  // is in flight, slow at rest (it used to poll every 2s forever, including for an idle item).
+  // Track the bound item's phase and running state, so the timeline attributes live frames to the
+  // right lane.
   const boundId = mode === 'dev' ? chipItem?.id ?? null : null
   const detailQ = useLive<WorkItemDetail>(
     boundId ? K.itemDetail(contextId, boundId) : null,
@@ -168,12 +151,7 @@ export default function ChatPanel({
     setBoundRunning(running)
     setBoundTerminal(boundDetail.item.status === 'done' || !!boundDetail.item.done_at)
     setRunFeature(running ? boundDetail.item.run_feature ?? null : null)
-    // Re-pull the authoritative trail on any STRUCTURAL change (phase moved, or a run just ended)
-    // AND on a slow heartbeat while running. The timeline endpoint includes in-progress runs, so
-    // this lands every phase's bubbles within a couple seconds with no manual refresh — re-fetching
-    // ONLY on the running true→false edge let fast back-to-back autopilot runs slip past (build/vet/
-    // deputy went missing until a hard refresh). The view dedups liveFrames against loaded history
-    // by run, so extra fetches never double-render.
+    // Also on a slow heartbeat, because fast back-to-back runs slip past a running-edge trigger.
     const prev = prevBound.current
     const structural = phase !== prev.phase || (prev.running && !running)
     prev.ticks += 1
@@ -182,27 +160,15 @@ export default function ChatPanel({
     else if (heartbeat) setTimelineKey((k) => k + 1)
     prev.running = running
     prev.phase = phase
-    // `detailAt` (the fetch stamp) is the dependency that makes this run once per RESPONSE — the
-    // detail object itself is referentially new on every poll whether or not anything changed.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // `detailAt` makes this run once per RESPONSE; the detail object is referentially new on every
+    // poll. eslint-disable-next-line react-hooks/exhaustive-deps
   }, [boundId, detailAt])
-  // Reset the edge-detector when the bound item changes — otherwise the new item's first read is
-  // compared against the previous item's phase and spuriously reads as a structural change.
+  // Reset the edge-detector on a new item, or its first read is compared against the previous
+  // item's phase.
   useEffect(() => { prevBound.current = { running: false, phase: null, ticks: 0 } }, [boundId])
 
-  // Deputy turns woven into the bound work-item thread (autopilot slice 4b). The deputy acts in the
-  // BACKGROUND (headless, at gates), so its words can't arrive over the live socket — they're
-  // persisted as `deputy.*` dev events and replayed here whenever the owner opens the item's chat.
-  // Appended after the session bubbles (the deputy always acts at the item's CURRENT gate, i.e. its
-  // latest state), each an attributed `deputy` bubble. Poll-refreshed so a decision made while the
-  // panel is open still surfaces. NOT merged into the SDK transcript — kept independent, exactly as
-  // the deputy session is (design §"Interface": stored attribution, never inferred).
-  // The deputy's channel presence is ONLY its real turns AT the agent (Q1). Its governance moves —
-  // approve / send-back / escalate and their rationale — belong in the Deputy-log drilldown
-  // (WorkItemModal), OUT of the channel (owner's Q1 spec), so the chat stays a clean 3-speaker
-  // conversation. Here we fetch just the `deputy.query` markers: the exact text of each turn the
-  // deputy fired at the agent, so the matching transcript user-bubble can be re-attributed (Q1-D).
-  // Same dev-log key the timeline and the drilldown read — one fetch feeds all three.
+  // The deputy acts headlessly, so its words are replayed from dev events. Only its turns AT the
+  // agent belong here.
   const deputyLog = useLive(
     boundId ? K.devLog(contextId, boundId, 50) : null,
     () => getDevLog(contextId, { itemId: boundId as string, limit: 50 }),
@@ -216,10 +182,8 @@ export default function ChatPanel({
     [deputyLog.data],
   )
 
-  // Re-attribute the deputy's real turns (Q1-D): a transcript bubble the owner appears to have sent
-  // that exactly matches a `deputy.query` marker was actually the DEPUTY talking to the agent on the
-  // owner's behalf — render it as the deputy (3 speakers), not as the owner. The agent never saw a
-  // difference; only the owner's view distinguishes them.
+  // A transcript bubble matching a `deputy.query` marker was the DEPUTY talking on the owner's
+  // behalf, so render it as such.
   const displayMessages = deputyQueries.length
     ? sessions.messages.map((m) =>
         m.role === 'you' && deputyQueries.includes((m.text ?? '').trim())
@@ -227,18 +191,14 @@ export default function ChatPanel({
           : m)
     : sessions.messages
 
-  // Reconcile: once the active session diverges from a card-set binding, that binding is stale — drop
-  // it so it can't mis-tag turns or leave a wrong indicator up. Keyed on activeId ALONE (not binding),
-  // so a fresh card-click isn't cleared before its take-over effect opens the item's session.
+  // A binding the active session has diverged from is stale. Keyed on `activeId` alone, so a fresh
+  // click survives.
   useEffect(() => {
     if (binding?.sessionId && binding.sessionId !== sessions.activeId) onUnbind?.()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessions.activeId])
 
-  // Binding take-over: open the item's dev thread (resume its session, or a fresh chat if it has
-  // none yet) — TRANSIENTLY, so it doesn't clobber the context's general session. When the binding
-  // is dropped (unbind, Inbox tab, or switching to core), restore the general session. Keyed on
-  // the work-item id, plus a first-mount guard so a fresh mount's own resume isn't overridden.
+  // Open the item's own thread TRANSIENTLY, so it does not clobber the context's general session.
   const boundItemRef = useRef<string | null | undefined>(undefined)
   useEffect(() => {
     const id = binding?.workItemId ?? null
@@ -251,18 +211,14 @@ export default function ChatPanel({
       if (binding.sessionId) sessions.openSession(binding.sessionId, false)
       else sessions.newChat(false)
     } else if (!first && sessions.activeId != null) {
-      // Unbound after having been bound — go back to the remembered general session. But if the rail
-      // is already on a fresh empty chat (activeId null — e.g. "New chat" pressed while bound), keep
-      // that; resuming the stored session would clobber the just-created new chat.
+      // If the rail is already on a fresh empty chat, keep it: resuming would clobber the new one.
       sessions.resumeStored()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [binding?.workItemId])
 
-  // Persist the model·context% readout across session opens: when the active session changes (mount
-  // resume, open-session, binding, unbind) seed the header from that session's LAST recorded run, so
-  // it shows the model instead of "history". Only OVERWRITES on a found run — never clears here, so a
-  // freshly-finished live turn's meta (or a brand-new session mid-turn) is left intact.
+  // Seed the header from the session's LAST recorded run. Only overwrites on a found run, never
+  // clears.
   useEffect(() => {
     setSessionEffort(null)                     // effort isn't re-derivable from a run → reset per session
     const id = sessions.activeId
@@ -286,20 +242,15 @@ export default function ChatPanel({
   function send() {
     const text = input
     if (!text.trim()) return
-    // Carry the chat mode + the per-session model/effort override; a card binding also tags the
-    // work-item so the daemon persists the session to it. A general dev chat (no binding) sends
-    // mode=dev with no work-item.
+    // A card binding also tags the work-item, so the daemon persists the session to it.
     if (!socket.send(text, sessions.sessionRef.current,
                      { mode, workItemId: binding?.workItemId, model: sessionModel, effort: sessionEffort })) return
     sessions.appendMessage({ role: 'you', text })
     setInput('')
   }
 
-  // One-shot seed (onboarding launch): send the kickoff once the socket is ready, then tell the parent
-  // to clear it. A workflow launch BIRTHS ITS OWN fresh general session — it must never inherit whichever
-  // session is open (esp. a work-item session, which would run onboarding bound to that item). So we
-  // start a new chat and send with an EXPLICIT null resume + no workItemId, so the daemon mints a fresh
-  // session regardless of the rail's current state. Guarded so it fires once per seed.
+  // A workflow launch BIRTHS ITS OWN session: inheriting a work-item's would run onboarding bound
+  // to that item.
   const seededRef = useRef(false)
   useEffect(() => {
     if (!seed) { seededRef.current = false; return }
@@ -309,8 +260,8 @@ export default function ChatPanel({
     sessions.newChat()                 // clear the rail to a new session
     socket.clearStream()
     socket.clearMeta()
-    // kind/subjectRunId (v1: diagnosis pointed at an Activity run) ride the birth turn — the daemon
-    // stamps them write-once so the session keeps its identity on resume.
+    // These ride the birth turn, and the daemon stamps them write-once, so the session keeps its
+    // identity on resume.
     if (!socket.send(seed.prompt, null, { mode, kind: seed.kind, subjectRunId: seed.subjectRunId })) {
       seededRef.current = false
       return
@@ -327,9 +278,7 @@ export default function ChatPanel({
   }
 
   function newChat() {
-    // A New chat is always a fresh GENERAL session — drop any work-item binding first, or the new
-    // chat inherits it and its turns get mis-tagged to that item (the take-over effect keeps the
-    // fresh chat rather than resuming the stored session, thanks to its activeId==null guard).
+    // A New chat is always a fresh GENERAL session, or its turns get mis-tagged to the bound item.
     if (binding) onUnbind?.()
     sessions.newChat()
     socket.clearStream()
@@ -348,10 +297,8 @@ export default function ChatPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [collapsed])
 
-  // Collapsed → the narrow quick-switch rail: recent sessions (current repo + mode) as category
-  // chips + a dev/core toggle, no repo switcher. Clicking a session (or New chat) opens it and
-  // expands the panel. All the session state lives here already (useSessions), so the rail is just
-  // an alternate render of this same conductor.
+  // Collapsed, this is an alternate render of the same conductor: recent sessions as chips, a mode
+  // toggle, no repo switcher.
   if (collapsed) {
     return (
       <CollapsedRail
@@ -369,9 +316,8 @@ export default function ChatPanel({
   return (
     <div
       className="relative flex h-full min-h-0 flex-col border-l border-line bg-surface"
-      // The chat rail's accent follows the mode: core = mint (pastel green), dev = blue. It holds a
-      // whole `rgb(...)` string, so a translucent variant cannot be derived at the point of use —
-      // Tailwind cannot decompose one to apply `/10`. Both bubble rails read it at full strength.
+      // It holds a whole `rgb(...)` string, so a translucent variant cannot be derived at the point
+      // of use.
       style={{
         ['--chat-accent' as string]: mode === 'core' ? 'rgb(var(--c-core))' : 'rgb(var(--c-dev))',
       } as CSSProperties}
@@ -401,8 +347,8 @@ export default function ChatPanel({
         </div>
       )}
 
-      {/* F2: bound to a work-item → the unified live timeline (all phases, read-only mirror).
-          A general chat → the normal session transcript. */}
+      {/* bound to a work-item, so the unified live timeline; a general chat gets the session
+      {   transcript */}
       {chipItem ? (
         <div className="flex min-h-0 flex-1 flex-col">
           <TimelineView
@@ -449,18 +395,8 @@ export default function ChatPanel({
         onPaletteOpen={socket.refreshCommands}
         modelOverride={sessionModel}
         effortOverride={sessionEffort}
-        // F2: grey the input while the item is in an autonomous phase (build/vet) — no live intake
-        // worker to receive it; the owner watches the stream and speaks again at review.
-        // A session outlives its work-item only when the folder left out of band (a reset, a hand
-        // delete) — the startup reconciler retires those, but one can vanish while the daemon is
-        // up. The transcript still reads: it happened. Sending does not, because a resumed thread
-        // would answer about work that no longer exists, and the box being live is the whole
-        // reason that reads as confusion rather than as history.
-        // A TERMINAL item's transcript is worth opening — it is how the work went — but there is
-        // nothing left to send INTO. Clearance reclaimed its phase threads at close, so binding a
-        // shipped item lands on `newChat` (see the binding effect): the box looks live, and typing
-        // in it would mint a brand-new thread against finished work, carrying none of the history
-        // shown directly above it. Read-only is the honest state.
+        // Read-only whenever there is nothing to send into: an autonomous phase, a vanished item,
+        // or a terminal one.
         locked={
           boundTerminal
             ? { reason: 'This work-item and its sessions are closed — the transcript is history.' }
@@ -471,8 +407,8 @@ export default function ChatPanel({
             : null
         }
         onSelectModel={(model, effort) => {
-          // A pure FE state change — the session's runtime model/effort, sent on the next turn's
-          // frame. 'reset' clears back to the server default. NEVER writes a persisted default.
+          // A pure FE state change, sent on the next turn's frame. `reset` clears back to the
+          // server default.
           setSessionModel(model === 'reset' ? null : model)
           setSessionEffort(effort === 'reset' ? null : effort)
         }}
@@ -513,9 +449,7 @@ export default function ChatPanel({
   )
 }
 
-// The collapsed chat rail — a slim quick-switcher. Shows the current repo's recent sessions (this
-// mode) as category chips, a dev/core mode toggle, and New chat. No repo switcher: the sessions are
-// always the repo the rail is currently pointed at (session-kinds-diagnose categories).
+// The collapsed chat rail — a slim quick-switcher over the repo the rail points at.
 function CollapsedRail({
   sessions, activeId, mode, onModeChange, onOpenSession, onNewChat, onExpand,
 }: {
@@ -527,15 +461,15 @@ function CollapsedRail({
   onNewChat: () => void
   onExpand: () => void
 }) {
-  // Only threads touched in the last 24h, most-recent first, capped at 8 — the collapsed rail is a
-  // quick-switcher for what's live now, not a full history (that's the expanded drawer).
+  // The collapsed rail is a quick-switcher for what is live now, not a full history; that is the
+  // expanded drawer.
   const dayAgo = Date.now() - 24 * 60 * 60 * 1000
   const recent = sessions
     .filter((s) => Date.parse(s.updated_at) >= dayAgo)
     .slice(0, 8)
 
-  // Hover tooltip is rendered fixed-position (not inside the scroll container, which would clip a
-  // left-anchored popover) so it appears instantly and fully. `top` is the button's vertical centre.
+  // Rendered fixed-position, because the scroll container would clip a left-anchored popover. `top`
+  // is the button's centre.
   const [hover, setHover] = useState<{ id: string; top: number; right: number } | null>(null)
 
   return (
@@ -602,8 +536,8 @@ function CollapsedRail({
         })}
       </div>
 
-      {/* Fixed-position hover tooltip — shows the (full) session title the icon can't. Rendered
-          outside the scroll container so it never gets clipped and appears instantly. */}
+      {/* Shows the full session title the icon cannot, rendered outside the scroll container so it
+          is never clipped. */}
       {hover &&
         (() => {
           const s = recent.find((x) => x.id === hover.id)

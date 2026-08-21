@@ -4,10 +4,9 @@ import TabBar from '@/ui/TabBar'
 import Empty from '@/ui/Empty'
 import { getLearningRollup, type LearningRollup } from '@/lib/api'
 
-// The Learning tile drill-in — the 4-slot pipeline as PER-REPO counts, each split dev/core:
-// Candidates (captured, awaiting distill) → Pending (proposed, awaiting gate-1) → Drafted (forged,
-// awaiting gate-2 publish) → Learned (published artifacts). Counts only — the item-level detail lives
-// in each repo's Dev workspace, not here. dev = repo_dev + universal_dev.
+// The 4-slot pipeline as per-repo counts, each split by mode: captured, pending, drafted, learned.
+//
+// Counts only — the item-level detail lives in each repo's own workspace.
 
 type ScopeCount = LearningRollup['candidates']
 type Tab = 'candidates' | 'pending' | 'drafted' | 'learned'

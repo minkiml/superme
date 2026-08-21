@@ -1,35 +1,18 @@
-// The router — routing-audit §3.1, slice 3.
+// The router — the path is the single source of "where am I".
 //
-// "Where am I" was nine pieces of `App` state and nothing in the URL: F5 landed on the Nexus, there
-// was no back button because nothing had navigated, and nothing was linkable. This makes the path
-// the single source of that answer.
-//
-// **Hand-written rather than react-router**, deliberately. The whole address space is a closed set
-// of about ten shapes; there are no nested data loaders, no route-level code splitting, and every
-// navigation in the app is a button rather than an `<a>` (so there is no link interception to do).
-// What is actually needed is `pushState` + `popstate` + a small matcher, which is what this is.
-// Everything goes through `useRoute`/`navigate`, so swapping in a library later is a contained
-// change rather than a rewrite.
-//
-// Scope note (slice 3): nav surfaces + repo workspaces. Item drilldowns, the stats tiles and the PR
-// page are slice 4 and stay component state until then — see §6 for the full inventory, which is
-// the contract this grows into.
+// Hand-written rather than a library: the address space is a closed set of shapes, and every
+// navigation is a button rather than an anchor.
 
 import { useCallback, useSyncExternalStore } from 'react'
 
-// `workspace` is not a tab in the rail — it is the Pipeline tab's OTHER pane (the board, versus the
-// capture queue). §6.1 folds it into this slot rather than nesting it under `pipeline`, because the
-// two panes are peers: you are looking at one or the other, never at a workspace inside an inbox.
+// `workspace` is the Pipeline tab's OTHER pane, a peer of the capture queue rather than something
+// nested under it.
 export const DEV_TABS = ['pipeline', 'workspace', 'project', 'activity'] as const
 export type DevTab = (typeof DEV_TABS)[number]
 
 /**
- * Global-strip tiles that open a drill-in. Addressed as `?stats=<tile>` rather than `/stats/<tile>`
- * — §6.1 tabled a path, and the reason it gave (the owner links to a token breakdown) is satisfied
- * either way, but a PATH displaces whatever was on screen. These are overlays: opened from Activity
- * with a path, the page behind the scrim silently became the Nexus, and closing had to guess where
- * to return. The query keeps the surface you were on and is equally linkable — the same treatment
- * §3.1 already gives the chat rail, for the same reason: it is orthogonal to where you are.
+ * Addressed as a QUERY, not a path: these are overlays, and a path would displace the surface
+ * behind them.
  */
 export const STATS_TILES = ['tokens', 'ops', 'learning'] as const
 export type StatsTile = (typeof STATS_TILES)[number]
@@ -38,9 +21,7 @@ export const SURFACES = ['activity', 'internals'] as const
 export type Surface = (typeof SURFACES)[number]
 
 /**
- * Sections of the System config popup, addressed as `?config=<section>`. A QUERY, like `?stats=`
- * and for the same reason: the popup opens OVER whatever you were looking at, so a path segment
- * would displace that surface and closing would have to guess where to return.
+ * A query, like the stats tiles: the popup opens OVER whatever you were looking at.
  */
 export const CONFIG_SECTIONS = [
   'general', 'learning',
@@ -50,8 +31,7 @@ export const CONFIG_SECTIONS = [
 export type ConfigSection = (typeof CONFIG_SECTIONS)[number]
 
 /**
- * Paths that used to be pages and are now sections of that popup. Rewritten on arrival, so an old
- * link lands on the same content instead of silently on the Nexus.
+ * Rewritten on arrival, so an old link lands on the same content instead of silently on the Nexus.
  */
 const LEGACY_SECTION: Record<string, ConfigSection> = {
   '/config': 'general',
@@ -59,8 +39,7 @@ const LEGACY_SECTION: Record<string, ConfigSection> = {
 }
 
 /**
- * Dev-workspace tabs that became project sections of the popup. The repo stays in the path and the
- * section joins the query, so the address still names the same repo AND the same content.
+ * The repo stays in the path and the section joins the query, so the address still names both.
  */
 const LEGACY_DEV_TAB: Record<string, ConfigSection> = {
   learning: 'plearning',
@@ -71,20 +50,11 @@ const LEGACY_DEV_TAB: Record<string, ConfigSection> = {
 export const PHASES = ['triage', 'plan', 'build', 'vet', 'investigate', 'review', 'close'] as const
 export type Phase = (typeof PHASES)[number]
 
-// The item drilldown's two extra segments. Both are CLOSED vocabularies, which is what lets `pr`
-// share the first slot without ambiguity: `pr` is not a tab, so `/item/:id/pr` can only ever mean
-// the PR page.
-//
-// These used to be `phase/sub` — the drilldown's stepper made every phase an address. §4 replaced
-// the stepper with a PROGRESS BAR that is deliberately not clickable (reading a past stage is what
-// the Reports tab is for), so the address now names the TAB you are on. A phase still appears here,
-// as the Reports tab's sub.
+// Both are CLOSED vocabularies, which lets `pr` share the first slot without ambiguity.
 export const ITEM_TABS = ['quick', 'reports', 'trace', 'git'] as const
 export type ItemTab = (typeof ITEM_TABS)[number]
 
-// Which subs a given tab offers is the DRILLDOWN's grammar, not the router's — the router only knows
-// the vocabulary. A sub that is real but wrong for its tab parses fine here and the modal corrects
-// the address on arrival; keeping that mapping in one place beats duplicating it where it drifts.
+// Which subs a tab offers is the DRILLDOWN's grammar; the router only knows the vocabulary.
 export const ITEM_SUBS = ['now', 'deputy', 'proof', 'auth', 'runs', 'timeline', ...PHASES] as const
 export type ItemSub = (typeof ITEM_SUBS)[number]
 
@@ -96,12 +66,10 @@ export type Route =
   | { name: 'dev'; repoId: string; tab: DevTab }
   | { name: 'core'; repoId: string }
   /**
-   * A work-item drilldown, open over its repo's pipeline board.
-   * `tab: null` means the default tab (Quick View) — a bare item link stays valid as the tab set
-   * evolves, and the modal canonicalises the address to whatever it is actually showing.
+   * `tab: null` is the default tab, so a bare item link stays valid as the tab set evolves.
    */
   | { name: 'item'; repoId: string; itemId: string; tab: ItemTab | null; sub: ItemSub | null }
-  /** The PR page — a path, but still its own document: `main.tsx` forks on it above `App` (§3.1). */
+  /** The PR page — a path, but still its own document: `main.tsx` forks on it above `App`. */
   | { name: 'pr'; repoId: string; itemId: string }
 
 const NEXUS: Route = { name: 'nexus' }
@@ -119,16 +87,15 @@ export function parse(pathname: string): Route {
     if (seg[2] === 'core') return { name: 'core', repoId }
     if (seg[2] === 'dev') {
       const tab = seg[3] as DevTab | undefined
-      // A bare `/dev` is the Pipeline tab; an unknown tab falls back to it rather than 404ing, so a
-      // renamed tab degrades to the workspace instead of throwing the owner back to the Nexus.
+      // An unknown tab falls back to Pipeline rather than 404ing, so a rename degrades instead of
+      // bouncing home.
       return { name: 'dev', repoId, tab: tab && DEV_TABS.includes(tab) ? tab : 'pipeline' }
     }
     if (seg[2] === 'item' && seg[3]) {
       const itemId = decodeURIComponent(seg[3])
       if (seg[4] === 'pr') return { name: 'pr', repoId, itemId }
-      // Unknown tokens are DROPPED rather than 404'd, and canonicalisation then rewrites the URL to
-      // what is actually being shown — a renamed phase degrades to the item's current one instead of
-      // bouncing the owner to the Nexus mid-review.
+      // Unknown tokens are DROPPED, and canonicalisation rewrites the URL to what is actually
+      // shown.
       const tab = (ITEM_TABS as readonly string[]).includes(seg[4]) ? (seg[4] as ItemTab) : null
       const sub = tab && (ITEM_SUBS as readonly string[]).includes(seg[5]) ? (seg[5] as ItemSub) : null
       return { name: 'item', repoId, itemId, tab, sub }
@@ -148,8 +115,7 @@ export function build(r: Route): string {
     case 'dev': return `/repo/${encodeURIComponent(r.repoId)}/dev${r.tab === 'pipeline' ? '' : `/${r.tab}`}`
     case 'pr': return `${itemBase(r.repoId, r.itemId)}/pr`
     case 'item': {
-      // A sub cannot be addressed without its tab (`/item/x//proof` is not a path), so naming a sub
-      // forces the tab segment even when it is the default one.
+      // A sub cannot be addressed without its tab, so naming one forces the tab segment.
       if (!r.tab) return itemBase(r.repoId, r.itemId)
       return `${itemBase(r.repoId, r.itemId)}/${r.tab}${r.sub ? `/${r.sub}` : ''}`
     }
@@ -160,10 +126,9 @@ function itemBase(repoId: string, itemId: string): string {
   return `/repo/${encodeURIComponent(repoId)}/item/${encodeURIComponent(itemId)}`
 }
 
-// ── the store ────────────────────────────────────────────────────────────────────────────────────
-// `popstate` fires for back/forward but NOT for our own pushState, so navigation notifies watchers
-// itself. One subscriber list, read through `useSyncExternalStore` — the same shape the data layer
-// uses, and for the same reason: React must not tear between the URL and what is rendered.
+// ── the store ──
+//
+// One subscription over `popstate`, so every reader sees the same route object.
 
 const watchers = new Set<() => void>()
 let snapshot: Route = parse(window.location.pathname)
@@ -183,11 +148,8 @@ function refresh() {
     window.history.replaceState(null, '', `${devTab[1]}?${q.toString()}`)
   }
   snapshot = parse(window.location.pathname)
-  // Canonicalise: a path that doesn't round-trip through parse/build gets rewritten in place. That
-  // covers junk (`/nonsense` → `/`, which would otherwise render the Nexus under an address that
-  // lies about where you are) and redundant-but-valid forms (`/repo/x/dev/pipeline` → `/repo/x/dev`,
-  // so one view has one address rather than two). `replaceState`, so `back` never lands on the form
-  // we just corrected. Terminates because the canonical form round-trips by definition.
+  // A path that does not round-trip is rewritten in place, so junk cannot render under a lying
+  // address.
   const canonical = build(snapshot)
   if (canonical !== window.location.pathname) {
     window.history.replaceState(null, '', canonical + window.location.search)
@@ -202,12 +164,8 @@ export function current(): Route {
 }
 
 /**
- * Go to `to`. The query string is CARRIED unless `search` says otherwise — the chat binding lives
- * there (§3.1: the rail is orthogonal to the path, you can be anywhere with any thread bound), so
- * a navigation must not silently drop it.
- *
- * `replace: true` for corrections that should not become a back-button stop (a redirect off an
- * unknown path, canonicalising a URL).
+ * The query is CARRIED unless `search` says otherwise: the chat binding lives there and is
+ * orthogonal to the path.
  */
 export function navigate(to: Route, opts?: { replace?: boolean; search?: string }): void {
   const search = opts?.search ?? window.location.search

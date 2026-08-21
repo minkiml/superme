@@ -13,22 +13,16 @@ import SweepBar from './SweepBar'
 import OnboardingLanding, { type OnboardMode } from './OnboardingLanding'
 import { useContainerWidth, railTight } from '@/lib/layout'
 
-// The Dev workspace — the per-repo Tier-2 detail surface, reached from an orbit node's inspector
-// ("Open dev workspace"). It takes over the main area (the shell owns the header + tabs) and holds
-// this repo's WORK: the plan→build pipeline, the general knowledge behind it, and its activity log.
+// The Dev workspace — this repo's WORK: the pipeline, the general knowledge behind it, and its
+// activity log.
 //
-// Its learning queue, local artifacts, prompt probe and both landing knobs left for System config ·
-// Project, where the repo picker governs them all at once. What stays here is what you watch while
-// work is moving — and the only control is the one that moves you to another project's board.
+// What stays here is what you watch while work is moving; the knobs and queues live in System
+// config.
 
-// Graph is no longer a tab — it's the Kanban⇄Graph toggle inside the Pipeline workspace panel
-// (same population, two projections).
+// `project` is this repo's GENERAL knowledge, as opposed to Pipeline's work-in-flight.
 //
-// `project` is the home of this repo's GENERAL knowledge — what we're building and why — as opposed
-// to Pipeline's work-in-flight. Roadmap is its first section; deliverables, open questions and the
-// decision ledger join it as the general/ docs become addressable records rather than prose.
 // `workspace` is Pipeline's other PANE, not a seventh tab: it addresses the board where `pipeline`
-// addresses the capture queue. Both light the same rail entry — see `pipelineTab` below.
+// addresses the queue.
 type Tab = 'pipeline' | 'workspace' | 'project' | 'activity'
 
 const TABS: { id: Exclude<Tab, 'workspace'>; label: string; icon: typeof GitBranch }[] = [
@@ -50,8 +44,7 @@ export default function DevWorkspace({
   boundItemId,
 }: {
   repo: OrbitRepo
-  // The tab is an ADDRESS (`/repo/:id/dev/:tab`), not local state — so it survives a refresh and is
-  // linkable. Owned by the router; this component only asks to change it.
+  // The tab is an ADDRESS, not local state, so it survives a refresh and is linkable.
   tab: Tab
   onTabChange: (tab: Tab) => void
   onExit: () => void
@@ -62,35 +55,24 @@ export default function DevWorkspace({
   onDiscussNote?: (inboxId: number, title: string) => void
   boundItemId?: string | null
 }) {
-  // (There is no "snap to the pipeline tab" effect any more: an item drilldown IS an address whose
-  // tab is Pipeline by construction — `App` derives the tab from the route — so arriving from the
-  // attention centre cannot land on the wrong tab in the first place.)
+  // An item drilldown IS an address whose tab is Pipeline by construction, so arriving cannot land
+  // on the wrong tab.
   const isHub = repo.id === 'global'
   const c = colorFor(repo.id)
-  // The header measures ITSELF — it can be 500px wide inside a 1400px window, so the window's
-  // width is not the question being asked (`lib/layout`).
+  // The header measures ITSELF: it can be 500px wide in a 1400px window, so the window is not the
+  // question.
   const [headRef, headW] = useContainerWidth<HTMLDivElement>()
-  // Same rule every tab rail in the app uses — the labels plus the sweep control need this much
-  // seat, and below it the labels go (`lib/layout`).
+  // Same rule every tab rail uses: below this seat the labels go.
   const tight = railTight(headW, TABS.length, 140)
   // Either of Pipeline's two panes means the Pipeline tab is what's showing.
   const pipelineTab = tab === 'pipeline' || tab === 'workspace'
 
-  // Attention badge (S7/D10): the top non-empty tier's color + count, read from durable state.
-  // Same cache key DevDashboard subscribes to, so the two surfaces cost ONE request between them
-  // rather than the two they used to fire on separate clocks.
+  // The top non-empty tier's colour and count. Same cache key the dashboard subscribes to, so the
+  // two cost one request.
   const attn = useLive(K.devAttention(repo.id), () => getAttention(repo.id))
   const badge: AttentionBadge | null = attn.data?.badge ?? null
 
-  // Onboarding gate (S5·B): a repo whose project memory isn't established yet (PRD defines no
-  // deliverables) shows the onboarding front door instead of the work tabs — you can't take on work
-  // before there's memory. `undefined` (nothing fetched yet) = still checking.
-  //
-  // The cadence is the gate itself: while the front door is up, establishment can arrive at any
-  // moment (the onboarding agent writes the PRD's first deliverable) and the tabs must flip without
-  // a manual "Recheck" — so it polls. Once established, the answer cannot change back, so the poll
-  // stops entirely rather than asking forever. That replaces the old pair of effects (a one-shot
-  // check plus a second interval that existed only to watch for the flip).
+  // It polls while the door is up, since establishment can arrive at any moment and cannot revert.
   const [settled, setSettled] = useState(false)
   const status = useLive(
     K.projectStatus(repo.id),
@@ -102,8 +84,8 @@ export default function DevWorkspace({
   }, [status.data?.established])
   // A repo switch re-arms the gate: the new repo's answer is unknown again.
   useEffect(() => { setSettled(false) }, [repo.id])
-  // Fail-open, as before: a status hiccup must not wall off the workspace. An error with no data is
-  // treated as established; last-good data survives a blip on its own.
+  // Fail-open: a status hiccup must not wall off the workspace, so an error with no data reads as
+  // established.
   const established: boolean | null =
     status.data ? status.data.established : status.error ? true : null
   const onboardMode = (status.data?.onboard_mode as OnboardMode | null) ?? null
@@ -116,10 +98,8 @@ export default function DevWorkspace({
     <div className="flex h-full flex-col overflow-hidden bg-app">
       {/* shell header — back · repo swatch · label · scope · quick-switch, then the tab rail */}
       <div ref={headRef} className="shrink-0 border-b border-line px-4 pt-3">
-        {/* The identity block truncates and the control cluster stays whole: a header narrows by
-            shortening the NAME, never by letting a picker slide under it. `flex-wrap` is the last
-            resort — past the width where even a truncated name leaves room, the controls drop to
-            their own line instead of overlapping the title (`lib/layout` holds the frame's rule). */}
+        {/* The identity block truncates and the controls stay whole; past that width they wrap to
+            their own line */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <button
             onClick={onExit}
@@ -135,10 +115,8 @@ export default function DevWorkspace({
           >
             {!isHub && repo.icon && <RepoIcon name={repo.icon} size={16} color={c} />}
           </span>
-          {/* A floor, not just `min-w-0`: an identity block that shrinks without limit never lets
-              the row WRAP — it just crushes the project's name to an initial and keeps the
-              pickers on the same line. With a floor, the controls drop to their own line first
-              and the name stays a name. */}
+          {/* A floor, not just `min-w-0`: without one the row never wraps, it just crushes the
+              name to an initial */}
           <div className="min-w-[10rem] flex-1 overflow-hidden">
             <div className="flex items-center gap-2">
               <span className="truncate text-[15px] font-semibold text-fg">{isHub ? 'SuperMe Hub' : repo.label}</span>
@@ -155,8 +133,8 @@ export default function DevWorkspace({
             </div>
             <div className="truncate text-[12px] text-faint">dev workspace</div>
           </div>
-          {/* The cluster wraps INSIDE itself once even its own line is too narrow — the pickers keep
-              their widths (each names a value, and a squeezed picker names nothing) and stack. */}
+          {/* The cluster wraps inside itself and the pickers keep their widths: a squeezed picker
+              names nothing. */}
           <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
             {onSwitch && others.length > 0 && (
               <RepoSwitcher current={repo} others={others} onSwitch={onSwitch} />
@@ -164,15 +142,8 @@ export default function DevWorkspace({
           </div>
         </div>
 
-        {/* the work tabs appear only once memory is established — the gate hides them otherwise.
-            The sweep bar rides the same row, right-aligned: the tabs are places you GO, a sweep is
-            something you START, and it is gated on the same "is this repo onboarded" question —
-            there is nothing to sweep before the project has a memory.
-
-            NARROW: the labels drop and only the CURRENT tab keeps its word (`lib/layout`). The
-            icons fit any pane this app can produce, so nothing is ever hidden behind a sideways
-            scroll — and the one label that survives is the one answering "where am I", which is
-            the question a rail of undifferentiated icons stops answering. */}
+        {/* the work tabs appear only once memory is established; the sweep bar rides the same row,
+            right-aligned */}
         {established === true && (
           <div className="mt-3 flex flex-wrap items-center gap-1">
             {TABS.map((t) => {

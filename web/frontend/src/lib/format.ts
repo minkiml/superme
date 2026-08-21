@@ -16,9 +16,8 @@ export function fmtLocal(iso?: string | null): string {
 }
 
 /**
- * How long ago, e.g. "4m", "5h", "3d" — and a plain date once it is older than a week, since by
- * then "9d" is harder to place than "Jun 19". For narrow surfaces where a full timestamp costs
- * more width than it carries; pair it with the full stamp in a `title`.
+ * How long ago, and a plain date past a week, since by then "9d" is harder to place than the date
+ * itself.
  */
 export function fmtAge(iso?: string | null): string {
   if (!iso) return ''
@@ -49,13 +48,7 @@ export function fmtTokens(n?: number | null): string {
   return String(v)
 }
 
-// Canonical model catalog — proper "Name Version" labels, keyed by the CONCRETE model id that
-// actually runs that version. This is the ONE source of truth for every model picker (config
-// select, /model chat picker, work-item run picker) and every model label. Pickers send the CONCRETE
-// id for explicit storage + display; the backend also normalizes a bare alias to the latest concrete
-// at consumption (core/models.py MODEL_TIERS → normalize_model / resolve_agent_model), so aliases —
-// the canonical on-disk form for agent .md files — resolve to the newest, never the lagging CLI alias.
-// Mirror core/models.py MODEL_TIERS. Bump both when a newer tier ships.
+// The ONE source of truth for every model picker, keyed by the CONCRETE id that runs that version.
 export type ModelKey = 'claude-opus-5' | 'claude-sonnet-5' | 'claude-haiku-4-5'
 
 export const MODELS: { key: ModelKey; label: string; blurb: string }[] = [
@@ -68,18 +61,14 @@ export const MODELS: { key: ModelKey; label: string; blurb: string }[] = [
 // picker option key; the backend still normalizes any value at consumption. Bump with MODELS above.
 export const DEFAULT_MODEL: ModelKey = 'claude-sonnet-5'
 
-// Labels by picker key (concrete id) PLUS the bare tier aliases. Aliases are the canonical stored form
-// (agent .md frontmatter, config): the backend resolves them to the latest concrete at consumption, so
-// here a bare `sonnet` renders with its current version label ("Sonnet 5"), not a bare "Sonnet".
-// Keep these mirroring MODELS — bump both when a newer tier ships.
+// Aliases are the canonical stored form; the backend resolves them to the latest concrete at
+// consumption.
 const MODEL_LABEL: Record<string, string> = {
   ...Object.fromEntries(MODELS.map((m) => [m.key, m.label])),
   opus: 'Opus 5', sonnet: 'Sonnet 5', haiku: 'Haiku 4.5',
 }
 
-// Tier alias → concrete picker-option key (mirror MODEL_TIERS; bump with MODELS). Picker overrides
-// are STORED as a tier alias ("sonnet") but the option keys are concrete ("claude-sonnet-5"); this
-// maps a stored value (alias OR legacy concrete) onto the option key so the right row highlights.
+// A stored alias must map to a concrete option key, or the picker shows nothing selected.
 const ALIAS_KEY: Record<string, ModelKey> = {
   opus: 'claude-opus-5', sonnet: 'claude-sonnet-5', haiku: 'claude-haiku-4-5',
 }
@@ -104,8 +93,8 @@ export const EFFORTS: { key: EffortKey; label: string; blurb: string }[] = [
  * "claude-haiku-4-5-20251001" → "Haiku 4.5"). Empty for missing. */
 export function fmtModel(id?: string | null): string {
   if (!id) return ''
-  // A full resolved id: claude-<tier>-<major>[-<minor>][-<date>]. Preserve its real version
-  // (a historical run may predate the current latest) but capitalize + drop trailing dates.
+  // Preserve a resolved id's real version — a historical run may predate the latest — but drop
+  // trailing dates.
   const m = id.match(/^claude-([a-z]+)-(\d+)(?:-(\d+))?/)
   if (m) {
     const name = m[1].charAt(0).toUpperCase() + m[1].slice(1)

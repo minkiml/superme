@@ -5,15 +5,9 @@ import { getSweepFamilies, launchSweep, type SweepFamily } from '@/lib/api/sweep
 import { topicRepo } from '@/lib/live/keys'
 import { invalidate } from '@/lib/live'
 
-// The standing-sweep launch bar. Sits at the right of the workspace tab strip: the tabs are places
-// you GO, these are things you START, so they read as a separate act rather than a seventh tab.
+// The standing-sweep launch bar: the tabs are places you GO, these are things you START.
 //
-// A standing sweep's subject is the codebase itself and its question never stops being worth
-// asking. Which families appear is the harness's registry (`core/kind_profiles`), not this file —
-// adding one grows a button here with no edit.
-//
-// Every launch spends real money on a full investigate run, so nothing fires on a single click:
-// the icon opens a small panel that states what is about to happen, takes the scope, and only then
+// Every launch spends real money, so the icon opens a panel that states what will happen before it
 // offers Launch.
 
 // The list state, distinct from any family slug.
@@ -43,8 +37,7 @@ export default function SweepBar({ contextId }: { contextId: string }) {
 
   useEffect(() => { getSweepFamilies().then(setFamilies).catch(() => setFamilies([])) }, [])
 
-  // Click-away closes the panel — a half-filled launch form left hanging over the board is worse
-  // than one that quietly goes away, because it looks like something is still pending.
+  // Click-away closes it: a half-filled form left hanging looks like something is still pending.
   useEffect(() => {
     if (!open) return
     const onDoc = (e: MouseEvent) => {
@@ -69,8 +62,7 @@ export default function SweepBar({ contextId }: { contextId: string }) {
     try {
       await launchSweep(contextId, fam.family, area.trim(), interest)
       setOpen(null)
-      // One prefix covers the board, the attention feed and every item under this
-      // repo — the new sweep has to appear on all three at once.
+      // One prefix covers the board, the feed and every item: the sweep must appear on all three.
       invalidate(topicRepo(contextId))
     } catch (e) {
       setError(e instanceof Error ? e.message : 'launch failed')
@@ -95,8 +87,8 @@ export default function SweepBar({ contextId }: { contextId: string }) {
         <Icons.ScanSearch size={16} />
       </button>
 
-      {/* The button carries no text, so the popover is where it says what it is — and it names the
-          four families rather than an umbrella word, because the families are what you came for. */}
+      {/* The button carries no text, so the popover names the families — they are what you came
+          for. */}
       {hover && !open && (
         <div className="absolute right-0 top-full z-30 mt-2 w-max max-w-[19rem] rounded-md border border-line bg-surface px-2.5 py-1.5 text-[11px] leading-snug text-muted shadow-lg">
           <span className="text-fg">System analysis</span>: {families.map((f) => cap(f.family)).join(', ')}

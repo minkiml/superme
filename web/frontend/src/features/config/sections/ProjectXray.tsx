@@ -5,11 +5,10 @@ import { fmtLocal } from '@/lib/format'
 import { PHASE_LABEL, Empty } from '@/features/dev/common'
 import { PaneHead } from '../controls'
 
-// Prompt X-ray — inspect the REAL input prompts SuperMe sends over a work-item's lifecycle. Rather
-// than capturing every run forever, this fires ONE throwaway probe on demand: a disposable work-item
-// that runs the real triage→plan→build→vet→review→close pipeline unattended, captures each phase's
-// actual input, then tears itself down (no merge, no anchor writes, no leftover) — leaving only the
-// tagged run trace + these captured input pages. Each link opens the full input in a new tab.
+// Inspect the REAL input prompts SuperMe sends over a work-item's lifecycle.
+//
+// One throwaway probe on demand: a disposable item runs the real pipeline unattended, captures each
+// phase's input, then tears itself down.
 
 export default function ProjectXray({ contextId, repoLabel }: { contextId: string; repoLabel: string }) {
   const [st, setSt] = useState<PromptExtractionStatus | null>(null)
@@ -23,8 +22,7 @@ export default function ProjectXray({ contextId, repoLabel }: { contextId: strin
       .catch((e) => setErr(String(e)))
   }, [contextId])
 
-  // Poll while a probe is in flight (the pipeline self-drives to close in the background); stop once
-  // it's done. Cleared on unmount / context change.
+  // Poll while a probe is in flight; the pipeline self-drives to close in the background.
   useEffect(() => {
     load()
     return () => { if (timer.current) clearTimeout(timer.current) }

@@ -1,6 +1,5 @@
-// A categorical color palette for distinct items (repos, operations, bars) — vibrant on the
-// near-black surface, so the dashboard reads dynamic rather than mono-blue/green. Used via inline
-// styles (Tailwind can't do dynamic per-item classes).
+// A categorical palette for distinct items, vibrant on the near-black surface. Used via inline
+// styles, since Tailwind cannot do dynamic per-item classes.
 
 export const PALETTE = [
   '#6ea8fe', // blue
@@ -26,9 +25,8 @@ export function colorFor(key: string): string {
   return PALETTE[hash(key) % PALETTE.length]
 }
 
-// Fixed colors for the known run features (SuperMe operations). Deliberately a warm + purple
-// family — NO blue and NO mint/green — so an operation bar never reads as the dev (blue) or core
-// (mint) scope color they sit beside. Fallback for an unknown feature stays a hashed hue.
+// A warm and purple family with no blue or mint, so an operation bar never reads as the scope
+// colour beside it.
 const FEATURE: Record<string, string> = {
   sweep: '#fbbf24', capture: '#fbbf24',   // amber (sweep = capture agent)
   plan: '#a78bfa',                        // violet
@@ -42,10 +40,8 @@ export function featureColor(feature: string): string {
   return FEATURE[feature] ?? colorFor(feature)
 }
 
-// Runs are stamped with the canonical feature key (`sweep`, `write`), but the owner-facing
-// vocabulary is the agent name (`capture`, `forge`) shown everywhere else (Quick config, skills,
-// agent .md). Map key → display label so the Activity chips read consistently. Unknown keys pass
-// through unchanged.
+// Runs carry the canonical feature key, but the owner-facing vocabulary is the agent name shown
+// everywhere else.
 const FEATURE_LABEL: Record<string, string> = {
   sweep: 'capture',
   write: 'forge',

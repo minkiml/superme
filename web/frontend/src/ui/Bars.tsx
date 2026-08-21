@@ -1,13 +1,9 @@
 import { fmtTokens } from '@/lib/format'
 
-// A horizontal bar list — one row per item, normalized to the largest value. Used by every stat
-// drill-in (tokens, projects, agents, learning) so the breakdown views read identically. Each row:
-// a color dot, a mono label, the proportional bar, a right-aligned value, and an optional sub-note.
-// `fmt` formats the value (defaults to compact token counts); pass String for plain counts.
+// A horizontal bar list, used by every stat drill-in so breakdowns read identically.
 //
-// `title` is for a row that STANDS FOR several things — a collapsed group. Collapsing keeps a list
-// readable, but a bar whose parts can never be seen is a bar you cannot act on, so hovering names
-// them. Omit it wherever the label already IS the whole answer.
+// `title` is for a row that STANDS FOR several things: a bar whose parts cannot be seen is one you
+// cannot act on.
 export type BarRow = { key: string; label: string; sub?: string; value: number; color: string; title?: string }
 
 export default function Bars({

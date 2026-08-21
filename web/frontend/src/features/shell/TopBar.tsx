@@ -7,27 +7,11 @@ import { fmtTokens } from '@/lib/format'
 import type { CommandStats } from './useCommandStats'
 import { getTokenTimeseries, type SystemHold, type TokenTimeseries } from '@/lib/api'
 
-// Full-width top bar: the brand, the four system stats, and the attention center (Pass 2 · Q2) — a
-// bell that surfaces every item across all projects that's holding for the owner. Theme lives in
-// the nav footer.
+// Full-width top bar: the brand, the system stats, and the attention bell.
 //
-// The stats live HERE, in the bar, not in a strip of their own (owner, 2026-07-31). As full-width
-// tiles they cost ~140px of vertical height on every screen — permanently — to show four numbers
-// that move slowly, and that height is exactly what the surfaces below were short of. As chips they
-// cost nothing and stay legible.
+// The stats are chips rather than a strip, which would cost vertical height on every screen.
 //
-// Hover is a real POPOVER, not the browser's `title=` (owner, 2026-08-01): the native tooltip waits
-// about a second, renders in the OS chrome rather than the app's, and can only say text.
-//
-// It is CENTRED on its chip and clamped to the window (owner, 2026-08-09). The first version was a
-// CSS-only `group-hover:block` panel pinned `right-0`, which put every popover to the LEFT of the
-// stat it described — readable, but it never pointed at anything. Centring alone is not enough
-// either: these chips sit at the far right of the bar, so a wide label would have run off-screen.
-// Pure CSS cannot ask how wide the window is, so this measures — one layout pass, one correction.
-//
-// Only stats that HAVE a drill-in are clickable. Projects had none and briefly navigated to Nexus
-// instead, which reads as a misfire: a control that answers a different question than the one you
-// clicked. It is now a read-out with a label, nothing more.
+// Hover is a real POPOVER, centred and clamped.
 type Chip = {
   id: string
   label: string
@@ -37,15 +21,13 @@ type Chip = {
 }
 
 const CHIPS: Chip[] = [
-  // `Coins`, not a dollar sign and not a bare circle: these are counted units, not money, and an
-  // empty outline said nothing at all.
+  // Coins, not a dollar sign: these are counted units, not money, and an empty outline said
+  // nothing.
   { id: 'tokens', label: 'Token usage', icon: Coins, drill: true,
     value: (s) => fmtTokens(s.tokensTotal) },
   { id: 'projects', label: 'Connected projects', icon: FolderKanban,
     value: (s) => String(s.projects) },
-  // `Bot` is the app's agent glyph EVERYWHERE — the chat rail's speaker, the activity log, the
-  // artifact author, the harness list. This chip counts agents, so it wears the same face; `Cpu`
-  // read as machine load and was the only place an agent looked like something else.
+  // `Bot` is the app's agent glyph everywhere, so the chip that counts agents wears the same face.
   { id: 'ops', label: 'Agents running / live', icon: Bot, drill: true,
     value: (s) => `${s.opsRunning}/${s.opsLive}` },
   { id: 'learning', label: 'Learning · candidate / pending / drafted / learned',
@@ -61,9 +43,7 @@ const SPARK_TYPES = [
   { key: 'output', color: '#5fe3b3' },
 ]
 
-// The token chip's popover body: the drill-in's Over time → By type chart, stripped to the bars.
-// No axis, no dates, no values — at this size a shape is all that reads, and the drill-in is one
-// click away for the numbers.
+// Stripped to the bars: at this size a shape is all that reads, and the drill-in has the numbers.
 function TokenSpark({ ts }: { ts: TokenTimeseries | null }) {
   const days = ts?.days ?? []
   if (!days.length) return <div className="text-[11px] text-muted">No usage yet</div>
@@ -90,13 +70,10 @@ function TokenSpark({ ts }: { ts: TokenTimeseries | null }) {
 // Distance kept from the window edge when a popover would otherwise overhang it.
 const EDGE = 8
 
-/** The popover itself: `fixed`, centred on `anchor`, then nudged back inside the window.
- *
- *  Fixed rather than absolute so the panel is never clipped by the bar's own box, and measured
- *  rather than guessed so a long label near the right edge slides left by exactly as much as it
- *  overhangs — no more, so the popover stays as close to centred as the window allows. The shift
- *  ACCUMULATES because the measurement already includes whatever shift is applied; adding the new
- *  overhang to it converges in one pass and stays correct when the anchor changes chips. */
+/**
+ * Fixed rather than absolute, so the bar's own box cannot clip it, then nudged back inside the
+ * window.
+ */
 function Pop({ anchor, children }: { anchor: DOMRect; children: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null)
   const [shift, setShift] = useState(0)
@@ -124,14 +101,12 @@ export default function TopBar({ stats, onDetails, onGoto }: {
   onDetails: (id: string) => void
   onGoto: (repoId: string, hold: SystemHold) => void
 }) {
-  // Fetched once for the sparkline. Not on the live cache: this is chrome, it moves once a day, and
-  // a per-day series has nothing to gain from the board's polling cadence.
+  // Fetched once, off the live cache: this is chrome, and it moves once a day.
   const [ts, setTs] = useState<TokenTimeseries | null>(null)
   useEffect(() => { getTokenTimeseries().then(setTs).catch(() => {}) }, [])
 
-  // Which chip is hovered, and where it was when the pointer arrived. The rect is captured rather
-  // than re-read on every frame: the bar does not scroll and the chips do not move, so one reading
-  // is the whole truth for as long as the popover is up. A resize invalidates that, so it closes.
+  // The rect is captured rather than re-read every frame: the bar does not scroll and the chips do
+  // not move.
   const [hot, setHot] = useState<{ id: string; rect: DOMRect } | null>(null)
   useEffect(() => {
     const drop = () => setHot(null)

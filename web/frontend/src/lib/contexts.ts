@@ -1,10 +1,6 @@
-// Live contexts (SuperMes the daemon can resolve): global "Me" + connected domains.
+// The contexts the daemon can resolve, fetched from it so the FE never drifts from the registry.
 //
-// The list is fetched from the daemon (GET /api/contexts), which reads the workspace
-// registry — so the FE never drifts from the backend. `global` is always present (used
-// as the seed before the fetch returns); domains append once projects are connected and
-// bridged into global knowledge. App owns the fetched list and threads it everywhere
-// that needs it (chat rail, Manage Knowledge, Domains).
+// `global` is always present and seeds the list before the fetch returns.
 
 export type ContextRef = {
   id: string // daemon context_id (knowledge root, sessions, chat all key off this)

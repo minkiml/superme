@@ -3,11 +3,8 @@ import type { WorkItem } from '@/lib/api'
 
 // Shared dev-knowledge primitives (the v2 work-item model — D-018).
 
-// The per-kind phase pipelines (workspace-workflow D2). The kanban renders the UNION in pipeline
-// order; a column only shows when it has items (mid-pipeline research stages sit beside their
-// implementation counterparts). Board redesign lands with the workflow's surface stage (S7).
-// `vet`/`review` are the wire enums too (build-vet-loop O1) — the old `validate`/`deliver` values
-// were renamed end-to-end (enums + stored frontmatter, via migration), not just at this edge.
+// The per-kind phase pipelines. The kanban renders the UNION in pipeline order, and a column shows
+// only when it has items.
 export const PHASES: { key: string; label: string }[] = [
   { key: 'triage', label: 'Triage' },
   { key: 'plan', label: 'Plan' },
@@ -21,14 +18,12 @@ export const PHASES: { key: string; label: string }[] = [
 
 export const PHASE_LABEL: Record<string, string> = Object.fromEntries(PHASES.map((p) => [p.key, p.label]))
 
-// Per-phase accent token (dot + column rail) — reads left→right as the pipeline advances:
-// intake/plan = dev-blue (thinking), mid-flight = warn-amber, review/close = success-green.
-// Display status = the runnable axis (D2), plus the derived terminal state `done`.
-// `awaiting_human` is the attention color — it pages the owner.
+// Reads left to right as the pipeline advances: thinking is blue, mid-flight amber, finishing
+// green.
 export const STATUS_COLOR: Record<string, string> = {
   active: 'text-accent-text',
-  // `error` (R2) is the only red on this axis: the work STOPPED. Louder than awaiting_human's
-  // amber, which means "resting at a gate by design".
+  // `error` is the only red here: the work STOPPED, which is louder than resting at a gate by
+  // design.
   error: 'text-danger',
   awaiting_human: 'text-warn',
   awaiting_child: 'text-muted',
@@ -37,8 +32,8 @@ export const STATUS_COLOR: Record<string, string> = {
   done: 'text-success',
 }
 
-// Left-edge accent stripe per display status — a fast scan cue on work-cards (literal classes so
-// Tailwind keeps them). Overrides only the card's left border color; width comes from `border-l-2`.
+// A fast scan cue on work-cards. Literal classes, so Tailwind keeps them; width comes from the
+// border utility.
 export const STATUS_STRIPE: Record<string, string> = {
   active: 'border-l-accent',
   error: 'border-l-danger',
@@ -49,9 +44,8 @@ export const STATUS_STRIPE: Record<string, string> = {
   done: 'border-l-success',
 }
 
-// Status labels are the OWNER's words, not the schema's: `active` says nothing about what's
-// happening, and `awaiting_child` asks the reader to know our data model. The wire values keep
-// their names; only this render boundary is friendly.
+// Status labels are the OWNER's words: the wire values keep their names, and only this boundary is
+// friendly.
 export const STATUS_LABEL: Record<string, string> = {
   active: 'in progress',
   error: 'stopped',
@@ -62,8 +56,8 @@ export const STATUS_LABEL: Record<string, string> = {
   done: 'done',
 }
 
-// What an agent is DOING while a run is in flight — the badge shows this instead of the status,
-// because "an agent is working on it right now" is the more useful fact and `active` can't say it.
+// What an agent is DOING while a run is in flight — a more useful fact than `active`, which cannot
+// say it.
 export const PHASE_VERB: Record<string, string> = {
   triage: 'triaging',
   plan: 'planning',
@@ -75,21 +69,12 @@ export const PHASE_VERB: Record<string, string> = {
   close: 'closing',
 }
 
-// The item's primary display status, READ from the item's attention tier rather than re-derived
-// here. Completion (done_at) reads as `done`; a `needs_you` bucket reads as `awaiting_human`;
-// otherwise the stored status.
-//
-// This used to own the rule itself — `active` at a gate with nothing running was derived back to
-// `awaiting_human` from a local GATE_PHASES set. The rule is right (an item at a gate with no run
-// has nothing working on it and only the owner can move it), but owning a SECOND copy of it put
-// three different answers to "how many need you" on one screen: this derivation said 7, the deputy
-// strip's raw-status read said 5, and the daemon's attention engine said 6 — all rendering at the
-// same instant (dogfood D2, 2026-07-29). The rule now lives in `core/attention.py`, next to the run
-// table it depends on, and every surface reads that one verdict. Do not re-derive it here.
+// READ from the item's attention tier, never re-derived: a second copy of the rule put three
+// answers on one screen.
 export function primaryStatus(it: WorkItem, bucket?: string): string {
   if (it.done_at) return 'done'
-  // Same rule as needs_you: READ the tier, never re-derive it. `error` outranks it in the engine,
-  // so an item in this bucket is stopped no matter what else its row says.
+  // READ the tier, never re-derive it. `error` outranks the rest, so an item in this bucket is
+  // stopped.
   if (bucket === 'error') return 'error'
   if (bucket === 'needs_you') return 'awaiting_human'
   return it.status ?? ''
@@ -101,20 +86,17 @@ export function Empty({ children }: { children: ReactNode }) {
   )
 }
 
-// ── Work-kind labelling ──────────────────────────────────────────────────────────────────────
-// Two chips, one axis: WHAT the item is (`kind`) and, for research, which FAMILY (`research_kind`).
-// They share a hue so they read as one statement — the family chip is the lighter half of the pair,
-// not a second unrelated badge. Colours are the `kind-*` tokens: the status hues (success/warn/
-// danger) say how the work is GOING and the scope hues (core/dev/universal) say where it LIVES, so
-// borrowing either here would make the chip claim something it doesn't mean.
+// ── work-kind labelling ──
+//
+// Two chips, one axis, sharing a hue so they read as one statement. The status and scope hues mean
+// other things.
 const KIND_CHIP: Record<string, string> = {
   implementation: 'bg-kind-build/10 text-kind-build',
   research: 'bg-kind-research/10 text-kind-research',
 }
 
-// The family's own word, not the slug. `deep-diagnosis` is two words to a reader and a hyphen only
-// to the filesystem, and an unknown value renders as-is rather than vanishing — a family added to
-// the backend shows up unstyled instead of silently unlabelled.
+// The family's own word, not the slug. An unknown value renders as-is rather than vanishing
+// unlabelled.
 const RESEARCH_KIND_LABEL: Record<string, string> = {
   audit: 'Audit',
   refactoring: 'Refactoring',
@@ -128,9 +110,8 @@ export function kindChipClass(kind?: string | null): string {
   return KIND_CHIP[kind ?? 'implementation'] ?? KIND_CHIP.implementation
 }
 
-// The same two hues as `KIND_CHIP`, as bare text — for rows that label the kind inline instead of
-// in a filled chip. One source for the pair, so a kind cannot read blue in one surface and green
-// in another.
+// The same two hues as bare text, for rows that label inline. One source, so a kind cannot read
+// blue here and green there.
 export const KIND_TEXT: Record<string, string> = {
   implementation: 'text-kind-build',
   research: 'text-kind-research',
@@ -146,9 +127,8 @@ export function researchKindLabel(rk?: string | null): string | null {
   return RESEARCH_KIND_LABEL[rk] ?? rk.replace(/-/g, ' ')
 }
 
-// "3m ago" — how long since the item last DID something. Deliberately coarse: the reader is asking
-// "is this still warm or has it been sitting?", and a card that ticks by the second answers a
-// question nobody asked while making the whole board twitch. `null` when the item has never run.
+// Deliberately coarse: the reader asks whether this is still warm, and a per-second tick makes the
+// board twitch.
 export function agoLabel(epochSeconds?: number | null): string | null {
   if (!epochSeconds) return null
   const secs = Math.max(0, Math.floor(Date.now() / 1000 - epochSeconds))

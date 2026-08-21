@@ -3,14 +3,10 @@ import { Loader2, Map } from 'lucide-react'
 import { getPortrait, type Portrait } from '@/lib/api'
 import { Empty } from './common'
 
-// The PORTRAIT — what this project IS. Six bands, each fed by exactly one anchor doc, so the view
-// can never become a place knowledge secretly lives: it renders what the docs say, or nothing.
+// The PORTRAIT — what this project IS. Six bands, each fed by exactly one anchor doc, so knowledge
+// never hides here.
 //
-// Deliberately absent: decisions (volatile, often work-item specific), work in motion, lint
-// findings, status. The dashboard already answers what the project is DOING; this answers what it
-// is. The test it has to pass is that reading it end to end tells you the project in under a
-// minute — so every band that failed that test in the benchmarks (file trees, component
-// inventories, session history) is gone. See general_docs/general-knowledge-content-design.md.
+// The dashboard already answers what the project is DOING.
 
 function Band({ title, src, children }: { title: string; src: string; children: React.ReactNode }) {
   return (
@@ -93,8 +89,8 @@ export default function ProjectPortrait({ contextId }: { contextId: string }) {
         )}
       </header>
 
-      {/* 2 — goals. Near-term must be specific; direction is allowed to be directional. Non-goals
-          get equal weight: what a project refuses is as defining as what it pursues. */}
+      {/* Goals. Non-goals get equal weight: what a project refuses is as defining as what it
+          pursues. */}
       {hasGoals ? (
         <Band title="Goals & non-goals" src="project-prd">
           <div className="grid cols-wide gap-6">
@@ -122,8 +118,8 @@ export default function ProjectPortrait({ contextId }: { contextId: string }) {
         </Band>
       ) : null}
 
-      {/* 3 — what it can do NOW. Empty is the honest answer for a project that hasn't shipped;
-          never a placeholder, and never the plan restated — that's the roadmap's job. */}
+      {/* What it can do NOW. Empty is honest for a project that has not shipped; never the plan
+          restated. */}
       <Band title="What it can do now" src="capabilities">
         {p.capabilities.length === 0 ? (
           <Empty>Nothing shipped yet — the first entry lands when a deliverable closes.</Empty>
@@ -169,8 +165,8 @@ export default function ProjectPortrait({ contextId }: { contextId: string }) {
         </Band>
       ) : null}
 
-      {/* 5 — deliverables as VALUE. No slugs, no waves, no work-item status: each line completes
-          "once this lands, I can ___". Sequencing and progress live in the pipeline. */}
+      {/* Deliverables as VALUE: each line completes "once this lands, I can…". Sequencing lives in
+          the pipeline. */}
       {p.deliverables.length > 0 && (
         <Band title="What it will deliver" src="project-prd">
           <div className="rounded-lg border border-line bg-surface">
