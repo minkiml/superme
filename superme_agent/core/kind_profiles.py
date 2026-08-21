@@ -1,11 +1,6 @@
-"""KIND_PROFILES — the one in-code table mapping a work-item KIND to its machinery (workspace-
-workflow D1/D2). A kind exists only when it changes MACHINERY (phases, git isolation, knowledge
-writes, artifacts, close criteria) — content differences (feature/bug/refactor/docs) are all
-`implementation`. Extending = adding a profile entry; an unknown kind fails LOUD (never a silent
-default), so a typo can't run an item through the wrong machinery.
+"""Maps a work-item KIND to its machinery: phases, worktree, knowledge writes, artifacts.
 
-Item-kind is orthogonal to session-kind (core/kernel_speech.py): they join at
-`(item.kind, item.phase)` → the phase-session behavior contract (S5).
+Unknown kinds fail loud.
 """
 
 from dataclasses import dataclass, field
@@ -14,27 +9,18 @@ from dataclasses import dataclass, field
 @dataclass(frozen=True)
 class KindProfile:
     kind: str
-    # Ordered phase pipeline. The FIRST phase is the intake (triage); the LAST is `close`.
+    # Ordered; first is triage, last is close.
     phases: tuple[str, ...]
-    # Does this kind PRODUCE CODE — branch + worktree at build entry, merge at review exit (S4)?
-    # Read as "this kind lands something", not merely "it gets a directory": `review_merge` and the
-    # PR machinery key off it (gates.py), which is why research says False.
+    # Does this kind LAND code? Research: False.
     worktree: bool
-    # May this kind write general dev-knowledge (anchor docs) at merge (D7)? Research: never.
+    # Writes anchor docs at merge. Research: never.
     knowledge_writes: bool
-    # Does this kind read the repo from a DETACHED throwaway checkout instead of the working tree?
-    # Orthogonal to `worktree` above, and deliberately a second field rather than a third state of
-    # the first: this one buys isolation, that one buys a landing. A read-only kind wants isolation
-    # WITHOUT a landing — the OS sandbox leaves a run's own cwd writable (core/sandbox.py), so a
-    # research run pointed at the real repo had the permission layer as its only wall. Created
-    # lazily by the runner (services/git_ops.ensure_scratch_worktree), removed by clearance like
-    # any other, and carried on the item as `git_worktree` with `git_branch` left None.
+    # Detached read-only checkout: isolation without a landing.
     scratch_worktree: bool = False
-    # phase → artifact kinds that phase EMITS (D6; consumed by the next gate). Scaffolding lands S2.
+    # phase → artifacts it emits.
     emits: dict[str, tuple[str, ...]] = field(default_factory=dict)
-    # Artifact kinds the close gate mechanically REQUIRES to exist (D6 §8; enforced S6).
     required_artifacts: tuple[str, ...] = ()
-    # Close-criteria keys the close gate checks (D8; evaluated S6). Declarative slugs, not code.
+    # Declarative slugs, not code.
     close_criteria: tuple[str, ...] = ()
 
 
@@ -49,56 +35,17 @@ KIND_PROFILES: dict[str, KindProfile] = {
             "plan": ("plan",),
             "review": ("review",),
         },
-        # `review` is the phase's agent-facing record — close reads what it settled, the landing
-        # commit reads its `**Delivered:**`, and a revision cycle reads what it may not re-open.
         required_artifacts=("plan", "review"),
-        # CLOSE RE-ADJUDICATES NOTHING. Review's exit is the lock-in (§2.3): the merge lands, and
-        # from that instant code + git cannot change — so every question about the WORK was already
-        # answered at the last gate where the owner could act on the answer. What survives here is
-        # only what close itself can still fix, or what genuinely became true after review.
-        #
-        # Retired for that reason (2026-07-30, dogfood D5):
-        #   `evidence_fresh`         — verification is the loop's gate and review's fact. Re-checked
-        #                              after the merge it could only ever refuse the paperwork for a
-        #                              decision already made, and its whole-repo fingerprint read a
-        #                              freshness-sync commit as "the code moved", wedging items whose
-        #                              own code was untouched and whose close phase cannot re-run a
-        #                              test by design.
-        #   `knowledge_row_resolved` — close AUTHORS the anchor-doc ops (slice 5); a phase's own
-        #                              output cannot also be its entry condition.
-        # Nor a merge check: review's EXIT is the merge (`advance_item` runs `review_merge` and 409s
-        # on conflict), so an item cannot reach close unmerged.
-        # `children_terminal` LEFT TOO (owner, 2026-08-09) — it is a REVIEW-gate check now. A child
-        # is spawned from this item and is part of its work, so the parent must still be re-workable
-        # when the child lands: re-checked, revised, re-vetted. At close it is none of those, the
-        # branch being merged and the sessions closed. Close was also the ONLY gate that ever asked,
-        # so a parent could pass review, land, and first meet its open child where nothing can act.
-        # Close is left asking one thing — do the files exist. It wraps up finished work; it does
-        # not decide whether the work finished.
+        # Empty on purpose: review's exit already locked code and git.
         close_criteria=(),
     ),
-    # The spine (triage · plan · review · close) is shared by every kind; only ‹WORK› differs —
-    # `investigate` here, `build ⟷ vet` above. The old `report` PHASE is retired: it sat where
-    # `review` belongs, and its work is now the shared review-ENTRY run — ONE `review` skill for
-    # every kind, with a per-kind report template inside it (renovation §2.2).
     "research": KindProfile(
         kind="research",
-        # NO PLAN PHASE (research-sweep-model-design §3, 2026-08-13). Plan's real product on the
-        # implementation path is the VET-PLAN — the Done criteria build is measured against. Research
-        # has no vet, and subtracting that leaves only "decide the approach", which the family guide
-        # (`investigate/references/<family>.md`) already owns in far more detail than a plan session
-        # would write. The split also cost real continuity: the plan session's UNDERSTANDING never
-        # transferred to investigate, only its document did — a price implementation pays willingly
-        # because build must be measured against something written first, and research got nothing
-        # for. Research's phases were originally implementation's minus build+vet and nobody asked
-        # whether plan survived the subtraction; this is that question, answered.
+        # No plan phase: plan's product is the vet-plan, and research has no vet.
         phases=("triage", "investigate", "review", "close"),
         worktree=False,
         knowledge_writes=False,
-        # …but it DOES get an isolated tree to read from (2026-08-14). Research is the read-only
-        # kind, and "read-only" was enforced by the permission classifier alone while the run's cwd
-        # was the live repository — the one wall Bash is least path-checkable against. Detached, so
-        # nothing about "research merges nothing" changes.
+        # Otherwise read-only rests on the permission classifier alone.
         scratch_worktree=True,
         emits={
             "triage": ("brief",),
@@ -106,122 +53,48 @@ KIND_PROFILES: dict[str, KindProfile] = {
             "review": ("review",),
         },
         required_artifacts=("investigation", "review"),
-        # NO close criteria (owner's standing rule, 2026-08-09). `findings_delivered` and
-        # `spawns_exist` lived here and both asked at the wrong phase: the first re-judged the
-        # owner's report after the item was locked, and the second told the owner to "run itemize"
-        # at a phase whose sessions are closed. Both read review-phase output, so both are review-
-        # gate checks now (`gate_briefs.research_readiness`) — refusable where a person can answer.
-        # Close wraps up finished work; it does not decide whether the work finished.
         close_criteria=(),
     ),
 }
 
 DEFAULT_KIND = "implementation"
 
-# --- item SCALE: how much ceremony this item's work is worth --------------------------------------
-# Kind decides the MACHINERY; scale decides how much CONTENT that machinery moves. They are
-# deliberately different axes, and scale is not a kind: a small item still gets the full pipeline,
-# its own branch, numbered tasks, a commit per task and a merge (owner, 2026-08-10). Nothing about
-# the STRUCTURE moves — every phase runs, every document keeps every section. What changes is how
-# much each phase reads before writing and how much it writes.
-#
-# Measured baseline that makes this worth having (2026-08-10, five playground items through the
-# full loop): triage 70k tokens over ~12 tool calls, plan 61k over ~14, review 52k over ~16 — so the
-# intake phases together cost MORE than build+vet, and they run about twice per item. The cost
-# tracks tool calls, not the launch prompt (that is ~2k chars). A one-line fix pays all of it.
-#
-# TWO VALUES ON PURPOSE. `standard` is exactly today's behaviour, so nothing in flight changes
-# meaning. A third tier would only give an agent a middle to reach for.
+# Kind decides the MACHINERY, scale decides how much CONTENT moves through it.
 ITEM_SCALES: tuple[str, ...] = ("small", "standard")
 DEFAULT_SCALE = "standard"
 
-# --- FAN-OUT: does this research surface need splitting across subagents? -------------------------
-# A SEPARATE field from `scale`, on purpose. Scale asks how much content the work is worth;
-# fan-out asks whether the surface divides. A bounded folder can be `standard` (real work, a real
-# judgement) and still take one thread, which is exactly the case this exists for. Folding it into
-# scale would make one field answer two questions — the shape of defect this codebase keeps
-# meeting, most recently a decision ledger whose promotion test was the wrong lever entirely.
-#
-# `expected` is the default and the family's own prescription: a whole-repo sweep splits. `bounded`
-# is triage saying it looked and this one does not. It is triage's call to make because triage is
-# the phase that has read the whole ask and sized the surface — investigate then obeys the brief,
-# and a gate row contradicting that brief blames the run for doing as it was told.
+# Whether a research surface divides across subagents. Triage's call.
 ITEM_FANOUT: tuple[str, ...] = ("expected", "bounded")
 DEFAULT_FANOUT = "expected"
 
 
 def item_fanout(item: dict | None) -> str:
-    """Whether this item's surface was judged to need splitting. Forgiving like `item_scale`: an
-    absent value means nobody judged, and the family's prescription stands."""
+    """Whether the surface needs splitting. Absent means nobody judged."""
     v = str((item or {}).get("fanout") or "").strip()
     return v if v in ITEM_FANOUT else DEFAULT_FANOUT
 
 
 def item_scale(item: dict | None) -> str:
-    """This item's declared scale, defaulting to `standard`. Deliberately FORGIVING where
-    `get_profile` is loud: an unknown kind means the item would run through the wrong machinery, but
-    an unknown or absent scale only means nobody judged it — and every item minted before the field
-    existed is in exactly that position. Defaulting them to today's behaviour is the correct
-    reading, not a swallowed error."""
+    """This item's declared scale. Unknown means nobody judged, not broken."""
     scale = str((item or {}).get("scale") or "").strip()
     return scale if scale in ITEM_SCALES else DEFAULT_SCALE
 
 
-# --- RESEARCH KIND: which family of investigation a research item is ------------------------------
-# A third axis, and it applies to ONE kind. `kind` decides the machinery, `scale` decides how much
-# content moves through it, and this decides what counts as an answer — which is why it routes two
-# real things rather than being a label: the guide the investigate phase reads, and the artifact
-# shape it scaffolds (`study` has its own; see artifacts._TEMPLATE_HOMES).
-#
-# NO DEFAULT, on purpose, and this is where it differs from `scale`. `standard` is a real behaviour
-# every skill already describes, so an unjudged item has somewhere honest to sit. There is no
-# equivalent family — an unjudged research item has not been told what counts as an answer, and
-# inventing one for it would silently pick a bar and an artifact. Unset reads None, the skill falls
-# back to naming the family in prose, and the base artifact shape (which is the audit shape, the one
-# the phase was originally written for) is what gets scaffolded.
-# The six (owner, 2026-08-13). Four are audit-shaped and differ in what they LOOK for and what
-# severity means in each; `study` and `refactoring` both end in a proposal; `deep-diagnosis` ends in
-# a mechanism.
-#
-# `deep-diagnosis` is NOT `diagnosis` on purpose. A `diagnosis` SESSION already exists — the quick
-# read of one run's trace, launched from an Activity row (sessions.kind, session_kinds.py). Reusing
-# that word for a work-item family would put two meanings on one token, which is how the wrong-field
-# bugs start. This one is the dedicated version: a planned investigation with a gate, not a look.
-#
-# `measurement` was here and is NOT: performance belongs inside the general audit, and a number
-# without a re-runnable recipe is a bad receipt in every family, not a family of its own.
+# Which family of investigation. No default: an unjudged item was never told what an answer is.
 @dataclass(frozen=True)
 class ResearchFamily:
-    """One row of the family registry. Adding a family is THIS ROW, one guide, one template — and
-    nothing else: the slug drives the guide path, the template name, the gate rows and the launch
-    bar, so there is no second list anywhere to keep in sync."""
+    """One row of the registry. The slug drives guide, template, gate rows and launch bar."""
     slug: str
-    # STANDING vs COMMISSIONED. A standing family's subject is the codebase itself and its question
-    # never stops being worth asking, so it is launched from a BUTTON. A commissioned family is
-    # born from a ticket: someone asked this specific question about this specific thing.
+    # Subject is the codebase → launches from a button. Else ticket-born.
     standing: bool
-    # Does launching it need an INTEREST named first? Audit's question ("is this sound?") is
-    # meaningless until you say sound in WHAT — coverage, performance, logic, or its promises. The
-    # launch surface asks, and the answer goes into the item's description; there is no typed field
-    # in v1, deliberately (see the design doc — a field that only leans is one nobody can rely on).
+    # "Is this sound?" means nothing until you say sound in WHAT.
     asks_interest: bool
-    # lucide-react icon name for the launch bar (step 7). Lives here so a new family is one row.
     icon: str
-    # One line, shown on the launch button and its tooltip. The owner's words, not the guide's.
+    # Owner-facing, for the launch button.
     blurb: str
 
 
-# THE FAMILY REGISTRY. Every property of an investigation family, in one table.
-#
-# The four STANDING families are the whole-codebase ones: their subject is this repo and their
-# question stands whether or not anyone asked it today. The two COMMISSIONED families are
-# ticket-born — a study is commissioned about a named thing, a deep diagnosis about a named
-# behaviour — and there is nothing to put on a button.
-#
-# `standing` also decides FAN-OUT (see `FANOUT_FAMILIES` below). That is not a coincidence being
-# exploited: a subject that is "the codebase" is large by definition and splits by area, while a
-# subject that is one thread splits badly. If a family ever needs one without the other, SPLIT THE
-# FIELD — do not special-case a slug at a call site.
+# `standing` also decides fan-out. If a family ever needs one without the other, split the field.
 RESEARCH_FAMILIES: tuple[ResearchFamily, ...] = (
     ResearchFamily("audit", standing=True, asks_interest=True, icon="Radar",
                    blurb="Is a surface sound — coverage, performance, logic, or its promises?"),
@@ -239,149 +112,74 @@ RESEARCH_FAMILIES: tuple[ResearchFamily, ...] = (
 
 FAMILY_BY_SLUG: dict[str, ResearchFamily] = {f.slug: f for f in RESEARCH_FAMILIES}
 
-# TWO MIRRORS THIS TABLE CANNOT DRIVE, both pinned in `test_research_kind` so adding a row fails
-# loudly rather than half-working:
-#   1. `dev_tools.TriageFacts.research_kind` — a `Literal[...]`, which must be spelled out for the
-#      JSON schema the model sees and for static analysis. Its prose is DELIBERATELY not this
-#      table's `blurb`: that one sells a button to the owner, this one teaches triage how to pick.
-#      Same fact, two audiences — the record/report split, applied to a sentence.
-#   2. `skills/triage/SKILL.md` — the picking guidance, agent-facing for the same reason.
-# Everything else (guide path, template, gate rows, fan-out, the launch bar) derives from here.
+# Two mirrors this table cannot drive, pinned in `test_research_kind`:
+# `dev_tools.TriageFacts.research_kind` (a Literal) and `skills/triage/SKILL.md`.
 
-# DERIVED, never hand-maintained — the one-writer rule applied to a list. Both of these were their
-# own literal tuples until 2026-08-14, which is two places to edit and one to forget.
+# Derived, never hand-maintained.
 RESEARCH_KINDS: tuple[str, ...] = tuple(f.slug for f in RESEARCH_FAMILIES)
 
 
 def family_guide(slug: str) -> str:
-    """The guide path a `slug` family's investigate run must read, relative to the skill folder.
-    The slug IS the filename — that is the whole naming rule, and `method_read` counts reads of it."""
+    """Guide path for a family. The slug IS the filename."""
     return f"references/{slug}.md"
 
 
 def family_template(slug: str) -> str:
-    """The investigation template name for a family. Same rule: the slug IS the shape."""
+    """Investigation template name. Same rule: the slug IS the shape."""
     return f"investigation-{slug}"
 
 
 def standing_families() -> tuple[ResearchFamily, ...]:
-    """The button-launchable families, in registry order — what the launch bar renders."""
+    """Button-launchable families, in registry order."""
     return tuple(f for f in RESEARCH_FAMILIES if f.standing)
 
-# The families whose guide PRESCRIBES fan-out — each `references/<family>.md` carries a `## Fan-out`
-# section telling investigate to split the surface across subagents (by area, or by boundary for
-# security). These four are the whole-codebase families: their subject is large by definition.
-#
-# WHY THIS TUPLE EXISTS AT ALL (measured, 2026-08-13). Across seven live items — including a
-# whole-repo refactoring study that burned 127k tokens and an audit of every reporting command —
-# **not one subagent was ever spawned.** The instruction was in all four guides, phrased clearly, and
-# complied with 0% of the time. That is the prompt-quality pass's own law restated: compliance tracks
-# ENFORCEMENT, not emphasis — `<fill:…>` slots are gate-checked and leak 0%, a thrice-stated prose
-# note leaked 100%. `## Fan-out` was prose nothing checked, so nothing did it.
-#
-# `study` and `deep-diagnosis` are absent deliberately: both follow ONE thread of enquiry to its end,
-# and splitting a diagnosis across agents is how a causal chain gets lost.
+# Families whose guide prescribes fan-out. study and deep-diagnosis follow one thread.
 FANOUT_FAMILIES: tuple[str, ...] = tuple(f.slug for f in RESEARCH_FAMILIES if f.standing)
 
 
 def research_kind(item: dict | None) -> str | None:
-    """This item's investigation family, or None when nobody has judged one. Forgiving for the same
-    reason `item_scale` is: every research item minted before this field existed has no line, and an
-    unknown value means the judgment is missing, not that the item is broken."""
+    """This item's investigation family, or None when nobody judged one."""
     fam = str((item or {}).get("research_kind") or "").strip()
     return fam if fam in RESEARCH_KINDS else None
 
-# Every phase any kind can be in (schema Literal mirrors this — keep in sync with
-# daemon/schemas/common.py WorkPhase).
+# Mirrored by schemas/common.py WorkPhase — keep in sync.
 ALL_PHASES: tuple[str, ...] = tuple(dict.fromkeys(
     p for prof in KIND_PROFILES.values() for p in prof.phases
 ))
 
 
-# --- session slots and roles (build-vet-loop §1.3; per-phase sessions 2026-08-13) --------------
-# A work-item's turns are stored in SLOTS on its own frontmatter (`session_<slot>`). There is one
-# slot PER PHASE, plus `build` and `vet`:
-#
-#     THE RULE — a session belongs to a PHASE.
-#     Entering the SAME phase again RESUMES its thread. Moving to a DIFFERENT phase MINTS a fresh one.
-#
-# WHAT THIS REPLACED, and why (owner, 2026-08-13). Until now the five non-build phases shared ONE
-# `intake` slot: each entry minted a fresh session, stored it, and RETIRED the one it replaced. So
-# review, which is the phase most often entered more than once, forgot its own previous review every
-# revise round — and a send-back that resumed "the item's thread" resumed whichever phase happened to
-# hold the slot, not the phase being sent back to.
-#
-# THE OLD REASONING STILL HOLDS, BUT ONLY WHERE IT APPLIED. Every phase reads its inputs from
-# ARTIFACTS, never from transcript memory: plan gets triage's conclusions from `brief.md` — the
-# reviewed, structured version — which beats recall. A shared thread would also carry triage's wrong
-# turns into plan, and anchoring is a real cost (it is exactly why `vet` forgets). That is an argument
-# about handing off between DIFFERENT phases, and mint-on-phase-change keeps all of it. It was never
-# an argument about re-entering the SAME phase, which is one agent looking at a changed tree — the
-# slot model simply could not tell the two cases apart.
-#
-# WHAT IT COSTS, KNOWINGLY: threads now accumulate across revise rounds instead of being purged, so a
-# heavily-revised item carries more fill. Compaction exists for exactly that.
-#
-# THE ONE THING THE SEPARATION STILL COSTS is the OWNER's words: anything they said mid-phase reaches
-# the NEXT phase only because the phase agent wrote it into the artifact. That is why `## From you`
-# (brief) and `## Decisions & clarifications` (plan) are carried forward MECHANICALLY rather than left
-# to an agent to remember — see `artifacts.carry_owner_input`.
-#
-# `intake` IS RETAINED AS A LEGACY READ SLOT and is never written again. Items in flight when this
-# landed carry `session_intake`; `dev_knowledge._session_fields` falls back to it for any intake-family
-# phase, so those items keep their thread and self-migrate on the next turn that writes a slot.
+# A session belongs to a PHASE: re-entering resumes its thread, moving to another mints one.
 INTAKE_PHASES: tuple[str, ...] = ("triage", "plan", "investigate", "review", "close")
 SESSION_SLOTS: tuple[str, ...] = (*INTAKE_PHASES, "build", "vet")
+# Read-only, never written again.
 LEGACY_INTAKE_SLOT = "intake"
 
-# The spine's `session.kind` grouping — UNCHANGED by the per-phase split. A slot answers "which
-# thread"; a kind answers "what sort of thread", and all five intake phases are still the same sort:
-# the owner's own item-facing conversation. Splitting the kind too would widen the spine enum, the
-# token taxonomy, the session picker's categories and every FE label for no question anyone asks.
+# A slot answers "which thread", a kind answers "what sort".
 SESSION_ROLES: tuple[str, ...] = ("intake", "build", "vet")
 
-# The durable `session.kind` values (spine column) — the stampable superset: the item ROLES above
-# + `general` (un-bound advisor session) + `onboarding` (label-only kind: stamped at birth for the
-# picker's category chip, but the onboarding persona is applied per-turn by project state, never by
-# this stamp) + `diagnosis` (read-only inspector pointed at a subject run — the one kind that
-# changes runtime behavior). `work_item` is never stamped — it's the DERIVED label for legacy
-# pre-roles item sessions (item_id set, kind NULL); the item_id stamp, not the kind, is what makes
-# a session item-bound. Each kind's identity PREAMBLE lives in core/kernel_speech.py.
+# `work_item` is never stamped — derived label for legacy sessions.
 SESSION_KINDS = ("general", "work_item", "onboarding", "diagnosis", "intake", "build", "vet")
 
-# Of those, the ones that are the AGENTS' OWN threads rather than the owner's: `build` and `vet` run
-# headless in a worktree (background turns, denied approval, no chat surface) — working memory, not
-# conversation. The owner cannot open one, cannot answer in one, and never sees it in the session
-# picker; counting them as "sessions" made the repo tile disagree with the list on screen. Their work
-# reaches the owner as artifacts and the run trace instead.
-# An UNKNOWN kind reads as a conversation: a new kind that HAS a chat surface must appear (the count
-# self-flags), while a new headless one is a deliberate addition that registers itself here.
+# Headless agent threads. The owner can never open or answer in one.
 AGENT_THREAD_KINDS: tuple[str, ...] = ("build", "vet")
 
 
 def is_conversation(kind: str | None) -> bool:
-    """Whether a session is one the owner can open and take a turn in (vs an agent's own thread)."""
+    """Whether the owner can open this session and take a turn in it."""
     return (kind or "") not in AGENT_THREAD_KINDS
 
 _ROLE_FOR_PHASE: dict[str, str] = {
-    # The spine KIND grouping, not the slot: all five intake phases are the same SORT of thread.
     "triage": "intake", "plan": "intake", "review": "intake", "close": "intake",
     "build": "build",
     "vet": "vet",
     "investigate": "intake",
 }
 
-# Slot per phase — identity for the intake family, so `sessions[phase]` IS that phase's thread.
 _SLOT_FOR_PHASE: dict[str, str] = {**{p: p for p in INTAKE_PHASES}, "build": "build", "vet": "vet"}
 
 
 def session_slot(phase: str | None) -> str:
-    """The SLOT a phase's turns are stored in (`session_<slot>` on the item). Unknown phases fail
-    LOUD (mirrors get_profile — a typo must not silently land a turn in the wrong thread).
-
-    This is the answer to "WHICH thread": one per phase, so re-entering a phase resumes its own and
-    moving to another phase mints. For "what SORT of thread" — the spine's `session.kind` — use
-    `session_role`. See the block above for why the two are separate."""
+    """The SLOT a phase's turns are stored in. Unknown phases fail LOUD."""
     p = phase or "triage"
     if p not in _SLOT_FOR_PHASE:
         raise KeyError(f"phase {p!r} has no session slot — known: {sorted(_SLOT_FOR_PHASE)}")
@@ -389,11 +187,7 @@ def session_slot(phase: str | None) -> str:
 
 
 def session_role(phase: str | None) -> str:
-    """The spine session KIND a phase's turns are stamped with (`intake` | `build` | `vet`).
-    Unknown phases fail LOUD.
-
-    NOT the storage slot — five phases share the `intake` KIND while each keeps its OWN thread.
-    Use `session_slot` whenever the question is which session to resume or write."""
+    """The spine session KIND a phase is stamped with. Not the storage slot."""
     p = phase or "triage"
     if p not in _ROLE_FOR_PHASE:
         raise KeyError(f"phase {p!r} has no session role — known: {sorted(_ROLE_FOR_PHASE)}")
@@ -401,24 +195,14 @@ def session_role(phase: str | None) -> str:
 
 
 def role_uses_worktree(role: str, kind: str | None = None) -> bool:
-    """Whether turns run at the item's WORKTREE cwd (build/vet) vs the repo (every intake phase).
-    Accepts either a role or a slot — `build`/`vet` name the same thing in both vocabularies, and
-    every other slot is an intake phase, which stays repo-level even while a worktree exists: close
-    merges into main, and the CLI's per-cwd transcript storage means an intake thread must never
-    change cwd mid-life.
-
-    `kind` flips that for a SCRATCH-worktree kind: research has no build/vet role at all, so its
-    every phase is an intake one, and leaving them repo-level would defeat the isolation entirely.
-    The mid-life rule is still honoured, in the other direction — ALL of a research item's phases
-    run at the scratch tree, so the one thread it has never sees its cwd move."""
+    """Worktree cwd (build/vet) or repo cwd (intake). The CLI stores transcripts per cwd."""
     if kind and get_profile(kind).scratch_worktree:
         return True
     return role in ("build", "vet")
 
 
 def get_profile(kind: str | None) -> KindProfile:
-    """The profile for `kind` — LOUD KeyError on an unknown kind (D1: never a silent default).
-    A missing/null kind (pre-workflow item) reads as DEFAULT_KIND for backward compatibility."""
+    """The profile for `kind`. LOUD KeyError on an unknown one; missing reads as DEFAULT_KIND."""
     k = kind or DEFAULT_KIND
     if k not in KIND_PROFILES:
         raise KeyError(
@@ -429,8 +213,7 @@ def get_profile(kind: str | None) -> KindProfile:
 
 
 def next_phase(kind: str | None, phase: str | None) -> str | None:
-    """The phase after `phase` in this kind's pipeline, or None at the last phase.
-    An unknown PHASE for the kind raises loud (a research item can't sit in `build`)."""
+    """The phase after `phase`, or None at the last. An unknown phase for the kind raises."""
     prof = get_profile(kind)
     p = phase or prof.phases[0]
     if p not in prof.phases:
