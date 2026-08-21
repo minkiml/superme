@@ -11,9 +11,9 @@ from pathlib import Path
 
 from superme_agent.core import artifacts as _arts
 from superme_agent.daemon.services.loop import decide_after_vet
+from scripts.sources import src
 
 PASS = 0
-ROOT = Path(__file__).resolve().parents[1]
 
 NONE_PLAN = """# Plan — probe
 
@@ -29,10 +29,6 @@ def ok(msg: str, cond: bool = True) -> None:
     assert cond, f"FAILED: {msg}"
     PASS += 1
     print(f"  ok  {msg}")
-
-
-def src(rel: str) -> str:
-    return (ROOT / rel).read_text()
 
 
 def _item(plan: str = NONE_PLAN) -> Path:

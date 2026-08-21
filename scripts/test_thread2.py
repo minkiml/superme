@@ -11,6 +11,7 @@ import re
 import types
 from pathlib import Path
 from types import SimpleNamespace
+from scripts.sources import src
 
 PASS = 0
 
@@ -135,7 +136,7 @@ def test_fire_auto_triage() -> None:
 # ------------------------------------------------------------------ skill + replay + FE
 def test_skill_and_sources() -> None:
     print("skill background section + replay hygiene + FE comment")
-    skill = Path("superme_agent/harness/plugins/superme-dev/skills/triage/SKILL.md").read_text()
+    skill = src("superme_agent/harness/plugins/superme-dev/skills/triage/SKILL.md")
     # The per-skill narration is retired; the classification stamp that lifts the gate stayed.
     ok("triage skill mandates set_triage_classification (the gate stamp)",
        "set_triage_classification" in skill)
@@ -150,7 +151,7 @@ def test_skill_and_sources() -> None:
 
     # The claim it guarded — triage fires on push, not in chat — is asserted at its real owner
     # above.
-    panels = _norm(Path("web/frontend/src/features/dev/panels.tsx").read_text())
+    panels = _norm(src("web/frontend/src/features/dev/panels.tsx"))
     ok("the FE keeps no stale 'triage happens in chat' claim", "triage happens in chat" not in panels)
 
 

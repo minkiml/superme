@@ -13,9 +13,9 @@ from superme_agent.core import attention
 from superme_agent.core.dev_knowledge import DevKnowledgeService, _LIVE_STATUSES, _STATUS_RANK
 from superme_agent.daemon.schemas.common import WorkStatus
 from superme_agent.daemon.services.loop import decide_after_vet, decide_after_build
+from scripts.sources import src
 
 PASS = 0
-ROOT = Path(__file__).resolve().parents[1]
 
 
 def ok(msg: str, cond: bool = True) -> None:
@@ -23,10 +23,6 @@ def ok(msg: str, cond: bool = True) -> None:
     assert cond, f"FAILED: {msg}"
     PASS += 1
     print(f"  ok  {msg}")
-
-
-def src(rel: str) -> str:
-    return (ROOT / rel).read_text()
 
 
 def _item(dev_root: Path, item_id: str = "e1", status: str = "active") -> Path:

@@ -22,6 +22,7 @@ from superme_agent.core import knowledge_delta as KD
 from superme_agent.core.dev_knowledge import DevKnowledgeService
 from superme_agent.core.kind_profiles import KIND_PROFILES
 from superme_agent.harness.tools.dev_tools import _apply_knowledge_delta, _ITEM_DEV_TOOLS
+from scripts.sources import src
 
 PASS = 0
 
@@ -289,7 +290,7 @@ def test_close_readiness(tmp: Path) -> None:
        and [c["criterion"] for c in GB.close_readiness(r_item, r_dir, [r_item])["checks"]]
            == ["required_artifacts"])
     # ...and SOMETHING must then clear it, or a finished item sits at close with no exit at all.
-    runs_src = Path("superme_agent/daemon/services/runs.py").read_text()
+    runs_src = src("superme_agent/daemon/services/runs.py")
     ok("itemize is research's closing run — it clears the item like any other close",
        'if skill == "itemize" and not stopped:' in runs_src
        and runs_src.index('if skill == "itemize" and not stopped:')

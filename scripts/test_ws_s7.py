@@ -14,6 +14,7 @@ from superme_agent.core import artifacts as A
 from superme_agent.core import gate_briefs as GB
 from superme_agent.core import workgraph as WG
 from superme_agent.core.dev_knowledge import DevKnowledgeService
+from scripts.sources import src
 
 PASS = 0
 
@@ -95,7 +96,7 @@ def test_orphan_reconcile(tmp: Path) -> None:
     ok("second pass is a no-op — nothing left running", sp.reconcile() == [])
 
     # The daemon half: the rows above are only useful if something parks the items.
-    ls = Path("superme_agent/daemon/lifespan.py").read_text()
+    ls = src("superme_agent/daemon/lifespan.py")
     ok("lifespan captures the orphans and parks them",
        "_orphans = app_state.spine.reconcile()" in ls
        and "_reconcile_orphaned_items(_orphans)" in ls)

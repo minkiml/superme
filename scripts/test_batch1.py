@@ -13,6 +13,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from superme_agent.core.spine import SystemSpine
+from scripts.sources import src
 
 PASS = 0
 
@@ -86,12 +87,12 @@ def test_plan_phase_guard(tmp: Path) -> None:
 
     # The FE no longer decides this: a second writer of the plannable rule, rendered by nothing.
     # One rule, one owner.
-    dd = _norm(Path("superme_agent/daemon/services/drilldown.py").read_text())
+    dd = _norm(src("superme_agent/daemon/services/drilldown.py"))
     ok("the launch rule lives server-side, and it is ONE control",
        'runnable = bool(RUNNABLE_PHASES & {phase})' in dd and '_act("run"' in dd)
     ok("...and the three buttons it replaced are gone",
        '_act("plan"' not in dd and '_act("vet"' not in dd and '_act("force"' not in dd)
-    fe = _norm(Path("web/frontend/src/features/dev/panels.tsx").read_text())
+    fe = _norm(src("web/frontend/src/features/dev/panels.tsx"))
     ok("...and the FE keeps no copy of the rule", "isPlannable" not in fe)
 
 
@@ -133,9 +134,9 @@ def test_run_session_id(tmp: Path) -> None:
 # ------------------------------------------------------------------ FE surface assertions
 def test_fe_surfaces() -> None:
     print("FE surfaces — Activity phase column + card layout")
-    act = _norm(Path("web/frontend/src/features/activity/GlobalActivity.tsx").read_text())
+    act = _norm(src("web/frontend/src/features/activity/GlobalActivity.tsx"))
     ok("Activity renders run.phase", "{r.phase &&" in act and "r.phase}" in act)
-    panels = _norm(Path("web/frontend/src/features/dev/panels.tsx").read_text())
+    panels = _norm(src("web/frontend/src/features/dev/panels.tsx"))
     # The board REFLOWS rather than scrolling sideways, which hides content behind an unadvertised
     # gesture.
     ok("board reflows its lanes rather than growing a sideways scrollbar",
@@ -145,11 +146,11 @@ def test_fe_surfaces() -> None:
        'className="truncate text-[12.5px] leading-snug text-fg"' in panels)
 
     # A pane that cannot fit its content must SHED, and what it sheds must stay reachable.
-    layout = _norm(Path("web/frontend/src/lib/layout.ts").read_text())
+    layout = _norm(src("web/frontend/src/lib/layout.ts"))
     ok("a container is measured by a CALLBACK ref, so one that mounts late is still measured",
        "export function useContainerWidth<T extends HTMLElement>(): [(node: T | null) => void, number]" in layout)
-    act_src = _norm(Path("web/frontend/src/features/activity/GlobalActivity.tsx").read_text())
-    panels_src = _norm(Path("web/frontend/src/features/dev/panels.tsx").read_text())
+    act_src = _norm(src("web/frontend/src/features/activity/GlobalActivity.tsx"))
+    panels_src = _norm(src("web/frontend/src/features/dev/panels.tsx"))
     ok("every flexible run-table column can shrink to zero, so nothing is clipped off the right",
        all(t in act_src for t in (
            "grid-cols-[minmax(0,1.4fr)_72px_48px_minmax(0,1fr)_84px_64px_112px]",
@@ -159,12 +160,12 @@ def test_fe_surfaces() -> None:
        "{density !== 'tight' && (" in act_src)
     ok("...and trades the timestamp for an age, with the stamp kept in the tooltip",
        "density === 'tight' ? fmtAge(r.started_at) : fmtLocal(r.started_at)" in act_src)
-    cfg = _norm(Path("web/frontend/src/features/config/SystemConfig.tsx").read_text())
+    cfg = _norm(src("web/frontend/src/features/config/SystemConfig.tsx"))
     ok("System config measures ITSELF and collapses its rail to icons before the pane suffers",
        "useContainerWidth" in cfg and "const railIcons" in cfg and "const railNarrow" in cfg)
     ok("...and the project picker moves into the pane when the rail cannot hold it",
        "{railIcons && PROJECT_SECTIONS.has(section) && picker && (" in cfg)
-    ctl = _norm(Path("web/frontend/src/features/config/controls.tsx").read_text())
+    ctl = _norm(src("web/frontend/src/features/config/controls.tsx"))
     ok("a setting's control wraps below its label rather than crushing it",
        "flex flex-wrap items-center gap-x-4 gap-y-2" in ctl and "min-w-[9rem] flex-1" in ctl)
 
@@ -174,7 +175,7 @@ def test_fe_surfaces() -> None:
        "const tightCards = laneW > 0 && laneW < 215" in panels
        and "{!tight && (model || ctx != null) && (" in panels
        and "{!tight && researchKindLabel(it.research_kind) && (" in panels)
-    dash = _norm(Path("web/frontend/src/features/dev/DevDashboard.tsx").read_text())
+    dash = _norm(src("web/frontend/src/features/dev/DevDashboard.tsx"))
     ok("the attention feed keeps WHICH item and drops the reason when there is no room",
        "{!tight && <span className=\"ml-1.5 text-[10px] text-faint\">{r.reason}</span>}" in dash)
     ok("the inbox-to-workspace arrow turns with the layout instead of pointing at white space",
@@ -182,8 +183,8 @@ def test_fe_surfaces() -> None:
     ok("the work-item stat row becomes five marks + five numbers on one line",
        "const chip = (Icon: LucideIcon" in dash and "if (tight) {" in dash)
     # A picker shows the value IN FORCE: an inherit row beside it is one answer with two labels.
-    pset = _norm(Path("web/frontend/src/features/config/sections/ProjectSettings.tsx").read_text())
-    gen = _norm(Path("web/frontend/src/features/config/sections/General.tsx").read_text())
+    pset = _norm(src("web/frontend/src/features/config/sections/ProjectSettings.tsx"))
+    gen = _norm(src("web/frontend/src/features/config/sections/General.tsx"))
     # Asserted on the option LISTS: the comment explaining the removal quotes the words, and a
     # check its own rationale trips reads as a bug.
     ok("no config picker offers a Default row beside the value it defaults to",

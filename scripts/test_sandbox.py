@@ -10,6 +10,7 @@ Run: PYTHONPATH=. python -m scripts.test_sandbox
 from pathlib import Path
 
 from superme_agent.core.sandbox import sandbox_options
+from scripts.sources import src
 
 PASS = 0
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,10 +21,6 @@ def ok(msg: str, cond: bool = True) -> None:
     assert cond, f"FAILED: {msg}"
     PASS += 1
     print(f"  ok  {msg}")
-
-
-def src(rel: str) -> str:
-    return (ROOT / rel).read_text()
 
 
 # ── the policy ──────────────────────────────────────────────────────────────────────────────────

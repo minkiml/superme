@@ -12,6 +12,7 @@ from tempfile import TemporaryDirectory
 
 from superme_agent.core import dev_store as DS
 from superme_agent.daemon.services import dashboard_stream as D
+from scripts.sources import src
 
 PASS = 0
 
@@ -113,24 +114,24 @@ async def test_observer_seam(tmp: Path) -> None:
 def test_backstop_contract() -> None:
     """The FE half's rule, asserted against the source so the two halves can't drift apart."""
     print("the FE backstop — push raises the poll interval, losing push releases it")
-    src = Path("web/frontend/src/lib/live/store.ts").read_text()
-    ok("a backstop exists and is slow", "BACKSTOP_MS = 30_000" in src)
+    store_src = src("web/frontend/src/lib/live/store.ts")
+    ok("a backstop exists and is slow", "BACKSTOP_MS = 30_000" in store_src)
     ok("it applies only to ordinary-cadence feeds",
-       "pushOnline && ms >= BACKSTOP_FLOOR_MS ? BACKSTOP_MS : ms" in src)
+       "pushOnline && ms >= BACKSTOP_FLOOR_MS ? BACKSTOP_MS : ms" in store_src)
     # A very fast subscriber watches something continuous that writes no event, so slowing it
     # would regress.
-    ok("...leaving fast live-run feeds alone", "BACKSTOP_FLOOR_MS = 5000" in src)
+    ok("...leaving fast live-run feeds alone", "BACKSTOP_FLOOR_MS = 5000" in store_src)
     ok("losing the channel re-times every live feed on the spot",
-       "entries.forEach((e) => { if (e.subs.size) schedule(e) })" in src)
+       "entries.forEach((e) => { if (e.subs.size) schedule(e) })" in store_src)
 
     # The "gone quiet" threshold is DERIVED from the cadence in force; the two numbers live in
     # different files.
-    ok("the store reports the slowest cadence in force", "slowestMs," in src)
-    bar = Path("web/frontend/src/features/shell/StatusBar.tsx").read_text()
+    ok("the store reports the slowest cadence in force", "slowestMs," in store_src)
+    bar = src("web/frontend/src/features/shell/StatusBar.tsx")
     ok("...and the staleness threshold is derived from it, not a constant",
        "stats.slowestMs * 1.5" in bar and "staleFor > quietAfter" in bar)
 
-    push = Path("web/frontend/src/lib/live/push.ts").read_text()
+    push = src("web/frontend/src/lib/live/push.ts")
     ok("the backstop engages on the daemon's hello, not merely on the socket opening",
        "frame.type === 'dashboard_hello'" in push and "setPushOnline(true)" in push)
     ok("a close releases it", "setPushOnline(false)" in push)

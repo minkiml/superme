@@ -16,9 +16,9 @@ from superme_agent.core import git_layer, kernel_speech, kind_profiles
 from superme_agent.core.permissions import build_can_use_tool, deny_all
 from superme_agent.daemon.services import watchdog
 from superme_agent.harness.policy import MAX_SUBAGENTS, SAFE_TOOLS, SUBAGENT_TOOLS
+from scripts.sources import src
 
 PASS = 0
-ROOT = Path(__file__).resolve().parents[1]
 
 
 def ok(msg: str, cond: bool = True) -> None:
@@ -26,10 +26,6 @@ def ok(msg: str, cond: bool = True) -> None:
     assert cond, f"FAILED: {msg}"
     PASS += 1
     print(f"  ok  {msg}")
-
-
-def src(rel: str) -> str:
-    return (ROOT / rel).read_text()
 
 
 def allowed(result) -> bool:

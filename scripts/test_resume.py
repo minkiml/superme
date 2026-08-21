@@ -12,9 +12,9 @@ from tempfile import TemporaryDirectory
 from superme_agent.core.dev_knowledge import DevKnowledgeService
 from superme_agent.daemon.services.drilldown import ACTION_HOMES, _actions
 from superme_agent.daemon.services.resume import RESUMABLE_PHASES, resume_reason
+from scripts.sources import src
 
 PASS = 0
-ROOT = Path(__file__).resolve().parents[1]
 
 
 def ok(msg: str, cond: bool = True) -> None:
@@ -22,10 +22,6 @@ def ok(msg: str, cond: bool = True) -> None:
     assert cond, f"FAILED: {msg}"
     PASS += 1
     print(f"  ok  {msg}")
-
-
-def src(rel: str) -> str:
-    return (ROOT / rel).read_text()
 
 
 # ── the activation rule ─────────────────────────────────────────────────────────────────────────

@@ -15,12 +15,7 @@ from pathlib import Path
 from superme_agent.core import artifacts as _arts
 from superme_agent.core import kind_profiles as _kp
 from superme_agent.core.dev_knowledge import DevKnowledgeService
-
-
-def _artifacts_source() -> str:
-    """The artifact package's whole source, so an assertion about it survives a re-split."""
-    root = Path("superme_agent/core/artifacts")
-    return "".join(p.read_text() for p in sorted(root.glob("*.py")))
+from scripts.sources import src
 
 _GUIDES = (Path(__file__).resolve().parents[1] / "superme_agent/harness/plugins"
            / "superme-dev/skills/investigate/references")
@@ -34,7 +29,6 @@ def flat(text: str) -> str:
     A guide re-wraps whenever a sentence is edited, so a pin matching across a line break fails on
     an unrelated word change. Structure pins match raw; sentence pins use this."""
     return " ".join(text.split())
-
 
 
 def ok(msg: str, cond: bool = True) -> None:
@@ -213,10 +207,10 @@ ok("…nor deep-diagnosis", fanout_check("deep-diagnosis", 0) is None)
 ok("never asked when nobody COUNTED — None is not zero", fanout_check("audit", None) is None)
 ok("never asked of an unjudged item", fanout_check(None, 0) is None)
 
-_gb = Path("superme_agent/core/gate_briefs.py").read_text()
+_gb = src("superme_agent/core/gate_briefs.py")
 ok("fanned_out is VISIBLE, never greys Approve (a small area may honestly not split)",
    "fanned_out" not in _gb.split('"review": (')[1].split(")")[0])
-_sp = Path("superme_agent/core/spine.py").read_text()
+_sp = src("superme_agent/core/spine.py")
 ok("the count is read from the spine's own subagent rows — unfakeable by the agent",
    "def subagent_count(" in _sp and "e.kind='subagent'" in _sp)
 
@@ -438,7 +432,7 @@ shutil.rmtree(_db.parent, ignore_errors=True)
 
 # Both halves can be right while the JOIN is missing: a payload nobody passes is a column that
 # stays NULL on every real run.
-_runs_src = Path("superme_agent/daemon/services/runs.py").read_text()
+_runs_src = src("superme_agent/daemon/services/runs.py")
 ok("the recorder actually passes the payload through — the join, not just the two ends",
    "payload=_artifact_payload(" in _runs_src)
 ok("…and a spawn with no prompt records no size rather than a zero",
@@ -459,8 +453,8 @@ ok("every family guide says what travels in the brief",
 
 # One gate, one row set: NEITHER side reads a counter of its own, so adding one cannot reach the
 # owner and miss the deputy.
-_dep = Path("superme_agent/daemon/services/deputy.py").read_text()
-_rt = Path("superme_agent/daemon/routers/dev/gates.py").read_text()
+_dep = src("superme_agent/daemon/services/deputy.py")
+_rt = src("superme_agent/daemon/routers/dev/gates.py")
 ok("the deputy inlines no counter of its own — it spreads the shared reader",
    "gate_counters(" in _dep
    and not any(f"_spine.{k}(" in _dep for k in ("subagent_count", "read_hits", "brief_sizes")))
@@ -484,13 +478,13 @@ ok("a read passes, with the count", standards_check(3)["ok"] is True and "3×" i
 ok("standards_read is VISIBLE, never greys Approve — it says the bar was consulted, not cleared",
    "standards_read" not in _gb.split('"review": (')[1].split(")")[0])
 ok("the review skill directs the read", "decisions.md` and `architecture.md`" in
-   Path("superme_agent/harness/plugins/superme-dev/skills/review/SKILL.md").read_text())
+   src("superme_agent/harness/plugins/superme-dev/skills/review/SKILL.md"))
 ok("…and the record has a slot for what departs",
    "## Against our own decisions" in
-   Path("superme_agent/harness/plugins/superme-dev/skills/review/templates/review-template.md").read_text())
+   src("superme_agent/harness/plugins/superme-dev/skills/review/templates/review-template.md"))
 ok("…and the two bars are never reranked against each other",
    "own line under `What to push back on`" in
-   Path("superme_agent/harness/plugins/superme-dev/skills/review/SKILL.md").read_text())
+   src("superme_agent/harness/plugins/superme-dev/skills/review/SKILL.md"))
 
 print("\n— the review gate greps the branch for surviving instrumentation —")
 ok("no branch to read → absent, never 'clean'", instrumentation_check(None) is None)
@@ -504,18 +498,18 @@ ok("the tag pattern needs the DEBUG prefix and hex, so prose never trips it",
    _gl.DEBUG_TAG.findall("[DEBUG-a4f2] and [DEBUG-9bd1]") == ["[DEBUG-a4f2]", "[DEBUG-9bd1]"]
    and _gl.DEBUG_TAG.findall("we should debug this [later]") == [])
 ok("the build skill asks for the tag and the one-grep sweep",
-   all(k in Path("superme_agent/harness/plugins/superme-dev/skills/build/SKILL.md").read_text()
+   all(k in src("superme_agent/harness/plugins/superme-dev/skills/build/SKILL.md")
        for k in ("[DEBUG-", "one grep")))
 
 print("\n— one reader for every counter the item folder cannot answer —")
-_dr = Path("superme_agent/daemon/services/drilldown.py").read_text()
+_dr = src("superme_agent/daemon/services/drilldown.py")
 ok("gate_counters returns every gate_state counter, in one place",
    all(k in _dr.split("def gate_counters")[1].split("def build_payload")[0]
        for k in ("subagents", "guide_reads", "brief_sizes", "debug_tags", "standards_reads")))
 ok("the owner's route spreads it rather than inlining counters",
-   "**drilldown.gate_counters(" in Path("superme_agent/daemon/routers/dev/gates.py").read_text())
+   "**drilldown.gate_counters(" in src("superme_agent/daemon/routers/dev/gates.py"))
 ok("…and so does the deputy, so one gate can never show two row sets",
-   "gate_counters(" in Path("superme_agent/daemon/services/deputy.py").read_text())
+   "gate_counters(" in src("superme_agent/daemon/services/deputy.py"))
 
 print("\n— the shared glossary —")
 _gl_doc = Path("superme_agent/harness/plugins/superme-dev/references/glossary.md")
@@ -527,7 +521,7 @@ ok("…and Flagged ambiguities, including the pair that cost weeks",
 ok("…and an Avoid line on the terms that drift",
    _g.count("*Avoid*:") >= 20)
 ok("the charter points at it (one line — the charter is always loaded)",
-   "glossary.md" in Path("superme_agent/harness/dev-charter.md").read_text())
+   "glossary.md" in src("superme_agent/harness/dev-charter.md"))
 ok("every authoring standard points at it too",
    all("glossary.md" in (Path("superme_agent/harness/plugins/superme-dev/skills") / r).read_text()
        for r in ("forge-skill/references/writing-skills.md",
@@ -624,22 +618,22 @@ ok("…and every derived template resolves through the artifact router",
    all(_arts._template_name("investigation", "research", f.slug) == _kp.family_template(f.slug)
        for f in _kp.RESEARCH_FAMILIES))
 ok("the artifact package routes templates off the registry, with no family list of its own",
-   "for f in _kp.RESEARCH_FAMILIES" in _artifacts_source())
+   "for f in _kp.RESEARCH_FAMILIES" in src("superme_agent/core/artifacts.py"))
 ok("the gate's guide needle is built from the registry too",
-   "family_guide(fam)" in Path("superme_agent/daemon/services/drilldown.py").read_text())
+   "family_guide(fam)" in src("superme_agent/daemon/services/drilldown.py"))
 
 # Agent-facing prose with a different job from the owner-facing blurb, so hand-written and pinned.
-_tools = Path("superme_agent/harness/tools/dev_tools.py").read_text()
+_tools = src("superme_agent/harness/tools/dev_tools.py")
 ok("the triage tool's Literal lists exactly the registry's families",
    all(f'"{f.slug}"' in _tools.split("research_kind: Annotated[Literal[")[1].split("]")[0]
        for f in _kp.RESEARCH_FAMILIES)
    and _tools.split("research_kind: Annotated[Literal[")[1].split("]")[0].count('"')
    == 2 * len(_kp.RESEARCH_FAMILIES))
 ok("the triage skill teaches every family, so none is unpickable in practice",
-   all(f.slug in Path("superme_agent/harness/plugins/superme-dev/skills/triage/SKILL.md").read_text()
+   all(f.slug in src("superme_agent/harness/plugins/superme-dev/skills/triage/SKILL.md")
        for f in _kp.RESEARCH_FAMILIES))
 ok("the registry names both mirrors, so the next person knows where to look",
-   all(k in Path("superme_agent/core/kind_profiles.py").read_text()
+   all(k in src("superme_agent/core/kind_profiles.py")
        for k in ("TriageFacts.research_kind", "triage/SKILL.md")))
 
 
@@ -690,7 +684,7 @@ with tempfile.TemporaryDirectory() as td:
             ok(f"{why} is refused before any folder is written")
 
 print("\n— the launch bar's routes —")
-_rt = Path("superme_agent/daemon/routers/dev/sweeps.py").read_text()
+_rt = src("superme_agent/daemon/routers/dev/sweeps.py")
 ok("only STANDING families get a button — a commissioned one is a 400",
    "is commissioned, not standing" in flat(_rt))
 ok("audit's interest is required, because its question needs one",
@@ -699,10 +693,10 @@ ok("the routes sit under /dev/research/, clear of the LEARNING capture sweep at 
    '"/dev/research/sweeps' in _rt and '"/dev/sweep"' not in _rt)
 ok("…and the glossary records the two live meanings of the word",
    "Sweep — two live meanings" in
-   Path("superme_agent/harness/plugins/superme-dev/references/glossary.md").read_text())
+   src("superme_agent/harness/plugins/superme-dev/references/glossary.md"))
 ok("the first investigate run is fired for the owner, not left for a second click",
    "fire_first_investigate" in _rt
-   and "def fire_first_investigate" in Path("superme_agent/daemon/services/runs.py").read_text())
+   and "def fire_first_investigate" in src("superme_agent/daemon/services/runs.py"))
 
 print(f"\n✓ ALL {PASS} CHECKS PASS")
 
@@ -750,10 +744,10 @@ print("\n— work_kind: the filer proposes, triage confirms —")
 import superme_agent.core.inbox_flow as _flow
 from superme_agent.core.dev_store import DevStore
 
-_ds_src = Path("superme_agent/core/dev_store.py").read_text()
-_fl_src = Path("superme_agent/core/inbox_flow.py").read_text()
-_dt_src = Path("superme_agent/harness/tools/dev_tools.py").read_text()
-_ks_src = Path("superme_agent/core/kernel_speech.py").read_text()
+_ds_src = src("superme_agent/core/dev_store.py")
+_fl_src = src("superme_agent/core/inbox_flow.py")
+_dt_src = src("superme_agent/harness/tools/dev_tools.py")
+_ks_src = src("superme_agent/core/kernel_speech.py")
 
 ok("the column is `work_kind`, never a second `kind` on the same row",
    'ADD COLUMN work_kind TEXT' in _ds_src)
@@ -820,7 +814,7 @@ ok("triage refuses a kind that contradicts the filed one, recording nothing",
 ok("…and the only way past it is the owner's answer, quoted",
    "kind_override_reason" in _dt_src and "item.kind_override" in _dt_src)
 ok("the triage-exit gate says out loud when a proposal was overruled",
-   "(filed as {proposed})" in Path("superme_agent/core/gate_briefs.py").read_text())
+   "(filed as {proposed})" in src("superme_agent/core/gate_briefs.py"))
 _SKILL_HOME = Path("superme_agent/harness/plugins/superme-dev/skills")
 _TRI = _SKILL_HOME / "triage" / "SKILL.md"
 ok("…and the triage skill names the one legal move on a disagreement",
@@ -847,7 +841,7 @@ ok("…and that an empty slot is only honest where the report was",
 ok("triage is told preliminary/ is read-only, so a thin brief is reported not invented",
    "`preliminary/` is read-only" in (_SKILL_HOME / "triage" / "SKILL.md").read_text())
 
-_dt = Path("superme_agent/harness/tools/dev_tools.py").read_text()
+_dt = src("superme_agent/harness/tools/dev_tools.py")
 from superme_agent.harness.tools.dev_tools import _brief_nudge, _BRIEF_FIELDS
 ok("the four brief fields are one list, not four literals",
    _BRIEF_FIELDS == ("background", "discussion", "direction", "constraints"))
@@ -897,12 +891,12 @@ with tempfile.TemporaryDirectory() as td:
     ok("the finding lands in the permanent trace, not only in a return value",
        any((e.get("meta") or {}).get("brief_issues") for e in pushes))
 
-_if = Path("superme_agent/core/inbox_flow.py").read_text()
+_if = src("superme_agent/core/inbox_flow.py")
 ok("the check reads the brief where it now LIVES, not where it was written",
    'preliminary" / "handoff-brief.md"' in _if)
 ok("both push callers surface it — the owner's route and the agent's tool",
    '"brief_issues": wi.get("brief_issues") or []'
-   in Path("superme_agent/daemon/routers/dev/inbox.py").read_text()
+   in src("superme_agent/daemon/routers/dev/inbox.py")
    and "wi.get('brief_issues')" in _dt)
 
 # ── a research run must see the repo's ignored SOURCE ───────────── A negative claim cannot be
@@ -916,7 +910,7 @@ ok("a repo names its ignored source and the config carries it",
 ok("…and a repo that names nothing keeps today's behaviour",
    RepoConfig(id="r", label="", cwd="/tmp").source_ignored == [])
 ok("the YAML key actually reaches the config — declaring the field is not reading it",
-   "source_ignored=spec.get" in Path("superme_agent/core/spine.py").read_text())
+   "source_ignored=spec.get" in src("superme_agent/core/spine.py"))
 
 _rc = RepoConfig(id="probe", label="", cwd="/tmp",
                  source_ignored=["scripts/", "/etc/passwd", "../up", "a/b"])
@@ -968,7 +962,7 @@ with tempfile.TemporaryDirectory() as td:
     ok("…proven by removing a copy of the mirrored tree outright", True)
 
 ok("the mirror runs only on a FRESH tree — a reused one already has it, read-only",
-   "if not rec.get(\"reused\"):" in Path("superme_agent/daemon/services/git_ops.py").read_text())
+   "if not rec.get(\"reused\"):" in src("superme_agent/daemon/services/git_ops.py"))
 
 # ── a stopped run must not lose its correction ──────────────────── A resumed item re-firing the
 # plain prompt reads its own finished transcript and no-ops.
@@ -989,13 +983,13 @@ with tempfile.TemporaryDirectory() as td:
     ok("…and stops being pending the moment the deputy says something else",
        _dep.pending_send_back(d) is None)
 
-_rn = Path("superme_agent/daemon/services/runs.py").read_text()
+_rn = src("superme_agent/daemon/services/runs.py")
 ok("the feedback firer swaps in the item's own cwd, like every phase runner already did",
    "ensure_scratch_worktree" in _rn.split("def fire_phase_feedback")[1].split("def ")[0])
 ok("…and the resolved tree becomes the run's own cwd, not the repo root",
    "replace(ctx, cwd=repo_dir)" in _rn.split("def fire_phase_feedback")[1].split("def ")[0])
 
-_rs = Path("superme_agent/daemon/services/resume.py").read_text()
+_rs = src("superme_agent/daemon/services/resume.py")
 ok("resume routes a pending send-back through the FEEDBACK firer, not the plain phase firer",
    "pending_send_back" in _rs and "fire_phase_feedback" in _rs)
 ok("…and falls back to the plain re-run if that firer will not start — never a dead button",
@@ -1005,7 +999,7 @@ _cli_stderr("Error: unknown option --nope")
 ok("the CLI's stderr is captured now that a callback is registered",
    "unknown option" in cli_stderr_tail())
 ok("…and the SDK is actually asked for it — no callback, no pipe",
-   "stderr=_cli_stderr" in Path("superme_agent/core/agent_service.py").read_text())
+   "stderr=_cli_stderr" in src("superme_agent/core/agent_service.py"))
 _fault = _f.classify(exc=RuntimeError("Command failed with exit code 1"))
 ok("a launch crash now REPORTS the cause instead of pointing at a stderr nobody kept",
    "unknown option" in _fault.reason)
@@ -1194,7 +1188,7 @@ with tempfile.TemporaryDirectory() as _td:
     ok("an unknown item is refused, never a crash the run cannot report",
        bool(_miss.get("is_error")))
 
-_REVIEW_SKILL = Path("superme_agent/harness/plugins/superme-dev/skills/review/SKILL.md").read_text()
+_REVIEW_SKILL = src("superme_agent/harness/plugins/superme-dev/skills/review/SKILL.md")
 ok("the review skill states the sort that decides which calls reach the owner at all",
    "Sort every open call before writing the block" in _REVIEW_SKILL)
 for _reason in _arts.RESERVED_REASONS:
@@ -1205,7 +1199,7 @@ ok("the skill forbids the shape the parser rejects: a default and a question tog
 ok("investigate is told to settle what reading settles — limb 1 is the only one that must never "
    "reach the owner",
    "Settle what reading can settle" in
-   Path("superme_agent/harness/plugins/superme-dev/skills/investigate/SKILL.md").read_text())
+   src("superme_agent/harness/plugins/superme-dev/skills/investigate/SKILL.md"))
 
 print("\n— the review gate: the owner sees what waits on them, and Approve stays live —")
 from superme_agent.core import gate_briefs as _gb                         # noqa: E402
@@ -1240,7 +1234,7 @@ ok("a MALFORMED ruling field fails the row — the owner cannot answer terms tha
 ok("`owner_rulings` is in the review gate's blocking set, so the malformed case greys Approve",
    "owner_rulings" in _gb._BLOCKING["review"])
 
-_DEPUTY = Path("superme_agent/core/kernel_speech.py").read_text()
+_DEPUTY = src("superme_agent/core/kernel_speech.py")
 ok("the deputy is told an outstanding owner ruling is the designed resting state, not a gap — "
    "without this it send_backs to clear a question it may not answer, forever",
    "designed resting state, not a gap" in _DEPUTY)
@@ -1380,7 +1374,7 @@ ok("…which is not silence: the judgement is named, so the owner argues with th
    and "not the run" in _fo("housekeeping", 0, fanout="bounded")["detail"])
 ok("the two pre-existing exemptions survive — a family that never splits, and a count nobody took",
    _fo("study", 0) is None and _fo("housekeeping", None) is None)
-_TRI = Path("superme_agent/harness/plugins/superme-dev/skills/triage/SKILL.md").read_text()
+_TRI = src("superme_agent/harness/plugins/superme-dev/skills/triage/SKILL.md")
 ok("triage is told the field exists and that prose is not a carrier",
    'Set `fanout: "bounded"`' in _TRI and "A judgement that lives in prose is one no" in _TRI)
 ok("…and what stating it in prose alone actually costs",
@@ -1425,7 +1419,7 @@ for _ph in ("triage", "investigate", "review"):
        "what they already answered", "read_decisions" in _dt.TOOL_SCOPES[_ph])
 ok("…and policy-allowed: a denial here does not stop the run, it makes it re-ask a settled question",
    "mcp__dev__read_decisions" in _pol.SAFE_TOOLS)
-_INV = Path("superme_agent/harness/plugins/superme-dev/skills/investigate/SKILL.md").read_text()
+_INV = src("superme_agent/harness/plugins/superme-dev/skills/investigate/SKILL.md")
 ok("investigate is told to check the ledger BEFORE passing any call up",
    "Before you pass ANY call up, `read_decisions`" in _INV)
 ok("review is told to check it before writing a question",
@@ -1442,15 +1436,14 @@ ok("review is told that most rulings establish no rule, so an empty line reads a
 ok("…and what an over-broad rule actually costs, since 'be careful' changes no behaviour",
    "silently suppresses questions that should have been asked" in _REVIEW_SKILL)
 ok("triage reads it when scoping — a settled subject makes an item smaller, sometimes moot",
-   "read_decisions" in Path(
-       "superme_agent/harness/plugins/superme-dev/skills/triage/SKILL.md").read_text())
+   "read_decisions" in src("superme_agent/harness/plugins/superme-dev/skills/triage/SKILL.md"))
 
-_D7 = Path("superme_agent/harness/tools/dev_tools.py").read_text()
+_D7 = src("superme_agent/harness/tools/dev_tools.py")
 ok("D7's refusal now says why a kernel-written decisions entry is not a violation of it — "
    "otherwise the next reader meets a ledger entry from a research item and calls it a bug",
    "immutable HISTORY, not current-state truth" in _D7)
 ok("…and that no agent is in that write path", "THE KERNEL writes" in _D7)
-_GATES = Path("superme_agent/daemon/services/gates.py").read_text()
+_GATES = src("superme_agent/daemon/services/gates.py")
 ok("the approve path is where a rule is recorded, beside the itemize it feeds",
    "decision_ledger" in _GATES)
 ok("…and only an OWNER approve records one — the owner ruled on the question, but an AGENT wrote "

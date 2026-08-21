@@ -15,6 +15,7 @@ from types import SimpleNamespace
 
 from superme_agent.core.dev_knowledge import DevKnowledgeService
 from superme_agent.core import gate_briefs as GB
+from scripts.sources import src
 
 PASS = 0
 
@@ -37,9 +38,9 @@ def test_f0_dangling_resume() -> None:
     ok("dangling resume (sid, no row) → None", _live_resume("sess-1", None) is None)
     ok("live resume (sid + row) → the sid", _live_resume("sess-1", {"id": "sess-1"}) == "sess-1")
     ok("no resume → None", _live_resume(None, None) is None)
-    src = _norm(Path("superme_agent/daemon/routers/ws.py").read_text())
+    ws_src = _norm(src("superme_agent/daemon/routers/ws.py"))
     ok("ws turn path wires the guard",
-       "turn_resume = _live_resume(msg.resume, resumed)" in src)
+       "turn_resume = _live_resume(msg.resume, resumed)" in ws_src)
 
 
 # ------------------------------------------------------------------ triaged_at stamp
@@ -144,7 +145,7 @@ def test_f2_merge_gate(tmp: Path) -> None:
     finally:
         GR.contexts = real_contexts
 
-    fe = _norm(Path("web/frontend/src/features/dev/WorkItemModal.tsx").read_text())
+    fe = _norm(src("web/frontend/src/features/dev/WorkItemModal.tsx"))
     # Activation is computed once, SERVER-SIDE, so the component only READS it. The removed button
     # skipped Approve's locks.
     ok("the FE never re-derives the landing rule",
@@ -230,7 +231,7 @@ def test_f8_background_mcp(tmp: Path) -> None:
             setattr(R, n, v)
 
     # The loop runners keep their own mount — this batch changed plan/resolve only.
-    loop_src = Path("superme_agent/daemon/services/loop.py").read_text()
+    loop_src = src("superme_agent/daemon/services/loop.py")
     ok("loop runners still mount dev MCP", loop_src.count("**_dev_mcp(") >= 2)
 
 

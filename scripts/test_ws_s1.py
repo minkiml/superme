@@ -14,6 +14,7 @@ from superme_agent.core import kind_profiles as kp
 from superme_agent.core import status_router as sr
 from superme_agent.core.dev_knowledge import DevKnowledgeService
 from superme_agent.core.dev_store import DevStore
+from scripts.sources import src
 
 PASS = 0
 
@@ -50,7 +51,7 @@ def test_kind_profiles() -> None:
     ok("spine phases are shared by every kind",
        all(set(("triage", "review", "close")) <= set(p.phases)
            for p in kp.KIND_PROFILES.values()))
-    gsrc = Path("superme_agent/daemon/services/gates.py").read_text()
+    gsrc = src("superme_agent/daemon/services/gates.py")
     ok("the advance guard asks for plan.md only from a kind that HAS a plan phase",
        'if nxt in ("build", "investigate") and "plan" in profile.phases:' in gsrc)
     ok("plan belongs to the kinds that VET, and to no others",
@@ -500,7 +501,7 @@ def test_deputy(tmp: Path) -> None:
        and dsvc.deputy_gate_for({"phase": "close"}) is None)
     # ...and a phase the deputy does NOT judge is still advanced mechanically, or an autopilot
     # item strands with no self-driver.
-    gsrc = Path("superme_agent/daemon/services/gates.py").read_text()
+    gsrc = src("superme_agent/daemon/services/gates.py")
     ok("a non-gate phase falls THROUGH the deputy branch to the mechanical advance",
        "if deputy_svc.deputy_gate_for(item) is not None:" in gsrc
        and "if deputy_svc.deputy_gate_for(item) is None:\n                return" not in gsrc)

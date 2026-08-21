@@ -12,9 +12,9 @@ from pathlib import Path
 from superme_agent.core import artifacts as _arts
 from superme_agent.core import knowledge_delta as _kd
 from superme_agent.core import verification_library as _vl
+from scripts.sources import src
 
 PASS = 0
-ROOT = Path(__file__).resolve().parents[1]
 
 ENTRY = """### older-ledgers-read
 - proves: a ledger written by an older version of the tool still reads without migration
@@ -55,10 +55,6 @@ def ok(msg: str, cond: bool = True) -> None:
     assert cond, f"FAILED: {msg}"
     PASS += 1
     print(f"  ok  {msg}")
-
-
-def src(rel: str) -> str:
-    return (ROOT / rel).read_text()
 
 
 def _root() -> Path:

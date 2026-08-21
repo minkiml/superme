@@ -11,6 +11,7 @@ import tempfile
 from pathlib import Path
 
 from superme_agent.core import artifacts as _arts
+from scripts.sources import src
 
 PASS = 0
 ROOT = Path(__file__).resolve().parents[1]
@@ -50,10 +51,6 @@ def ok(msg: str, cond: bool = True) -> None:
     assert cond, f"FAILED: {msg}"
     PASS += 1
     print(f"  ok  {msg}")
-
-
-def src(rel: str) -> str:
-    return (ROOT / rel).read_text()
 
 
 def _item(plan: str = PLAN) -> Path:
@@ -186,7 +183,6 @@ def test_an_empty_block_is_dropped_rather_than_printed():
     only_assumed = _report(item, assumptions="- nobody scripts the old output (Agent)")
     ok("assumptions alone still get the heading they live under",
        "## Decisions & Assumptions" in only_assumed and "**Decisions:**" not in only_assumed)
-
 
 
 # ── the shape every user-facing report shares ───────────────────────────────────────────────────
