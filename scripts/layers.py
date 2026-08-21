@@ -1,7 +1,6 @@
 """Import-layering gate: the package stays acyclic and no area reaches upward.
 
-Module-level imports only: an import deferred inside a function does not couple two modules
-at load time.
+Module-level imports only — one deferred inside a function couples nothing at load time.
 
     python -m scripts.layers            # report and gate
     python -m scripts.layers --graph    # also print every cross-area edge
@@ -33,8 +32,7 @@ PINNED = {
     "superme_agent.core.permissions → superme_agent.harness.policy",
 }
 
-# The tier the rest of core is defined in terms of, read off the folder so a new module
-# joins the lint by living there. Importing nothing else in core is what keeps it a floor.
+# The floor the rest of core stands on, read off the folder so a new module joins by living there.
 VOCAB_PKG = "superme_agent.core.vocab"
 
 
@@ -71,7 +69,7 @@ def graph() -> tuple[dict[str, set[str]], set[str]]:
                 base = _resolve(me, is_pkg, node.level, node.module) if node.level else (node.module or "")
                 if base.startswith("superme_agent"):
                     # `from .pkg import x` binds a submodule when one exists, else a symbol
-                    # off `pkg/__init__` — only the latter couples them.
+                    # — only the latter couples them.
                     for a in node.names:
                         targets.append(f"{base}.{a.name}" if f"{base}.{a.name}" in mods else base)
             elif isinstance(node, ast.Import):
