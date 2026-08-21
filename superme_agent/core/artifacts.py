@@ -876,8 +876,8 @@ _PROPOSAL_FIELDS = {
     # The rule the answer establishes, if any. Written WITH `Answer`, never before it. Empty is
     # the normal case.
     "Rule": "rule",
-    # The free-prose predecessor of `Question`, kept so an older line lands in its own key. It
-    # gates nothing.
+    # `Depends-on` is free prose and gates nothing. It gets its own key so it cannot run on into
+    # `Why now`.
     "Depends-on": "legacy_depends_on",
 }
 _PROPOSAL_FIELD = re.compile(r"^\s*\*\*(" + "|".join(_PROPOSAL_FIELDS) + r"):\*\*\s*(.*)$")
@@ -2149,10 +2149,6 @@ def evidence_status(item_dir: Path, repo_dir: Path | None, *, scope_to_plan: boo
     if stale:
         return {"status": "stale", "entries": len(entries), "stale_checks": stale, **extra}
     return {"status": "passed", "entries": len(entries), **extra}
-
-
-# `author_readiness` and `readiness.md` are RETIRED: a mechanical user doc saying what `report-
-# review.md` already said.
 
 
 # cycle reports

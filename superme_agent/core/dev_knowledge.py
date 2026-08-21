@@ -513,8 +513,7 @@ class DevKnowledgeService:
             if key in seen:
                 raise ValueError(f"duplicate item key {key!r}")
             seen.add(key)
-            # No default kind: an itemizer usually KNOWS which it is, and used to have no way to
-            # say so.
+            # No default kind: an itemizer usually KNOWS which it is, so it is asked.
             item_kind = str(it.get("kind") or "").strip()
             if not item_kind:
                 raise ValueError(f"item {key!r} is missing a `kind` (implementation | research)")

@@ -808,8 +808,8 @@ class SystemSpine:
             return cur.rowcount > 0
 
     def session_kind(self, session_id: str | None) -> dict | None:
-        """The stored (kind, subject_run_id), or None. `kind` is NULL for pre-existing
-        sessions — the caller derives it."""
+        """The stored (kind, subject_run_id), or None. An unstamped session has a NULL `kind`, and the
+        caller derives it."""
         if not session_id:
             return None
         with self._conn() as c:

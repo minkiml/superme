@@ -68,8 +68,8 @@ def fanout_check(family: str | None, subagents: int | None,
     if family not in FANOUT_FAMILIES or subagents is None:
         return None
     if item_fanout({"fanout": fanout}) == "bounded":
-        # Not silence: the judgement stays on the gate. What is gone is a red row for a compliant
-        # run.
+        # Not silence: the judgement stays on the gate, but a run that followed its brief gets no
+        # red row.
         return {"criterion": "fanned_out", "ok": True,
                 "detail": (f"triage judged this surface bounded, so no split was expected — "
                            f"investigate spawned {subagents}. Disagree with the sizing, not the run.")}
