@@ -7,10 +7,10 @@ Run: PYTHONPATH=. python -m scripts.test_router
 """
 
 import re
-from pathlib import Path
+
+from sources import src
 
 PASS = 0
-SRC = Path("web/frontend/src")
 
 
 def ok(msg: str, cond: bool = True) -> None:
@@ -160,7 +160,7 @@ def test_slice5_grammar() -> None:
     # and an overlay belongs over where you are.
     ok("no tile is a PATH — a drill-in must not replace the surface it opens over",
        all(build(parse(f"/stats/{t}")) == "/" for t in STATS_TILES))
-    app_src = (SRC / "App.tsx").read_text()
+    app_src = src("web/frontend/src/App.tsx")
     ok("...they are read from `?stats=` instead", "useParam('stats')" in app_src)
     ok("...and closing is just dropping the param", "setParam('stats', null)" in app_src)
 
@@ -170,13 +170,13 @@ def test_slice5_grammar() -> None:
        parse("/repo/x/dev/workspace") == ("dev", "x", "workspace"))
     ok("...and the bare `/dev` is still the capture queue, so the landing pane did not move",
        build(parse("/repo/x/dev")) == "/repo/x/dev" and parse("/repo/x/dev")[2] == "pipeline")
-    dash = (SRC / "features/dev/DevDashboard.tsx").read_text()
+    dash = src("web/frontend/src/features/dev/DevDashboard.tsx")
     ok("the dashboard derives the pane from the route rather than holding it",
        "const [zoom, setZoom] = useState" not in dash and "route.tab === 'workspace'" in dash)
     ok("an open item implies the board, so closing a drilldown lands on the card's pane",
        "route.name === 'item' ? 'workspace'" in dash)
 
-    ws = (SRC / "features/dev/DevWorkspace.tsx").read_text()
+    ws = src("web/frontend/src/features/dev/DevWorkspace.tsx")
     ok("both panes light the ONE Pipeline rail entry",
        "const pipelineTab = tab === 'pipeline' || tab === 'workspace'" in ws)
 
@@ -187,7 +187,7 @@ def test_config_overlay() -> None:
     print("System config — a query overlay, and the addresses it inherited")
     ok("no section is a PATH — the popup must not replace the surface it opens over",
        all(build(parse(f"/config/{c}")) == "/" for c in CONFIG_SECTIONS))
-    app_src = (SRC / "App.tsx").read_text()
+    app_src = src("web/frontend/src/App.tsx")
     ok("...it is read from `?config=` instead", "useParam('config')" in app_src)
 
     # An old link must land on the same CONTENT, so arrival rewrites the address in place.
@@ -202,7 +202,7 @@ def test_config_overlay() -> None:
        all(build(parse(f"/repo/x/dev/{t}")) == "/repo/x/dev" for t in LEGACY_DEV_TAB))
 
     # An addressable section with no pane is a compile error, which stops the two lists drifting.
-    cfg = (SRC / "features/config/SystemConfig.tsx").read_text()
+    cfg = src("web/frontend/src/features/config/SystemConfig.tsx")
     ok("the pane registry is exhaustive over the section vocabulary",
        "Record<ConfigSection, (repo: OrbitRepo, label: string) => ReactNode>" in cfg)
 
@@ -212,30 +212,30 @@ def test_port_matches_source() -> None:
     the canonical-form rule against the source, so a change there fails HERE rather than silently
     leaving this suite testing a fiction."""
     print("the port mirrors the source (else this suite tests a fiction)")
-    src = (SRC / "lib/router/index.ts").read_text()
-    item_tabs_src = re.search(r"export const ITEM_TABS = \[(.*?)\] as const", src, re.S).group(1)
+    router_src = src("web/frontend/src/lib/router/index.ts")
+    item_tabs_src = re.search(r"export const ITEM_TABS = \[(.*?)\] as const", router_src, re.S).group(1)
     ok("ITEM_TABS matches",
        [x.strip().strip("'") for x in item_tabs_src.split(",") if x.strip()] == ITEM_TABS)
-    tabs = re.search(r"export const DEV_TABS = \[(.*?)\] as const", src, re.S).group(1)
-    surfaces = re.search(r"export const SURFACES = \[(.*?)\] as const", src, re.S).group(1)
+    tabs = re.search(r"export const DEV_TABS = \[(.*?)\] as const", router_src, re.S).group(1)
+    surfaces = re.search(r"export const SURFACES = \[(.*?)\] as const", router_src, re.S).group(1)
     ok("DEV_TABS matches", [t.strip().strip("'") for t in tabs.split(",") if t.strip()] == DEV_TABS)
     ok("SURFACES matches", [t.strip().strip("'") for t in surfaces.split(",") if t.strip()] == SURFACES)
-    sections = re.search(r"export const CONFIG_SECTIONS = \[(.*?)\] as const", src, re.S).group(1)
+    sections = re.search(r"export const CONFIG_SECTIONS = \[(.*?)\] as const", router_src, re.S).group(1)
     ok("CONFIG_SECTIONS matches",
        [t.strip().strip("'") for t in sections.split(",") if t.strip()] == CONFIG_SECTIONS)
-    leg = re.search(r"const LEGACY_SECTION: Record<string, ConfigSection> = \{(.*?)\}", src, re.S).group(1)
+    leg = re.search(r"const LEGACY_SECTION: Record<string, ConfigSection> = \{(.*?)\}", router_src, re.S).group(1)
     ok("LEGACY_SECTION matches",
        dict(re.findall(r"'([^']+)':\s*'([^']+)'", leg)) == LEGACY_SECTION)
-    legt = re.search(r"const LEGACY_DEV_TAB: Record<string, ConfigSection> = \{(.*?)\}", src, re.S).group(1)
+    legt = re.search(r"const LEGACY_DEV_TAB: Record<string, ConfigSection> = \{(.*?)\}", router_src, re.S).group(1)
     ok("LEGACY_DEV_TAB matches",
        dict(re.findall(r"(\w+):\s*'([^']+)'", legt)) == LEGACY_DEV_TAB)
-    tiles = re.search(r"export const STATS_TILES = \[(.*?)\] as const", src, re.S).group(1)
+    tiles = re.search(r"export const STATS_TILES = \[(.*?)\] as const", router_src, re.S).group(1)
     ok("STATS_TILES matches", [t.strip().strip("'") for t in tiles.split(",") if t.strip()] == STATS_TILES)
-    phases = re.search(r"export const PHASES = \[(.*?)\] as const", src, re.S).group(1)
+    phases = re.search(r"export const PHASES = \[(.*?)\] as const", router_src, re.S).group(1)
     ok("PHASES matches", [t.strip().strip("'") for t in phases.split(",") if t.strip()] == PHASES)
     # Reports' subs ARE the phases, spread from one list, so adding a phase never means adding it
     # twice.
-    subs = re.search(r"export const ITEM_SUBS = \[(.*?)\] as const", src, re.S).group(1)
+    subs = re.search(r"export const ITEM_SUBS = \[(.*?)\] as const", router_src, re.S).group(1)
     ok("ITEM_SUBS spreads PHASES rather than re-listing them",
        "...PHASES" in subs
        and [x.strip().strip("'") for x in subs.split(",") if x.strip() and "PHASES" not in x]
@@ -243,29 +243,29 @@ def test_port_matches_source() -> None:
 
     # Forked at the root, so the tab carries none of the cockpit's polling. Addressable and
     # separate are independent decisions.
-    entry = (SRC / "main.tsx").read_text()
+    entry = src("web/frontend/src/main.tsx")
     ok("the PR page still forks ABOVE App rather than becoming a route inside the shell",
        "route.name === 'pr' ? <PrPage" in entry)
     ok("...and a PR tab parked on the old `?repo=&pr=` form is rewritten in place, not broken",
        "legacyRepo && legacyItem" in entry and "replaceState" in entry)
     ok("`pipeline` is still the bare-`/dev` canonical form",
-       "r.tab === 'pipeline' ? '' :" in src)
+       "r.tab === 'pipeline' ? '' :" in router_src)
     ok("canonicalisation runs on EVERY navigation, not just at mount",
-       "if (canonical !== window.location.pathname)" in src and "function refresh()" in src)
+       "if (canonical !== window.location.pathname)" in router_src and "function refresh()" in router_src)
     ok("...and preserves the query string (the chat binding lives there — §3.1)",
-       "canonical + window.location.search" in src)
+       "canonical + window.location.search" in router_src)
 
 
 def test_old_state_is_gone() -> None:
     print("§6.3 invariant — one writer per row: the replaced state is DELETED, not shadowed")
-    app = (SRC / "App.tsx").read_text()
+    app = src("web/frontend/src/App.tsx")
     ok("`active` is no longer component state", "useState('nexus')" not in app)
     ok("`dest` is no longer component state", "setDest(" not in app and "const [dest" not in app)
     ok("`selectedId` is gone — the inspector is the `/repo/:id` address",
        "setSelectedId(" not in app)
     ok("App reads the route instead", "const route = useRoute()" in app)
 
-    ws = (SRC / "features/dev/DevWorkspace.tsx").read_text()
+    ws = src("web/frontend/src/features/dev/DevWorkspace.tsx")
     ok("the dev tab is a prop from the route, not local state",
        "const [tab, setTab]" not in ws and "onTabChange" in ws)
 
@@ -276,11 +276,11 @@ def test_old_state_is_gone() -> None:
     ok("gotoItem navigates straight to the item's address",
        "navigate({ name: 'item', repoId, itemId: hold.id, tab: null, sub: null })" in app)
 
-    board = (SRC / "features/dev/DevDashboard.tsx").read_text()
+    board = src("web/frontend/src/features/dev/DevDashboard.tsx")
     ok("the board reads the open item off the route", "const openId = route.name === 'item'" in board)
     ok("...and holds no `reviewId` of its own", "setReviewId" not in board and "const [reviewId" not in board)
 
-    modal = (SRC / "features/dev/WorkItemModal.tsx").read_text()
+    modal = src("web/frontend/src/features/dev/WorkItemModal.tsx")
     ok("the tab selection is the path, not state",
        "const [phaseView" not in modal and "const [tab," not in modal
        and "route.name === 'item' && route.tab" in modal)
@@ -292,7 +292,7 @@ def test_old_state_is_gone() -> None:
        "const [drill, setDrill]" not in app and "const drill = useParam('stats')" in app)
 
     # The last local state, deliberately: the address needs a route that does not exist yet.
-    act = (SRC / "features/activity/GlobalActivity.tsx").read_text()
+    act = src("web/frontend/src/features/activity/GlobalActivity.tsx")
     ok("`openRun` is still local — /run/:runId is blocked on a per-run GET (see §12.3)",
        "const [openRun, setOpenRun]" in act)
 

@@ -15,5 +15,8 @@ def src(rel: str) -> str:
         return path.read_text()
     package = path.with_suffix("")
     if package.is_dir():
-        return "".join(p.read_text() for p in sorted(package.rglob("*.py")))
+        parts = [p.read_text() for p in sorted(package.rglob(f"*{path.suffix}"))]
+        if not parts:
+            raise FileNotFoundError(f"{package} holds no {path.suffix} — is the extension right?")
+        return "".join(parts)
     raise FileNotFoundError(f"no module at {rel}")

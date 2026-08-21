@@ -1698,9 +1698,10 @@ def test_pr_gate_and_page(tmp: Path) -> None:
     # --- the surfaces the conflict and review paths needed ------------------------- The refusal
     # names a control, so that control must exist.
     modal = src("web/frontend/src/features/dev/WorkItemModal.tsx")
+    api_imports = "".join(re.findall(r"import[\s\S]*?from '@/lib/api'", modal))
     ok("the park refusal's own escape hatch is reachable — a component calls resolveWorkItemGit",
        "resolveWorkItemGit(it.id, contextId)" in modal
-       and "resolveWorkItemGit," in modal.split("} from '@/lib/api'", 1)[0])
+       and "resolveWorkItemGit," in api_imports)
     # Always rendered, disabled with the reason: an absent button reads as a missing feature. The
     # gate itself is unchanged.
     ok("...always rendered, and live only when the branch is behind (the one conflict-possible state)",
