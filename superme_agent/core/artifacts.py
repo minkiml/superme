@@ -1,17 +1,7 @@
-"""Artifact machinery — one template plus a deterministic scaffolder per artifact kind.
+"""Artifact machinery — one template plus a deterministic scaffolder per kind.
 
-THE STANDARD: agent supplies content, code supplies form.
-
-- Code owns frontmatter, section order, ids and timestamps. The agent fills `<fill:…>` slots.
-- A light SELF-CHECK runs at the phase gate that CONSUMES the doc, never at write time.
-- Reject with instructions and no state change: nothing is persisted on failure.
-- Claims are verified against GROUND TRUTH, so a doc cannot acquire a dead pointer at accept.
-- Evidence goes STALE on later repo edits. "Validated" is earned, never asserted.
-- Append-only, atomic writes for checkpoints.
-
-Inside a work-item folder: `artifacts/` holds the agent-facing spine docs and the per-cycle
-build⟷vet reports; `reports/` holds the owner-facing projection of each phase; `checkpoints/`
-holds continuity.
+THE STANDARD: agent supplies content, code supplies form. Code owns frontmatter, section order,
+ids and timestamps; the agent fills `<fill:…>` slots. A self-check runs at the CONSUMING gate.
 """
 
 import hashlib
@@ -32,32 +22,25 @@ from .kind_profiles import get_profile
 log = logging.getLogger(__name__)
 
 FILL = re.compile(r"<fill:[^>]*>")
-# An artifact's own leading frontmatter, and the investigation-family stamp inside it. Read by
-# `self_check` so a file is judged against the template that produced it.
+# An artifact's own frontmatter, and the family stamp inside it. `self_check` judges a file
+# against its own template.
 _FM_BLOCK = re.compile(r"\A---\n(.*?)\n---\n", re.DOTALL)
 _FM_RESEARCH_KIND = re.compile(r"(?m)^research_kind:\s*(\S+)\s*$")
 
 
-# The template FILE under the authoring skill is the single source: body, section order and the
-# required-sections check all derive from it. A section with a `<fill:…>` slot must be FILLED;
-# a comment-only one must merely EXIST.
+# The template FILE is the single source. A `<fill:…>` slot must be FILLED; a comment-only section
+# must merely EXIST.
 
 _TEMPLATE_HOMES = {
     "brief":         ("triage", "brief-template.md"),
     "plan":          ("plan", "plan-template.md"),
     "plan-research": ("plan", "plan-research-template.md"),
     "build-vet":     ("build", "build-vet-template.md"),
-    # The UNJUDGED shape — a research item whose family nobody named (every item minted before the
-    # field existed is in that position). Deliberately family-neutral, and deliberately left alone:
-    # `self_check` judges a base-shaped file against this spec, so adding a section here would
-    # retro-fail records already written correctly.
+    # The UNJUDGED shape — a research item whose family nobody named. Adding a section here would
+    # retro-fail correct records.
     "investigation": ("investigate", "investigation-template.md"),
-    # One shape per family. NOT variations on a theme: each family answers a different question,
-    # so each owes a different record. What they share is `## Follow-up work` — a research item's
-    # job is the investigation AND the work it implies.
-    #
-    # Read from the REGISTRY, never a literal list: a second copy is a family that silently
-    # scaffolds the base shape because somebody added a row and missed this line.
+    # One shape per family: each answers a different question, so each owes a different record.
+    # Read from the REGISTRY.
     **{_kp.family_template(f.slug): ("investigate", f"{_kp.family_template(f.slug)}-template.md")
        for f in _kp.RESEARCH_FAMILIES},
     "review":          ("review", "review-template.md"),
@@ -70,8 +53,8 @@ _template_cache: dict[str, str] = {}
 
 
 def skill_template(name: str) -> str:
-    """The template body for `name`, read from its authoring skill's `templates/` folder. Cached
-    for the process lifetime (templates change only with a deploy)."""
+    """The template body for `name`, from its authoring skill's `templates/`. Cached for
+    the process lifetime."""
     if name not in _template_cache:
         from ..paths import DEV_PLUGIN_DIR
         skill, fname = _TEMPLATE_HOMES[name]
@@ -81,12 +64,8 @@ def skill_template(name: str) -> str:
 
 
 def template_section_spec(name: str) -> list[tuple[str, bool]]:
-    """[(heading, must_be_filled)] per `## ` heading, derived from the template itself — the
-    template IS the required-sections list (no second list anywhere).
-
-    Fill detection runs over each section's WHOLE body, not line by line: a `<fill:…>` slot wrapped
-    across two lines matches neither line on its own, and a section whose only slot was wrapped
-    would silently read as optional — the template would stop demanding the content it asks for."""
+    """[(heading, must_be_filled)] per `## ` heading — the template IS the
+    required-sections list. Fill detection reads each whole body, since a slot can wrap."""
     spec: list[tuple[str, bool]] = []
     cur: str | None = None
     body: list[str] = []
@@ -121,22 +100,19 @@ _HANDOFF = """# Handoff brief — {title}
 <fill:constraints, tried-but-failed, out-of-scope>
 """
 
-# kind → (template, required sections for the self-check). `brief` + `plan` are skill-owned
-# templates (sections derived); `handoff-brief` sections are ALL optional (D5: capture friction
-# kills itemizing) — its check only demands one non-empty section.
+# kind → (template, required sections). `handoff-brief` sections are ALL optional — capture
+# friction kills itemizing.
 _SPECS: dict[str, dict] = {
     "brief":       {"file": "brief.md",      "required": (), "reader": "agent"},  # derived from template
     "plan":        {"file": "plan.md",       "required": (), "reader": "both"},  # per item-kind, resolved below
     # The research work-segment record — agent-facing, the counterpart of build-vet-<n>.md.
     # Sections derived from its template file.
     "investigation": {"file": "investigation.md", "required": (), "reader": "agent"},
-    # Review's own agent-facing record. Without one its owner report had grown five machine-read
-    # fields nobody reading it wanted. This holds the record; the report holds the judgment.
+    # Review's own agent-facing record. This holds the record; the report holds the judgment.
     "review":        {"file": "review.md",        "required": (), "reader": "agent"},
     "handoff-brief": {"file": "handoff-brief.md", "required": (), "reader": "agent"},
 }
-# Legacy plan shapes, READ-ONLY: a plan is judged against the shape it was authored under, and
-# these die with their items.
+# Legacy plan shapes, READ-ONLY: a plan is judged against the shape it was authored under.
 _PLAN_REQUIRED_LEGACY = ("Approach", "Tasks", "Validation criteria")
 _PLAN_FEED_SECTIONS = ("Touches", "Behavior preview", "Risks & assumptions")
 _PLAN_REQUIRED_V1 = ("Approach", "Tasks", "Inner checks", "Vet plan")
@@ -148,12 +124,8 @@ ARTIFACT_KINDS = tuple(_SPECS)
 
 def _template_name(artifact: str, item_kind: str | None,
                    research_kind: str | None = None) -> str | None:
-    """The skill-template name for a template-file-backed artifact kind, else None (embedded).
-
-    `research_kind` is the investigation family (kind_profiles.RESEARCH_KINDS) and EVERY family has
-    its own shape — the mapping is the slug itself, so adding a family is adding a template file and
-    an enum entry, never a branch here. An unjudged item passes None and gets the base, which is the
-    honest fallback: nobody picked a family, so nobody picked a shape either."""
+    """The skill-template name for a template-backed kind, else None. The family slug IS
+    the mapping; an unjudged item gets the base."""
     if artifact == "plan":
         return "plan-research" if item_kind == "research" else "plan"
     if artifact == "review":
@@ -191,10 +163,7 @@ def artifact_file(artifact: str) -> str:
     return _SPECS[artifact]["file"]
 
 
-# The `reader:` LABEL (audit §5): who each artifact is designed for — `user` | `agent` | `both`.
-# A label, never a constraint: stamped into scaffolded frontmatter, surfaced as a chip in artifact
-# views (user-facing docs prominent, agent plumbing collapsed). Non-scaffolded kinds included so
-# routes can label by filename.
+# The `reader:` LABEL — who each artifact is designed for. A label, never a constraint.
 ARTIFACT_READERS: dict[str, str] = {
     **{k: s["reader"] for k, s in _SPECS.items()},
     "prd": "both", "vet-report": "agent", "checkpoint": "agent", "notes": "agent",
@@ -227,12 +196,11 @@ def _inject_checks(body: str, blocks: list[str]) -> str:
 def scaffold(item_dir: Path, artifact: str, *, title: str = "", item_kind: str | None = None,
              item_id: str | None = None, standing: list[str] | None = None,
              research_kind: str | None = None) -> dict:
-    """Deterministically scaffold one artifact skeleton. NEVER overwrites — an existing file
-    returns `created: False`, since filling happens by editing. Unknown kinds fail loud.
+    """Deterministically scaffold one artifact skeleton. NEVER overwrites — filling happens by
+    editing. Unknown kinds fail loud.
 
-    `standing` are the repo library's standing checks, pre-written into a plan. The KERNEL attaches
-    them: what a repo always owes is not something anyone should have to remember, and a
-    copied-by-hand entry is one rewording away from no longer being the same check."""
+    The KERNEL attaches the repo's `standing` checks: a copied-by-hand entry is one rewording from a
+    different check."""
     if artifact not in _SPECS:
         raise KeyError(f"unknown artifact kind {artifact!r} — known: {sorted(_SPECS)}")
     item_kind = get_profile(item_kind).kind  # validates + resolves null → implementation
@@ -244,10 +212,8 @@ def scaffold(item_dir: Path, artifact: str, *, title: str = "", item_kind: str |
     sections = list(required_sections(artifact, item_kind, research_kind))
     if path.exists():
         return {"path": str(path), "created": False, "sections": sections, "inherited": 0}
-    # `research_kind:` is stamped so the file carries the shape it was authored under. `self_check`
-    # reads it back from HERE, not from the item — an artifact is judged against the template that
-    # produced it (same rule as the legacy plan shapes below), so re-classifying an item mid-flight
-    # can never turn its already-written investigation red.
+    # `research_kind:` is stamped so the file carries the shape it was authored under. Re-
+    # classifying mid-flight cannot turn it red.
     fm = (f"---\nartifact: {artifact}\n"
           + (f"item: {item_id}\n" if item_id else "")
           + f"item_kind: {item_kind}\n"
@@ -256,9 +222,8 @@ def scaffold(item_dir: Path, artifact: str, *, title: str = "", item_kind: str |
           + f"created_at: {date.today().isoformat()}\n---\n")
     tmpl = _template(artifact, item_kind, research_kind)
     heading = title or (item_id or "work-item")
-    # The family is named ONCE in the heading: the template opens with it and a sweep-launched
-    # title does too, so a naive render doubles it. Read off the template rather than a table, so
-    # a family added later gets this free and a commissioned item keeps its prefix.
+    # The family is named ONCE in the heading, so a naive render doubles it. Read it off the
+    # template.
     m = re.match(r"#[ \t]+(.+?)[ \t]+—[ \t]+\{title\}", tmpl)
     if m and heading.lower().startswith(m.group(1).lower() + " — "):
         heading = heading[len(m.group(1)) + 3:].lstrip()
@@ -278,9 +243,8 @@ def _split_sections(text: str) -> dict[str, str]:
         m = re.match(r"^##\s+(.+?)\s*$", line)
         if m:
             cur = m.group(1)
-            # CONCATENATE a repeated heading, never reset it. A report carrying two `## Verification`
-            # sections read as whatever the LAST held, while the writer appends to the FIRST — so twelve
-            # green verdicts read as a ledger of zero and the loop exited `system_fault`.
+            # CONCATENATE a repeated heading: the writer appends to the FIRST, so a reader of the
+            # LAST sees nothing.
             out.setdefault(cur, "")
         elif cur is not None:
             out[cur] += line + "\n"
@@ -293,49 +257,34 @@ def _section_filled(body: str) -> bool:
     return bool(cleaned.strip())
 
 
-# The plan-authored contract vet executes: a fresh agent with zero context must run it
-# unambiguously. Check ids are the JOIN KEY into the evidence ledger, so plan and ledger meet
-# with no new store.
-#
-# HARD issues block the gate (mechanically decidable); SOFT flags surface for the owner, who
-# is present — the one place fail-open is correct.
+# The plan-authored contract vet executes. Check ids are the JOIN KEY into the evidence ledger, so
+# plan and ledger meet.
 
-# Evidence PROVENANCE (design §4): who actually performed the check. `machine` = the kernel ran the
-# check's literal `run:` block in the sandbox; `agent` = a vetter did it and attested. Old entries
-# carry neither and read as `agent`, which is what they were.
+# Who actually performed the check. `machine` = the kernel ran its `run:` block; `agent` = a
+# vetter attested.
 BY_MACHINE = "machine"
 BY_AGENT = "agent"
 
-# Ledger entry KINDS. A verdict answers "did this check pass"; a diagnosis answers "where and why
-# did it fail". They share the fence and the check id, and nothing else — see `diagnoses`.
+# A verdict answers "did this check pass"; a diagnosis answers "where and why did it fail".
 KIND_VERDICT = "verdict"
 KIND_DIAGNOSIS = "diagnosis"
 KIND_LENS = "lens"
 KIND_NOMINATION = "nomination"
-# The kernel's re-run of a build validation claim (2026-08-07 amendment). A `## Verification`
-# entry like the rest, and deliberately NOT a verdict: `evidence_entries` filters on
-# KIND_VERDICT, so an audit can never be counted as one of the item's checks.
+# The kernel's re-run of a build validation claim. Deliberately NOT a verdict, so an audit never
+# counts as a check.
 KIND_AUDIT = "audit"
 
-# The two machine lanes in a cycle report, each a tagged fence inside its own section: `checks` in
-# `## Verification` (vet's verdicts) and `runs` in `## Validation` (build's own self-check runs).
-# Named, not positional, so a section can hold prose beside its records without either reader
-# guessing which fence is theirs.
+# The two machine lanes, each a tagged fence in its own section. Named, not positional.
 VALIDATION_FENCE = "runs"
 VERIFICATION_FENCE = "checks"
 
-# Read on every cycle, independently of the plan: its checks can only defend what the planner
-# thought of. Depth governs EXECUTION, and a lens is a read — so `depth: none` means vet runs
-# nothing, not that vet does nothing.
-#
-# `performance` is not standing: it is meaningful only against a budget the plan named, and a
-# lens with no bar produces opinions.
+# Read every cycle, independently of the plan: its checks can only defend what the planner thought
+# of.
 STANDING_LENSES = ("intent", "safety", "robustness")
 LENSES = STANDING_LENSES + ("performance",)
 SEVERITIES = ("low", "medium", "high")
 
-# Intent and safety have no severity scale: anything found is a gap in what the item is FOR or
-# a way it can hurt someone. Only `high` robustness gates, and performance never does.
+# Intent and safety have no severity scale: anything found is a gap. Only `high` robustness gates.
 _LENS_GATES_AT = {"intent": SEVERITIES, "safety": SEVERITIES, "robustness": ("high",)}
 
 VET_DEPTHS = ("none", "checks", "scenarios")
@@ -344,20 +293,16 @@ _VET_CHECK_ID = re.compile(r"^[a-z0-9-]+$")
 _VET_HEADER_KEY = re.compile(r"^(depth|reason|env):\s*(.*)$")
 _VET_FIELD = re.compile(
     r"^-\s*(proves|traces|covers|mode|scenario|run|rubric|expect|source):\s*(.*)$")
-# A rubric criterion: an INDENTED bullet under `- rubric:`. Indentation is what separates it from
-# the next field of the check, and the bullet is what separates one criterion from the wrap of the
-# one before it — both matter, so both are required here.
+# A rubric criterion: an INDENTED bullet under `- rubric:`. Indentation separates fields, the
+# bullet separates criteria.
 _RUBRIC_ITEM = re.compile(r"^\s+[-*]\s+\S")
-# The literal command the KERNEL runs. One line, because a check is one exit code — a scenario
-# that cannot be said in one line is exactly one that stays agent-attested.
+# The literal command the KERNEL runs. One line, because a check is one exit code.
 _VET_CHECK_HEAD = re.compile(r"^###\s+(.+?)\s*$")
-# Vagueness heuristic for `expect` (soft): non-falsifiable filler words, or too short to pin
-# an observable outcome. A banned-word list is too brittle to BLOCK on — hence soft.
+# Vagueness heuristic for `expect`. A banned-word list is too brittle to BLOCK on — hence soft.
 _VET_VAGUE = re.compile(r"\b(works|correctly|properly|as expected)\b", re.IGNORECASE)
 _VET_EXPECT_MIN = 40
-# `proves` is written FOR the owner, and its failure mode is restating the mechanism instead of
-# the meaning. "exit code 0" tells nobody whether a green demonstrates the intent. Soft:
-# phrasing is a judgment, and a human is at the gate.
+# `proves` is written FOR the owner: "exit code 0" tells nobody whether a green demonstrates the
+# intent.
 _PROVES_MACHINE = re.compile(
     r"\bexit(?:s|ed)?[- ]?(?:code|status)\b|\bexit\s+(?:0|1|zero|non-?zero)\b|\bstdout\b|"
     r"\bstderr\b|\breturns?\s+(?:0|1|zero)\b|"
@@ -372,9 +317,8 @@ def _vet_value(raw: str) -> str:
 
 
 def parse_check_blocks(body: str) -> list[dict]:
-    """`### <check-id>` blocks → check dicts, in order. The plan's `## Verification plan` and the
-    repo's verification library (design §8) both hold checks in this one grammar, so a library entry
-    can be inherited into a plan verbatim — no translation step to drift."""
+    """`### <check-id>` blocks → check dicts, in order. Plan and library share this
+    grammar, so an entry inherits verbatim."""
     out: list[dict] = []
     cur: dict | None = None
     last = ""              # the field a wrapped continuation line belongs to
@@ -382,11 +326,8 @@ def parse_check_blocks(body: str) -> list[dict]:
         h = _VET_CHECK_HEAD.match(line)
         if h:
             last = ""
-            # `covers` is the Proof view's join key. NOT hard when absent: requiring it would retroactively
-            # fail every in-flight plan. An untagged check lands in the item-wide row.
-            # `source` says where the check came from: authored here, attached, or cited.
-            # `proves` is the one HUMAN field. Every other serves executing or judging, so without it the
-            # reports and the vetter each infer what a green means — separately, and drifting.
+            # `covers` joins the Proof view; absent is not hard. `proves` is the one HUMAN field,
+            # and without it readers drift.
             cur = {"id": _vet_value(h.group(1)), "proves": "", "traces": "", "covers": "",
                    "mode": "", "scenario": "", "run": "", "expect": "", "rubric": [], "source": ""}
             out.append(cur)
@@ -395,8 +336,8 @@ def parse_check_blocks(body: str) -> list[dict]:
             continue
         m = _VET_FIELD.match(line.strip())
         if m:
-            # `rubric:` holds a LIST — its criteria are the indented bullets under it, each one
-            # separately judged and separately recorded. Everything else is one value.
+            # `rubric:` holds a LIST — indented bullets, each judged and recorded separately.
+            # Everything else is one value.
             cur[m.group(1)] = [] if m.group(1) == "rubric" else _vet_value(m.group(2))
             last = m.group(1)
         elif last and line.startswith((" ", "\t")) and line.strip():
@@ -407,18 +348,15 @@ def parse_check_blocks(body: str) -> list[dict]:
                 elif cur["rubric"] and text:
                     cur["rubric"][-1] += " " + text     # …or the wrap of the last one
                 continue
-            # A wrapped field — markdown folds it, so we do too. Without this the value stops
-            # mid-sentence, and `expect:` (the falsifiable condition, and the one field the
-            # owner reads at the plan gate) is exactly the field long enough to wrap.
+            # A wrapped field — markdown folds it, so we do too. `expect:` is exactly the field
+            # long enough to wrap.
             cur[last] = (cur[last] + " " + line.strip()).strip()
     return out
 
 
 def parse_vet_plan(plan_text: str) -> dict:
-    """Parse plan.md's `## Verification plan` section (`## Vet plan` in pre-renovation plans) →
-    {present, depth, reason, env, checks}. Pure text → data; validity is judged separately
-    (`vet_plan_hard_issues` / `vet_plan_soft_flags`). Header fields are the `key: value` lines
-    before the first `### <check-id>`; the checks are read by `parse_check_blocks`."""
+    """Parse plan.md's `## Verification plan` → {present, depth, reason, env, checks}.
+    Pure text → data; validity is judged separately."""
     sections = _split_sections(plan_text)
     body = sections.get("Verification plan")
     if body is None:
@@ -436,10 +374,8 @@ def parse_vet_plan(plan_text: str) -> dict:
     return out
 
 
-# Whole-suite test runners. A check whose `run:` is one of these UNNARROWED is the project's own
-# regression suite — build's validation, not the item's exam (design amendment 2026-08-07). The
-# list is invocations, not tools: `pytest tests/test_csv.py::test_note_roundtrip` drives one
-# behaviour and is a perfectly good check, so only the bare form is refused.
+# An UNNARROWED suite runner is build's validation, not the item's exam. Only the bare form is
+# refused.
 _SUITE_RUNNERS = (
     r"pytest", r"py\.test", r"python3?\s+-m\s+pytest", r"python3?\s+-m\s+unittest(\s+discover)?",
     r"npm\s+(run\s+)?test", r"yarn\s+test", r"pnpm\s+(run\s+)?test", r"jest", r"vitest",
@@ -454,31 +390,23 @@ _SUITE_RUN = re.compile(r"^\s*(?:[\w./-]*/)?(?:" + "|".join(_SUITE_RUNNERS) + r"
 
 
 def is_whole_suite_run(cmd: str) -> bool:
-    """Is this `run:` the project's whole test suite, unnarrowed?
-
-    `python3 -m unittest discover -s tests` is → it proves the project still works, which is what
-    BUILD's validation already establishes every cycle and what vet now audits. Putting it in the
-    vet plan makes the suite run twice and files a validation result as the item's own proof.
-    `python3 -m unittest tests.test_ledger -k QuietFlagTest` is NOT — it drives one behaviour, and
-    a check is entitled to do that however it likes."""
+    """Is this `run:` the project's whole test suite, unnarrowed? A narrowed invocation
+    drives one behaviour and is a fine check."""
     cmd = " ".join((cmd or "").split())
     if not cmd or not _SUITE_RUN.match(cmd):
         return False
-    # Only the runner's OWN arguments narrow it. A `&&`-joined second command is a different act,
-    # and `-q`/`-v`/`--tb=short` are noise controls, not selectors.
+    # Only the runner's OWN arguments narrow it. `-q`/`--tb=short` are noise controls, not
+    # selectors.
     head = re.split(r"&&|\|\||;|\|", cmd)[0]
     tail = head[_SUITE_RUN.match(head).end():] if _SUITE_RUN.match(head) else ""
     return not _SUITE_NARROWERS.search(tail)
 
 
 def vet_plan_hard_issues(vp: dict) -> list[str]:
-    """The gate-blocking structural rules, every one mechanically decidable: legal depth · a
-    reason even for none · depth≠none implies ≥1 check and depth=none implies 0 · every check fully
-    fielded · `interaction` needs an env recipe · ids unique and slug-shaped.
+    """The gate-blocking structural rules, every one mechanically decidable.
 
-    `proves` is HARD where `covers` is not, and the difference is who holds the gap. A missing
-    `covers` costs a join; a missing `proves` means nobody downstream can say what a green MEANS, so
-    the owner's report and the vetter each re-derive it separately."""
+    `proves` is HARD where `covers` is not: a missing `covers` costs a join, a missing `proves` means
+    nobody can say what a green MEANS."""
     if not vp.get("present"):
         return ["missing required section '## Verification plan'"]
     issues: list[str] = []
@@ -506,9 +434,8 @@ def vet_plan_hard_issues(vp: dict) -> list[str]:
         seen.add(cid)
         for field_name in ("proves", "traces", "mode", "scenario"):
             if not c.get(field_name):
-                # The remedy travels with the complaint. `run:` ACCOMPANIES `scenario:`, but a bare "missing
-                # scenario" reads as "`run:` was the wrong field" — and three kernel-runnable checks lost
-                # their run blocks to that reading.
+                # The remedy travels with the complaint: a bare "missing scenario" reads as
+                # "`run:` was the wrong field".
                 extra = (" — a check with `run:` still needs the prose scenario BESIDE it; add "
                          "the scenario, never drop the run block"
                          if field_name == "scenario" and c.get("run") else "")
@@ -516,9 +443,8 @@ def vet_plan_hard_issues(vp: dict) -> list[str]:
                     extra = (" — one plain sentence saying what is TRUE of the product when this "
                              "passes, in the owner's terms and not the command's")
                 issues.append(f"vet plan check {label!r}: missing `{field_name}`{extra}")
-        # The suite is BUILD's validation, audited by the kernel on vet's pass. As a vet-plan check it
-        # runs the suite twice and files the result as the item's own proof. HARD, because a soft flag
-        # on a check copied from the library is a row nobody reads twice.
+        # As a vet-plan check it runs the suite twice and files the result as the item's own
+        # proof. HARD.
         if c.get("run") and is_whole_suite_run(str(c.get("run"))):
             issues.append(
                 f"vet plan check {label!r}: `run:` is the project's whole test suite — that is "
@@ -526,11 +452,8 @@ def vet_plan_hard_issues(vp: dict) -> list[str]:
                 "Drop this check, or narrow the command to the ONE behaviour this item promises "
                 "(a single test, a scenario) and say in `proves:` what that green means for the "
                 "owner")
-        # A check needs a bar that can FAIL, and there are two shapes of one: a binary `expect`, or
-        # a rubric whose criteria are judged one by one. Either satisfies this; both together is a
-        # normal check (an exit code AND a judgment about what it printed). Neither is a check that
-        # cannot come back red. Every in-flight plan has an `expect`, so nothing is retroactively
-        # failed by widening the rule.
+        # A check needs a bar that can FAIL: a binary `expect`, or a rubric judged criterion by
+        # criterion. Either suffices.
         if not c.get("expect") and not c.get("rubric"):
             issues.append(f"vet plan check {label!r}: needs `expect` (a binary pass condition), "
                           "`rubric` criteria (judged one by one), or both — a check with neither "
@@ -548,26 +471,18 @@ def vet_plan_hard_issues(vp: dict) -> list[str]:
     return issues
 
 
-# A vet check that leans on a RETIRED anchor doc (BV-A2 small-fix): retired docs are read-only, so a
-# check whose pass depends on editing/greping one can never go green through the normal loop — it is
-# a plan miss (drop the check, or migrate the doc as an authorized contract change). Match the
-# filename precisely (`spec.md`) — the bare word "spec" is too common to flag.
+# A check depending on a RETIRED read-only doc can never go green. Match the filename precisely.
 _RETIRED_DOC_REF = re.compile(r"\bspec\.md\b", re.I)
 
 
 def vet_plan_soft_flags(vp: dict) -> list[str]:
-    """The judgment flags (§3.4 SOFT) — surfaced in the pre-main gate brief, never blocking:
-    an `expect` that pattern-matches vagueness or is too short to pin an observable outcome, a
-    `proves` written in the command's terms rather than the product's, or a check that targets a
-    retired (read-only) anchor doc."""
+    """The judgment flags — surfaced in the gate brief, never blocking: a vague
+    `expect`, a mechanism-worded `proves`, a retired-doc target."""
     flags: list[str] = []
     for c in vp.get("checks", []):
         exp, cid = c.get("expect", ""), c.get("id") or "(unnamed)"
-        # A check INHERITED from the library is not this planner's prose. Its wording was settled
-        # when the repo adopted it, the planner cannot rewrite it without breaking the inheritance,
-        # and the owner curates the library in its own surface. Flagging it asks the wrong author a
-        # question they cannot answer, on every item that cites the entry — which is how a soft
-        # flag stops being read at all (owner, 2026-08-07).
+        # A check INHERITED from the library is not this planner's prose — flagging it asks the
+        # wrong author.
         if c.get("source") == "library":
             continue
         # Retired-doc scan across the whole check (traces/scenario/expect) — a check that can't pass.
@@ -595,12 +510,8 @@ def vet_plan_soft_flags(vp: dict) -> list[str]:
 
 
 def clip(text: str, limit: int) -> str:
-    """Trim to `limit` at a WORD boundary, with an ellipsis when anything was cut.
-
-    A hard slice reads as a rendering bug rather than as a trim — the owner sees
-    "…to the `list` and `sum` subparsers i" and wonders what broke. Cut at the last space
-    instead, and say so with the ellipsis. Falls back to the hard slice for a single long token
-    (a path, a URL) that has no space to cut at."""
+    """Trim to `limit` at a WORD boundary, with an ellipsis when anything was cut. A hard slice
+    reads as a rendering bug."""
     text = str(text or "")
     if len(text) <= limit:
         return text
@@ -612,9 +523,8 @@ _VET_DEPTH_RANK = {"none": 0, "checks": 1, "scenarios": 2}
 
 
 def parse_inner_checks(plan_text: str) -> list[str]:
-    """plan.md's `## Inner checks` bullets → the command list build must run green before it may
-    exit (§2.1: every line is a command whose exit code decides it). Backticks stripped; unfilled
-    slots skipped."""
+    """plan.md's `## Inner checks` bullets → the commands build must run green before
+    it may exit."""
     body = _split_sections(plan_text).get("Inner checks", "")
     cmds: list[str] = []
     for line in body.splitlines():
@@ -633,18 +543,17 @@ def _is_legacy_plan(sections: dict) -> bool:
 
 
 # ------------------------------------------------------------------- gate feeds (renovation §2)
-# The three plan sections whose STRUCTURED content feeds the plan gate's answer forms (design doc
-# Q→FORM→FEED): `## Touches` (yaml → change map) · `## Behavior preview` (fenced before/after →
-# predicted panes) · `## Risks & assumptions` (bullets → confirm/adjust cards). Parsers are pure
-# text→data; absent sections return empty — the surface falls back to prose rows (design §2b).
+
+# The three plan sections whose STRUCTURED content feeds the gate's answer forms. Absent sections
+# return empty.
 
 TOUCH_ACTIONS = ("new", "modify", "read")
 _FENCE = re.compile(r"^```[\w-]*\s*$")
 
 
 def _fenced_blocks(body: str, *, lang: str = "") -> list[str]:
-    """The contents of every ``` fenced block in a section body, in order. `lang` keeps only the
-    blocks opened with that tag — needed once a section carries more than one machine lane."""
+    """The contents of every ``` fenced block in a section body. `lang` keeps only blocks
+    opened with that tag."""
     blocks, cur, keep = [], None, True
     for line in body.splitlines():
         s = line.strip()
@@ -661,8 +570,8 @@ def _fenced_blocks(body: str, *, lang: str = "") -> list[str]:
 
 
 def parse_touches(plan_text: str) -> list[dict]:
-    """plan.md's `## Touches` fenced yaml → [{component, path, action}]. Tolerant: absent
-    section / unparseable yaml / unfilled slots → []; validity is judged in touches_hard_issues."""
+    """plan.md's `## Touches` fenced yaml → [{component, path, action}]. Tolerant: anything
+    unparseable gives []."""
     body = _split_sections(plan_text).get("Touches", "")
     blocks = _fenced_blocks(body)
     raw = blocks[0] if blocks else body
@@ -681,8 +590,8 @@ def parse_touches(plan_text: str) -> list[dict]:
 
 
 def touches_hard_issues(plan_text: str) -> list[str]:
-    """Gate-blocking structure for a filled `## Touches` section: the yaml must parse into ≥1
-    complete row with a legal action. (Only called for plans that carry the section.)"""
+    """Gate-blocking structure for a filled `## Touches`: the yaml must parse into ≥1
+    complete row with a legal action."""
     rows = parse_touches(plan_text)
     if not rows:
         return ["touches: the fenced yaml must parse into at least one "
@@ -703,15 +612,11 @@ _TASK_LINE = re.compile(r"^\s*-\s*\[(?P<tick>[ xX])\]\s*(?P<id>t\d+)\b[\s—:-]*
 
 
 def parse_tasks(plan_text: str) -> list[dict]:
-    """plan.md's `## Tasks` → [{id, done, text, detail}], in plan order. The id is what build's
-    commits carry in their trailer, so this is the join that titles a walkthrough group. Tolerant: an
-    unparseable line is skipped, never raised.
+    """plan.md's `## Tasks` → [{id, done, text, detail}], in order. The id is what build's
+    commit trailers carry.
 
-    A task is a BLOCK of two parts, and the split is the point. `text` is the HEAD line — the task's
-    NAME, what the board shows. `detail` is the indented specification under it.
-
-    Reading the head alone cut a wrapped task off mid-clause; merging both produced a 340-character
-    paragraph. Keeping them separate is what lets the name be a name."""
+    A task is a BLOCK of two parts: `text` is the NAME the board shows, `detail` the indented spec
+    under it."""
     body = _split_sections(plan_text).get("Tasks", "")
     out: list[dict] = []
     cur: dict | None = None
@@ -733,11 +638,8 @@ _DECISION_HEAD = re.compile(r"^### (?P<ts>\S+) — (?P<q>.+)$", re.M)
 
 
 def parse_decisions(plan_text: str) -> list[dict]:
-    """plan.md's `## Decisions & clarifications` ledger (the grill's record): one entry per
-    answered question — `### <ts> — <question>` + `- answer:` + `- changed:`. Append-only with
-    owner provenance; the plan gate surfaces the newest few, and the deputy treats an entry as
-    settled ("owner said X"), never re-litigated. The template's authoring comment is stripped
-    first so its example entry can't parse as a real one."""
+    """plan.md's `## Decisions & clarifications` ledger: one entry per answered question,
+    append-only with owner provenance. The deputy never re-litigates one."""
     body = _split_sections(plan_text).get("Decisions & clarifications", "")
     body = re.sub(r"<!--.*?-->", "", body, flags=re.S)
     heads = list(_DECISION_HEAD.finditer(body))
@@ -760,11 +662,8 @@ _LABEL_LINE = re.compile(r"^\*\*[^*]+:\*\*")
 
 
 def _space_labels(text: str) -> str:
-    """Put a blank line before every `**Label:**` block that lacks one.
-
-    Reports are agent-copied from a template, so their spacing is prose, not structure — and markdown
-    is unforgiving: two label lines in a row fold into one paragraph. A template is a suggestion to a
-    model, and this is the read path both the owner and the deputy go through. Fences are left alone."""
+    """Put a blank line before every `**Label:**` block that lacks one — markdown folds two
+    label lines into one paragraph."""
     out: list[str] = []
     fenced = False
     for line in text.split("\n"):
@@ -776,18 +675,15 @@ def _space_labels(text: str) -> str:
     return "\n".join(out)
 
 
-# A value that means the author had nothing to say. Every template tells them to DELETE the block
-# instead; this is what happens when they don't.
+# A value meaning the author had nothing to say. Every template says DELETE the block instead.
 _DEAD_VALUES = {"", "none", "none.", "n/a", "na", "-", "—", "nothing", "(none)",
                 "(first run — n/a)", "(first run - n/a)", "first run — n/a", "first run - n/a"}
 _HEADING = re.compile(r"^#{1,6}\s")
 
 
 def _dead_label(lines: list[str], i: int) -> bool:
-    """Is the `**Label:**` at `lines[i]` a block with nothing under it?
-
-    The next NON-BLANK line decides. Reading `lines[i + 1]` called every list-under-a-label dead, and
-    stripped the labels that said whose the paragraphs were."""
+    """Is the `**Label:**` at `lines[i]` a block with nothing under it? The next NON-BLANK
+    line decides."""
     if lines[i].split(":**", 1)[1].strip().lower() not in _DEAD_VALUES:
         return False
     for nxt in lines[i + 1:]:
@@ -798,8 +694,8 @@ def _dead_label(lines: list[str], i: int) -> bool:
 
 
 def _live_body(lines: list[str]) -> bool:
-    """Does a section body hold anything a reader would want? Blank lines, authoring comments and
-    labels with nothing under them all read as nothing."""
+    """Does a section body hold anything a reader would want? Blank lines, comments and empty
+    labels read as nothing."""
     text = re.sub(r"<!--.*?-->", "", "\n".join(lines), flags=re.DOTALL)
     body = text.split("\n")
     return any(ln.strip() and not (_LABEL_LINE.match(ln) and _dead_label(body, k))
@@ -807,14 +703,8 @@ def _live_body(lines: list[str]) -> bool:
 
 
 def _drop_dead_blocks(text: str) -> str:
-    """Delete `**Label:** none` blocks and an empty `## Changed since` on the READ path.
-
-    Every template says to delete a block it has nothing to put under, and two survived into the very
-    first report the owner read — lines that exist only to say nothing, in a document whose budget is
-    half a screen.
-
-    Deliberately literal: a block goes only when its value is one of a few dead tokens. Anything with
-    real content is left exactly as written."""
+    """Delete `**Label:** none` blocks on the READ path — lines that exist only to say
+    nothing. Deliberately literal."""
     lines, out = text.split("\n"), []
     i, fenced = 0, False
     while i < len(lines):
@@ -822,8 +712,7 @@ def _drop_dead_blocks(text: str) -> str:
         if line.lstrip().startswith("```"):
             fenced = not fenced
         if not fenced and _LABEL_LINE.match(line):
-            # A label whose value is on the FOLLOWING lines (bullets etc.) is never dead — only a
-            # same-line value can be, and only if the block ends right there.
+            # Only a same-line value can be dead, and only if the block ends right there.
             if _dead_label(lines, i):
                 i += 2                      # drop the label line and its trailing blank
                 while out and not out[-1].strip():
@@ -833,16 +722,12 @@ def _drop_dead_blocks(text: str) -> str:
         if not fenced and _HEADING.match(line) and "changed since" in line.lower():
             body = [ln for ln in lines[i + 1:] if not _HEADING.match(ln)]
             joined = "\n".join(body).strip().strip("()").strip().lower()
-            # "first run" is its own family of phrasings ("(first run)", "first run — n/a", …) and
-            # they all mean the same nothing, so this one gets a prefix match rather than another
-            # entry in the token list every time an author words it differently.
+            # "first run" has a family of phrasings that all mean the same nothing, so it gets a
+            # prefix match.
             if joined in _DEAD_VALUES or joined.startswith("first run"):
                 break                       # nothing after it but the dead section
         if not fenced and _HEADING.match(line):
-            # A heading with nothing under it. `## From you` is the standing case — it exists in
-            # every triage brief because the owner has to be able to find it, and until they write
-            # in it there is nothing to read. A bare heading reads as a section that failed to
-            # render, so it goes; the drilldown's editor is what tells the owner it is there.
+            # A bare heading reads as a section that failed to render, so it goes.
             j = i + 1
             while j < len(lines) and not _HEADING.match(lines[j]):
                 j += 1
@@ -855,12 +740,8 @@ def _drop_dead_blocks(text: str) -> str:
 
 
 def changed_since(item_dir: Path, since: str | None) -> list[str]:
-    """The item's records written since `since`, newest first. Empty when `since` is unparseable
-    or nothing moved.
-
-    Reads mtimes, not a change log: every writer moves an mtime, and none can be persuaded to keep a
-    ledger honest. Scope is the two folders a phase FORMS A JUDGMENT FROM — not `checkpoints/`, which
-    every run writes, and not the frozen `preliminary/`."""
+    """The item's records written since `since`, newest first. Reads MTIMES: every writer
+    moves one, and no ledger stays honest."""
     try:
         cutoff = datetime.fromisoformat(str(since)).timestamp()
     except (TypeError, ValueError):
@@ -879,27 +760,22 @@ def changed_since(item_dir: Path, since: str | None) -> list[str]:
 
 
 def report_text(item_dir: Path, phase: str) -> dict | None:
-    """A phase's user-facing report, for the drilldown's Reports tab and the deputy's prompt.
-
-    `contract` is the relative path to the phase's full agent-facing artifact, read on demand. The
-    report is the compact projection; the contract is the whole thing, never pasted into it. Review
-    and close have no separate contract — their report IS the record."""
+    """A phase's user-facing report. `contract` points at the full agent-facing artifact,
+    read on demand and never pasted in."""
     path = Path(item_dir) / "reports" / f"report-{phase}.md"
     if not path.is_file():
         return None
     contract = {"triage": "artifacts/brief.md", "plan": "artifacts/plan.md",
                 "investigate": "artifacts/investigation.md",
-                # Review HAS an agent-facing record (`artifacts/review.md`) and was the one phase
-                # whose report offered no way to reach it — the owner read the judgment at the
-                # merge gate with the record behind it unreachable (owner, 2026-08-08). Close is
-                # still None: its report IS the record.
+                # Review has a record its report could not reach. Close is still None: its report
+                # IS the record.
                 "review": "artifacts/review.md"}.get(phase)
     if phase in ("build", "vet"):
         # The cycle the report covers is the newest one — build and vet both project the same file.
         reports = cycle_reports(item_dir)
         contract = f"artifacts/{Path(reports[-1]['path']).name}" if reports else None
-    # A link to a file that isn't there is worse than no link: the surface renders it, the owner
-    # clicks it, and the doc view 404s. Older items predate several of these artifacts.
+    # A link to a missing file is worse than none: it renders, the owner clicks, the doc view
+    # 404s.
     if contract and not (Path(item_dir) / contract).is_file():
         contract = None
     try:
@@ -911,17 +787,13 @@ def report_text(item_dir: Path, phase: str) -> dict | None:
             "path": str(path), "mtime": st.st_mtime, "contract": contract}
 
 
-# A `**Label:** value` with the value ON THE SAME LINE. Every one-line fact in a user-facing report
-# is written this way (`**Summary:**`, `**Category:**`, `**Problem:**`), which is what makes them
-# readable by code without parsing the prose around them.
+# A `**Label:** value` on ONE line — how every one-line fact in a report is written.
 _LABEL_VALUE = re.compile(r"^\*\*(?P<label>[^*\n]+?):\*\*[^\S\n]*(?P<value>.*?)\s*$", re.M)
 
 
 def label_values(text: str) -> dict[str, str]:
-    """Every same-line `**Label:** value` in a document → {label lowercased: value}.
-
-    Same-line only, deliberately: a label whose content is a list below it is prose for the owner,
-    and a reader that flattened it would put a paragraph in a card row. First occurrence wins."""
+    """Every same-line `**Label:** value` → {label lowercased: value}. Same-line only: a list
+    below a label is prose."""
     out: dict[str, str] = {}
     for m in _LABEL_VALUE.finditer(re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)):
         value = m.group("value").strip()
@@ -932,21 +804,14 @@ def label_values(text: str) -> dict[str, str]:
 
 def report_summary(item_dir: Path, phase: str) -> str:
     """A phase report's `**Summary:**` line — one sentence, what that phase concluded.
-
-    The Quick View phase card renders this alone, which is the whole reason every user-facing report
-    opens with it. Empty when the phase has written no report yet, or wrote one without the line."""
+    The Quick View card renders it alone."""
     path = Path(item_dir) / "reports" / f"report-{phase}.md"
     return label_values(path.read_text()).get("summary", "") if path.is_file() else ""
 
 
 def triage_facts(item_dir: Path) -> dict:
-    """What triage established about the item, for the drilldown's `About this work-item` card:
-    {category, background, problem}.
-
-    Read from the OWNER's brief rather than from `brief.md`, because these are the owner's own
-    framing of their own request — the agent-facing record states the same things in the vocabulary
-    of the work. `**Goal:**` is the template's alternative to `**Problem:**` for an item where
-    nothing is broken; both land in `problem`, since the card asks one question: what is this for."""
+    """What triage established, for the `About this work-item` card. Read from the OWNER's
+    brief: this is their own framing."""
     path = Path(item_dir) / "reports" / "report-triage.md"
     if not path.is_file():
         return {"category": "", "background": "", "problem": ""}
@@ -956,10 +821,8 @@ def triage_facts(item_dir: Path) -> dict:
 
 
 def report_issues(item_dir: Path, name: str) -> list[str]:
-    """Itemized issues on a user-facing report in `reports/` — present, and no template slot left
-    unfilled. A report is COPIED from its template by the authoring agent (not scaffolded by code),
-    so this is the only mechanical hold on it. HTML comments are stripped first: a template
-    documents its own slots in a comment, and documentation is not an unfilled slot."""
+    """Itemized issues on a user-facing report: present, and no template slot unfilled.
+    A report is COPIED, not scaffolded."""
     path = Path(item_dir) / "reports" / f"{name}.md"
     if not path.is_file():
         return [f"reports/{name}.md does not exist — write it from its template"]
@@ -970,17 +833,14 @@ def report_issues(item_dir: Path, name: str) -> list[str]:
     return []
 
 
-# `[^\S\n]*`, not `\s*`: in MULTILINE `\s` matches newlines, so a decision line left EMPTY (the
-# template's comment stripped away) would skip the blank line and capture whatever heading came
-# next — reporting a decision the owner never made, at the gate that exists to catch exactly that.
-# Invisible until the line stopped being the last one in its file.
+# `[^\S\n]*`, not `\s*`: in MULTILINE `\s` matches newlines, so an empty line would capture the
+# next heading.
 _OWNER_DECISION = re.compile(r"^\*\*Owner's decision:\*\*[^\S\n]*(.+?)\s*$", re.M)
 
 
 def owner_decision(item_dir: Path) -> str:
-    """The itemization outcome `itemize` recorded into review.md: what it filed, what it skipped
-    as a duplicate, or that there was nothing. Empty when absent or still an unfilled slot — either
-    way itemization never ran, and the proposals went nowhere."""
+    """The itemization outcome `itemize` recorded into review.md. Empty means itemization
+    never ran."""
     path = Path(item_dir) / "artifacts" / artifact_file("review")
     if not path.is_file():
         return ""
@@ -993,15 +853,8 @@ def owner_decision(item_dir: Path) -> str:
 
 
 def proposed_work(item_dir: Path) -> str:
-    """A research review record's `## Proposed work` body — the work its findings imply, which is
-    half of what a research item owes. Empty string when the section is missing, unfilled, or says
-    nothing.
-
-    This is what the REVIEW gate can actually ask. `itemize` — which turns these into inbox items —
-    fires on review APPROVE, so at the moment the gate is read it has not run yet and its record is
-    always empty. Asking there whether the proposals were filed is a question no first approval can
-    answer; asking whether they were STATED is answerable, and it is answerable while the owner can
-    still send the item back."""
+    """A research review record's `## Proposed work` body — the work its findings imply.
+    Empty when missing, unfilled, or saying nothing."""
     path = Path(item_dir) / "artifacts" / artifact_file("review")
     if not path.is_file():
         return ""
@@ -1013,46 +866,31 @@ def proposed_work(item_dir: Path) -> str:
 
 
 # ----------------------------------------------------- research proposals (the typed `## Proposed work`)
-# A research item's findings imply work, but research may not DECIDE — so each proposal carries how
-# its open call was handled. Three shapes, and only the third can withhold a proposal:
-#
-#   no ruling fields          — nothing to decide; files as-is.
-#   `Default applied`         — a preference with a safe, cheaply reversed default. Files WITH the
-#                               default stated; the owner adjusts it at the gate if it is wrong.
-#   `Question` (+ reason)     — a preference whose default is destructive or expensive to reverse.
-#                               Files ONLY once `Answer` carries the owner's ruling.
-#
-# The withheld case is the whole point: a brief that says "do X, pending a ruling nobody gave" reads
-# as actionable, and a build agent asked to finish it will pick an option — which is the one act
-# research is not allowed to perform. Nothing stores an unanswered question; the next sweep re-reads
-# the same code and raises it again, which is the reminder a parked question could never be.
+
+# A research item's findings imply work, but research may not DECIDE — each proposal carries its
+# ruling.
 _PROPOSAL_FIELDS = {
     "Title": "title", "Kind": "kind", "Why now": "why_now", "Delivers": "delivers",
     "Default applied": "default_applied", "Question": "question",
     "Reserved because": "reserved_because", "Suggested": "suggested", "Answer": "answer",
-    # The generalization the answer establishes, if it establishes one. Written WITH `Answer` and
-    # never before it: a rule follows from the ruling, so one written beside the question would only
-    # be true if the owner took the suggestion. Empty is the normal case — see `promotable`.
+    # The rule the answer establishes, if any. Written WITH `Answer`, never before it. Empty is
+    # the normal case.
     "Rule": "rule",
-    # The free-prose predecessor of `Question`. Kept as a field so an older review's line lands in
-    # its own key instead of running on into `Why now` — it gates nothing (it never could: no
-    # reader ever consumed it), and reading it as a question would retroactively withhold work on
-    # items written before the field existed.
+    # The free-prose predecessor of `Question`, kept so an older line lands in its own key. It
+    # gates nothing.
     "Depends-on": "legacy_depends_on",
 }
 _PROPOSAL_FIELD = re.compile(r"^\s*\*\*(" + "|".join(_PROPOSAL_FIELDS) + r"):\*\*\s*(.*)$")
-# Closed set, and the reason the set is closed: an agent that must name which limb a question passes
-# writes fewer questions than one that may simply assert the owner should decide.
+# Closed set: an agent that must name which limb a question passes writes fewer questions.
 RESERVED_REASONS = ("destructive", "expensive_to_reverse")
-# `Becomes work` is a yes/no, and absent means yes: the ordinary proposal is work, and only a ruling
-# that emptied it has to say so.
+# `Becomes work` is a yes/no, and absent means yes — only a ruling that emptied a proposal must
+# say so.
 BECOMES_WORK = ("yes", "no")
 
 
 def research_proposals(item_dir: Path) -> list[dict]:
-    """`## Proposed work` → one dict per proposal, keyed by `_PROPOSAL_FIELDS`. A block opens at
-    `**Title:**`; a line that matches no field header continues the field above it (values wrap).
-    Unfilled `<fill:…>` slots read as absent. Returns [] when the section is missing or unfilled."""
+    """`## Proposed work` → one dict per proposal. A block opens at `**Title:**`; a line
+    matching no field header continues the one above."""
     path = Path(item_dir) / "artifacts" / artifact_file("review")
     if not path.is_file():
         return []
@@ -1083,49 +921,40 @@ def proposal_is_withheld(prop: dict) -> bool:
 
 
 def filed_and_withheld(props: list[dict]) -> tuple[list[dict], list[dict]]:
-    """Split proposals into (files now, waits for the owner). Per-proposal, never per-review — one
-    open question must not hold settled siblings, or a busy week turns into a stuck board."""
+    """Split proposals into (files now, waits for the owner). Per-proposal: one open
+    question must not hold settled siblings."""
     filed = [p for p in props if not proposal_is_withheld(p)]
     return filed, [p for p in props if proposal_is_withheld(p)]
 
 
 def proposal_promotable(prop: dict) -> bool:
-    """Does this ruling establish something a LATER reader can use? Only then is it project memory.
+    """Does this ruling establish something a LATER reader can use? The test is `Rule`,
+    not `Reserved because`.
 
-    The test is `Rule`, not `Reserved because`. Those answer different questions: the reserved reason
-    says the call was the owner's to make (the action is destructive or expensive to reverse), which
-    is a property of the ACTION and says nothing about whether the answer generalizes. A one-off
-    destructive act produces a one-off answer — "delete this file" is an instruction that dies with
-    the file, not a rule anybody can apply. So the common case is EMPTY: an answered question is
-    remembered only when the answer was written down as a rule that binds work outside this item."""
+    Those answer different questions: a one-off destructive act produces a one-off answer. The common
+    case is EMPTY."""
     return bool(str(prop.get("rule") or "").strip()) and bool(str(prop.get("answer") or "").strip())
 
 
 def proposal_becomes_work(prop: dict) -> bool:
-    """Does this proposal still describe WORK once the owner has ruled on it?
+    """Does this proposal still describe WORK once the owner ruled on it? A ruling that
+    emptied it leaves nothing to plan.
 
-    An inbox item is a thing that becomes a work item when pushed. That is the whole definition, and
-    a proposal that fails it was never an item — it is an answer. Half of every keep-or-delete
-    question lands on "keep", which empties the deliverable: nothing to plan, nothing to build,
-    nothing to verify. Filing it anyway puts a ticket on the owner's board whose own body says there
-    is nothing to do, and hands them a Push button that would cut a branch for a no-op.
-
-    Absent reads as YES. The ordinary proposal is work; only a ruling that emptied one declares it."""
+    Absent reads as YES: the ordinary proposal is work, and only an emptied one declares otherwise."""
     return str(prop.get("becomes_work") or "yes").strip().lower() != "no"
 
 
 def filed_and_settled(props: list[dict]) -> tuple[list[dict], list[dict]]:
-    """Split the FILE-ABLE proposals into (become work, settled with nothing to do). The second list
-    is reported, never filed: the owner's ruling is on the record, and no ticket carries it."""
+    """Split the FILE-ABLE proposals into (become work, settled with nothing to do).
+    The second list is reported, never filed."""
     filed, _ = filed_and_withheld(props)
     return ([p for p in filed if proposal_becomes_work(p)],
             [p for p in filed if not proposal_becomes_work(p)])
 
 
 def research_proposal_issues(props: list[dict]) -> list[str]:
-    """Structural faults in the proposal blocks — read at the review gate, where the owner can still
-    send the item back. A malformed ruling field is worse than none: it decides whether a proposal
-    files, so a typo silently changes what reaches the queue."""
+    """Structural faults in the proposal blocks, read at the review gate.
+    A malformed ruling field is worse than none."""
     issues: list[str] = []
     for p in props:
         label = clip(p.get("title") or "(untitled)", 60)
@@ -1136,9 +965,8 @@ def research_proposal_issues(props: list[dict]) -> list[str]:
                               "`Reserved because` — name the limb it passes "
                               f"({' or '.join(RESERVED_REASONS)}) or decide it yourself")
             elif reason not in RESERVED_REASONS:
-                # The commonest way to fail this is to answer the field's own grammar: "Reserved
-                # BECAUSE" invites a reason, and the value that follows the right word is prose.
-                # So the message names where the prose belongs rather than only what is wrong.
+                # "Reserved BECAUSE" invites a reason, so the message names where the prose
+                # belongs, not just what is wrong.
                 first = reason.split()[0].rstrip(":,;.").strip("`*")
                 hint = (f" — the word {first!r} is right; delete everything after it and put the "
                         "reasoning in `Suggested`" if first in RESERVED_REASONS else "")
@@ -1169,30 +997,18 @@ def research_proposal_issues(props: list[dict]) -> list[str]:
 
 
 # --------------------------------------------------------------- `## From you` (the owner's input)
-# The one section of any report the OWNER writes, and the only place in the item where their own
-# words arrive as instruction rather than as chat. It lives in the triage brief because that is the
-# document the plan phase cold-starts from — an owner note filed anywhere else reaches nobody.
-#
-# CODE owns the section from here on. Triage copies its template through with the two labels empty
-# and never fills them; the drilldown's editor is the only writer. That is why the template carries
-# no `<fill:…>` slot under this heading: a slot would invite the triage agent to invent the owner's
-# references, and an invented authority is worse than an empty one.
-#
-# SLOTS, not prose (owner, 2026-08-08). Both blocks used to be one free textarea each, which made
-# the section a wall the owner had to punctuate themselves and gave the reader nothing to delete.
-# Each entry is now ONE bullet: a reference is `- **<source>** — <description>`, a note is `- <text>`.
-# The surface adds one slot at a time and removes one at a time, and the plan phase's contract
-# ("one note, one check") finally matches what is on disk.
+
+# The one section the OWNER writes. It lives in the triage brief, which the plan phase cold-starts
+# from.
 FROM_YOU = "From you"
 _OWNER_BLOCKS = (("references", "Useful imported references"), ("notes", "Verification notes"))
-# `- **source** — description`. The bold source and the em-dash are optional so an older section's
-# free prose still reads as slots rather than vanishing: a bullet with no source is all description.
+# The bold source and em-dash are optional, so an older section's free prose still reads as slots.
 _OWNER_BULLET = re.compile(r"^\s*[-*]\s+(?:\*\*(?P<source>[^*]+?)\*\*\s*[—-]\s*)?(?P<rest>.+?)\s*$")
 
 
 def _owner_blocks(body: str) -> dict[str, str]:
-    """`## From you`'s body → {references, notes} as RAW text. Label-driven, so an owner's own blank
-    lines and bullets survive round-tripping and only the two headings are structural."""
+    """`## From you`'s body → {references, notes} as RAW text. Only the two headings are
+    structural."""
     keyed = {label.lower(): key for key, label in _OWNER_BLOCKS}
     out: dict[str, list[str]] = {key: [] for key, _ in _OWNER_BLOCKS}
     cur: str | None = None
@@ -1200,9 +1016,8 @@ def _owner_blocks(body: str) -> dict[str, str]:
         if _LABEL_LINE.match(line):
             name, _, rest = line.partition(":**")
             key = keyed.get(name.strip("*").strip().lower())
-            # ONLY our two labels are structural. An owner who bolds a label of their own inside a
-            # block is writing content, and treating it as a delimiter would silently swallow
-            # everything they typed after it — the one failure a round-trip editor must not have.
+            # ONLY our two labels are structural: treating an owner's own bold as a delimiter
+            # would swallow what they typed.
             if key:
                 cur = key
                 if rest.strip():
@@ -1214,12 +1029,8 @@ def _owner_blocks(body: str) -> dict[str, str]:
 
 
 def _owner_slots(raw: str, *, sourced: bool) -> list[dict]:
-    """One block's raw text → its slots. A `sourced` block (references) splits each bullet into
-    {source, description}; a plain one (notes) keeps {description} alone.
-
-    A non-bullet line is still a slot. Older sections hold whatever the owner typed into a
-    textarea, and reading their words as one description each keeps them addressable instead of
-    silently dropping them on the first save."""
+    """One block's raw text → its slots. A non-bullet line is still a slot, so older free text
+    stays addressable."""
     out: list[dict] = []
     for line in raw.splitlines():
         if not (text := line.strip()):
@@ -1232,10 +1043,8 @@ def _owner_slots(raw: str, *, sourced: bool) -> list[dict]:
 
 
 def owner_input(item_dir: Path) -> dict:
-    """What the owner has written into `reports/report-triage.md` § From you, as slots.
-
-    `exists` is whether the triage brief is on disk at all — the editor has nothing to write into
-    before triage runs, and the surface says so rather than creating a report no phase authored."""
+    """What the owner wrote into `reports/report-triage.md` § From you. `exists` says whether
+    the triage brief is on disk."""
     path = Path(item_dir) / "reports" / "report-triage.md"
     if not path.is_file():
         return {"exists": False, "references": [], "notes": []}
@@ -1246,32 +1055,20 @@ def owner_input(item_dir: Path) -> dict:
 
 
 def _one_line(s: str) -> str:
-    """A slot is one bullet, so it is one line — newlines pasted into a field would otherwise split
-    it into slots nobody added."""
+    """A slot is one bullet, so it is one line — a pasted newline would split it into slots
+    nobody added."""
     return " ".join(str(s or "").split())
 
 
-# The owner's standing input, carried to EVERY phase (owner, 2026-08-09).
-#
-# Each intake phase runs in its OWN session (see kind_profiles' role block): what the owner typed
-# during triage is gone by the time plan runs, and gone again by review. The two places their words
-# are DURABLE are `## From you` in the triage report and `## Decisions & clarifications` in the
-# plan. Both were reaching later phases only because a template told the agent to go and read them
-# — an instruction, which a phase can skip, misread, or simply not have (the build and vet skills
-# never mentioned either). This makes it MECHANICAL: the kernel puts the owner's own words in front
-# of every turn, so no phase can miss them by not looking.
-#
-# A POINTER WITH THE TEXT IN IT, not a substitute for the artifacts: capped hard, because this
-# rides every turn's system prompt and an owner who writes an essay must not push the rest of the
-# contract out. Over the cap it says so and names the file.
+# The owner's standing input, carried to EVERY phase: each intake phase has its own session, so
+# words are otherwise lost.
 _CARRY_CAP = 1200
 _DECISIONS = "Decisions & clarifications"
 
 
 def carry_owner_input(item_dir: Path, *, cap: int = _CARRY_CAP) -> str | None:
-    """The owner's durable words for this item as one preamble block, or None when they have said
-    nothing. Read-only and failure-tolerant: a missing or malformed artifact yields None rather
-    than breaking a turn that was going to run anyway."""
+    """The owner's durable words as one preamble block, or None. Read-only and
+    failure-tolerant: never breaks a turn."""
     lines: list[str] = []
     try:
         own = owner_input(item_dir)
@@ -1288,8 +1085,8 @@ def carry_owner_input(item_dir: Path, *, cap: int = _CARRY_CAP) -> str | None:
         plan = Path(item_dir) / "artifacts" / artifact_file("plan")
         if plan.is_file():
             body = _split_sections(plan.read_text()).get(_DECISIONS, "")
-            # Comment-only bodies are the SCAFFOLD, not an answer — the template ships this section
-            # with its instructions inside `<!-- -->` and the agent appends beneath them.
+            # Comment-only bodies are the SCAFFOLD, not an answer — the template ships its
+            # instructions inside `<!-- -->`.
             body = re.sub(r"<!--.*?-->", "", body, flags=re.DOTALL)
             for ln in (l.strip() for l in body.splitlines()):
                 if ln and not ln.startswith("#"):
@@ -1313,8 +1110,8 @@ def carry_owner_input(item_dir: Path, *, cap: int = _CARRY_CAP) -> str | None:
 
 
 def _render_from_you(references: list[dict], notes: list[dict]) -> str:
-    """The section, rebuilt whole. Both labels stay even when empty: they are how the owner knows
-    the section is theirs to write in, and the read path drops an empty block on its own."""
+    """The section, rebuilt whole. Both labels stay even when empty — they tell the owner
+    the section is theirs."""
     out = [f"## {FROM_YOU}", ""]
     for key, label in _OWNER_BLOCKS:
         lines = []
@@ -1330,12 +1127,8 @@ def _render_from_you(references: list[dict], notes: list[dict]) -> str:
 
 def write_owner_input(item_dir: Path, *, references: list[dict],
                       notes: list[dict]) -> dict:
-    """Replace `## From you` in the triage brief with the owner's slots, leaving every other byte of
-    the report alone. Appends the section when an older brief has none.
-
-    The caller sends the WHOLE list, not a delta: adding and deleting are both a rewrite of two
-    short lists, the owner is the section's only writer, and a whole-section replacement is the one
-    shape that keeps what is on disk equal to what the surface showed."""
+    """Replace `## From you` in the triage brief, leaving every other byte alone. The
+    caller sends the WHOLE list."""
     path = Path(item_dir) / "reports" / "report-triage.md"
     if not path.is_file():
         raise FileNotFoundError("reports/report-triage.md does not exist — triage writes it first")
@@ -1353,10 +1146,8 @@ def write_owner_input(item_dir: Path, *, references: list[dict],
 
 def self_check(item_dir: Path, artifact: str, *, item_kind: str | None = None,
                path: Path | None = None) -> list[str]:
-    """The gate-time validator: itemized issues (empty list = pass). Checks: file exists ·
-    every required section present AND filled · no `<fill:…>` slot left anywhere.
-    Read-only — never mutates state. `path` overrides
-    the default artifacts/ location (the handoff-brief lives in inbox/<id>/ then preliminary/)."""
+    """The gate-time validator: itemized issues, empty list means pass. Read-only. `path`
+    overrides the default `artifacts/` location."""
     if artifact not in _SPECS:
         raise KeyError(f"unknown artifact kind {artifact!r} — known: {sorted(_SPECS)}")
     path = Path(path) if path else Path(item_dir) / "artifacts" / artifact_file(artifact)
@@ -1365,15 +1156,13 @@ def self_check(item_dir: Path, artifact: str, *, item_kind: str | None = None,
     text = path.read_text()
     issues: list[str] = []
     fills = FILL.findall(text)
-    # handoff-brief sections are ALL optional (D5: capture friction kills itemizing) — a leftover
-    # slot just marks an unfilled optional section; every other kind must clear its slots.
+    # A leftover slot in a handoff-brief marks an unfilled optional section; every other kind must
+    # clear its slots.
     if fills and artifact != "handoff-brief":
         issues.append(f"{len(fills)} unfilled <fill:…> slot(s) remain — fill or remove them")
     sections = _split_sections(text)
-    # The shape the file was AUTHORED under, read from its own frontmatter — never from the item's
-    # current field. A family re-classified after the artifact was written must not retro-fail the
-    # text already on disk (same principle as the legacy plan shapes below); and it keeps this
-    # signature free of a parameter every one of the five call sites would otherwise have to thread.
+    # The shape the file was AUTHORED under, read from its own frontmatter — never the item's
+    # current field.
     head = _FM_BLOCK.match(text)
     fam = _FM_RESEARCH_KIND.search(head.group(1)) if head else None
     spec = section_spec(artifact, item_kind, fam.group(1) if fam else None)
@@ -1381,8 +1170,8 @@ def self_check(item_dir: Path, artifact: str, *, item_kind: str | None = None,
                     and get_profile(item_kind).kind == "implementation")
     is_new_plan = artifact == "plan" and any(
         h in sections for h in ("Intent", "Verification plan", "Decisions & clarifications"))
-    # Pre-renovation plans stay valid READ-ONLY — each is judged against the shape it was
-    # authored under, so mid-flight items don't go red retroactively. Newest first.
+    # Pre-renovation plans stay valid READ-ONLY, judged against the shape they were authored
+    # under. Newest first.
     if artifact == "plan" and not is_new_plan:
         if is_impl_plan and _is_legacy_plan(sections):
             spec = [(h, True) for h in _PLAN_REQUIRED_LEGACY]
@@ -1398,9 +1187,8 @@ def self_check(item_dir: Path, artifact: str, *, item_kind: str | None = None,
             issues.append(f"missing required section '## {req}'")
         elif needs_fill and not _section_filled(sections[req]):
             issues.append(f"section '## {req}' is empty")
-    # The verification-plan structural gate (§3.4 HARD) — the pre-main gate consumes plan.md, so
-    # a plan whose checks a fresh agent couldn't execute is not gate-ready. Skip the duplicate
-    # "missing section" (already reported above); soft flags go to the gate brief, never here.
+    # The pre-main gate consumes plan.md, so a plan whose checks a fresh agent could not execute
+    # is not gate-ready.
     if is_impl_plan and ("Verification plan" in sections or "Vet plan" in sections):
         issues.extend(vet_plan_hard_issues(parse_vet_plan(text)))
     # The change-map feed (old v2 shape only): a plan CARRYING `## Touches` owes parseable rows.
@@ -1413,24 +1201,17 @@ def self_check(item_dir: Path, artifact: str, *, item_kind: str | None = None,
 
 
 # --- owner edits (2026-08-09) ------------------------------------------------------------------
-# THE OWNER MAY HAND-EDIT EXACTLY TWO ARTIFACTS: the brief and the plan.
-#
-# Both state INTENT — what this item is for and how it will be done — and intent is the owner's to
-# state. A stale or wrong one is what strands an item, and until now nothing could repair it: there
-# is no write route for a work-item artifact, so a plan written under an older contract, or one that
-# read the request wrong, could only be regenerated by re-running the phase that wrote it.
-#
-# Every other artifact stays read-only, and not because it is harder: `build-vet-<n>.md`, `review.md`
-# and `execution.md` are RECORDS OF WHAT A RUN DID. Editing one is not repairing a contract, it is
-# changing the evidence — and the verification model is worth exactly what that evidence is worth.
+
+# THE OWNER MAY HAND-EDIT EXACTLY TWO ARTIFACTS: the brief and the plan. Both state INTENT, which
+# is theirs to state.
 OWNER_EDITABLE: tuple[str, ...] = ("brief", "plan")
 
 _EDITED_LINE = re.compile(r"(?m)^edited_by_owner:.*\n?")
 
 
 def owner_edited_at(text: str) -> str | None:
-    """The `edited_by_owner` stamp in an artifact's frontmatter, or None if the owner never touched
-    it. Readers use this to know the document in front of them is not what the agent last wrote."""
+    """The `edited_by_owner` stamp, or None. Readers use it to know the document is not what
+    the agent last wrote."""
     m = _FM_BLOCK.match(text or "")
     if not m:
         return None
@@ -1440,13 +1221,10 @@ def owner_edited_at(text: str) -> str | None:
 
 def owner_edit(item_dir: Path, artifact: str, text: str, *,
                item_kind: str | None = None) -> list[str]:
-    """Replace an owner-editable artifact with `text`, stamping `edited_by_owner` into its
-    frontmatter. Returns the self-check issues and WRITES NOTHING when the new text breaks the
-    artifact's contract — the same validator the gate runs, so a save can never leave an item in a
-    state the gate will refuse and the owner cannot see. Empty list = written.
+    """Replace an owner-editable artifact, stamping `edited_by_owner`. WRITES NOTHING when the
+    text breaks the contract — the same validator the gate runs.
 
-    The stamp is the point, not bookkeeping: an agent re-reading this plan is reading the OWNER's
-    words, not its own, and the trail has to say so. Raises ValueError for a non-editable kind."""
+    The stamp is the point: an agent re-reading this plan is reading the OWNER's words."""
     if artifact not in OWNER_EDITABLE:
         raise ValueError(f"{artifact!r} is not owner-editable — only {', '.join(OWNER_EDITABLE)} "
                          "state intent; the rest are records of what a run did")
@@ -1459,16 +1237,13 @@ def owner_edit(item_dir: Path, artifact: str, text: str, *,
         fm = _EDITED_LINE.sub("", m.group(1)).rstrip()
         body = f"---\n{fm}\nedited_by_owner: {stamp}\n---\n" + body[m.end():]
     else:
-        # An edit that dropped the frontmatter gets it back — the block carries `artifact:` and
-        # `item_kind:`, which downstream readers key on. Losing it silently would be the edit
-        # breaking the file in a way the section checks below cannot see.
+        # An edit that dropped the frontmatter gets it back: downstream readers key on `artifact:`
+        # and `item_kind:`.
         head = _FM_BLOCK.match(path.read_text())
         keep = _EDITED_LINE.sub("", head.group(1)).rstrip() if head else f"artifact: {artifact}"
         body = f"---\n{keep}\nedited_by_owner: {stamp}\n---\n" + body.lstrip("\n")
-    # Judge the CANDIDATE, never the file: validating after the write would mean the artifact holds
-    # a rejected version for as long as it takes to report the failure, and a phase agent reading it
-    # in that window would work against text the owner was told did not save. The probe lives
-    # outside artifacts/ so nothing that lists the folder can ever see it.
+    # Judge the CANDIDATE, never the file: validating after the write leaves a rejected version
+    # readable meanwhile.
     probe = Path(tempfile.mkdtemp(prefix="superme-edit-")) / path.name
     try:
         probe.write_text(body)
@@ -1491,12 +1266,8 @@ _BRIEF_SECTIONS = (("Background & why raised", "background"),
 
 def write_handoff_brief(folder: Path, title: str, *, background: str = "", discussion: str = "",
                         direction: str = "", constraints: str = "") -> str:
-    """Deterministically render an inbox item's `handoff-brief.md` (D5): code owns frontmatter +
-    section order; the caller (the itemizing agent, while context is hot) supplies the prose per
-    section AS ARGS — all optional; an empty section keeps its `<fill:…>` slot for triage to
-    backfill. If the brief already EXISTS, the new content is APPENDED under a divider (D5: the
-    topic resurfaced — never rewrite). Content contract: high-level only — no plans, no
-    implementation detail, no research findings. Returns the file path."""
+    """Render an inbox item's `handoff-brief.md`: code owns form, the caller supplies
+    prose. An existing brief is APPENDED to."""
     folder = Path(folder)
     path = folder / "handoff-brief.md"
     provided = {"background": (background or "").strip(), "discussion": (discussion or "").strip(),
@@ -1519,20 +1290,11 @@ def write_handoff_brief(folder: Path, title: str, *, background: str = "", discu
 # --------------------------------------------------------------------------- evidence ledger
 
 def repo_fingerprint(repo_dir: Path | None) -> str:
-    """A cheap fingerprint of the repo's CODE STATE: HEAD sha + the content of every uncommitted
-    change to a TRACKED file (`git diff HEAD`). Any commit or tracked edit changes it — the D6
-    stale-on-edit trigger. The diff CONTENT is what's hashed, not a status summary: a summary is
-    byte-identical while an already-dirty file keeps changing, which would let evidence recorded
-    mid-build stay "fresh" through further edits to the same file.
+    """A cheap fingerprint of the repo's CODE STATE: HEAD sha plus `git diff HEAD` content.
+    Any commit or tracked edit moves it.
 
-    UNTRACKED files are deliberately excluded (2026-07-30). They were counted via
-    `git status --porcelain`, which made a vet run stale its own evidence: running the project's
-    tests drops coverage files, temp databases and logs into the worktree, the fingerprint moved,
-    and green evidence read as `stale` — a false positive of exactly the kind that wedged the close
-    gate (dogfood D5). Build's implementation is always tracked (the commit gate sees to that), so
-    nothing this rule exists to catch lives in an untracked file.
-
-    Non-git / missing dir → 'no-git' (evidence there can't be freshness-tracked, only recorded)."""
+    UNTRACKED files are excluded: test runs drop coverage files and logs, which staled green evidence.
+    Non-git → 'no-git'."""
     if not repo_dir or not Path(repo_dir).is_dir():
         return "no-git"
     try:
@@ -1551,17 +1313,14 @@ _EVIDENCE_HEAD = re.compile(r"^### (?P<ts>\S+) — (?P<check>.*)$")
 
 
 def _resolve_evidence_check(check: str, valid_ids: list[str]) -> str:
-    """The evidence ledger's check field IS its join key — `evidence_status` derives each check's
-    verdict from the LATEST entry bearing that exact key. So a glued key (`stats-top: leaderboard,
-    no TOTAL`) is a DIFFERENT key from the vet-plan id (`stats-top`): its stale `failed` entry is
-    never superseded by the clean id's later `pass`, and the loop halts on a phantom permanent
-    failure (B4). Single source of truth: the ledger key space == the vet-plan id space, enforced
-    at write. Returns the exact id, or raises with a targeted hint. `valid_ids` empty → no vet plan
-    to check against (depth=none / non-vetted kinds) → caller records the check verbatim."""
+    """The ledger's check field IS its join key, so a glued key is a DIFFERENT key
+    whose stale `failed` never gets superseded.
+
+    Returns the exact id, or raises with a targeted hint. Empty `valid_ids` means record verbatim."""
     c = check.strip()
     if c in valid_ids:
         return c
-    # Glued key? — a real id with a description welded on. Name it so the fix is one edit, not a hunt.
+    # A real id with a description welded on. Name it, so the fix is one edit and not a hunt.
     glued = next((vid for vid in sorted(valid_ids, key=len, reverse=True)
                   if c == vid or c.startswith(vid + " ") or c.startswith(vid + ":")
                   or c.startswith(vid + " —") or c.startswith(vid + " -")), None)
@@ -1578,33 +1337,18 @@ def _resolve_evidence_check(check: str, valid_ids: list[str]) -> str:
 
 def record_validation(item_dir: Path, repo_dir: Path | None, *, command: str, result: str,
                       passed: bool, task: str = "") -> dict:
-    """Append one BUILD validation run to the current cycle report's `## Validation` ```runs fence:
-    the command build ran, what came back, whether it passed, and the tree it ran against.
+    """Append one BUILD validation run to the cycle report's `## Validation` ```runs
+    fence.
 
-    Validation is the builder's self-check (design §Further Notes) and it stays build's to run —
-    but a self-check written as prose (*"full suite: 106/106 pass"*) cannot be checked by anything.
-    Build is both the runner and the only witness, and the sentence reads identically whether the
-    suite passed, failed, or never ran. Recording the run as DATA is what lets vet audit the claim
-    on its own pass and send a false green back into the loop, which is the whole point: the proof
-    of build's work belongs to verification, and verification needs something to hold.
-
-    The prose bullets in `## Validation` are unaffected — they are the per-task narrative a vetter
-    reads. This is the machine lane beside them, same grammar as `## Verification`'s ```checks."""
+    A self-check written as prose cannot be checked: build is both runner and only witness. Recording
+    the run as DATA is what lets vet audit the claim."""
     result = " ".join((result or "").split())
     raw = (command or "").strip()
     if not raw:
         raise ValueError("record_validation needs the COMMAND you ran — a claim with no command "
                          "is the prose this record exists to replace")
-    # A newline INSIDE A QUOTE is refused, not silently flattened. This ledger stores the command on
-    # its `###` heading line and vet's audit re-runs THE STORED TEXT verbatim, so every newline
-    # becomes a space. Between shell words that is harmless — a wrapped `pytest -q\n tests/` is the
-    # same command. Inside a quoted string it is not: the newlines are the program's statement
-    # separators, so `python3 -c "import os\nprint(1)"` flattens into an IndentationError, the audit
-    # reports "claim did not reproduce", and the loop spends a whole build⟷vet cycle on a storage
-    # round-trip while the code was always correct (observed live 2026-08-14, 223k tokens).
-    # Refusing costs one tool call instead. Quote tracking is deliberately naive — it answers "was a
-    # quote open at this newline", which is the question, and over-refusing a pathological quoting
-    # style is cheaper than shipping a command that no longer runs.
+    # A newline INSIDE A QUOTE is refused, not flattened: the audit re-runs the stored text, and
+    # quotes carry statement separators.
     quote = ""
     for ch in raw:
         if quote:
@@ -1637,11 +1381,8 @@ def record_validation(item_dir: Path, repo_dir: Path | None, *, command: str, re
 
 
 def validation_runs(item_dir: Path, *, cycle: int | None = None) -> list[dict]:
-    """Every recorded build validation run, in record order: [{ts, command, task, result, passed,
-    fingerprint, cycle}]. `cycle` scopes to one pass — what vet's audit re-runs.
-
-    The head slot holds the COMMAND (the ledger parser reads it as `check`), because a validation
-    run is identified by what was executed, not by a name someone chose for it."""
+    """Every recorded build validation run, in record order. The head slot holds the
+    COMMAND: a run is identified by what executed."""
     out: list[dict] = []
     for r in cycle_reports(item_dir):
         if cycle is not None and r["cycle"] != cycle:
@@ -1658,14 +1399,11 @@ def validation_runs(item_dir: Path, *, cycle: int | None = None) -> list[dict]:
 
 def record_validation_audit(item_dir: Path, repo_dir: Path | None, *, command: str,
                             claimed: bool, actual: bool, result: str) -> dict:
-    """Record the kernel's AUDIT of one build validation claim — what build said the command did,
-    and what the command actually does now.
+    """Record the kernel's AUDIT of one build validation claim — what build said, and
+    what the command does now.
 
-    It lands in the `## Verification` fence as `kind: audit`, beside vet's verdicts and diagnoses:
-    same append-only grammar, same freshness stamp, and `evidence_entries` filters it out, so an
-    audit can never be counted as a check. That matters — the whole point of moving the test suite
-    out of the vet plan is that unit tests are not the item's exam. This is not an exam question;
-    it is the answer to *"is build's claim true?"*, which is verification's own business."""
+    It lands in `## Verification` as `kind: audit`, so `evidence_entries` filters it out and it never
+    counts as a check."""
     def _one(s: str) -> str:
         return " ".join((s or "").split())
     command = _one(command)
@@ -1689,8 +1427,8 @@ def record_validation_audit(item_dir: Path, repo_dir: Path | None, *, command: s
 
 
 def validation_audit(item_dir: Path, *, cycle: int | None = None) -> list[dict]:
-    """The audit rows recorded so far: [{command, claimed, actual, agrees, result, cycle}].
-    `cycle` scopes to one pass — the loop only acts on the pass it is deciding."""
+    """The audit rows recorded so far. `cycle` scopes to one pass — the loop acts only on
+    the pass it is deciding."""
     rows = []
     for e in _ledger(item_dir):
         if e.get("kind") != KIND_AUDIT:
@@ -1705,9 +1443,8 @@ def validation_audit(item_dir: Path, *, cycle: int | None = None) -> list[dict]:
 
 
 def validation_discrepancies(item_dir: Path, *, cycle: int | None = None) -> list[dict]:
-    """Audit rows where build's claim and the machine disagree — the findings that send a cycle
-    back. The LAST audit of a command wins: a re-audit after build fixed something is the current
-    answer, and carrying the superseded row would keep a resolved discrepancy alive forever."""
+    """Audit rows where build's claim and the machine disagree. The LAST audit of a
+    command wins, so a fix clears it."""
     latest: dict[str, dict] = {}
     for r in validation_audit(item_dir, cycle=cycle):
         latest[r["command"]] = r
@@ -1715,9 +1452,8 @@ def validation_discrepancies(item_dir: Path, *, cycle: int | None = None) -> lis
 
 
 def _parse_ledger_entries(text: str) -> list[dict]:
-    """Line-oriented ledger text → [{ts, check, how, result, note?, passed, deferred?,
-    fingerprint}] in order. Shared by the legacy validation.md reader and the cycle-file
-    §Verification fence reader — one format, one parser."""
+    """Line-oriented ledger text → entry dicts, in order. One format, one parser, shared
+    by both readers."""
     entries: list[dict] = []
     cur: dict | None = None
     for line in text.splitlines():
@@ -1731,23 +1467,21 @@ def _parse_ledger_entries(text: str) -> list[dict]:
             if kv:
                 k, v = kv.group(1), kv.group(2).strip()
                 if k == "finding":
-                    # `<severity>: <text>` — the severity vocabulary is fixed and three words long,
-                    # so the first colon splits it unambiguously even when the text has its own.
+                    # `<severity>: <text>` — the vocabulary is three words, so the first colon
+                    # splits it unambiguously.
                     f = re.match(r"^(low|medium|high):\s*(.*)$", v)
                     cur.setdefault("findings", []).append(
                         {"severity": f.group(1), "text": f.group(2)} if f
                         else {"severity": "medium", "text": v})
                     continue
                 if k in ("met", "missed"):
-                    # One rubric criterion, judged. Repeated lines accumulate rather than
-                    # overwrite — the whole point is that each criterion stands on its own.
+                    # One rubric criterion, judged. Repeated lines accumulate: each criterion
+                    # stands on its own.
                     cur.setdefault("criteria", []).append({"text": v, "met": k == "met"})
                     continue
                 if k == "probed":
-                    # One probe per line, accumulating. A lens read is a LIST of things tried, and
-                    # a reader asking "what did it actually check" wants them separable — the old
-                    # single line turned four distinct probes into one unreadable paragraph. Rows
-                    # written before this still parse: one line simply gives a one-item list.
+                    # One probe per line, accumulating. A lens read is a LIST, and a reader wants
+                    # the probes separable.
                     cur.setdefault("probed", []).append(v)
                     continue
                 cur[k] = (v == "true") if k in ("passed", "deferred") else v
@@ -1758,33 +1492,13 @@ def record_verification(item_dir: Path, repo_dir: Path | None, *, check: str, ho
                         result: str, passed: bool, deferred: bool = False, note: str = "",
                         title: str = "", by: str = BY_AGENT,
                         met: list[str] | None = None, missed: list[str] | None = None) -> dict:
-    """Append one machine entry to the current cycle report's `§Verification` check fence
-    (renovation §3.1 — the fence replaces the retired validation.md ledger; scaffolds the cycle
-    file first if none exists): check + how it ran + the machine result + pass/fail + the repo
-    fingerprint at record time. Entries are APPEND-ONLY; 'verified' is derived from them, never
-    asserted. The `check` MUST be an exact verification-plan id when the plan has one (B4) — see
-    _resolve_evidence_check. `note` is the one-line expected-vs-actual context for a failure.
+    """Append one entry to the cycle report's `§Verification` check fence. Append-only,
+    so 'verified' is derived.
 
-    `by` is the entry's PROVENANCE (design §4): `machine` when the kernel executed the check's
-    literal `run:` block itself, `agent` when a vetter performed it and attested to the result.
-    Both are legitimate evidence; they are not equally strong, and a reader who cannot tell them
-    apart is reading a weaker record than they think. A machine entry already written this cycle
-    is FINAL — a later agent record against the same check is refused, because the one property
-    that makes kernel execution worth having is that nothing downstream can revise it.
-
-    `met` / `missed` carry a rubric check's per-criterion judgment (design §2). Every criterion the
-    plan listed must be accounted for, and a missed one means the check FAILED — "three of four,
-    close enough" is exactly the soft pass a rubric exists to prevent. Both rules are enforced
-    below rather than asked for, because a partial record and a partial pass look identical from
-    the outside.
-
-    `deferred=True` (BV-A2) records a check the build could NOT satisfy because it needs an
-    authorization it lacks: it is neither pass nor fail — it advances the item to review with the
-    authorization request, rather than failing the loop closed. A deferred entry rides
-    `passed: false` for legacy readers but carries `deferred: true`, and evidence_status buckets
-    it separately."""
-    # Single-line coerce: the ledger is line-oriented (one `- key: value` per line) — an embedded
-    # newline in any field would corrupt parsing for every entry after it.
+    `by` is PROVENANCE: `machine` beats `agent` and is FINAL for the cycle. A missed rubric criterion
+    FAILS the check; `deferred` is neither pass nor fail."""
+    # Single-line coerce: the ledger is line-oriented, so an embedded newline corrupts every entry
+    # after it.
     def _one_line(s: str) -> str:
         return " ".join((s or "").split())
     check, how, result, note = _one_line(check), _one_line(how), _one_line(result), _one_line(note)
@@ -1794,8 +1508,8 @@ def record_verification(item_dir: Path, repo_dir: Path | None, *, check: str, ho
     plan_path = Path(item_dir) / "artifacts" / artifact_file("plan")
     valid_ids = [c["id"] for c in parse_vet_plan(plan_path.read_text()).get("checks", [])] \
         if plan_path.is_file() else []
-    # `depth: none` has no key space at all, so a recorded entry here could only be one vet
-    # invented — and it would then drive the loop. Refuse, and name where the observation goes.
+    # `depth: none` has no key space, so an entry here could only be one vet invented. Refuse and
+    # redirect.
     if plan_vet_depth(item_dir) == "none":
         raise ValueError(
             "the approved plan declares `depth: none` — this item has no verification plan, so "
@@ -1822,14 +1536,13 @@ def record_verification(item_dir: Path, repo_dir: Path | None, *, check: str, ho
     elif met or missed:
         raise ValueError(f"check {check!r} declares no rubric in the plan — there are no criteria "
                          "to judge. Record the result in `result`.")
-    # Target the LATEST cycle report even when the driver already closed it (a re-vet after stale
-    # re-verifies the SAME cycle); scaffold only when no cycle exists at all.
+    # Target the LATEST cycle report even when the driver closed it; scaffold only when no cycle
+    # exists.
     reports = cycle_reports(item_dir)
     cy = ({"cycle": reports[-1]["cycle"], "path": reports[-1]["path"]}
           if reports else scaffold_cycle(item_dir, title=title))
-    # A machine entry is the cycle's final word on that check. Without this an agent could re-record
-    # over a red kernel result and the loop would advance on the agent's version — which would make
-    # kernel execution decorative rather than load-bearing.
+    # A machine entry is the cycle's final word on that check — otherwise kernel execution is
+    # decorative.
     if by != BY_MACHINE and any(e["check"] == check and e.get("by") == BY_MACHINE
                                 for e in evidence_entries(item_dir)
                                 if e.get("cycle") == cy["cycle"]):
@@ -1856,18 +1569,10 @@ def record_verification(item_dir: Path, repo_dir: Path | None, *, check: str, ho
 
 def record_diagnosis(item_dir: Path, *, check: str, where: str, why: str,
                      unknown: str = "") -> dict:
-    """Append vet's DIAGNOSIS of a failed check (design §5): where it broke, why, and what could
-    not be determined. Never the fix — build reasons that out inside the same plan, because a
-    remedy named here is a remedy vet then grades itself on.
+    """Append vet's DIAGNOSIS of a failed check: where it broke and why. Never the fix.
 
-    Refused unless the check's latest verdict is an actual failure: a diagnosis of a passing check
-    is noise in the one place the next build cycle is told to look, and a diagnosis of a deferral
-    invents a cause for work nobody did.
-
-    `unknown` is optional and load-bearing when present — "the request never reached the handler,
-    and I could not tell whether the router or the middleware dropped it" is a better handoff than
-    a confident guess. Silence about the limits of the evidence is how a build cycle gets sent
-    somewhere the vetter never actually looked."""
+    Refused unless the check's latest verdict is an actual failure. `unknown` is load-bearing: a
+    confident guess sends build somewhere nobody looked."""
     item_dir = Path(item_dir)
 
     def _one_line(s: str) -> str:
@@ -1901,21 +1606,11 @@ def record_diagnosis(item_dir: Path, *, check: str, where: str, why: str,
 
 def record_lens(item_dir: Path, *, probed: list[str] | str, lens: str,
                 findings: list[dict] | None = None) -> dict:
-    """Record one standing lens's read of this cycle (design §3): what was PROBED, and whatever it
-    found. No findings is the expected outcome and a complete record — `probed` is what makes a
-    clean pass mean something instead of reading as a lens nobody ran.
+    """Record one standing lens's read of this cycle: what was PROBED, and what it found.
+    No findings is a complete record.
 
-    `probed` is a LIST — one probe per entry (owner, 2026-08-06). A lens read is several separable
-    things tried, and the owner reads this to answer "what did it actually check": as one paragraph
-    that answer has to be extracted by eye, as four lines it is scannable. A bare string is still
-    accepted and becomes a one-item list, so every stored read keeps parsing.
-
-    Deliberately no quotas anywhere in this path. "Find at least two unhandled inputs" manufactures
-    the second one when the code is fine, so the obligation is to probe and say what was probed.
-
-    A lens is not a plan check: it has no id in `## Verification plan`, it runs whatever the depth
-    says, and it is recorded here rather than through `record_verification` — which would refuse it,
-    correctly, for not naming a planned check."""
+    `probed` is a LIST, one probe per entry. No quotas anywhere: a quota manufactures a finding when
+    the code is fine."""
     item_dir = Path(item_dir)
 
     def _one_line(s: str) -> str:
@@ -1954,16 +1649,11 @@ def record_lens(item_dir: Path, *, probed: list[str] | str, lens: str,
 
 
 def record_nomination(item_dir: Path, *, check: str, general: str) -> dict:
-    """Nominate one of this item's checks for the repo's VERIFICATION LIBRARY (design §8) — the
-    growing catalogue the next item's plan inherits from. `general` says what makes it general: the
-    property of THIS REPO it defends, stated without reference to this item.
+    """Nominate one of this item's checks for the repo's VERIFICATION LIBRARY. `general`
+    says what property of THIS REPO it defends.
 
-    Vet nominates; CLOSE writes. Vet has no writes into `general/`, and the nomination changing that
-    would put a repo-wide commitment on the far side of a gate the owner has not reached yet.
-
-    Refused unless the check has PASSED at least once here. A library of untested hypotheses is
-    worse than no library: the next plan inherits one, it does not work, and that item spends a
-    cycle discovering what this one could have told it."""
+    Vet nominates; CLOSE writes. Refused unless the check has PASSED here — untested hypotheses cost
+    the next item a cycle."""
     item_dir = Path(item_dir)
 
     def _one_line(s: str) -> str:
@@ -1988,9 +1678,8 @@ def record_nomination(item_dir: Path, *, check: str, general: str) -> dict:
 
 
 def nominations(item_dir: Path) -> dict[str, dict]:
-    """Every check nominated for the library across this item's cycles → {check: {general, cycle}}.
-    Not this-cycle-only, unlike the lenses and diagnoses: a nomination is a claim about the REPO,
-    which does not expire when the item's code moves, and close reads the whole item at the end."""
+    """Every check nominated for the library across this item's cycles. Not this-cycle-only:
+    a nomination is a claim about the REPO."""
     out: dict[str, dict] = {}
     for e in _ledger(item_dir):
         if e.get("kind") == KIND_NOMINATION:
@@ -1999,8 +1688,8 @@ def nominations(item_dir: Path) -> dict[str, dict]:
 
 
 def lens_reads(item_dir: Path) -> dict[str, dict]:
-    """This cycle's lens reads → {lens: {probed, findings, cycle}}. THIS cycle only: a finding the
-    last cycle raised describes code that has since moved, and a lens read is cheap to redo."""
+    """This cycle's lens reads → {lens: {probed, findings, cycle}}. THIS cycle only: last
+    cycle's finding describes code that has moved."""
     reports = cycle_reports(item_dir)
     if not reports:
         return {}
@@ -2008,8 +1697,8 @@ def lens_reads(item_dir: Path) -> dict[str, dict]:
     out: dict[str, dict] = {}
     for e in _ledger(item_dir):
         if e.get("kind") == KIND_LENS and e.get("cycle") == cycle:
-            # `probed` is a list of probes. A read stored before that (one `- probed:` line) parses
-            # to a one-item list, so no reader needs to know which era wrote it.
+            # `probed` is a list. An older single `- probed:` line parses to a one-item list, so
+            # no reader cares.
             raw = e.get("probed") or []
             out[e["check"]] = {"probed": [raw] if isinstance(raw, str) else list(raw),
                                "findings": list(e.get("findings") or []),
@@ -2023,25 +1712,23 @@ def _gating(lens: str, findings: list[dict]) -> list[dict]:
 
 
 def lens_gaps(item_dir: Path) -> list[dict]:
-    """The lens findings that send this item back to build → [{lens, severity, text}], in lens
-    order. A failing lens routes like any other failed check; there is no separate exit for it."""
+    """The lens findings that send this item back to build. A failing lens routes like any other
+    failed check."""
     reads = lens_reads(item_dir)
     return [{"lens": ln, **f} for ln in LENSES
             for f in _gating(ln, reads.get(ln, {}).get("findings") or [])]
 
 
 def missing_lenses(item_dir: Path) -> list[str]:
-    """Standing lenses with no read this cycle. `performance` is never here — it is only meaningful
-    against a budget the plan named, and demanding it would buy opinions."""
+    """Standing lenses with no read this cycle. `performance` is never here — without a
+    budget, demanding it buys opinions."""
     reads = lens_reads(item_dir)
     return [ln for ln in STANDING_LENSES if ln not in reads]
 
 
 def undiagnosed_failures(item_dir: Path) -> list[str]:
-    """Checks whose latest verdict is a failure with no diagnosis in that same cycle — the vet
-    report's closing bar (design §5). Same-cycle, deliberately: a check that failed in c1 and fails
-    again in c3 needs c3's reading, because the code moved in between and last cycle's cause may
-    have been fixed and replaced by another."""
+    """Checks whose latest verdict failed with no diagnosis in that same cycle.
+    Same-cycle: the code moved, so last cycle's cause may be gone."""
     latest = {e["check"]: e for e in evidence_entries(item_dir)}
     diag = diagnoses(item_dir)
     return [c for c, e in latest.items()
@@ -2050,14 +1737,11 @@ def undiagnosed_failures(item_dir: Path) -> list[str]:
 
 
 def evidence_entries(item_dir: Path) -> list[dict]:
-    """Every recorded VERDICT, in record order: each cycle report's §Verification fence, in cycle
-    order. One derived view, so evidence_status and the briefs never care where an entry lives.
-    (`validation.md` — the pre-renovation ledger — is retired; a still-open item carrying one
-    predates the loop entirely and has no live cycle to gate.)
+    """Every recorded VERDICT, in cycle order — one derived view, so no caller needs to know
+    where an entry lives.
 
-    Diagnosis entries share the fence but are NOT verdicts and are filtered out here — every caller
-    (freshness, the loop's convergence fingerprint, the check table) counts verdicts, and a
-    diagnosis leaking into that count would read as a second, failing entry."""
+    Diagnosis entries share the fence but are filtered out: one leaking in would read as a second,
+    failing entry."""
     return [e for e in _ledger(item_dir) if e.get("kind", KIND_VERDICT) == KIND_VERDICT]
 
 
@@ -2073,13 +1757,10 @@ def _ledger(item_dir: Path) -> list[dict]:
 
 
 def diagnoses(item_dir: Path) -> dict[str, dict]:
-    """The latest diagnosis per check → {check: {where, why, unknown, cycle}} (design §5).
+    """The latest diagnosis per check → {check: {where, why, unknown, cycle}}.
 
-    A diagnosis is a separate act from the verdict, deliberately: the verdict says a check failed,
-    the diagnosis says where and why — and for a kernel-run check the two even have different
-    authors (the daemon owns the exit code, vet owns the reading of it). Keeping them as one record
-    would mean either letting an agent rewrite a machine verdict to attach its reading, or leaving
-    machine failures undiagnosed. Both are worse than a second entry."""
+    A diagnosis is a separate act from the verdict: for a kernel-run check they even have different
+    authors, so merging them would let an agent rewrite a machine verdict."""
     out: dict[str, dict] = {}
     for e in _ledger(item_dir):
         if e.get("kind") == KIND_DIAGNOSIS:
@@ -2091,36 +1772,22 @@ def diagnoses(item_dir: Path) -> dict[str, dict]:
 
 
 # --- Proof: the connected view (renovation v2 §4.2) ------------------------------------------
-# One row per BUILT THING, each carrying its own validation → verification. A bare grid of check ids
-# tells the owner nothing; "this feature, proven this way" does. The join key is the plan's `## Tasks`
-# id: cycle §Built / §Validation bullets lead with `t<n> —`, and vet-plan checks name `covers:`.
-# Assembled mechanically — no LLM anywhere in this path.
-#
-# TOLERANT BY DESIGN. Untagged content is not dropped and not guessed at: it lands in the item-wide
-# row. Requiring the tags would fail every in-flight item, and a Proof view that silently omits work
-# is worse than one that admits it couldn't attribute it.
-# The id may be EMPHASIZED. Live finding (2026-07-30): every real cycle report on the playground
-# writes `- **t1** (\`file.py:49\`): …`, so a bare `t\d+` match found nothing and every bullet fell
-# into the item-wide row — the tolerant path hid the bug instead of failing it. Agents bold the id
-# because it reads better, and the format they actually produce is the one to parse.
-# `\b` sits BEFORE the closing emphasis, not after it: `t1**` followed by a space has no word
-# boundary after the asterisks, so a trailing `\b` makes the regex backtrack to consuming zero of
-# them and the `**` survives into the text.
+
+# One row per BUILT THING, carrying its own validation → verification. Joined on the plan's `##
+# Tasks` id.
 _TAGGED_BULLET = re.compile(r"^\s*[-*]\s*[*`_]{0,2}(t\d+)\b[*`_]{0,2}[\s—:.\-]*(.*)$")
 
 
 def _tagged_bullets(body: str) -> tuple[dict[str, list[str]], list[str]]:
-    """A report section's bullets split by leading task id → ({task: [text, …]}, [untagged, …]).
-    A bullet is a BLOCK: continuation lines belong to the bullet above (the template wraps long
-    ones, and the line-wise reading of exactly this shape is what corrupted a plan on 2026-07-28)."""
+    """A report section's bullets split by leading task id. A bullet is a BLOCK: continuation
+    lines belong to the bullet above."""
     by_task: dict[str, list[str]] = {}
     loose: list[str] = []
     cur: list[str] | None = None
     fenced = False
     for line in (body or "").splitlines():
-        # A fenced block is the section's MACHINE lane (`## Validation`'s ```runs), not prose. Read
-        # line-wise it would spill `- result:` / `- passed:` lines into the untagged bullets and put
-        # raw ledger fields on the Task tab beside the narrative they were extracted from.
+        # A fenced block is the section's MACHINE lane, not prose — read line-wise its fields
+        # spill into the bullets.
         if _FENCE.match(line.strip()):
             fenced = not fenced
             cur = None
@@ -2142,16 +1809,10 @@ def _tagged_bullets(body: str) -> tuple[dict[str, list[str]], list[str]]:
 
 
 def proof_rows(item_dir: Path) -> list[dict]:
-    """The Proof view's rows → [{task, text, done, built[], validated[], verified[]}], the plan's
-    tasks in order, then one `task: ""` item-wide row for everything that named no task.
+    """The Proof view's rows — the plan's tasks in order, then one item-wide row for the rest.
 
-    `verified` entries are the PLANNED checks — the plan's `## Verification plan` is the list, and a
-    recorded verdict is joined onto it. A check the loop hasn't reached yet is still a row (`ran:
-    False`), because the exam is decided at plan and the owner reads it there: rows that only appear
-    once vet has run left the Task tab empty at exactly the gate where the owner is asked whether
-    this proof is enough. A check is attached to a task when its `covers:` names it; one covering two
-    tasks appears under both — it genuinely proves both. The item-wide row also carries the
-    whole-item validation lines (a suite run isn't per-task) and any check that named nothing."""
+    `verified` entries are the PLANNED checks with any verdict joined on. A check the loop has not
+    reached is still a row: the exam is decided at plan."""
     item_dir = Path(item_dir)
     plan_path = item_dir / "artifacts" / artifact_file("plan")
     plan = plan_path.read_text() if plan_path.is_file() else ""
@@ -2173,34 +1834,31 @@ def proof_rows(item_dir: Path) -> list[dict]:
         built_loose += bl
         valid_loose += vl
 
-    # Each check's pass/fail sequence by cycle, so the surface can render `c3 ✗→✓` — the one thing
-    # latest-per-check loses, and the whole point of showing a LOOP's proof rather than a snapshot.
+    # Each check's pass/fail sequence by cycle, so the surface can render `c3 ✗→✓`. Latest-per-
+    # check loses that.
     history: dict[str, list[dict]] = {}
     for e in evidence_entries(item_dir):
         history.setdefault(e["check"], []).append(
             {"cycle": e.get("cycle"), "passed": bool(e.get("passed"))})
 
-    # The planned exam, joined with whatever the loop has recorded. Planned order first; a recorded
-    # check the plan no longer declares still shows (a revision dropped it — the verdict is real and
-    # silently losing it would hide a result the owner may have already read).
+    # The planned exam joined with what the loop recorded. A dropped check still shows — its
+    # verdict was real.
     verdicts = {r["check"]: r for r in verdict_rows(item_dir)}
-    # `by` on a PLANNED row is the promise, not the record: a check carrying a `run:` block will be
-    # executed by the kernel, and the owner reading the plan gate should see which parts of the exam
-    # are machine-decided before approving it. Once it runs, the ledger's own `by` overwrites this.
+    # `by` on a PLANNED row is a promise, not a record. Once it runs, the ledger's `by` overwrites
+    # it.
     planned = [{"check": c["id"],
-                # The plan's own sentence for what a green MEANS — the line the Task tab leads
-                # with, so the owner reads the proof before the mechanism. Never re-derived here:
-                # deriving it from `run:` is exactly the drift `proves:` exists to end.
+                # The plan's own sentence for what a green MEANS. Never re-derived from `run:` —
+                # that is the drift `proves` ends.
                 "proves": str(c.get("proves") or ""),
                 "expect": str(c.get("expect") or ""),
                 "mode": str(c.get("mode") or ""), "ran": False,
                 # A rubric check is judged, so the kernel never runs it (see services/checks.py).
                 "by": BY_MACHINE if (c.get("run") and not c.get("rubric")) else BY_AGENT,
-                # Where the check came from: "" = authored for this item, `standing`/`library` =
-                # inherited from the repo's verification library (design §8).
+                # Where the check came from: "" is authored here, `standing`/`library` is
+                # inherited from the repo.
                 "source": str(c.get("source") or ""),
-                # The criteria the plan set, readable at the plan gate — the recorded judgment
-                # lands beside them in `criteria` once the check runs.
+                # The criteria the plan set, readable at the plan gate. The recorded judgment
+                # lands beside them.
                 "rubric": [str(r) for r in (c.get("rubric") or [])], "criteria": [],
                 "passed": False, "deferred": False, "cycle": None, "how": "", "result": ""}
                for c in checks]
@@ -2212,12 +1870,8 @@ def proof_rows(item_dir: Path) -> list[dict]:
         v = verdicts.get(base["check"])
         row = {**base, **(v or {}), "ran": v is not None,
                "history": history.get(base["check"], [])}
-        # Only tasks the plan actually DECLARES can hold a check. A `covers: t7` with no `t7` in
-        # `## Tasks` used to route the row to a bucket no task ever read, so the check disappeared
-        # from the owner's Proof view — the silent omission this function's contract refuses. It is
-        # a plan miss (the skill says fix one or the other), but the surface's job is to admit it
-        # couldn't attribute the check, not to drop it: unattributed lands item-wide, like any
-        # untagged content.
+        # Only tasks the plan DECLARES can hold a check. An unattributable one lands item-wide
+        # rather than disappearing.
         known = {t["id"] for t in tasks}
         covers = [t for t in re.findall(r"t\d+", covers_of.get(row["check"], "")) if t in known]
         if covers:
@@ -2238,13 +1892,10 @@ def proof_rows(item_dir: Path) -> list[dict]:
 
 
 def verdict_rows(item_dir: Path) -> list[dict]:
-    """The LATEST verdict per check, in first-seen order → [{check, passed, deferred, cycle, how,
-    result}]. The vet's actual findings, which is what a review reader needs and what a count of
-    ledger entries can't say. Read by the review deputy's prompt (slice 6b) and the Proof view.
+    """The LATEST verdict per check, in first-seen order — the vet's actual findings.
 
-    Latest-per-check, not every entry: a check that failed in c1 and passed in c3 IS passing, and
-    showing both rows invites the reader to average two contradictory facts. Same rule
-    `evidence_status` uses to decide freshness — one definition of "where this check stands"."""
+    Latest-per-check, not every entry: a check that failed in c1 and passed in c3 IS passing, and two
+    rows invite averaging contradictory facts."""
     latest: dict[str, dict] = {}
     for e in evidence_entries(item_dir):
         latest[e["check"]] = e
@@ -2256,36 +1907,23 @@ def verdict_rows(item_dir: Path) -> list[dict]:
              "by": str(e.get("by") or BY_AGENT),
              # Per-criterion judgment (empty on a check with no rubric).
              "criteria": list(e.get("criteria") or []),
-             # The located cause, joined from this cycle's diagnosis (empty on a passing check, and
-             # on a stale one from an earlier cycle — a cause the code has moved past misleads).
+             # The located cause, from THIS cycle's diagnosis: a cause the code has moved past
+             # misleads.
              **{k: (diag.get(c, {}).get(k, "") if diag.get(c, {}).get("cycle") == e.get("cycle")
                     else "") for k in ("where", "why", "unknown")}}
             for c, e in latest.items()]
 
 
 # --- assumptions: RETIRED (workflow-renovation-v2 §3.1 demolition, 2026-07-27) --------------
-# `assumptions.md` + `record_assumption` / `ratify_assumptions` / `assumptions_ratified` are gone.
-# The ledger was a file nobody opened whose only teeth were a close criterion an autopilot item
-# could never satisfy — ratification is owner-only, so autonomy ended at a blocked gate. The
-# signal it carried survives where it is actually read: a `## Assumptions` section in the phase's
-# own record (cycle report / investigation.md), surfaced in that phase's user report, picked up on
-# demand. Do not reintroduce a standalone ledger for it.
+
+# `assumptions.md` and its tools are gone. The signal survives as a `## Assumptions` section in
+# the phase's own record.
 
 
 # --- the authorization ledger (BV-A2) -------------------------------------------
-# A work-item may PROPOSE a contract change (an anchor-doc op) but not every such change is
-# self-authorizable: the ones that DEFINE or alter intent are owner-reserved. When build hits one it
-# can't self-authorize, it records an AUTHORIZATION REQUEST here (what · why · which doc · a SCOPE
-# the deputy's delegated authority is matched against · the vet check it blocks) and lets that check
-# DEFER — instead of stalling, or (worse) re-pointing its own exam to dodge the wall. The request
-# rides every gate brief; at review the owner — or the deputy, when the scope is delegated — grants
-# or denies. A grant routes back through build⟷vet (grant-as-send_back); a denial accepts the
-# deferral (the work is skipped, on the record). Close refuses while any request is still PENDING.
-#
-# The SCOPE vocabulary encodes the owner's line (build-vet-autonomy-design.md): the deputy may
-# authorize changes that SYNC the contract to shipped reality; the owner reserves changes that
-# DEFINE or alter intent. Which scopes are delegated is a per-system setting (BV-A2.2) matched
-# against this vocabulary — the default set lives with the deputy mandate, not here.
+
+# A work-item may PROPOSE a contract change, but changes that DEFINE intent are owner-reserved.
+# Build requests and DEFERS.
 AUTH_SCOPES = (
     # DELEGABLE by default — "sync the contract to shipped reality":
     "doc-sync",           # reconcile a descriptive doc (architecture/capabilities/resources) to merged reality
@@ -2298,27 +1936,15 @@ AUTH_SCOPES = (
     "doc-delete",         # delete / retire a doc
 )
 
-# The DEFAULT sync-to-reality set — scopes the deputy may grant out of the box (BV-A2.2's
-# spine.DEFAULT_DELEGATED_AUTHORITY mirrors this). The actual delegated set is a per-system setting;
-# this static split only informs the owner's review brief ("was this delegable, or is it reserved —
-# which is why it reached you"). Keep in sync with AUTH_SCOPES' delegable half above.
+# The DEFAULT sync-to-reality set. The live delegated set is a per-system setting; this only
+# informs the review brief.
 DELEGABLE_SCOPES = ("doc-sync", "rename-to-shipped", "roadmap-mark-done")
 
 _AUTHORIZATION_FILE = "authorizations.md"
 _AUTHORIZATION_HEAD = re.compile(r"^### (?P<id>\S+) — (?P<what>.*)$")
 
 
-# Which STAGED OPS make a declared scope a lie. The reserved/delegable split (above) is declared
-# by the agent it constrains, so on its own it is an honour system — live evidence 2026-07-27
-# (item b229793bcf9a): ops that dropped `--csv` from the `d-reporting` deliverable line AND
-# rewrote its success-signal row were filed as `doc-sync`, the DELEGABLE scope, with the reason
-# "the docs-updated check inspects the live doc". A deputy would have granted it. Code, not prose,
-# has to say that touching what a project IS is not a sync.
-#
-# Deliberately narrow: it matches the two anchor docs + the sections that DEFINE intent, and it
-# only fires when a delegable scope is claimed. It cannot catch every mislabel (an op can reword a
-# deliverable from inside a neighbouring section) — the guarantee is "the obvious lie is refused",
-# not "the scope is proven". Reserved scopes pass through untouched: they already reach the owner.
+# Which STAGED OPS make a declared scope a lie: the split is declared by the agent it constrains.
 _INTENT_SECTIONS = {
     "project-prd": ("deliverables", "success signals", "non-goals", "users", "problem"),
     "roadmap":     ("wave", "deliverable"),
@@ -2326,8 +1952,8 @@ _INTENT_SECTIONS = {
 
 
 def intent_ops(ops: list) -> list[str]:
-    """The staged ops that DEFINE intent rather than record what shipped → ['<doc> § <section>'].
-    Empty when nothing intent-defining is staged."""
+    """The staged ops that DEFINE intent rather than record what shipped. Empty when nothing
+    intent-defining is staged."""
     out: list[str] = []
     for op in ops or []:
         if not isinstance(op, dict):
@@ -2342,9 +1968,8 @@ def intent_ops(ops: list) -> list[str]:
 
 
 def scope_mismatch(scope: str, ops: list) -> str:
-    """'' when the declared scope is consistent with the staged ops, else the refusal message.
-    Only DELEGABLE scopes are checked — a reserved one already goes to the owner, so mislabelling
-    upward costs nothing and blocking it would only add friction."""
+    """'' when the declared scope matches the staged ops, else the refusal message. Only
+    DELEGABLE scopes are checked — a reserved one already goes to the owner."""
     if scope not in DELEGABLE_SCOPES:
         return ""
     hits = intent_ops(ops)
@@ -2359,8 +1984,8 @@ def scope_mismatch(scope: str, ops: list) -> str:
 
 def record_authorization(item_dir: Path, *, what: str, why: str, doc: str, scope: str,
                          check: str = "", phase: str = "", cycle: int | None = None) -> dict:
-    """Append one PENDING authorization request. id = the record timestamp (unique per request).
-    Append-only: the grant/deny decision rewrites only this entry's `status`/`by` lines later."""
+    """Append one PENDING authorization request; the id is its timestamp. Append-only:
+    a later decision rewrites only `status` and `by`."""
     def _one_line(s: str) -> str:
         return " ".join((s or "").split())
     what, why, doc, scope, check = (_one_line(x) for x in (what, why, doc, scope, check))
@@ -2412,8 +2037,8 @@ def pending_authorizations(item_dir: Path) -> list[dict]:
 
 
 def resolve_authorization(item_dir: Path, auth_id: str, *, decision: str, by: str) -> dict | None:
-    """Grant or deny ONE pending request (append-only in substance: rewrite its status+by lines).
-    Returns the updated entry, or None if the id isn't found or isn't pending."""
+    """Grant or deny ONE pending request. Returns the updated entry, or None if the id
+    is unknown or no longer pending."""
     if decision not in ("granted", "denied"):
         raise ValueError("decision must be granted or denied")
     path = Path(item_dir) / "artifacts" / _AUTHORIZATION_FILE
@@ -2439,9 +2064,8 @@ def resolve_authorization(item_dir: Path, auth_id: str, *, decision: str, by: st
 
 
 def _plan_check_ids(item_dir: Path) -> set[str] | None:
-    """The CURRENT vet plan's check ids — the authoritative set. None when there is nothing to
-    scope by (no plan file, no `## Vet plan`, or a plan with zero checks): the caller then reads
-    the whole ledger, the pre-scoping behaviour."""
+    """The CURRENT vet plan's check ids. None when there is nothing to scope by, and the
+    caller then reads the whole ledger."""
     plan = Path(item_dir) / "artifacts" / artifact_file("plan")
     if not plan.is_file():
         return None
@@ -2450,14 +2074,10 @@ def _plan_check_ids(item_dir: Path) -> set[str] | None:
 
 
 def plan_vet_depth(item_dir: Path) -> str:
-    """The plan's declared vet depth (`none` | `checks` | `scenarios`), or `""` when there is no
-    plan / no `## Verification plan` to read.
+    """The plan's declared vet depth, or `""` when there is no plan to read.
 
-    `none` is the OWNER-APPROVED judgment that this item has no observable surface worth checking
-    — declared by the plan agent, shown at the plan gate, and approved with it. It is NOT vet's
-    call to make: an agent that could declare "nothing to verify" for itself would reach for the
-    phrase whenever checks were inconvenient. Everything downstream that honours `none` reads it
-    from HERE, so the authority has exactly one source (slice 5b, 2026-07-30)."""
+    `none` is the OWNER-APPROVED judgment that nothing here is observable — never vet's call, and
+    everything downstream reads it from HERE."""
     plan = Path(item_dir) / "artifacts" / artifact_file("plan")
     if not plan.is_file():
         return ""
@@ -2469,14 +2089,10 @@ _NO_VET_LINE = "**Nothing to verify.**"
 
 
 def note_no_verification(item_dir: Path) -> str | None:
-    """Write the `depth: none` cycle's §Verification content — CODE-WRITTEN, like every other fact
-    nobody should be able to type, and quoting the plan's own `reason` so the justification on the
-    page is the one the owner approved. The vet agent narrates this in its report; what lands in
-    the cycle file is derived, so an empty §Verification can never be mistaken for a vet that gave
-    up (the failure mode the build skill already hit with unfilled slots).
+    """Write the `depth: none` cycle's §Verification content, CODE-WRITTEN and quoting
+    the plan's own `reason`.
 
-    Idempotent: a re-vet of the same cycle adds nothing. Returns the cycle path, or None when there
-    is no cycle report yet or the line is already there."""
+    Derived, so an empty §Verification can never be mistaken for a vet that gave up. Idempotent."""
     item_dir = Path(item_dir)
     reports = cycle_reports(item_dir)
     if not reports:
@@ -2495,41 +2111,24 @@ def note_no_verification(item_dir: Path) -> str | None:
 
 
 def evidence_status(item_dir: Path, repo_dir: Path | None, *, scope_to_plan: bool = True) -> dict:
-    """The derived verdict over the ledger (D6 §2, hermes stale-on-edit): `unverified` (no
-    entries) · `failed` (latest entry of any check failed) · `stale` (all latest entries passed
-    but the repo fingerprint moved since) · `passed` (green AND fresh).
+    """The derived verdict over the ledger: `unverified` · `failed` · `stale` · `passed`.
 
-    Scoped to the CURRENT vet plan's checks by default: the ledger is append-only, so a check that
-    was renamed or dropped (a re-plan, or a build re-pointing its checks) leaves a stale entry
-    behind. Unscoped, that ORPHAN's last verdict — often a FAIL — pins the loop red forever, since
-    nothing ever writes a fresh entry under a name no longer in the plan. Scoping drops orphans
-    from the derived verdict while keeping them in the ledger for audit (they ride the result as
-    `orphaned`). Pass scope_to_plan=False for the raw whole-ledger view.
-
-    A `deferred` status (BV-A2) sits between passed and failed: a check awaiting an authorization
-    grant. The authorization ledger is the AUTHORITY — a check named by a PENDING request is
-    deferred whether or not the vetter recorded it that way — so a genuine wall can't masquerade as
-    a fail-closed loop, and the build never has to re-point its own exam to dodge it. A real FAIL
-    still dominates; deferred routes the item to review carrying the request."""
+    Scoped to the CURRENT plan's checks, so a renamed check's ORPHAN cannot pin the loop red forever.
+    `deferred` sits between passed and failed; the authorization ledger is the AUTHORITY."""
     entries = evidence_entries(item_dir)
     ids = _plan_check_ids(item_dir) if scope_to_plan else None
     auths = authorization_entries(item_dir)
     deferred_by_auth = {a["check"] for a in auths if a.get("status") == "pending" and a.get("check")}
-    # A DENIED request WAIVES its check (BV-A2.3): the owner decided the change won't happen, so the
-    # check that required it is excused — the item can close with the gap on the record. A check that
-    # is denied-then-re-requested is pending again (deferred wins over waived).
+    # A DENIED request WAIVES its check: the change won't happen, so the item closes with the gap
+    # on record.
     waived_by_auth = {a["check"] for a in auths if a.get("status") == "denied" and a.get("check")} \
         - deferred_by_auth
     if ids is not None:
         deferred_by_auth &= ids
         waived_by_auth &= ids
     if not entries and not deferred_by_auth:
-        # `depth: none` — the plan's owner-approved judgment that nothing here is observable. An
-        # empty ledger is then the CORRECT ledger, so it reports `passed`, not `unverified`: the
-        # loop's fail-closed rule ("an unrecorded vet is not a pass") exists to catch a vet that
-        # skipped its work, and there was no work to skip. It stays `passed` rather than a fourth
-        # status so no consumer's `== "passed"` branch can silently halt an item that is fine;
-        # `not_required` is the flag the user-facing surfaces read to say the honest thing.
+        # `depth: none` means an empty ledger is the CORRECT ledger, so it reports `passed`, not
+        # `unverified`.
         if plan_vet_depth(item_dir) == "none":
             return {"status": "passed", "entries": 0, "not_required": True}
         return {"status": "unverified", "entries": 0}
@@ -2559,17 +2158,14 @@ def evidence_status(item_dir: Path, repo_dir: Path | None, *, scope_to_plan: boo
     return {"status": "passed", "entries": len(entries), **extra}
 
 
-# `author_readiness` / `readiness.md`: RETIRED (workflow-renovation-v2 §3.1 demolition,
-# 2026-07-27). A mechanically-authored user doc that said what `report-review.md` already says,
-# written at advance-to-review into a slot the owner had no reason to open twice.
+# `author_readiness` and `readiness.md` are RETIRED: a mechanical user doc saying what `report-
+# review.md` already said.
 
 
 # --------------------------------------------------------------------------- cycle reports (renovation §3.1)
-# ONE report per build⟷vet cycle: `artifacts/build-vet-<n>.md`, scaffolded from the build skill's
-# template at cycle start. Strictly sequential writers — build fills §Built/§Validation, the vet
-# pen APPENDS the §Verification check fence (record_verification above), the loop driver APPENDS
-# §Cycle outcome, which CLOSES the cycle. The file is both the build→vet handover (vet reads
-# §Built/§Validation instead of re-deriving from a raw diff) and the cycle narrative for review.
+
+# ONE report per cycle, with strictly sequential writers: build, then vet's fence, then the
+# driver's outcome.
 
 _CYCLE_FILE = re.compile(r"^build-vet-(\d+)\.md$")
 _VET_REPORT_FILE = re.compile(r"^vet-report-(\d+)\.md$")   # legacy files — reader labeling only
@@ -2579,9 +2175,8 @@ _CYCLE_REVISION = re.compile(r"(?m)^plan_revision:\s*(r\d+)\s*$")
 
 
 def cycle_reports(item_dir: Path) -> list[dict]:
-    """All cycle reports in cycle order: [{cycle, path, revision}] — `revision` is the plan
-    revision the report was scaffolded under (`''` for the original plan), which is what scopes the
-    loop's guards to the current generation (§3-bis.4)."""
+    """All cycle reports in cycle order. `revision` is the plan revision the report was
+    scaffolded under, which scopes the loop's guards."""
     adir = Path(item_dir) / "artifacts"
     if not adir.is_dir():
         return []
@@ -2596,8 +2191,8 @@ def cycle_reports(item_dir: Path) -> list[dict]:
 
 
 def latest_cycle_report(item_dir: Path, *, char_cap: int = 8000) -> dict | None:
-    """The newest cycle report {cycle, path, text, truncated} — the loop's handover payload for
-    the next build cycle (capped: hermes build_worker_context precedent, §8·O10)."""
+    """The newest cycle report — the loop's handover payload for the next build cycle,
+    capped."""
     reports = cycle_reports(item_dir)
     if not reports:
         return None
@@ -2612,10 +2207,8 @@ def _cycle_closed(text: str) -> bool:
 
 
 def scaffold_cycle(item_dir: Path, *, title: str = "") -> dict:
-    """Scaffold the current OPEN cycle's report from the build skill's template (no-op when the
-    open cycle's file already exists). The open cycle = the last file while its §Cycle outcome is
-    empty, else last+1 (1 when none) — the driver's outcome append is what closes a cycle.
-    Returns {cycle, path, created}."""
+    """Scaffold the current OPEN cycle's report from the build skill's template. The open
+    cycle is the last file while its §Cycle outcome is empty, else last+1."""
     reports = cycle_reports(item_dir)
     cycle = 1
     if reports:
@@ -2626,19 +2219,15 @@ def scaffold_cycle(item_dir: Path, *, title: str = "") -> dict:
     path = adir / f"build-vet-{cycle}.md"
     if path.exists():
         return {"cycle": cycle, "path": str(path), "created": False}
-    # The plan revision this cycle implements (§2.1): `build-vet-3` under a rewritten design is
-    # legible as such instead of reading like a third attempt at the same one. Empty for a plan
-    # that was never revised.
+    # The plan revision this cycle implements, so `build-vet-3` under a rewritten design reads as
+    # such.
     from .plan_revision import current_revision   # local: plan_revision imports this module
     rev = current_revision(item_dir)
     fm = (f"---\nartifact: build-vet\ncycle: {cycle}\nreader: agent\n"
           + (f"plan_revision: {rev}\n" if rev else "")
           + f"created_at: {date.today().isoformat()}\n---\n")
-    # An HTML comment in a template is a note to whoever AUTHORS from it, not a line of the document
-    # it produces — the same call `write_plan_user_report` / `write_vet_user_report` already make.
-    # Instantiating one verbatim published scaffolding as content: the owner read "appended by vet's
-    # recording tool — never hand-edit" as a paragraph of their own cycle report (2026-08-03). The
-    # rule those two comments carried now lives where a rule belongs, in the build and vet skills.
+    # An HTML comment in a template is a note to the AUTHOR, not a line of the document it
+    # produces.
     body = re.sub(r"[ \t]*<!--.*?-->\n?", "", skill_template("build-vet"), flags=re.DOTALL).format(
         cycle=cycle, title=title or Path(item_dir).name)
     _atomic_write(path, fm + body)
@@ -2646,14 +2235,10 @@ def scaffold_cycle(item_dir: Path, *, title: str = "") -> dict:
 
 
 def _append_to_section(path: Path, heading: str, entry: str, *, fence: str = "") -> None:
-    """Append `entry` inside the `## {heading}` section of a cycle report — at the section's end,
-    or (fence) inside its ```<fence> block, creating the block when missing. Line-based and atomic;
-    raises ValueError when the section heading is absent (a hand-mangled file must fail loud, not
-    scatter entries).
+    """Append `entry` inside a cycle report's `## {heading}` section, or inside its named
+    ```<fence>. Raises when the heading is absent — a mangled file must fail loud.
 
-    The fence is NAMED rather than assumed: `## Verification` keeps its ```checks block, and
-    `## Validation` gains a ```runs one for build's own machine records — same grammar, so one
-    appender and one parser serve both, and a section can carry prose beside its machine lane."""
+    The fence is NAMED, so one appender and one parser serve both lanes."""
     lines = path.read_text().splitlines()
     start = next((i for i, ln in enumerate(lines)
                   if re.match(rf"^##\s+{re.escape(heading)}\s*$", ln)), None)
@@ -2671,10 +2256,8 @@ def _append_to_section(path: Path, heading: str, entry: str, *, fence: str = "")
                               if lines[j].strip() == "```"), None)
                 break
         if close is not None:
-            # A BLANK LINE between entries (owner, 2026-08-08). Packed back to back, a fence of six
-            # `### ts — name` records reads as one wall of text with no place for the eye to start.
-            # The parser is line-oriented on `### ` heads and `- key: value` lines, so a blank line
-            # is invisible to it — this is presentation only, and it costs one line per entry.
+            # A BLANK LINE between entries: packed back to back, six records read as one wall.
+            # Presentation only.
             has_entries = any(lines[k].strip() for k in range(opened + 1, close))
             lines[close:close] = ([""] if has_entries else []) + entry_lines
         else:
@@ -2693,25 +2276,18 @@ def append_cycle_outcome(item_dir: Path, *, evidence: str, decision: str, reason
                          fingerprint: str = "", failed: list[str] | tuple = (),
                          tokens: int | None = None, budget: int | None = None,
                          loop_exit: str = "") -> dict | None:
-    """Append one driver decision to the LATEST cycle report's §Cycle outcome (closing the cycle).
-    `evidence` is the evidence_status verdict; `decision` what the driver did (review|build|revet|
-    halt); `loop_exit` the TYPED loop exit when this decision ended the loop (converged | budget |
-    not_converging | no_progress | system_fault) — the record a revision reads its `concerns` off
-    (§3-bis.3), so the tag is never guessed; `fingerprint` the failure fingerprint (convergence-guard
-    input); `tokens`/`budget` the meter reading. Returns None (nothing recorded) when no cycle report
-    exists yet — the DB loop.decision event still carries the decision."""
+    """Append one driver decision to the LATEST cycle report's §Cycle outcome, closing
+    the cycle. `loop_exit` is the TYPED exit a revision reads its `concerns` off.
+
+    Returns None when no cycle report exists — the DB `loop.decision` event still carries it."""
     def _one_line(s: str) -> str:
         return " ".join((s or "").split())
     reports = cycle_reports(item_dir)
     if not reports:
         return None
     ts = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-    # Name the cycle this decision closed. It goes in a FIELD, never in the heading: the heading is
-    # parsed (`^### <ts> — <decision>$`) and `read_cycle_outcomes` feeds the convergence and stale
-    # guards off it, so decorating it turns "review" into "cycle 1 — review" and the loop's own
-    # breakers stop recognising their decisions. The parser keeps taking `cycle` from the FILE,
-    # which is authoritative; this line exists so the owner can read which loop pass each of three
-    # stacked outcome entries ended without counting `###` blocks.
+    # Name the cycle in a FIELD, never the heading: the heading is parsed, and decorating it
+    # blinds the loop's breakers.
     entry = (f"### {ts} — {_one_line(decision)}\n"
              f"- cycle: {reports[-1]['cycle']}\n"
              f"- evidence: {_one_line(evidence)}\n"
@@ -2729,13 +2305,10 @@ def append_cycle_outcome(item_dir: Path, *, evidence: str, decision: str, reason
 
 
 def read_cycle_outcomes(item_dir: Path, *, revision: str | None = None) -> list[dict]:
-    """Every driver decision across the cycle reports, in order: [{ts, cycle, decision, evidence,
-    reason, exit?, fingerprint?, failed?, tokens?}]. The convergence guard reads the last entry's
-    fingerprint; the stale guard the last entry's decision.
+    """Every driver decision across the cycle reports, in order.
 
-    `revision` scopes the read to ONE generation (§3-bis.4): pass the plan's current revision and
-    only cycles scaffolded under it count, so three identical failures recorded before a redesign
-    no longer trip the recurrence guard after it. `None` reads the item's whole life."""
+    `revision` scopes the read to ONE generation, so failures recorded before a redesign no longer
+    trip the recurrence guard after it. `None` reads the item's whole life."""
     out: list[dict] = []
     for r in cycle_reports(item_dir):
         if revision is not None and r["revision"] != revision:
@@ -2756,9 +2329,8 @@ def read_cycle_outcomes(item_dir: Path, *, revision: str | None = None) -> list[
 
 
 def _how_checked(c: dict) -> str:
-    """One check → how the owner will know it held, in their words. Derived, never asserted: the
-    plan already fixed the mode and whether a `run:` block makes it kernel-executed, and the owner
-    is entitled to know which rows are machine-decided BEFORE they approve the exam."""
+    """One check → how the owner will know it held, in their words. Derived from the plan,
+    so the owner sees which rows are machine-decided."""
     mode = str(c.get("mode") or "")
     how = {"command": "run for real",
            "interaction": "driven for real and judged",
@@ -2772,10 +2344,7 @@ def _how_checked(c: dict) -> str:
 
 def _slot(text: str | None, heading: str) -> str:
     """A prose slot's body, with the section heading stripped when the author repeated it.
-
-    The template owns the headings and the agent owns the words, but an agent naturally opens a
-    section with its own title and the render then carries it twice. Structure is code's to own, so
-    code drops the echo instead of asking every author to remember."""
+    Structure is code's to own, so code drops the echo."""
     body = (text or "").strip()
     first, _, rest = body.partition("\n")
     if first.startswith("#") and first.lstrip("#").strip().lower() == heading.strip().lower():
@@ -2787,10 +2356,8 @@ _LENS_LINE = re.compile(r"(?mi)^(\s*[-*]\s+)(" + "|".join(LENSES) + r")(\s*:)")
 
 
 def _bold_lenses(text: str) -> str:
-    """Bold the lens name that OPENS a `## What else was looked at` bullet.
-
-    The lens vocabulary is code's, not prose: each bullet is one standing reading, and the name is its
-    label. Bolding here rather than in CSS keeps ONE rule for what a label looks like."""
+    """Bold the lens name that OPENS a `## What else was looked at` bullet. Here rather than
+    in CSS, so ONE rule says what a label looks like."""
     return _LENS_LINE.sub(lambda m: f"{m.group(1)}**{m.group(2)}{m.group(3).strip()}**", text)
 
 
@@ -2800,19 +2367,9 @@ def write_plan_user_report(item_dir: Path, *, summary: str, approach: str = "",
     """Write the owner's answer to *what is being built, and what will prove it*.
 
     The prose slots are the planner's; everything factual is DERIVED from plan.md, because a
-    hand-copied claim is a claim ABOUT the plan rather than a reading of it, and the gap is the one
-    thing this report exists to make visible.
-
-    The centrepiece is the confirmation table: each check's `proves:` line verbatim, and how the
-    owner will know. A task nothing defends is named under the table, because a hole is worth seeing
-    at the gate rather than three cycles later.
-
-    Refuses on a plan with no tasks — an empty table would read as "nothing needs proving"."""
-    # An OMITTED optional slot arrives as None, not "" — the tool layer's `_s` returns None for an
-    # absent arg, and this report's own contract tells the planner to omit `decisions`/`assumptions`
-    # when there were none. Taking the parameter at its type and calling `.strip()` on it turned
-    # doing-as-told into `'NoneType' object has no attribute 'strip'`, an error naming neither the
-    # field nor the tool (live, 2026-08-07). Normalize once, here, where the type is declared.
+    hand-copied claim is a claim ABOUT the plan."""
+    # An OMITTED optional slot arrives as None, not "". Normalize once, here, where the type is
+    # declared.
     approach, confirm = approach or "", confirm or ""
     decisions, assumptions = decisions or "", assumptions or ""
     item_dir = Path(item_dir)
@@ -2824,24 +2381,19 @@ def write_plan_user_report(item_dir: Path, *, summary: str, approach: str = "",
     if not tasks:
         raise ValueError("plan.md declares no `## Tasks` — scaffold and fill the plan first; a "
                          "report over nothing would read as 'nothing needs proving'")
-    # One row per CHECK, not per task: the owner is approving an exam, and the exam's unit is the
-    # check. Task coverage is still computed — it just surfaces as the named gap below the table,
-    # where a hole reads as a sentence instead of as an empty cell.
-    # NOT clipped. `proves:` is one bounded sentence by contract, and it IS the row — clipping it
-    # to keep the column tidy cut the meaning mid-word ("prints only the groceries entries, none
-    # from other…") on the first real item to reach this table, which is the exact failure the field
-    # was added to prevent. A markdown cell wraps; a truncated sentence does not recover.
+    # One row per CHECK: the owner is approving an exam, and `proves:` IS the row, so it is never
+    # clipped.
     rows = [f"| {c.get('proves') or '—'} | {_how_checked(c)} |" for c in vp.get("checks", [])]
-    # A research item declares no checks BY DESIGN, so every one of its tasks would read as a hole.
-    # The gap call-out is about an implementation plan that forgot to defend something.
+    # A research item declares no checks BY DESIGN, so the gap call-out is about implementation
+    # plans only.
     uncovered = [] if research else [r["task"] for r in proof_rows(item_dir)
                                      if r["task"] and not r["verified"]]
     gap_text = ", ".join(
         clip(t["text"], 60) for t in tasks if t["id"] in set(uncovered))
     gaps = (f"\n\n**Nothing will prove:** {gap_text} — either a check is missing, or that work "
             "genuinely needs no proof and the gate is where to say so." if uncovered else "")
-    # Assembled here rather than as separate template slots, so a block with nothing real in it
-    # leaves no blank line behind — the reader-side hygiene the other reports already have.
+    # Assembled here, not as separate template slots, so an empty block leaves no blank line
+    # behind.
     blocks = [
         f"## Decisions & Assumptions\n\n**Decisions:**\n{decisions.strip()}"
         if decisions.strip() else "",
@@ -2872,19 +2424,11 @@ def write_plan_user_report(item_dir: Path, *, summary: str, approach: str = "",
 
 def write_vet_user_report(item_dir: Path, repo_dir: Path | None, *, summary: str = "",
                           confirms: str = "", looked_at: str = "", unknown: str = "") -> dict:
-    """Write the vet report. HYBRID: vet writes the narrative, code writes `## What didn't hold`
-    off the evidence ledger and owns the refusals.
+    """Write the vet report: vet writes the narrative, code writes `## What didn't
+    hold` off the ledger.
 
-    Vet is not suspected of lying — it runs the checks. What code guarantees is narrower:
-
-    - ONE-WRITER with the ledger. The driver decides on the recorded entries, so a failure reaches
-      the owner whatever the prose says. Vet cannot omit a red check by writing around it.
-    - COMPLETENESS. No report while a plan check has no entry, a standing lens has no read, or a
-      failing check has no diagnosis. The last is the diagnosis duty's teeth: a cycle that says
-      "3 failing" and nothing about WHERE sends the next build hunting.
-
-    The per-check table is gone: the Task tab carries evidence per check, and a table here made
-    build's self-report and vet's independent pass read as the same list."""
+    ONE-WRITER with the ledger, so vet cannot write around a red check. No report while a check has
+    no entry, a lens no read, or a failure no diagnosis."""
     item_dir = Path(item_dir)
     plan_path = item_dir / "artifacts" / artifact_file("plan")
     plan_ids = [c["id"] for c in parse_vet_plan(plan_path.read_text()).get("checks", [])] \
@@ -2901,17 +2445,14 @@ def write_vet_user_report(item_dir: Path, repo_dir: Path | None, *, summary: str
             "(an unrecorded check doesn't exist)" for c in missing))
     if not by_check and not no_vet:
         raise ValueError("no checks recorded — record_verification for every plan check first")
-    # The lenses run on EVERY cycle, including one whose plan declared `depth: none` — depth governs
-    # what is executed, not whether the work is read. This refusal is why "there was nothing to run"
-    # can no longer produce a cycle with nothing on the record.
+    # The lenses run on EVERY cycle: depth governs what is executed, not whether the work is read.
     if (missing := missing_lenses(item_dir)):
         raise ValueError("; ".join(
             f"the {ln} lens has no read this cycle — call record_lens with what you probed (no "
             "findings is a fine answer, and saying what you probed is what makes it one)"
             for ln in missing))
-    # The diagnosis duty has its teeth here (design §5). A cycle that reports "3 checks failing"
-    # and nothing about WHERE sends the next build cycle hunting, which is the tax this whole
-    # stage exists to remove — and the report is the last moment anyone can still be asked.
+    # The diagnosis duty has its teeth here: "3 checks failing" with no WHERE sends the next cycle
+    # hunting.
     if (undiag := undiagnosed_failures(item_dir)):
         raise ValueError("; ".join(
             f"check {c!r} is failing with no diagnosis this cycle — call record_diagnosis with "
@@ -2921,9 +2462,8 @@ def write_vet_user_report(item_dir: Path, repo_dir: Path | None, *, summary: str
     checks = plan_ids + [c for c in by_check if c not in plan_ids]
     deferred_auth = {a["check"] for a in pending_authorizations(item_dir) if a.get("check")}
 
-    # Each check's `proves:` — what a green MEANS, in the owner's terms. The machine block leads
-    # a failure with it, so a red row says what STOPPED being true rather than naming a check id
-    # the owner has no memory of.
+    # Each check's `proves:`, so a red row says what STOPPED being true instead of naming an id
+    # nobody remembers.
     proves_of = {c["id"]: str(c.get("proves") or "")
                  for c in (parse_vet_plan(plan_path.read_text()).get("checks", [])
                            if plan_path.is_file() else [])}
@@ -2932,11 +2472,8 @@ def write_vet_user_report(item_dir: Path, repo_dir: Path | None, *, summary: str
     deferred_all = sorted(deferred_auth | {c for c, h in by_check.items()
                                            if h and h[-1].get("deferred")})
 
-    # --- the machine block: everything vet must not be able to write around ----------------------
     # `## What didn't hold` is authored HERE, off the ledger, so a red check reaches the owner
-    # whatever the Summary says. It leads with what stopped being true and follows with the
-    # recorded diagnosis — where it broke and why — because "what do I look at" is the reader's
-    # actual question and the `where` alone answers it.
+    # regardless.
     diag = diagnoses(item_dir)
     lines = []
     for c in failed:
@@ -2949,13 +2486,12 @@ def write_vet_user_report(item_dir: Path, repo_dir: Path | None, *, summary: str
     for c in deferred_all:
         lines.append(f"- **{proves_of.get(c) or f'check `{c}`'}** — not checked: deferred pending "
                      "your authorization.")
-    # A lens finding that GATES belongs here for the same reason a failed check does: it is what
-    # sends the item back, and the owner should not have to take vet's word that it was mentioned.
+    # A lens finding that GATES belongs here for the same reason a failed check does: it sends the
+    # item back.
     for g in lens_gaps(item_dir):
         lines.append(f"- **{g['text']}** — raised by the {g['lens']} reading ({g['severity']}).")
-    # A build validation claim the kernel could not reproduce. Machine-authored for the same reason
-    # as everything else here: it is a finding ABOUT the phase writing this report's neighbour, and
-    # the one record that must not depend on anyone choosing to mention it.
+    # A build validation claim the kernel could not reproduce — the one record that must not
+    # depend on being mentioned.
     for a in validation_discrepancies(item_dir, cycle=(cycle_reports(item_dir) or [{}])[-1].get("cycle")):
         lines.append(
             f"- **The build reported `{a['command']}` as "
@@ -2963,9 +2499,8 @@ def write_vet_user_report(item_dir: Path, repo_dir: Path | None, *, summary: str
             f"{'passes' if a['actual'] else 'does not'}** — its own validation does not reproduce. "
             f"({a['result']})")
     machine = ("## What didn't hold\n" + "\n".join(lines) + "\n\n") if lines else ""
-    # A `depth: none` item still gets a reading, and that reading can still GATE — so this note
-    # PRECEDES the didn't-hold block, it does not replace it. It replaced it for about ten minutes,
-    # and in that state a high robustness finding on a no-checks item reached nobody.
+    # A `depth: none` item still gets a reading, and that reading can GATE — so this note PRECEDES
+    # the block.
     if ev.get("not_required"):
         machine = ("## What was owed\nNothing. The approved plan declares `depth: none` — this "
                    "item has no observable surface to check, so the reading below is the whole "
@@ -2996,29 +2531,13 @@ def write_vet_user_report(item_dir: Path, repo_dir: Path | None, *, summary: str
 
 
 # --------------------------------------------------------------------------- PR review notes
-# What the PR page shows BESIDE each task's own commits (owner, 2026-08-09).
-#
-# NOT A DOCUMENT, and not a second opinion on the merge. The review report answers *should this
-# land* — what to push back on, how much to trust it, what it leaves behind — and repeating any of
-# that here would give the owner two panes saying the same sentences. These notes answer a different
-# question, the one you have while looking at a diff: *what do I need to know about THIS task?*
-#
-# PER TASK, never per file. The walkthrough is already grouped by task, so a note travels with the
-# commits it describes; a file column would only restate what is on screen. Two tasks touching one
-# module get two notes, which is exactly what a file-keyed view cannot do.
-#
-# WRITTEN BY BUILD, not review. Build wrote the code and is the only phase that knows what a reader
-# should look at and where it left the plan; review, by the time it writes, is summarizing artifacts
-# it did not produce. Everything else is derived — the requirement from the check's `proves:`, the
-# proof from the ledger. LATEST CYCLE WINS: a note cycle 1 wrote about a line cycle 3 rewrote is
-# worse than no note at all.
+
+# What the PR page shows BESIDE each task's commits. Not a second opinion: the review report
+# answers whether to land.
 
 def delivered_line(item_dir: Path) -> str:
-    """`artifacts/review.md`'s **Delivered** field — what actually shipped, as one line.
-
-    Read by the landing commit's body. Reads the whole PARAGRAPH, not the first physical line: the
-    file is hand-written prose wrapped for reading, so a two-sentence Delivered routinely spans
-    three lines."""
+    """`artifacts/review.md`'s **Delivered** field, read by the landing commit's body.
+    Reads the whole PARAGRAPH: the file is prose wrapped for reading."""
     path = Path(item_dir) / "artifacts" / "review.md"
     try:
         if not path.is_file():
@@ -3029,8 +2548,7 @@ def delivered_line(item_dir: Path) -> str:
                 if line.strip().startswith("**Delivered:**"):
                     parts.append(line.split("**Delivered:**", 1)[1].strip())
                 continue
-            # The field ends where its paragraph does — a blank line, or the next bold field for a
-            # report whose author forgot the blank.
+            # The field ends where its paragraph does — a blank line, or the next bold field.
             if not line.strip() or line.strip().startswith("**"):
                 break
             parts.append(line.strip())
@@ -3040,15 +2558,15 @@ def delivered_line(item_dir: Path) -> str:
     return ""
 
 
-# `- t1 — look: … · deviated: …`. One line, and the whole grammar build has to hold. A `look` or
-# `deviated` reading `none` is a real answer, not a missing one, and renders as nothing.
+# One line, and the whole grammar build must hold. `none` is a real answer, and renders as
+# nothing.
 _NOTE = re.compile(r"^-\s*(?P<task>t\d+)\s*[—-]\s*(?P<body>.+)$")
 _NONE = {"none", "none.", "n/a", "-", "—"}
 
 
 def _bullets(body: str) -> list[str]:
-    """A section's `- ` bullets, each folded back into ONE line with its indented continuations.
-    Markdown wraps for reading; the grammar reads a bullet, not a physical line."""
+    """A section's `- ` bullets, each folded back into ONE line with its continuations. The
+    grammar reads a bullet, not a physical line."""
     out: list[str] = []
     for raw in body.splitlines():
         if raw.lstrip().startswith(("<!--", "<fill:")):
@@ -3061,12 +2579,10 @@ def _bullets(body: str) -> list[str]:
 
 
 def _note_fields(body: str) -> dict:
-    """`look: … · deviated: …` → its labelled parts. Split on the separator FIRST and the label
-    second, so a `·` in prose cannot start a phantom field.
+    """`look: … · deviated: …` → its labelled parts. Split on the separator FIRST, so a `·`
+    in prose cannot start a phantom field.
 
-    A value whose FIRST SENTENCE is `none` is nothing, however much follows: build wrote "none" and
-    then justified it, which put a restatement of the diff under a heading promising what the diff
-    cannot show. The declaration is the answer; the justification is for the record."""
+    A value whose FIRST SENTENCE is `none` is nothing, however much follows."""
     out: dict = {}
     for part in re.split(r"\s+·\s+", body):
         if m := re.match(r"^(look|deviated)\s*:\s*(.*)$", part.strip(), re.I):
@@ -3077,10 +2593,8 @@ def _note_fields(body: str) -> dict:
 
 
 def pr_task_notes(item_dir: Path) -> dict:
-    """`{task_id: {look, deviated, cycle}}` from the cycle reports' `## For the reviewer`.
-
-    Oldest cycle first so the newest overwrites: a task rebuilt in cycle 3 carries cycle 3's note,
-    and the superseded one is left in its own cycle report where it belongs."""
+    """`{task_id: {look, deviated, cycle}}` from the cycle reports. Oldest cycle first, so a
+    task rebuilt in cycle 3 carries cycle 3's note."""
     notes: dict[str, dict] = {}
     for r in cycle_reports(item_dir):
         try:
@@ -3099,20 +2613,13 @@ def pr_task_notes(item_dir: Path) -> dict:
 
 
 def pr_task_guide(item_dir: Path) -> dict:
-    """Everything the PR page shows per task.
-
-    `needed` is the covering check's `proves:` line — what must be TRUE, stated for a person. Never
-    the plan's task spec: that is build instructions, and handing it to a reviewer is giving them the
-    recipe when they asked what the dish is.
-
-    `checks` is the proof, joined at read time, never re-transcribed."""
+    """Everything the PR page shows per task. `needed` is the covering check's `proves:` —
+    never the task spec, which is build instructions."""
     out: dict[str, dict] = {}
     notes = pr_task_notes(item_dir)
     plan_path = Path(item_dir) / "artifacts" / artifact_file("plan")
-    # How many tasks each check defends. A check covering `t1, t2` states something true of BOTH,
-    # so it is a poor answer to "what did THIS task have to make true" — on the first live run t2
-    # ("wire the subcommand") showed the month-filter requirement, purely because that shared check
-    # was declared first in the plan. Prefer a check that covers this task ALONE.
+    # How many tasks each check defends. One covering `t1, t2` answers "what did THIS task make
+    # true" poorly.
     breadth: dict[str, int] = {}
     if plan_path.is_file():
         for c in parse_vet_plan(plan_path.read_text()).get("checks", []):
@@ -3137,14 +2644,9 @@ def pr_task_guide(item_dir: Path) -> dict:
 
 
 # --------------------------------------------------------------------------- convergence guard (build-vet-loop §5)
-# Convergence-fingerprint normalization (§8·O3 resolved): the signature is the ledger's latest
-# `result` line per failed check — model-authored one-line failure prose. Normalize it so
-# incidental variation (case, punctuation, timestamps, addresses, durations) doesn't hide a
-# no-progress cycle: lowercase → drop hex runs (addresses/shas) → drop every digit-run of ≥2
-# digits (timestamp/date fragments, ports, ids; single digits like "exit 1" / "2 failed" stay —
-# they're signal) → strip non-alphanumerics → collapse whitespace. Deliberately biased toward
-# STABILITY over granularity: a fingerprint that flickers on a timestamp defeats the guard, while
-# one that misses "13 passed → 14 passed" only delays escalation by a cycle.
+
+# Normalize the failure signature so incidental variation — case, punctuation, timestamps, ids —
+# cannot hide a no-progress cycle.
 _SIG_HEX = re.compile(r"\b0x[0-9a-f]+\b|\b[0-9a-f]{7,40}\b")
 _SIG_NUM = re.compile(r"\d{2,}")
 _SIG_JUNK = re.compile(r"[^a-z0-9 ]+")
@@ -3158,13 +2660,11 @@ def _normalize_signature(s: str) -> str:
 
 
 def convergence_fingerprint(item_dir: Path, *, extra: list[str] | None = None) -> str:
-    """The current cycle's failure fingerprint: sha1 over the sorted (check, normalized latest
-    failing result) pairs from the evidence ledger. Empty string when nothing is failing —
-    an empty fingerprint never trips the guard.
+    """The current cycle's failure fingerprint: sha1 over the sorted (check,
+    normalized result) pairs. Empty when nothing is failing.
 
-    `extra` carries failure signatures that are not ledger checks — today the gating lens findings
-    (design §3). They belong here for the same reason the checks do: a wall the loop keeps hitting
-    should exit as `not_converging` rather than burn the whole budget rediscovering it."""
+    `extra` carries failure signatures that are not ledger checks — a wall the loop keeps hitting
+    should exit `not_converging`, not burn the budget."""
     latest: dict[str, dict] = {}
     for e in evidence_entries(item_dir):
         latest[e["check"]] = e
@@ -3180,13 +2680,11 @@ def convergence_fingerprint(item_dir: Path, *, extra: list[str] | None = None) -
 
 def write_checkpoint(item_dir: Path, repo_dir: Path | None, *, working_on: str, decisions: str,
                      remaining: str, notes: str = "", role: str | None = None) -> str:
-    """Bank one continuity checkpoint. APPEND-ONLY and atomic — a new timestamped file every
-    time, and the filename IS the canonical order. Reference artifacts BY PATH, never duplicate them.
+    """Bank one continuity checkpoint. APPEND-ONLY and atomic; the filename IS the order.
+    Reference artifacts BY PATH.
 
-    `role` is the SESSION ROLE that banked it. An item's three threads all bank into one folder, so
-    without the stamp "the latest checkpoint" is whichever wrote last. Harmless for item-state
-    readers, WRONG for continuity: handing a compacted intake thread the build thread's checkpoint
-    tells it "this is what you were doing" about work it never did."""
+    `role` is the SESSION ROLE that banked it: unstamped, a compacted intake thread gets the build
+    thread's checkpoint and reads it as its own."""
     if not (working_on.strip() and remaining.strip()):
         raise ValueError("a checkpoint needs at least working_on and remaining")
     cdir = Path(item_dir) / "checkpoints"
@@ -3220,9 +2718,8 @@ def write_checkpoint(item_dir: Path, repo_dir: Path | None, *, working_on: str, 
 
 
 def checkpoint_feed(item_dir: Path, *, limit: int = 30) -> list[dict]:
-    """The drilldown's continuity feed (S7): newest-first checkpoint stubs [{ts, path, headline,
-    git}] — headline = the first content line (what the session was working on), git = the
-    frontmatter git-state line. Full text stays behind the path (one click deeper)."""
+    """The drilldown's continuity feed: newest-first checkpoint stubs. Full text stays
+    behind the path, one click deeper."""
     cdir = Path(item_dir) / "checkpoints"
     if not cdir.is_dir():
         return []
@@ -3242,30 +2739,21 @@ def checkpoint_feed(item_dir: Path, *, limit: int = 30) -> list[dict]:
 
 def latest_checkpoint(item_dir: Path, *, char_cap: int = 6000,
                       role: str | None = None) -> dict | None:
-    """The newest checkpoint (by filename — canonical order), char-capped. None when none exist.
+    """The newest checkpoint by filename, char-capped. None when none exist.
 
-    Two different questions, one function:
-    - **"What is this ITEM's latest state?"** — `role=None`, newest from any thread. What the
-      item-state readers want.
-    - **"What was THIS THREAD doing before it lost its memory?"** — `role='intake'|'build'|'vet'`,
-      the continuity read. Restricts to checkpoints that thread banked, PLUS unstamped ones
-      (written before the stamp existed — role-agnostic by definition, and dropping them would
-      blind every pre-existing item).
-    """
+    `role=None` answers "what is this ITEM's latest state"; a named role answers "what was THIS
+    THREAD doing", and also takes unstamped checkpoints, which are role-agnostic."""
     cdir = Path(item_dir) / "checkpoints"
     if not cdir.is_dir():
         return None
-    # Sort by STEM, not filename: a same-second collision file `<ts>-1` must sort AFTER `<ts>`,
-    # but with the `.md` suffix attached '-' < '.' would order it before.
+    # Sort by STEM: with `.md` attached, `-` < `.` would put a collision file `<ts>-1` before
+    # `<ts>`.
     files = sorted(cdir.glob("*.md"), key=lambda p: p.stem)
     if not files:
         return None
     if role:
-        # `role` is now a per-phase SLOT. Two stamps still match besides the exact one: an UNSTAMPED
-        # checkpoint (written before the stamp existed — role-agnostic by definition), and a legacy
-        # `intake` stamp from before sessions went per-phase, which any intake phase may claim. Both
-        # are widenings, never a narrowing: dropping them would blind an in-flight item to the
-        # continuity it actually banked.
+        # Two other stamps match: an UNSTAMPED checkpoint, and a legacy `intake` one. Both widen,
+        # never narrow.
         from .kind_profiles import INTAKE_PHASES, LEGACY_INTAKE_SLOT
         wants = [f"\nrole: {role}\n"]
         if role in INTAKE_PHASES:
@@ -3281,24 +2769,9 @@ def latest_checkpoint(item_dir: Path, *, char_cap: int = 6000,
 
 
 # --- session memory: the non-work-item thread's checkpoint (compaction-redesign §13.4 / T5) ---
-#
-# A general (unbound) session has no item folder, no phase and no artifacts — so it has NO disk
-# copy of anything, and a compaction there loses the conversation outright. `session-memory/` is
-# its equivalent of `checkpoints/`, with two deliberate differences:
-#   - ONE file per session, overwritten. A work-item's checkpoints are append-only because three
-#     threads share the folder and the item's HISTORY is a surface (the drilldown feed). A session
-#     has one thread and no history surface; the only question ever asked is "what did this thread
-#     know before it lost its memory", so keeping older revisions would just be growth.
-#   - Mode-scoped root (`<internal_root>/dev` or `/core`), passed in by the caller — a general
-#     session can be either, and the knowledge tree is split that way already (owner, 2026-07-28).
-#   - There is no WRITER here. A work-item checkpoint goes through `write_checkpoint` because the
-#     agent reaches it as an MCP tool; a general session has no item tools, so the `checkpoint`
-#     skill writes this file directly and the four `## ` headings are the whole format. A
-#     kernel-side writer would have no caller — the derived fallback that justifies one for
-#     work-items cannot exist here, because a general session has no artifacts to derive from.
-# The spine holds NO pointer to this file: the path is `<root>/session-memory/<session-id>.md`,
-# fully derivable from the session id, and "is one owed" is already derivable from the run table
-# (`spine.session_compacted_pending`). Adding a column would store what we can compute.
+
+# A general session has no item folder, so a compaction loses the conversation outright. ONE file
+# per session, overwritten.
 
 def session_memory_path(root_dir: Path, session_id: str) -> Path:
     """Where this session's memory lives. `root_dir` is the MODE root (`…/dev` or `…/core`)."""
@@ -3316,9 +2789,8 @@ def read_session_memory(root_dir: Path, session_id: str, *,
 
 
 def artifact_status(item: dict, item_dir: Path, repo_dir: Path | None = None) -> dict:
-    """The COMPUTED per-artifact status map (D6 §4 — derived from file existence + self-check +
-    evidence freshness; never stored in any doc): {kind → {required, present, issues, status}}.
-    The `plan` row additionally carries the evidence verdict. Feeds the S7 drilldown."""
+    """The COMPUTED per-artifact status map: {kind → {required, present, issues, status}},
+    derived and never stored. The `plan` row also carries the evidence verdict."""
     profile = get_profile(item.get("kind"))
     out: dict[str, dict] = {}
     for kind in ARTIFACT_KINDS:
@@ -3332,8 +2804,7 @@ def artifact_status(item: dict, item_dir: Path, repo_dir: Path | None = None) ->
             row["status"] = "ok" if not issues else "incomplete"
         else:
             row["status"] = "missing"
-        # The derived check verdict rides the `plan` row — the plan owns the vet checks, and the
-        # entries proving them live in the cycle reports' §Verification fences.
+        # The derived check verdict rides the `plan` row — the plan owns the vet checks.
         if kind == "plan" and cycle_reports(item_dir):
             row["evidence"] = evidence_status(item_dir, repo_dir)
         out[kind] = row
