@@ -1,14 +1,10 @@
 """Behavior-parity harness: proves a refactor moved code without changing the API.
 
-The route inventory is the hard gate — the sorted "METHOD /path" set from /openapi.json plus
-the WebSocket routes, which OpenAPI cannot enumerate. The shape snapshot is informational
-until `--strict-shapes`. Read-only, and the daemon must be up.
+Route inventory is the hard gate. Read in-process, so it describes the code on disk.
 
-Usage:
-    python -m scripts.parity snapshot                 # write/refresh the committed baseline
-    python -m scripts.parity check                    # inventory gate + shapes report + WS
-    python -m scripts.parity check --strict-shapes    # also fail on any OpenAPI shape drift
-    python -m scripts.parity check --no-ws            # skip the WS handshake
+    python -m scripts.parity snapshot         # refresh the committed baseline
+    python -m scripts.parity check            # add --strict-shapes to gate on shape drift
+    python -m scripts.parity check --live     # ask a running daemon instead, and probe WS
 """
 
 import asyncio
@@ -21,8 +17,32 @@ from pathlib import Path
 DAEMON = os.environ.get("SUPERME_DAEMON_URL", "http://127.0.0.1:8787").rstrip("/")
 BASELINE = Path(__file__).resolve().parent / "parity_baseline.json"
 
-# Routes OpenAPI can't enumerate (WebSocket) — tracked explicitly so the inventory stays complete.
-WS_ROUTES = ["WS /ws/agent", "WS /ws/dashboard"]
+HTTP_METHODS = {"get", "post", "put", "patch", "delete", "head", "options"}
+
+
+def _app():
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from superme_agent.daemon.server import app
+    return app
+
+
+def _ws_routes(app) -> list[str]:
+    """The WebSocket paths the app actually declares — absent from OpenAPI, so measured here.
+
+    FastAPI has wrapped included routers before now, so anything carrying `routes` is walked."""
+    from starlette.routing import WebSocketRoute
+
+    found: list[str] = []
+
+    def walk(routes) -> None:
+        for r in routes:
+            if isinstance(r, WebSocketRoute):
+                found.append(f"WS {r.path}")
+            elif hasattr(r, "routes"):
+                walk(r.routes)
+
+    walk(app.router.routes)
+    return sorted(found)
 
 
 def _fetch_openapi() -> dict:
@@ -33,56 +53,60 @@ def _fetch_openapi() -> dict:
         sys.exit(f"✗ could not reach the daemon at {DAEMON}/openapi.json — is it up?  ({e})")
 
 
-def _inventory(openapi: dict) -> list[str]:
-    """Sorted ['METHOD /path', …] over every HTTP operation + the known WS route(s)."""
-    items: list[str] = []
-    for path, item in openapi.get("paths", {}).items():
-        for method in item:
-            if method.lower() in {"get", "post", "put", "patch", "delete", "head", "options"}:
-                items.append(f"{method.upper()} {path}")
-    return sorted(items + WS_ROUTES)
+def _source(live: bool) -> tuple[dict, list[str], str]:
+    """The OpenAPI document, the WS routes, and where they came from."""
+    if live:
+        base = json.loads(BASELINE.read_text()) if BASELINE.exists() else {"inventory": []}
+        ws = [r for r in base["inventory"] if r.startswith("WS ")]
+        return _fetch_openapi(), ws, DAEMON
+    app = _app()
+    return app.openapi(), _ws_routes(app), "in-process"
 
 
-def _ws_ok(name: str) -> bool:
-    """Open one daemon socket and close it. Both are side-effect-free to merely open.
+def _inventory(openapi: dict, ws: list[str]) -> list[str]:
+    """Sorted ['METHOD /path', …] over every HTTP operation, plus the WS routes."""
+    items = [f"{method.upper()} {path}"
+             for path, item in openapi.get("paths", {}).items()
+             for method in item if method.lower() in HTTP_METHODS]
+    return sorted(items + ws)
 
-    Sockets are absent from the OpenAPI, so without this probe one could break silently while
-    the route inventory stayed green."""
+
+def _ws_ok(path: str) -> bool:
+    """Open one daemon socket and close it. Both are side-effect-free to merely open."""
     base = DAEMON.replace("http://", "ws://").replace("https://", "wss://")
 
-    async def _probe() -> bool:
-        import websockets  # available (SDK dep); imported lazily so --no-ws needs nothing
+    async def probe() -> bool:
+        import websockets  # available (SDK dep); imported lazily so a plain check needs nothing
         try:
-            async with websockets.connect(f"{base}/ws/{name}", open_timeout=5, close_timeout=2):
+            async with websockets.connect(f"{base}{path}", open_timeout=5, close_timeout=2):
                 return True
         except Exception:  # noqa: BLE001
             return False
 
-    return asyncio.run(_probe())
+    return asyncio.run(probe())
 
 
-def snapshot() -> None:
-    openapi = _fetch_openapi()
-    inv = _inventory(openapi)
+def snapshot(live: bool) -> None:
+    openapi, ws, where = _source(live)
+    inv = _inventory(openapi, ws)
     BASELINE.write_text(json.dumps({"inventory": inv, "openapi": openapi}, indent=2, sort_keys=True))
-    print(f"✓ baseline written: {len(inv)} routes ({len(inv) - len(WS_ROUTES)} HTTP + {len(WS_ROUTES)} WS)")
+    print(f"✓ baseline written from {where}: {len(inv)} routes "
+          f"({len(inv) - len(ws)} HTTP + {len(ws)} WS)")
     print(f"  → {BASELINE}")
 
 
-def check(*, strict_shapes: bool, do_ws: bool) -> int:
+def check(*, strict_shapes: bool, live: bool) -> int:
     if not BASELINE.exists():
         sys.exit(f"✗ no baseline at {BASELINE} — run `python -m scripts.parity snapshot` first")
     base = json.loads(BASELINE.read_text())
-    openapi = _fetch_openapi()
-    inv = _inventory(openapi)
+    openapi, ws, where = _source(live)
+    inv = _inventory(openapi, ws)
 
     failed = False
 
     # --- ROUTE INVENTORY (hard gate) ---
-    base_inv = set(base["inventory"])
-    cur_inv = set(inv)
-    added = sorted(cur_inv - base_inv)
-    removed = sorted(base_inv - cur_inv)
+    added = sorted(set(inv) - set(base["inventory"]))
+    removed = sorted(set(base["inventory"]) - set(inv))
     if added or removed:
         failed = True
         print("✗ ROUTE INVENTORY DRIFT:")
@@ -91,7 +115,7 @@ def check(*, strict_shapes: bool, do_ws: bool) -> int:
         for r in added:
             print(f"    + {r}   (NEW, not in baseline)")
     else:
-        print(f"✓ route inventory identical ({len(inv)} routes)")
+        print(f"✓ route inventory identical ({len(inv)} routes, from {where})")
 
     # --- OPENAPI SHAPES (informational unless --strict-shapes) ---
     base_paths = base["openapi"].get("paths", {})
@@ -118,14 +142,15 @@ def check(*, strict_shapes: bool, do_ws: bool) -> int:
     else:
         print("✓ openapi shapes identical")
 
-    # --- WS HANDSHAKE ---
-    if do_ws:
-        for name in ("agent", "dashboard"):
-            if _ws_ok(name):
-                print(f"✓ ws /ws/{name} reachable")
+    # --- WS HANDSHAKE (only against a real daemon) ---
+    if live:
+        for route in ws:
+            path = route.split(" ", 1)[1]
+            if _ws_ok(path):
+                print(f"✓ ws {path} reachable")
             else:
                 failed = True
-                print(f"✗ ws /ws/{name} UNREACHABLE")
+                print(f"✗ ws {path} UNREACHABLE")
 
     print("—" * 4, "PARITY FAIL" if failed else "PARITY OK")
     return 1 if failed else 0
@@ -133,13 +158,14 @@ def check(*, strict_shapes: bool, do_ws: bool) -> int:
 
 def main() -> None:
     args = sys.argv[1:]
-    cmd = args[0] if args else "check"
+    cmd = args[0] if args and not args[0].startswith("-") else "check"
+    live = "--live" in args
     if cmd == "snapshot":
-        snapshot()
+        snapshot(live)
     elif cmd == "check":
-        sys.exit(check(strict_shapes="--strict-shapes" in args, do_ws="--no-ws" not in args))
+        sys.exit(check(strict_shapes="--strict-shapes" in args, live=live))
     else:
-        sys.exit(f"usage: python -m scripts.parity [snapshot|check] [--strict-shapes] [--no-ws]")
+        sys.exit("usage: python -m scripts.parity [snapshot|check] [--strict-shapes] [--live]")
 
 
 if __name__ == "__main__":

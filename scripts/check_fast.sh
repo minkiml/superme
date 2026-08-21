@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# Fast, read-only gate to run between edits: the daemon's route surface is unchanged and
-# the frontend still typechecks. Seconds, and it mutates nothing.
+# Fast, read-only gate to run between edits. Seconds, and it mutates nothing.
 #
-#   bash scripts/check_fast.sh                 # inventory gate + shapes-info + ws + FE tsc
+#   bash scripts/check_fast.sh                 # route surface + import surface + layers + FE tsc
 #   STRICT=1 bash scripts/check_fast.sh        # also fail on ANY OpenAPI shape drift
+#
+# Every check reads the code on disk, never a running daemon: one serving older code would
+# certify a surface this tree cannot produce. For a live daemon, run `parity check --live`.
 #
 # The heavier E2E suites in scripts/test_*.py run only when a change reaches them.
 set -uo pipefail
@@ -20,20 +22,24 @@ fi
 [ -n "$PY" ] || { echo "no python on PATH — set SUPERME_PY to an interpreter" >&2; exit 1; }
 EXTRA=""; [ "${STRICT:-0}" = "1" ] && EXTRA="--strict-shapes"
 
-# Load the app fresh, because parity below hits the LIVE daemon: without this, a stale
-# daemon still serving old code would let a startup-breaking edit gate green.
 echo "▸ import check (fresh app load)"
 PYTHONPATH=. "$PY" -c "from superme_agent.daemon import server; assert server.app" ; IMPORT=$?
 
 echo "▸ parity check ${EXTRA}"
 PYTHONPATH=. "$PY" -m scripts.parity check $EXTRA; PARITY=$?
 
+echo "▸ import surface"
+PYTHONPATH=. "$PY" -m scripts.api_snapshot check; API=$?
+
+echo "▸ import layering"
+PYTHONPATH=. "$PY" -m scripts.layers; LAYERS=$?
+
 echo "▸ frontend typecheck"
 ( cd web/frontend && npx -y tsc --noEmit ); TSC=$?
 
 echo "————"
-if [ $IMPORT -eq 0 ] && [ $PARITY -eq 0 ] && [ $TSC -eq 0 ]; then
+if [ $IMPORT -eq 0 ] && [ $PARITY -eq 0 ] && [ $API -eq 0 ] && [ $LAYERS -eq 0 ] && [ $TSC -eq 0 ]; then
   echo "✓ FAST GATE GREEN"; exit 0
 else
-  echo "✗ FAST GATE RED  (import=$IMPORT parity=$PARITY tsc=$TSC)"; exit 1
+  echo "✗ FAST GATE RED  (import=$IMPORT parity=$PARITY api=$API layers=$LAYERS tsc=$TSC)"; exit 1
 fi
