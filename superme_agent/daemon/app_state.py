@@ -1,11 +1,7 @@
 """Shared daemon singletons — built once, injected into routers.
 
-Instantiated at import (cheap: open DB handles + load YAML config). The one startup SIDE EFFECT,
-`spine.reconcile()` (flip runs orphaned by a previous daemon exit), lives in `lifespan.py` — NOT here —
-so importing this module for introspection or tests never mutates the run table.
-
-Routers take these via FastAPI `Depends(get_…)`, which returns the singleton (no per-request rebuild)
-and gives a clean test seam (`app.dependency_overrides[get_spine] = lambda: fake`).
+The one startup SIDE EFFECT lives in `lifespan.py`, so importing this for tests never mutates the
+run table.
 """
 
 from ..core import (

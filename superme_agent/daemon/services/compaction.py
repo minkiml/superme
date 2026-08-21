@@ -1,32 +1,8 @@
-"""Compaction runtime (workspace-workflow S8/D11) — configurable trigger + checkpoint-first run
-order + effectiveness verdict with back-off.
+"""Compaction runtime: a configurable trigger, a checkpoint-first run order, and an effectiveness
+verdict with back-off.
 
-The kernel — not the CLI's hidden threshold — decides when a work-item session compacts:
-- **Trigger**: ONE check, at run START, before the run-lock is taken. The session's current fill
-  (`spine.session_ctx_pct` — the last finished run's authoritative reading on that session) is
-  compared against `compaction_trigger_pct` (spine setting, per-kind override). Nothing else.
-  Checking at run start is what makes "never mid-task" true by CONSTRUCTION: no run is in
-  flight, so the lock is free and there is no work to strand. The two seams are the interactive
-  bound turn (ws.py) and the autopilot gate seam (gates.maybe_autopilot_advance) — between them
-  every accumulating session is covered, chat and background alike.
-- **Run order**: pre-compaction checkpoint FIRST (the derived S2 banking, deduped against any
-  the agent just wrote) → `/compact` sent to the session (the CLI performs it; the ONLY
-  cache-break event; full pre-compaction transcript retained on disk) → **effectiveness
-  verdict** on the REAL pre/post prompt tokens the compact boundary records, plus the summary
-  text the CLI injected (WHAT survived, beside how much).
-- **Back-off**: a defer latch blocks re-fire until the next REAL turn reports fresh usage (so an
-  ineffective compaction can never loop with the seam that just re-entered); ≥2 ineffective
-  compactions → this session stops auto-compacting and the item is parked `awaiting_human` —
-  "needs a fresh session" lands in the attention engine (durable state, restart-proof). A
-  PreCompact hook (wired in ws.py) banks the checkpoint even when the CLI compacts on its own
-  mid-turn — the checkpoint-first guarantee holds either way.
-
-**Boundaries are permission, not instruction** (owner, 2026-07-28): a run boundary says it is
-SAFE to compact here; the threshold says whether it is WORTH it. Both must hold.
-
-State here is per-session and in-memory (a restart forgets strikes — the safe direction: at
-worst one more attempt); everything durable (verdict, back-off, checkpoint) is events + item
-status.
+The check runs at run START, before the lock is taken, which makes "never mid-task" true by
+construction.
 """
 
 import asyncio
@@ -47,24 +23,11 @@ from .turns import ResilientTurn
 
 log = logging.getLogger("superme-agent")
 
-# The incompressible floor as a share of the window, with headroom. MEASURED 2026-07-28
-# (`scripts/probe_context_floor.py`, `get_context_usage()` before any turn): 21.3K of 200,000 =
-# 10.6%, and the window is 200,000 on every tier we run — so this is a stable percentage, not a
-# per-model one. 25% is that floor plus room for one exchange; a trigger at or below it could
-# only thrash, so `validate_trigger` refuses one at config time.
+# The incompressible floor is about 10.6% of a 200K window, and 25% is that plus room for one
+# exchange.
 FLOOR_MIN_PCT = 25
-# …and the minimum a TRIGGER may sit at, which is a different question the guard used to conflate.
-# Clearing the floor is not enough: a trigger just above it re-fires on the next turn, because
-# compaction lands the session near the floor and one exchange puts it back over.
-#
-# OBSERVED 2026-07-30 (item `dc00c47bc74f`, trigger 26%): seven compactions in three days, EVERY ONE
-# 80–93% effective, each reclaiming to ~5% and re-crossed 26% within a turn. Nothing flagged it,
-# because the strike rule only counts INEFFECTIVE compactions.
-#
-# Derived from the same measurement `FLOOR_MIN_PCT` uses, not picked: the floor is 10.6%
-# (21.3K/200K) and 25% is that plus room for ONE exchange — so one exchange is ~14 points. A trigger
-# needs the floor plus one exchange to do work in, and one more before it fires again: 10.6 + 2×14 ≈
-# 40. Below that, compaction is a treadmill however well it shrinks.
+# A trigger just above the floor re-fires next turn, because one exchange puts the session back
+# over it.
 TRIGGER_MIN_PCT = 40
 STRIKES_TO_BACKOFF = 2
 # A compaction has to buy at least this many real turns of runway, or it was a treadmill step.
@@ -77,9 +40,8 @@ class _SessState:
     defer: bool = False              # latch: wait for the next real turn's usage before re-firing
     strikes: int = 0                 # consecutive compactions that bought nothing
     backed_off: bool = False
-    # Real turns since this session last compacted. `None` = it has not compacted yet. This is what
-    # makes THRASH visible: a compaction that shrinks 90% but is re-crossed by the very next turn
-    # bought no runway, and shrink alone cannot tell you that (see `_bought_runway`).
+    # `None` means it has not compacted yet. This is what makes thrash visible — shrink alone
+    # cannot show it.
     turns_since_compact: int | None = None
 
 
@@ -91,12 +53,8 @@ def _s(session_id: str) -> _SessState:
 
 
 def note_turn_start(session_id: str | None) -> None:
-    """A real (non-compact) turn ran on this session, so the next reading will be fresh — release
-    the defer latch. This is the ONLY thing that releases it: without it, a seam that re-enters
-    right after an ineffective compaction would read the same over-threshold fill and fire again.
-
-    It also COUNTS the turn, which is the runway measure: how much work a compaction actually
-    bought before the trigger was crossed again."""
+    """A real turn ran, so release the defer latch — without this a seam re-entering after an
+    ineffective compaction fires again. It also counts the turn, which is the runway measure."""
     if session_id and session_id in _state:
         st = _state[session_id]
         st.defer = False
@@ -105,8 +63,8 @@ def note_turn_start(session_id: str | None) -> None:
 
 
 def validate_trigger(pct: int) -> str | None:
-    """The config-time floor guard: a trigger the incompressible floor alone would exceed is
-    refused with the reason (None = acceptable). Makes the knob safe to expose."""
+    """The config-time floor guard: a trigger the incompressible floor alone would exceed is refused
+    with the reason."""
     if pct <= FLOOR_MIN_PCT:
         return (f"trigger {pct}% is at/below the incompressible floor ({FLOOR_MIN_PCT}% — "
                 f"system prompt + tools alone); it would fire-loop. Use a higher value.")
@@ -121,21 +79,16 @@ def validate_trigger(pct: int) -> str | None:
 
 
 def effective_trigger(kind: str | None) -> int:
-    """The trigger this session compacts at: the configured value, per-kind override winning.
-    That is the whole rule. It used to be raised above the session's "observed floor + margin",
-    where the floor was the FIRST FILL SEEN — which is not a floor (a first turn already carries
-    a prompt) and which a daemon restart re-measured mid-conversation, silently lifting the
-    trigger to wherever the session happened to be. Observed 2026-07-28: floor recorded as 31%,
-    trigger lifted 55 → 41 → never fired. `validate_trigger` guards the floor at config time,
-    which is the right place for it; the runtime just honours the number."""
+    """The trigger this session compacts at: the configured value, per-kind override winning. That is
+    the whole rule — `validate_trigger` guards the floor at config time."""
     cfg = _spine.get_compaction_config()
     k = get_profile(kind).kind
     return int(cfg["by_kind"].get(k, cfg["trigger_pct"]))
 
 
 def _summary_text(entry: dict) -> str:
-    """The text of an `isCompactSummary` transcript entry — the CLI writes it as a user message
-    whose content is either a plain string or a block list."""
+    """The text of an `isCompactSummary` transcript entry, whose content is either a plain string or a
+    block list."""
     content = (entry.get("message") or {}).get("content")
     if isinstance(content, str):
         return content
@@ -147,18 +100,10 @@ def _summary_text(entry: dict) -> str:
 
 def _compact_metadata(session_id: str, *, after_iso: str | None = None
                       ) -> tuple[dict | None, str]:
-    """The NEWEST compaction's evidence from the session transcript, as (meta, summary_text):
+    """The NEWEST compaction's evidence from the session transcript, as (meta, summary_text).
 
-    - `meta` — the `compact_boundary` numbers {preTokens, postTokens, trigger, durationMs}.
-    - `summary_text` — the `isCompactSummary` message the CLI injected as the compacted
-      session's new opening. This is WHAT SURVIVED; the numbers only say how much did. Judging
-      compaction on tokens alone can't tell a good summary from a lossy one, so the text is
-      captured onto the verdict event for us and the diagnosis agent to read.
-
-    `after_iso` scopes the read to entries created AFTER this run started — a re-compact that
-    produced NO new boundary must never be judged by a stale (usually highly effective) earlier
-    one. ("", None) when nothing qualifies.
-    """
+    The numbers say how much was shed; the text says WHAT survived. `after_iso` keeps a re-compact
+    from being judged by a stale boundary."""
     hits = list(Path.home().glob(f".claude/projects/*/{session_id}.jsonl"))
     if not hits:
         return None, ""
@@ -179,38 +124,18 @@ def _compact_metadata(session_id: str, *, after_iso: str | None = None
     return meta, summary
 
 
-# Auto mode: a compaction is effective when it reclaimed at least this fraction of the session's
-# RECLAIMABLE space (pre − incompressible floor). 0.5 = "shed at least half of what a perfect
-# summary could shed" — the v2 calibration (runway-based, from recorded verdicts + per-turn
-# ctx_pct history) may replace this constant.
+# Effective means it shed at least half of what a perfect summary could shed.
 AUTO_RECLAIM_FRACTION = 0.5
 _FALLBACK_GAIN_PCT = 30   # flat threshold when auto has no floor measurement to normalize against
 
 
 def judge_effectiveness(meta: dict | None, min_gain_pct: int | str,
                         *, floor_tokens: int | None = None) -> dict:
-    """The pure verdict: real pre/post prompt tokens from the boundary, judged ONCE per
-    compaction. No boundary recorded = the compact never happened = ineffective.
+    """The pure verdict from the boundary's real pre/post prompt tokens.
 
-    Two modes (min_gain_pct):
-      "auto"  — reclaimable-normalized: effective ⇔ reclaimed ≥ AUTO_RECLAIM_FRACTION ×
-                (pre − floor_tokens). The floor is what compaction can NEVER remove (system
-                prompt + tools + orient, re-sent every turn), so a preload-heavy session isn't
-                false-failed and a bloated one isn't false-passed. Falls back to the flat
-                threshold when no floor measurement exists (e.g. post-restart).
-      int %   — the manual escape hatch: effective ⇔ gain_pct ≥ min_gain_pct.
-
-    **The two boundary numbers are not on the same basis** (measured 2026-07-28, two real
-    compactions): `preTokens` INCLUDES the floor — 68,100 against a session reading 33% of a
-    200K window is the whole prompt — while `postTokens` does NOT, landing BELOW the floor
-    (12,025 vs a 21,297 floor, an impossibility for a real prompt) because it counts the summary
-    the CLI wrote, before the next turn re-sends system prompt and tools. Normalizing without
-    correcting for that inflates the ratio by floor/(pre − floor) and can push it ABOVE 1.0 —
-    which is exactly what the first auto-mode verdict recorded (1.09). So the post side is
-    restated onto the pre side's basis (`post + floor`) before the ratio is taken.
-
-    The returned dict carries the full measurement (mode, threshold, floor, reclaimable,
-    reclaimed ratio) — it lands in the permanent verdict event as the calibration record."""
+    `min_gain_pct` is "auto" (normalized against the measured floor) or a flat int percent.
+    `preTokens` includes the floor and `postTokens` does not, so post is restated onto the pre
+    basis."""
     if not meta or not meta.get("preTokens"):
         return {"pre_tokens": None, "post_tokens": None, "gain_pct": 0.0, "effective": False,
                 "mode": "none"}
@@ -220,8 +145,7 @@ def judge_effectiveness(meta: dict | None, min_gain_pct: int | str,
     auto = str(min_gain_pct).strip().lower() == "auto"
     if auto and floor_tokens is not None and 0 <= floor_tokens < pre:
         reclaimable = pre - floor_tokens
-        # Both sides floor-inclusive: what the next turn will really carry is the summary PLUS
-        # the floor, so that is what "how much did this shed" must be measured against.
+        # Both sides floor-inclusive: the next turn carries the summary PLUS the floor.
         post_real = post + int(floor_tokens)
         ratio = max(0.0, (pre - post_real) / reclaimable) if reclaimable else 0.0
         out.update(mode="auto", floor_tokens=int(floor_tokens), reclaimable=reclaimable,
@@ -235,38 +159,24 @@ def judge_effectiveness(meta: dict | None, min_gain_pct: int | str,
 
 
 def bank_precompaction_checkpoint(ctx: Context, item_id: str) -> bool:
-    """The checkpoint-FIRST step (D11 run order #1): bank the derived S2 checkpoint unless one
-    landed in the last couple of minutes (the agent's own hot bank wins — never duplicate)."""
+    """Bank the derived checkpoint unless one landed in the last couple of minutes — the agent's own
+    hot bank wins."""
     from .runs import bank_auto_checkpoint
     return bank_auto_checkpoint(ctx, item_id, since=time.time() - _CHECKPOINT_DEDUPE_S)
 
 
 def session_memory_root(ctx: Context) -> Path | None:
-    """The MODE root a general session's memory hangs off — `<internal_root>/dev` or `/core`.
-    Mode-scoped because the knowledge tree already is (owner, 2026-07-28)."""
+    """The MODE root a general session's memory hangs off. Mode-scoped, because the knowledge tree
+    already is."""
     return (ctx.internal_root / ctx.mode) if ctx.internal_root else None
 
 
 async def run_handoff_turn(ctx: Context, context_id: str, item_id: str | None, session_id: str,
                            *, model: str | None) -> bool:
-    """Ask the thread to bank its own checkpoint, as a TURN, before `/compact` runs.
+    """Ask the thread to bank its own checkpoint, as a TURN, before `/compact`.
 
-    Two things happen at once, and both matter:
-    - the `superme-dev:checkpoint` skill writes the thread's continuity record — OUR copy, on
-      disk, which survives however the CLI's summary turns out;
-    - the turn's reply becomes the LAST thing in the transcript, which is what the summarizer
-      weights most heavily. That is the only lever we have on `/compact`'s output: we cannot pass
-      it instructions (the SDK exposes compaction as read-only telemetry — §3), so we shape its
-      INPUT instead.
-
-    One content contract, two write targets (§13.4): a work-item thread calls the
-    `write_checkpoint` tool (`item_id` given); a general session has no item folder and no such
-    tool, so it WRITES `session-memory/<session-id>.md` and the trigger names the exact path. In
-    both cases the turn's write scope is exactly that one directory and nothing else.
-
-    A model call, so it is spent only when a compaction is actually about to happen. Returns True
-    if the turn completed; False sends the caller to the derived fallback (Hermes's pattern: LLM
-    summary primary, deterministic handoff when it fails, never a lost boundary)."""
+    The reply becomes the LAST thing in the transcript, which the summarizer weights most. A
+    work-item thread calls `write_checkpoint`; a general session writes `session-memory/<sid>.md`."""
     from .runs import _dev_mcp, capture_prompt
     if item_id:
         prompt = kernel_speech.checkpoint_trigger(item_id)
@@ -296,18 +206,13 @@ async def run_handoff_turn(ctx: Context, context_id: str, item_id: str | None, s
 
 async def run_compaction(ctx: Context, context_id: str, item_id: str | None, session_id: str,
                          *, model: str | None, pre_pct: int | None, manual: bool = False) -> dict:
-    """Execute one full compaction sequence on a session. Returns the verdict record.
-    The caller has already decided (`due`) and holds NO run — this opens its own, which is why
-    every caller must be at a run boundary rather than inside one.
+    """Execute one full compaction sequence on a session and return the verdict record.
 
-    `item_id=None` is a GENERAL session (§13.4 / T5): same sequence, but the run row is a plain
-    session run (no item, and therefore no per-item run-lock — `due`'s defer latch, set below
-    before anything else, is what stops a second seam re-entering) and the handoff writes
-    `session-memory/` instead of a checkpoint."""
+    The caller holds NO run — this opens its own, which is why every caller must be at a run
+    boundary. `item_id=None` is a general session."""
     from .runs import _begin_run, _end_run, capture_prompt
     st = _s(session_id)
-    # A compaction is a MAINTENANCE run — it must not move the item's workflow state. Remember
-    # the resting status now; back-off overrides it to awaiting_human (the page).
+    # A compaction is a MAINTENANCE run and must not move the item's workflow state.
     rest_status = "active"
     cur: dict = {}
     if item_id and ctx.internal_root:
@@ -328,14 +233,11 @@ async def run_compaction(ctx: Context, context_id: str, item_id: str | None, ses
     run_usage: dict | None = None
     post_pct: int | None = None   # bound BEFORE the try: the finally reads it on every path
     try:
-        # 1. Checkpoint FIRST — banked and logged BEFORE any compaction event exists. The thread
-        #    writes its own via the `checkpoint` skill (it is the only party that knows what was
-        #    said); the derived bank is the fallback when that turn fails, so a boundary is never
-        #    crossed with nothing banked.
+        # Checkpoint first, before any compaction event exists. The thread writes its own; the
+        # derived bank is the fallback.
         by_agent = await run_handoff_turn(ctx, context_id, item_id, session_id, model=model)
-        # The derived fallback exists only for work-items — it is assembled from the item's
-        # artifacts, and a general session has none. There, a failed handoff turn means nothing
-        # is banked, and that is the honest outcome rather than a stub with no content in it.
+        # The derived fallback is assembled from item artifacts, so a general session has none,
+        # and banking nothing is honest.
         banked = by_agent or (bool(item_id) and bank_precompaction_checkpoint(ctx, item_id))
         _dev_store.log_event(context_id, "compaction.checkpoint",
                              ("Pre-compaction checkpoint written by the session" if by_agent
@@ -345,8 +247,8 @@ async def run_compaction(ctx: Context, context_id: str, item_id: str | None, ses
                              item_id=item_id, actor="daemon",
                              meta={"session_id": session_id, "banked": banked,
                                    "by_agent": by_agent})
-        # 2. The compaction itself: /compact into the session (CLI performs it; the transcript
-        #    keeps the full pre-compaction history + gains the boundary record).
+        # The CLI performs the compaction; the transcript keeps its full pre-compaction history
+        # and gains the boundary record.
         real_usage: dict | None = None
         window: int | None = None
         compact_turn = ResilientTurn("compact", item_id=item_id)
@@ -355,14 +257,12 @@ async def run_compaction(ctx: Context, context_id: str, item_id: str | None, ses
             if isinstance(ev, Result):
                 real_usage = ev.usage
                 window = ev.context_window   # the model's real window — converts floor % → tokens
-                # The fill the NEXT turn will start from — the number that says whether this bought
-                # any runway. Without it the compact run row reads ctx None and the only evidence of
-                # the gain is the verdict event's token pair.
+                # The fill the NEXT turn starts from — the number that says whether this bought
+                # any runway.
                 post_pct = ev.ctx_pct
                 break
-        # 3. Effectiveness verdict on the boundary's REAL pre/post prompt tokens. The CLI
-        #    flushes the boundary record to the transcript slightly AFTER the result streams —
-        #    poll briefly rather than judging a not-yet-written boundary as a false strike.
+        # The CLI flushes the boundary slightly after the result streams, so poll rather than
+        # judge a not-yet-written one.
         meta, summary = None, ""
         for _ in range(10):
             meta, summary = _compact_metadata(session_id, after_iso=started_iso)
@@ -370,66 +270,31 @@ async def run_compaction(ctx: Context, context_id: str, item_id: str | None, ses
                 break
             await asyncio.sleep(2)
         cfg = _spine.get_compaction_config()
-        # The session's incompressible floor in TOKENS — auto mode's normalizer. MEASURED
-        # (get_context_usage on a pre-turn session), not inferred from an observed fill; cached
-        # per context+model, so this costs a probe once. None if the probe failed — the verdict
-        # then falls back to the flat threshold.
+        # Measured, not inferred, and cached per context and model. None if the probe failed; the
+        # verdict then falls back.
         measured = await _agent.measure_context_floor(ctx, model)
         floor_tokens = measured[0] if measured else None
         verdict = judge_effectiveness(meta, cfg["min_gain_pct"], floor_tokens=floor_tokens)
-        # Token attribution: the CLI reports ZERO API usage for a /compact turn (verified
-        # empirically — the summarization request never surfaces through the session), so the run
-        # row carries what we MEASURED, which is nothing. It stays 0.
-        #
-        # It used to carry `preTokens` as input + `postTokens` as output, "estimated from the
-        # boundary". That was a category error (owner, 2026-07-28): those two numbers describe how
-        # much context the compaction REMOVED, not what it spent — a compaction metric filed in a
-        # usage column, which made a single cached summarization call out-rank build and plan on
-        # the Activity board (132.7k vs 58.6k). The usage column means usage; the shrink belongs
-        # to `compaction.verdict` (pre_tokens/post_tokens/gain_pct/reclaimed_ratio), where it
-        # already lives. Do not re-mix them.
-        #
-        # The compaction does cost real money — one summarization call, mostly cache-read input
-        # plus the summary's output. We simply cannot see it, and 0 is the honest value for a
-        # column defined as "what we counted". If a future CLI reports it, `real_usage` below
-        # picks it up automatically.
+        # The CLI reports no usage for a `/compact` turn; 0 is honest here. The shrink belongs to
+        # `compaction.verdict`.
         run_usage = real_usage if (real_usage and sum(
             real_usage.get(k, 0) for k in ("input_tokens", "output_tokens",
                                            "cache_creation_input_tokens"))) else None
-        # Strikes exist to stop the AUTO trigger looping on a session it cannot shrink. A manual
-        # compaction cannot loop — the owner fired it — so it must not accrue one, and it must not
-        # push a session into permanent back-off. Live finding (2026-07-28): a SMALL session scores
-        # low by construction (reclaimable = pre − floor is tiny, so 28,390 → 3,703 came out at
-        # 0.48 of reclaimable, just under the bar) — two hand-typed `/compact`s on a short thread
-        # would have retired its auto-compaction for good. An effective one still CLEARS strikes:
-        # that is evidence the session is compactable again, whoever asked.
-        #
-        # RUNWAY, not just shrink (2026-07-30). `effective` answers "did it get smaller"; it cannot
-        # answer "did that buy any working room", and those came apart in practice: seven consecutive
-        # 80–93%-effective compactions on one item, each re-crossing the trigger within a turn, with
-        # strikes pinned at 0 the whole time. A compaction that bought fewer than MIN_RUNWAY_TURNS
-        # real turns is a treadmill step and counts against the back-off however well it shrank.
+        # A manual compaction cannot loop, so it accrues no strike; and shrink alone cannot tell a
+        # treadmill from runway.
         bought_runway = (st.turns_since_compact is None            # first compaction on this session
                          or st.turns_since_compact >= MIN_RUNWAY_TURNS)
         verdict["bought_runway"] = bought_runway
         verdict["runway_turns"] = st.turns_since_compact
-        # `or manual` keeps the manual carve-out intact: the owner asked, and a hand-run compaction
-        # cannot loop, so it clears the board on effectiveness alone. The runway condition is for the
-        # AUTO trigger, which is the only thing that can treadmill.
+        # `or manual`: the owner asked, and a hand-run compaction cannot loop, so effectiveness
+        # alone clears the board.
         if verdict["effective"] and (bought_runway or manual):
             st.strikes = 0
         elif not manual:
             st.strikes += 1
         st.turns_since_compact = 0   # this compaction is now the one runway is measured from
-        # The verdict event's meta is the durable CALIBRATION record (v2 runway tuning reads
-        # these + the per-turn ctx_pct history on run rows): full measurement — mode, floor,
-        # window, reclaimable, ratio — not just the outcome. `trigger_pct` is None for a manual
-        # "Compact now" (no trigger fired — a 0 here would poison the calibration data).
-        # `post_pct` came off the `/compact` turn's Result and was ALWAYS None: a compact turn
-        # reports no usage (that is why its run row reads `Σ 0 tok`), so the SDK has no fill to give.
-        # It is derived here instead, from two MEASURED numbers the boundary does record — post
-        # tokens over the model's real window. Not an estimate: a ratio of two measurements, which is
-        # what a fill percentage is everywhere else in the system.
+        # The durable calibration record: full measurement, not just outcome. `post_pct` is
+        # derived, since a compact turn reports no fill.
         if post_pct is None and window and verdict.get("post_tokens"):
             post_pct = round(verdict["post_tokens"] / window * 100)
         verdict.update(strikes=st.strikes, trigger_pct=pre_pct, post_pct=post_pct)
@@ -440,20 +305,18 @@ async def run_compaction(ctx: Context, context_id: str, item_id: str | None, ses
                               + (f", {round(verdict['reclaimed_ratio'] * 100)}% of reclaimable"
                                  if verdict.get("reclaimed_ratio") is not None else "")
                               + (f" → {post_pct}% fill" if post_pct is not None else "") + ")"
-                              # The treadmill, named where the owner actually reads it. A shrink
-                              # figure alone let seven of these look like seven successes.
+                              # The treadmill, named where the owner reads it: a shrink figure
+                              # alone let seven of these look successful.
                               + ("" if verdict.get("bought_runway", True) else
                                  f" — but bought only {verdict.get('runway_turns')} turn(s) of "
                                  f"runway; the trigger is too low for this session")
                               if pre else "Compaction produced no boundary — counted ineffective"),
                              item_id=item_id, actor="daemon",
                              meta={**verdict, "session_id": session_id, "window": window,
-                                   # WHAT survived, beside how much. Agent/diagnosis-facing —
-                                   # no owner surface renders this (compaction is session
-                                   # hygiene, not a story for the owner).
+                                   # WHAT survived, beside how much. Agent-facing — no owner
+                                   # surface renders this.
                                    "summary": summary})
-        # 4. Back-off: ≥2 strikes → stop compacting this session + page the owner (durable:
-        #    awaiting_human IS the attention engine's needs-you signal).
+        # Back-off: two strikes stop compacting this session and page the owner.
         if st.strikes >= STRIKES_TO_BACKOFF and not st.backed_off and not manual:
             st.backed_off = True
             rest_status = "awaiting_human"   # the page — _end_run below rests the item there
@@ -478,19 +341,8 @@ async def run_compaction(ctx: Context, context_id: str, item_id: str | None, ses
 
 
 def due(session_id: str | None, kind: str | None, *, force: bool = False) -> int | None:
-    """Is this session over its trigger and clear to compact? Returns the fill that decided it
-    (so the caller can log and pass it as `pre_pct`), or None for "no".
-
-    Pure and cheap — one spine read, no side effects — so a run-start seam can ask on every run
-    without paying for it. The reading is the last finished run's authoritative `ctx_pct` on this
-    session: nothing has been appended to that transcript since, so it IS the current fill.
-
-    `force` is the owner's explicit "compact now" (§13.1 row 4): the THRESHOLD is bypassed — they
-    asked, so worth-it is their call, not ours — but the back-off is not. A session that has
-    already compacted ineffectively twice is one where compaction demonstrably does nothing, and
-    running it again on request would burn a model call to prove that a third time. Returns 0 when
-    forced with no reading yet, which is falsy — so callers must test `is None`, never truthiness
-    (that is why the return is the fill and not a bool)."""
+    """Is this session over its trigger and clear to compact? Returns the fill that decided it, or
+    None."""
     if not session_id:
         return None
     st = _s(session_id)
@@ -507,15 +359,10 @@ def due(session_id: str | None, kind: str | None, *, force: bool = False) -> int
 async def compact_before_run(ctx: Context, context_id: str, item_id: str | None,
                              session_id: str | None, *, kind: str | None,
                              model: str | None, force: bool = False) -> dict | None:
-    """The run-START gate: if this session is over its trigger, compact it NOW and return the
-    verdict. None = it did not fire (the common case, one spine read).
+    """The run-START gate: if this session is over its trigger, compact now and return the verdict.
 
-    AWAITED, not fire-and-forget — the caller must not open its run until this returns, because
-    `run_compaction` takes the item's run-lock (one live item-run is a data-layer invariant) and
-    because sending a real prompt into a session mid-compaction is what "never mid-task" forbids.
-
-    `item_id=None` is a general session; `force=True` is the owner's manual "compact now", which
-    rides this SAME path with the threshold bypassed rather than being a second mechanism."""
+    AWAITED, not fire-and-forget: `run_compaction` takes the item's run-lock, and a prompt sent
+    mid-compaction is what "never mid-task" forbids."""
     pre = due(session_id, kind, force=force)
     if pre is None:
         return None

@@ -1,28 +1,8 @@
 #!/usr/bin/env python3
-"""forge_kit/eval.py — the behavioural check for a forged artifact.
+"""The behavioural check for a forged artifact.
 
-Structural lint proves the artifact is *well-formed*; this proves it is *good* — by putting it in
-front of a fresh model and seeing how it behaves. The methodology is lifted from our own
-best-practice guide's Validation section:
-
-  * skill  — Discovery (does the description route the right requests to it, and keep the wrong
-             ones out?) + Logic (simulate an agent executing the steps on a realistic task; where
-             is it forced to guess?).
-  * agent  — Delegation (would the main agent hand this worker the right job?) + Self-containment
-             (an isolated worker sees only its own brief — is that brief enough to act?).
-  * constitution — Clarity (one unambiguous, actionable directive?) + Conflict (does it contradict
-             or duplicate the rules already in force in this scope?).
-
-It runs a single hermetic `claude -p` one-shot and returns a JSON report. Eval is *evidence for the
-gate-2 reviewer*, not a hard gate: a `fail` verdict means the author should revise and re-run, but
-the report is always emitted (exit 0). If the model call itself can't run, the report says so
-(`verdict: "skipped"`) rather than blocking the pipeline.
-
-Usage:
-    python eval.py <form> <file> --intent "<what this artifact is for>" \
-        [--name <slug>] [--scope <target_scope>] [--existing <path>] [--model <id>]
-
-The full JSON report is printed to stdout (last line is the compact JSON for machine capture).
+Structural lint proves it is well-formed; this proves it is good, by putting it in front of a fresh
+model. The report is always emitted.
 """
 
 import argparse
@@ -36,9 +16,8 @@ import tempfile
 from pathlib import Path
 
 TIMEOUT_S = 180
-# The trial run that measures the ARTIFACT's own cost is sandboxed hard: read-only tools (so an
-# unvetted learned artifact can never mutate the machine) and a turn cap (so it can't run away on
-# cost). Cheaper budget than the review since we only want a ballpark.
+# Read-only tools and a turn cap, so an unvetted artifact can neither mutate the machine nor run
+# away on cost.
 _TRIAL_TOOLS = "Read,Grep,Glob"
 _TRIAL_MAX_TURNS = 8
 _TRIAL_TIMEOUT_S = 150
@@ -123,10 +102,8 @@ def _build_prompt(form, artifact, intent, existing):
 
 
 def _purge_native_transcript(cwd_path):
-    """claude -p records a native session transcript under ~/.claude/projects/<slugified-cwd>/.
-    Our cwd is a throwaway tempdir, so that transcript is pure orphaned cruft once the eval is done —
-    delete it. Keyed on the tempdir's unique basename (e.g. 'tmpbhabgded'), which can't collide with
-    a real project dir, so the glob is safe."""
+    """`claude -p` records a native transcript under the user's projects dir. Our cwd is a throwaway
+    tempdir, so that transcript is orphaned cruft — delete it."""
     base = Path(cwd_path).name
     projroot = Path.home() / ".claude" / "projects"
     if base:
@@ -144,18 +121,10 @@ def _strip_frontmatter(text):
 
 
 def _run_footprint(env_obj):
-    """Reduce the envelope to the HONEST resource figures, not the misleading cumulative one.
+    """Reduce the envelope to the HONEST resource figures, not the cumulative one.
 
-    A naive 'total tokens' sums input+output+cache across every turn — but in an N-turn agentic loop
-    each turn re-reads the same growing context from cache, so that total is ~`turns × context` and
-    is 99% cheap cache re-reads. It is neither the context the worker held nor a coherent
-    'consumption'. So we report what's actually meaningful:
-      • context — the working set the worker held PER TURN ≈ cumulative input ÷ turns (what 'the
-        context showed'; ~tens of k, matching the run's ctx_pct).
-      • output  — net NEW text generated across the run (small; the real product of the work).
-      • turns   — how many agentic steps it took.
-    Cost (total_cost_usd) and time remain the truest billed measures. `modelUsage` is the cumulative
-    per-model source (its costUSD reconciles to total_cost_usd); fall back to top-level usage."""
+    A naive total re-counts the same growing context every turn. Reported instead: `context` per turn,
+    net new `output`, and `turns`."""
     turns = max(int(env_obj.get("num_turns") or 1), 1)
     mu = env_obj.get("modelUsage")
     if isinstance(mu, dict) and mu:
@@ -173,10 +142,10 @@ def _run_footprint(env_obj):
 
 
 def _run_claude(prompt, model, *, extra_args=None, timeout=TIMEOUT_S):
-    """One hermetic claude -p call (JSON output, so we also get real run metrics — tokens, time,
-    cost). Hermetic = a throwaway cwd so the operated repo's settings/skills/memory don't leak into
-    the judgment, AND its native transcript is purged after. `extra_args` lets the trial run pin
-    read-only tools and a turn cap. Returns (reply_text, metrics)."""
+    """One hermetic `claude -p` call, JSON output, so real run metrics come back with the reply.
+
+    Hermetic means a throwaway cwd, so the operated repo's settings and memory cannot leak into the
+    judgment, and its native transcript is purged after."""
     cmd = ["claude", "-p", "--strict-mcp-config", "--output-format", "json"]
     if extra_args:
         cmd += extra_args
@@ -191,10 +160,8 @@ def _run_claude(prompt, model, *, extra_args=None, timeout=TIMEOUT_S):
             )
         finally:
             _purge_native_transcript(td)
-    # Parse the JSON envelope regardless of exit code: `claude -p` exits NON-ZERO on a soft outcome
-    # like `error_max_turns` (the trial's turn cap is the expected way an exercise ends) yet still
-    # emits a complete result envelope with real usage/cost/duration. Discarding that would throw
-    # away a genuine — if turn-capped — run. Only a missing/unparseable envelope is a hard failure.
+    # `claude -p` exits non-zero on a soft outcome like a turn cap, yet still emits a complete
+    # envelope.
     env_obj = None
     if out.stdout:
         try:
@@ -216,14 +183,10 @@ def _run_claude(prompt, model, *, extra_args=None, timeout=TIMEOUT_S):
 
 
 def _trial_run(form, artifact, *, task, model):
-    """Ballpark the ARTIFACT's OWN run cost (not the review's) on one synthetic task.
+    """Ballpark the ARTIFACT's own run cost on one synthetic task.
 
-    A constitution never "runs" — it is frontmatter-first, so only its `description` (the catalog
-    line) is always-resident; the body is pulled on demand. Its per-turn overhead is therefore the
-    description, which we estimate from length (~4 chars/token) with no model call. A skill/agent
-    does run, so we exercise its body once on a synthetic task, read-only and turn-bounded — safe
-    (can't mutate the machine), cheap, and reflective of real work. Returns a metrics dict tagged
-    with `kind` so the UI can render it."""
+    A constitution never runs, so its overhead is estimated from its description's length. A skill or
+    agent is exercised once, read-only and turn-bounded."""
     if form == "constitution":
         m = re.search(r"^description:\s*(.+)$", artifact, re.MULTILINE)
         resident = m.group(1).strip() if m else artifact.strip()
@@ -304,12 +267,12 @@ def main():
     except Exception as e:
         report = {"verdict": "skipped", "summary": f"eval could not run: {e}"}
 
-    # schema_version stamps the report shape (R5): 1 = {verdict, summary, checks[], issues[],
-    # metrics{}, trial_task}. Lets readers tell post-versioning reports from pre-metrics legacy rows.
+    # `schema_version` stamps the report shape, so a reader can tell it from a pre-metrics legacy
+    # row.
     report = {"schema_version": 1, "form": args.form, **report}
 
-    # Trial run — the headline metric: the artifact's OWN run cost on a synthetic task. Skip only if
-    # the review itself couldn't run (the model is unreachable, so a trial would fail too).
+    # Skip only when the review itself could not run: the model is unreachable, so a trial would
+    # fail too.
     metrics = {}
     if report.get("verdict") != "skipped":
         try:

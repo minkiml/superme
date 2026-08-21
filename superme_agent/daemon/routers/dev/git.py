@@ -1,9 +1,7 @@
-"""Work-item git routes (workspace-workflow S4/D4): health check, freshness sync, the review
-merge (heavy main path / light blocking-child path), backup-ref revert, and Resolve-with-Agent.
+"""Work-item git routes: health check, freshness sync, the review merge, backup-ref revert, and
+resolve-with-agent.
 
-These are the OWNER's git surface — mechanics only; the readiness brief that fronts the review
-decision lands at S6. The mechanics themselves live in core/git_layer; item records in
-core/dev_knowledge. Every route re-reads the item (authoritative state, never a stored flag).
+The mechanics live in `core/git_layer`. Every route re-reads the item, never a stored flag.
 """
 
 import asyncio
@@ -56,10 +54,11 @@ def _require_worktree(item: dict) -> str:
 async def dev_work_item_git(item_id: str, context_id: str = "global",
                             dev: DevKnowledgeService = Depends(get_dev),
                             spine: SystemSpine = Depends(get_spine)) -> dict:
-    """The item's live git state (derived at read time, never stored): branch/dir/registration
-    existence, dirty files, ahead/behind vs the repo's anchor (behind = freshness debt), merged.
-    Also echoes the repo's `review_mode`, so the rule governing the merge is visible where the
-    merge is — read live, never from the item, so a mode flip applies to items already at review."""
+    """The item's live git state, derived at read time: branch and dir existence, dirty files, ahead and
+    behind versus the anchor, merged.
+
+    Also echoes the repo's `review_mode`, read live, so a mode flip applies to items already at
+    review."""
     ctx, _root, item = _load(context_id, item_id, dev)
     mode = {"review_mode": git_ops.repo_review_mode(ctx, spine)}
     if not item.get("git_branch") and not item.get("git_worktree"):
@@ -75,13 +74,10 @@ async def dev_work_item_git_merge(item_id: str, body: GitBody,
                                   dev: DevKnowledgeService = Depends(get_dev),
                                   dev_store: DevStore = Depends(get_dev_store),
                                   spine: SystemSpine = Depends(get_spine)) -> dict:
-    """The review-gate merge (owner-fired), as a raw route. Thin wrapper over
-    `services.git_ops.review_merge` — the SAME body `advance_item` runs when the owner (or deputy)
-    approves at review, so 'the review decision IS the merge' holds whether it's fired here or by
-    the Approve transition (B2). Routes by topology (D4): a BLOCKING child merges into its parent's
-    branch (light path), everything else to the trunk (heavy path — overlap refusal, backup ref,
-    never-merge-twice). Conflicts on the main path → 200 with the conflict list (sync + resolve,
-    then retry / approve again)."""
+    """The review-gate merge as a raw route — a thin wrapper over the SAME body `advance_item` runs.
+
+    Routes by topology: a blocking child merges into its parent's branch, everything else to the
+    trunk."""
     ctx, _root, _item = _load(body.context_id, item_id, dev)
     return git_ops.review_merge(ctx, body.context_id, item_id,
                                 dev=dev, dev_store=dev_store, spine=spine)
@@ -91,7 +87,7 @@ async def dev_work_item_git_merge(item_id: str, body: GitBody,
 async def dev_work_item_pr(item_id: str, context_id: str = "global",
                            dev: DevKnowledgeService = Depends(get_dev),
                            spine: SystemSpine = Depends(get_spine)) -> dict:
-    """The dedicated PR page (§4.4) — `strict`'s review surface, and readable in any mode. Read-only
+    """The dedicated PR page — `strict`'s review surface, and readable in any mode. Read-only
     by construction: the page's one action is the ordinary review Approve, which merges."""
     ctx = contexts.resolve(context_id, "dev")
     return pr_view.pr_view(ctx, context_id, item_id, dev=dev, spine=spine)
@@ -114,9 +110,9 @@ async def dev_work_item_git_revert(item_id: str, body: GitBody,
                                    dev: DevKnowledgeService = Depends(get_dev),
                                    dev_store: DevStore = Depends(get_dev_store),
                                    spine: SystemSpine = Depends(get_spine)) -> dict:
-    """Restore the trunk to its pre-merge state via the item's recorded backup ref — the
-    always-offered undo behind every main merge (D4 guardrail). Safe-only: refuses once anything
-    else has landed on top. Clears the item's merge record (the branch itself is untouched)."""
+    """Restore the trunk to its pre-merge state via the item's recorded backup ref.
+
+    Safe-only: refuses once anything else has landed on top. The branch itself is untouched."""
     ctx, dev_root, item = _load(body.context_id, item_id, dev)
     backup = item.get("git_backup_ref")
     if not backup:
@@ -137,11 +133,11 @@ async def dev_work_item_git_revert(item_id: str, body: GitBody,
 async def dev_work_item_git_resolve(item_id: str, body: GitBody,
                                     dev: DevKnowledgeService = Depends(get_dev),
                                     spine: SystemSpine = Depends(get_spine)) -> dict:
-    """Resolve-with-Agent (D4): the human decides WHETHER, the agent resolves — they never
-    hand-edit conflict markers. Re-runs the freshness sync leaving conflicts IN the worktree,
-    then fires a background resolution run (write-sandboxed to the worktree); the daemon completes
-    the merge mechanically and the item re-enters `vet`. 409 if the sync is clean (nothing
-    to resolve) or a run is in flight."""
+    """Resolve-with-agent: the human decides WHETHER, the agent resolves, and nobody hand-edits conflict
+    markers.
+
+    Re-runs the sync leaving conflicts in the worktree, then fires a background resolution run. The
+    daemon completes the merge mechanically."""
     ctx, _root, item = _load(body.context_id, item_id, dev)
     wt = Path(_require_worktree(item))
     if spine.is_item_running(body.context_id, item_id):

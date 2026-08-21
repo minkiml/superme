@@ -28,18 +28,16 @@ class InboxBody(BaseModel):
     tag: str | None = None
     origin: str = "user"  # user (manual) | agent (branch-off proposal)
     context_id: str = "global"
-    # D3 provenance a branch-off row carries from birth: {item, relation: blocking|parallel|spawn}.
+    # The provenance edge a branch-off row carries from birth: {item, relation: blocking|parallel|spawn}.
     spawned_from: dict | None = None
-    # F3: run config chosen at capture — locked into the work-item at push. NULL = inherit default.
+    # Run config chosen at capture — locked into the work-item at push. NULL = inherit default.
     model: str | None = None
     effort: str | None = None
     autopilot: bool = True     # drives its own gates after push; the card's toggle opts out
-    # §4.1: the PROPOSED work-item kind (implementation | research). None = undecided, which is
-    # what every capture was before the field — triage then judges alone.
+    # The PROPOSED kind. None means undecided, and triage then judges alone.
     work_kind: str | None = None
-    # The two roles that run on their OWN tier rather than this item's: `vet` checks what build
-    # produced, `deputy` judges the gates. NULL = fall through to the repo's vet tier / the system
-    # deputy tier — never to this item's model, which is the coupling the roles exist to break.
+    # Roles that run on their OWN tier, never this item's model. Breaking that coupling is the
+    # point.
     vet_model: str | None = None
     vet_effort: str | None = None
     deputy_model: str | None = None
@@ -59,9 +57,8 @@ class InboxPatch(BaseModel):
     autopilot: bool | None = None
     # "" clears it back to undecided; None means the caller didn't touch the field.
     work_kind: str | None = None
-    # The two roles that run on their OWN tier rather than this item's: `vet` checks what build
-    # produced, `deputy` judges the gates. NULL = fall through to the repo's vet tier / the system
-    # deputy tier — never to this item's model, which is the coupling the roles exist to break.
+    # Roles that run on their OWN tier, never this item's model. Breaking that coupling is the
+    # point.
     vet_model: str | None = None
     vet_effort: str | None = None
     deputy_model: str | None = None
@@ -91,7 +88,7 @@ async def dev_inbox_add(body: InboxBody, dev_store: DevStore = Depends(get_dev_s
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    # Log the capture (dev-native — belongs to no work-item). PRD §4.9.
+    # Log the capture (dev-native — belongs to no work-item).
     dev_store.log_event(
         body.context_id, "inbox.add",
         f"Captured: {(row.get('title') or row.get('text') or '')[:80]}",
@@ -103,9 +100,10 @@ async def dev_inbox_add(body: InboxBody, dev_store: DevStore = Depends(get_dev_s
 
 @router.patch("/dev/inbox/{item_id}", response_model=InboxRow)
 async def dev_inbox_update(item_id: int, body: InboxPatch, dev_store: DevStore = Depends(get_dev_store)) -> dict:
-    """Edit an inbox item: change status, kind, tag, text, or title. A PUSHED row is immutable
-    trace (its content already moved into the work-item's preliminary/): flipping it back to
-    `open` would let a second push mint a duplicate work-item over the same provenance."""
+    """Edit an inbox item: status, kind, tag, text or title.
+
+    A PUSHED row is immutable trace, since its content already moved into the work-item — flipping it
+    back to `open` would let a second push mint a duplicate."""
     cur = dev_store.get_inbox(item_id)
     if cur is None:
         raise HTTPException(status_code=404, detail="inbox item not found")
@@ -131,21 +129,15 @@ async def dev_inbox_push(item_id: int, body: InboxPushBody,
                          dev_store: DevStore = Depends(get_dev_store),
                          dev: DevKnowledgeService = Depends(get_dev),
                          spine: SystemSpine = Depends(get_spine)) -> dict:
-    """Push an inbox item to the workspace — the owner's push (the `spawn` relation waits for
-    exactly this; blocking/parallel children auto-pushed at branch-off time never reach here
-    open). One shared transaction (core/inbox_flow): creates `work-items/<id>/` at triage/active
-    carrying `spawned_from` + `inbox_id`, MOVES the inbox content folder (handoff brief + extras)
-    into the item as `preliminary/` (the row stays as trace), and pauses the parent when the
-    relation is blocking. Then fires the auto-triage run (#120 — no manual trigger). Returns the
-    new work-item + the row.
-    """
+    """Push an inbox item to the workspace — the owner's push.
+
+    One shared transaction: create the work-item at triage, MOVE the inbox content into it as
+    `preliminary/` while the row stays as trace, then fire the auto-triage run."""
     rows = dev_store.list_inbox(body.context_id)
     row = next((r for r in rows if r["id"] == item_id), None)
     if row is None:
         raise HTTPException(status_code=404, detail="inbox item not found")
-    # A `note` is the owner's own thought, not a capture — it has no work to become, so it has no
-    # push. Refused here rather than hidden only in the UI: the button is the reminder, the route
-    # is the rule, and a note reaching triage would put the owner's private jotting on the board.
+    # A note has no work to become, so it has no push. Refused here, not just hidden in the UI.
     if str(row.get("kind")) == "note":
         raise HTTPException(
             status_code=409,
@@ -184,7 +176,7 @@ async def dev_inbox_delete(item_id: int, dev_store: DevStore = Depends(get_dev_s
 
 @router.get("/dev/inbox/{item_id}/brief", response_model=InboxBriefResponse)
 async def dev_inbox_brief(item_id: int, dev_store: DevStore = Depends(get_dev_store)) -> dict:
-    """One row's handoff brief (D5). Agent-filed rows carry one from birth; a bare capture has
+    """One row's handoff brief. Agent-filed rows carry one from birth; a bare capture has
     none, and `content: null` says so rather than 404-ing — an absent brief is the state the
     owner can still fill, not a missing resource."""
     row = dev_store.get_inbox(item_id)

@@ -1,15 +1,7 @@
-"""Typed WebSocket frame models for the agent socket (`/ws/agent`) — R6.
+"""Typed WebSocket frame models for the agent socket.
 
-Every frame is a JSON object discriminated on `type`. `protocol.py` serializes EVERY outbound frame
-through these models (single source of truth), and the router validates inbound frames against them.
-The combined JSON schema (`WsFrames`) is exported for the frontend's WS-type codegen, the same drift-
-proof pipeline R8 uses for REST — see `scripts/ws_schema.py` + `npm run gen:ws`.
-
-  /ws/agent      client → daemon : turn · approval_response · watch
-                 daemon → client : init · text_delta · status · usage · approval_request ·
-                                   result · error · timeline
-  /ws/dashboard  daemon → client : dashboard_hello · invalidate   (send-only; the browser speaks
-                                   only by closing)
+Every frame is discriminated on `type`. `protocol.py` serializes every outbound frame through these
+models, and the router validates inbound ones.
 """
 
 from typing import Annotated, Literal, Union
@@ -75,11 +67,9 @@ class ErrorFrame(BaseModel):
 
 
 class TimelineFrame(BaseModel):
-    """A live event from a work-item's run that this panel is WATCHING (F2 unified timeline) —
-    pushed from the item's broker (`item_stream`), independent of any turn this panel fired. Carries
-    which run it belongs to; run-lock means one live run per item, so the FE appends it to the item's
-    CURRENT phase lane. Kinds mirror the run trail: `reply` (assistant text) · a tool/skill call
-    (status kinds) · `result` (a call's output)."""
+    """A live event from a work-item run this panel is WATCHING, pushed from the item's broker.
+
+    Run-lock means one live run per item, so the FE appends it to the current phase lane."""
     type: Literal["timeline"] = "timeline"
     item_id: str
     run_id: int | None = None
@@ -91,21 +81,19 @@ class TimelineFrame(BaseModel):
 
 
 class InvalidateFrame(BaseModel):
-    """`/ws/dashboard` → the browser: "everything under these topics changed; refetch it."
+    """The dashboard socket's "everything under these topics changed; refetch it".
 
-    **Carries no values, by design.** The frame names cache topics (`dev:<repo>:`, `sys:`); the
-    browser then reads over ordinary HTTP. That keeps ONE source for every number on screen, so a
-    pushed frame and a polled read cannot disagree — the failure mode that would otherwise come with
-    a push channel. Coalesced: one frame per burst, carrying the union of its topics."""
+    Carries no values, by design: the browser reads over ordinary HTTP, so a pushed frame and a polled
+    read cannot disagree. Coalesced into one frame per burst."""
     type: Literal["invalidate"] = "invalidate"
     topics: list[str] = []
 
 
 class DashboardHelloFrame(BaseModel):
-    """Sent once when a dashboard panel connects. Its arrival is the browser's signal that push is
-    live — which is when it raises its polling to the slow backstop. Losing the socket drops it back
-    to the ordinary cadence automatically, so a dead channel degrades to the old behaviour rather
-    than to silence."""
+    """Sent once when a dashboard panel connects.
+
+    Its arrival tells the browser push is live, which is when it raises polling to the slow backstop.
+    Losing the socket drops it back automatically."""
     type: Literal["dashboard_hello"] = "dashboard_hello"
     coalesce_ms: int = 250
 
@@ -122,10 +110,8 @@ class TurnFrame(BaseModel):
     effort: str | None = None  # per-turn reasoning-effort override (low|medium|high)
     mode: str | None = None
     work_item_id: str | None = None
-    # Session KIND + subject pointer (session-kinds-diagnose). Only meaningful at a session's BIRTH
-    # (no resume row yet); on resume the session's STORED kind wins, so a stale/rogue payload can't
-    # re-point it. v1: kind='diagnosis' + subject_run_id=<Activity run> opens a read-only diagnosis
-    # session pointed at that run. Absent ⇒ inferred (item_id ⇒ work_item else general).
+    # Meaningful only at a session's BIRTH; on resume the stored kind wins, so a stale payload
+    # cannot re-point it.
     kind: str | None = None
     subject_run_id: int | None = None
 
@@ -138,10 +124,10 @@ class ApprovalResponseFrame(BaseModel):
 
 
 class WatchFrame(BaseModel):
-    """Client → daemon: "this panel is now watching work-item `item_id`" — subscribe it to that
-    item's live event broker so build/vet/other-phase runs stream in (F2). `item_id: null` stops
-    watching (panel closed / switched away). Independent of turns: watching is passive observation,
-    firing a turn is separate."""
+    """Client to daemon: this panel is now watching `item_id`, so subscribe it to that item's live event
+    broker. `null` stops watching.
+
+    Independent of turns: watching is passive observation."""
     type: Literal["watch"] = "watch"
     item_id: str | None = None
 
@@ -151,8 +137,8 @@ class WatchFrame(BaseModel):
 OutboundFrame = Annotated[
     Union[InitFrame, TextDeltaFrame, StatusFrame, UsageFrame,
           ApprovalRequestFrame, ResultFrame, ErrorFrame, TimelineFrame,
-          # /ws/dashboard's two frames. A separate socket, but the same frame vocabulary and the
-          # same codegen artifact — one protocol file, not two.
+          # A separate socket, but the same frame vocabulary and codegen artifact — one protocol
+          # file, not two.
           InvalidateFrame, DashboardHelloFrame],
     Field(discriminator="type"),
 ]

@@ -1,18 +1,7 @@
 """Agent-facing artifact viewer — one work-item doc as a standalone HTML page.
 
-The owner's reports name their `full contract` (brief.md · plan.md · build-vet-<n>.md). That line
-used to be inert text; it is now a link that opens the doc in its own browser tab, the same shape
-the prompt inspector already uses for a run's captured input.
-
-The markdown is RENDERED (owner, 2026-08-02) — these documents carry tables, code blocks and
-several heading levels, and reading that as raw source is reading a structure that is right there
-in the file and simply not being drawn. `markdown_page.render` covers the constructs our own
-templates produce; it shares the input inspector's palette so the two standalone views read as one
-surface.
-
-Path safety: the caller passes the report's own relative `contract` path. It is accepted only when
-it stays inside the item's `artifacts/` folder — resolved and re-checked against the real directory,
-so neither `..` nor a symlink can walk out.
+Path safety: the relative path is accepted only when it resolves inside the item's `artifacts/`
+folder, so neither `..` nor a symlink can walk out.
 """
 
 import html
@@ -37,24 +26,18 @@ def resolve_doc(item_dir: Path, rel_path: str) -> Path | None:
 
 
 def editable_artifact(item_dir: Path, rel_path: str) -> str | None:
-    """The artifact KIND `rel_path` names iff the owner may edit it — else None.
+    """The artifact KIND `rel_path` names, iff the owner may edit it.
 
-    Two gates, and the order matters: the path must first resolve inside `artifacts/` (so no `..`
-    or symlink reaches a file elsewhere named `plan.md`), and only then is its filename matched
-    against `OWNER_EDITABLE`. Matching the name first would let `../../somewhere/plan.md` past the
-    kind check and leave path safety as the only thing standing between an owner edit and an
-    arbitrary file."""
+    Two gates, and the order matters: the path must resolve inside `artifacts/` before its filename is
+    matched, or a traversal would slip past the kind check."""
     target = resolve_doc(item_dir, rel_path)
     if target is None:
         return None
     return next((a for a in OWNER_EDITABLE if artifact_file(a) == target.name), None)
 
 
-# The edit mode lives in the page because the page IS the surface (owner, 2026-08-09): the report's
-# "full contract" link already opens each artifact in its own tab, so putting the editor anywhere
-# else would mean a second way to reach the same document. Read stays the default — Edit swaps the
-# rendered doc for its source, and Save round-trips through the same self-check the gate runs, so
-# the failure the owner sees here is exactly the failure they would have hit at the gate.
+# The edit mode lives in the page because the page IS the surface; Save round-trips the self-check
+# the gate runs.
 _EDIT_CSS = """
 .bar{display:flex;gap:8px;align-items:center;margin:10px 0 14px}
 .bar button{font:inherit;font-size:12px;padding:5px 12px;border-radius:7px;border:1px solid var(--line);
@@ -126,8 +109,8 @@ def render_doc_page(item_id: str, rel_path: str, text: str, *,
         + (" You can edit this one: it states what the item is <em>for</em>, which is yours to say."
            if editable else "")
         + "</div>"
-        # The stamp is shown, not just stored. An agent reading this file sees `edited_by_owner` in
-        # the frontmatter; the person reading the same document deserves the same fact.
+        # The stamp is shown, not just stored: the person reading deserves the fact the agent sees
+        # in the frontmatter.
         + (f"<div class='stamp'>You edited this by hand on {html.escape(stamp)} — "
            "the agents work from your version.</div>" if stamp else "")
         + bar

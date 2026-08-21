@@ -1,8 +1,5 @@
-"""Daemon API schemas (Backend Refactor R3+).
+"""Daemon API schemas — Pydantic models, one module per resource, plus `common.py` for shared bits.
 
-Pydantic v2 request/response models, one module per resource (mirroring `routers/`), plus `common.py`
-for shared bits. Requests keep the `*Body` suffix; responses are `*Response`. Every route declares
-`response_model=` so the daemon's OpenAPI is the single source of truth (the FE generates its transport
-types from it). `core/` stays dataclass-pure; routers map dataclass → `*Response` at the edge via
-`from_attributes`. Empty until R3.
+Every route declares `response_model=`, so the OpenAPI is the single source the FE generates its
+transport types from. `core/` stays dataclass-pure.
 """

@@ -1,9 +1,7 @@
-"""Response schemas for the learning routes (routers/dev/learning.py): stats, distill/sweep ops,
-and the two-gate proposal review queue.
+"""Response schemas for the learning routes: stats, ops, and the two-gate review queue.
 
-The proposal row is a rich DB record (JSON columns) and the distill/sweep responses are branch-variant,
-so those use extra='allow' + the routes set response_model_exclude_unset=True (each emits exactly the
-keys it returns). The stats payload is a fixed shape and is modeled strictly.
+The rich DB rows use `extra='allow'` and emit only the keys they return; the stats payload is
+modeled strictly.
 """
 
 from pydantic import BaseModel, ConfigDict
@@ -141,9 +139,10 @@ class EvalMetrics(BaseModel):
 
 
 class EvalReport(BaseModel):
-    """A proposal's gate-2 eval report (forge_kit/eval.py emits it as JSON, stored on the row).
-    Versioned via `schema_version` (1 = current); tolerant of pre-versioning / pre-metrics legacy
-    reports — every field optional, extra='allow' so an older or richer report never 500s a read."""
+    """A proposal's gate-2 eval report, stored on the row.
+
+    Versioned via `schema_version`, and tolerant of legacy reports: every field is optional, so an older
+    or richer one never 500s a read."""
     model_config = ConfigDict(extra="allow")
     schema_version: int | None = None
     form: str | None = None
@@ -156,10 +155,10 @@ class EvalReport(BaseModel):
 
 
 class Proposal(BaseModel):
-    """A memory proposal (rich DB row with JSON columns). Declared fields document the stable shape;
-    extra='allow' carries anything else, and routes emit only the keys actually present. The
-    output_form/target_scope/status enums are locked (R5): their producer coerces/guards to these
-    exact sets, so the Literal can't 500 on a real row."""
+    """A memory proposal — a rich DB row with JSON columns.
+
+    The declared fields document the stable shape; `extra='allow'` carries the rest. The enums are
+    locked, because their producer coerces to exactly those sets."""
     model_config = ConfigDict(extra="allow")
     id: int
     context_id: str | None = None
@@ -175,7 +174,7 @@ class Proposal(BaseModel):
     confidence: str | None = None  # categorical: "high" | "medium" | "low" (NOT numeric)
     candidate_ids: list[int] | None = None
     status: ProposalStatus | None = None
-    recall_type: str | None = None  # retired (WI-8); always null on new rows
+    recall_type: str | None = None  # always null on new rows
     summary: str | None = None
     fields: dict | None = None
     clarifications: list | None = None

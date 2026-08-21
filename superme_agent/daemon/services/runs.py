@@ -1,11 +1,9 @@
-"""Run lifecycle — the orchestrator-owned helpers that drive a work-item's background runs.
+"""Run lifecycle — the helpers that drive a work-item's background runs.
 
-Open/close spine run rows, accumulate live telemetry, map tool-use to call-trail artifacts, drive
-the background intake/resolve turns, and snapshot the execution trace on completion. The work-item
-routes (in server.py / the work_items router) call these; they own run-state, the route owns the
-HTTP shape.
+Open and close spine run rows, accumulate telemetry, map tool-use to trail rows, and snapshot
+the execution trace.
 
-Imports singletons from `app_state` (never from server.py) so there's no import cycle.
+Imports singletons from `app_state`, never server.py, to avoid an import cycle.
 """
 
 import asyncio
@@ -34,28 +32,15 @@ from .turns import ResilientTurn
 
 log = logging.getLogger("superme-agent")
 
-# Work-items default to the latest Sonnet (concrete id — the `sonnet` alias lags; see core/models.py).
+# Concrete id, not the `sonnet` alias, which lags behind the latest release.
 DEFAULT_RUN_MODEL = MODEL_TIERS["sonnet"]
 
 
 def stop_item_work(context_id: str, item_id: str, *, expect_live: bool = False) -> tuple[int, bool]:
-    """End an item's work for real — cancel the TASK, then close its run ROWS. Returns
-    `(runs_freed, task_cancelled)`.
+    """End an item's work for real — cancel the TASK, then close its run ROWS.
 
-    The two halves answer different questions and neither is sufficient alone.
-    `spine.release_item_runs` only marks rows `aborted`: the row stops claiming to be running, but
-    the coroutine underneath keeps going, and a turn that outlives its own item can still write into
-    a folder the caller is about to remove — which is how a disposed item comes back as an orphan
-    artifacts/ shell that no `item.md` explains and no terminal event accounts for.
-
-    ORDER IS THE GUARD. The task first, so the run-lock does not open while a live turn still holds
-    it; the rows second, and unconditionally, because cancellation only lands at the task's next
-    suspension point and one frozen inside a syscall may never reach one. A zombie that finishes
-    later finds no running row and no-ops. Same reasoning as the stall watchdog, which is where this
-    pairing was first written.
-
-    `expect_live=False` because disposal usually meets an item that already finished; pass True from
-    a caller that has established a run IS in flight, and an empty slot will be shouted about."""
+    Cancel first: releasing rows alone leaves the coroutine writing into a doomed folder. Rows
+    close unconditionally, since cancellation lands only at a suspension point."""
     cancelled = run_tasks.cancel(context_id, item_id, expect_live=expect_live)
     freed = _spine.release_item_runs(context_id, item_id)
     if cancelled:
@@ -65,16 +50,10 @@ def stop_item_work(context_id: str, item_id: str, *, expect_live: bool = False) 
 
 
 def mark_item_error(ctx, context_id: str, item_id: str, reason: str, *, phase: str = "") -> bool:
-    """Stop an item at `error` with the reason its work stopped (recovery-resilience R2).
+    """Stop an item at `error` — the one writer of that status.
 
-    The ONE writer of that status. Called where a run died — after R1's ladder is spent, or on a
-    fault that was never retryable — so the item stays at the phase it died in, labelled, instead
-    of resting `awaiting_human` (which claims a decision is wanted) or `active` (which claims
-    something is working). Both of those lies were live: an outage left items reading IN PROGRESS
-    with a frozen timer, and the owner had no way to tell them from real work.
-
-    Not terminal, ever: `error` is the entry point to Resume (R4) and re-run (R5). Best-effort —
-    a failure to LABEL a failure must not itself raise inside a runner's tail."""
+    The item stays where it died rather than claiming a decision is wanted or that work is running.
+    Never terminal: `error` is what Resume and re-run read."""
     if not (item_id and getattr(ctx, "internal_root", None)):
         return False
     try:
@@ -94,10 +73,8 @@ def mark_item_error(ctx, context_id: str, item_id: str, reason: str, *, phase: s
 
 
 def retry_notice(context_id: str, item_id: str, phase: str):
-    """The trail a retry leaves (R1). A run asleep on the ladder for five minutes is externally
-    indistinguishable from a hung one, so every wait writes a dev event naming what failed and how
-    long we are giving it — the difference between "SuperMe is stuck" and "SuperMe is waiting out
-    an outage". Every background runner passes one of these to its `ResilientTurn`."""
+    """The trail a retry leaves: a run asleep on the backoff ladder is indistinguishable from a
+    hung one."""
     def _notify(fault, attempt: int, delay: int) -> None:
         try:
             _dev_store.log_event(
@@ -113,11 +90,9 @@ def retry_notice(context_id: str, item_id: str, phase: str):
 
 def _set_status(ctx, item_id: str, status: str) -> None:
     """Set a work-item's run-state status (orchestrator-owned). Best-effort; logs on failure.
-    Run-lifecycle rests never OVERWRITE a typed pause: when the turn itself paused the item
-    (`awaiting_child` — e.g. its session filed a blocking child mid-turn), resting it back to
-    `active` at turn end would silently un-pause it. Only the status ROUTER (which calls
-    dev.set_work_item_status directly) may resume a paused parent. Terminal is guarded at the
-    data layer."""
+
+    Never overwrites a typed pause: resting an `awaiting_child` item back to `active` at turn end
+    would silently un-pause it. Only the status router may resume a paused parent."""
     if not (item_id and ctx.internal_root):
         return
     try:
@@ -133,46 +108,27 @@ def _set_status(ctx, item_id: str, status: str) -> None:
 
 def _begin_run(ctx, context_id: str, item_id: str, kind: str = "plan",
                model: str | None = None, phase: str | None = None) -> int | None:
-    """Mark an item as running, atomically: open a spine run row (status=running) ONLY if the item
-    isn't already running, then rest the work-item at `active` and log the start. The running row
-    IS the live state (no in-memory mirror) and IS the per-item run-lock. Returns False without any
-    side effect if a run was already in flight (the caller turns that into a 409), so the lock can't
-    be lost to a check-then-start race (R5). `phase` stamps the item's current phase onto the run so
-    tokens can be accumulated per-phase (Stage D)."""
+    """Open a run row only if the item isn't already running, then rest it `active` and log.
+
+    That row is both the live state and the per-item run-lock, so a check-then-start race cannot
+    lose it."""
     run_id = _spine.start_item_run(context_id, mode=ctx.mode, feature=kind,
                                    item_id=item_id, model=model, phase=phase)
     if run_id is None:
         return None  # already running — no status flip, no event
-    # Runnable-state axis (workspace-workflow D2): a starting run means the item is being worked —
-    # `active`. "Running right now" is NOT a status — it's derived from the live run row (the two
-    # were conflated pre-workflow as in_progress/waiting).
+    # A starting run means the item is being worked; "running now" is derived from the live run
+    # row.
     _set_status(ctx, item_id, "active")
-    # Run start — item-scoped. PRD §4.9.
     _dev_store.log_event(context_id, f"{kind}.start", f"Started {kind} run",
                          item_id=item_id, actor="daemon", meta={"model": model})
     return run_id  # the live run id — the caller keys its per-run event trail on it
 
 
 class _LiveTokens:
-    """Per-run token tally, DEDUPED by message_id — and, since 2026-08-14, the run's AUTHORITATIVE
-    total rather than a live estimate of one.
+    """Per-run token tally, deduped by `message_id` — the run's authoritative total.
 
-    The SDK emits several Usage steps per API call sharing one message_id (one per content block),
-    so summing every STEP over-counts. Keeping the latest per message_id fixes that, and what
-    remains is one entry per API call — which summed IS the turn's real spend, because that is how
-    the calls are billed.
-
-    **Why this is now the authority.** `Result.usage` covers the PARENT conversation's calls only.
-    Measured on the hub (2026-08-14): a turn whose subagent did all the work reported 75,857 here
-    against 9,150 there — 8.3x — and `Result.usage.output_tokens` was 219, the parent's two-line
-    reply. Two fresh research sweeps reproduced it at 3.0x and 3.3x. Subagent messages arrive on
-    the same stream (tagged `parent_tool_use_id`) and are counted here; they are absent there. So
-    the figure that was being called authoritative was the smaller, partial one, and every fan-out
-    run — the most expensive thing SuperMe does — was under-reported in exactly proportion to how
-    much it delegated.
-
-    `usage()` returns the summed 4-type dict for `finish_item_run`, which writes the typed columns
-    from it. The shape matches a raw SDK usage dict so every existing reader is unchanged."""
+    The SDK emits one Usage step per content block, so summing steps over-counts; latest-per-id
+    leaves one entry per API call. `Result.usage` is parent-only and misses every subagent call."""
 
     _KEYS = ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens",
              "output_tokens")
@@ -182,11 +138,8 @@ class _LiveTokens:
         self._legacy: list[dict] = []      # steps from an SDK build with no message_id
 
     def bump(self, context_id: str, item_id: str, ev) -> None:
-        """Record one step. NEVER raises — this is telemetry, and it runs inside the run's own task,
-        so anything that escapes here kills the WORK. That is not hypothetical: on 2026-08-14 an
-        unexpected usage value raised out of this method, the task died mid-investigation, and the
-        run row stayed `running` until the watchdog stopped it 20 minutes later. A counter that can
-        stop a run is worse than no counter."""
+        """Record one step. NEVER raises: this runs inside the run's own task, so anything escaping kills
+        the WORK."""
         try:
             mid = getattr(ev, "message_id", None)
             step = dict(getattr(ev, "usage", None) or {})
@@ -202,14 +155,8 @@ class _LiveTokens:
 
     @staticmethod
     def _num(value) -> int:
-        """A usage field as an int, or 0 for anything that isn't one.
-
-        A usage dict is EXTERNAL DATA from the SDK, and this accumulator runs on every step of every
-        run — so an unexpected value must never be able to stop the work. It could, until
-        2026-08-14: a step arrived with a LIST where an int was expected, `int()` raised inside
-        `bump`, the whole run task died mid-flight, and the row sat `running` until the stall
-        watchdog closed it 20 minutes later. 486k tokens of real investigation, lost to a token
-        COUNTER. The shape is logged once so the surprise is still learnable."""
+        """A usage field as an int, or 0 for anything else. The SDK's usage dict is external data and this
+        runs on every step, so an unexpected value must never stop the work."""
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             if value not in (None, ""):
                 log.warning("unusable token value in SDK usage (%r) — counted as 0", value)
@@ -217,22 +164,10 @@ class _LiveTokens:
         return int(value)
 
     def usage(self, final: dict | None = None) -> dict | None:
-        """The whole turn's usage — parent AND subagents — as a raw-shaped dict, or None if no
-        Usage step ever arrived (then the caller keeps `Result.usage` as the only thing it has).
+        """The whole turn's usage — parent and subagents — or None if none arrived.
 
-        `final` is `Result.usage`, and it is read for ONE field: **output_tokens**. A per-message
-        usage dict carries the API's `message_start` numbers, where the input and cache figures are
-        final but the output count is a PLACEHOLDER — measured 2026-08-15 on a 3-tool-call probe:
-        every message reported 1–2 output tokens while the Result reported 188. Summed over a
-        700-call sweep that placeholder produced 1,805 output tokens for run 1402, which is off by
-        roughly two orders of magnitude. The input and cache sides are unaffected (the probe's
-        per-message cache_creation summed to exactly the Result's), so only this one field is
-        taken from the smaller-but-real aggregate.
-
-        The residual, deliberately left: `Result.usage` is parent-only, so **subagent output is
-        still uncounted**. It is the cheapest slice of a fan-out by volume and there is no other
-        signal for it on the stream — a known undercount of one field beats an invented one. Total
-        spend is dominated by cache_creation and cache_read, both of which DO include subagents."""
+        `final` is `Result.usage`, read for one field: output_tokens, which per-message usage only
+        reports as a placeholder. Subagent output stays uncounted, deliberately."""
         steps = list(self._by_msg.values()) + self._legacy
         if not steps:
             return None
@@ -242,8 +177,8 @@ class _LiveTokens:
         return summed
 
     def tokens(self) -> int:
-        """The 3-type scalar (input + cache_creation + output; cache_read excluded, as everywhere
-        else) — what the running row shows and what the card footer counts up."""
+        """The 3-type scalar (input + cache_creation + output; cache_read excluded) — what the running row
+        and the card footer show."""
         u = self.usage() or {}
         return (self._num(u.get("input_tokens")) + self._num(u.get("cache_creation_input_tokens"))
                 + self._num(u.get("output_tokens")))
@@ -253,85 +188,32 @@ def _end_run(ctx, context_id: str, item_id: str, tokens: int | None,
              status: str = "active", usage: dict | None = None,
              ctx_pct: int | None = None, outcome: str | None = None,
              session_id: str | None = None, summary: str = "") -> None:
-    """Close out a run: finalize its spine row (keeping the accumulated live token sum, or the
-    passed Result aggregate as a fallback) and set the work-item's resting status. Interactive
-    (bound-chat) turns rest at `active`; a BACKGROUND phase run that ends at a human gate passes
-    `awaiting_human` (the only status that pages the owner — D2 typed awaiting; the full
-    completion-report router lands S5). `kind` is recovered from the running row for the end event.
-    `usage` is the whole-turn final dict — the typed-column fallback if no per-step Usage arrived.
-    `ctx_pct` is the authoritative Result fill — persisted over the live-bump estimate (chat runs do
-    the same via finish_run), so an item card's ctx% matches the true end-of-turn occupancy."""
+    """Finalize a run's spine row and rest the work-item.
+
+    Interactive turns rest `active`; a background run ending at a human gate passes
+    `awaiting_human`, the only status that pages the owner. `ctx_pct` is the authoritative
+    end-of-turn fill."""
     info = _spine.live_run(context_id, item_id)
     kind = (info or {}).get("feature", "plan")
-    # The run's PHASE, which is not its feature. They coincide for every background phase run
-    # (`feature='review'`, `phase='review'`) and DIVERGE for an interactive turn bound to the item
-    # (`feature='chat'`, `phase='review'`) — so anything routing on "which phase concluded this"
-    # must read this, and anything labelling "which surface ran" must read `kind`. See the revise
-    # branch below, which read `kind` for eleven weeks while its own comment said phase.
+    # The run's PHASE, not its feature — route on this, label the surface with `kind`.
     run_phase = str((info or {}).get("phase") or kind)
     rid = _spine.finish_item_run(context_id, item_id, fallback_tokens=tokens, usage=usage,
                                  ctx_pct=ctx_pct, outcome=outcome, session_id=session_id)
-    # Log the AUTHORITATIVE total that finish just reconciled onto the row (3-type, excl. cache_read —
-    # the same basis the item card shows), NOT the pre-finish `info` snapshot, whose live `tokens` sums
-    # the cumulative-for-the-turn Usage snapshots and so over-counts (that mismatch was the "62k vs 305k").
+    # The authoritative 3-type total finish just reconciled onto the row; the pre-finish snapshot
+    # over-counts.
     total = _spine.run_tokens(rid) if rid else (tokens or 0)
     _set_status(ctx, item_id, status)
-    # Every run is OFFERED `scratch/` in its preamble and most never write in it, so without this
-    # the offer alone litters the item folder the owner reads. Empty-only: a run that did leave
-    # files keeps them, because a phase can be resumed or re-entered and rebuilding an inventory
-    # costs exactly what building it cost. The terminal sweep (dev_knowledge) takes the rest.
-    #
-    # Read defensively and skipped when there is no root: TIDYING MUST NEVER BE ON THE CRITICAL
-    # PATH of finishing a run. A run whose spine row never closes is a stranded item; a scratch dir
-    # that survives an hour longer is nothing.
+    # Every run is offered `scratch/` and most never write there; sweeping must never block
+    # finishing a run.
     if (root := getattr(ctx, "internal_root", None)) is not None:
         _sandbox.prune_scratch(Path(root) / "dev" / "work-items" / item_id)
-    # Run end — item-scoped, with the final token total. PRD §4.9.
     _dev_store.log_event(context_id, f"{kind}.end", f"Finished {kind} run · Σ {total} tok",
                          item_id=item_id, actor="daemon", meta={"tokens": total})
-    # Autopilot hook: a background phase run that just rested the item at its gate (`awaiting_human`)
-    # is the moment the owner would click Approve. If the item is enrolled, drive the same advance.
-    # Scheduled (not inline) so this run's lock is fully released before the next phase's `_begin_run`
-    # fires — and so a blocking git/plan step never stalls run finalization. No-op when not on a loop
-    # (offline tests exercise the driver directly). See services/gates.maybe_autopilot_advance.
-    # Plan's grill (renovation §2): `needs_user` pages the OWNER directly — questions are not
-    # phase output, so the deputy is not in this path. The item parks per-item (the cohort keeps
-    # running); the owner's answers arrive as chat, and only the agent's post-answer report
-    # re-enters the normal judged flow.
-    # `revise` (renovation §2.1): the review conversation concluded the WORK must change. It is the
-    # ONE way back to re-work — there is no send-back button anywhere — and it rides the SAME path
-    # the deputy's send_back already uses (`fire_phase_feedback` flips review→plan and posts the
-    # turn on the item's own intake thread), because the conversation IS the context: nothing is
-    # handed over and nothing is re-derived. Owner-attributed: they concluded it, the agent only
-    # reported the conclusion.
-    # Compaction: a real turn just reported fresh usage, so release this session's defer latch —
-    # the NEXT run-start check will read this run's fill. Nothing is EVALUATED here. The trigger
-    # lives at run start (ws.py for a bound turn, gates.maybe_autopilot_advance for the background
-    # chain), where the lock is free by construction and there is no queued phase to strand.
+    # Scheduled, not inline: this run's lock must be fully released before the next phase begins.
     if kind != "compact" and session_id:
         from . import compaction
         compaction.note_turn_start(session_id)
-    # ONLY a review run routes from here. `revise` from anywhere else — a build cycle concluding
-    # the plan it was handed is wrong — belongs to that phase's own driver, because the driver is
-    # already going to decide where the item goes next. Routing here as well put TWO writers on one
-    # transition: on f0bda271d766 this flipped the item to `plan` and started a plan run, and the
-    # loop's build-cycle branch then logged `build → vet` on top of the running plan, saved from
-    # actually starting a vet only by the one-run-at-a-time lock. It also attributed the whole thing
-    # to the OWNER, who had done nothing. `decide_after_build` now returns klass `revise` and the
-    # loop routes it, attributed to the agent that actually concluded it.
-    # `run_phase` is THIS RUN's own phase, read off its spine row — not the item's phase on disk,
-    # which by now may already have been moved by whatever else is reacting to the same report.
-    #
-    # IT MUST BE THE PHASE, NOT THE FEATURE. This branch read `kind` (the feature) while this
-    # comment said phase, so it fired only for the BACKGROUND review run and never for an owner
-    # talking to the review thread — which is the one way an owner can send work back at all
-    # ("`revise` is the ONE way back to re-work — there is no send-back button anywhere", §2.1).
-    # The turn concluded `revise`, the outcome was persisted, the agent told the owner what would
-    # happen next, and nothing moved: the item sat at `review · active` with no run. Measured live
-    # on 3ae839ce7fd7 (run 1309, `feature='chat'` `phase='review'`), 2026-08-13.
-    #
-    # Feature-blindness is the point. Whoever concluded it — the background run, the owner in chat,
-    # the deputy — the item goes back the same way, because the conclusion is about the WORK.
+    # Only a review run routes here — a build's `revise` belongs to its own driver.
     if outcome == "revise" and run_phase == "review":
         try:
             fire_phase_feedback(context_id, item_id, phase="review",
@@ -351,13 +233,11 @@ def _end_run(ctx, context_id: str, item_id: str, tokens: int | None,
             pass  # no running loop (sync/test context) — driver is tested directly
 
 
-# Tool-use blocks the agent emits (Status events) → a (kind, head, detail) triple. `head` is the
-# call type ("Read", "skill", "subagent", "mcp"); `detail` is the specific target (filename, skill
-# name, sub-agent name…). The UI shows "head - detail" (detail dimmed), like the CLI's call lines.
+# Tool-use Status events map to (kind, head, detail). The UI shows "head - detail", like the CLI's
+# call lines.
 def _short_path(p, keep: int = 4) -> str:
-    """A readable file path for the trace: the last `keep` segments (so the containing folders show,
-    not just the basename), prefixed with `…/` when the head is elided. Absolute paths are too long
-    and the UI truncates the TAIL (the filename) — this keeps the meaningful end intact."""
+    """The last `keep` segments of a path, `…/`-prefixed when elided. The UI truncates the tail, so
+    keep the meaningful end."""
     parts = [x for x in str(p or "").split("/") if x]
     if not parts:
         return ""
@@ -365,9 +245,8 @@ def _short_path(p, keep: int = 4) -> str:
 
 
 def _int_or_none(value) -> int | None:
-    """An int, or None for anything a tool's arguments might hold instead. Tool input is written by
-    an AGENT, so every field in it is untrusted shape — and the trail formatter below is not a
-    place that may raise (see the Read span)."""
+    """An int, or None for anything else a tool's arguments hold — agent-written input is untrusted
+    shape."""
     if isinstance(value, bool) or not isinstance(value, (int, float, str)):
         return None
     try:
@@ -377,11 +256,8 @@ def _int_or_none(value) -> int | None:
 
 
 def _artifact_payload(tool_name: str, ti: dict) -> str | None:
-    """The row's full text, for the rows where the TEXT is what gets audited — not what the trace
-    displays. Only a sub-agent's brief today: a spawned worker inherits nothing (not the phase
-    skill, not the family guide, not the plan), so the brief is the entire input deciding what it
-    does, and it was the one input nothing kept. `None` everywhere else, and deliberately: a trail
-    row's description already IS its content, and copying it would double the trail for no reader."""
+    """The row's full text, for rows where the TEXT is audited — only a sub-agent's brief today,
+    because a spawned worker inherits nothing. `None` elsewhere: a row's description is its content."""
     if tool_name in ("Task", "Agent"):
         return str(ti.get("prompt") or "") or None
     return None
@@ -391,27 +267,17 @@ def _artifact_desc(tool_name: str, ti: dict) -> tuple[str, str, str]:
     """Map a tool-use to (kind, head, detail). kind ∈ tool|subagent|skill|mcp."""
     ti = ti or {}
     base = _short_path
-    # Sub-agent spawn — arrives as either the `Task` or the `Agent` tool depending on SDK build. Render
-    # it "Agent - <type>" (same label·detail shape as skills: "skill - <name>"), so the trace says WHICH
-    # agent ran (e.g. `superme-dev:capture`) instead of a generic "Agent". kind=subagent → the Bot icon.
+    # A spawn arrives as `Task` or `Agent` depending on SDK build; render which agent ran, not a
+    # generic "Agent".
     if tool_name in ("Task", "Agent"):
-        # The row always reads "Agent - Subagent", and NAMES the worker in parentheses when the
-        # spawn said which: `Subagent (superme-dev:capture)`. The bare form is the honest fallback
-        # for a spawn whose input carried no recognizable type key — it says a sub-agent ran, which
-        # is true, instead of the old "Agent - agent", which said nothing twice.
+        # Name the worker when the spawn said which; the bare form is the honest fallback.
         who = (ti.get("subagent_type") or ti.get("subagentType") or ti.get("agent_type")
                or ti.get("agentType") or ti.get("name") or ti.get("description") or "")
-        # The MODEL, when the spawn overrode it. `vet` fans out on haiku and `plan` on sonnet by
-        # skill instruction — without this the trail cannot show whether that instruction was
-        # actually followed, which is the whole question a delegation review asks.
+        # The model, when the spawn overrode it — otherwise the trail cannot show whether a per-
+        # phase instruction was followed.
         model = ti.get("model") or ti.get("modelName")
-        # The BRIEF's size, because a subagent inherits nothing: it cannot see the skill, the family
-        # guide or the plan, so whatever the brief does not carry, the work is done without. The
-        # prompt itself is far too long for a trace row (and would put a whole pasted bar on screen),
-        # so what is kept is the one fact a row can hold and a gate can read — how much was sent.
-        # Size is a PROXY for content and is treated as one: it can only prove a brief too short to
-        # have carried a bar, never that a long one carried the right bar. Added 2026-08-14, after
-        # the fan-out instruction shipped for weeks with no contract for what a brief must contain.
+        # A subagent inherits nothing, so whatever the brief omits is worked without. Size is all
+        # a row can hold.
         brief = str(ti.get("prompt") or "")
         parts = [str(who).strip(), str(model).strip() if model else "",
                  f"brief {len(brief)}" if brief else ""]
@@ -427,18 +293,11 @@ def _artifact_desc(tool_name: str, ti: dict) -> tuple[str, str, str]:
         return "mcp", "mcp", parts[-1] if parts else tool_name
     if tool_name in ("Read", "Write", "Edit", "MultiEdit", "NotebookEdit"):
         path = base(ti.get("file_path") or ti.get("notebook_path"))
-        # A READ's SPAN, when it named one. The row used to carry the path alone, which makes the
-        # trail unable to distinguish "read 20 lines of a 46 KB file" from "read the whole 46 KB
-        # file" — and that difference is most of what a phase run costs, because everything read
-        # early is re-sent on every later step. The run-protocol rule that asks for spans was
-        # therefore unobservable by the very trace meant to check it (2026-08-10).
+        # A read's span, when it named one: the path alone cannot distinguish 20 lines from a
+        # whole 46 KB file.
         if tool_name == "Read":
-            # `offset`/`limit` are whatever the AGENT typed, not a validated shape. A list here
-            # raised TypeError out of this formatter, out of `capture_event`, and out of the run's
-            # own task — killing a live investigation and leaving its row `running` until the stall
-            # watchdog closed it 20 minutes later. Seen three times on 2026-08-14 (runs 1399-1401,
-            # ~1.4M tokens) and almost certainly the original 24-minute incident too. A LABEL for a
-            # trace row must never be able to stop the work it is describing.
+            # `offset`/`limit` are whatever the agent typed, not a validated shape; a label must
+            # never crash the run it describes.
             off, lim = _int_or_none(ti.get("offset")), _int_or_none(ti.get("limit"))
             if off is not None or lim is not None:
                 start = off or 0
@@ -447,13 +306,8 @@ def _artifact_desc(tool_name: str, ti: dict) -> tuple[str, str, str]:
             return "tool", tool_name, f"{path} [whole]"
         return "tool", tool_name, path
     if tool_name == "Bash":
-        # 1200, not 60: at 60 characters two shell commands that differ only in their path argument
-        # render identically, so the trail cannot answer "why was this one refused and that one
-        # allowed" — the question the tab exists for. 200 was still too short for the commands that
-        # most need the answer: an agent's inventory script is several lines, and the path that
-        # decided its verdict sits past the cut. The UI truncates the row to one line either way and
-        # carries the rest in its tooltip. Prefer the raw command over the model's own
-        # `description`, which is prose about the command rather than the command.
+        # 1200 characters, so two commands differing only in a path argument still render
+        # differently. The UI truncates the row.
         return "tool", "Bash", (str(ti.get("command") or "") or str(ti.get("description", "")))[:1200]
     if tool_name in ("Grep", "Glob"):
         return "tool", tool_name, str(ti.get("pattern", ""))
@@ -465,17 +319,15 @@ def _artifact_desc(tool_name: str, ti: dict) -> tuple[str, str, str]:
     return "tool", tool_name, ""
 
 
-# --- per-run trail caps (both trails: run_artifact for work-items, run_event for Activity/diagnosis) ---
+# --- per-run trail caps ---
 _PROMPT_CAP = 4000   # a run's trigger prompt, trimmed
 _REPLY_CAP = 8000    # one assistant text block, trimmed
 _RESULT_CAP = 1200   # a tool's output, trimmed — enough to show what it returned without bloating the trail
 
 
 def _result_row(ev: ToolResult) -> tuple[str, str]:
-    """Map a ToolResult to (name, description) for a trail row: name = the tool that produced it
-    (the specific tool, e.g. `read_dev_log` / `Bash`, via the same _artifact_desc mapping the call
-    used), description = its capped output (error-flagged). It carries `ev.tool_id` so the FE can
-    pair it back to its call (concurrent tools return out of order — position can't pair them)."""
+    """Map a ToolResult to (name, description). Its `tool_id` pairs it back to the call, since
+    concurrent tools return out of order."""
     _, head, detail = _artifact_desc(ev.tool_name, {})
     name = detail or head
     body = (ev.content or "").strip()
@@ -484,11 +336,7 @@ def _result_row(ev: ToolResult) -> tuple[str, str]:
     return name, body[:_RESULT_CAP]
 
 
-# `_log_artifact` is GONE (2026-07-31). Every runner that called it also called `capture_event` on
-# the same event stream, so it wrote a second, POORER copy of the same trail: `run_artifact` skipped
-# prompt/reply rows and was never written by deputy or compaction runs at all. The drilldown's Runs
-# pane happened to read that copy and was silently showing 17 of one item's 34 runs. `run_event` is
-# the one trail now. The TABLE and its rows stay (never-delete-logs) — frozen history, no new writes.
+# `run_event` is the one trail; `run_artifact` is frozen history with no writer.
 
 
 def capture_prompt(repo_id: str, prompt: str, *, run_id: int | None = None,
@@ -502,16 +350,10 @@ def turn_surface(*, model: str | None = None, effort: str | None = None,
                  mcp: list[str] | None = None, write_boundary: list | None = None,
                  sandbox_writes: list | None = None, read_only: bool = False,
                  approve: str = "denied", resumes: bool = False) -> dict:
-    """What the turn is ALLOWED to do — the half of a run's input that isn't prose.
+    """What the turn is ALLOWED to do — a run's input that isn't prose.
 
-    Two runs can carry the same words and behave differently because one of them could run a shell
-    inside the worktree and the other could not. This is that difference, recorded in the same row
-    as the prompt so the inspector can show them together. Paths are stringified; nothing here is
-    read back by the runtime, so it is a faithful snapshot rather than a second source of truth.
-
-    `resumes` is the other invisible half for a REMEMBERING thread (build, intake): the model's real
-    context is this input PLUS a transcript the capture doesn't hold, and a reader who doesn't know
-    that will mis-read a short prompt as a short context."""
+    Two runs can carry the same words and behave differently because one could run a shell. Nothing
+    here is read back."""
     return {"model": model or "", "effort": effort or "",
             "mcp": sorted(mcp or []),
             "write_boundary": [str(p) for p in (write_boundary or [])],
@@ -520,12 +362,10 @@ def turn_surface(*, model: str | None = None, effort: str | None = None,
 
 
 def surface_from_turn(turn_kwargs: dict, *, mcp: list[str] | None = None) -> dict:
-    """`turn_surface` READ OFF the kwargs a turn is actually sent with.
+    """`turn_surface` read off the kwargs a turn is actually sent with.
 
-    The inspector used to restate the surface beside the call, and a restatement can be wrong: an
-    intake run recorded `write_boundary=[item_dir]` while the stream below it passed no boundary at
-    all, so every shell command it issued was refused and the capture said otherwise. A snapshot of
-    the real arguments cannot drift from them."""
+    A restatement can be wrong: an intake run recorded a `write_boundary` the stream below it never
+    passed, so every shell command was refused and the capture said otherwise."""
     return turn_surface(
         model=turn_kwargs.get("model"),
         effort=turn_kwargs.get("effort"),
@@ -538,18 +378,11 @@ def surface_from_turn(turn_kwargs: dict, *, mcp: list[str] | None = None) -> dic
 
 
 def _authored_extras(ctx, item: dict, phase: str | None, mcp: list[str]) -> dict:
-    """The prompt text SuperMe authors OUTSIDE the system append — the two channels a capture of the
-    append alone silently omits, each as ready-to-render fragments.
+    """The prompt text SuperMe authors OUTSIDE the system append: the phase SKILL.md and the mounted
+    MCP tool docs.
 
-    1. The phase SKILL.md the trigger tells this run to invoke. It is the largest single artifact we
-       write, and it is the one the model actually follows; a prompt page without it is a page about
-       the smaller half. (Its `references/` guides are pulled on demand and are NOT included — they
-       cost nothing unless read.)
-    2. The mounted MCP tools' own descriptions + parameter docs. Every byte rides in every request
-       of the turn, so they belong on the same page as the prose, measured the same way.
-
-    Best-effort by construction: a missing skill file or an unknown server name drops that fragment
-    rather than the capture."""
+    Both ride in every request, so they belong on the same page as the prose. A missing one drops
+    only its fragment."""
     from ...harness.tools.base_tools import BASE_TOOLS
     from ...harness.tools.dev_tools import dev_tool_specs
     from ...harness.tools.registry import describe_specs
@@ -565,11 +398,8 @@ def _authored_extras(ctx, item: dict, phase: str | None, mcp: list[str]) -> dict
             skills.append({"name": f"superme-dev:{name} — SKILL.md",
                            "location": f"plugins/superme-dev/skills/{name}/SKILL.md",
                            "text": path.read_text()})
-    # Server → the spec list that server mounts. `superme` is always present (agent_service builds
-    # it); the rest come from the run's own `extra_mcp_servers`, recorded in the turn surface.
-    # The dev server is SCOPED (dev_tools.TOOL_SCOPES), so the capture asks for the same scope the
-    # run mounted — the skill this phase fires. An unrecognised one drops the fragment, per the
-    # best-effort contract above, rather than showing a surface no run carried.
+    # `superme` is always mounted; the rest come from the run's own `extra_mcp_servers`. An
+    # unrecognised one drops the fragment.
     try:
         dev_specs = dev_tool_specs(name or str(phase or ""))
     except KeyError:
@@ -590,38 +420,30 @@ def _authored_extras(ctx, item: dict, phase: str | None, mcp: list[str]) -> dict
 def capture_run_input(context_id: str, item_id: str, *, ctx, system_append: str | None,
                       prompt: str, background: bool, phase: str | None,
                       surface: dict | None = None) -> None:
-    """Prompt inspector "A": persist the ACTUAL input the item's live run is about to send — the
-    assembled system prompt (built through the SAME `assemble_system_append` seam `_build_options`
-    uses, with THIS run's exact ctx / system_append) + the prompt body. `background` is stored as
-    display metadata only (the run-protocol delta now lives inside system_append itself). Keyed to
-    the live run. Faithful by construction; best-effort — never breaks a turn.
+    """Persist the ACTUAL input a run is about to send: the assembled system prompt plus the prompt
+    body, keyed to the live run.
 
-    Called ONLY for throwaway prompt-extraction items (the call sites gate on
-    `autopilot.is_prompt_extraction(item)`) — normal work-item runs no longer capture, so the
-    `run_input` table stops growing per-run. Also stamps `run.feature='prompt-extraction'` so the
-    KEPT trace (the item folder is torn down; the run rows survive) is tagged + token-bucketed."""
+    Called only for throwaway prompt-extraction items, so `run_input` stops growing per-run.
+    Best-effort — never breaks a turn."""
     try:
         info = _spine.live_run(context_id, item_id)
         rid = (info or {}).get("id")
         if rid is None:
             return
-        _spine.set_run_feature(rid, PROMPT_EXTRACTION_FEATURE)   # tag the kept trace
-        # `item_bound=True` — this function is only ever called for a work-item run, and the flag
-        # changes what the operating-context fragment renders, so a preview without it would show a
-        # prompt no run ever sent.
+        _spine.set_run_feature(rid, PROMPT_EXTRACTION_FEATURE)
+        # `item_bound=True` changes what the operating-context fragment renders; without it the
+        # preview shows a prompt no run sent.
         system_prompt = _agent.assemble_system_append(ctx, system_append=system_append,
                                                       item_bound=True)
-        # Also capture the system prompt's provenance breakdown (ordered [{name,location,text}]) so
-        # the inspector renders per-fragment sub-cards. Same builder as `system_prompt` above, so the
-        # fragments sum to it. Guarded: a serialization hiccup must never lose the whole capture.
+        # Provenance breakdown from the same builder, so the fragments sum to `system_prompt`.
+        # Guarded: a hiccup must not lose the capture.
         try:
             frags = _agent.assemble_system_fragments(ctx, system_append=system_append,
                                                      item_bound=True)
             fragments_json = _json.dumps(frags, ensure_ascii=False)
         except Exception:  # noqa: BLE001
             fragments_json = None
-        # The other authored channels (phase skill + mounted tool docs) — same guard: losing the
-        # skill body must never cost us the prose.
+        # Same guard: losing the skill body must never cost us the prose.
         try:
             item = (_dev.read_work_item(ctx.internal_root / "dev", item_id) or {}) \
                 if getattr(ctx, "internal_root", None) else {}
@@ -642,22 +464,10 @@ def capture_run_input(context_id: str, item_id: str, *, ctx, system_append: str 
 
 def capture_event(repo_id: str, ev, *, run_id: int | None = None, item_id: str | None = None,
                   publish_live: bool = True) -> None:
-    """Record one turn event onto a run's trail: a Status → its tool/skill/agent call, a ToolResult →
-    that call's (capped) output, a TextDelta → an assistant reply block. Anything else is ignored.
-    Best-effort (log_run_event never raises).
+    """Record one turn event onto a run's trail and publish it to any panel watching the item.
+    `publish_live=False` for the ws turn, which streams itself.
 
-    ALSO the single publish point for the F2 live timeline: the same row is fanned out to any panel
-    watching this item (`item_stream.publish`), so build/vet/intake turns stream live. Run-lock means
-    one live run per item, so the FE attributes each live frame to the item's CURRENT phase lane.
-    `publish_live=False` for the INTERACTIVE ws turn — it already streams itself directly to the panel
-    that fired it, so broadcasting would double it there (run-lock means no other panel needs the echo).
-
-    **NEVER RAISES.** This is called from inside the run's own task for every event, so anything that
-    escapes here does not lose a trail row — it kills the WORK. That is not theoretical: a `Read`
-    whose `limit` arrived as a list raised out of `_artifact_desc` and took three hub investigations
-    with it on 2026-08-14 (~1.4M tokens), each leaving its row `running` until the watchdog closed
-    it. The specific shape is fixed at the source; this is the wall that makes the class of bug
-    survivable, because the trail is a description of the work and must never outrank it."""
+    NEVER RAISES: this runs inside the run's own task, so anything escaping kills the WORK."""
     try:
         _capture_event(repo_id, ev, run_id=run_id, item_id=item_id, publish_live=publish_live)
     except Exception:
@@ -667,11 +477,8 @@ def capture_event(repo_id: str, ev, *, run_id: int | None = None, item_id: str |
 
 def _capture_event(repo_id: str, ev, *, run_id: int | None = None, item_id: str | None = None,
                    publish_live: bool = True) -> None:
-    # Resolve the run ONCE, here. Every background phase caller passes only `item_id` and lets
-    # `log_run_event` resolve the run for the DB row — but the live frame was being published with
-    # the caller's `run_id`, i.e. None, so the browser could not match it to the history it already
-    # held and rendered every streaming reply a second time on top (owner, 2026-08-02: duplicated
-    # bubbles for the length of a run, correct the instant it ended and the live buffer cleared).
+    # Resolve once here — a live frame with `run_id=None` cannot be matched to the history the
+    # browser already holds.
     if run_id is None and item_id is not None:
         run_id = _spine.running_run_id(repo_id, item_id)
     if isinstance(ev, Status):
@@ -684,8 +491,7 @@ def _capture_event(repo_id: str, ev, *, run_id: int | None = None, item_id: str 
             _publish_timeline(item_id, run_id, kind, head, detail, ev.tool_id, ev.parent_tool_id)
     elif isinstance(ev, ToolResult):
         name, desc = _result_row(ev)
-        # Record with the tool_use id so the FE pairs result→call exactly (concurrent tools return
-        # out of order). Empty output stays empty (the call just won't be expandable).
+        # The tool_use id pairs result to call exactly; concurrent tools return out of order.
         _spine.log_run_event(repo_id=repo_id, kind="result", name=name, description=desc,
                              run_id=run_id, item_id=item_id, tool_id=ev.tool_id,
                              parent_tool_id=ev.parent_tool_id)
@@ -703,8 +509,8 @@ def _capture_event(repo_id: str, ev, *, run_id: int | None = None, item_id: str 
 def _publish_timeline(item_id: str | None, run_id: int | None, kind: str, name: str,
                       description: str, tool_id: str | None,
                       parent_tool_id: str | None) -> None:
-    """Fan a captured event out to any panel watching this item (F2). No-op when nobody's watching
-    (the common background-autopilot case) so we skip the frame build entirely. Never raises."""
+    """Fan a captured event out to any panel watching this item. No-op when nobody is watching.
+    Never raises."""
     if not item_id or not item_stream.has_subscribers(item_id):
         return
     try:
@@ -718,12 +524,10 @@ def _publish_timeline(item_id: str | None, run_id: int | None, kind: str, name: 
 
 
 def bank_auto_checkpoint(ctx, item_id: str, *, since: float | None = None) -> bool:
-    """The session-end checkpoint hook's mechanical fallback (S5): guarantees the orient block
-    always has a latest checkpoint, even when the agent didn't bank its own. SKIPS when the item
-    is terminal or a checkpoint newer than `since` (the session's start) already exists — the
-    agent's own checkpoint is always better than this derived stub. Content is DATA the kernel can
-    derive (phase, remaining tasks); it says so, and the orient block's verify-banner covers the
-    rest. Returns True if a checkpoint was written."""
+    """Mechanical fallback for the session-end checkpoint hook, so the orient block always has one.
+
+    Skipped when the item is terminal or a checkpoint newer than `since` exists; the agent's own is
+    better."""
     if not (item_id and ctx.internal_root):
         return False
     dev_root = ctx.internal_root / "dev"
@@ -760,10 +564,8 @@ def bank_auto_checkpoint(ctx, item_id: str, *, since: float | None = None) -> bo
 def compacted_checkpoint(ctx, item: dict, session_id: str | None) -> str | None:
     """The checkpoint path this thread is owed a pointer to, or None.
 
-    Owed only while the session's newest finished run IS the compaction (spine —
-    self-clearing, restart-proof), and resolved to THIS THREAD's newest checkpoint via the role
-    stamp: three threads bank into one folder, and handing a compacted intake thread the build
-    thread's checkpoint would present work it never did as recovered memory."""
+    Owed only while the session's newest finished run IS the compaction, and resolved via the role
+    stamp: three threads bank into one folder."""
     if not (session_id and ctx.internal_root and item):
         return None
     if not _spine.session_compacted_pending(session_id):
@@ -775,10 +577,8 @@ def compacted_checkpoint(ctx, item: dict, session_id: str | None) -> str | None:
 
 
 def compacted_session_memory(ctx, session_id: str | None) -> str | None:
-    """`compacted_checkpoint`'s general-session twin (§13.4 / T5): the `session-memory/` path this
-    thread is owed a pointer to, or None. Same self-clearing gate (the session's newest finished
-    run IS the compaction), and no role scoping — a general session has exactly one thread. None
-    when the handoff turn failed to write one, so the notice is never a pointer at nothing."""
+    """The `session-memory/` path this thread is owed a pointer to, or None. Same self-clearing gate
+    as `compacted_checkpoint`; a general session has one thread, so no role scoping."""
     if not (session_id and ctx.internal_root):
         return None
     if not _spine.session_compacted_pending(session_id):
@@ -788,13 +588,11 @@ def compacted_session_memory(ctx, session_id: str | None) -> str | None:
 
 
 def reset_vet_thread(ctx, item: dict, *, dev=None, sessions=None) -> bool:
-    """VET FORGETS (build-vet-loop §1.3): called on every transition INTO the vet phase, so each
-    build⟷vet cycle gets a FRESH vetter — no anchoring, no fatigue-capitulation; prior cycles'
-    findings are handed over as DATA (the vet reports), never as memory. Retires the previous
-    cycle's vet session (transcript reclaimed, run trace preserved + labeled) and clears the
-    item's vet slot so the next vet turn MINTS. No-op on the first cycle (empty slot). `dev`/
-    `sessions` are injectable for tests; default to the app singletons. Returns True if a
-    previous thread was retired."""
+    """Retire the previous cycle's vet session and clear the item's vet slot, so the next vet turn
+    mints.
+
+    Called on every transition into vet, so each cycle gets a fresh vetter — prior findings arrive
+    as reports, never as memory."""
     d, s = dev or _dev, sessions or _sessions
     prev = (item.get("sessions") or {}).get("vet")
     if not prev:
@@ -806,15 +604,11 @@ def reset_vet_thread(ctx, item: dict, *, dev=None, sessions=None) -> bool:
 
 def read_completion(context_id: str, item_id: str, sink: dict,
                     run_id: int | None = None) -> dict | None:
-    """A run's completion payload out of its `report_completion` sink (run_tools) — None when the
-    run never called the tool (a legacy/unstructured ending; callers warn so drift is visible).
-    Persists the payload as the run.report event, the DB record keyed to this item's run trail.
+    """A run's completion payload out of its `report_completion` sink, persisted as the `run.report`
+    event. None when the run never reported.
 
-    `run_id` names the run this report ENDS — resolved from the item's live row when the caller
-    doesn't already hold it (every background runner logs before `_end_run`, so the row is still
-    open). The timeline needs it to place the card inside its run and to drop anything the agent
-    says after its own ending. Stored ALONGSIDE the payload, never inside it: `meta` stays the
-    verbatim `report_completion` call plus this one kernel-added key."""
+    `run_id` names the run this report ENDS, resolved from the item's live row. Stored alongside
+    the payload, never inside it."""
     report = sink.get("report")
     if report:
         rid = run_id if run_id is not None else _spine.running_run_id(context_id, item_id)
@@ -830,28 +624,19 @@ UNREPORTED = "unreported"   # a run that finished but declared nothing, even aft
 async def ensure_completion(ctx, context_id: str, item_id: str, sink: dict, *, skill: str,
                             session_id: str | None, model: str | None, effort: str | None,
                             run_id: int | None = None) -> dict | None:
-    """`read_completion` with a BACKSTOP: when the run ended without declaring, spend one short
-    turn asking it to. Returns the payload, or None if even that failed.
+    """`read_completion` with a BACKSTOP: when the run ended without declaring, spend one short turn
+    asking it to.
 
-    Why a kernel-side check rather than firmer wording in the skill: measured, prose does not carry
-    this. The same instruction lands at a 4% miss where the loop breaks without it and 18-36% where
-    nothing downstream notices — compliance tracks enforcement, not emphasis. So the contract stays
-    where it was and the guarantee moves here, identically for every phase.
-
-    The nudge RESUMES the run's own session, so the agent still has its work in context and the
-    call costs one small turn; without a session id there is nothing to resume and we accept the
-    gap. Deliberately NOT inferred: `outcome` encodes judgment (`partial` / `blocked` /
-    `needs_user`) that only the agent holds, so a kernel-stamped `success` would be a claim nobody
-    made — see [[no-estimated-usage]] for the same rule about measurements."""
+    The nudge resumes the run's own session, keeping the work in context. Never inferred:
+    `outcome` encodes judgment only the agent holds."""
     report = read_completion(context_id, item_id, sink, run_id=run_id)
     if report or not session_id:
         if not report:
             log.warning("%s run for %s ended undeclared with no session to resume", skill, item_id)
         return report
     log.info("%s run for %s ended undeclared — asking for its outcome", skill, item_id)
-    # `retry=False` deliberately, though every other background turn climbs the ladder: the work is
-    # already done and only its label is missing, so holding the item for up to ~29 minutes of
-    # backoff to win a label is the wrong trade. One attempt, classified; then `unreported`.
+    # `retry=False` deliberately — the work is done and only its label is missing; backoff is the
+    # wrong trade.
     turn = ResilientTurn("completion-backstop", item_id=item_id, retry=False)
     try:
         async for _ev in turn.stream(
@@ -870,14 +655,10 @@ async def ensure_completion(ctx, context_id: str, item_id: str, sink: dict, *, s
 
 
 def _dev_mcp(ctx, repo_dir: Path, item_id: str, *, scope: str) -> dict:
-    """The dev MCP server for a background intake/resolve run (F8-residual, playground-e2e-blockers:
-    these runners went tool-less while the loop runners got the mount in step 5) — same shape as
-    loop.py's `_dev_mcp`. A background planner can now read the dev log / roadmap / inbox and use
-    the item pens instead of planning blind. `repo_dir` = where evidence fingerprints (the
-    worktree when one exists, else the repo root).
+    """The dev MCP server for a background intake/resolve run.
 
-    `scope` names which tools this run may see (dev_tools.TOOL_SCOPES) — for a phase run it is the
-    skill being fired, so a close run cannot hold plan's pens."""
+    `repo_dir` is where evidence fingerprints — the worktree when one exists, else the repo root.
+    `scope` names which tools this run sees, so a close run cannot hold plan's pens."""
     return {"dev": make_dev_mcp_server(
         _dev_store, ctx.id, spine=_spine, scope=scope,
         dev_root=ctx.internal_root / "dev",
@@ -897,41 +678,31 @@ async def _run_background_plan(ctx, context_id: str, item_id: str, item_dir: Pat
 async def _run_background_item_skill(ctx, context_id: str, item_id: str, item_dir: Path,
                                      skill: str, model: str | None = None,
                                      effort: str | None = None) -> None:
-    """The generic phase-entry runner: any auto-fired item skill that is NOT plan — `review` (every
-    kind, on review entry), research's `investigate`, and research's `itemize` on review approve.
-    All carry the item's INTAKE role (kind_profiles: one thread end to end, no fresh-perspective
-    boundary), so they ride the same runner as plan/triage and only the skill differs. Named for
-    what it does rather than for one kind: it was `_run_background_research` while review had no
-    runner and research was the only caller. Thin wrapper over _background_intake_run."""
+    """The generic phase-entry runner for any auto-fired item skill that is not plan: `review`,
+    `investigate`, `itemize`.
+
+    All carry the item's INTAKE role — one thread end to end — so only the skill differs. Thin
+    wrapper over `_background_intake_run`."""
     await _background_intake_run(ctx, context_id, item_id, item_dir,
                                  skill=skill, model=model, effort=effort)
 
 
 async def _run_background_triage(ctx, context_id: str, item_id: str, item_dir: Path,
                                  model: str | None = None, effort: str | None = None) -> None:
-    """Auto-triage on push (#120) — one /triage turn, no surface, fired when an inbox item is
-    pushed to the workspace. The item lands at `awaiting_human` with its classification recorded:
-    the one-click triage-exit gate ("always-stop-but-trivial" — the run does the work, the owner
-    glances + approves). Thin wrapper over _background_intake_run."""
+    """Auto-triage on push: one triage turn, no surface, fired when an inbox item is pushed to the
+    workspace.
+
+    The item lands at `awaiting_human` with its classification recorded, so the owner glances and
+    approves."""
     await _background_intake_run(ctx, context_id, item_id, item_dir,
                                  skill="triage", model=model, effort=effort)
 
 
 def fire_review_entry(context_id: str, item_id: str, spine) -> bool:
-    """Fire the REVIEW-ENTRY run for an item that just landed at review (renovation §2.2). Shared
-    by the two ways in, so neither can drift from the other: `advance_item`'s auto-fire (an owner
-    Approve at vet, an owner force, a deputy advance) and the LOOP's vet→review hop, which
-    CAS-flips the phase itself and never touches advance_item.
+    """Fire the review-entry run for an item that just landed at review.
 
-    That second path is why this exists as a function. The loop is how items normally reach review;
-    wiring the run only into advance_item would have left the common path with no report at all —
-    the same shape of hole that left the old review skill with no runner for its whole life.
-
-    The item rests `awaiting_human` when it gets here (the loop's rest status), so this flips it to
-    `active` for the duration: `active` with no run is an idle stall, and `awaiting_human` while a
-    run works is a lie about who is waiting. On any failure the item is put back to
-    `awaiting_human` — a review with no report is still a gate the owner can act on, just a poorer
-    one. Best-effort, never raises. Returns True iff a run was started."""
+    Shared by `advance_item`'s auto-fire and the loop's vet→review hop. Flips the item `active`
+    while it runs, because `active` with no run is an idle stall."""
     from ...gateway import contexts   # lazy: avoid an import cycle at module load
     try:
         ctx = contexts.resolve(context_id, "dev")
@@ -964,14 +735,8 @@ def fire_review_entry(context_id: str, item_id: str, spine) -> bool:
 def fire_first_investigate(context_id: str, item_id: str, spine) -> bool:
     """Kick a BUTTON-LAUNCHED sweep into its first investigate run.
 
-    The sibling of `fire_auto_triage`, and for the same reason: an item the owner just created by
-    pressing a button should not sit waiting for a second click. It differs only in where the item
-    was born — a standing sweep enters at `investigate` already classified (the button IS the
-    classification), so there is no ticket for triage to read and no triage run to fire.
-
-    Fires ONLY for an `active` item at `investigate` whose phase run isn't already in flight. Best
-    effort: returns True iff a run started, and a failure leaves the sweep resting at investigate
-    for a chat-driven pass rather than raising into the owner's click."""
+    The sibling of `fire_auto_triage`: an item created by pressing a button should not wait for a
+    second click. A standing sweep enters already classified, so triage never runs."""
     from ...gateway import contexts   # lazy: avoid an import cycle at module load
     try:
         ctx = contexts.resolve(context_id, "dev")
@@ -996,14 +761,10 @@ def fire_first_investigate(context_id: str, item_id: str, spine) -> bool:
 
 
 def fire_auto_triage(context_id: str, item_id: str, spine) -> bool:
-    """Kick a freshly-active item into its first triage run — the SHARED "first push" for the
-    autopilot chain (slice 4c). Three callers use it: the FE owner-push (inbox router), an
-    onboarding-itemized cohort (launch service), and a peer released off its `after` edge
-    (scheduler). Fires ONLY for an item that is `active` at phase `triage` (never re-fires a
-    running item, an item already past triage, or a paused/parked one) and only when no run is
-    already in flight (the per-item run-lock in `_begin_run` gates that). Best-effort — returns
-    True iff a triage run was started; any failure leaves the item resting at triage for a
-    chat-driven pass, never raises."""
+    """Kick a freshly-active item into its first triage run — the autopilot chain's shared first push.
+
+    Fires only for an item `active` at `triage` with no run in flight. A failure leaves the item
+    resting there for a chat-driven pass."""
     from ...gateway import contexts   # lazy: avoid an import cycle at module load
     try:
         ctx = contexts.resolve(context_id, "dev")
@@ -1013,8 +774,8 @@ def fire_auto_triage(context_id: str, item_id: str, spine) -> bool:
         item = _dev.read_work_item(dev_root, item_id) or {}
         if str(item.get("status")) != "active" or str(item.get("phase")) != "triage":
             return False   # only a fresh, active, un-triaged item is kicked
-        # Resolve with the item's LOCKED config (F3) — the first kick must honour the model/effort
-        # chosen at capture, same as every later phase (precedence: item → repo → system).
+        # Resolve with the item's locked config, so the first kick honours the model chosen at
+        # capture.
         model = spine.effective_model(context_id, item_model=item.get("model"))
         effort = spine.effective_effort(context_id, item_effort=item.get("effort"))
         if _begin_run(ctx, context_id, item_id, "triage", model, phase="triage") is None:
@@ -1030,52 +791,31 @@ def fire_auto_triage(context_id: str, item_id: str, spine) -> bool:
 
 # --------------------------------------------------------------------------- deputy send-back re-run
 
-# Which skill a phase's re-run fires (the phase that OWNS the fix; deputy-live-turns-design §"New
-# model"). triage feedback re-triages, plan/review feedback re-plans (review flips review→plan first).
-# The skill a phase RE-RUNS with — its own, one entry per phase that can be re-run in place. It used
-# to carry `review: plan` and `build: plan` too, which conflated two questions: "can this gate
-# negotiate" and "what runs when it does". Once the destination became per-kind those values were
-# dead weight that still looked authoritative — a `review` entry saying `plan` is exactly the stale
-# lookup someone would later trust.
+# Which skill a phase re-runs with — its own. One entry per phase that can be re-run in place.
 _PHASE_FEEDBACK_SKILL = {"triage": "triage", "plan": "plan", "investigate": "investigate"}
 
-# The phases whose feedback lands somewhere OTHER than where it was given: the work must change, and
-# a document has to say how. `review` is the owner/deputy's send-back; `build` is the build cycle
-# concluding that the plan it was handed is wrong (a `revise` outcome) — a different speaker with the
-# same destination, which is why they share a path and NOT an event.
+# Phases whose feedback lands somewhere else, because the work must change: `review` is a send-
+# back, `build` a `revise`.
 _ROUTES_BACK = ("review", "build")
 
-# …and WHERE it lands is per-KIND, because the destination has to be a phase the kind actually has.
-# Implementation re-plans (`plan.md` is the only document that can change the work, and forward flow
-# plan→build→vet→review re-vets by construction). Research has no plan phase at all any more, so its
-# send-back re-enters INVESTIGATE — which is the same shape of act: the phase that produced the
-# record is asked to produce a better one, and it resumes its own thread to do it.
-#
-# THIS IS THE FOURTH INSTANCE of the pattern the 2026-08-13 E2E kept surfacing: a router with one
-# destination, and that destination belonged to the implementation path. Left unfixed alongside the
-# phase change it is not a degradation but a hard failure — `next_phase` raises loud on a phase the
-# profile does not contain, which is exactly what a research send-back would have set.
+# Per-kind, because the destination must be a phase the kind actually has — research has no plan
+# phase.
 _SEND_BACK_TARGET = {"implementation": "plan", "research": "investigate"}
 
 
 def _send_back_phase(item: dict) -> str:
-    """Where a `revise` from review/build re-enters, for this item's kind. Unknown kinds fall back to
-    the implementation route rather than raising: a send-back is recourse, and losing recourse is a
-    worse failure than routing a novel kind to its planning phase."""
+    """Where a `revise` from review or build re-enters, for this item's kind. Unknown kinds route to
+    the implementation path rather than raise — losing recourse is the worse failure."""
     return _SEND_BACK_TARGET.get(str(item.get("kind") or ""), "plan")
 
 
 def fire_phase_feedback(context_id: str, item_id: str, *, phase: str, feedback: str,
                         digest: str | None = None, by: str = "deputy") -> bool:
-    """Deliver gate feedback as a REAL turn on the item's own session (deputy-live-turns design Q1;
-    #178 unifies the OWNER onto the same path): resume the item's intake/plan session and post the
-    feedback so the agent re-runs the phase in-thread. The chat panel is a shared terminal — owner,
-    work-item agent, and deputy all speak here; `by` ("owner" | "deputy") only sets attribution, the
-    ROUTING is identical (that is the point: feedback advances the loop the same way whoever gives it).
+    """Deliver gate feedback as a REAL turn on the item's own session, so the agent re-runs the phase
+    in-thread.
 
-    Persists a `<by>.query` marker so the FE can attribute the resulting transcript turn. Fires ONLY
-    when the item is resting at that gate with no run in flight; returns True iff the re-run started.
-    Best-effort — any failure leaves the item at `awaiting_human` for the owner, never raises."""
+    `by` sets attribution only; routing is identical whoever gives it. Fires only at that gate,
+    with no run in flight."""
     from ...gateway import contexts   # lazy: avoid an import cycle at module load
     try:
         ctx = contexts.resolve(context_id, "dev")
@@ -1087,29 +827,21 @@ def fire_phase_feedback(context_id: str, item_id: str, *, phase: str, feedback: 
             return False
         if phase not in _PHASE_FEEDBACK_SKILL and phase not in _ROUTES_BACK:
             return False   # not a gate that negotiates via a phase re-run
-        # Review feedback FALLS BACK INTO THE KIND'S REWORK PHASE (deputy-live-turns Q1-B; #178 owner
-        # too) — `plan` for implementation, `investigate` for research. Flipping the phase is what
-        # makes the rework re-run, and forward flow from there re-checks by construction
-        # (plan→build→vet→review, or investigate→review). The run + trigger then speak in the
-        # DESTINATION's terms — hence the skill swap — while the `digest` carries the review/build/vet
-        # context so the rework knows it is answering feedback on its own earlier output.
+        # Review feedback falls back into the kind's rework phase; flipping the phase is what
+        # makes the rework re-run.
         run_phase = _send_back_phase(item) if phase in _ROUTES_BACK else phase
         skill = _PHASE_FEEDBACK_SKILL.get(run_phase)
         if skill is None:
             return False   # the kind routes somewhere that cannot re-run — never guess a skill
         if phase in _ROUTES_BACK:
             if phase == "review":
-                # `strict` (§2.2): a send-back spends the approval, so the PR closes with it — the
-                # diff it described is about to change. See git_ops.close_pr. No-op in `fast` repos
-                # and on any item that never had one open. A BUILD-originated revise has no
-                # approval to spend: nothing was ever put to the owner.
+                # A send-back spends the approval, so the PR closes with it — the diff it
+                # described is about to change.
                 from .git_ops import close_pr
                 close_pr(_dev, dev_root, item_id)
             _dev.set_work_item_phase(dev_root, item_id, run_phase)
-            # ONE EVENT PER SPEAKER. `review.route` used to be logged for a build's `revise` too,
-            # so the permanent record said a review had concluded something when no review had run
-            # — and `gate_briefs` counts these events as REVISION ROUNDS, so a build's own
-            # conclusion inflated the owner's round count. Seen live on f0bda271d766 (2026-08-07).
+            # One event per speaker: `gate_briefs` counts these as revision rounds, so a build's
+            # conclusion must not log a review.
             kind, said = (("review.route", f"Review feedback routed back to {run_phase}")
                           if phase == "review" else
                           ("revise.route",
@@ -1118,20 +850,14 @@ def fire_phase_feedback(context_id: str, item_id: str, *, phase: str, feedback: 
                                  item_id=item_id, actor=by,
                                  meta={"from": phase, "to": run_phase, "feedback": feedback[:400],
                                        "by": by})
-        # RESUME THE TARGET PHASE'S OWN THREAD (per-phase sessions). Before the split this read the
-        # single `intake` slot, which belonged to whichever phase entered last — so a send-back to
-        # plan resumed REVIEW's thread and the re-plan ran in the reviewer's head. Falls back to the
-        # retired shared slot for items in flight at the cutover, then to the pre-roles bare key.
+        # Resume the TARGET phase's own thread — resuming the entering phase's re-plans in the
+        # reviewer's head.
         slots = item.get("sessions") or {}
         session_id = (slots.get(kind_profiles.session_slot(run_phase))
                       or slots.get(kind_profiles.LEGACY_INTAKE_SLOT)
                       or item.get("session_id") or None)
-        # SAME CWD SWAP THE PHASE RUNNER DOES. A read-only kind's session belongs to its detached
-        # checkout, and Claude Code stores sessions per project path — so resuming it from the repo
-        # root cannot find it and the CLI exits 1 before any turn. Measured: `--resume <sid>` from
-        # the worktree exits 0, from the repo exits 1 with "No conversation found with session ID".
-        # Every phase run came through the swap and this path did not, which is why only the
-        # send-back re-run ever died. No-op for every kind without a scratch worktree.
+        # Claude Code stores sessions per project path, so a detached checkout's session cannot be
+        # resumed from the repo root.
         from .git_ops import ensure_scratch_worktree
         repo_dir = ensure_scratch_worktree(ctx, context_id, item,
                                            dev=_dev, dev_store=_dev_store, spine=_spine)
@@ -1141,9 +867,8 @@ def fire_phase_feedback(context_id: str, item_id: str, *, phase: str, feedback: 
         effort = _spine.effective_effort(context_id, item_effort=item.get("effort"))
         if _begin_run(ctx, context_id, item_id, skill, model, phase=run_phase) is None:
             return False   # a run is already in flight — don't double-fire
-        # The marker the FE matches to attribute the resulting user turn to the `<by>` role, and the
-        # record that this round's feedback was delivered (its own event so the trail is honest even
-        # if the turn then dies). `speech` = the short bubble; `text` = what actually gets sent.
+        # The marker the FE matches to attribute the turn to `<by>`; `speech` is the bubble,
+        # `text` is what gets sent.
         title = item.get("title") or item_id
         prompt = kernel_speech.phase_feedback_trigger(item_id, title, run_phase, skill, feedback, digest)
         _dev_store.log_event(context_id, f"{by}.query",
@@ -1172,15 +897,15 @@ def fire_deputy_feedback(context_id: str, item_id: str, *, phase: str, feedback:
 async def _run_deputy_feedback_turn(ctx, context_id: str, item_id: str, item_dir: Path, *,
                                     session_id: str | None, phase: str, prompt: str,
                                     model: str | None, effort: str | None) -> None:
-    """Run one deputy send-back re-run: RESUME the item's session (so the query + reply are real
-    3-speaker transcript) and let the agent re-run the phase against the feedback. Ends the item at
-    `awaiting_human` — which re-fires the gate seam (`_end_run` → maybe_autopilot_advance), so the
-    deputy re-judges the result. That chaining IS the negotiation loop; the send-back cap (counted in
-    the decision log) turns a 4th round into an escalation."""
+    """Run one deputy send-back re-run: RESUME the item's session and let the agent re-run the phase
+    against the feedback.
+
+    Ends at `awaiting_human`, which re-fires the gate seam so the deputy re-judges the result. That
+    chaining IS the negotiation loop."""
     dev_root = ctx.internal_root / "dev"
     capture_prompt(context_id, prompt, item_id=item_id)
-    # Current-focus pointer (thin, per-turn): re-read the item AFTER any review→plan phase flip so
-    # the pointer names the phase this re-run actually works.
+    # Re-read the item after any phase flip so the pointer names the phase this re-run actually
+    # works.
     live_item = _dev.read_work_item(dev_root, item_id) or {"id": item_id, "phase": phase}
     focus = kernel_speech.work_item_preamble(
         item_id, live_item, str(item_dir), interactive=False,
@@ -1201,7 +926,7 @@ async def _run_deputy_feedback_turn(ctx, context_id: str, item_id: str, item_dir
         extra_mcp_servers={**_dev_mcp(ctx, ctx.cwd, item_id,
                                       scope=str(live_item.get("phase") or phase)),
                            "run": make_run_report_server(sink)},
-        system_append=focus,   # Current-focus pointer incl. the run protocol
+        system_append=focus,
         item_bound=True,       # one item is this run's subject — no board-wide in-progress list
     ):
         if isinstance(ev, Usage):
@@ -1211,8 +936,8 @@ async def _run_deputy_feedback_turn(ctx, context_id: str, item_id: str, item_dir
             _sessions.record(ctx, ev.session_id)
             if ev.session_id:
                 try:
-                    # The feedback re-run belongs to the phase it re-runs, so it lands in
-                    # THAT phase's slot — the same one it resumed a moment ago.
+                    # The feedback re-run belongs to the phase it re-runs, so it lands in that
+                    # phase's slot.
                     _dev.set_work_item_session(dev_root, item_id, ev.session_id,
                                                slot=kind_profiles.session_slot(phase))
                     _spine.stamp_session_item(ev.session_id, item_id)
@@ -1222,9 +947,8 @@ async def _run_deputy_feedback_turn(ctx, context_id: str, item_id: str, item_dir
             _cache_slash(ctx.id, ev.slash_commands)
         if isinstance(ev, (Status, TextDelta, ToolResult)):
             capture_event(context_id, ev, item_id=item_id)
-    # The `finally` this replaces guaranteed the run row closed even on a crash. `ResilientTurn`
-    # returns rather than raises, so the closing block below is reached on every path — including
-    # a spent retry ladder, where `turn.fault` names what beat us.
+    # `ResilientTurn` returns rather than raises, so the closing block below is reached on every
+    # path.
     report = await ensure_completion(ctx, context_id, item_id, sink, skill=str(phase),
                                      session_id=final_session, model=model, effort=effort)
     stopped = turn.fault.failed and not report
@@ -1243,15 +967,10 @@ async def _run_deputy_feedback_turn(ctx, context_id: str, item_id: str, item_dir
 
 
 def fire_close_run(context_id: str, item_id: str, spine) -> bool:
-    """Fire the ONE closing run of an item's CLOSE phase — knowledge finalization (anchor-doc ops
-    + the weekly change-log entry), the only knowledge write in the workflow. Mirrors the
-    auto-plan-on-advance kick: fires ONLY for an item resting at phase `close` with no run in
-    flight. When the run reports, the kernel clears the item mechanically (`_clear_or_retry` →
-    services/clearance) — there is no proposal and no owner click.
+    """Fire the ONE closing run of the CLOSE phase — the workflow's only knowledge write.
 
-    Best-effort — returns True iff the run started. When no run can start at all, the item is
-    CLEARED anyway with the knowledge gap on record: clearance always completes, so a close-phase
-    item is never left `active` with nothing behind it (the idle stall). Never raises."""
+    Fires only for an item resting at `close` with no run in flight; when none can start it clears
+    anyway, with the gap on record."""
     from ...gateway import contexts   # lazy: avoid an import cycle at module load
     ctx = None
     try:
@@ -1274,9 +993,8 @@ def fire_close_run(context_id: str, item_id: str, spine) -> bool:
         log.exception("auto-close failed to start for %s", item_id)
         return False
     finally:
-        # No run started and the item is still sitting `active` at close ⇒ nothing will ever move
-        # it. Clear it instead, with the missing knowledge write on record. (A started run owns
-        # the status from here — `_begin_run` registered it before the task was created.)
+        # No run started and the item still `active` means nothing will move it; clear it, gap
+        # recorded.
         try:
             if ctx is not None and ctx.internal_root:
                 d_root = ctx.internal_root / "dev"
@@ -1295,19 +1013,18 @@ def fire_close_run(context_id: str, item_id: str, spine) -> bool:
 
 async def _run_background_close(ctx, context_id: str, item_id: str, item_dir: Path,
                                 model: str | None = None, effort: str | None = None) -> None:
-    """Drive the item's ONE closing turn: RESUME its intake thread (the narrative that knows what
-    the item was for) and let the close skill reflect the LOCKED changes into the general anchor
-    docs + this week's change log, then report. The kernel clears the item from there
-    (`_clear_or_retry`) — the run never completes the item itself. Best-effort: a turn that dies
-    without reporting is retried, and after the budget the item clears with the gap recorded."""
+    """Drive the item's ONE closing turn: RESUME its intake thread and let the close skill reflect the
+    locked changes into the anchor docs and the change log.
+
+    The kernel clears the item from there — the run never completes it."""
     dev_root = ctx.internal_root / "dev"
     item = _dev.read_work_item(dev_root, item_id) or {}
     session_id = ((item.get("sessions") or {}).get("intake") or item.get("session_id") or None)
     title = item.get("title") or item_id
     prompt = kernel_speech.close_trigger(item_id, title)
     capture_prompt(context_id, prompt, item_id=item_id)
-    # Current-focus pointer (thin, per-turn) — the resumed transcript carries the orient bulk;
-    # this is the standing phase/role pointer every runner now sends.
+    # The resumed transcript carries the bulk; this is the standing phase/role pointer every
+    # runner sends.
     focus = kernel_speech.work_item_preamble(
         item_id, item, str(item_dir), interactive=False,
         compacted_checkpoint=compacted_checkpoint(ctx, item, session_id))
@@ -1327,7 +1044,7 @@ async def _run_background_close(ctx, context_id: str, item_id: str, item_dir: Pa
         sandbox_writes=[item_dir],   # sandboxed shell; the item folder is its one outside write
         extra_mcp_servers={**_dev_mcp(ctx, ctx.cwd, item_id, scope="close"),
                            "run": make_run_report_server(sink)},
-        system_append=focus,   # Current-focus pointer incl. the run protocol
+        system_append=focus,
         item_bound=True,       # one item is this run's subject — no board-wide in-progress list
     )
     # Prompt inspector "A" — throwaway probes ONLY: capture matches the real send exactly.
@@ -1356,8 +1073,8 @@ async def _run_background_close(ctx, context_id: str, item_id: str, item_dir: Pa
     report = await ensure_completion(ctx, context_id, item_id, sink, skill="close",
                                      session_id=final_session, model=model, effort=effort)
     outcome = str((report or {}).get("outcome") or "")
-    # `active`, never `awaiting_human`: nobody is being paged. Clearance decides what happens
-    # next, and it is mechanical (the item is terminal a moment later, or retried).
+    # `active`, never `awaiting_human`: nobody is being paged. Clearance decides next,
+    # mechanically.
     stopped = turn.fault.failed and not outcome
     if stopped:
         mark_item_error(ctx, context_id, item_id, turn.fault.reason, phase="close")
@@ -1367,24 +1084,22 @@ async def _run_background_close(ctx, context_id: str, item_id: str, item_dir: Pa
         bank_auto_checkpoint(ctx, item_id, since=run_started)
     except Exception:
         log.exception("auto-checkpoint after auto-close failed")
-    # A STOPPED close run must not feed the clearance retry: that budget exists for a run that
-    # finished without reporting, and spending it on an outage would burn the item's last chances
-    # and then clear it with a knowledge gap nobody chose. `error` holds it for Resume instead.
+    # A stopped close run must not spend the clearance retry budget, which exists for unreported
+    # finishes.
     if not stopped:
         _clear_or_retry(context_id, item_id, outcome)
 
 
 def _clear_or_retry(context_id: str, item_id: str, outcome: str) -> None:
-    """The post-CLOSE kernel hook. The closing run reported ⇒ clear the item. It didn't ⇒ re-fire
-    the run, and once the retry budget is spent clear it ANYWAY with the knowledge gap on record.
+    """The post-CLOSE kernel hook: reported ⇒ clear the item; not ⇒ re-fire, and once the budget is
+    spent clear it anyway with the gap recorded.
 
-    Clearance always completes (renovation §2): a closing run that cannot finish is a SuperMe
-    fault to fix, never a work-item left sitting at close with no way out. Never raises."""
+    Clearance always completes — a closing run that cannot finish is a SuperMe fault."""
     from . import clearance
     try:
         if outcome:
-            # Any report clears. Close has no authority to change anything (review's exit locked
-            # code and git), so a non-success outcome is a knowledge gap to record, not a hold.
+            # Close has no authority to change anything, so a non-success outcome is a knowledge
+            # gap to record, not a hold.
             gap = None if outcome in ("success", "clean_noop") else \
                 f"the closing run reported `{outcome}`"
             res = clearance.clear_item(context_id, item_id, knowledge_gap=gap)
@@ -1410,86 +1125,41 @@ def _clear_or_retry(context_id: str, item_id: str, outcome: str) -> None:
 async def _background_intake_run(ctx, context_id: str, item_id: str, item_dir: Path, *,
                                  skill: str, model: str | None = None,
                                  effort: str | None = None) -> None:
-    """Drive one background intake-phase turn (triage, plan, investigate, review, close) for
-    `item_id` with no surface attached, then clear run-state. They share this driver — only the
-    skill + trigger differ.
+    """Drive one background intake-phase turn with no surface attached, then clear run-state. Only the
+    skill and trigger differ.
 
-    RESUMES THIS PHASE'S OWN THREAD, or mints when the phase has none yet (per-phase sessions).
-    The phase has already been flipped by the time this runs (`gates.autopilot_advance` sets it and
-    then fires), so the item's computed `session_id` IS this phase's slot. Entering a phase for the
-    first time therefore mints; entering it again — a review after a revise round — continues.
-
-    It used to always pass `resume=None`, on the reasoning that a re-run must not resume an agent
-    that says "already done". That reasoning covered a re-run of a DIFFERENT phase, which still
-    mints; it never covered a phase re-entered with new feedback, which is one agent looking at a
-    changed tree and had no business forgetting its own last pass.
-
-    The run protocol (kernel-fired, report_completion ending) rides the per-turn Current-focus
-    background variant — never the durable transcript, which this session keeps for later
-    interactive chat. Persists the session onto this phase's slot, sandboxes writes to the item
-    folder; status is owned here: active while running → awaiting_human (the item sits at the
-    owner's gate) on finish."""
+    RESUMES THIS PHASE'S OWN THREAD, or mints when it has none: re-entering a phase is one agent
+    looking at a changed tree."""
     dev_root = ctx.internal_root / "dev"
     item = _dev.read_work_item(dev_root, item_id) or {}
-    # A READ-ONLY kind reads from its own detached checkout, not the working tree (kind_profiles:
-    # `scratch_worktree`). The swap is here, at the one door every intake phase comes through, so
-    # all of an item's phases share one cwd — a thread that read the repo at triage and the tree at
-    # investigate would be one agent watching its own paths move. No-op for every other kind.
+    # A read-only kind reads its own detached checkout; swapping here keeps every phase on one
+    # cwd.
     from .git_ops import ensure_scratch_worktree
     repo_dir = ensure_scratch_worktree(ctx, context_id, item,
                                        dev=_dev, dev_store=_dev_store, spine=_spine)
     if repo_dir != ctx.cwd:
         ctx = replace(ctx, cwd=repo_dir)
         item = _dev.read_work_item(dev_root, item_id) or item   # re-read: the git record moved
-    # The phase this run IS — read off the item, which `gates.autopilot_advance` already flipped.
-    # NOT `skill`: they coincide for triage/plan/investigate/review/close but not for `itemize`,
-    # which is a research item's closing run and belongs in the `close` slot.
+    # The phase this run IS, not `skill` — `itemize` is a research item's closing run.
     run_phase = str(item.get("phase") or "triage")
-    # THIS PHASE'S OWN THREAD (per-phase sessions). Resuming it is the point: re-entering a phase —
-    # a review after a revise round, a triage the owner re-ran — continues where that phase left off
-    # instead of re-deriving it. A phase entered for the FIRST time has no slot, so `resume` is None
-    # and the CLI mints; that is the mint-on-phase-change half of the rule.
-    #
-    # `prev_session` is still read, because resuming can FORK: the CLI may hand back a new id, and
-    # the thread it forked from is then superseded and retired below. `_session_fields` supplies the
-    # legacy `session_intake` (pre-split items) / bare `session_id` (pre-roles items) fallbacks, so
-    # an item in flight at the cutover resumes its real thread rather than starting blank.
+    # Resuming this phase's own thread continues where it left off; a first entry has no slot, so
+    # the CLI mints.
     prev_session = item.get("session_id") or None
-    # Bank BEFORE the thread dies (compaction-redesign §13, row 5). This runner mints a fresh
-    # intake session and then DELETES the previous one — so the whole triage conversation, owner
-    # clarifications at the gate included, is gone with nothing carrying it. Not resuming is right
-    # (a re-plan must not read as "already done") and deleting is right (the picker holds one
-    # intake slot), but carrying NOTHING is not: lossy beats gone. Derived, not a model call —
-    # there is no agent turn available here (the old thread is dying, nothing is running), and
-    # paying a summarization call at every triage→plan for a conversation that is often just
-    # "approve" is bad economics. `since=None` so it always banks, even if one landed recently.
+    # Bank before the thread dies — this runner mints a fresh session and deletes the previous
+    # one.
     if prev_session:
         try:
             bank_auto_checkpoint(ctx, item_id)
         except Exception:
             log.exception("pre-replace checkpoint failed for %s", item_id)
     title = item.get("title") or item_id
-    # A research item's worktree is a SCRATCH tree (kind_profiles) — a detached checkout made so a
-    # read-only investigation cannot touch real code. It is the only tree this run reads, and the
-    # only one whose contents it may destroy without consequence, which is exactly the test for a
-    # shell root. An implementation item's worktree is not one: it holds work that merges.
+    # A research worktree is a detached scratch tree — the only one this run reads or may destroy.
     wt = item.get("git_worktree")
     scratch_tree = ([Path(wt)]
                     if wt and kind_profiles.get_profile(
                         str(item.get("kind") or "implementation")).scratch_worktree
                     else [])
-    # Thin trigger: which skill for which item — nothing else. The procedure lives in the
-    # superme-dev:<skill> skill (its "## Background runs" section); the run protocol rides the
-    # Current-focus background variant below. Orientation is on-demand — the skill's directed
-    # reads over the item folder Current focus points at (the orient birth-block is retired,
-    # workflow-renovation-v2 §1). On replay, sessions._NOISE_PREFIXES drops this trigger phrase
-    # (one entry per intake skill — keep in sync when adding one).
-    # …with ONE exception, and only when this phase is being RE-ENTERED on its own thread: what
-    # changed on disk since that thread last ran. Resuming buys the phase its own memory, and a
-    # resumed agent believes its memory over the folder unless the turn says otherwise (measured:
-    # a review that answered "nothing has changed" over a rewritten investigation). Computed from
-    # the phase's last FINISHED run, so the first entry — and any phase whose thread was adopted
-    # from a legacy slot with no run history — says nothing.
+    # A resumed agent believes its memory over the folder, so a re-entry is told what changed.
     changed: list[str] = []
     if prev_session:
         try:
@@ -1515,26 +1185,19 @@ async def _background_intake_run(ctx, context_id: str, item_id: str, item_dir: P
         model=model,
         effort=effort or _spine.effective_effort(context_id),  # item → repo → system → medium
         approve=scoped_writes_approve(item_dir, deny_all),
-        # The shell boundary, matching the write sandbox beside it. Without it every command the
-        # read-only classifier cannot prove — a scripted inventory, a probe, anything with a pipe
-        # into a file — went to `deny_all` with no path to allow, for this run AND every reader it
-        # spawned. Build and vet have carried this since the freeze boundary landed; the intake
-        # phases never did, and a research sweep is the one that most needs a shell.
+        # Without a shell boundary every command the read-only classifier cannot prove goes to
+        # `deny_all`, with no path to allow.
         write_boundary=[item_dir],
-        # A research sweep reads a tree it may not write to and writes to a folder it is not
-        # standing in, so nearly every honest command it composes names both — and one path
-        # outside the write boundary refuses the whole command. Its scratch worktree is therefore
-        # nameable by the SHELL (a detached throwaway checkout: nothing commits, nothing merges,
-        # closing deletes it), while the write TOOLS stay pinned to the item folder above.
+        # One path outside the boundary refuses the whole command, so the shell may name the
+        # scratch worktree.
         shell_roots=scratch_tree,
         sandbox_writes=[item_dir, *scratch_tree],   # the kernel holds the same two roots
         extra_mcp_servers={**_dev_mcp(ctx, ctx.cwd, item_id, scope=skill),
                            "run": make_run_report_server(sink)},
-        system_append=focus,   # Current-focus pointer incl. the run protocol
+        system_append=focus,
         item_bound=True,       # one item is this run's subject — no board-wide in-progress list
     )
-    # Prompt inspector "A" — throwaway probes ONLY: capture matches the real send exactly.
-    # Normal items skip capture (the run_input table no longer grows per-run).
+    # Throwaway probes only — capture matches the real send exactly. Normal items skip it.
     if _autopilot.is_prompt_extraction(item):
         capture_run_input(context_id, item_id, ctx=ctx, system_append=focus, prompt=prompt,
                           phase=skill,
@@ -1545,10 +1208,8 @@ async def _background_intake_run(ctx, context_id: str, item_id: str, item_dir: P
             live.bump(context_id, item_id, ev)
         elif isinstance(ev, Result):
             final_tokens = ev.tokens
-            # The turn total is the accumulated per-message usage (parent + subagents), NOT
-            # `Result.usage`, which covers the parent conversation only — measured 3-8x smaller
-            # on fan-out runs (see _LiveTokens). Falls back to the Result when no Usage step ever
-            # arrived, which is the only case where it is the fuller of the two.
+            # Accumulated per-message usage (parent + subagents), not the parent-only
+            # `Result.usage`; falls back when no Usage step arrived.
             final_usage = live.usage(ev.usage) or ev.usage
             final_session = ev.session_id
             _sessions.record(ctx, ev.session_id)
@@ -1556,36 +1217,29 @@ async def _background_intake_run(ctx, context_id: str, item_id: str, item_dir: P
                 try:
                     _dev.set_work_item_session(dev_root, item_id, ev.session_id,
                                                slot=kind_profiles.session_slot(run_phase))
-                    # Reverse stamp: this background session is a work-item session, born here —
-                    # stamp its durable identity (work-item-session-recognition-prd) + its spine
-                    # KIND, which stays `intake` for every intake phase (the slot is per-phase; the
-                    # kind is what SORT of thread it is, and that did not change).
+                    # Reverse stamp: a background session born here gets its durable work-item
+                    # identity and its spine kind.
                     _spine.stamp_session_item(ev.session_id, item_id)
                     _spine.stamp_session_kind(ev.session_id,
                                               kind_profiles.session_role(run_phase))
                 except Exception:
                     log.exception("background %s: failed to persist session to %s" % (skill, item_id))
-                # The replaced thread is superseded — delete it so the picker stays clean; its
-                # run trace is preserved + labeled 'retired'.
+                # The replaced thread is superseded — delete it so the picker stays clean; its run
+                # trace is preserved.
                 if prev_session and prev_session != ev.session_id:
                     _sessions.delete(ctx, prev_session, cause="retired")
         elif isinstance(ev, Init):
             _cache_slash(ctx.id, ev.slash_commands)
-        # Per-run trail for the Activity trace: the reply text + each call + its output, keyed to
-        # this run (resolved from the item's running row). Parallel to the work-item run_artifact log.
+        # Per-run trail for the Activity trace: the reply text, each call and its output, keyed to
+        # this run.
         if isinstance(ev, (Status, TextDelta, ToolResult)):
             capture_event(context_id, ev, item_id=item_id)
-    # Structured completion (renovation §3.2): the run's report_completion payload, delivered
-    # through the sink and persisted onto the run row. `ensure_completion` asks once more when the
-    # run ended undeclared — the intake phases are where that used to happen most (2026-08-11:
-    # plan 36/100, triage 24/111), because the PHASE ends at someone's approval and "completion"
-    # read like a claim the agent could not make.
+    # `ensure_completion` asks once more when a run ended undeclared; an intake phase ends at
+    # someone's approval, so agents skip it.
     report = await ensure_completion(ctx, context_id, item_id, sink, skill=skill,
                                      session_id=final_session, model=model, effort=effort)
-    # Background intake finished (or died). Finished ⇒ the item sits at the owner's pre-main gate
-    # (triage exit or plan), the one status that pages them (D2 typed awaiting). DIED ⇒ `error`
-    # (R2): resting a stopped run at `awaiting_human` claims a decision is wanted, and the owner
-    # would open the gate to find no report and no explanation.
+    # Finished ⇒ the item sits at the owner's gate; died ⇒ `error`, because `awaiting_human` would
+    # claim a decision is wanted.
     stopped = turn.fault.failed and not report
     if stopped:
         mark_item_error(ctx, context_id, item_id, turn.fault.reason, phase=skill)
@@ -1599,12 +1253,8 @@ async def _background_intake_run(ctx, context_id: str, item_id: str, item_dir: P
         bank_auto_checkpoint(ctx, item_id, since=run_started)
     except Exception:
         log.exception("auto-checkpoint after background %s failed", skill)
-    # ITEMIZE IS RESEARCH'S CLOSING RUN, so it owes what every closing run owes: clearance.
-    # Research fires it on close ENTRY instead of the close skill (a research close writes no
-    # knowledge — it exists to record the itemization decision), but clearance hung off the close
-    # runner alone, so the item rested at close forever (live, 2026-08-13): Approve 409s ("phase
-    # close has no next phase"), Run refuses ("waiting on your decision, not on a run"), and only
-    # Drop moved it — filing finished research as `abandoned`.
+    # Itemize is research's closing run, so it owes clearance — otherwise the item rests at close
+    # forever.
     if skill == "itemize" and not stopped:
         _clear_or_retry(context_id, item_id,
                         str((report or {}).get("outcome") or UNREPORTED))
@@ -1615,16 +1265,13 @@ async def _background_intake_run(ctx, context_id: str, item_id: str, item_dir: P
 async def _run_background_resolve(ctx, context_id: str, item_id: str, worktree: Path,
                                 conflicts: list[str], model: str | None = None,
                                   effort: str | None = None) -> None:
-    """Resolve-with-Agent (workspace-workflow S4/D4): a conflicted freshness merge was left IN the
-    item's worktree; drive one background turn that edits the conflict markers, then COMPLETE the
-    merge mechanically daemon-side (marker scan + `git add` + commit — the agent never commits).
-    The human decided WHETHER (they fired the route); the agent does the resolution; the item
-    re-enters `vet` on success (D4: re-vet before re-presenting). Failure pages the
-    owner (`awaiting_human`) with the merge still in the tree for a retry or manual abort."""
+    """Drive one background turn that edits a conflicted merge's markers, then COMPLETE the merge
+    mechanically daemon-side — the agent never commits.
+
+    Success re-enters `vet`; failure pages the owner with the merge still in the tree."""
     dev_root = ctx.internal_root / "dev"
-    # The conflict procedure is genuine task policy and stays in the trigger (kernel_speech).
-    # No report_completion mount here: the outcome is MECHANICAL (did the merge finish), never
-    # the agent's claim — this runner has no structured-report seam by design.
+    # No `report_completion` mount: the outcome is mechanical (did the merge finish), never the
+    # agent's claim.
     prompt = kernel_speech.resolve_trigger(worktree, item_id, conflicts)
     capture_prompt(context_id, prompt, item_id=item_id)
     final_tokens = None
@@ -1641,16 +1288,14 @@ async def _run_background_resolve(ctx, context_id: str, item_id: str, worktree: 
         effort=effort or _spine.effective_effort(context_id),
         approve=scoped_writes_approve(worktree, deny_all),
         sandbox_writes=[worktree],   # resolving a conflict is git + edits inside the tree, nothing more
-        extra_mcp_servers=_dev_mcp(ctx, worktree, item_id, scope="resolve"),  # F8-residual: dev tools mounted
+        extra_mcp_servers=_dev_mcp(ctx, worktree, item_id, scope="resolve"),  # Dev tools mounted so a background planner can read the log, roadmap and inbox.
     ):
         if isinstance(ev, Usage):
             live.bump(context_id, item_id, ev)
         elif isinstance(ev, Result):
             final_tokens = ev.tokens
-            # The turn total is the accumulated per-message usage (parent + subagents), NOT
-            # `Result.usage`, which covers the parent conversation only — measured 3-8x smaller
-            # on fan-out runs (see _LiveTokens). Falls back to the Result when no Usage step ever
-            # arrived, which is the only case where it is the fuller of the two.
+            # Accumulated per-message usage (parent + subagents), not the parent-only
+            # `Result.usage`; falls back when no Usage step arrived.
             final_usage = live.usage(ev.usage) or ev.usage
             final_session = ev.session_id
             _sessions.record(ctx, ev.session_id)
@@ -1669,7 +1314,7 @@ async def _run_background_resolve(ctx, context_id: str, item_id: str, worktree: 
     if resolved:
         item = _dev.read_work_item(dev_root, item_id) or {}
         revet = str(item.get("phase")) == "review"
-        if revet:                               # re-enters vet before re-presenting (D4)
+        if revet:  # Re-vet before re-presenting: the merge changed the diff the owner already saw.
             reset_vet_thread(ctx, item)         # vet forgets — fresh vetter for the re-entry
             _dev.set_work_item_phase(dev_root, item_id, "vet")
             # Every phase move lands in the trail — this is the one non-gate transition.
@@ -1679,12 +1324,8 @@ async def _run_background_resolve(ctx, context_id: str, item_id: str, worktree: 
                                  meta={"from": "review", "to": "vet"})
         _end_run(ctx, context_id, item_id, final_tokens, "active", final_usage, outcome=outcome,
                  session_id=final_session)
-        # …and something must actually RUN behind that `active`. This runner used to flip the phase
-        # and stop: no vet run was ever dispatched, so the item sat at `vet` · `active` with nothing
-        # working — the P6 idle stall, and the worst shape it takes, because `active` doesn't page
-        # the owner either. The board showed "IN PROGRESS" with a frozen timer forever. (Found live,
-        # 2026-07-29, on the first real conflict.) Fired AFTER `_end_run` — the resolve run still
-        # holds the item's lock until then, and `start_vet_run` refuses while a run is in flight.
+        # Something must run behind that `active`. Fired after `_end_run`, because `start_vet_run`
+        # refuses while a run holds the lock.
         if revet:
             from .loop import start_vet_run
             started, why = start_vet_run(ctx, context_id, item_id)
@@ -1693,9 +1334,8 @@ async def _run_background_resolve(ctx, context_id: str, item_id: str, worktree: 
                 _dev.set_work_item_status(dev_root, item_id, "awaiting_human")
                 log.warning("resolve: vet re-entry did not start for %s (%s)", item_id, why)
     elif turn.fault.failed:
-        # The resolver never ran to completion — an outage, not a hard conflict. Same distinction
-        # as everywhere else (R2): "I tried and the conflict beat me" is a decision for the owner,
-        # "I never got to try" is a stop to resume. The merge is still in the tree either way.
+        # The resolver never finished: an outage, not a hard conflict. The merge is still in the
+        # tree either way.
         mark_item_error(ctx, context_id, item_id, turn.fault.reason, phase="resolve")
         _end_run(ctx, context_id, item_id, final_tokens, "error", final_usage,
                  outcome=outcome, session_id=final_session)
@@ -1714,11 +1354,11 @@ async def _run_background_resolve(ctx, context_id: str, item_id: str, worktree: 
 
 
 def build_item_timeline(context_id: str, item_id: str) -> dict:
-    """The F2 unified timeline read model: every run this item has had, oldest-first, each tagged
-    with its phase · role (feature) · model and carrying its ordered turn events (prompt · reply ·
-    calls · results). The chat panel loads this on open, then live-appends new frames from
-    `item_stream`. Chronological across phases, so triage→plan→build→vet→review reads as one
-    conversation. Read-only mirror — the durable source is the run/run_event tables."""
+    """Every run this item has had, oldest-first, each tagged with its phase, role and model and
+    carrying its ordered turn events.
+
+    Chronological across phases, so the whole item reads as one conversation. Read-only mirror of
+    the run/run_event tables."""
     runs = _spine.runs_for_item(context_id, item_id)
     out = []
     for r in runs:
@@ -1726,7 +1366,7 @@ def build_item_timeline(context_id: str, item_id: str) -> dict:
         out.append({
             "run_id": rid,
             "phase": r.get("phase"),
-            "feature": r.get("feature"),      # chat (interactive) · deputy · triage/plan/build/vet/close
+            "feature": r.get("feature"),
             "model": r.get("model"),
             "status": r.get("status"),
             "started_at": r.get("started_at"),
@@ -1736,14 +1376,9 @@ def build_item_timeline(context_id: str, item_id: str) -> dict:
 
 
 def _render_execution_md(context_id: str, item_id: str, item: dict) -> str:
-    """Snapshot a work-item's execution trace (its run call-trail + per-run telemetry) to Markdown,
-    so the item folder carries its own copy after completion (the spine rows themselves are
-    permanent — never-delete-logs). Chronological (oldest run
-    first)."""
-    # The item's whole trail, minus the turn TEXT — this snapshot is the call trail, and the
-    # prompt/reply rows belong to the conversation (the Trace tab renders them the same way).
-    # Reading `run_event` rather than the retired `run_artifact` copy also means the snapshot now
-    # includes the deputy's and the loop's runs, which the old feed dropped entirely.
+    """Snapshot a work-item's execution trace to Markdown, so the item folder keeps its own copy.
+    Chronological, oldest run first."""
+    # The call trail only — prompt and reply rows belong to the conversation.
     arts = [e for e in _spine.events_for_item(context_id, item_id)
             if e.get("kind") not in ("prompt", "reply")]
     runs = {r["id"]: r for r in _spine.run_history(context_id)}
@@ -1768,9 +1403,8 @@ def _render_execution_md(context_id: str, item_id: str, item: dict) -> str:
         out += [head, ""]
         for a in calls:
             d = f" — {a['description']}" if a.get("description") else ""
-            # A call made INSIDE a sub-agent is indented under its spawn, so the snapshot keeps
-            # the same shape the live trace shows — a flat list would read as the parent doing work
-            # three delegated readers actually did.
+            # Indent a sub-agent's calls under its spawn, so the snapshot keeps the shape the live
+            # trace shows.
             indent = "    " if a.get("parent_tool_id") else ""
             out.append(f"{indent}{a['seq']}. **{a['name']}**{d}")
         out.append("")

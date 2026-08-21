@@ -1,9 +1,7 @@
-"""Response schemas for the dev work-item routes (routers/dev/work_items.py).
+"""Response schemas for the dev work-item routes.
 
-The `WorkItem` model covers BOTH the 14-field base shape (read_work_item / create_work_item, used by
-the detail + inbox-push routes) and the 28-field enriched shape (the /dev list: base + tree-walk +
-run telemetry). All non-core fields are optional and routes use `response_model_exclude_unset=True`,
-so each route emits exactly the keys it actually returns (no spurious nulls, no dropped fields).
+`WorkItem` covers both the base shape and the enriched list shape. All non-core fields are optional
+and routes use `response_model_exclude_unset=True`, so each emits exactly the keys it returns.
 """
 
 from __future__ import annotations
@@ -16,19 +14,19 @@ from ..common import WorkKind, WorkPhase, WorkStatus, WorkOutcome, SpawnRelation
 
 
 class SpawnedFrom(BaseModel):
-    """The D3 provenance edge, child-side: which item this one branched off and how. `blocking`/
-    `parallel` = real children (gate the parent's completion; blocking also pauses it);
-    `spawn` = provenance-only follow-up. Exactly one origin edge per item; parent views derived."""
+    """The provenance edge, child-side: which item this one branched off and how.
+
+    `blocking` and `parallel` are real children that gate the parent's completion; `spawn` is
+    provenance only. Exactly one origin edge per item."""
     item: str
     relation: SpawnRelation
     note: str | None = None
 
 
 class ArtifactRef(BaseModel):
-    """A work-item design artifact, NORMALIZED on read (R5): legacy bare-string entries
-    ("artifacts/plan.md") and structured {type, path} entries both coerce to this one shape at the
-    daemon boundary (`DevKnowledgeService`), so the wire contract is a single object union, never a
-    string-or-object mix."""
+    """A work-item design artifact, NORMALIZED on read: legacy bare-string and structured entries both
+    coerce to this shape at the daemon boundary, so the wire contract is never a string-or-object
+    mix."""
     type: str
     path: str
 
@@ -48,33 +46,25 @@ class WorkItemTasks(BaseModel):
 
 
 class WorkItem(BaseModel):
-    """A dev work-item. Base fields are always present; tree-walk + telemetry fields appear only on
-    the enriched /dev list (extra='allow' tolerates any future frontmatter key)."""
+    """A dev work-item. Base fields are always present; tree-walk and telemetry fields appear only on the
+    enriched list."""
     model_config = ConfigDict(extra="allow")
 
     # --- base (read_work_item / create_work_item) ---
     id: str
     root_id: str | None = None
     parent_id: str | None = None
-    # Two-tier anchor-scaffold pointer, set on a ROOT work-item: `wave` = the roadmap wave this item
-    # is an instance of (resolves its deliverable), or `deliverable` directly when no wave applies.
-    # Self-describing / derived by scan, like root_id/parent_id. Written in S2; declared here as the
-    # contract so the wire shape is stable.
+    # Anchor pointer on a ROOT item: the roadmap wave it instantiates, or a deliverable directly
+    # when no wave applies.
     wave: str | None = None
     deliverable: str | None = None
     title: str | None = None
-    # Workspace-workflow S1 contract fields: `kind` picks the machinery (KIND_PROFILES; null on
-    # pre-workflow items reads as implementation), `spawned_from` is the branch-off provenance
-    # edge, `outcome` stamps HOW the item ended (with status=done), `superseded_by` backs the
-    # superseded outcome, `inbox_id` is the originating inbox row (D5 trace).
+    # `kind` picks the machinery, `spawned_from` is the branch-off edge, `outcome` stamps how the
+    # item ended.
     kind: WorkKind | None = None
-    # Which research FAMILY, on a `research` item (audit | refactoring | housekeeping | security |
-    # deep-diagnosis | study). It has always ridden extra='allow'; declared here because the surface
-    # now labels it, and a field a surface renders should be one the contract names.
+    # Which research family, on a `research` item. Declared here because the surface labels it.
     research_kind: str | None = None
-    # What the FILER said this item was, frozen at birth (§4.1). Provenance beside `inbox_id`, not
-    # a second routing field: nothing reads it after triage, and the surface shows it only where it
-    # differs from `kind` — i.e. where somebody was overruled.
+    # What the FILER said this item was, frozen at birth. Shown only where it differs from `kind`.
     proposed_kind: WorkKind | None = None
     spawned_from: SpawnedFrom | None = None
     superseded_by: str | None = None
@@ -82,38 +72,31 @@ class WorkItem(BaseModel):
     inbox_id: int | None = None
     phase: WorkPhase | None = None
     status: WorkStatus | None = None
-    # Why the work stopped, in one owner-facing line. Present ONLY while `status == "error"` —
-    # cleared the moment the item leaves that status, so it can never describe a stop that was
-    # already resolved (recovery-resilience R2).
+    # Present ONLY while `status == "error"`, cleared as the item leaves it, so it cannot describe
+    # a resolved stop.
     error_reason: str | None = None
-    # Peer sequencing (autopilot slice 1): ids this item may not start before. Present when set;
-    # an item with an open upstream rests at status `awaiting_upstream` until the scheduler releases.
+    # Ids this item may not start before; an item with an open upstream rests until the scheduler
+    # releases it.
     after: list[str] | None = None
-    # Autopilot (slice 2): the per-item policy — does the workflow drive its gates without a click.
+    # Autopilot: the per-item policy — does the workflow drive its gates without a click.
     autopilot: bool | None = None
     model: str | None = None
     effort: str | None = None  # configured reasoning effort (low|medium|high) its runs use
-    # work-item frontmatter dates parse to datetime.date (YAML); a date|str union keeps them faithful
-    # (date → isoformat "YYYY-MM-DD" on serialize, exactly as the raw jsonable_encoder path did).
+    # Frontmatter dates parse to `date`, so the union keeps them faithful through serialization.
     done_at: date | str | None = None
-    # --- git record (workspace-workflow S4/D4) --- written at build entry (branch + worktree +
-    # base) and at the review merge (merge commit + backup ref). A terminal item KEEPS THE WHOLE
-    # record, `git_worktree` included: clearance removes the DIRECTORY but leaves the field as the
-    # record of where the work happened (`services/clearance.py` §2a). So on a closed item the path
-    # names a dir that no longer exists — that is the trace, not a stale value. The branch ref is
-    # likewise kept, never deleted.
+    # A terminal item KEEPS THE WHOLE record: clearance removes the directory but the field
+    # records where the work happened.
     git_branch: str | None = None
     git_worktree: str | None = None
     git_base: str | None = None
     git_merge_commit: str | None = None
     git_merged_at: str | None = None
     git_backup_ref: str | None = None
-    # `strict` repos only (renovation §2.2): when the deputy approved and handed the merge to the
-    # owner. Set ∧ no merge commit = the PR is open (the FE derives it the same way the BE does).
+    # Set with no merge commit means the PR is open; the FE derives it the same way the backend
+    # does.
     git_pr_opened_at: str | None = None
-    # S7 attention engine: the owner-opened read receipt — a terminal item without it sits in
-    # the `unread` bucket. Never bumps updated_at. YAML round-trips the stamp as datetime, so
-    # the union keeps it faithful (datetime → isoformat on serialize), same as done_at.
+    # The owner-opened read receipt: a terminal item without it sits in the `unread` bucket. Never
+    # bumps `updated_at`.
     seen_at: datetime | str | None = None
     artifacts: list[ArtifactRef] | None = None
     session_id: str | None = None
@@ -127,8 +110,7 @@ class WorkItem(BaseModel):
     children: list[str] | None = None
     # --- run telemetry (the /dev route) ---
     total_tokens: int | None = None
-    # Per-phase token accumulation {phase → Σ}, both bases: `phase_tokens` = 3-type (what the card
-    # shows for its current phase), `phase_tokens_4type` = full volume (3-type + cache_read) behind it.
+    # Per-phase accumulation in both bases: 3-type for the card, and full volume behind it.
     phase_tokens: dict[str, int] | None = None
     phase_tokens_4type: dict[str, int] | None = None
     last_run: WorkItemLastRun | None = None
@@ -149,9 +131,10 @@ class TaskItem(BaseModel):
 
 
 class ArtifactCall(BaseModel):
-    """One row of a work-item's run call-trail (tool / sub-agent / skill invocation, or its result).
-    `tool_id` pairs a `result` row back to its call (concurrent tools return out of order);
-    `parent_tool_id` names the sub-agent spawn the row happened inside (null = the parent itself)."""
+    """One row of a work-item's run call-trail.
+
+    `tool_id` pairs a `result` back to its call, and `parent_tool_id` names the sub-agent spawn the row
+    happened inside."""
     id: int
     run_id: int | None = None
     seq: int
@@ -173,8 +156,8 @@ class PlanResponse(BaseModel):
 
 
 class PromptExtractionLink(BaseModel):
-    """One captured "A" page for the last Prompt X-ray probe's phase runs — survives the probe's
-    teardown (run_input rows are kept trace, keyed by the dangling item_id)."""
+    """One captured input page for the last probe's phase runs. Survives the probe's teardown, keyed by
+    the dangling item id."""
     run_id: int
     phase: str | None = None
     started_at: str | None = None
@@ -192,8 +175,8 @@ class PromptExtractionStatusResponse(BaseModel):
 
 
 class ArtifactStatusRow(BaseModel):
-    """COMPUTED status of one artifact kind (S2 — derived from file existence + self-check +
-    evidence freshness at read time; never stored in any doc, so it cannot drift)."""
+    """COMPUTED status of one artifact kind — derived at read time from file existence, self-check and
+    evidence freshness, so it cannot drift."""
     required: bool
     present: bool
     status: str  # ok | incomplete | missing
@@ -216,16 +199,15 @@ class WorkItemDetailResponse(BaseModel):
     tasks: list[TaskItem] | None = None
     execution: str | None = None
     artifact_status: dict[str, ArtifactStatusRow] | None = None
-    # S7 drilldown: raw text of the remaining gate docs (validation/readiness/investigation/closeout;
-    # value None while un-emitted) + the checkpoint continuity feed.
+    # Raw text of the remaining gate docs; None while a doc has not been written.
     docs: dict[str, str | None] | None = None
     checkpoints: list[CheckpointStub] | None = None
 
 
 class RunHeader(BaseModel):
-    """What one of an item's runs WAS — so a call-trail group can name itself. `feature` is the
-    answer to "why did this run open with a shell command instead of a phase skill": `chat` (an
-    owner turn), `resolve` (the conflict resolver), a resumed `build` cycle, `deputy`, `compact`."""
+    """What one of an item's runs WAS, so a call-trail group can name itself.
+
+    `feature` answers why a run opened with a shell command instead of a phase skill."""
     id: int
     feature: str | None = None
     phase: str | None = None
@@ -242,8 +224,8 @@ class WorkItemArtifactsResponse(BaseModel):
 
 
 class TimelineEvent(BaseModel):
-    """One event in a run's trail (F2 timeline): a prompt, an assistant reply block, a tool/skill
-    call (status), or that call's result — the same rows the Activity trace shows, per run."""
+    """One event in a run's trail: a prompt, a reply block, a call, or that call's result — the same rows
+    the Activity trace shows."""
     id: int
     seq: int
     kind: str                       # prompt | reply | status/tool kinds | result
@@ -266,15 +248,15 @@ class TimelineRun(BaseModel):
 
 
 class WorkItemTimelineResponse(BaseModel):
-    """The F2 unified timeline: all of an item's runs oldest-first, each with its ordered events —
-    the read-only conversation the panel mirrors across every phase."""
+    """All of an item's runs oldest-first, each with its ordered events — the read-only conversation the
+    panel mirrors across every phase."""
     item_id: str
     runs: list[TimelineRun] = []
 
 
 class WorkItemGitRecord(BaseModel):
-    """The git record a build entry writes onto the item (S4): its branch, worktree dir, and the
-    base it branched from (the trunk, or the parent's branch for a blocking child)."""
+    """The git record a build entry writes onto the item: its branch, worktree dir, and the base it
+    branched from."""
     branch: str
     worktree: str
     base: str
@@ -290,22 +272,23 @@ class WorkItemAdvanceResponse(BaseModel):
     from_: str = Field(alias="from")
     # Present only when this advance ENTERED build for a worktree kind: the record just created.
     git: WorkItemGitRecord | None = None
-    # Present only when this advance LEFT review (the review decision IS the merge, B2): the merge
-    # result — target/path, knowledge ops applied, freshness lint. Absent on every other transition.
+    # Present only when this advance LEFT review, since the review decision IS the merge. Absent
+    # otherwise.
     merge: dict | None = None
 
 
 class WorkItemSeenResponse(BaseModel):
-    """Seen-stamp result (S7 read receipt). `changed` False = was already stamped just now."""
+    """Seen-stamp result. `changed` False means it was already stamped."""
     ok: bool
     id: str
     changed: bool
 
 
 class WorkItemDocEditResponse(BaseModel):
-    """Owner edit of `brief.md` / `plan.md`. `saved` False means the text broke the artifact's
-    contract and NOTHING was written — `issues` are the same lines the gate would refuse on, so the
-    owner fixes them here rather than discovering them at a gate."""
+    """Owner edit of `brief.md` or `plan.md`.
+
+    `saved` False means the text broke the artifact's contract and NOTHING was written; `issues` are
+    the lines the gate would refuse on."""
     ok: bool
     id: str
     path: str

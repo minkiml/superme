@@ -2,7 +2,7 @@
 
     python -m superme_agent.daemon      (from the repo root, in the my-agent env)
 
-Localhost only. Surfaces (web BFF, Slack in B2) connect to ws://HOST:PORT/ws/agent.
+Localhost only. Surfaces connect to ws://HOST:PORT/ws/agent.
 """
 
 import uvicorn

@@ -1,17 +1,7 @@
-"""The PR page's read model (renovation §4.4) — the branch, assembled for a human to review.
+"""The PR page's read model — the branch, assembled for a human to review.
 
-This is the surface `strict` exists for: the deputy has approved, the diff has not landed, and the
-owner reads it here before it does. Everything on the page is DERIVED at read time from the branch
-and the item's own artifacts — nothing is stored, so the page can never show a stale rendering of a
-branch that has since moved.
-
-**Why grouped by task.** SuperMe's build commits carry a `SuperMe-Task` trailer by construction
-(4c-bis), so the walkthrough can be organized by the plan's tasks rather than by file — each group
-traceable to the task it implements and to the cycle report that verified it. No forge can do that
-with an ordinary branch, and it is exactly what pre-squash tidying would have thrown away.
-
-The page is read-only. Its one action (Merge) is the ordinary review advance, fired from the FE —
-this module never merges, never writes, never touches the tree.
+Everything is DERIVED at read time, so the page can never show a stale rendering. Grouped by task,
+because build commits carry a task trailer.
 """
 
 from __future__ import annotations
@@ -26,9 +16,8 @@ from . import git_ops
 
 log = logging.getLogger("superme-agent")
 
-# Commits with no `SuperMe-Task` trailer (checkpoints outside a task, a conflict resolution, a
-# pre-trailer item) still have to appear — a walkthrough that hides commits is worse than one with
-# an untidy group. They collect here, last.
+# Commits with no task trailer still have to appear: a walkthrough that hides commits is worse
+# than an untidy group.
 UNLABELLED = "unlabelled"
 
 
@@ -54,24 +43,22 @@ def _load(ctx, item_id: str, dev) -> tuple[dict, Path]:
 
 
 def task_of(commit: dict) -> str:
-    """Which task a commit belongs to, from its trailer. A checkpoint commit is tagged
-    `SuperMe-Task: t3 (wip)` (build/references/commit-style.md), so only the first token is the id
-    — a checkpoint belongs to its task's group, not to a group of its own."""
+    """Which task a commit belongs to, from its trailer. Only the first token is the id, so a `(wip)`
+    checkpoint belongs to its task's group."""
     raw = (commit.get("trailers") or {}).get("SuperMe-Task") or ""
     return raw.split()[0] if raw.split() else UNLABELLED
 
 
 def _group_commits(commits: list[dict], tasks: list[dict]) -> list[dict]:
-    """Commits → task groups, in PLAN order (not commit order): the owner reads the branch against
-    the plan they approved, so a task built out of order still reads where they expect it. Tasks
-    with no commits are dropped — the walkthrough shows what happened, and an unbuilt task is the
-    cycle reports' story, not the diff's."""
+    """Commits to task groups, in PLAN order rather than commit order: the owner reads the branch against
+    the plan they approved.
+
+    Tasks with no commits are dropped — an unbuilt task is the cycle reports' story, not the diff's."""
     titles = {t["id"]: t for t in tasks}
     buckets: dict[str, list[dict]] = {}
     for c in commits:
         buckets.setdefault(task_of(c), []).append(c)
-    # Plan order first, then any task id the plan doesn't know (a renumbered plan, a hand commit),
-    # then the unlabelled bucket last.
+    # Plan order first, then task ids the plan does not know, then the unlabelled bucket.
     order = [t["id"] for t in tasks if t["id"] in buckets]
     order += [k for k in buckets if k not in order and k != UNLABELLED]
     if UNLABELLED in buckets:
@@ -92,8 +79,8 @@ def _group_commits(commits: list[dict], tasks: list[dict]) -> list[dict]:
             "done": (task or {}).get("done"),
             "commits": [{"sha": c["sha"], "short": c["short"], "subject": c["subject"],
                          "body": _body_without_trailers(c)} for c in group_commits],
-            # Churn-ranked — the biggest change in the group is where the risk is, and it is the
-            # one a reader who stops after two files should have seen.
+            # Churn-ranked: the biggest change is where the risk is, and what a reader who stops
+            # after two files should see.
             "files": sorted(churn.values(), key=lambda f: -(f["plus"] + f["minus"])),
         })
     return groups
@@ -115,9 +102,8 @@ def _body_without_trailers(commit: dict) -> str:
 
 
 def _base_of(item: dict, ctx, spine) -> str:
-    """Where this branch forked. The RECORDED base, because that is the truth of where the work
-    began — a blocking child forked from its parent's branch, and the repo's anchor may have been
-    re-pointed since. Falls back to the anchor for records written before `git_base` existed."""
+    """Where this branch forked — the RECORDED base, because a blocking child forked from its parent's
+    branch and the anchor may have been re-pointed since."""
     return str(item.get("git_base") or "") or (git_ops.repo_anchor(ctx, spine) or "")
 
 
@@ -131,9 +117,8 @@ def pr_view(ctx, context_id: str, item_id: str, *, dev, spine) -> dict:
     commits = git_layer.branch_commits(ctx.cwd, branch, base)
     tasks = artifacts.parse_tasks(_read(item_dir / "artifacts" / "plan.md"))
     stat = git_layer.branch_stat(ctx.cwd, branch, base)
-    # The review notes, joined onto their own task's group. Derived at read time like everything
-    # else here: the requirement from the plan's checks, the pointer and the deviation from the
-    # cycle that built it, the verdicts from the ledger.
+    # Derived at read time, like everything here: requirement from the plan, deviation from the
+    # cycle, verdicts from the ledger.
     guide = artifacts.pr_task_guide(item_dir)
     groups = [{**g, **{k: v for k, v in (guide.get(g["task"]) or {}).items() if k != "cycle"}}
               for g in _group_commits(commits, tasks)]
@@ -149,9 +134,8 @@ def pr_view(ctx, context_id: str, item_id: str, *, dev, spine) -> dict:
         "pr_open": git_ops.pr_open(item),
         "merged": bool(item.get("git_merge_commit")),
         "merge_commit": item.get("git_merge_commit"),
-        # Finished ≠ merged. An item can end terminal with its branch never landed — abandoned,
-        # superseded — and the page has to say which, because `merged: False` alone reads as
-        # "not merged YET" and puts a live Merge in front of a decision already taken.
+        # Finished is not merged: `merged: False` alone would put a live Merge before a decision
+        # already taken.
         "terminal": bool(item.get("done_at")) or str(item.get("status")) == "done",
         "outcome": item.get("outcome"),
         "report": _read(item_dir / "reports" / "report-review.md") or None,
@@ -163,11 +147,10 @@ def pr_view(ctx, context_id: str, item_id: str, *, dev, spine) -> dict:
 
 def pr_file_diff(ctx, context_id: str, item_id: str, *, path: str, task: str | None,
                  dev, spine) -> dict:
-    """One file's patches inside one task group — fetched when the reader opens the row, because
-    a branch's full diff is the one thing a review page must not make them wait for.
+    """One file's patches inside one task group, fetched when the reader opens the row.
 
-    The commit shas are resolved HERE from the branch rather than accepted from the caller: the
-    page asks for 'this file, under this task', and the server decides which commits that is."""
+    The commit shas are resolved HERE from the branch: the page asks for this file under this task, and
+    the server decides which commits that is."""
     item, _dir = _load(ctx, item_id, dev)
     branch = str(item["git_branch"])
     commits = git_layer.branch_commits(ctx.cwd, branch, _base_of(item, ctx, spine))

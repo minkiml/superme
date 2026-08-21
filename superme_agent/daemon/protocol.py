@@ -1,11 +1,7 @@
-"""WebSocket frame protocol for the agent socket — the single (de)serialization seam (R6).
+"""WebSocket frame protocol for the agent socket — the single serialization seam.
 
-Every outbound frame is built through a typed model in `schemas/ws.py` and dumped to a plain dict
-here, so the wire shape has ONE source of truth (the models), which is also what the FE generates its
-WS types from. The router calls these constructors instead of hand-writing dicts.
-
-  client → daemon : turn · approval_response          (parsed via `parse_inbound`)
-  daemon → client : init · text_delta · status · usage · approval_request · result · error
+Every outbound frame is built through a typed model in `schemas/ws.py`, so the wire shape has ONE
+source of truth.
 """
 
 from ..core.events import Init, TextDelta, Status, Usage, Result, TurnEvent

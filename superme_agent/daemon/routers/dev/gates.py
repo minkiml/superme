@@ -1,11 +1,7 @@
-"""Drilldown + lifecycle routes (renovation v2 §4): the work-item surface's server-computed payload,
-its per-phase report reads, and the human-only abandon path.
+"""The work-item drilldown's payload, its per-phase report reads, and the human-only abandon path.
 
-This layer only GATHERS inputs (item, events, git health) — the payload is assembled in
-`services/drilldown` over `core/gate_briefs.gate_state`, so the drilldown and the deputy's prompt
-read one computation of a gate's checks. Abandon is D8's human-only terminal path: ordered,
-idempotent effects; zero general-knowledge writes (write-at-merge means a pre-merge abandon never
-wrote anything); blocking children surfaced for the owner's disposal.
+This layer only GATHERS inputs; the payload is assembled in `services/drilldown`, so the drilldown
+and the deputy read one computation of a gate's checks.
 """
 
 import logging
@@ -75,9 +71,10 @@ class OwnerInputBody(BaseModel):
 @router.get("/dev/work-items/{item_id}/from-you", response_model=OwnerInputResponse)
 async def dev_work_item_owner_input(item_id: str, context_id: str = "global",
                                     dev: DevKnowledgeService = Depends(get_dev)) -> dict:
-    """`reports/report-triage.md` § From you — what the owner has written into the one section of
-    the item that is theirs. Never 404s on a missing brief: `exists: false` is the editor's cue to
-    say triage hasn't written one yet, which is a different thing from a broken read."""
+    """What the owner has written into the one section of the item that is theirs.
+
+    Never 404s on a missing brief: `exists: false` tells the editor triage has not written one yet,
+    which is not a broken read."""
     _ctx, dev_root, _item = _load(context_id, item_id, dev)
     return artifacts.owner_input(dev_root / "work-items" / item_id)
 
@@ -85,11 +82,10 @@ async def dev_work_item_owner_input(item_id: str, context_id: str = "global",
 @router.put("/dev/work-items/{item_id}/from-you", response_model=OwnerInputResponse)
 async def dev_work_item_set_owner_input(item_id: str, body: OwnerInputBody,
                                         dev: DevKnowledgeService = Depends(get_dev)) -> dict:
-    """Save the owner's own section, replacing it whole and leaving the rest of the brief untouched.
+    """Save the owner's own section, replacing it whole and leaving the rest untouched.
 
-    HUMAN-ONLY, like abandon: there is no agent tool behind it, because the value of the section is
-    precisely that an agent did not write it. Returns what is now on disk — the editor shows what
-    the plan phase will read, not what was typed."""
+    HUMAN-ONLY: there is no agent tool behind it, because the value of the section is that an agent did
+    not write it."""
     _ctx, dev_root, _item = _load(body.context_id, item_id, dev)
     try:
         return artifacts.write_owner_input(
@@ -105,24 +101,17 @@ async def dev_work_item_drilldown(item_id: str, context_id: str = "global",
                                   dev: DevKnowledgeService = Depends(get_dev),
                                   dev_store: DevStore = Depends(get_dev_store),
                                   spine: SystemSpine = Depends(get_spine)) -> dict:
-    """Everything the drilldown renders, computed once (§4): the live strip · the
-    WHAT-YOU-NEED-TO-DO card · at-a-glance · the gate's named check rows with `blocking` · every
-    control's activation + reason · the Proof rows · which phases have a report.
+    """Everything the drilldown renders, computed once.
 
-    Server-computed activation is the point. The gate brief carried `approve_blocked_by` and no
-    component ever read it, so the greying rule lived in TypeScript beside the rule the backend
-    enforces."""
+    Server-computed activation is the point: a greying rule that lives in the component sits beside the
+    rule the backend actually enforces."""
     ctx, dev_root, item = _load(context_id, item_id, dev)
-    # The board's live-run telemetry (running · tokens · ctx) — the Now strip reads `running`, and
-    # without the enrich a working agent renders as idle.
+    # Without the enrich a working agent renders as idle: the Now strip reads `running`.
     live_by_item = {r["item_id"]: r for r in spine.live_runs(context_id) if r.get("item_id")}
     dev.enrich_work_items(dev_root, [item], live_by_item, spine.run_stats(context_id, mode="dev"))
     events = dev_store.list_events(context_id, item_id=item_id, limit=100)
-    # The landing rule is a REPO fact, read unconditionally and passed on its own. It used to be
-    # decorated onto `git_health`, which made it disappear whenever there was no branch yet or the
-    # health read raised — and `mode != "strict"` then told the owner of a STRICT repo that their
-    # repo was `fast`. What "Approve" does at review depends on this, so it must not ride a
-    # nullable carrier that answers a different question (dogfood D1, then this).
+    # The landing rule is a REPO fact, read unconditionally: it must not ride a nullable carrier
+    # that answers another question.
     review_mode = git_ops.repo_review_mode(ctx, spine)
     git_health = None
     if item.get("git_branch") or item.get("git_worktree"):
@@ -133,16 +122,13 @@ async def dev_work_item_drilldown(item_id: str, context_id: str = "global",
         except (git_layer.GitError, git_layer.GitBusy):
             git_health = None
     all_items = dev.read_all(dev_root)["work_items"]
-    # WHO raised this — the inbox row's own `origin`, read here because the drilldown service takes
-    # no store. A row the agent filed via `create_inbox_item` carries `agent`; an owner capture
-    # carries `user`. Absent row (deleted, or an item that never came from the inbox) reads owner.
+    # Who raised this, from the inbox row's own `origin`. An absent row reads as owner.
     inbox_origin = ""
     if item.get("inbox_id"):
         row = dev_store.get_inbox(int(item["inbox_id"])) or {}
         inbox_origin = "agent" if "agent" in (row.get("origin") or []) else "user"
-    # Every check the item folder cannot answer — fan-out, the family method, the briefs, surviving
-    # probes, the recorded standards — read in ONE place that the deputy shares, so the two sides of
-    # a gate can never be shown different rows (see `gate_counters`).
+    # Read in ONE place the deputy shares, so the two sides of a gate can never be shown different
+    # rows.
     return drilldown.build_payload(item, dev_root / "work-items" / item_id, dev_root, ctx.cwd,
                                    all_items=all_items, events=events, git_health=git_health,
                                    review_mode=review_mode, inbox_origin=inbox_origin,
@@ -153,7 +139,7 @@ async def dev_work_item_drilldown(item_id: str, context_id: str = "global",
 class AbandonBody(BaseModel):
     context_id: str = "global"
     reason: str = ""
-    superseded_by: str | None = None  # set → outcome `superseded` (D3: no dangling supersedes)
+    superseded_by: str | None = None  # set → outcome `superseded` (no dangling supersedes)
 
 
 @router.post("/dev/work-items/{item_id}/abandon", response_model=AbandonResponse)
@@ -162,36 +148,32 @@ async def dev_work_item_abandon(item_id: str, body: AbandonBody,
                                 dev_store: DevStore = Depends(get_dev_store),
                                 sessions: SessionStore = Depends(get_sessions),
                                 spine: SystemSpine = Depends(get_spine)) -> dict:
-    """Abandon a work-item — HUMAN-ONLY (no agent-tool counterpart), legal from any non-terminal
-    phase (D8). Ordered, each step idempotent: end live runs/sessions · remove the worktree
-    (branch kept — near-free trace) · abandon note into reports/report-close.md · terminal status change
-    (`abandoned`, or `superseded` when `superseded_by` names the replacement) · resume a paused
-    parent whose last open blocking child this was. Dev-knowledge untouched — write-at-merge
-    means a pre-merge abandon wrote nothing, ever. The response is the abandon brief: blocking
-    children listed for YOUR disposal (they existed only for this parent); parallel children
-    continue untouched."""
+    """Abandon a work-item — HUMAN-ONLY, legal from any non-terminal phase.
+
+    Ordered and each step idempotent: end live runs, remove the worktree, write the abandon note, set
+    the terminal status, resume a paused parent."""
     ctx, dev_root, item = _load(body.context_id, item_id, dev)
     if item.get("done_at") or str(item.get("status")) == "done":
         raise HTTPException(status_code=409, detail="item is already terminal")
-    # A live run's asyncio task can't be killed from here — releasing its row while it keeps
-    # executing would leave a straggler writing into a terminal item. Wait it out first.
+    # A live run's task cannot be killed from here, and releasing its row would leave a straggler
+    # writing.
     if spine.is_item_running(body.context_id, item_id):
         raise HTTPException(status_code=409,
                             detail="a run is in progress for this item — wait for it to finish")
     outcome = "superseded" if body.superseded_by else "abandoned"
-    # D3 "no dangling supersedes" — enforced, not just claimed: the pointer must name a real item.
+    # No dangling supersedes, enforced, not just claimed: the pointer must name a real item.
     if body.superseded_by and not dev.read_work_item(dev_root, str(body.superseded_by)):
         raise HTTPException(status_code=400,
                             detail=f"superseded_by names no existing work-item: {body.superseded_by}")
     all_items = dev.read_all(dev_root)["work_items"]
 
-    # 1. end live work: free run rows (history kept), retire the session (transcript reclaimed,
-    #    trace preserved + labeled). No capture sweep — an abandon writes nothing anywhere.
+    # End live work: free run rows, retire the session. No capture sweep — an abandon writes
+    # nothing.
     from ...services.runs import stop_item_work
     runs_freed, _ = stop_item_work(body.context_id, item_id)
     for sid in dev.work_item_session_ids(item):   # ALL role threads (intake/build/vet + legacy)
         sessions.delete(ctx, sid, cause="retired")
-    # 2. worktree dir removed, branch KEPT (D4 terminal cleanup). Never blocks the abandon.
+    # 2. worktree dir removed, branch KEPT. Never blocks the abandon.
     worktree_removed = None
     if item.get("git_worktree"):
         try:
@@ -199,10 +181,8 @@ async def dev_work_item_abandon(item_id: str, body: AbandonBody,
         except (git_layer.GitError, git_layer.GitBusy) as e:
             worktree_removed = False
             log.warning("abandon: worktree cleanup failed for %s: %s", item_id, e)
-    # 3. abandon note into reports/report-close.md — why, in the owner's words. An abandon IS how
-    #    this item closed, and every user-facing doc is `report-<phase>.md` (renovation §3.3), so
-    #    the ending is recorded in the close report. No agent runs here, so CODE writes the whole
-    #    file: the facts are the item record's, not a claim anyone has to author.
+    # An abandon IS how this item closed, so it is recorded in the close report. Code writes the
+    # whole file.
     item_dir = dev_root / "work-items" / item_id
     report = item_dir / "reports" / "report-close.md"
     note = (f"\n## Abandon note\n{outcome}"
@@ -221,11 +201,8 @@ async def dev_work_item_abandon(item_id: str, body: AbandonBody,
                                    superseded_by=body.superseded_by)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    # 4b. THE OWNER'S OWN ENDING IS ITS OWN READ RECEIPT. `unread` (S7) exists to push a closeout
-    #     the owner has not seen; abandon is human-only, so the notice would be addressed to its
-    #     author. Without this the strip filled with items the owner had just dropped and could
-    #     only clear by re-opening each one (owner, 2026-08-09). A COMPLETED close still pages —
-    #     that one is genuinely news, and an autopilot item can land overnight unwatched.
+    # The owner's own ending is its own read receipt; a completed close still pages, because that
+    # is genuinely news.
     dev.set_work_item_seen(dev_root, item_id)
     # 5. a paused parent whose last open BLOCKING child this was resumes (typed-awaiting router).
     for it in all_items:
@@ -239,8 +216,8 @@ async def dev_work_item_abandon(item_id: str, body: AbandonBody,
                             f"{rel.capitalize()} child {item_id} abandoned — parent resumed",
                             item_id=resume_id, actor="daemon",
                             meta={"child": item_id, "relation": rel})
-    # 5b. peers parked on this item (`after:`) — an abandon/supersede is NOT a release. They page
-    #     the owner instead: the thing they were queued behind is never landing.
+    # An abandon is NOT a release: peers page the owner instead, since what they queued behind is
+    # never landing.
     for it in all_items:
         if it.get("id") == item_id:
             it["outcome"] = outcome
@@ -249,7 +226,7 @@ async def dev_work_item_abandon(item_id: str, body: AbandonBody,
     # Abandoning a build⟷vet item frees an autopilot slot — pump the queue.
     from ...services import gates as gate_svc
     gate_svc.pump_autopilot_slots(body.context_id)
-    # 6. the children triage list (D8: a triage moment, nothing automatic).
+    # 6. the children triage list — a triage moment, nothing automatic.
     blocking, parallel = [], []
     for it in all_items:
         sf = it.get("spawned_from")

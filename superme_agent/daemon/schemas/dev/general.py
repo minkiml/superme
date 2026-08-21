@@ -1,9 +1,8 @@
-"""Response schemas for the general/ anchor-doc routes (routers/dev/general.py) + the roadmap board.
+"""Response schemas for the `general/` anchor-doc routes and the roadmap board.
 
-The anchor docs (project-prd · spec · roadmap · architecture · resources) are plain markdown with NO
-frontmatter; the roadmap board is the deliverable → wave → work-item-instance join, assembled from the
-readable deliverable/wave lists + each item's own `wave:`/`deliverable:` pointer (see
-`core.dev_knowledge.roadmap_board`)."""
+The anchor docs are plain markdown with no frontmatter; the board is the deliverable to wave to
+work-item join, assembled from each item's own pointer.
+"""
 
 from __future__ import annotations
 
@@ -22,10 +21,10 @@ class GeneralDocsResponse(BaseModel):
 
 
 class ProjectStatusResponse(BaseModel):
-    """Whether this project's memory is established (PRD defines ≥1 deliverable). The dev workspace
-    gates on it: an un-established repo shows the onboarding front door instead of the work tabs.
-    `onboard_mode` is the connect-time choice (project-init | retrofit) the front door launches
-    directly; null ⇒ the repo predates connect-flow, so the landing offers both paths to pick."""
+    """Whether this project's memory is established.
+
+    The dev workspace gates on it: an un-established repo shows the onboarding front door instead of the
+    work tabs. A null `onboard_mode` means the landing offers both paths."""
     established: bool
     onboard_mode: str | None = None
     docs: list[GeneralDoc]
@@ -46,7 +45,7 @@ class GeneralDocSaveResponse(BaseModel):
     name: str
 
 
-# --- the verification library (verification-model §8) ---------------------------
+# --- the verification library ---------------------------
 
 class LibraryEntry(BaseModel):
     """One proven check the repo keeps. `standing` entries are attached to every implementation
@@ -134,10 +133,8 @@ class RoadmapBoardResponse(BaseModel):
     orphans: list[Orphan]
 
 
-# --- the portrait (what the project IS) -----------------------------------------
-# Six bands, each fed by exactly ONE anchor doc, so the view can never become a place knowledge
-# secretly lives. Everything the dashboard already answers — decisions, work in motion, lint,
-# status — is deliberately absent: this is the portrait, not the console.
+# --- the portrait --- Six bands, each fed by exactly ONE anchor doc, never a place knowledge
+# hides.
 
 class PortraitIdentity(BaseModel):
     """project-prd — what it is, who for, and the load-bearing field: why it exists."""

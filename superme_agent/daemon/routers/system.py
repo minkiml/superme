@@ -1,7 +1,7 @@
-"""System spine routes (the Monitor/System dashboard read surface, PRD §4.11.3).
+"""System spine routes — the Monitor dashboard's read surface.
 
-Read-only views over the System / Repo / Session / Run spine (what the system IS / is DOING / HAS
-DONE) plus the model-config writes (system default + per-repo override) and the learning master switch.
+Read-only views over the System, Repo, Session and Run spine, plus the model-config writes and the
+learning master switch.
 """
 
 import logging
@@ -29,15 +29,15 @@ from ...core.models import CANONICAL_MODELS, is_valid_model, model_family, norma
 router = APIRouter()
 log = logging.getLogger("superme-agent")
 
-# Model hierarchy, most-specific first: per-turn pick → per-repo override → system default → host
-# default. A null/empty model clears that level.
+# Model hierarchy, most-specific first: turn → repo → system → host. A null model clears that
+# level.
 _EFFORT_LEVELS = ("low", "medium", "high")
 
 
 class RepoModelBody(BaseModel):
     model: str | None = None  # null/"" clears this repo's override (fall back to the default)
-    # Which ROLE's tier this sets. Omitted = the project's own. `vet` is the reviewer of what build
-    # produced and resolves on its own chain, so setting it here does not touch the project's.
+    # Which role's tier this sets; omitted means the project's own. `vet` resolves on its own
+    # chain.
     role: str = "default"
 
 
@@ -51,13 +51,11 @@ class LearningBody(BaseModel):
 
 
 class DeputyConfigBody(BaseModel):
-    # Either/both may be sent (partial update). enabled = deputy on/off; strictness = a PARTIAL
-    # per-gate map {gate: level} — send only the gates that changed (e.g. {"review": "high"}).
+    # Partial update: `strictness` is a per-gate map, so send only the gates that changed.
     enabled: bool | None = None
     strictness: dict[str, str] | None = None  # {triage|plan|review: low·medium·high·extra}
-    # The deputy's own tier — one judge across every project, so one answer, set here rather than
-    # per repo. Send "" to clear back to the floor. It is never the project's tier: a judge that
-    # rises with what it judges is not a second opinion.
+    # One judge across every project, so one answer, set here rather than per repo. Never the
+    # project's tier.
     model: str | None = None
     effort: str | None = None
 
@@ -75,10 +73,10 @@ class RepoMetaBody(BaseModel):
 
 
 def _norm_model(m: str | None) -> str | None:
-    """Validate a model (tier alias OR concrete id) and store it as its TIER ALIAS (`sonnet`) — the
-    canonical on-disk/DB form everywhere; the concrete latest is resolved only at consumption (so a
-    saved pick auto-tracks a MODEL_TIERS bump instead of pinning to an old concrete id). '' / 'reset'
-    / 'default' → None (clear). Raises on an unrecognized value. (models.py is the catalog.)"""
+    """Validate a model — tier alias or concrete id — and store it as its TIER ALIAS.
+
+    The concrete latest is resolved at consumption, so a saved pick tracks a tier bump instead of
+    pinning an old id."""
     if not m or m.strip().lower() in ("reset", "default", "inherit"):
         return None
     if not is_valid_model(m):
@@ -97,9 +95,8 @@ def _norm_effort(e: str | None) -> str | None:
 
 
 def _active_item_count(repo_id: str) -> int:
-    """Live work-items = every non-terminal item (status active or any awaiting_*; D2 runnable
-    axis). Read from the work-item STORE (the item's own status is the source of truth, not run
-    rows). 0 when the repo has no dev-knowledge."""
+    """Live work-items: every non-terminal item, read from the work-item store rather than run rows.
+    0 when the repo has no dev-knowledge."""
     try:
         data = _dev.read_all(dev_root(repo_id))
     except Exception:
@@ -134,9 +131,10 @@ def _slug(s: str) -> str:
 
 @router.post("/repos", response_model=RepoConnectResponse)
 async def connect_repo(body: RepoConnectBody, spine: SystemSpine = Depends(get_spine)) -> dict:
-    """Connect a domain: register a new repo into the spine and seed its knowledge home. `kind`
-    (new|existing) is stored on the repo and selects its onboarding front door (project-init |
-    retrofit). New dirs are created (must be empty); existing dirs must already be a directory."""
+    """Connect a domain: register a new repo into the spine and seed its knowledge home.
+
+    `kind` selects its onboarding front door. New dirs are created and must be empty; existing dirs
+    must already be a directory."""
     kind = (body.kind or "").strip()
     if kind not in ("new", "existing"):
         raise HTTPException(status_code=422, detail="kind must be 'new' or 'existing'")
@@ -161,9 +159,8 @@ async def connect_repo(body: RepoConnectBody, spine: SystemSpine = Depends(get_s
         spine.add_repo(rc)
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e)) from e
-    # Seed the deputy mandate boilerplate in the harness cell so a freshly connected repo already has
-    # a standing bar to judge against + something to edit in the Deputy subtab (wiped on disconnect,
-    # since disconnect rmtree's the whole local-harness/<id>/ cell). Best-effort — never fail connect.
+    # Seed the mandate boilerplate so a fresh repo has a standing bar to judge against. Never fail
+    # connect.
     try:
         from ...core import deputy as deputy_core
         deputy_core.read_mandate(deputy_core.deputy_root(rid))  # seed=True writes the template
@@ -176,13 +173,11 @@ async def connect_repo(body: RepoConnectBody, spine: SystemSpine = Depends(get_s
 @router.delete("/repos/{repo_id}", response_model=RepoDisconnectResponse)
 async def disconnect_repo(repo_id: str, confirm: str = "",
                           spine: SystemSpine = Depends(get_spine)) -> dict:
-    """Disconnect a domain — forget the project from SuperMe entirely. IRREVERSIBLE: deletes the
-    registration (repos.yaml entry + kv overrides), the knowledge home, the per-repo harness cell,
-    the pipeline state (inbox + learning rows) and every session (row + transcript). The project
-    FOLDER itself is never touched; reconnecting later is simply a fresh connect (retrofit).
-    Preserved per never-delete-logs: run/run_event/run_artifact + dev-activity events — each
-    deleted session's runs are stamped session_fate='disconnected'. Guards: `?confirm=<repo id>`
-    must match (the UI's typed confirmation), the hub is refused, and live runs block with 409."""
+    """Disconnect a domain — forget the project from SuperMe entirely. IRREVERSIBLE.
+
+    Deletes the registration, knowledge home, harness cell, pipeline state and every session. The
+    project FOLDER is never touched. Run rows and dev events are preserved and stamped
+    `session_fate='disconnected'`."""
     import shutil
 
     rc = spine.repo(repo_id)
@@ -201,8 +196,7 @@ async def disconnect_repo(repo_id: str, confirm: str = "",
     from ...gateway import contexts
     from ..app_state import sessions as session_store, dev_store
 
-    # 1 · sessions — hard-delete each (row + transcript) through the one deletion path; the
-    # context must be resolved BEFORE the registration is removed (transcript lookup needs cwd).
+    # Resolve the context BEFORE removing the registration: the transcript lookup needs the cwd.
     ctx = contexts.resolve(repo_id, mode="dev")
     rows = spine.sessions_for_repo(repo_id)
     for s in rows:
@@ -211,8 +205,8 @@ async def disconnect_repo(repo_id: str, confirm: str = "",
     # 2 · pipeline state (inbox + learning candidates/proposals); dev events preserved.
     pipeline_rows = dev_store.purge_context(repo_id)
 
-    # 3 · the on-disk homes SuperMe owns. The project folder (rc.cwd) is deliberately untouched —
-    # only best-effort `git worktree prune` tidies its .git metadata after the worktrees go.
+    # The project folder is deliberately untouched; only `git worktree prune` tidies its .git
+    # metadata.
     wt = worktrees_root(repo_id)
     worktrees_removed = wt.is_dir()
     shutil.rmtree(wt, ignore_errors=True)
@@ -241,23 +235,20 @@ async def disconnect_repo(repo_id: str, confirm: str = "",
 
 @router.get("/repos", response_model=list[RepoOverview])
 async def repos_overview(spine: SystemSpine = Depends(get_spine)) -> list[dict]:
-    """Every repo × scope: static meta + computed live status (active/idle, last activity,
-    current item) + session/run counts + the per-scope knowledge & operational home pointers."""
+    """Every repo and scope: static meta, computed live status, session and run counts, and the per-scope
+    knowledge and operational home pointers."""
     out = []
     for rc in spine.repos().values():
         scopes = {}
-        # Active work-item agents come from the item STORE by status (dev scope only — core has no
-        # work-items). `agents` = live items + live learning runs; `running` ⊆ agents = items
-        # executing a turn now + running learning runs. Bounded + self-clearing.
+        # `agents` is live items plus live learning runs; `running` is the subset executing a turn
+        # now.
         dev_active_items = _active_item_count(rc.id)
         for scope in MODES:
             st = spine.repo_status(rc.id, scope)
             lar = spine.live_agent_runs(rc.id, scope)
             active_items = dev_active_items if scope == "dev" else 0
-            # A background learning run (forge/distill/sweep) IS a live Claude session while it runs, so
-            # count it in `sessions` too — but it's disposable (sessionless, transcript discarded on
-            # finish), so it leaves NO row to clean: the moment it finishes it drops out of
-            # learn_running and the count self-corrects. So sessions never goes stale.
+            # A learning run is a live session while it runs, but disposable: it leaves no row to
+            # clean.
             scopes[scope] = {
                 "knowledge_home": str(rc.knowledge_home(scope)),
                 "operational_home": str(rc.operational_home(scope)),
@@ -273,8 +264,8 @@ async def repos_overview(spine: SystemSpine = Depends(get_spine)) -> list[dict]:
             "id": rc.id, "label": rc.label, "cwd": str(rc.cwd), "layer": rc.layer,
             "model_override": spine.get_model_override(rc.id),
             "effort_override": spine.get_effort_override(rc.id),
-            # The vet role's own tier. Unset means the floor, NOT the two lines above — vet is the
-            # check on the work and does not inherit the tier of the thing it checks.
+            # Unset means the floor, not the lines above: vet does not inherit the tier of the
+            # thing it checks.
             "vet_model": spine.get_model_override(rc.id, "vet"),
             "vet_effort": spine.get_effort_override(rc.id, "vet"),
             "learning_enabled": spine.get_repo_learning(rc.id),
@@ -289,10 +280,10 @@ async def repos_overview(spine: SystemSpine = Depends(get_spine)) -> list[dict]:
 
 @router.get("/system/attention", response_model=list[RepoAttention])
 async def system_attention() -> list[dict]:
-    """The top-of-SuperMe attention feed (Pass 2 · Q2): every `awaiting_human` hold across ALL
-    connected repos, grouped by repo and classified (escalation · paged · review · gate)
-    so the notification center can badge a count and offer the right quick actions. Only repos with
-    a hold appear; empty feed = nothing needs the owner."""
+    """The top-of-SuperMe attention feed: every `awaiting_human` hold across all connected repos, grouped
+    by repo and classified.
+
+    Only repos with a hold appear; an empty feed means nothing needs the owner."""
     from ..services import attention
     return attention.system_attention()
 
@@ -300,8 +291,8 @@ async def system_attention() -> list[dict]:
 @router.get("/runs", response_model=RunsResponse)
 async def runs_overview(context_id: str | None = None, limit: int = 50,
                         spine: SystemSpine = Depends(get_spine)) -> dict:
-    """The run log: live (in-flight) + recent history. Scope to one repo with ?context_id=,
-    or omit for the system-wide log. `running` is the live count for a quick gauge."""
+    """The run log: live plus recent history. Scope to one repo with `context_id`, or omit for the
+    system-wide log."""
     if context_id:
         live = spine.live_runs(context_id)
         history = spine.run_history(context_id, limit=limit)
@@ -313,38 +304,37 @@ async def runs_overview(context_id: str | None = None, limit: int = 50,
 
 @router.get("/runs/{run_id}/trace", response_model=RunTraceResponse)
 async def run_trace(run_id: int, spine: SystemSpine = Depends(get_spine)) -> dict:
-    """One run's event trail — the prompt that opened it, the assistant's reply text, and each
-    tool/skill/agent call, in order. Per-RUN (not per-session), so each Activity row has its own
-    thread; works for background runs too. Empty list when nothing was recorded."""
+    """One run's event trail — the opening prompt, the assistant's reply, and each call, in order.
+
+    Per-RUN rather than per-session, so each Activity row has its own thread."""
     return {"run_id": run_id, "events": spine.events_for_run(run_id)}
 
 
 @router.get("/tokens", response_model=TokenUsageResponse)
 async def token_usage(spine: SystemSpine = Depends(get_spine)) -> dict:
-    """System-wide token usage: global total + two reconciling breakdowns (semantic `by_category`
-    tree + systematic `by_type`) + per-scope/per-feature splits, and the same per repo. Feeds the
-    observability strip + the orbit's per-repo signal. All SuperMe-context spend."""
+    """System-wide token usage: the global total, two reconciling breakdowns, and per-scope and
+    per-feature splits, the same per repo."""
     return spine.token_usage()
 
 
 @router.get("/tokens/timeseries", response_model=TokenTimeseriesResponse)
 async def token_timeseries(tz_offset: int = 0, spine: SystemSpine = Depends(get_spine)) -> dict:
     """Per-day token usage for the trend graph. `tz_offset` is minutes to ADD to UTC to reach the
-    caller's local time (the FE sends `-getTimezoneOffset()`), so days bucket on the owner's day."""
+    caller's local time, so days bucket on the owner's day."""
     return spine.token_timeseries(tz_offset)
 
 
 @router.get("/system/agent-models", response_model=AgentModelsResponse)
 async def get_agent_models(spine: SystemSpine = Depends(get_spine)) -> dict:
-    """The tunable background agents (sweep/distill/write) with their preset, override, and effective
-    model — the autonomous learning runners that pick up a model from config, not a per-turn choice."""
+    """The tunable background agents with their preset, override and effective model — the autonomous
+    runners that take a model from config rather than a per-turn choice."""
     return {"agents": spine.agent_model_config()}
 
 
 @router.post("/system/agent-models/{feature}", response_model=AgentModelsResponse)
 async def set_agent_model(feature: str, body: AgentModelBody, spine: SystemSpine = Depends(get_spine)) -> dict:
-    """Set a background sub-agent's model TIER and/or reasoning effort — written into its own `.md`
-    frontmatter (the source of truth). Send either field; both are applied when present."""
+    """Set a background sub-agent's model tier and/or reasoning effort, written into its own `.md`
+    frontmatter. Send either field; both apply when present."""
     if feature not in AGENT_MODEL_FEATURES:
         raise HTTPException(status_code=404,
                             detail=f"unknown agent '{feature}' (use {'/'.join(AGENT_MODEL_FEATURES)})")
@@ -357,8 +347,8 @@ async def set_agent_model(feature: str, body: AgentModelBody, spine: SystemSpine
 
 @router.post("/system/learning", response_model=LearningResponse)
 async def set_system_learning(body: LearningBody, spine: SystemSpine = Depends(get_spine)) -> dict:
-    """Flip the learning master switch (idle / phase / completion sweeps). Off by default — background
-    learning spends tokens unattended. Capture is fully automatic, so this governs all of it."""
+    """Flip the learning master switch. Off by default, because background learning spends tokens
+    unattended."""
     spine.set_learning_enabled(body.enabled)
     log.info("auto-learning %s", "ENABLED" if body.enabled else "disabled")
     return {"ok": True, "learning_enabled": spine.get_learning_enabled()}
@@ -366,10 +356,11 @@ async def set_system_learning(body: LearningBody, spine: SystemSpine = Depends(g
 
 @router.post("/system/deputy", response_model=DeputyConfigResponse)
 async def set_system_deputy(body: DeputyConfigBody, spine: SystemSpine = Depends(get_spine)) -> dict:
-    """The global deputy dial (Quick config): whether a deputy judges autopilot gates and how
-    readily it escalates PER GATE (triage/plan/review, each low·medium·high·extra). Partial —
-    omitted fields stay put; strictness sets only the gates it names. Rejects an unknown gate or
-    level (422) rather than silently defaulting."""
+    """The global deputy dial: whether a deputy judges autopilot gates, and how readily it escalates PER
+    GATE.
+
+    Partial — omitted fields stay put. Rejects an unknown gate or level rather than silently
+    defaulting."""
     if body.enabled is not None:
         spine.set_deputy_enabled(body.enabled)
     if body.strictness is not None:
@@ -393,9 +384,8 @@ async def set_system_deputy(body: DeputyConfigBody, spine: SystemSpine = Depends
 
 @router.post("/system/sweep", response_model=SweepConfigResponse)
 async def set_system_sweep(body: SweepConfigBody, spine: SystemSpine = Depends(get_spine)) -> dict:
-    """Tune the capture-sweep triggers: idle threshold, heartbeat cadence, and the min-new-user-message
-    gate. Any omitted field is left unchanged. Takes effect without a daemon restart (the heartbeat
-    reads the cadence each iteration)."""
+    """Tune the capture-sweep triggers. Any omitted field is left unchanged, and a change takes effect
+    without a restart."""
     cfg = spine.set_sweep_config(
         idle_seconds=body.idle_seconds, poll_seconds=body.poll_seconds, min_user_msgs=body.min_user_msgs,
     )
@@ -406,9 +396,8 @@ async def set_system_sweep(body: SweepConfigBody, spine: SystemSpine = Depends(g
 
 @router.get("/system/compaction", response_model=CompactionConfigResponse)
 async def get_system_compaction(spine: SystemSpine = Depends(get_spine)) -> dict:
-    """The compaction runtime knobs (S8/D11): trigger fill %, per-kind overrides, and the
-    effectiveness threshold, plus the static incompressible floor the trigger may never sit
-    at/below (what makes the knob safe to expose)."""
+    """The compaction runtime knobs, plus the static incompressible floor the trigger may never sit at
+    or below — what makes the knob safe to expose."""
     from ..services.compaction import FLOOR_MIN_PCT, TRIGGER_MIN_PCT
     return {"ok": True, **spine.get_compaction_config(),
             "floor_pct": FLOOR_MIN_PCT, "min_pct": TRIGGER_MIN_PCT}
@@ -417,8 +406,9 @@ async def get_system_compaction(spine: SystemSpine = Depends(get_spine)) -> dict
 @router.post("/system/compaction", response_model=CompactionConfigResponse)
 async def set_system_compaction(body: CompactionConfigBody,
                                 spine: SystemSpine = Depends(get_spine)) -> dict:
-    """Tune the compaction runtime. Any omitted field is left unchanged. FLOOR-AWARE: a trigger
-    the incompressible floor alone would exceed is refused (409) — never stored, never fired."""
+    """Tune the compaction runtime. Any omitted field is left unchanged.
+
+    FLOOR-AWARE: a trigger the incompressible floor alone would exceed is refused, never stored."""
     from ..services.compaction import FLOOR_MIN_PCT, TRIGGER_MIN_PCT, validate_trigger
     for pct in [body.trigger_pct, *(body.by_kind or {}).values()]:
         if pct is None:
@@ -464,8 +454,7 @@ async def set_repo_effort(repo_id: str, body: RepoEffortBody, spine: SystemSpine
 
 @router.post("/repos/{repo_id}/learning", response_model=RepoLearningResponse)
 async def set_repo_learning(repo_id: str, body: LearningBody, spine: SystemSpine = Depends(get_spine)) -> dict:
-    """Opt one repo in/out of automatic capture. The global master switch still gates everything;
-    this lets a single repo sit out even when the master is on."""
+    """Opt one repo in or out of automatic capture. The global master switch still gates everything."""
     if repo_id not in spine.repos():
         raise HTTPException(status_code=404, detail=f"unknown repo '{repo_id}'")
     spine.set_repo_learning(repo_id, body.enabled)
@@ -479,8 +468,8 @@ class AutopilotConcurrencyBody(BaseModel):
 @router.post("/repos/{repo_id}/autopilot", response_model=RepoAutopilotResponse)
 async def set_repo_autopilot(repo_id: str, body: AutopilotConcurrencyBody,
                              spine: SystemSpine = Depends(get_spine)) -> dict:
-    """Set this repo's autopilot concurrency cap — the max autopilot items in the build⟷vet loop at
-    once (the slice-3 launch breaker). Per-project by owner decision; floored at 1."""
+    """Set this repo's autopilot concurrency cap — the most autopilot items in the build⟷vet loop at
+    once. Floored at 1."""
     if repo_id not in spine.repos():
         raise HTTPException(status_code=404, detail=f"unknown repo '{repo_id}'")
     n = spine.set_autopilot_concurrency(repo_id, body.concurrency)
@@ -494,9 +483,10 @@ class RepoGitBody(BaseModel):
 
 
 def _anchor_state(rc) -> dict:
-    """What this repo's anchor resolves to right now, or why it doesn't. Read at request time —
-    a branch can be deleted between two settings loads, and the owner should see that here rather
-    than at a merge."""
+    """What this repo's anchor resolves to right now, or why it does not.
+
+    Read at request time, because a branch can be deleted between two settings loads and the owner
+    should see that here rather than at a merge."""
     try:
         if not git_layer.is_git_repo(rc.cwd):
             return {"resolved_anchor": None, "anchor_error": None}
@@ -509,11 +499,10 @@ def _anchor_state(rc) -> dict:
 @router.post("/repos/{repo_id}/git", response_model=RepoGitResponse)
 async def set_repo_git(repo_id: str, body: RepoGitBody,
                        spine: SystemSpine = Depends(get_spine)) -> dict:
-    """Set this repo's review mode (`fast` | `strict`) and/or anchor branch — the two knobs that
-    govern how work lands (workflow-renovation-v2 §2.2). Both are read LIVE at every decision point,
-    so a change applies immediately, including to items already sitting at review. An anchor naming
-    a branch that doesn't exist is accepted and reported back as an `error`: the setting is the
-    owner's declaration, and every git site refuses rather than silently retargeting the default."""
+    """Set this repo's review mode and/or anchor branch.
+
+    Both are read LIVE at every decision point. An anchor naming a branch that does not exist is
+    accepted and reported back as an `error`."""
     patch = {k: v for k, v in body.model_dump().items() if v is not None}
     try:
         rc = spine.update_repo(repo_id, **patch) if patch else spine.repo(repo_id)
@@ -527,12 +516,10 @@ async def set_repo_git(repo_id: str, body: RepoGitBody,
 
 @router.get("/repos/{repo_id}/branches", response_model=RepoBranchesResponse)
 async def get_repo_branches(repo_id: str, spine: SystemSpine = Depends(get_spine)) -> dict:
-    """This repo's local branches — the anchor picker's option set. Read live off git rather than
-    stored: a branch can appear or vanish between two page loads, and the anchor REFUSES on a branch
-    that doesn't exist, so a stale list would offer a setting that fails at the next merge.
+    """This repo's local branches — the anchor picker's option set.
 
-    A non-git repo answers with an empty list and no error — nothing to pick from is a fact about
-    the repo, not a failure of the request."""
+    Read live off git: the anchor REFUSES on a branch that does not exist, so a stale list would offer
+    a setting that fails at the next merge."""
     rc = spine.repo(repo_id)
     if rc is None:
         raise HTTPException(status_code=404, detail=f"unknown repo '{repo_id}'")

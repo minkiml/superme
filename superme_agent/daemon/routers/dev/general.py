@@ -1,7 +1,7 @@
-"""general/ anchor-doc routes: the doc set (project-prd · spec · roadmap · architecture · resources)
-with read/save, and the roadmap board — deliverable → wave → its live work-item instances, joined by
-each item's own `wave:`/`deliverable:` pointer. The parse/join lives in core.dev_knowledge; these are
-the thin HTTP layer."""
+"""`general/` anchor-doc routes: the doc set with read and save, plus the roadmap board.
+
+The parse and join live in `core.dev_knowledge`; these are the thin HTTP layer.
+"""
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -62,7 +62,7 @@ def dev_general_doc_save(name: str, body: GeneralDocSaveBody,
 
 @router.get("/dev/verification", response_model=VerificationLibraryResponse)
 def dev_verification_library(context_id: str = "global") -> dict:
-    """This repo's verification library (verification-model §8): the standing entries every
+    """This repo's verification library: the standing entries every
     implementation plan inherits, and the available ones a plan cites by id. A repo with no library
     reads as two empty lists — the correct starting state, never an error."""
     return _vl.read_library(_dev_root(context_id))
@@ -72,12 +72,7 @@ def dev_verification_library(context_id: str = "global") -> dict:
 def dev_decisions(context_id: str = "global") -> dict:
     """This repo's decision ledger — every call the owner has ruled on, newest FIRST.
 
-    The file is append-only and reads chronologically (oldest first, per its own contract); a reader
-    scanning for what was decided lately wants the opposite, so the order is flipped here and only
-    here. Nothing is derived: the entries are the file's own headings and bodies.
-
-    A repo with no ledger reads as an empty list — the correct starting state for a project where
-    nobody has had to rule on anything yet, never an error."""
+    The file is append-only and reads oldest-first, so the order is flipped here and only here."""
     from ....core import decision_ledger as _dl
     return {"decisions": list(reversed(_dl.read_entries(_dev_root(context_id))))}
 

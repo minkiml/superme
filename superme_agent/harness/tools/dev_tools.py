@@ -1,16 +1,9 @@
 """In-process tools giving the DEV agent scoped, on-demand access to dev-knowledge.
 
-Following the benchmarked read-path rule (PRD §4.9): file-backed knowledge is read with the
-agent's native Read/Grep; DB-backed, structured-query knowledge gets a typed tool. The event
-LOG lives in SQLite and the key query is date-filtered ("what was done yesterday?"), so it's
-exposed here as a tool — the agent calls it instead of us dumping the whole log into context.
+File-backed knowledge is read with the agent's native Read/Grep; DB-backed, structured-query
+knowledge gets a typed tool here.
 
-Each tool is a `ToolSpec` (see `registry.py`): a lean one-line description (the WHEN/HOW lives in
-the owning skill/agent — descriptions sit in every dev turn's context, so they stay one-liners),
-a typed TypedDict schema whose `Annotated` fields carry the per-param docs, and a handler factory
-bound to the per-context deps. `make_dev_mcp_server` renders the registry into an SDK MCP server.
-
-Dev-only: wired into dev-mode turns; absent in core mode (folder-as-scope, same as skills).
+Each tool is a `ToolSpec` whose `Annotated` schema fields carry per-param docs.
 """
 
 import asyncio
@@ -23,13 +16,8 @@ from typing import Annotated, Literal, NotRequired, Required, TypedDict
 from .registry import ToolSpec, build_mcp_server
 
 
-# --------------------------------------------------------------------------- structured id grammar
-# Every read_* tool emits NAMESPACE-QUALIFIED ids — `proposal:99`, `candidate:172`, `event:559`,
-# `run:228`, `inbox:12`, `item:<slug>` — so a record's ORIGIN table is never ambiguous. A bare `#99`
-# is indistinguishable across the proposal / candidate / event / run id spaces (they overlap and are
-# renumbered independently), which is exactly what let a recap conflate a dev-log reference with a
-# live table row. Each tool also leads with a `#`-prefixed header naming its record shape, so the
-# output is self-describing and the agent parses it the same way every time. (read-tool-output)
+# Namespace-qualified ids, because a bare `#99` is ambiguous across the proposal, candidate, event
+# and run id spaces.
 
 def _qid(ns: str, ident) -> str:
     """A namespace-qualified id: `proposal:99`, `event:559`, `run:228`, `candidate:172`, `inbox:12`."""
@@ -37,9 +25,8 @@ def _qid(ns: str, ident) -> str:
 
 
 def _artifact_name(path: str | None) -> str | None:
-    """The specific artifact a learning event produced, from its staged_path — names WHICH skill /
-    constitution / agent, not just the form. `…/skills/add-daemon-endpoint/SKILL.md` → 'add-daemon-
-    endpoint'; `…/constitution/commit-subject-line.md` → 'commit-subject-line'."""
+    """The specific artifact a learning event produced, from its staged_path — which skill,
+    constitution or agent, not just the form."""
     if not path:
         return None
     stem = os.path.basename(path).rsplit(".", 1)[0]
@@ -50,10 +37,8 @@ def _artifact_name(path: str | None) -> str | None:
 
 
 def _event_refs(meta: dict | None) -> str:
-    """The qualified cross-table refs an event carries in its meta, as a compact ` · refs=…` clause:
-    proposal_id → proposal:N, candidate_ids → candidate:a+b, staged_path → artifact="<name>". Empty
-    when the event references nothing structured. These refs are what make a dev-log line say
-    `proposal:99 (skill "add-daemon-endpoint")` instead of an unqualified, unnamed `#99 skill`."""
+    """The qualified cross-table refs an event carries in its meta, as a compact ` · refs=…` clause.
+    Empty when the event references nothing structured."""
     if not isinstance(meta, dict):
         return ""
     parts: list[str] = []
@@ -71,10 +56,10 @@ def _event_refs(meta: dict | None) -> str:
 # --------------------------------------------------------------------------- rendering helpers
 
 def _day_range(day: str) -> tuple[str, str] | None:
-    """Resolve a relative/calendar day to a [start, end) UTC range, using the OWNER'S LOCAL
-    timezone (localhost single-owner → the machine's tz). Events are stored UTC but "today" is
-    a local-calendar notion — without this, a UTC+12 owner asking "today" misses events that
-    are still "yesterday" in UTC. Accepts 'today' | 'yesterday' | 'YYYY-MM-DD'."""
+    """Resolve a relative or calendar day to a [start, end) UTC range in the OWNER'S local timezone.
+
+    Events are stored UTC but "today" is a local-calendar notion, so a UTC+12 owner would otherwise
+    miss events still dated yesterday."""
     local_tz = datetime.now().astimezone().tzinfo
     d = day.strip().lower()
     if d == "today":
@@ -96,10 +81,10 @@ def _day_range(day: str) -> tuple[str, str] | None:
 
 
 def _fmt(events: list[dict]) -> str:
-    """Render dev-log events as qualified, scannable records (newest first). Each line:
-    `event:<id> · <ts> · <kind> · <actor>@<scope> · [refs=…] · <summary>`. The `refs=` ids point at
-    OTHER tables and are a HISTORICAL record — the referenced row may since have been cleaned, so a
-    ref here does NOT prove a live row; use read_proposals / read_candidates for what's currently live."""
+    """Render dev-log events as qualified, scannable records, newest first.
+
+    The `refs=` ids are a HISTORICAL record: the referenced row may since have been cleaned, so a
+    ref here does not prove a live row."""
     if not events:
         return "(no matching activity)"
     lines = [
@@ -117,9 +102,8 @@ def _fmt(events: list[dict]) -> str:
 
 
 def _fmt_candidates(rows: list[dict]) -> str:
-    """Render operational-learning candidates for distill to judge — one block per row, all the
-    fields it needs to classify and draft (id, hints, origin pointers, statement, rationale,
-    evidence)."""
+    """Render operational-learning candidates for distill to judge — one block per row, with every
+    field it needs to classify and draft."""
     if not rows:
         return "(no candidates in this state)"
     out = ["# read_candidates · LIVE learning-candidate rows · head: candidate:<id> · <ts> · src=… [· form_hint · scope · item:…]"]
@@ -142,9 +126,8 @@ def _fmt_candidates(rows: list[dict]) -> str:
 
 
 def _fmt_proposals(rows: list[dict]) -> str:
-    """Render the OPEN proposals for distill to consolidate against — enough for it to spot a
-    standing proposal that already covers a learning (id, status, form/scope, cluster, title,
-    summary, the candidates it already draws on) so it can merge into it rather than duplicate."""
+    """Render the OPEN proposals for distill to consolidate against, so it can spot a standing
+    proposal that already covers a learning and merge rather than duplicate."""
     if not rows:
         return "(no open proposals — nothing to consolidate against)"
     out = ["# read_proposals · LIVE open-proposal rows · head: proposal:<id> · <status> · <form>/<scope> [· cluster]"]
@@ -178,8 +161,8 @@ def _fmt_run_list(rows: list[dict]) -> str:
 
 
 def _fmt_run_trace(run: dict, events: list[dict]) -> str:
-    """One run's full trace: its summary header + the ordered prompt · reply · tool/skill/agent
-    call trail — the diagnosis substrate ('what did this run actually do / why did it fail')."""
+    """One run's full trace: its summary header plus the ordered prompt, reply and call trail — the
+    diagnosis substrate."""
     head = [
         f"{_qid('run', run['id'])} · {run.get('feature')} · {run.get('mode')} · {run.get('status')}",
         f"  model={run.get('model') or '—'} · tokens={run.get('tokens') or 0}"
@@ -200,17 +183,15 @@ def _fmt_run_trace(run: dict, events: list[dict]) -> str:
         if len(desc) > 300:
             desc = desc[:300] + "…"
         label = e.get("name") or e.get("kind")
-        # A row from inside a sub-agent is indented under its spawn. Flat, a fan-out reads as one
-        # agent thrashing — and a diagnosis of "why did this run fail" turns on exactly that
-        # distinction (whose tool call was denied: the parent's, or a delegated reader's).
+        # Indent a sub-agent's rows under its spawn: flat, a fan-out reads as one agent thrashing.
         indent = "    " if e.get("parent_tool_id") else "  "
         trail.append(f"{indent}{e.get('seq')}. [{e.get('kind')}] {label}" + (f" — {desc}" if desc else ""))
     return "\n".join(head + trail)
 
 
 def _ids(raw) -> list[int]:
-    """Parse a candidate-id list from a comma/space-separated string or a list (MCP args arrive
-    as either). Non-numeric tokens are skipped; order-independent, de-duplicated."""
+    """Parse a candidate-id list from a comma/space-separated string or a list (MCP args arrive as
+    either). Non-numeric tokens are skipped."""
     if raw in (None, ""):
         return []
     items = raw if isinstance(raw, (list, tuple)) else re.split(r"[,\s]+", str(raw))
@@ -239,16 +220,12 @@ def _ok(text: str) -> dict:
     return {"content": [{"type": "text", "text": text}]}
 
 
-# read_dev_log reading depths — recent (default) · mid · max. Far-back rows rarely inform a question
-# and cost context, so a no-arg read stays at 'recent'; the agent widens deliberately.
+# Far-back rows rarely inform a question and cost context, so a no-arg read stays shallow.
 _LOG_LEVELS = {"recent": 100, "mid": 300, "max": 500}
 
 
-# --------------------------------------------------------------------------- typed schemas
-# Per-param docs live here (on the schema), NOT in the description. Keep them terse — they answer
-# "what is this arg", never "when should I call this tool" (that's the owning skill/agent's job).
-# Closed value sets are `Literal[...]` (the registry renders them as JSON-Schema enums, so the
-# model sees the allowed values as TYPE, not prose); prose in the doc string is for meaning only.
+# Per-param docs live on the schema and answer "what is this arg", never "when should I call this
+# tool".
 class DevLogArgs(TypedDict, total=False):
     day: Annotated[str, "'today' | 'yesterday' | 'YYYY-MM-DD' (owner's local tz)"]
     since: Annotated[str, "ISO timestamp — start of a custom range"]
@@ -261,8 +238,8 @@ class DevLogArgs(TypedDict, total=False):
 
 
 class FileCandidateArgs(TypedDict, total=False):
-    # The capture sweep saw the moment and later phases (distill, the owner) did not, so make the
-    # candidate self-sufficient: state it richly here. This row is written straight to the pool.
+    # The capture sweep saw the moment and later phases did not, so the candidate must be self-
+    # sufficient.
     statement: Required[Annotated[str, "what to do — the durable operational learning, stated so it stands alone (1–3 sentences)"]]
     rationale: Annotated[str, "why it matters / what triggered it / the problem it solves"]
     evidence: Annotated[str, "the concrete instance(s) from the slice + a pointer (item id / path / quote)"]
@@ -273,9 +250,8 @@ class FileCandidateArgs(TypedDict, total=False):
 
 
 class StageArtifactArgs(TypedDict, total=False):
-    # The write subagent authors the FINAL artifact and stages it here. Which proposal it belongs to
-    # (and where it will publish) is bound server-side from the write run — the agent supplies only
-    # the finished content.
+    # Which proposal this belongs to is bound server-side from the write run; the agent supplies
+    # only content.
     content: Required[Annotated[str, ("the complete final artifact, frontmatter-first: for constitution "
                                       "a `description` (+ optional body); for skill the full SKILL.md; for "
                                       "agent the full agent.md — clean, concise, on-point")]]
@@ -346,8 +322,7 @@ def _dev_log(*, store, context_id, **_):
                 return _err(f"Couldn't parse day='{day}' — use 'today', 'yesterday', or 'YYYY-MM-DD'.")
             since, until = rng
         try:
-            # Three discrete reading depths (far-back rows are rarely meaningful + cost context):
-            # recent (default) → 100 · mid → 300 · max → 500. `limit` is an exact override (1–500).
+            # Three reading depths — `limit` is an exact override.
             lvl = (_s(args, "level") or "recent").lower()
             depth = int(args.get("limit") or _LOG_LEVELS.get(lvl, 100))
             events = store.list_events(
@@ -362,9 +337,8 @@ def _dev_log(*, store, context_id, **_):
 
 
 def _read_run(*, context_id, spine=None, **_):
-    """Read one run's full trace (or list recent runs) — the diagnosis/inspection read over the
-    spine's run + run_event tables. `spine` is injected by the daemon (which owns it); learning runs
-    build the dev server without it, but they never carry read_run in their allowlist."""
+    """Read one run's full trace, or list recent runs — the diagnosis read over the spine's run and
+    run_event tables. `spine` is injected by the daemon, which owns it."""
     async def read_run(args: dict) -> dict:
         if spine is None:
             return _err("Run inspection isn't available in this session.")
@@ -391,10 +365,10 @@ def _read_run(*, context_id, spine=None, **_):
 
 
 def _file_candidate(*, store, context_id, origin_session_id=None, capture_source="agent", **_):
-    """The capture sweep's pen. The `capture` sub-agent calls this once per learning it finds in the
-    swept conversation slice; it writes a rich candidate row straight to the pool. Provenance
-    (which session, agent vs owner-asked) is bound server-side from the sweep that launched it — the
-    agent only supplies the substance. Grounding/consolidation/dedup is `distill`'s job downstream."""
+    """The capture sweep's pen, called once per learning found in the swept slice.
+
+    Provenance is bound server-side from the sweep; the agent supplies only substance. Grounding
+    and dedup are distill's job downstream."""
     async def file_candidate(args: dict) -> dict:
         statement = _s(args, "statement")
         if not statement:
@@ -403,8 +377,8 @@ def _file_candidate(*, store, context_id, origin_session_id=None, capture_source
             row = store.add_memory_candidate(
                 context_id, statement,
                 source=capture_source,
-                # No form_hint — capture never classifies the form; that's distill's call (it needs
-                # the consolidated, cross-candidate view). Capture supplies substance + scope only.
+                # Capture never classifies the form; that needs distill's consolidated, cross-
+                # candidate view.
                 rationale=_s(args, "rationale"),
                 scope_hint=_s(args, "scope_hint") or "repo_dev",
                 origin_item_id=_s(args, "origin_item_id"),
@@ -418,18 +392,17 @@ def _file_candidate(*, store, context_id, origin_session_id=None, capture_source
 
 
 def _stage_artifact(*, store, proposal_id=None, staged_path=None, **_):
-    """The write phase's pen. The `write` sub-agent calls this once with the complete final artifact
-    it authored; the proposal it belongs to and the path it will publish to are bound server-side
-    from the write run (the agent only supplies content). Staging moves the proposal to `drafted`
-    (gate 2) — disk stays untouched until publish."""
+    """The write phase's pen, called once with the complete final artifact.
+
+    The proposal and publish path are bound server-side. Staging moves the proposal to `drafted`;
+    disk stays untouched until publish."""
     async def stage_artifact(args: dict) -> dict:
         if proposal_id is None:
             return _err("stage_artifact is only available inside a write run.")
         content = _s(args, "content")
         if not content:
             return _err("Nothing to stage — pass `content` (the complete final artifact).")
-        # The behavioural eval report is evidence for gate 2 — accept it as a JSON string and
-        # tolerate a malformed/absent one (eval is advisory, never blocks staging).
+        # Tolerate a malformed or absent report: the eval is advisory and never blocks staging.
         report = None
         raw = _s(args, "eval_report")
         if raw:
@@ -527,9 +500,8 @@ def _propose_memory(*, store, context_id, **_):
 
 
 def _review_proposals(*, store, context_id, **_):
-    """Distill's cross-run consolidation lens: the OPEN proposals already standing in this context.
-    Distill reads this alongside the candidate pool so a learning captured again in a later session
-    can MERGE into the proposal that already covers it, instead of minting a parallel one."""
+    """Distill's cross-run consolidation lens: the OPEN proposals already standing in this context, so
+    a learning captured twice can merge instead of minting a parallel proposal."""
     async def review_proposals(args: dict) -> dict:
         try:
             rows = store.list_memory_proposals(context_id)
@@ -584,10 +556,8 @@ def _merge_into_proposal(*, store, context_id, **_):
     return merge_into_proposal
 
 
-# --------------------------------------------------------------------------- inbox (read-only)
-# The inbox is DB-backed (not files), so it gets a tool rather than native Read (spec §5). Scoped
-# to THIS host's context_id server-side, so it can only ever see its own queue. Read-only for now;
-# mutation (agent-authored items, behind a human gate) is the deferred write-variant.
+# The inbox is DB-backed, so it gets a tool rather than native Read, scoped server-side to this
+# context.
 
 class InboxArgs(TypedDict, total=False):
     status: Annotated[str, "filter by status (e.g. 'open'); omit for all"]
@@ -630,12 +600,8 @@ def _list_inbox(*, store, context_id, **_):
     return list_inbox
 
 
-# --------------------------------------------------------------------------- inbox (create — sanctioned)
-# The one WRITE a general (non-work-item) session may make (work-item-session-recognition-prd): the
-# sanctioned front door for turning a discussion into a proper ticket. Caller-agnostic — the skill
-# that drives it synthesizes the content; this tool just performs the controlled inbox write (it can
-# touch nothing else, so it can't be abused to smuggle implementation past the general-session
-# guardrail). Origin is stamped `agent`; the owner triages/pushes it into a work-item downstream.
+# The one write a general session may make. It can touch nothing else, so it cannot smuggle
+# implementation.
 
 class CreateInboxItemArgs(TypedDict, total=False):
     title: Required[Annotated[str, ("the ticket's headline — a few words naming it, under 60 "
@@ -666,9 +632,8 @@ class CreateInboxItemArgs(TypedDict, total=False):
 
 
 def _wk_note(work_kind: str) -> str:
-    """Say the filed kind back in the tool's own return. §4.1's rule for agent-driven filing is
-    that the choice is ANNOUNCED, not merely stored — an owner reading the session has to be able
-    to argue with it before the item lands, and an unsaid choice is one nobody can argue with."""
+    """Say the filed kind back in the tool's own return. The choice is ANNOUNCED, not merely stored —
+    an unsaid choice is one nobody can argue with."""
     return (f" Filed as a {work_kind} item (triage confirms it)." if work_kind else
             " No work kind filed — triage decides it alone.")
 
@@ -677,17 +642,10 @@ _BRIEF_FIELDS = ("background", "discussion", "direction", "constraints")
 
 
 def _brief_nudge(args: dict, *, spawned: bool, repairable: bool) -> str:
-    """Name the brief slots this call left empty. The four fields ARE the cold-start context — the
-    session filing has them and the triage session that reads them has nothing else — so an empty
-    one is context thrown away at the only moment it was free.
+    """Name the brief slots this call left empty — the four fields ARE the cold-start context, thrown
+    away at the only moment they were free.
 
-    A BRANCH-OFF is held to EACH field, not merely to "not all four empty": it is filed from a
-    parent that already holds the answer, so a blank slot there is a carry that did not happen. A
-    plain capture may genuinely have only a background, so it is flagged only when wholly empty.
-
-    `repairable` is false once the row has auto-pushed: the brief has moved into the item's
-    `preliminary/`, which is immutable provenance, so there is nothing left to append to and the
-    only honest instruction is to say so where the owner will read it."""
+    A branch-off is held to EACH field, since its parent holds the answers."""
     missing = [f for f in _BRIEF_FIELDS if not _s(args, f)]
     if not missing or (not spawned and len(missing) < len(_BRIEF_FIELDS)):
         return ""
@@ -727,10 +685,8 @@ def _create_inbox_item(*, store, context_id, dev_root=None, fire_triage=None, **
             parent_item = dev.read_work_item(Path(dev_root), parent) if dev_root else None
             if not parent_item:
                 return _err(f"Parent work-item {parent!r} not found — a branch-off must name a real item.")
-            # blocking/parallel AUTO-PUSH and branch off git: blocking from the parent's own branch,
-            # parallel alongside it. A kind with no worktree (research) has no branch to hand over
-            # and nothing running to wait on it — and auto-pushing from one would start work the
-            # owner never chose. `spawn` is the decoupled relation those items use.
+            # A kind with no worktree has no branch to hand over, and auto-pushing would start
+            # work the owner never chose.
             if relation in ("blocking", "parallel"):
                 from ...core.kind_profiles import get_profile
                 if not get_profile(parent_item.get("kind")).worktree:
@@ -739,15 +695,8 @@ def _create_inbox_item(*, store, context_id, dev_root=None, fire_triage=None, **
                         f"{relation!r} branch-off (those auto-push and branch off git). Use "
                         "`relation: \"spawn\"` — it waits in the inbox for the owner's push.")
             spawned_from = {"item": parent, "relation": relation}
-        # WHAT AN INBOX ITEM IS, checked rather than assumed: a thing that BECOMES A WORK ITEM when
-        # the owner pushes it. `work_kind` is the whole test — naming which machinery it becomes is
-        # the same act as saying it is work at all. Filed live once without it: a research review
-        # ruled "keep the file", and the ruling was filed as an implementation ticket whose own body
-        # read "no file change needed; this records the decision" — a branch waiting to be cut for a
-        # no-op. A decision already made is not work; it belongs in the record that holds it.
-        #
-        # LAST, after the shape checks: a malformed branch-off is the more basic mistake and the
-        # caller should hear about that first. Nothing reaches the store without passing this one.
+        # An inbox item BECOMES a work item, and `work_kind` is the whole test. Checked after the
+        # shape checks.
         if (wk := _s(args, "work_kind")) not in ("implementation", "research"):
             return _err(
                 "`work_kind` is required and must be `implementation` or `research`. An inbox item "
@@ -756,16 +705,14 @@ def _create_inbox_item(*, store, context_id, dev_root=None, fire_triage=None, **
                 "want remembered, or anything with nothing to build belongs in the record that "
                 "holds it — not on the owner's board.")
         try:
-            # `item`, always. `note` is the OWNER's free note — their own thought, never pushed —
-            # so an agent has no way to mint one, which is what makes the distinction trustworthy.
+            # `note` is the owner's own thought, never pushed, so an agent has no way to mint one.
             row = store.add_inbox(
                 context_id, body, kind="item",
                 title=title, origin=["agent"], spawned_from=spawned_from, work_kind=wk,
             )
         except Exception as e:
             return _err(f"Could not create the inbox item: {e}")
-        # Handoff brief (D5): scaffolded + prose slots filled from the args while context is hot.
-        # High-level only — the work-item's own phases do the deep work.
+        # Scaffolded, with prose slots filled from the args while context is hot. High-level only.
         brief = None
         if dev_root:
             brief = _arts.write_handoff_brief(
@@ -773,18 +720,16 @@ def _create_inbox_item(*, store, context_id, dev_root=None, fire_triage=None, **
                 background=_s(args, "background"), discussion=_s(args, "discussion"),
                 direction=_s(args, "direction"), constraints=_s(args, "constraints"),
             )
-        # Auto-push (D3): blocking/parallel children route through the inbox for the uniform
-        # trace but push immediately — only `spawn` waits for the owner.
+        # Blocking and parallel children route through the inbox for the trace but push
+        # immediately.
         if spawned_from and relation in ("blocking", "parallel") and dev_root:
             try:
                 wi = _flow.push_inbox_item(store, dev, Path(dev_root), row,
                                            context_id=context_id, actor="agent")
             except Exception as e:
                 return _err(f"Inbox item #{row['id']} created but auto-push failed: {e}")
-            # First kick — the same one the owner's push gets. Without it the child lands at
-            # triage/active with no run behind it and never moves (a BLOCKING child wedges its
-            # parent there too). Injected by the daemon; absent in a bare/test server, where the
-            # child simply waits for a hand-driven triage.
+            # Without the first kick the child lands at triage with no run behind it and never
+            # moves.
             triaged = False
             if fire_triage:
                 try:
@@ -793,8 +738,7 @@ def _create_inbox_item(*, store, context_id, dev_root=None, fire_triage=None, **
                     triaged = False
             paused = " Parent paused (awaiting_child) until it closes." if relation == "blocking" else ""
             kick = " Triage is running on it." if triaged else " It rests at triage for a triage pass."
-            # The auto-push branch used to return before the brief check ran, so the children that
-            # cold-start IMMEDIATELY were the only ones never told their brief was empty.
+            # Children that cold-start immediately need the brief warning too.
             return _ok(f"Branch-off filed and AUTO-PUSHED: inbox #{row['id']} → work-item "
                        f"{wi['id']} ({relation} child of {parent}; brief moved to its "
                        f"preliminary/).{paused}{kick}{_wk_note(_s(args, 'work_kind'))}"
@@ -807,20 +751,7 @@ def _create_inbox_item(*, store, context_id, dev_root=None, fire_triage=None, **
     return create_inbox_item
 
 
-# --------------------------------------------------------------------------- inbox (push — operate)
-# The general session's second sanctioned act: START an item the owner points at. Filing a ticket and
-# starting one are different decisions — this tool exists precisely so the agent can do the second
-# without being able to do the work itself. It touches no project code; it operates the board, which
-# is the line the general-session guardrail actually draws (mutate the machine, never the product).
-#
-# NOT folded into `create_inbox_item` as an `action` param, though the tool-design guidance leans
-# toward consolidation: the two calls share no arguments (create synthesizes a whole ticket; push
-# names an existing id), have opposite preconditions, and one is routine while the other starts an
-# autonomous run. An `action` switch would put the loud act one keystroke from the quiet one.
-#
-# Description note: the registry's house style is one-liners, on the grounds that the WHEN/HOW lives
-# in the owning skill. This tool has no skill — the owner says "start #12" in open conversation — so
-# its description has to carry its own when/when-not/returns or nothing will.
+# Start an item the owner points at. Filing a ticket and starting one are different decisions.
 
 class PushInboxItemArgs(TypedDict, total=False):
     item_id: Required[Annotated[int, ("the OPEN inbox item's numeric id — the number in the "
@@ -833,9 +764,8 @@ def _push_inbox_item(*, store, context_id, dev_root=None, fire_triage=None,
         from pathlib import Path
         from ...core import inbox_flow as _flow
         from ...core.dev_knowledge import DevKnowledgeService
-        # A phase session operates its OWN item, never the board. Its sanctioned way to spin work
-        # off is the branch-off (create_inbox_item + spawned_from_item/relation), which auto-pushes
-        # blocking/parallel children with the provenance edge this tool would silently omit.
+        # A phase session operates its own item, never the board; its way to spin work off is the
+        # branch-off.
         if bound_item_id:
             return _err(
                 "push_inbox_item is not available inside a work-item session — a phase session works "
@@ -862,8 +792,7 @@ def _push_inbox_item(*, store, context_id, dev_root=None, fire_triage=None,
                                        context_id=context_id, actor="agent")
         except Exception as e:
             return _err(f"Could not push {_qid('inbox', item_id)}: {e}")
-        # The same first kick the owner's Push button fires. Without it the item lands at
-        # triage/active with no run behind it and never moves. Absent in a bare/test server.
+        # The same first kick the owner's Push button fires; without it the item never moves.
         triaged = False
         if fire_triage:
             try:
@@ -873,19 +802,15 @@ def _push_inbox_item(*, store, context_id, dev_root=None, fire_triage=None,
         title = (row.get("title") or row.get("text") or "")[:80]
         kick = ("Triage is running on it now." if triaged else
                 "It rests at triage until a triage run starts.")
-        # The brief is immutable from this moment (it now lives in the item's `preliminary/`), so
-        # this is the last place saying so can still mean anything to whoever pushed.
+        # The brief is immutable from here, so this is the last place saying so can mean anything.
         cold = (f" NOTE: {'; '.join(wi.get('brief_issues') or [])} — triage starts colder than it "
                 "should." if wi.get("brief_issues") else "")
         return _ok(f"Pushed {_qid('inbox', item_id)} → {_qid('item', wi['id'])} — \"{title}\". {kick}{cold}")
     return push_inbox_item
 
 
-# --------------------------------------------------------------------------- itemize + launch (4c)
-# The onboarding LAUNCH step: turn a settled plan into a cohort of autopilot work-items in one call.
-# Unlike create_inbox_item (one ticket, owner triages later), this mints work-items DIRECTLY on
-# autopilot with their dependency edges wired — the end-of-onboarding act, after the owner confirms
-# the list. `key` is a batch-local handle so the caller can express `after` edges before ids exist.
+# Mint work-items directly on autopilot with their edges wired. `key` is a batch-local handle for
+# `after` edges.
 
 class ItemizeItemArgs(TypedDict, total=False):
     key: Required[Annotated[str, ("a batch-LOCAL handle for this item, used only to wire `after` "
@@ -962,10 +887,8 @@ def _append_inbox_item(*, store, context_id, dev_root=None, **_):
             return _err(f"Could not append to the inbox item: {e}")
         if row is None:
             return _err(f"No inbox item #{item_id} to append to.")
-        # Mirror the append onto the handoff brief when one exists (D5: append, never rewrite).
-        # The section is the caller's to name: this used to hardcode `discussion`, so an append
-        # meant to fill an empty `constraints` landed under Discussion summary and the triage
-        # session — which reads the brief BY SECTION — never saw it where it looked.
+        # Append, never rewrite. The section is the caller's to name — the triage session reads
+        # the brief BY SECTION.
         field = _s(args, "brief_field") or "discussion"
         if field not in _BRIEF_FIELDS:
             return _err(f"`brief_field` must be one of {', '.join(_BRIEF_FIELDS)}.")
@@ -981,11 +904,7 @@ def _append_inbox_item(*, store, context_id, dev_root=None, **_):
     return append_inbox_item
 
 
-# --------------------------------------------------------------------------- work-item artifacts (S2)
-# The D5-playbook write tools: code supplies form (scaffold/renderer), the agent supplies content.
-# All three need `dev_root` (the item folders) and take `repo_dir` for git-state/freshness; both
-# are threaded as deps from the ws turn. S5 scopes these to work-item sessions (worker tool-scoping);
-# until then they live in the main dev set — they can only touch a work-item's OWN folder.
+# Code supplies form, the agent supplies content. These can only touch a work-item's own folder.
 
 def _item_dir(dev_root, item_id: str):
     from pathlib import Path
@@ -996,10 +915,8 @@ def _item_dir(dev_root, item_id: str):
 
 
 def _bound_err(item_id, bound_item_id) -> str | None:
-    """Worker tool-scoping (S5/D9, hermes): a work-item session operates ONLY its own item — no
-    cross-item writes; a session with no bound item has no item write-tools at all. Returns the
-    refusal text, or None when the call is in scope. (Kernel gate actions — close, merge, push —
-    have no tool counterparts at all: enforcement by absence.)"""
+    """A work-item session operates ONLY its own item; one with no bound item has no item write-tools
+    at all. Returns the refusal text, or None when the call is in scope."""
     if bound_item_id is None:
         return ("Work-item tools operate only inside a work-item session. This session has no "
                 "bound item — if this work is real, itemize it (create_inbox_item) and do it in "
@@ -1034,9 +951,8 @@ def _scaffold_artifact(*, store, context_id, dev_root=None, bound_item_id=None, 
             r = _arts.scaffold(d, _s(args, "artifact"), title=str(meta.get("title") or item_id),
                                item_kind=meta.get("kind"), item_id=item_id,
                                standing=_vl.standing_blocks(Path(dev_root)),
-                               # The investigation family picks the artifact SHAPE, and it is
-                               # triage's judgment on the item — never an argument the scaffolding
-                               # agent gets to pass, or the shape would be a per-call opinion.
+                               # The family picks the artifact shape and is triage's judgment,
+                               # never an argument the scaffolding agent passes.
                                research_kind=meta.get("research_kind"))
         except KeyError as e:
             return _err(str(e))
@@ -1117,14 +1033,10 @@ class SetTriageClassificationArgs(TypedDict, total=False):
 
 def _set_triage_classification(*, store, context_id, dev_root=None, bound_item_id=None, **_):
     async def set_triage_classification(args: dict) -> dict:
-        """Triage's RECORDING surface (D1/D3): write the item's name + proposed kind + deliverable
-        onto the item so the triage-exit gate confirms durable fields, not chat prose. Triage phase
-        only — after the gate the kind is fixed (post-triage needs are branch-offs, never re-kinds).
+        """Triage's RECORDING surface: write the item's name, proposed kind and deliverable onto the item,
+        so the exit gate confirms durable fields rather than chat prose.
 
-        Naming rides with classifying because they are the same act by the same reader: triage is
-        the one phase that has read the whole ask, and the mint points upstream of it cannot always
-        name well (an owner's inbox capture may carry no title at all, in which case the item was
-        born holding the first sentence of the request)."""
+        Naming rides with classifying — triage has read the whole ask."""
         from pathlib import Path
         from ...core.dev_knowledge import DevKnowledgeService, _parse_deliverables
         item_id = _s(args, "item_id")
@@ -1140,12 +1052,8 @@ def _set_triage_classification(*, store, context_id, dev_root=None, bound_item_i
             return _err("Kind/deliverable are fixed after the triage-exit gate — this item is "
                         f"already in `{item.get('phase')}`. A post-triage need is a branch-off "
                         "(create_inbox_item), never a re-kind.")
-        # A kind that contradicts the FILED one is refused, for the same reason and in the same
-        # place as the pairing check below: before any write. The filer already judged, so this is
-        # not triage deciding an open question — it is triage overruling somebody, and the item's
-        # kind is frozen at this gate. So the run must stop and ask instead: `needs_user` parks the
-        # item, pages the owner and renders the question as a card. The override arg is how the
-        # answer comes back, and it is recorded as an event so the reversal is never silent.
+        # A kind contradicting the FILED one is triage overruling somebody, so the run stops and
+        # asks instead.
         proposed = str(item.get("proposed_kind") or "")
         override = _s(args, "kind_override_reason")
         if proposed and _s(args, "kind") and _s(args, "kind") != proposed and not override:
@@ -1155,17 +1063,12 @@ def _set_triage_classification(*, store, context_id, dev_root=None, bound_item_i
                 "was recorded. End your run with report_completion(machine.outcome='needs_user'), "
                 "asking the owner which it is and saying what you saw that disagrees. When they "
                 "answer, call this again with `kind_override_reason` quoting their decision.")
-        # The kind/family PAIRING is checked before anything is written. Every other validation
-        # here can afford to run in place because it guards its own field; this one spans two, and
-        # a refusal raised halfway would leave the item holding a new title, kind and scale under a
-        # message telling the agent nothing was recorded.
+        # Checked before any write: this validation spans two fields, so a refusal halfway would
+        # leave the item inconsistent.
         fam = _s(args, "research_kind")
         if _s(args, "kind") == "research" and not fam:
-            # The list MUST match the Literal on `research_kind` above. It did not until
-            # 2026-08-14: it named `measurement` and `diagnosis`, which are not families, and
-            # omitted refactoring, housekeeping, security and deep-diagnosis, which are. An agent
-            # that hits a refusal is being told what to do next, so a wrong menu here sends it to
-            # pick a value the very next call will reject.
+            # This list must match the `research_kind` Literal — a refusal tells the agent what to
+            # do next.
             return _err("A research item needs `research_kind` (audit | refactoring | "
                         "housekeeping | security | study | deep-diagnosis) + "
                         "`research_kind_reason` — it decides what counts as an "
@@ -1203,9 +1106,8 @@ def _set_triage_classification(*, store, context_id, dev_root=None, bound_item_i
                             "unconfirmed slug.")
             dev.set_work_item_scaffold(root, item_id, deliverable=deliverable)
             d_note = f" · deliverable `{deliverable}`"
-        # Scale + its reason (kind_profiles.ITEM_SCALES) — recorded in the SAME act as the kind
-        # because it is the same judgment by the same reader: triage is the one phase that has read
-        # the whole ask before anyone has spent anything on it.
+        # Recorded in the same act as the kind, because it is the same judgment by the same
+        # reader.
         try:
             dev.set_work_item_scale(root, item_id, _s(args, "scale") or "",
                                     _s(args, "scale_reason") or "")
@@ -1213,11 +1115,8 @@ def _set_triage_classification(*, store, context_id, dev_root=None, bound_item_i
                 dev.set_work_item_fanout(root, item_id, _fo)
         except ValueError as e:
             return _err(str(e))
-        # The investigation family — the third axis, and the only one that applies to a single kind
-        # (kind_profiles.RESEARCH_KINDS). Its pairing with `kind` was validated up top; what is
-        # left here is the write. Required-when-research cannot live in the arg schema, which has
-        # no way to express a conditional — and a research item whose family nobody named would
-        # reach investigate with neither a method nor an artifact shape chosen for it.
+        # Required-when-research cannot live in the arg schema, which has no way to express a
+        # conditional.
         fam_note = ""
         if fam:
             try:
@@ -1226,8 +1125,7 @@ def _set_triage_classification(*, store, context_id, dev_root=None, bound_item_i
             except ValueError as e:
                 return _err(str(e))
             fam_note = f" · research kind `{fam}`"
-        # F1: the triage-exit gate's `triage_ran` reads this stamp — recording a classification
-        # IS triage having run; a bare inbox push (kind default + body copied) never stamps it.
+        # Recording a classification IS triage having run; a bare inbox push never stamps it.
         dev.set_work_item_triaged(root, item_id)
         t_note = f" · renamed to \"{title}\"" if renamed else ""
         return _ok(f"Recorded triage classification: kind `{kind}` · scale "
@@ -1280,9 +1178,8 @@ class RecordValidationArgs(TypedDict, total=False):
 def _record_validation(*, store, context_id, dev_root=None, repo_dir=None,
                        bound_item_id=None, **_):
     async def record_validation(args: dict) -> dict:
-        """Build's own self-check, recorded as data instead of prose. Vet audits these on its pass:
-        it re-runs each command and compares, so a green that was never earned goes back into the
-        loop as a finding rather than reaching the owner as a sentence."""
+        """Build's own self-check, recorded as data instead of prose. Vet re-runs each command and
+        compares, so an unearned green returns as a finding rather than reaching the owner."""
         from ...core import artifacts as _arts
         item_id = _s(args, "item_id")
         if (msg := _bound_err(item_id, bound_item_id)):
@@ -1515,10 +1412,7 @@ def _read_research_proposals(*, store, context_id, dev_root=None, bound_item_id=
             return _ok("This review proposes no work. That is a real outcome — report "
                        "`clean_noop` and say so in the Owner's decision line.")
         filed, held = _arts.filed_and_withheld(props)
-        # THREE groups, not two. A ruling that settled a question by changing nothing leaves a
-        # proposal with no deliverable — it is an answer, not work — so it is reported and never
-        # filed, exactly like an unruled one, and for the same reason: an inbox item is a thing that
-        # becomes a work item, and neither of these can.
+        # A ruling that changed nothing is an answer, not work, so it is reported and never filed.
         filed, settled = _arts.filed_and_settled(props)
         out = [f"## File these ({len(filed)})"]
         for p in filed:
@@ -1531,8 +1425,8 @@ def _read_research_proposals(*, store, context_id, dev_root=None, bound_item_id=
                     out.append(f"- {label}: {p[key]}")
         if not filed:
             out.append("- (none)")
-        # The withheld list is reported, never filed. Naming them is what keeps a half-filed review
-        # distinguishable from a clean one — the owner cannot see an absence.
+        # Naming the withheld keeps a half-filed review distinguishable from a clean one — an
+        # absence is invisible.
         out.append(f"\n## Do NOT file these ({len(held)}) — the owner has not ruled")
         for p in held:
             out.append(f"\n### {p['title']}")
@@ -1587,9 +1481,8 @@ def _request_authorization(*, store, context_id, dev_root=None, bound_item_id=No
             item = _DK().read_work_item(dev_root, item_id) or {}
         except Exception:
             pass
-        # The declared scope is checked against the STAGED OPS, not taken on trust (§2.1): claiming
-        # a delegable `doc-sync` for ops that rewrite what the project IS would route an
-        # intent change past the owner to a delegated deputy. Refuse with the scope to use instead.
+        # Checked against the staged ops: a delegable claim over ops that change intent must not
+        # route past the owner.
         try:
             from ...core import knowledge_delta as _kd
             staged = (_kd.read_delta(d) or {}).get("ops") or []
@@ -1633,10 +1526,8 @@ class FilePlanReportArgs(TypedDict, total=False):
 
 def _file_plan_report(*, store, context_id, dev_root=None, bound_item_id=None, **_):
     async def file_plan_report(args: dict) -> dict:
-        """The plan gate's user report (`reports/report-plan.md`): the confirmation table is
-        DERIVED from the verification plan's checks — each row is a check's own `proves:` line and
-        how it will be run — and so are the stats; the agent supplies only the prose. A task
-        nothing defends is named under the table."""
+        """The plan gate's user report. The confirmation table is DERIVED from the verification plan's
+        checks — each row is a check's `proves:` line and how it will be run — and so are the stats."""
         from ...core import artifacts as _arts
         item_id = _s(args, "item_id")
         if (msg := _bound_err(item_id, bound_item_id)):
@@ -1681,15 +1572,7 @@ def _phase_report_pen(phase: str):
     """Build the pen for one phase's user-facing report.
 
     ONE FACTORY, because there is one rule: `<item>/reports/report-<phase>.md`, built in code and
-    never named to an agent. A phase that names its own path in prose is a confused resolution away
-    from filing where the drilldown does not look — the run's cwd is not always the item folder, and
-    an agent that has been writing under `artifacts/` will resolve a bare `reports/` against THAT.
-    That is not hypothetical: it happened to `investigate`, on a real run, and the report was lost
-    to its reader while sitting on disk the whole time.
-
-    Four phases were still writing from prose when this was written. Copying the investigate pen
-    four times would have made four places for the rule to drift; this way the rule has one home
-    and a new phase is one line."""
+    never named to an agent — a phase naming its own path resolves it against whatever its cwd is."""
     def factory(*, store, context_id, dev_root=None, bound_item_id=None, **_):
         async def file_phase_report(args: dict) -> dict:
             from ...core import artifacts as _arts
@@ -1725,10 +1608,8 @@ _file_close_report = _phase_report_pen("close")
 
 def _file_investigate_report(*, store, context_id, dev_root=None, bound_item_id=None, **_):
     async def file_investigate_report(args: dict) -> dict:
-        """The investigation's user report. Every other phase's report path is built in code; this
-        one was named in prose, and an agent working inside `artifacts/` resolved the relative
-        `reports/` against it and filed the report where nothing reads. The path is code's now, and
-        an unfilled slot is refused rather than shipped."""
+        """The investigation's user report. The path is built in code, and an unfilled slot is refused
+        rather than shipped."""
         from ...core import artifacts as _arts
         item_id = _s(args, "item_id")
         if (msg := _bound_err(item_id, bound_item_id)):
@@ -1773,10 +1654,9 @@ class FileVetReportArgs(TypedDict, total=False):
 
 def _file_vet_report(*, store, context_id, dev_root=None, repo_dir=None, bound_item_id=None, **_):
     async def file_vet_report(args: dict) -> dict:
-        """The vet cycle's user report (`reports/report-vet.md`) — HYBRID: you write the narrative,
-        code writes `## What didn't hold` off the recorded §Verification entries so a failure
-        reaches the owner whatever the prose says. Refused while any plan check has no recorded
-        entry, a standing lens has no read this cycle, or a failing check has no diagnosis."""
+        """The vet cycle's user report — HYBRID: you write the narrative, code writes
+        `## What didn't hold` off the recorded entries, so a failure reaches the owner whatever the
+        prose says."""
         from ...core import artifacts as _arts
         item_id = _s(args, "item_id")
         if (msg := _bound_err(item_id, bound_item_id)):
@@ -1819,8 +1699,8 @@ def _write_checkpoint(*, store, context_id, dev_root=None, repo_dir=None, bound_
         d = _item_dir(dev_root, item_id)
         if d is None:
             return _err(f"No work-item {item_id!r} here.")
-        # The banking THREAD, derived from the item's phase — never asked of the agent, which has
-        # no reason to know its own session role. Continuity reads filter on it.
+        # Derived from the item's phase, never asked of the agent, which has no reason to know its
+        # session role.
         role = None
         try:
             from ...core import kind_profiles as _kp, dev_knowledge as _dk  # noqa: F401
@@ -1863,8 +1743,8 @@ def _sync_from_main(*, store, context_id, dev_root=None, main_repo_dir=None, bou
             return _err("This item has no live worktree — sync applies only during build "
                         "(the worktree is created at build entry).")
         try:
-            # Sync from the repo's ANCHOR, not whatever git calls the default branch — a repo
-            # anchored on `develop` must not pull `main` into an item branch mid-build.
+            # Sync from the repo's anchor: one anchored on `develop` must not pull `main` into an
+            # item branch.
             rc = spine.repo(context_id) if spine else None
             res = _gl.sync_from_main(main_repo_dir or Path(str(wt)), Path(str(wt)),
                                      target=rc.anchor_branch if rc else None)
@@ -1933,14 +1813,14 @@ def _apply_knowledge_delta(*, store, context_id, dev_root=None, repo_dir=None,
                         "that entry at the review gate, from the typed proposal the owner answered "
                         "— never an agent, so the ledger's every entry traces to a question an "
                         "owner was asked. You have nothing to do there; it is already recorded.")
-        # Close is the ONLY writing moment (renovation §2.3): before it, the owner has not yet
-        # locked the code, so a doc written earlier could describe something that never lands.
+        # Before close the owner has not locked the code, so a doc written earlier could describe
+        # something that never lands.
         if not is_final_phase(item.get("kind"), item.get("phase") or "triage"):
             return _err(f"The anchor docs are written at CLOSE — this item is at "
                         f"`{item.get('phase')}`. Until the merge locks the code there is nothing "
                         f"true to write about it yet.")
-        # A blocking child merged into its PARENT's branch, so its content is not on main until
-        # the parent lands. The parent's close speaks for the family.
+        # A blocking child's content is not on main until the parent lands, so the parent's close
+        # speaks for the family.
         sf = item.get("spawned_from") or {}
         if isinstance(sf, dict) and sf.get("relation") == "blocking":
             return _err(f"This is a blocking child of `{sf.get('item')}` — its work landed on the "
@@ -1953,9 +1833,8 @@ def _apply_knowledge_delta(*, store, context_id, dev_root=None, repo_dir=None,
                 ops = json.loads(ops) if ops.strip() else None
             except (ValueError, TypeError) as e:
                 return _err(f"`ops` must be a JSON array of edit ops: {e}")
-        # The verification library is created the first time a close has something to put in it —
-        # a repo that predates the library, or one that has never proven a general check, simply
-        # doesn't have the doc yet, and validation would otherwise reject the op for that.
+        # The library doc appears the first time a close has something to put in it, so validation
+        # allows its absence.
         if any(isinstance(o, dict) and o.get("doc") == _vl.LIBRARY_DOC for o in (ops or [])):
             _vl.seed(Path(dev_root))
         issues = _kd.validate_ops(ops, Path(dev_root), repo_dir)
@@ -2032,11 +1911,8 @@ def _revise_plan(*, store, context_id, dev_root=None, bound_item_id=None, spine=
         if not path.is_file():
             return _err("This item has no plan.md yet — scaffold and author it first "
                         "(`scaffold_artifact`); a revision edits a plan that already exists.")
-        # PLAN PHASE ONLY (§2.1). plan.md is the plan phase's to write, and the review agent is
-        # read-only on it — which is exactly why review has `revise`. Caught live on 2026-07-27:
-        # the review agent folded owner feedback straight into the plan and stayed at review, so
-        # the plan changed with nothing downstream re-running against it. The bound-item check
-        # can't catch this — review rides the SAME intake session, so it holds the same binding.
+        # plan.md belongs to the plan phase; review is read-only on it, which is exactly why
+        # review has `revise`.
         from ...core.dev_knowledge import _parse_md
         phase = str((_parse_md((d / "item.md").read_text())[0] or {}).get("phase") or "")
         if phase != "plan":
@@ -2070,9 +1946,8 @@ def _revise_plan(*, store, context_id, dev_root=None, bound_item_id=None, spine=
         if issues:
             return _err("Revision rejected — plan.md is unchanged. Fix and re-send:\n- "
                         + "\n- ".join(issues))
-        # `concerns` and the spend boundary come from the RECORD, never from the agent (§3-bis.3/.4):
-        # the loop's typed exit + the authorization ledger say what drove this, and the meter reading
-        # at this instant is what makes the next generation's budget start at zero.
+        # Both come from the record, never the agent: they are what start the next generation's
+        # budget at zero.
         concerns = _pr.derive_concerns(d)
         spend = spine.item_phase_tokens(context_id, item_id) if spine else 0
         res = _pr.revise(d, changes=changes, feedback=feedback, directive=directive,
@@ -2198,9 +2073,8 @@ _ITEM_DEV_TOOLS: list[ToolSpec] = [
         "a report with an unfilled slot left in it.",
         FileInvestigateReportArgs, _file_investigate_report,
     ),
-    # The same pen for the four phases that used to write from a path named in prose. Same contract
-    # every time: you hand over the whole filled body, the tool owns the path and refuses a report
-    # with an unfilled slot left in it.
+    # One pen, one contract: hand over the whole filled body; the tool owns the path and refuses
+    # an unfilled slot.
     ToolSpec(
         "file_triage_report",
         "File triage's user report (triage phase, once the classification is settled). You supply "
@@ -2267,18 +2141,11 @@ _ITEM_DEV_TOOLS: list[ToolSpec] = [
 ]
 
 
-# --------------------------------------------------------------------------- the registry
-# Three groups, kept apart for READING the file. What any given session actually MOUNTS is decided
-# further down by TOOL_SCOPES, one line per session kind — these lists are the catalogue, not the
-# surface. The grouping still carries one hard rule: the LEARNING pens (capture / distill / forge)
-# must never reach the main chat agent, or it will short-circuit the automatic capture→distill→forge
-# flow by filing candidates/proposals itself (there is no chat-side learning surface by design).
+# Three groups for reading; TOOL_SCOPES decides what a session mounts. The learning pens must
+# never reach the main chat agent.
 
-# Read-only tools available to EVERY dev turn (main chat + learning runs). Naming: every read is
-# `read_*` so the tool surface is scannable. The learning-pool reads (`read_candidates`/`read_proposals`)
-# live here — not in the learning-only set — because they mutate nothing: a general session should be
-# able to answer "what learning is pending?" (the UI already shows it). Only the learning WRITE pens
-# stay gated (below), so the main agent can't file learnings by hand and bypass automatic sweep-capture.
+# Read-only tools every dev turn gets. The learning-pool reads live here because they mutate
+# nothing.
 _MAIN_DEV_TOOLS: list[ToolSpec] = [
     ToolSpec(
         "read_dev_log",
@@ -2345,9 +2212,8 @@ _MAIN_DEV_TOOLS: list[ToolSpec] = [
     ),
 ]
 
-# Pipeline-only WRITE pens — capture files candidates, distill proposes/merges/drops, forge stages.
-# These must never reach the main chat agent (it would bypass automatic capture). The learning-pool
-# READS moved to the main set above; only the mutating pens remain gated here.
+# Pipeline-only write pens. These must never reach the main chat agent, which would bypass
+# automatic capture.
 _LEARNING_DEV_TOOLS: list[ToolSpec] = [
     ToolSpec(
         "file_candidate",
@@ -2380,17 +2246,8 @@ DEV_TOOLS: list[ToolSpec] = _MAIN_DEV_TOOLS + _ITEM_DEV_TOOLS + _LEARNING_DEV_TO
 
 _BY_NAME: dict[str, ToolSpec] = {t.name: t for t in DEV_TOOLS}
 
-# One in-code table: SESSION SCOPE → the dev tools that session may see. Same pattern as
-# `core.kind_profiles.KIND_PROFILES` — declarative, one home, and an unknown key fails loud.
-#
-# WHY visibility and not just refusal: a session that cannot do another phase's job should not be
-# holding its pen. Before this, every dev run mounted all 30 tools and the separation lived in skill
-# prose ("Fixes belong to the build session, never here") — which is exactly the self-grading vet
-# exists to catch, and a diagnosis session (read-only by design) still carried `apply_knowledge_delta`.
-#
-# The rule for membership is deliberately narrow: a tool is in a scope when that scope's SKILL names
-# it, or when the surface plainly needs it (the owner's own chat). Widening a scope is a one-line
-# change here; nothing else moves.
+# Session scope: the tools it may see. A session that cannot do another phase's job should not
+# hold its pen.
 TOOL_SCOPES: dict[str, tuple[str, ...]] = {
     # --- chat surfaces (ws.py), by session kind ---
     "general": ("read_dev_log", "read_inbox", "read_run", "read_candidates", "read_proposals",
@@ -2413,12 +2270,8 @@ TOOL_SCOPES: dict[str, tuple[str, ...]] = {
               "file_close_report"),
     "investigate": ("scaffold_artifact", "write_checkpoint", "read_decisions",
                     "file_investigate_report"),
-    # `itemize_and_launch` is NOT here, though this scope is named for it. It belongs to the two
-    # CHAT scopes, where the owner approves each call; this run is a background one with nobody to
-    # ask, and the skill it fires says in as many words "Never itemize_and_launch — that is
-    # onboarding's". Mounting it anyway made the scope contradict its own skill, and left the run
-    # holding a tool whose only possible outcome was a refusal. Filing inbox items (which the owner
-    # then pushes or drops) is the whole job, and `create_inbox_item` is what does it.
+    # `itemize_and_launch` belongs to the chat scopes, where the owner approves each call; this
+    # run has nobody to ask.
     "itemize": ("read_inbox", "read_dev_log", "read_research_proposals", "create_inbox_item"),
     # --- kernel-fired turns that are not a phase ---
     "deputy": ("read_dev_log", "read_run"),             # it judges a report; it writes a verdict
@@ -2431,28 +2284,24 @@ TOOL_SCOPES: dict[str, tuple[str, ...]] = {
     "write": ("stage_artifact",),
 }
 
-# Import-time guard: a scope naming a tool that doesn't exist is a typo, and it should never get as
-# far as a live run. Same reasoning as KIND_PROFILES' loud unknown-kind failure.
+# A scope naming a tool that does not exist is a typo, and should never reach a live run.
 for _scope, _names in TOOL_SCOPES.items():
     if (_missing := [n for n in _names if n not in _BY_NAME]):
         raise KeyError(f"TOOL_SCOPES[{_scope!r}] names unknown dev tool(s): {', '.join(_missing)}")
 
 
 def make_dev_mcp_server(store, context_id: str, *, scope: str, **deps):
-    """Build the `dev` MCP server bound to one context's event store, carrying only the tools
-    `scope` may see (TOOL_SCOPES). `scope` is required and unknown values raise — a session with the
-    wrong toolset is a bug we want in a test, not in production.
+    """Build the `dev` MCP server bound to one context's event store, carrying only the tools `scope`
+    may see. Unknown scopes raise.
 
-    Optional deps thread per-turn state to specific learning tools (ignored by the rest):
-    `origin_session_id` + `capture_source` (provenance bound onto `file_candidate` during a sweep),
-    `proposal_id` + `staged_path` (bound onto `stage_artifact` during a write run)."""
+    Optional deps thread per-turn state to specific learning tools and are ignored by the rest."""
     return build_mcp_server("dev", dev_tool_specs(scope),
                             store=store, context_id=context_id, **deps)
 
 
 def dev_tool_specs(scope: str) -> list[ToolSpec]:
     """The EXACT spec list `make_dev_mcp_server` mounts for a scope. One source, so the prompt
-    inspector's tool-surface capture can never claim a turn carried tools it didn't."""
+    inspector cannot claim a turn carried tools it didn't."""
     try:
         names = TOOL_SCOPES[scope]
     except KeyError:

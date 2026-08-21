@@ -1,22 +1,10 @@
 #!/usr/bin/env python3
-"""forge_kit/lint.py — the deterministic structural check for a forged artifact.
+"""The deterministic structural check for a forged artifact.
 
-The shape of an operational artifact (constitution / skill / agent) is strict and knowable
-without a model: frontmatter parses, the name is kebab and matches its published home, the
-description fits the routing budget, the body stays lean. That is exactly the work to hand a
-script rather than ask the author to "be careful" — so the `forge` agent runs this, reads the
-findings, and self-corrects before it stages.
+An operational artifact's shape is knowable without a model: frontmatter parses, the name is kebab,
+the description fits the routing budget.
 
-Usage:
-    python lint.py <form> <file> [--name <expected-slug>]
-
-    <form>   constitution | skill | agent
-    <file>   path to the authored artifact on disk
-    --name   the slug the artifact will publish under (skill/agent dir name). When given, the
-             frontmatter `name` must match it — a mismatch breaks discovery on disk.
-
-Exit code 0 = clean (artifact may stage). Non-zero = blocking errors found; stdout lists them
-plus any non-blocking warnings, each on its own line, so the agent can fix and re-run.
+Exit 0 means it may stage; non-zero lists the blocking errors.
 """
 
 import argparse
@@ -32,11 +20,8 @@ except ImportError:  # the harness env ships pyyaml; degrade loudly rather than 
 NAME_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 MAX_DESC = 1024          # routing budget — the only metadata an agent sees when choosing
 MAX_NAME = 64
-# A LEARNED artifact must use a model ALIAS, never a pinned full ID. Aliases are the canonical on-disk
-# form everywhere in SuperMe; the backend resolves them to the latest concrete id at consumption
-# (core/models.py MODEL_TIERS → resolve_agent_model / normalize_model). A pinned id would go stale (or,
-# like a hallucinated `claude-sonnet-4-5`, be invalid) and needs a file rewrite on every model bump. So
-# lint allows only these.
+# A learned artifact must use a model ALIAS, never a pinned id: the backend resolves aliases at
+# consumption.
 MODEL_ALIASES = {"sonnet", "opus", "haiku", "inherit"}
 SKILL_BODY_HARD = 500    # spec ceiling for SKILL.md
 LEAN_BODY_WARN = 200     # a *learned* skill/agent should be tighter than the ceiling
@@ -116,11 +101,11 @@ def _check_meta(fm, body, *, expected_name, want_tools, errors, warnings):
 
 
 def lint_constitution(text, *, expected_name, errors, warnings):
-    """A constitution is frontmatter-first: a required `description` (the always-resident catalog
-    line — a rule's directive, or a reference's what + when-to-pull) plus an OPTIONAL body (a rule's
-    why/example, or a reference's substance). `name` and the runtime/provenance fields
-    (enabled/scope/source/created/category) are stamped at publish, so the authored artifact need
-    only carry `description` (+ optional body)."""
+    """A constitution is frontmatter-first: a required `description` — the always-resident catalog line —
+    plus an optional body.
+
+    `name` and the runtime fields are stamped at publish, so the authored artifact need only carry the
+    description."""
     fm, body = _split_frontmatter(text)
     if fm is None:
         errors.append("A constitution must open with a '---' frontmatter block carrying a "

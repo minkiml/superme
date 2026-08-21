@@ -1,51 +1,23 @@
-"""Shared schema vocabulary — the locked enum value-sets (R5).
+"""Shared schema vocabulary — the locked enum value-sets.
 
-Each `Literal` here is pinned to exactly the values its producer can emit, verified against the live
-data AND the producer code (so a `response_model` can declare it without ever 500-ing on a real row):
-
-- work-item kind/phase/status/outcome: written by `DevKnowledgeService` (create → triage/active;
-  advance via KIND_PROFILES; orchestrator `set_work_item_status`; terminal via outcome).
-- inbox kind/status/origin: `DevStore` validates against `_KINDS`/`_STATUSES` on write.
-- proposal output_form/target_scope: `DevStore.propose_memory` COERCES to `_MEM_OUTPUT_FORMS`/
-  `_MEM_TARGET_SCOPES`; proposal status is guarded by `_MEM_PROP_STATUSES` on every transition.
-- run mode/status: `SystemSpine` (mode = the core|dev scope axis; status flips running→done/waiting/
-  aborted).
-- event scope/actor and artifact-call kind: daemon-emitted, fully code-controlled.
-
-Deliberately NOT locked (model-generated / free-form, so a Literal could 500): proposal `confidence`
-(distill emits high|medium|low but it is uncoerced text), `recall_type` (retired, always null now),
-`apply_target` (a slug), run `feature` (a free label: chat|plan|distill|sweep|write|…), event `kind`.
+Each `Literal` is pinned to exactly the values its producer can emit, so a `response_model` never
+500s on a real row. Model-generated and free-form fields are deliberately left unlocked.
 """
 
 from typing import Literal
 
-# --- work-item lifecycle (workspace-workflow D1/D2, 2026-07-15) ---
-# Three separate state layers replace the old conflated phase/status pair:
-# 1. `kind` — which MACHINERY the item runs (core/kind_profiles.py; unknown kind fails loud).
-# 2. `phase` — per-kind ordered pipeline stage. implementation: triage→plan→build→vet→
-#    review→close · research: triage→plan→investigate→report→close. The Literal is the UNION of
-#    all kinds' phases (KIND_PROFILES.ALL_PHASES); validity-per-kind is enforced by kind_profiles.
-# 3. `status` — the runnable-state axis: active · awaiting_* (typed router — only awaiting_human
-#    pages the owner; awaiting_child / awaiting_upstream / awaiting_slot all auto-release without a
-#    human — child on a spawned child closing, upstream on a peer named in `after:` completing,
-#    slot on the autopilot concurrency cap freeing a build⟷vet slot) · done (terminal).
-# `outcome` stamps HOW an item ended (with status=done): completed | abandoned | superseded —
-# status changes only, never deletes (never-delete standing constraint).
+# --- work-item lifecycle --- Three state layers: `kind` picks the machinery, `phase` the pipeline
+# stage, `status` the runnable state.
 WorkKind = Literal["implementation", "research"]
 WorkPhase = Literal["triage", "plan", "build", "vet", "review", "investigate", "close"]
-#    `error` (R2) is the item whose work STOPPED — a crash, an outage that outlasted the retry
-#    ladder, a daemon restart. Distinct from the run-level `system_fault` on purpose (owner,
-#    2026-07-31): a system fault is a run that COMPLETED while our machinery misbehaved (review's
-#    business, the work advanced); `error` is a run that stopped, so the item stays where it died
-#    carrying `error_reason` until the owner resumes or re-runs it. Non-terminal, always.
+# `error` is an item whose work STOPPED, so it stays where it died carrying `error_reason`. Never
+# terminal.
 WorkStatus = Literal["active", "awaiting_child", "awaiting_upstream", "awaiting_slot",
                      "awaiting_human", "error", "done"]
 WorkOutcome = Literal["completed", "abandoned", "superseded"]
-# Branch-off relation on `spawned_from` (D3): blocking/parallel = children (auto-pushed, gate the
-# parent's completion; blocking additionally pauses it) · spawn = provenance only (owner-pushed).
+# Blocking and parallel are children that gate the parent's completion; spawn is provenance only.
 SpawnRelation = Literal["blocking", "parallel", "spawn"]
-# Per-run terminal outcomes (D2 layer 3) — stamped by the background phase-session completion
-# contract (lands S5); declared here so the wire vocabulary is stable from S1.
+# Per-run terminal outcomes, stamped by the background phase completion contract.
 RunOutcome = Literal["success", "clean_noop", "blocked", "approval_required", "exhausted", "stagnated"]
 
 # --- inbox triage ---
@@ -67,14 +39,8 @@ RunStatus = Literal["running", "done", "aborted", "waiting"]
 
 # --- activity log + call-trail ---
 EventScope = Literal["item", "dev", "global"]
-# owner (a person) · agent (a phase session) · daemon (the kernel) · autopilot (the per-item
-# auto-advance driver, slice 2) · deputy (the owner's stand-in that judges gates, slice 4). Distinct
-# actors so "who decided this" stays legible in the log forever — an autopilot advance and a deputy
-# approval must never read as the same hand.
+# Distinct actors, so an autopilot advance and a deputy approval never read as the same hand.
 EventActor = Literal["owner", "agent", "daemon", "autopilot", "deputy"]
-# One row of a run's trail. The first five are CALLS (and a call's `result`); `prompt`/`reply` are
-# the turn's text. All seven ride the same feed because the drilldown's Runs pane groups by RUN, and
-# a run whose whole trail is text (a compaction, an errored turn) must still appear as a group that
-# says so — filtering it upstream is what made 17 of one item's 34 runs vanish from that pane.
-# Renderers drop the text kinds themselves (`lib/trace.ts` → TRACE_CALL_KINDS).
+# All seven kinds ride one feed, because the Runs pane groups by RUN and a text-only run must
+# still appear.
 ArtifactKind = Literal["tool", "subagent", "skill", "mcp", "result", "prompt", "reply"]

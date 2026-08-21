@@ -12,15 +12,14 @@ from .common import RunMode, RunStatus
 
 
 class RunRow(BaseModel):
-    """One row of the spine `run` table (live or historical) — every run-returning route shares it.
-    mode/status are locked (R5: the spine writes exactly these); `feature` stays a free label."""
+    """One row of the spine `run` table, live or historical — shared by every run-returning route.
+    `feature` stays a free label."""
     id: int
     repo_id: str
     mode: RunMode
     feature: str
-    # The work-item phase this run happened IN (triage/plan/build/vet/review/close), stamped at run
-    # open. NULL for non-item runs. Surfaced so the Activity feed shows the pipeline phase, not just
-    # the raw feature label (an interactive triage/build turn is feature `chat` — phase is the signal).
+    # The phase this run happened in, NULL for non-item runs. An interactive turn's feature is
+    # `chat`.
     phase: str | None = None
     session_id: str | None = None
     item_id: str | None = None
@@ -30,12 +29,10 @@ class RunRow(BaseModel):
     ctx_pct: int | None = None
     started_at: str
     ended_at: str | None = None
-    # NULL while the origin session is live; 'deleted' / 'retired' once it's hard-deleted
-    # (session-deletion-trace-model) — the run + its trace are preserved, this labels the orphan.
+    # NULL while the origin session is live; set once it is hard-deleted, to label the preserved
+    # orphan run.
     session_fate: str | None = None
-    # A BACKGROUND run's structured completion outcome (workspace-workflow D2/S5): success |
-    # partial | clean_noop | blocked | approval_required | exhausted | stagnated. NULL for
-    # interactive turns and pre-S5 rows. Feeds the S7 attention engine.
+    # A background run's structured completion outcome. NULL for interactive turns.
     outcome: str | None = None
 
 
@@ -48,7 +45,7 @@ class SystemResponse(BaseModel):
     policy_version: int
     default_repo: str
     learning_enabled: bool
-    deputy_enabled: bool = True            # autopilot gate judge on/off (slice 4)
+    deputy_enabled: bool = True  # autopilot gate judge on/off
     deputy_strictness: dict[str, str] = Field(default_factory=dict)  # {gate: low·medium·high·extra}
     deputy_model: str | None = None            # the deputy's own tier (None = unset → the floor)
     deputy_effort: str | None = None
@@ -69,9 +66,8 @@ class RepoScope(BaseModel):
     active: bool
     current_item: str | None = None
     last_activity: str | None = None
-    # CONVERSATIONS — the sessions the owner can open and take a turn in. The headless build/vet
-    # agent threads are excluded (kind_profiles.AGENT_THREAD_KINDS) so this agrees with the session
-    # picker; surfaced as "conversations", not "sessions".
+    # Conversations: the sessions the owner can open and take a turn in. Headless agent threads
+    # are excluded.
     sessions: int
     agents: int
     running: int
@@ -84,13 +80,12 @@ class RepoOverview(BaseModel):
     layer: str
     model_override: str | None = None
     effort_override: str | None = None  # owner-set reasoning-effort override (None = inherit system)
-    # The `vet` ROLE's tier for this repo (None = unset → the floor). Not covered by the two above:
-    # a reviewer that rises with what it reviews is not an independent check, so vet resolves on its
-    # own chain and the project's tier is deliberately not in it.
+    # The `vet` role's tier; None means the floor. Vet does not inherit the tier of what it
+    # reviews.
     vet_model: str | None = None
     vet_effort: str | None = None
     learning_enabled: bool = True
-    autopilot_concurrency: int = 4  # per-repo autopilot build⟷vet cap (slice 3)
+    autopilot_concurrency: int = 4  # per-repo autopilot build⟷vet cap
     tag_color: str | None = None   # owner-set visual tag color (None = hashed-palette default)
     icon: str | None = None        # owner-set icon (emoji) shown in place of the color swatch
     review_mode: str = "fast"      # "fast" | "strict" — whether the diff gets its own review gate
@@ -103,9 +98,8 @@ class RepoOverview(BaseModel):
 
 
 class HoldQuestion(BaseModel):
-    """One question the grill carries to the owner — the four fields `report_completion` enforces,
-    so the card renders labelled rows instead of parsing prose. `recommend`/`why` are absent only
-    on a pre-typed report replayed from an older event."""
+    """One question the grill carries to the owner — the four fields `report_completion` enforces, so the
+    card renders labelled rows instead of parsing prose."""
     question: str
     recommend: str | None = None
     why: str | None = None
@@ -113,7 +107,7 @@ class HoldQuestion(BaseModel):
 
 
 class AttentionHold(BaseModel):
-    """One parked (`awaiting_human`) work-item on the top-of-SuperMe attention center (Pass 2 · Q2)."""
+    """One parked work-item on the top-of-SuperMe attention center."""
     id: str
     title: str
     session_id: str | None = None  # the item's own dev session — so Open binds the chat to it, not the general thread
@@ -122,8 +116,8 @@ class AttentionHold(BaseModel):
     kind: Literal["question", "escalation", "paged", "review", "gate"]
     reason: str
     actor: str
-    # kind "question" only — the plan agent's clarifying questions (renovation §2 grill), rendered
-    # as the ask-card. Absent on every other hold kind.
+    # The plan agent's clarifying questions, rendered as the ask-card. Absent on every other hold
+    # kind.
     questions: list[HoldQuestion] | None = None
 
 
@@ -135,8 +129,8 @@ class RepoAttention(BaseModel):
 
 
 class RepoConnectResponse(BaseModel):
-    """A freshly connected repo — the new orbit node. `onboarding` is the connect-time choice
-    (project-init | retrofit) that its dev workspace launches until memory is established."""
+    """A freshly connected repo. `onboarding` is the connect-time choice that its dev workspace launches
+    until memory is established."""
     id: str
     label: str
     cwd: str
@@ -144,9 +138,8 @@ class RepoConnectResponse(BaseModel):
 
 
 class RepoDisconnectResponse(BaseModel):
-    """The receipt for a disconnect — what the cascade actually removed. Irreversible by design;
-    the project folder itself is never touched, and run traces + dev events are preserved
-    (never-delete-logs), stamped session_fate='disconnected'."""
+    """The receipt for a disconnect — what the cascade removed. Irreversible; the project folder is never
+    touched, and run traces are preserved."""
     id: str
     label: str
     sessions_deleted: int      # session rows hard-deleted (transcripts removed with them)
@@ -163,11 +156,9 @@ class RunsResponse(BaseModel):
 
 
 class RunEventRow(BaseModel):
-    """One entry of a run's event trail: a prompt, an assistant reply block, a tool/skill/agent call,
-    or that call's `result`. `kind` ∈ prompt | reply | tool | mcp | skill | agent | subagent | result;
-    `name` is the label, `description` the body; `tool_id` pairs a result back to its call, and
-    `parent_tool_id` names the sub-agent spawn a row happened inside (null = the parent's own call),
-    so a fan-out reads as nested work rather than as the parent doing everything itself."""
+    """One entry of a run's event trail: a prompt, a reply block, a call, or that call's result.
+
+    `tool_id` pairs a result back to its call; `parent_tool_id` names the spawn a row happened inside."""
     id: int
     seq: int
     kind: str
@@ -184,8 +175,8 @@ class RunTraceResponse(BaseModel):
 
 
 class AgentModelRow(BaseModel):
-    """One tunable background sub-agent: the TIER it tracks (sonnet/opus/haiku — the pick) and the
-    concrete model that tier currently resolves to (what actually runs), plus its label and scope."""
+    """One tunable background sub-agent: the TIER it tracks, and the concrete model that tier currently
+    resolves to."""
     feature: str
     label: str
     scope: str
@@ -218,8 +209,8 @@ class SweepConfigResponse(BaseModel):
 
 
 class CompactionConfigBody(BaseModel):
-    """Partial update of the compaction runtime (S8/D11) — omitted fields stay unchanged. The
-    route refuses (409) any trigger at/below the incompressible floor."""
+    """Partial update of the compaction runtime; omitted fields stay unchanged. The route refuses any
+    trigger at or below the incompressible floor."""
     trigger_pct: int | None = Field(default=None, ge=1, le=100)
     by_kind: dict[str, int] | None = None   # per-kind trigger overrides {kind: pct}
     # "auto" (default) = reclaimable-normalized verdict; an int % = the manual escape hatch.
@@ -233,9 +224,8 @@ class CompactionConfigResponse(BaseModel):
     # "auto" = judged against the session's reclaimable space; int % = flat manual threshold.
     min_gain_pct: int | Literal["auto"]
     floor_pct: int            # the static incompressible floor a trigger may never sit at/below
-    # …and the lowest trigger actually ACCEPTED — floor plus working room. The FE's input `min` must
-    # read THIS, not `floor_pct + 1`: that was one rule in two places, and the FE's copy allowed the
-    # exact value (26%) that re-fires every turn.
+    # The lowest trigger actually accepted — floor plus working room. The FE's input `min` must
+    # read THIS.
     min_pct: int
 
 
@@ -273,8 +263,8 @@ class DeputyConfigResponse(BaseModel):
     ok: bool
     deputy_enabled: bool
     deputy_strictness: dict[str, str]  # {gate: low·medium·high·extra}
-    # The deputy's OWN tier, and what it resolves to. `deputy_model`/`deputy_effort` are what the
-    # owner set (None = unset); the `effective_` pair is what a turn would actually run on.
+    # `deputy_model` is what the owner set; the `effective_` pair is what a turn would actually
+    # run on.
     deputy_model: str | None = None
     deputy_effort: str | None = None
     deputy_effective_model: str | None = None
@@ -282,9 +272,10 @@ class DeputyConfigResponse(BaseModel):
 
 
 class RepoGitResponse(BaseModel):
-    """The repo's two git knobs after a write (workflow-renovation-v2 §2.2). `resolved_anchor` is
-    what `anchor_branch` actually points at now — None when the repo isn't a git repo; `error` when
-    the configured branch doesn't exist, which is a refusal at every git site, not a fallback."""
+    """The repo's two git knobs after a write.
+
+    `resolved_anchor` is what `anchor_branch` points at now; `error` when the configured branch does
+    not exist, which every git site refuses rather than falling back."""
     ok: bool
     repo_id: str
     review_mode: str
@@ -294,9 +285,10 @@ class RepoGitResponse(BaseModel):
 
 
 class RepoBranchesResponse(BaseModel):
-    """The anchor picker's option set — this repo's local branches, most-recently-committed first,
-    with the work-item branches excluded. `anchor` is what the anchor resolves to right now, so the
-    picker can show the branch in USE even when nothing has been configured yet."""
+    """The anchor picker's option set: this repo's local branches, newest-committed first, work-item
+    branches excluded.
+
+    `anchor` is what the anchor resolves to now, so the picker can show the branch in USE."""
     repo_id: str
     branches: list[str] = []
     anchor: str | None = None
@@ -310,11 +302,10 @@ class RepoMetaResponse(BaseModel):
     icon: str | None = None
 
 
-# --- token observability (token-usage-tracking-spec) ----------------------------
+# --- token observability ---
 class TokenTypeSplit(BaseModel):
-    """Breakdown 2 — the systematic (per token-type) split. A run that never returned a final usage
-    (aborted, killed, errored) has no typed split and contributes nothing here — measured usage only.
-    The four sum to the bucket total (reconciliation)."""
+    """The systematic, per-token-type split. A run that never returned a final usage contributes nothing
+    here — measured usage only. The four sum to the bucket total."""
     input: int = 0
     cache_creation: int = 0
     cache_read: int = 0
@@ -322,10 +313,9 @@ class TokenTypeSplit(BaseModel):
 
 
 class CategoryNode(BaseModel):
-    """One node of Breakdown 1 — the semantic tree: a category total + its per-feature amounts,
-    plus how it should READ. `label` is the category's owner-facing name and `collapsed` says the
-    surface should draw it as one bar rather than one per feature — both are taxonomy decisions
-    (token_taxonomy), carried here so no renderer has to re-make them."""
+    """One node of the semantic tree: a category total, its per-feature amounts, and how it should READ.
+
+    `label` and `collapsed` are taxonomy decisions carried here, so no renderer has to re-make them."""
     total: int = 0
     features: dict[str, int] = {}
     label: str = ""
@@ -333,14 +323,13 @@ class CategoryNode(BaseModel):
 
 
 class TokenBucket(BaseModel):
-    """A token total plus its splits. Two reconciling breakdowns: `by_category` (semantic — the
-    generic tree the FE renders) and `by_type` (systematic). `by_scope`/`by_feature` are retained
-    flat maps for back-compat. All maps are open (producer-supplied labels, not a locked enum)."""
+    """A token total plus its splits: `by_category` is semantic, `by_type` systematic, and the two
+    reconcile. All maps are open, not a locked enum."""
     total: int
     by_scope: dict[str, int] = {}
     by_feature: dict[str, int] = {}
-    # Per-feature cache_read (global only) — lets the drilldown's "By operation" tab render 4-type
-    # (per-feature 3-type + this) when the owner toggles cache_read on. Empty on per-repo buckets.
+    # Per-feature cache_read, global only, so a drilldown can render 4-type. Empty on per-repo
+    # buckets.
     by_feature_cache_read: dict[str, int] = {}
     by_type: TokenTypeSplit = TokenTypeSplit()
     by_category: dict[str, CategoryNode] = {}
@@ -351,8 +340,8 @@ class RepoTokens(TokenBucket):
 
 
 class ArchivedRepoTokens(BaseModel):
-    """One disconnected project's preserved spend. `label` is the tombstoned display name (falls
-    back to the bare id for repos that left before tombstoning); `disconnected_at` is null there."""
+    """One disconnected project's preserved spend. `label` is the tombstoned display name, falling back
+    to the bare id."""
     id: str
     label: str
     total: int = 0
@@ -361,17 +350,18 @@ class ArchivedRepoTokens(BaseModel):
 
 
 class ArchivedTokens(BaseModel):
-    """"Old projects" — spend belonging to repos that are no longer connected. Their runs are kept
-    forever, so they still count in `global.total`; this bucket keeps them ATTRIBUTABLE (the orbit
-    only renders live repos, so without it the visible nodes wouldn't sum to the header)."""
+    """Spend belonging to repos that are no longer connected.
+
+    Their runs are kept forever, so they still count in the global total; this bucket keeps them
+    attributable."""
     total: int = 0
     runs: int = 0
     repos: list[ArchivedRepoTokens] = []
 
 
 class TokenUsageResponse(BaseModel):
-    """System-wide token usage: the global bucket + one bucket per repo (keyed by repo id) +
-    the "Old projects" roll-up of disconnected repos (also present in by_repo, by raw id)."""
+    """System-wide token usage: the global bucket, one bucket per repo, and the roll-up of disconnected
+    repos."""
     global_: TokenBucket = Field(alias="global")
     by_repo: dict[str, RepoTokens] = {}
     archived: ArchivedTokens = ArchivedTokens()
@@ -381,7 +371,7 @@ class TokenUsageResponse(BaseModel):
 
 class TokenDay(BaseModel):
     """One local-day bucket of the usage time-series: the four token types, the day total, and the
-    running `cumulative` total across days."""
+    running cumulative."""
     day: str
     input: int = 0
     cache_creation: int = 0

@@ -1,7 +1,7 @@
-"""Shared route dependencies — context resolution + small cross-surface helpers.
+"""Shared route dependencies — context resolution and small cross-surface helpers.
 
-Imported by routers AND (until their routes move) `server.py`. Depends ONLY on the gateway, config,
-and core — never on `server.py` — so router modules import these without an import cycle.
+Depends only on the gateway, config and core, never on `server.py`, so routers can import it
+without a cycle.
 """
 
 import json
@@ -28,16 +28,8 @@ def knowledge_root(context_id: str):
 def local_harness_root(context_id: str | None, mode: str = "dev"):
     """A context's own operational cell: `local-harness/<id>/<mode>`.
 
-    RESOLVES THE ID THROUGH THE REGISTRY rather than joining the caller's string onto a path. A
-    `context_id` arrives off a query string, and `Path / "../../.."` walks out of the tree quite
-    happily — `contexts.resolve` maps anything unregistered to `global` (it already did, for every
-    other purpose), so the returned id can only ever be one this daemon knows.
-
-    Found by SuperMe's own security sweep on 2026-08-14 and reproduced: routes that built this path
-    inline resolved `context_id='../../../../tmp/decoy'` to a directory outside `local-harness/`
-    entirely. `resolve_plugin_file` was not the hole — it validates `name` and then checks the result
-    sits under `base`, but `base` was already outside, so the check passed on a compromised premise.
-    A containment test is only worth the root it is given."""
+    RESOLVES THE ID THROUGH THE REGISTRY rather than joining the caller's string onto a path — a
+    containment test is only worth the root it is given."""
     return LOCAL_HARNESS_DIR / contexts.resolve(context_id).id / mode
 
 

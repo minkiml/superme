@@ -1,6 +1,8 @@
-"""Filesystem browse — the connect-a-domain folder picker's backend. Lists sub-directories of a
-path, bounded to the owner's home dir (a localhost dev tool, but never above home). Read-only; no
-create/delete here — creating a new project dir happens at registration (POST /repos)."""
+"""Filesystem browse — the connect-a-domain folder picker's backend.
+
+Lists sub-directories of a path, bounded to the owner's home dir. Read-only: creating a project dir
+happens at registration.
+"""
 
 from pathlib import Path
 
@@ -44,8 +46,8 @@ def fs_browse(path: str = "") -> dict:
             key=lambda c: c.name.lower(),
         )
     except PermissionError:
-        # macOS TCC (Documents/Desktop/Downloads etc.) — degrade to a locked, empty view rather than
-        # erroring the whole picker; the owner can navigate elsewhere or grant Full Disk Access.
+        # macOS file-access protection: degrade to a locked, empty view rather than erroring the
+        # whole picker.
         return {"path": str(target), "parent": parent, "entries": [], "locked": True}
     except OSError as e:
         raise HTTPException(status_code=400, detail=f"cannot read directory: {e}") from e

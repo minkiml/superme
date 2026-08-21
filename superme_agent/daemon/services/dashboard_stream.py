@@ -1,22 +1,8 @@
-"""The dashboard's live-push channel (`/ws/dashboard`) — routing-audit §3.3 / §7.6.
+"""The dashboard's live-push channel.
 
-**This channel carries TOPICS, never values.** A frame says "everything under `dev:my-repo:`
-changed"; the browser then refetches over ordinary HTTP. That is the whole design, and it is what
-makes push safe here: every number on screen still has exactly ONE source (the REST read), so a
-pushed frame and a polled read can never disagree about a value. A channel that shipped the values
-themselves would introduce that disagreement — the reason the audit originally deferred push — and
-this one structurally cannot.
-
-What it replaces: the browser asking "anything new?" every five seconds whether or not anything
-happened. With this, the poll becomes a backstop at 30s (the FE raises its own intervals while the
-socket is up, and drops back to 5s the moment it isn't), and changes land immediately.
-
-Where the events come from: `dev_store.log_event` — the one write every meaningful state change
-already funnels through, 78 call sites across 20 modules. `lifespan` registers the observer.
-
-Delivery is best-effort, exactly like `item_stream`: a full subscriber queue drops the frame rather
-than backpressure whatever produced the event. Dropping an invalidation costs at most one backstop
-poll of staleness, which is precisely what the backstop is for.
+It carries TOPICS, never values: a frame says what changed, the browser refetches over HTTP, and
+every number keeps one source. Best-effort — a full queue drops the frame rather than backpressure
+the write.
 """
 
 from __future__ import annotations
@@ -26,35 +12,28 @@ import logging
 
 log = logging.getLogger("superme-agent")
 
-# Every open dashboard panel is one queue. Small: frames are tiny and a stalled client should be
-# dropping, not buffering minutes of history it will re-derive from one refetch anyway.
+# One queue per open panel, small: a stalled client should drop rather than buffer history it will
+# refetch.
 _subscribers: set[asyncio.Queue] = set()
 _QUEUE_MAX = 64
 
-# Coalescing. A single build cycle writes a burst of events (run start, several artifacts, report,
-# phase advance); without this the browser would refetch once per event. Collect topics for a beat,
-# then emit ONE frame carrying the union. 250ms is below the threshold where a UI reads as delayed
-# and comfortably above a burst's internal spacing.
+# A build cycle writes a burst of events; collect topics for a beat, then emit ONE frame carrying
+# the union.
 COALESCE_MS = 250
 _COALESCE_S = COALESCE_MS / 1000
 _pending: set[str] = set()
 _flush_task: asyncio.Task | None = None
 
-# The topic every system-wide number lives under. A run starting or ending moves token totals, the
-# attention feed and the running-count on the roster, so every event touches it.
+# The topic every system-wide number lives under. A run starting moves totals, the feed and the
+# roster.
 TOPIC_SYSTEM = "sys:"
 
 
 def topics_for(event: dict) -> list[str]:
     """The invalidation topics one dev event implies.
 
-    Deliberately coarse: the repo prefix, plus `sys:`. The FE's key grammar nests
-    (`dev:<ctx>:` covers that repo's board, its attention feed and every open item under it), so a
-    repo-level topic is already the right blast radius for anything an item does. Being finer would
-    mean this module deciding which of the FE's views care about which event kinds — a coupling that
-    would rot the first time either side changed. Refetching one extra cheap endpoint is the
-    cheaper mistake.
-    """
+    Deliberately coarse — the repo prefix plus `sys:`. Being finer would mean this module deciding
+    which FE views care about which event kinds, a coupling that rots the first time either changes."""
     ctx = str(event.get("context_id") or "").strip()
     out = [TOPIC_SYSTEM]
     if ctx:
@@ -79,9 +58,9 @@ def has_subscribers() -> bool:
 
 
 def publish(topics: list[str]) -> None:
-    """Queue `topics` for the next coalesced frame. Safe to call from anywhere on the daemon's event
-    loop, and a no-op when nobody is watching — which is the common headless/autopilot case, so an
-    unattended run pays nothing for this channel existing."""
+    """Queue `topics` for the next coalesced frame.
+
+    Safe to call from anywhere on the daemon's event loop, and a no-op when nobody is watching."""
     if not _subscribers or not topics:
         return
     _pending.update(topics)
@@ -89,12 +68,9 @@ def publish(topics: list[str]) -> None:
 
 
 def publish_event(event: dict) -> None:
-    """The `dev_store.log_event` observer: one event → its topics. Installed once, by `lifespan`.
+    """The `log_event` observer: one event to its topics.
 
-    Runs on whatever thread/context the write happened on, which is NOT always the event loop (a
-    background runner may be off-thread), so it never touches the queues directly — `publish` only
-    mutates a set, and the flush is scheduled on the loop.
-    """
+    It runs on whatever context the write happened on, so it never touches the queues directly."""
     publish(topics_for(event))
 
 
@@ -105,8 +81,8 @@ def _schedule_flush() -> None:
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
-        # No loop here (a synchronous write off the daemon's loop). The topics stay pending and ride
-        # out with the next publish that does land on the loop; the backstop poll covers the gap.
+        # No loop here, so topics ride out with the next publish that lands on one. The backstop
+        # covers it.
         return
     _flush_task = loop.create_task(_flush())
 

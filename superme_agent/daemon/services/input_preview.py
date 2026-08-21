@@ -1,16 +1,7 @@
-"""Input inspector (prompt inspector "A") — read back the ACTUAL input a past run sent (captured at
-send time into `run_input`) and render it as a self-contained HTML page for a new browser tab.
+"""Read back the ACTUAL input a past run sent and render it as a self-contained HTML page.
 
-Two channels, exactly as the doc's context-model describes them:
-  • system prompt  — the layer-2 system append (persona · charter · constitution catalog ·
-    operating-context · session-kind preamble incl. the background run protocol), captured through the SAME
-    `AgentService.assemble_system_append` a live turn used — byte-for-byte what the run sent.
-  • prompt body    — the birth-once orient block + the phase's kernel-speech trigger, as sent.
-
-Capture happens ONLY for throwaway prompt-extraction probe items (the Prompt X-ray tab fires one,
-runs a real lifecycle, then tears it down leaving the tagged run trace + these captured inputs).
-The reconstruct-from-current-state preview ("B") was removed — a real captured run reflects the
-actual accumulation (resumed transcript, real cycles) that a preview cannot. Pure read.
+Two channels: the system append, captured through the same builder a live turn used, and the
+prompt body as sent. Pure read.
 """
 
 from __future__ import annotations
@@ -26,9 +17,8 @@ log = logging.getLogger("superme-agent")
 
 
 def build_captured_input(context_id: str, item_id: str, run_id: int) -> dict | None:
-    """Prompt inspector "A": the ACTUAL input a past run sent, read back from the run_input capture
-    → the same dict shape `render_input_page` takes, or None when this run has no captured input
-    (a pre-feature run, or an interactive/chat turn that isn't captured)."""
+    """The ACTUAL input a past run sent, read back from the capture into the dict `render_input_page`
+    takes. None when this run has no captured input."""
     from ...gateway import contexts
     from .. import app_state
     spine = app_state.spine
@@ -51,8 +41,8 @@ def build_captured_input(context_id: str, item_id: str, run_id: int) -> dict | N
         "model": run.get("model") or "—", "effort": run.get("effort") or "—",
         "run_id": int(run_id), "started_at": run.get("started_at"),
     }
-    # The system prompt's provenance breakdown (ordered [{name,location,text}]), captured alongside
-    # the whole system_prompt. None for pre-feature rows → the renderer falls back to one whole card.
+    # The provenance breakdown captured beside the whole system prompt. None makes the renderer
+    # fall back to one card.
     system_fragments = None
     raw_frags = rec.get("system_fragments")
     if raw_frags:
@@ -62,18 +52,15 @@ def build_captured_input(context_id: str, item_id: str, run_id: int) -> dict | N
                 system_fragments = parsed
         except Exception:  # noqa: BLE001 — a corrupt capture must still render (fallback card)
             system_fragments = None
-    # What the turn was ALLOWED to do (2026-08-06). Captured in the same row as the prose, because
-    # the prose alone can't explain why two runs on the same words behaved differently. None on
-    # pre-feature rows → the page simply omits the block.
+    # What the turn was ALLOWED to do — the prose alone cannot explain two runs on the same words.
     surface = None
     try:
         parsed = json.loads(rec.get("turn_surface") or "null")
         surface = parsed if isinstance(parsed, dict) else None
     except Exception:  # noqa: BLE001 — a corrupt capture must still render the prose
         surface = None
-    # The OTHER authored channels (2026-08-10): the phase skill this run was told to invoke, and the
-    # mounted tools' own descriptions. Both are prompt text SuperMe wrote; a page that shows only the
-    # append reads as if the append were all we author, which understated it by ~2x.
+    # The other authored channels: the phase skill and the mounted tool docs. Both are prompt text
+    # SuperMe wrote.
     extras: dict = {}
     try:
         parsed = json.loads(rec.get("authored_extras") or "null")
@@ -88,17 +75,8 @@ def build_captured_input(context_id: str, item_id: str, run_id: int) -> dict | N
 
 # --------------------------------------------------------------------------- HTML rendering
 
-# ONE PALETTE, TWO THEMES, AND IT IS THE APP'S (owner, 2026-08-08). These pages open in a real
-# browser tab, outside the app's own theme toggle, so the only signal available is the OS/browser
-# preference — and they were hardcoded dark, which put a black page beside a light dashboard for
-# anyone running light. Every colour is now a variable declared twice: dark in `:root`, light under
-# `prefers-color-scheme: light`.
-#
-# The VALUES are `web/frontend/src/index.css`'s own tokens, verbatim, so a doc opened in its own tab
-# is the same document it is inside the drilldown rather than a lookalike in a second palette. Keep
-# them in step: `--c-app` → `--bg`, `--c-surface` → `--panel`, `--c-sunken` → `--surface` (the app
-# sinks code and inputs), `--c-accent-text` → `--accent`, `--c-warn` → `--warn`, `--c-success` → `--ok`.
-# Nothing below may use a literal colour — a hex here is a rule that obeys only one theme.
+# These pages open outside the app's theme toggle, so every colour is a variable declared for both
+# schemes.
 _PAGE_CSS = """
 :root {
   color-scheme: dark light;
@@ -160,16 +138,14 @@ def _approx_tokens_n(chars: int) -> int:
     return round(chars / 4)
 
 
-# The orient block's birth headers (mirror of sessions._BIRTH_BLOCK_HEADERS) and the kernel's
-# `orient \n\n---\n\n trigger` join. A body that opens with a birth header carries the orient
-# (a session-birth run); a resumed run's body is the trigger ALONE (orient already replayed
-# earlier in the transcript) → (None, body).
+# A body opening with a birth header carries the orient; a resumed run's body is the trigger
+# alone.
 _ORIENT_HEADERS = ("### Work-item orientation", "### Subject activity-run trace")
 
 
 def _split_body(body: str) -> tuple[str | None, str]:
-    """Split a run's prompt body into (orient_block, trigger). Returns (None, body) when this run
-    injected no orient (a resumed run — the orient lives earlier in the replayed transcript)."""
+    """Split a run's prompt body into (orient_block, trigger). Returns (None, body) for a resumed run,
+    whose orient lives earlier in the replayed transcript."""
     b = body or ""
     if b.lstrip().startswith(_ORIENT_HEADERS):
         parts = b.split("\n\n---\n\n", 1)   # same boundary sessions._strip_birth_block uses
@@ -178,9 +154,8 @@ def _split_body(body: str) -> tuple[str | None, str]:
 
 
 def _frag_card(text: str, *, name: str, location: str, gate: bool = False) -> str:
-    """One fragment sub-card: the prompt-text box (full reading width) + a right-side info gutter
-    (source name · location · size) living in the page's added side space — the text box is never
-    narrowed to make room for the info."""
+    """One fragment sub-card: the prompt-text box at full reading width, plus a right-side info gutter in
+    the page's added space, so the text is never narrowed."""
     body = (text or "").strip("\n")
     meta = "" if gate else f'<div class="fmeta">{len(body):,} chars · ~{_approx_tokens(body):,} tok</div>'
     return (
@@ -213,8 +188,7 @@ def _gate_section(title: str, *, name: str, note: str) -> str:
 
 
 def _fragment_orient(orient: str) -> list[dict]:
-    """Split the orient block into its "### …" sub-sections, each a fragment. The block is written
-    once at session birth (kernel_speech.render_orient_block / the sessions birth block)."""
+    """Split the orient block into its `### …` sub-sections, each a fragment."""
     loc = "orient block · session birth (core/kernel_speech.py)"
     chunks = [c for c in re.split(r"(?m)^(?=### )", orient) if c.strip()]
     frags: list[dict] = []
@@ -226,10 +200,10 @@ def _fragment_orient(orient: str) -> list[dict]:
 
 
 def _render_surface(surface: dict | None) -> str:
-    """④ — what the turn was ALLOWED to do. The prompt is only half of a run's input; the other
-    half is its capability, and two runs carrying identical words behave differently when one may
-    run a shell in the worktree and the other may not. Omitted entirely for rows captured before
-    this existed, rather than rendered as a block of dashes claiming the turn had no powers."""
+    """What the turn was ALLOWED to do.
+
+    Two runs carrying identical words behave differently when one may run a shell. Omitted entirely
+    for rows captured before this existed."""
     if not surface:
         return ""
     def _paths(key: str) -> str:
@@ -248,8 +222,8 @@ def _render_surface(surface: dict | None) -> str:
                                "NOT in this capture" if surface.get("resumes")
                                else "no — this is the whole context"),
     ]
-    # Rendered as the same plain-text fragment card every other channel uses, so the page keeps one
-    # vocabulary — this is a fourth thing the run was given, not a differently-shaped widget.
+    # The same fragment card every other channel uses: a fourth thing the run was given, not a new
+    # widget.
     w = max(len(k) for k, _ in rows)
     text = "\n".join(f"{k.ljust(w)}   {v}" for k, v in rows)
     return _render_section("⑥ Turn surface — what this run was ALLOWED to do", [{
@@ -258,18 +232,14 @@ def _render_surface(surface: dict | None) -> str:
 
 
 def render_input_page(data: dict) -> str:
-    """Render one input-inspector "A" page (self-contained HTML) — the ACTUAL bytes a real run sent,
-    read back from the run_input capture. Each of the three channels is broken into per-fragment
-    sub-cards, each labelled on the side with its source name + location."""
+    """Render one input-inspector page — the ACTUAL bytes a run sent.
+
+    Each channel is broken into per-fragment sub-cards, labelled with its source name and location."""
     m = data["meta"]
     mode_chip = ("mode-captured", "ACTUAL · as sent to the model")
     banner = "This is the exact input that was sent to the model for this run."
-    # Three channels, matching the three distinct behaviors:
-    #   1. system prompt   — assembled fresh EVERY run (reflects current state); shown as the ordered
-    #      provenance fragments it's assembled from (persona · charter · catalog · … )
-    #   2. orient block    — written ONCE at session birth (a frozen run-1 snapshot), split into its
-    #      "### …" sub-sections; absent on resumed runs (it lives earlier in the replayed transcript)
-    #   3. user/trigger    — this run's freshly injected kernel-speech message
+    # Three channels: the system prompt is assembled per run, the orient block written once at
+    # birth, the trigger fresh.
     sys_frags = data.get("system_fragments") or [
         {"name": "System append (whole)", "location": "agent_service.assemble_system_append()",
          "text": data.get("system_prompt", "")}]
@@ -297,10 +267,8 @@ def render_input_page(data: dict) -> str:
         trig_html = _render_section(trig_title, [{
             "name": f"{m.get('phase', '?')} trigger message",
             "location": "core/kernel_speech.py · phase speech", "text": trig}])
-    # ④/⑤ — the authored channels that don't arrive as a message. The skill is loaded when the run
-    # invokes it (so it enters the transcript, not the system prompt) and the tool docs ride in every
-    # request; both are SuperMe's own words, and leaving them off made the append look like the whole
-    # of what we write.
+    # The authored channels that never arrive as a message: the skill enters the transcript, the
+    # tool docs ride every request.
     skills, tools = data.get("skills") or [], data.get("tools") or []
     skill_html = _render_section(
         "④ Phase skill — the procedure this run was told to invoke", skills) if skills else \

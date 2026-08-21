@@ -1,17 +1,7 @@
-"""Standing-sweep routes — the launch bar (research-sweep-model §7).
+"""Standing-sweep routes — the launch bar.
 
-Pathed under `/dev/research/` on purpose: `/dev/sweep` is already the LEARNING
-capture sweep, a different act entirely (it mines a conversation for durable
-learnings). Two live meanings of one word is how a router ends up on the wrong one.
-
-A STANDING sweep is one whose subject is the codebase itself and whose question never stops being
-worth asking: `audit · refactoring · housekeeping · security`. It is launched from a BUTTON rather
-than raised as a ticket, and that is the whole difference — one pipeline, not two. The item is born
-at `investigate`, already classified, because the button IS the classification and there is nothing
-for triage to read.
-
-The commissioned families (`study`, `deep-diagnosis`) have no button: both are born from someone
-asking about a named thing, and there is nothing standing to put on one.
+Pathed under `/dev/research/` on purpose: `/dev/sweep` is already the learning capture sweep. The
+item is born at `investigate`, because the button IS the classification.
 """
 
 import logging
@@ -34,10 +24,10 @@ router = APIRouter()
 
 @router.get("/dev/research/sweeps/families", response_model=SweepFamiliesResponse)
 async def dev_sweep_families() -> dict:
-    """The launch bar's buttons — a projection of `kind_profiles.RESEARCH_FAMILIES`.
+    """The launch bar's buttons — a projection of the research-families registry.
 
-    Read-only and repo-independent: which sweeps EXIST is a property of this harness, not of the
-    project. Adding a family is a row in that registry; this route grows a button with no edit."""
+    Read-only and repo-independent: which sweeps exist is a property of this harness. Adding a family
+    is a row in that registry."""
     return {"families": [
         {"family": f.slug, "icon": f.icon, "blurb": f.blurb, "asks_interest": f.asks_interest}
         for f in kind_profiles.standing_families()
@@ -47,14 +37,10 @@ async def dev_sweep_families() -> dict:
 class SweepLaunchBody(BaseModel):
     family: str
     context_id: str = "global"
-    # What to point it at. Empty = the whole repo, which is the honest default for a standing
-    # sweep — and the record has to SAY which breadth it got either way (the family guides' "two
-    # breadths" fork), so an empty area is a real answer rather than a missing one.
+    # Empty means the whole repo, which is the honest default: the record has to say which breadth
+    # it got.
     area: str = ""
-    # `audit` only: coverage | performance | logic | promises. The registry's `asks_interest` says
-    # which families need it. There is no typed field on the item in v1 — by decision: a field that
-    # only leans is one nobody can rely on, so the interest goes into the description, where the
-    # investigate run reads it as part of the subject.
+    # No typed field for interest: one that only leans is unreliable, so it rides the description.
     interest: str = ""
 
 
@@ -65,9 +51,8 @@ async def dev_sweep_launch(body: SweepLaunchBody,
                            spine: SystemSpine = Depends(get_spine)) -> dict:
     """Launch a standing sweep: mint the item at `investigate`, then fire its first run.
 
-    Costs real money, so the surface confirms before calling this — but the refusal that matters is
-    here: an unknown family, or one that is not standing, is a 400 rather than a research item with
-    no button behind it."""
+    An unknown family, or one that is not standing, is a 400 rather than a research item with no button
+    behind it."""
     fam = kind_profiles.FAMILY_BY_SLUG.get(str(body.family))
     if fam is None:
         raise HTTPException(status_code=400, detail=f"unknown family: {body.family}")
@@ -85,8 +70,8 @@ async def dev_sweep_launch(body: SweepLaunchBody,
     scope = area or "the whole repo"
     title = (f"{fam.slug.capitalize()} — {interest} in {scope}" if interest
              else f"{fam.slug.capitalize()} — {scope}")
-    # The description IS the subject, and it is what investigate turns into its questions and walls
-    # (there is no plan phase on a research item). Written in the owner's frame, not the kernel's.
+    # The description IS the subject, written in the owner's frame — investigate turns it into
+    # questions and walls.
     desc = "\n".join(filter(None, [
         f"Standing {fam.slug} sweep, launched from the workspace bar.",
         f"Subject: {scope}.",

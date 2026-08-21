@@ -28,8 +28,7 @@ async def dev_read(context_id: str = "global",
     inbox = dev_store.list_inbox(context_id)
     data = dev.read_all(root, inbox=inbox)
     data["context_id"] = context_id
-    # Run telemetry comes from the spine (WI-4): one live-rows query + per-item accumulated stats.
-    # The daemon queries the spine here, then the service enriches the items (decision #7 push-down).
+    # The daemon queries the spine here, then the service enriches the items.
     live_by_item = {r["item_id"]: r for r in spine.live_runs(context_id) if r.get("item_id")}
     stats = spine.run_stats(context_id, mode="dev")
     dev.enrich_work_items(root, data["work_items"], live_by_item, stats)
@@ -41,21 +40,18 @@ async def dev_read(context_id: str = "global",
 async def dev_attention(context_id: str = "global",
                         dev: DevKnowledgeService = Depends(get_dev),
                         spine: SystemSpine = Depends(get_spine)) -> dict:
-    """The attention engine (S7/D10): every item in at most one bucket, strict priority
-    needs_you (awaiting_human) > deputy_working (live deputy judgment) > running (live phase run)
-    > unread (terminal, never opened) — derived from durable state at read time. `badge` = the top
-    non-empty tier's color + count, or null when nothing claims attention. Powers the workspace
-    badge + kanban tinting."""
+    """Every item in at most one bucket, by strict priority, derived from durable state at read time.
+
+    `badge` is the top non-empty tier's colour and count, or null when nothing claims attention."""
     root = dev_root(context_id)
     items = dev.read_all(root)["work_items"]
     live = {r["item_id"]: r for r in spine.live_runs(context_id) if r.get("item_id")}
     running = set(live)
-    # The deputy subset: live runs stamped feature="deputy" (its judgment is standing in for the
-    # owner, so it gets its own attention tier, not the generic green "running") — F1.
+    # The deputy's judgment stands in for the owner, so it gets its own attention tier, not the
+    # generic running green.
     deputy = {iid for iid, r in live.items() if str(r.get("feature")) == "deputy"}
-    # How many proposals in each parked research review are waiting on a ruling only the owner can
-    # give. Read here rather than inside `assign` so that stays pure — and read at ALL, because the
-    # bare "at the review gate" line is identical whether or not the item is asking them something.
+    # Read here so `assign` stays pure — and at all, because the gate line looks identical either
+    # way.
     rulings = {}
     for it in items:
         if str(it.get("status")) == "awaiting_human" and str(it.get("phase")) == "review":
@@ -74,11 +70,11 @@ async def dev_attention(context_id: str = "global",
 async def dev_workgraph(context_id: str = "global",
                         dev: DevKnowledgeService = Depends(get_dev),
                         dev_store: DevStore = Depends(get_dev_store)) -> dict:
-    """The DERIVED WorkGraph projection (D3): repo root · roadmap deliverables · work-items ·
-    spawned-but-unpushed inbox rows, with contains / spawned_from(relation) / supersedes edges.
-    Assembled on demand from the authoritative feeds — nothing stored, nothing to sync. Cycles
-    (a hand-edited provenance loop) are REPORTED as data, never a 500. Git state joins as node
-    decoration in S4; the graph VIEW consumes this in S7."""
+    """The DERIVED work-graph projection: repo root, deliverables, work-items and unpushed inbox rows,
+    with their edges.
+
+    Assembled on demand from the authoritative feeds — nothing stored. A cycle is REPORTED as data,
+    never a 500."""
     root = dev_root(context_id)
     items = dev.read_all(root)["work_items"]
     g = workgraph.build(
@@ -97,18 +93,10 @@ async def dev_log(context_id: str = "global", since: str | None = None,
                   until: str | None = None, scope: str | None = None,
                   item_id: str | None = None, limit: int = 200,
                   dev_store: DevStore = Depends(get_dev_store)) -> dict:
-    """The activity log — a SELECTIVE read over the events table (PRD §4.9), never a dump.
-    Filters: `item_id` (an item's own timeline), `scope`, `since`/`until` (ISO timestamps — e.g.
-    "what happened yesterday"). Newest first. Powers the dashboard activity view and the chat
-    "what was done…" queries.
+    """The activity log — a SELECTIVE read over the events table, never a dump.
 
-    `scope` takes a stored scope (`item` | `dev`) or **`repo`** — the activity view's read: every
-    dev-native row plus the item-scoped kinds that are milestones of the PROJECT rather than steps
-    inside one item (`REPO_MILESTONE_KINDS`). Per-item traces belong to that item's drilldown.
-
-    Discarded rows (a re-run's soft-deleted attempt) follow the reader split: an ITEM read is the
-    drilldown asking "what is happening on this item", so it sees the current attempt only; a
-    REPO-WIDE read is the project's history, which includes the attempts that were thrown away."""
+    `scope` takes a stored scope or `repo`, which adds the item-scoped kinds that are milestones of the
+    PROJECT rather than steps inside one item."""
     events = dev_store.list_events(
         context_id, since=since, until=until, scope=scope, item_id=item_id, limit=limit,
         include_discarded=item_id is None,

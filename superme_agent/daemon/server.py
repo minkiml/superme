@@ -1,10 +1,7 @@
 """FastAPI app for the SuperMe Core daemon.
 
-Thin assembly module: builds the `app` with its lifespan and mounts the resource routers. Every
-route handler lives under `routers/` (the HTTP surfaces + the agent WebSocket in `routers/ws.py`);
-orchestration lives in `services/`; the shared singletons in `app_state` (injected via `Depends`).
-`spine.reconcile()` + the idle-sweep heartbeat run in the `lifespan` (lifespan.py), not at import.
-`uvicorn` imports `server:app`.
+Thin assembly: build the `app` with its lifespan and mount the routers. Handlers live under
+`routers/`, orchestration in `services/`, the shared singletons in `app_state`.
 """
 
 import logging
@@ -15,8 +12,7 @@ from .lifespan import lifespan
 
 log = logging.getLogger("superme-agent")
 
-# docs_url/redoc_url disabled: the daemon is internal (the BFF is its only client) and we want the
-# `/docs` path for the SuperMe Docs API, not FastAPI's Swagger UI.
+# Swagger is off: the daemon is internal, and `/docs` belongs to the SuperMe Docs API.
 app = FastAPI(title="SuperMe Core daemon", docs_url=None, redoc_url=None, lifespan=lifespan)
 
 

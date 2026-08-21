@@ -1,7 +1,5 @@
-"""Daemon orchestration services (Backend Refactor R4+).
+"""Daemon orchestration services — agent orchestration extracted out of the route handlers.
 
-Agent-orchestration extracted out of route handlers — the background plan/distill/write runners, the
-sweep + idle loop, and the proposal state-machine driver. This is daemon glue (spawns asyncio tasks,
-streams events), kept here rather than pushed into `core/` so the surface-agnostic services stay pure.
-Empty until R4.
+Daemon glue that spawns tasks and streams events, kept here rather than in `core/`, so the
+surface-agnostic services stay pure.
 """

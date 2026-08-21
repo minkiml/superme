@@ -1,14 +1,7 @@
-"""Launch a cohort — the onboarding itemize step's daemon side (autopilot slice 4c).
+"""Launch a cohort — the onboarding itemize step's daemon side.
 
-`core/dev_knowledge.itemize_launch` does the CREATION (topological, cohort-stamped, edge-resolved,
-loop-free so it unit-tests without a daemon); this module fires the first triage run for each item
-that starts `active`, so the autopilot chain actually begins. Items parked `awaiting_upstream` are
-kicked later by the scheduler's peer release (`services.scheduler.release_downstream`), which runs
-the same `fire_auto_triage` first-kick when an upstream completes.
-
-`cohort_spend` is the OBSERVABILITY read (no breaker): the aggregate build+vet token spend across a
-launch cohort. The launch budget was deliberately NOT built as a hard ceiling — the per-item budget
-already contains each item with hold-and-page semantics; this exposes the aggregate so it's visible.
+`itemize_launch` does the creation; this fires the first triage run for each item that starts
+`active`. `cohort_spend` is an observability read, not a breaker.
 """
 
 from __future__ import annotations
@@ -23,12 +16,10 @@ log = logging.getLogger("superme-agent")
 
 
 def launch_cohort(context_id: str, items: list[dict], *, actor: str = "agent") -> dict:
-    """Create the cohort (via `itemize_launch`), log the launch, and fire the first triage run for
-    every item that starts `active`. Returns the itemize result augmented with the close-out shape
-    the skill renders: `{cohort, created, running, waiting, launched}` where `launched` is the count
-    of items whose triage actually started this call (the rest wait on upstreams). Raises
-    RuntimeError if the context has no internal (dev) root, ValueError on a bad batch (bubbled up
-    from itemize_launch — cyclic/unknown edge, missing title)."""
+    """Create the cohort, log the launch, and fire the first triage run for every item that starts
+    `active`.
+
+    `launched` counts the items whose triage actually started this call; the rest wait on upstreams."""
     from ...gateway import contexts
     ctx = contexts.resolve(context_id, "dev")
     if not ctx.internal_root:

@@ -1,4 +1,4 @@
-"""Response schemas for the work-item git routes (routers/dev/git.py — workspace-workflow S4)."""
+"""Response schemas for the work-item git routes (routers/dev/git.py)."""
 
 from __future__ import annotations
 
@@ -12,8 +12,7 @@ class GitHealthResponse(BaseModel):
     branch: str | None = None
     worktree: str | None = None
     trunk: str | None = None    # the repo's ANCHOR branch — what ahead/behind and the merge target are
-    # The repo's review mode (`fast` | `strict`), read live and echoed here so the rule governing the
-    # merge is visible where the merge is. Not stored on the item: a mode flip applies immediately.
+    # Read live and echoed here, so the rule governing the merge is visible where the merge is.
     review_mode: str | None = None
     branch_exists: bool | None = None
     dir_exists: bool | None = None
@@ -36,14 +35,11 @@ class GitMergeResponse(BaseModel):
     target: str | None = None
     conflicts: list[str] | None = None
     stash_warning: str | None = None
-    # The merge act owns freshness (§2.3). Neither value is a failure — the anchor moved while the
-    # item sat at the gate. `park` = syncing it in conflicts, the owner resolves. `revet` = it
-    # merged cleanly but over `stale_paths` this item also changed, so the evidence is stale and
-    # the item takes one vet cycle before it can be approved again.
+    # Neither value is a failure: the anchor moved under a waiting gate. `park` conflicts, `revet`
+    # costs a cycle.
     freshness: str | None = None       # park | revet (absent when the anchor was already current)
     stale_paths: list[str] | None = None
-    # Standing freshness-lint warnings raised by this merge. (The knowledge WRITE moved to close —
-    # renovation §2.3 — so a merge no longer reports ops applied or folded.)
+    # Standing freshness-lint warnings raised by this merge.
     lint_warnings: list[str] | None = None
 
 
@@ -81,13 +77,9 @@ class PrCheck(BaseModel):
 
 
 class PrGroup(BaseModel):
-    """One task's slice of the branch. `task` is null for commits that carry no `SuperMe-Task`
-    trailer — they are shown last rather than hidden.
+    """One task's slice of the branch. `task` is null for commits with no trailer; they are shown last.
 
-    The four fields below the diff are the REVIEW NOTES (owner, 2026-08-09): what this task had to
-    make true, what build says to look at, where it left the plan, and what proves it. They sit here
-    rather than in a document of their own because a note is only useful beside the commits it
-    describes — and per TASK, not per file, so two tasks touching one module get two notes."""
+    The four fields below the diff are the REVIEW NOTES, per TASK rather than per file."""
     task: str | None = None
     title: str | None = None    # the plan's `## Tasks` line for this id, when the plan still has it
     done: bool | None = None
@@ -109,7 +101,7 @@ class PrStat(BaseModel):
 
 
 class PrViewResponse(BaseModel):
-    """The dedicated PR page (§4.4): the review report on the left, the task-grouped diff
+    """The dedicated PR page: the review report on the left, the task-grouped diff
     walkthrough on the right. Entirely derived at read time — nothing here is stored."""
     ok: bool
     id: str
@@ -122,8 +114,8 @@ class PrViewResponse(BaseModel):
     pr_open: bool
     merged: bool
     merge_commit: str | None = None
-    # The item's own lifecycle, distinct from the branch's. `terminal` with `merged: False` is the
-    # abandoned/superseded case: the page shows how it ended instead of offering a Merge.
+    # The item's lifecycle, distinct from the branch's: terminal-and-unmerged is the abandoned
+    # case.
     terminal: bool = False
     outcome: str | None = None
     report: str | None = None   # reports/report-review.md, rendered by the FE

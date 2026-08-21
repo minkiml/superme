@@ -1,34 +1,9 @@
-"""One turn, with the retry ladder around it (recovery-resilience R1).
+"""One turn, with the retry ladder around it.
 
-Every background runner in the daemon has the same three lines at its heart — open the stream,
-forward the events, catch whatever escapes — and until now each of them ended that story the same
-poor way: `except Exception: turn_error = True`, which says a turn failed but never why, so the only
-possible response was to page the owner. A 529 that would have cleared in ninety seconds cost the
-same as a real bug.
+IT ONLY EVER RETRIES A TURN THAT DID NOTHING: an attempt that issued a tool call is never replayed,
+because doubling those effects is worse than a wait.
 
-`ResilientTurn` puts the ladder (`core.faults`) in one place instead of twelve:
-
-    turn = ResilientTurn("vet", item_id=item_id)
-    async for ev in turn.stream(_agent, ctx, prompt, **kw):
-        ...                      # exactly the loop the runner had before
-    if turn.fault.failed:        # …and one honest verdict afterwards
-        ...
-
-**It only ever retries a turn that did nothing.** The rule is `saw_call`: if this attempt issued a
-single tool call, the attempt is not replayed, no matter how retryable the failure looks. Re-running
-a turn that already edited files, committed, or filed a report would double those effects to save a
-wait — a far worse outcome than surfacing the failure. So the ladder covers exactly the shape it was
-built for (upstream refused us before any work happened) and declines everything else, where R4's
-owner-driven Resume is the correct cure because a resumed session keeps the work already done.
-
-**The empty-reply case is a failure here, not a success.** A turn whose whole output is
-"API Error: 529 Overloaded" raises nothing; the stream ends normally. Left alone, the run is stamped
-`outcome=success` with 0 tokens and the loop moves on as though a build cycle had happened — which
-is precisely what run 804 did on 2026-07-30. Because that shape has no tool call by definition, it
-is both detectable and safe to replay, so it is the one failure the ladder catches most cleanly.
-
-Interactive turns pass `retry=False`: the owner is watching the stream, and a chat turn that sits
-silent for twenty-nine minutes is worse than one that says "upstream is down" and offers the button.
+A turn whose whole output is an API error raises nothing, and would otherwise be stamped a success.
 """
 
 import asyncio
@@ -51,22 +26,17 @@ class ResilientTurn:
         self.label = label
         self.item_id = item_id
         self.retry = retry
-        # Called before each wait with (fault, attempt-about-to-run, seconds). The runner uses it
-        # to leave a trail — a run that is silently asleep for half an hour is indistinguishable
-        # from a hung one, and the owner deserves to be able to tell those apart.
+        # The runner leaves a trail: a run silently asleep for half an hour looks exactly like a
+        # hung one.
         self._notify = notify
         self.fault: Fault = NO_FAULT
         self.attempts = 0          # completed attempts, so 1 after a clean first try
 
     async def stream(self, agent, ctx, prompt: str, **kw) -> AsyncIterator:
-        """Yield the turn's events, re-attempting on the ladder when an attempt fails without
-        having done anything. Leaves `self.fault` set to the final verdict: NO_FAULT if some
-        attempt got through, otherwise the failure the caller must act on.
+        """Yield the turn's events, re-attempting when an attempt fails without having done anything.
 
-        Registers this task against the item for the whole turn (`run_tasks`), so the stall
-        watchdog has something to cancel when the stream goes quiet. Here rather than in each
-        runner because this is the one place every item run passes through — and a runner that
-        forgot to register would be exactly the run nobody could stop."""
+        Registers this task against the item, so the stall watchdog has something to cancel — here rather
+        than in each runner."""
         watch = run_tasks.register(getattr(ctx, "id", ""), self.item_id)
         try:
             async for ev in self._attempts(agent, ctx, prompt, **kw):

@@ -1,26 +1,7 @@
-"""Resume a stopped work-item — re-fire the run that died (recovery-resilience R4).
+"""Resume a stopped work-item — re-fire the run that died.
 
-`error` (R2) says the work stopped. This is how it starts again: clear the status and re-fire the
-phase's own background run, the SAME firer the workflow would have used. Nothing about the item's
-work is rewound — the branch, the worktree, the artifacts, the transcripts all stand; only the run
-is new. That is what makes Resume cheap and safe to offer, and it is why it is a different act from
-re-run (R5), which deliberately throws work away.
-
-**Resume is not Continue.** They read alike and do opposite things, which is exactly why they keep
-separate names (owner, 2026-07-31):
-
-    Continue  a build parked at a wall it cannot pass → finalize what's doable and carry the gap
-              forward to review. The run SUCCEEDED; the work is what stopped.
-    Resume    a run that never finished → run it again. The work is fine; the RUN is what stopped.
-
-**Why this is one function and not five call sites.** R3 will auto-fire exactly this on a healthy
-restart, and the owner's button fires it now. If auto-resume grew its own dispatch table the two
-would drift, and the drift would be invisible until an outage — the worst possible time to discover
-that the automatic path resumes four phases and the manual one resumes six.
-
-Best-effort and honest about failure: if no run starts, the item goes straight back to `error` with
-the reason, because an item left `active` with nothing running is the silent wedge this whole
-project exists to remove.
+Nothing is rewound: the branch, worktree and artifacts stand, only the run is new. One function,
+not five call sites, so auto-resume and the owner's button cannot drift.
 """
 
 import asyncio
@@ -33,9 +14,7 @@ from . import run_tasks
 
 log = logging.getLogger("superme-agent")
 
-# The phases a stopped item can be resumed at — every phase that owns a background run. `triage`,
-# `plan`, `investigate`, `review` and `close` each have a firer; `build` and `vet` are the loop's.
-# A phase absent here has no run to re-fire, so Resume would be a button that does nothing.
+# Every phase that owns a background run. A phase absent here has no run to re-fire.
 RESUMABLE_PHASES = ("triage", "plan", "build", "vet", "investigate", "review", "close")
 
 
@@ -58,11 +37,10 @@ def resume_reason(item: dict, *, running: bool) -> tuple[bool, str]:
 
 
 def resume_item(context_id: str, item_id: str) -> tuple[bool, str]:
-    """Clear a stopped item's error and re-fire its phase's run. Returns (started, reason).
+    """Clear a stopped item's error and re-fire its phase's run.
 
-    The status is cleared FIRST because every firer refuses a non-active item (the owner-hold rule
-    they all share) — and restored to `error` if nothing starts, so a failed Resume leaves the item
-    exactly as it found it rather than `active` with no run."""
+    The status is cleared FIRST because every firer refuses a non-active item, and restored to `error`
+    if nothing starts."""
     try:
         ctx = contexts.resolve(context_id, "dev")
         if not ctx.internal_root:
@@ -76,11 +54,8 @@ def resume_item(context_id: str, item_id: str) -> tuple[bool, str]:
             return False, why
         phase = str(item.get("phase"))
         was = str(item.get("error_reason") or "")
-        # An UNCONSUMED send-back is re-delivered, not dropped. `_fire` re-runs the phase with its
-        # ordinary prompt, which says nothing about what the deputy asked for — so a resumed item
-        # whose last verdict was "go fix this" reads its own finished transcript and no-ops, while
-        # the deputy keeps paying a full pass to re-derive the same verdict. Routed through the
-        # feedback firer instead, which is the path that carries the reason and the asked-for change.
+        # An unconsumed send-back is re-delivered, not dropped: the ordinary prompt says nothing
+        # about what was asked for.
         pending = _deputy.pending_send_back(dev_root / "work-items" / item_id)
         if pending:
             from .runs import fire_phase_feedback
@@ -100,8 +75,7 @@ def resume_item(context_id: str, item_id: str) -> tuple[bool, str]:
             _dev.set_work_item_error(dev_root, item_id, was or "the work stopped")
             log.warning("resume: feedback re-fire failed for %s — falling back to a plain re-run",
                         item_id)
-        # Clearing the error is what makes the item eligible again — and `set_work_item_status`
-        # drops `error_reason` with it, so a resumed item never carries a stale explanation.
+        # Clearing the error makes the item eligible again and drops `error_reason` with it.
         _dev.set_work_item_status(dev_root, item_id, "active")
         started, detail = _fire(ctx, context_id, item_id, phase)
         if not started:
@@ -118,13 +92,10 @@ def resume_item(context_id: str, item_id: str) -> tuple[bool, str]:
 
 
 def run_phase(context_id: str, item_id: str) -> tuple[bool, str]:
-    """The owner's manual RUN: fire the current phase's own background run (owner, 2026-07-31).
+    """The owner's manual RUN: fire the current phase's own background run.
 
-    The driver for a repo that is NOT on autopilot — the same dispatcher Resume uses, with a
-    different precondition. Resume answers "the run died, start it again"; this answers "nothing has
-    run yet, start it". Refuses a terminal item, an item at a gate (that slot is Approve's), a
-    stopped item (that slot is Resume's) and a run already in flight. Returns (started, reason).
-    """
+    The same dispatcher Resume uses, with a different precondition. Refuses a terminal item, one at a
+    gate, a stopped one, or a run in flight."""
     try:
         ctx = contexts.resolve(context_id, "dev")
         if not ctx.internal_root:
@@ -173,8 +144,8 @@ def _fire(ctx, context_id: str, item_id: str, phase: str) -> tuple[bool, str]:
         return fire_review_entry(context_id, item_id, _spine), "re-fired the review-entry run"
     if phase == "close":
         return fire_close_run(context_id, item_id, _spine), "re-fired the closing run"
-    # plan / investigate — the two intake skills with no dedicated firer, dispatched the same way
-    # `gates.advance_item` dispatches them on an approve.
+    # The two intake skills with no dedicated firer, dispatched the way an approve dispatches
+    # them.
     dev_root = ctx.internal_root / "dev"
     item = _dev.read_work_item(dev_root, item_id) or {}
     model = _spine.effective_model(context_id, item_model=item.get("model"))

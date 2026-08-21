@@ -7,7 +7,7 @@ from ..common import InboxKind, InboxStatus, InboxOrigin, WorkKind
 
 
 class InboxRow(BaseModel):
-    """One quick-capture triage-queue row. kind/status/origin are locked (R5): DevStore validates
+    """One quick-capture triage-queue row. kind/status/origin are locked: DevStore validates
     them against its own value-sets on write, so the Literal can't 500 on a real row."""
     id: int
     context_id: str
@@ -20,21 +20,19 @@ class InboxRow(BaseModel):
     updated_at: str
     title: str | None = None
     origin: list[InboxOrigin] = []  # an item can accrue multiple origins (e.g. ['user','agent'])
-    # D3 provenance a branch-off row carries before push (copied onto the work-item on push).
+    # The provenance edge a branch-off row carries before push (copied onto the work-item on push).
     spawned_from: SpawnedFrom | None = None
-    # F3: run config chosen at capture, locked into the work-item at push. NULL = inherit default.
+    # Run config chosen at capture, locked into the work-item at push. NULL = inherit default.
     model: str | None = None
     effort: str | None = None
-    # Whether the work-item this row becomes drives its own gates. Decided here because the
-    # work-item route only accepts the flag pre-build — capture is the moment always in time.
-    # ON by default: driving itself is the normal case, and the card's toggle is the opt-out.
+    # Decided here because the work-item route only accepts the flag pre-build. On by default; the
+    # card's toggle is the opt-out.
     autopilot: bool = True
-    # §4.1: which machinery this row becomes when pushed (implementation | research). NULL = nobody
-    # has judged yet, and triage decides alone — the behaviour every row had before the field.
+    # Which machinery this row becomes when pushed. NULL means nobody has judged, and triage
+    # decides alone.
     work_kind: WorkKind | None = None
-    # The two roles that run on their own tier rather than this item's — `vet` checks what build
-    # produced, `deputy` judges the gates. NULL = fall through to the repo's vet tier / the system
-    # deputy tier, never to `model` above.
+    # Roles that run on their own tier, falling through to the repo or system default — never to
+    # `model` above.
     vet_model: str | None = None
     vet_effort: str | None = None
     deputy_model: str | None = None
@@ -45,9 +43,8 @@ class InboxPushResponse(BaseModel):
     ok: bool
     work_item: WorkItem
     inbox: InboxRow
-    # D5's brief self-check, run at the last moment it is actionable: the brief has just moved into
-    # the item's read-only `preliminary/`. Empty = fine. Never blocks the push — a bare capture is
-    # legal — it says how cold triage is about to start.
+    # The brief self-check, at the last moment it is actionable. Never blocks the push; it says
+    # how cold triage starts.
     brief_issues: list[str] = []
 
 
@@ -57,10 +54,10 @@ class InboxDeleteResponse(BaseModel):
 
 
 class InboxBriefResponse(BaseModel):
-    """One row's handoff brief (D5) — the cold-start context the item it becomes reads first.
-    `content` is null when no brief was filed, which is a legal state and not an error. `editable`
-    is false once the row is pushed: the brief has moved into the item's `preliminary/`, which is
-    provenance."""
+    """One row's handoff brief — the cold-start context the item it becomes reads first.
+
+    `content` is null when none was filed, which is legal. `editable` is false once pushed: the brief
+    has become provenance."""
     id: int
     content: str | None = None
     editable: bool

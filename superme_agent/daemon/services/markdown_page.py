@@ -1,21 +1,13 @@
-"""A small markdown→HTML renderer for the standalone doc pages the daemon serves.
+"""A small markdown to HTML renderer for the standalone doc pages the daemon serves.
 
-Deliberately NOT a general markdown engine and never will be. It covers exactly the constructs the
-work-item artifacts use — they are written from our own templates, so the vocabulary is known:
-YAML frontmatter · ATX headings · fenced code · tables · bullet + numbered lists · blockquotes ·
-horizontal rules · paragraphs, with `code`, **bold**, *italic* and links inline. Anything it does
-not recognise falls through as a paragraph, which is the safe direction: the worst case is that a
-line reads as plain text rather than styled.
-
-Adding a markdown dependency for one read-only viewer was the alternative; this is ~120 lines with
-no supply chain, and the subset is pinned by our own templates rather than by a spec.
+Deliberately NOT a general engine: anything unrecognised falls through as a paragraph.
 """
 
 import html
 import re
 
-# Inline rules, applied in order to ALREADY-ESCAPED text. Code spans are lifted out first so their
-# contents are never re-formatted — `**not bold**` inside backticks must stay literal.
+# Applied in order to already-escaped text. Code spans lift out first, so `**not bold**` in
+# backticks stays literal.
 _LINK = re.compile(r"\[([^\]]+)\]\(([^)\s]+)\)")
 _BOLD = re.compile(r"\*\*(.+?)\*\*", re.S)
 _ITALIC = re.compile(r"(?<![\w*])\*([^*\n]+)\*(?![\w*])")
@@ -152,18 +144,8 @@ def render(md: str) -> str:
     return "\n".join(out)
 
 
-# Styling for the rendered document. Every colour comes from the variables `_PAGE_CSS` declares
-# (see input_preview) — that block carries BOTH themes off `prefers-color-scheme` and takes its
-# values from the app's own tokens, and these pages always ship the two stylesheets together. No
-# literal colour here, for the same reason.
-#
-# The two INK RULES below are the app's markdown grammar (`ui/Markdown.tsx`), reproduced so a doc
-# reads the same in its own tab as it does in the drilldown:
-#   · a `code` span is TINTED accent — it is the thing the reader can type, and the one token that
-#     must stay findable when the prose around it is scanned rather than read;
-#   · bold that OPENS a paragraph or list item is the block's NAME (`**Summary:**`, `**result:**`)
-#     and takes `--warn`; bold used mid-sentence is emphasis and stays `--fg`. Tinting all of it
-#     makes every line the loud line, which is no hierarchy at all.
+# Every colour comes from the variables `_PAGE_CSS` declares, which carries both themes. No
+# literal colour here.
 DOC_CSS = """
 .doc { font: 14.5px/1.65 ui-sans-serif, system-ui, -apple-system, sans-serif; color: var(--body); }
 .doc h1, .doc h2, .doc h3, .doc h4 { color: var(--fg); font-weight: 650; line-height: 1.3;

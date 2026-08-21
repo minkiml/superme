@@ -1,11 +1,7 @@
-"""Learning pipeline — the capture/distill/write runners + the capture-sweep machinery (WI-8).
+"""Learning pipeline — the capture, distill and write runners plus the capture-sweep machinery.
 
-Three disposable, sessionless background runners (distill the candidate pool, write an approved
-proposal, capture-sweep a session's un-swept tail) plus the sweep triggers (single-flight guard,
-fire-and-forget, the idle-scan pass, and the daemon's idle heartbeat). The learning + work-item
-routes call these; the daemon `lifespan` launches `_idle_sweep_loop`.
-
-Imports singletons from `app_state` (never from server.py) so there's no import cycle.
+Three disposable, sessionless background runners and the sweep triggers. The learning and work-item
+routes call these; `lifespan` launches `_idle_sweep_loop`.
 """
 
 import time
@@ -34,18 +30,13 @@ FORGE_KIT = HARNESS_DIR / "forge_kit"   # the forge agent's lint + behavioural-e
 # --- DISTILL phase: process the candidate pool into proposals -----------------------------------
 
 async def _run_background_distill(ctx, context_id: str, run_id: int) -> None:
-    """Drive one background distill pass: a dev-mode turn whose only job is to invoke the `distill`
-    sub-agent over the un-processed candidate pool. The sub-agent files proposals via the dev MCP
-    (read_candidates / propose_memory), so we inject that server for this turn. Fire-and-forget.
+    """Drive one background distill pass over the un-processed candidate pool.
 
-    The distill pass is a standalone, DISPOSABLE spine Run (started by the caller, finished here):
-    it has NO session — its `ev.session_id` is deliberately NOT recorded, so it can't pollute the
-    resumable picker. A clean finish purges the run row; an error keeps it as `aborted` for audit.
-    Nothing is applied — the owner still gates every proposal."""
+    A DISPOSABLE spine run with NO session — `ev.session_id` is deliberately unrecorded, so it cannot
+    pollute the resumable picker. Nothing is applied; the owner still gates every proposal."""
     # Thin trigger: name the agent + the job, nothing else. The steps live in the distill agent;
     prompt = kernel_speech.distill_trigger()
-    # The trail's first entry = what this run was asked to do (these transcripts are disposed,
-    # so the trail is the only record).
+    # These transcripts are disposed, so the trail's first entry is the only record of the ask.
     capture_prompt(context_id, prompt, run_id=run_id)
     # Snapshot the pool so the end event can report what the pass produced.
     cands_before = len(_dev_store.list_memory_candidates(context_id, status="candidate"))
@@ -74,16 +65,14 @@ async def _run_background_distill(ctx, context_id: str, run_id: int) -> None:
             run_usage = ev.usage          # whole-turn usage — typed-column fallback at finish
         elif isinstance(ev, Init):
             _cache_slash(ctx.id, ev.slash_commands)
-        # Per-run trail for the Activity trace: this background run's reply text + tool/skill/agent
-        # calls (its throwaway session transcript is disposed, so this is the only record).
+        # The throwaway transcript is disposed, so this trail is the run's only record.
         if isinstance(ev, (Status, TextDelta, ToolResult)):
             capture_event(context_id, ev, run_id=run_id)
         # NB: never _sessions.record — distill is sessionless; its transcript is disposed below.
     if turn.fault.failed:
         run_status = "aborted"
-    # The run is LOGGED (the spine run row is kept as durable telemetry + the event below),
-    # but the session is fully DISPOSABLE — delete its throwaway transcript so nothing
-    # resumable lingers on disk.
+    # The run row is kept as durable telemetry, but the session is disposable — delete its
+    # transcript.
     _spine.finish_run(run_id, status=run_status, model=run_model, usage=run_usage)
     if session_id:
         _sessions.discard_transcript(ctx, session_id)
@@ -96,9 +85,9 @@ async def _run_background_distill(ctx, context_id: str, run_id: int) -> None:
     log.info("background distill: %s for %s (%d proposals filed)", run_status, context_id, filed)
 
 
-# --- WRITE phase (WI-8 §Phase 3 / 4c) — gate-1 approval → background per-item authoring -----------
+# --- WRITE phase: gate-1 approval → background per-item authoring ---
 
-# Forms × scopes that can actually be written today (core is reserved, §4.11.6 #3).
+# Forms and scopes that can actually be written today; core is reserved.
 _WRITE_FORMS = {"constitution", "skill", "agent"}
 _WRITE_SCOPES = {"repo_dev", "universal_dev"}
 
@@ -118,8 +107,8 @@ def _has_answer(answers, question) -> bool:
 
 
 def _intended_path(prop: dict, repo_id: str | None) -> str | None:
-    """Where this proposal WILL publish to — computed up front so it can be staged + shown at gate 2.
-    Best-effort: returns None if the home can't be resolved (e.g. reserved scope)."""
+    """Where this proposal WILL publish to, computed up front so it can be staged and shown at the gate.
+    None when the home cannot be resolved."""
     from ...core import operational as ops
     slug = _proposal_slug(prop)
     try:
@@ -134,9 +123,8 @@ def _intended_path(prop: dict, repo_id: str | None) -> str | None:
 
 
 def _existing_rules_file(prop: dict, repo_id: str | None, workspace: Path) -> str | None:
-    """For a constitution proposal, write the scope's currently-in-force rules into the workspace so
-    the eval can run a real conflict check. Returns the file path, or None when there's nothing to
-    compare against (non-constitution, or no rules yet)."""
+    """For a constitution proposal, write the scope's in-force rules into the workspace so the eval can
+    run a real conflict check. None when there is nothing to compare against."""
     if prop["output_form"] != "constitution":
         return None
     from ...core import operational as ops
@@ -156,20 +144,17 @@ def _existing_rules_file(prop: dict, repo_id: str | None, workspace: Path) -> st
 
 
 async def _run_background_write(ctx, context_id: str, proposal_id: int, run_id: int) -> None:
-    """Drive one background WRITE pass for a single approved proposal: a dev-mode turn whose only job
-    is to invoke the `write` sub-agent, which authors the final artifact and stages it (→ drafted)
-    via `stage_artifact`. Per-item isolated — one proposal per run, no context mixing.
+    """Drive one background WRITE pass for a single approved proposal — one proposal per run, no context
+    mixing.
 
-    Disposable spine Run (started by the caller, finished here): sessionless, transcript discarded,
-    run row kept as telemetry. On a clean finish the proposal is `drafted`; if the agent failed to
-    stage, we revert it to `proposed` so the owner can re-approve."""
+    Disposable and sessionless. On a clean finish the proposal is `drafted`; if the agent never staged,
+    it reverts to `proposed` for re-approval."""
     prop = _dev_store.get_memory_proposal(proposal_id)
     repo_id = context_id if prop["target_scope"] == "repo_dev" else None
     staged_path = _intended_path(prop, repo_id)
     slug = _proposal_slug(prop)
-    # Disposable scratch space: forge drafts + runs the forge_kit here, nowhere else (writes are
-    # scoped to it). Removed in the finally. For a constitution, drop the scope's in-force rules in
-    # so the eval can do a real conflict check.
+    # Disposable scratch space, removed in the `finally`. A constitution gets its scope's in-force
+    # rules for a real conflict check.
     workspace = Path(tempfile.mkdtemp(prefix=f"forge-{proposal_id}-"))
     existing_path = _existing_rules_file(prop, repo_id, workspace)
     _dev_store.log_event(context_id, "write.start",
@@ -191,8 +176,8 @@ async def _run_background_write(ctx, context_id: str, proposal_id: int, run_id: 
         resume=None,
         model=_spine.resolve_agent_model("write"),   # its .md tier → latest concrete (never the lagging CLI alias)
         effort=_spine.resolve_agent_effort("write"),  # its .md effort field (default medium)
-        # forge needs Bash (forge_kit) + Write (draft into the scratch workspace); both are
-        # auto-allowed for this hermetic, disposable run. stage_artifact stays DB-only (safe).
+        # Bash and Write are auto-allowed for this hermetic, disposable run; `stage_artifact`
+        # stays DB-only.
         approve=learning_write_approve(workspace),
         extra_mcp_servers=turn_mcp,
     ):
@@ -204,8 +189,7 @@ async def _run_background_write(ctx, context_id: str, proposal_id: int, run_id: 
             run_usage = ev.usage          # whole-turn usage — typed-column fallback at finish
         elif isinstance(ev, Init):
             _cache_slash(ctx.id, ev.slash_commands)
-        # Per-run trail for the Activity trace: this background run's reply text + tool/skill/agent
-        # calls (its throwaway session transcript is disposed, so this is the only record).
+        # The throwaway transcript is disposed, so this trail is the run's only record.
         if isinstance(ev, (Status, TextDelta, ToolResult)):
             capture_event(context_id, ev, run_id=run_id)
     if turn.fault.failed:
@@ -215,8 +199,8 @@ async def _run_background_write(ctx, context_id: str, proposal_id: int, run_id: 
         _sessions.discard_transcript(ctx, session_id)
     after = _dev_store.get_memory_proposal(proposal_id)
     status_now = after.get("status") if after else None
-    # Moved past `writing` (→ drafted, or already published by a fast gate-2) ⇒ the agent staged.
-    # Still `writing` ⇒ it never staged (failed/declined) — revert so the owner can re-approve.
+    # Past `writing` means the agent staged; still `writing` means it never did, so revert for re-
+    # approval.
     staged = status_now in ("drafted", "published")
     if status_now == "writing":
         _dev_store.set_proposal_status(proposal_id, "proposed")
@@ -229,16 +213,11 @@ async def _run_background_write(ctx, context_id: str, proposal_id: int, run_id: 
     shutil.rmtree(workspace, ignore_errors=True)
 
 
-# --- capture sweep: deterministic trigger → agentic remembering (WI-8) ---------------------
-# The learning pipeline's front door. A sweep is DETERMINISTIC code (this function) that decides
-# WHEN + WHAT-IS-NEW (read the transcript slice past the watermark, single-flight, advance the
-# watermark) wrapped around AGENTIC remembering (the `capture` sub-agent decides what, if anything,
-# in that slice is a durable operational learning and files candidates). Capture is FULLY AUTOMATIC:
-# the idle-timeout and phase-advance/completion triggers both bottom out here — there is no chat-side
-# capture surface. The candidate pool then flows to `distill` exactly as before.
+# Deterministic code decides WHEN and WHAT-IS-NEW; the `capture` sub-agent decides what in that
+# slice is a learning.
 
-# Single-flight guard, keyed by the ORIGIN session id (in-memory: a restart means nothing is
-# actually sweeping, so the set is correctly empty). The spine run row stays sessionless telemetry.
+# Keyed by origin session id, in memory: a restart means nothing is sweeping, so an empty set is
+# correct.
 _sweeping: set[str] = set()
 
 
@@ -252,28 +231,19 @@ def _render_slice(messages: list[dict]) -> str:
 
 
 async def run_sweep(ctx, session_id: str, focus: str | None = None) -> dict:
-    """Run ONE capture sweep over a session's un-swept conversation tail. The keystone of the
-    learning workflow's capture end (WI-8):
+    """Run ONE capture sweep over a session's un-swept conversation tail.
 
-      1. read the transcript slice `watermark → head` (content-level idempotency — never re-sweep);
-      2. if nothing new, no-op;
-      3. else launch a DISPOSABLE background run of the `capture` sub-agent over that slice, which
-         files candidates via `mcp__dev__file_candidate` (provenance bound here, not by the agent);
-      4. advance the watermark to head on a clean pass (an abort leaves it, so the slice re-sweeps).
-
-    Disposable like distill: the sweep run is a sessionless spine Run (telemetry kept); its throwaway
-    sub-transcript is deleted on finish. `focus` is the owner's optional steer (manual sweep)."""
+    Reads the slice `watermark → head` and advances the watermark only on a clean pass, so an abort
+    leaves the slice to be re-swept."""
     context_id = ctx.id
     if session_id in _sweeping:
         return {"status": "already_running", "session_id": session_id}
-    # Onboarding sessions are never swept: SuperMe walking the owner through project-init/retrofit is
-    # dense with SuperMe reciting its own skills/guides (nothing owner-originated to mine), and it's a
-    # one-time, any-project process. Single choke — every trigger bottoms out here, so this one guard
-    # covers the idle loop, the phase/completion hooks, and the manual /dev/sweep path alike.
+    # Onboarding is SuperMe reciting its own guides, with nothing owner-originated to mine. One
+    # choke: every trigger lands here.
     if _spine.session_is_onboarding(session_id):
         return {"status": "skipped_onboarding", "session_id": session_id}
-    # Diagnosis sessions are never swept either: read-only meta-observation ABOUT a run, not dev work
-    # — mining it would feed diagnosis-of-diagnosis recursion + log noise (session-kinds-diagnose).
+    # Diagnosis is read-only observation ABOUT a run; mining it would feed diagnosis-of-diagnosis
+    # recursion.
     if _spine.session_is_diagnosis(session_id):
         return {"status": "skipped_diagnosis", "session_id": session_id}
     try:
@@ -322,8 +292,7 @@ async def run_sweep(ctx, session_id: str, focus: str | None = None) -> dict:
             run_usage = ev.usage          # whole-turn usage — typed-column fallback at finish
         elif isinstance(ev, Init):
             _cache_slash(ctx.id, ev.slash_commands)
-        # Per-run trail for the Activity trace: this background run's reply text + tool/skill/agent
-        # calls (its throwaway session transcript is disposed, so this is the only record).
+        # The throwaway transcript is disposed, so this trail is the run's only record.
         if isinstance(ev, (Status, TextDelta, ToolResult)):
             capture_event(context_id, ev, run_id=run_id)
         # NB: never _sessions.record — the sweep is sessionless; its transcript is disposed below.
@@ -350,25 +319,20 @@ async def run_sweep(ctx, session_id: str, focus: str | None = None) -> dict:
             "watermark": head if run_status == "done" else mark}
 
 
-# --- capture-sweep TRIGGERS (WI-8 build ②) ------------------------------------------------
-# Both auto triggers bottom out at run_sweep, identical to the manual path. The watermark makes
-# every trigger safe to fire freely — content is never swept twice. v1 triggers (owner-locked):
-#   • PHASE-ADVANCE / COMPLETION — the work-item lifecycle gates (fired from those endpoints);
-#   • IDLE-TIMEOUT — a periodic loop sweeps dev sessions that went quiet with un-swept content.
-# Deferred: every-N-turn cadence, pre-compaction.
+# Both auto triggers bottom out at `run_sweep`, like the manual path. The watermark makes every
+# trigger safe to fire freely.
 SWEEP_IDLE_SECONDS = 15 * 60     # a dev session quiet this long, with un-swept content, gets swept
 SWEEP_POLL_SECONDS = 5 * 60      # how often the idle loop scans (the watermark is the real gate, so
-                                 # this only sets latency, not how often anything actually sweeps)
-# These are the built-in FALLBACKS. The live values come from the spine (Quick config → sweep
-# tuning): idle threshold, heartbeat poll cadence, and a min-un-swept-user-message gate.
+                                 # Built-in fallbacks; the live values come from the spine's sweep
+                                 # tuning.
 
 
 def _fire_sweep_bg(ctx, session_id: str | None, *, focus: str | None = None,
                    then_delete: str | None = None) -> None:
-    """Fire-and-forget a sweep so the triggering request returns immediately. `then_delete` (a
-    session_fate cause, e.g. 'retired') chains a full session delete AFTER the sweep — for
-    completion, where the transcript is reclaimed but the sweep must read it first (so the delete
-    can't happen synchronously in the endpoint). The run trace is preserved + labeled by the delete."""
+    """Fire-and-forget a sweep so the triggering request returns immediately.
+
+    `then_delete` chains a full session delete AFTER the sweep, for the case where the transcript is
+    reclaimed but must be read first."""
     if not session_id:
         return
 
@@ -385,16 +349,10 @@ def _fire_sweep_bg(ctx, session_id: str | None, *, focus: str | None = None,
 
 
 async def _sweep_idle_sessions(idle_seconds: int | None = None, min_user_msgs: int | None = None) -> dict:
-    """One idle-scan pass: across every repo, sweep each dev session that (a) has gone quiet for
-    `idle_seconds` and (b) has enough un-swept content past its watermark — at least `min_user_msgs`
-    new USER messages (we count user turns because a conversation is user→AI→user→AI, so user turns
-    are the natural unit of "how much new conversation is there"). Eligible sessions are swept
-    CONCURRENTLY (each has its own single-flight guard). Returns a small summary for logging/tests.
-    Both thresholds default to the live spine sweep config when not passed.
+    """One idle-scan pass: sweep every dev session quiet for `idle_seconds` with enough un-swept content.
+    Eligible sessions sweep concurrently.
 
-    VISIBLE-ONLY (token safety): the scan walks `sessions_for_cwd` (resumable_only=True) — exactly
-    the recorded, dashboard-visible dev sessions. Disposable sub-runs (distill/sweep) are never
-    recorded, and the owner's own Claude-Code transcript is never recorded, so neither is ever swept."""
+    VISIBLE-ONLY, for token safety: the scan walks only recorded, dashboard-visible sessions."""
     cfg = _spine.get_sweep_config()
     if idle_seconds is None:
         idle_seconds = cfg["idle_seconds"]
@@ -448,10 +406,10 @@ async def _sweep_idle_sessions(idle_seconds: int | None = None, min_user_msgs: i
 
 
 async def _idle_sweep_loop() -> None:
-    """The daemon's idle-sweep heartbeat: every `poll_seconds` (live from the spine config), IF
-    auto-learning is enabled, scan + sweep quiet dev sessions. When the master switch is off the
-    loop just idles (cheap). Reading the cadence each iteration lets a Quick-config change take
-    effect without a daemon restart."""
+    """The daemon's idle-sweep heartbeat: every `poll_seconds`, if auto-learning is on, scan and sweep
+    quiet dev sessions.
+
+    Reading the cadence each iteration lets a config change take effect without a restart."""
     while True:
         try:
             poll = max(30, _spine.get_sweep_config()["poll_seconds"])

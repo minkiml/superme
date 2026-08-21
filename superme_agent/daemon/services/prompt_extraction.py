@@ -1,13 +1,7 @@
-"""Prompt X-ray — the throwaway prompt-extraction probe engine (repo-level "Prompt X-ray" tab).
+"""Prompt X-ray — the throwaway prompt-extraction probe engine.
 
-Fire a disposable work-item that runs the REAL lifecycle unattended (autopilot + no deputy: it sails
-every gate via `gates.maybe_autopilot_advance`'s throwaway branch + `git_ops.review_merge`'s synthetic
-skip), so every phase's ACTUAL input prompt is captured ("A", the `run_input` table). When it rests
-at close, it tears ITSELF down here — folder + worktree + branch + sessions — leaving ONLY the tagged
-run trace (run / run_event / run_input rows, `feature='prompt-extraction'`; never-delete-logs). No
-merge, no anchor-doc write, no work-item knowledge ever lands.
-
-Nothing here runs for a normal work-item: the whole path is gated on `item['prompt_extraction']`.
+Fire a disposable work-item that runs the REAL lifecycle unattended, so every phase's actual input
+prompt is captured; at close it tears ITSELF down, leaving only the tagged run trace.
 """
 
 from __future__ import annotations
@@ -20,9 +14,8 @@ from ...core import git_layer
 log = logging.getLogger("superme-agent")
 
 _PROBE_TITLE = "Prompt X-ray probe"
-# A generic, repo-agnostic trivial task: it exercises a real build→vet cycle with an actual file
-# change so the captured prompts are genuine, but nothing lands (never merged; worktree + branch
-# deleted at teardown). Deliberately isolated — touches one new file, no existing code.
+# A repo-agnostic trivial task: it exercises a real build→vet cycle so the captured prompts are
+# genuine, but nothing lands.
 _PROBE_DESC = (
     "THROWAWAY prompt-extraction probe (auto-generated; torn down at close, never merged). "
     "Create a single new file named `PROMPT_XRAY_PROBE.md` at the repository root whose entire "
@@ -57,9 +50,8 @@ def launch(context_id: str) -> dict:
     created = dev.create_work_item(dev_root, _PROBE_TITLE, _PROBE_DESC,
                                    kind="implementation", autopilot=True, prompt_extraction=True)
     item_id = created["id"]
-    # The probe only exists to capture prompt SHAPE, not to do real work — run it on Sonnet, not the
-    # (default) Opus tier. Write the alias (model-aliases-lag: SuperMe resolves alias→concrete at
-    # consumption via MODEL_TIERS); every phase run then resolves the item's model = sonnet.
+    # The probe captures prompt SHAPE, so run it on a cheaper tier. Write the alias, not a
+    # concrete id.
     dev.set_work_item_model(dev_root, item_id, "sonnet")
     spine.set_prompt_extraction_state(context_id, {
         "item_id": item_id, "status": "running", "started_at": _now(), "finished_at": None})
@@ -72,9 +64,9 @@ def launch(context_id: str) -> dict:
 
 
 def teardown(context_id: str, item_id: str, *, reason: str = "") -> None:
-    """Tear a finished probe ALL the way down — sessions + worktree + branch + folder — keeping only
-    the tagged run trace. Best-effort and step-independent (a partial failure still clears the rest).
-    Marks the repo's probe state `done` so the captured A-links stay listable."""
+    """Tear a finished probe all the way down, keeping only the tagged run trace.
+
+    Best-effort and step-independent: a partial failure still clears the rest."""
     from .. import app_state
     from ..app_state import get_spine
     from ...gateway import contexts
@@ -86,8 +78,8 @@ def teardown(context_id: str, item_id: str, *, reason: str = "") -> None:
         spine = get_spine()
         dev_root = ctx.internal_root / "dev"
         item = dev.read_work_item(dev_root, item_id) or {}
-        # 1. sessions — hard-delete transcript + resume state (SessionStore preserves + labels the
-        #    run trace, so the captured run_input rows survive).
+        # Hard-delete the transcript and resume state; the run trace and its captured inputs
+        # survive.
         for sid in dev.work_item_session_ids(item):
             try:
                 app_state.sessions.delete(ctx, sid, cause="deleted")
@@ -104,10 +96,8 @@ def teardown(context_id: str, item_id: str, *, reason: str = "") -> None:
                 git_layer.delete_branch(ctx.cwd, str(branch))
             except Exception:  # noqa: BLE001
                 log.exception("probe teardown: branch delete failed %s", branch)
-        # 3. end the work: cancel the task, then release its run rows to a terminal status (KEEPS
-        #    the rows + their event/input trails). The task half matters HERE most of all — step 4
-        #    removes the folder, and a turn still running would recreate it as an artifacts-only
-        #    shell that nothing accounts for.
+        # Cancel the task before removing the folder: a turn still running would recreate it as an
+        # orphan shell.
         try:
             from .runs import stop_item_work
             stop_item_work(context_id, item_id)

@@ -22,7 +22,5 @@ class SweepLaunchResponse(BaseModel):
     ok: bool
     work_item: WorkItem
     family: str
-    # Did the first investigate run actually start? False is not a failure — the sweep exists and
-    # rests at investigate for a chat-driven pass. The surface says which, rather than implying a
-    # run that never began.
+    # False is not a failure: the sweep exists and rests at investigate for a chat-driven pass.
     started: bool

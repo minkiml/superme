@@ -15,11 +15,10 @@ class GlanceItem(BaseModel):
 
 class Glance(BaseModel):
     """The dashboard glance summary (counts + bucketed item stubs). `awaiting_human` is the
-    attention bucket (D10: the only status that pages the owner)."""
+    attention bucket (the only status that pages the owner)."""
     model_config = ConfigDict(extra="allow")
     by_status: dict[str, int]
-    # Ended AND landed. `by_status["done"]` counts every item that ended, abandoned ones included;
-    # this is the number the Shipped tile shows, so the two are deliberately not the same.
+    # Ended AND landed. `by_status["done"]` counts every item that ended, abandoned ones included.
     shipped: int = 0
     by_phase: dict[str, int]
     active: list[GlanceItem]
@@ -43,7 +42,7 @@ class AttentionRow(BaseModel):
 
 
 class AttentionBadge(BaseModel):
-    """The global badge: the TOP non-empty tier only — one color, one count (D10)."""
+    """The global badge: the TOP non-empty tier only — one color, one count."""
     tier: str            # needs_you | deputy_working | running | unread
     color: str           # orange | purple | green | blue
     count: int
@@ -68,8 +67,8 @@ class DevReadResponse(BaseModel):
 
 
 class WorkGraphNode(BaseModel):
-    """One node of the derived WorkGraph (D3). `kind` ∈ repo_root | deliverable | work_item |
-    inbox_spawn; work_item nodes carry item_kind/phase/status/outcome (+ git decoration in S4)."""
+    """One node of the derived WorkGraph. `kind` ∈ repo_root | deliverable | work_item |
+    inbox_spawn; work_item nodes carry item_kind/phase/status/outcome."""
     model_config = ConfigDict(extra="allow")
     id: str
     kind: str

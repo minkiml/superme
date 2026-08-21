@@ -1,9 +1,5 @@
-"""Manage-Harness routes: SuperMe's own universal skills/agents, the chat "/" palette, and the
-published-LEARNED-artifact inventory.
-
-- `/dev/harness/plugins` + `/dev/harness/plugin-file` (GET/PUT): the universal harness plugin tree.
-- `/dev/palette`: the chat "/" palette for a (context, mode), computed live from disk.
-- `/dev/harness/published` (GET/PATCH/DELETE): govern artifacts the learning loop published.
+"""Manage-Harness routes: SuperMe's own universal skills and agents, the chat palette, and the
+inventory of what the learning loop published.
 """
 
 import logging
@@ -33,9 +29,8 @@ router = APIRouter()
 @router.get("/dev/harness/plugins", response_model=HarnessPluginsResponse,
             response_model_exclude_unset=True)
 async def dev_harness_plugins() -> dict:
-    """SuperMe's OWN universal skills + agents, grouped by scope (dev | core | shared) — the
-    Manage-Harness "Skills & Agents" tab. Read straight from the harness plugin frontmatter; this
-    is the universal harness only (per-repo operational artifacts are out of scope here)."""
+    """SuperMe's OWN universal skills and agents, grouped by scope, read straight from the plugin
+    frontmatter. Per-repo operational artifacts are out of scope here."""
     from ....core.operational import list_harness_plugins
     from ....paths import DEV_PLUGIN_DIR, CORE_PLUGIN_DIR, SHARED_PLUGIN_DIR
     return {"scopes": list_harness_plugins(
@@ -147,10 +142,8 @@ async def dev_harness_foundation_save(body: FoundationFileBody) -> dict:
     return {"ok": True, "key": body.key}
 
 
-# --- Deputy mandate: the per-repo standing acceptance bar (Artifacts → Deputy subtab) ---------
-# A GOVERNANCE artifact (sibling of constitutions), so it lives in the harness cell
-# (`local-harness/<id>/dev/deputy/mandate.md`) — seeded on connect, wiped on disconnect. Read/write
-# raw markdown, like the Foundations files. See general_docs/deputy-memory-lifecycle-design.md.
+# --- Deputy mandate --- A governance artifact, so it lives in the harness cell: seeded on
+# connect, wiped on disconnect.
 @router.get("/dev/harness/deputy", response_model=DeputyMandateResponse)
 async def dev_harness_deputy(context_id: str = "global") -> dict:
     """This repo's deputy mandate — the standing bar the deputy judges gates against while the owner
@@ -184,12 +177,8 @@ async def dev_harness_deputy_save(body: DeputyMandateBody,
     return {"ok": True, "context_id": body.context_id}
 
 
-# --- Chat "/" palette: mode-correct, fresh-from-disk, category-filtered -----------------------
-# Internal pipeline skills (`category: learning` — the forge-* authors) are hidden here; learned
-# skills appear immediately (computed from disk, not the per-turn SDK snapshot). External/native
-# commands (model, compact, /debug, …) come from the context's cached list since only the SDK can
-# enumerate those. Our own namespaces are stripped from the cache so a stale turn can't re-surface a
-# hidden or wrong-mode skill.
+# --- the "/" palette --- Internal pipeline skills are hidden; native commands come from the SDK's
+# cached list.
 _HIDE_CATEGORIES = {"learning"}
 
 
@@ -213,9 +202,8 @@ async def dev_palette(context_id: str = "global", mode: str = "dev") -> dict:
             "commands": sorted(set(visible) | set(external))}
 
 
-# --- Published inventory: govern LEARNED artifacts post-publish (#6 runtime management) -------
-# Driven by published proposals (not a disk scan) so SuperMe's shipped harness skills never appear
-# here — only what the learning loop published. Live enabled/present state is reconciled with disk.
+# --- Published inventory --- Driven by published proposals, so shipped harness skills never
+# appear here.
 @router.get("/dev/harness/published", response_model=PublishedResponse)
 async def dev_harness_published(context_id: str = "global",
                                 dev_store: DevStore = Depends(get_dev_store)) -> dict:
@@ -268,10 +256,8 @@ async def dev_harness_published_toggle(proposal_id: int, body: PublishedToggleBo
     return {"ok": True, "proposal_id": proposal_id, **res}
 
 
-# --- Constitutions: govern ALL constitutions by (scope, slug) --------------------------------
-# Unlike the Published inventory (proposal-keyed → learned only), this is a DISK SCAN, so it covers
-# hand-authored + system + learned constitutions alike — universal and this host's local — giving the
-# owner enable/disable control over the whole constitution catalog, not just what the loop published.
+# --- Constitutions --- A DISK SCAN, so it covers hand-authored, system and learned constitutions
+# alike.
 @router.get("/dev/harness/constitutions", response_model=ConstitutionsResponse)
 async def dev_harness_constitutions(context_id: str = "global") -> dict:
     """Every constitution in this context's scope: universal-dev + this host's local (`repo_dev`),
@@ -313,8 +299,8 @@ async def dev_harness_constitution_toggle(slug: str, body: ConstitutionToggleBod
     from ....core import operational as ops
     if body.scope not in ("universal_dev", "repo_dev"):
         raise HTTPException(status_code=400, detail=f"scope '{body.scope}' is not manageable")
-    # A foundational constitution is pinned always-on — a charter consults it by name, and disabling
-    # would dangle that pull. Refuse to turn one off (enabling is a no-op but harmless).
+    # A foundational constitution is pinned always-on: a charter consults it by name, so disabling
+    # would dangle that pull.
     if not body.enabled:
         p = _resolve_constitution_file(body.scope, slug, body.context_id)
         from ....core.operational import parse_frontmatter, _is_foundational

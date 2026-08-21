@@ -1,19 +1,8 @@
-"""Light MCP-tool registry — the mechanism behind SuperMe's in-process dev/core tools.
+"""Light MCP-tool registry — the mechanism behind SuperMe's in-process tools.
 
-A `ToolSpec` is the whole declaration of one tool:
-
-- **`description`** — a LEAN one-liner. It sits in every turn's context (and invites accidental
-  calls when bloated), so the WHEN/HOW lives in the owning skill/agent, not here. Tools are scoped
-  to where they belong via the owning agent's `tools:` allowlist.
-- **`schema`** — a TypedDict whose `Annotated[type, "doc"]` fields carry the per-param docs and
-  whose `Required[...]` fields mark what's mandatory. The SDK renders a TypedDict straight to
-  JSON-Schema (required-keys respected, `Annotated` → param `description`, nested TypedDicts
-  inlined — no `$ref`), so typed inputs are self-documenting without hand-written JSON.
-- **`build`** — a factory `(**deps) -> async handler` that binds the handler to its runtime deps
-  (the event store, the context id, optional callbacks). Deps arrive at server-build time.
-
-`build_mcp_server` turns a list of specs into an SDK MCP server. Keeping the specs in a list makes
-"what tools sit in the agent's context, and what each costs" auditable at a glance.
+A `ToolSpec` declares one tool: a LEAN one-line `description`, a TypedDict `schema` whose
+`Annotated` fields carry the per-param docs, and a `build` factory binding the handler to its
+deps.
 """
 
 from __future__ import annotations
@@ -28,12 +17,8 @@ from claude_agent_sdk import create_sdk_mcp_server, tool
 Handler = Callable[[dict], Awaitable[dict[str, Any]]]
 
 
-# --- TypedDict → JSON-Schema, Literal-aware -------------------------------------------------
-# The SDK's own converter handles Annotated/Required/NotRequired but silently degrades
-# `Literal["a","b"]` to a bare string (no `enum`) — the allowed values vanish from the schema
-# the model sees. This renderer mirrors the SDK's semantics and adds the enum, so schemas can
-# state closed value sets as types instead of prose. ToolSpec schemas are pre-rendered through
-# it; a spec that's already a JSON-Schema dict passes through untouched.
+# --- TypedDict to JSON-Schema --- The SDK's converter degrades `Literal` to a bare string, so the
+# allowed values vanish.
 
 def _type_schema(py_type: Any) -> dict[str, Any]:
     origin = get_origin(py_type)
@@ -84,11 +69,8 @@ def _render_schema(schema: type | dict[str, Any]) -> dict[str, Any]:
     hints = get_type_hints(schema, include_extras=True)
     out: dict[str, Any] = {"type": "object",
                            "properties": {k: _type_schema(t) for k, t in hints.items()}}
-    # Requiredness from the RESOLVED hints, not just __required_keys__: under
-    # `from __future__ import annotations` the class sees only strings at creation time, so
-    # `Required[...]` never reaches __required_keys__ (that latent hole shipped un-required
-    # args in base_tools). The wrapper on the resolved hint is authoritative; __required_keys__
-    # covers plain fields in total=True dicts.
+    # Requiredness from the RESOLVED hints: under `from __future__ import annotations`,
+    # `Required[...]` never reaches `__required_keys__`.
     declared = getattr(schema, "__required_keys__", frozenset())
     required = set()
     for key, hint in hints.items():
@@ -111,13 +93,10 @@ class ToolSpec:
 
 
 def describe_specs(specs: list[ToolSpec]) -> str:
-    """The authored tool surface as readable text: each tool's name, its description, and each
-    argument's own doc, in mount order.
+    """The authored tool surface as readable text, in mount order.
 
-    This is PROMPT TEXT. A tool's description and its parameter docs ride in every request the turn
-    makes, exactly like the system append does — so the prompt inspector renders them beside the
-    prose they compete with, and a bloated description is visible as the cost it is.
-    """
+    This is PROMPT TEXT — it rides in every request the turn makes, so a bloated description is visible
+    as the cost it is."""
     blocks: list[str] = []
     for s in specs:
         schema = _render_schema(s.schema)
@@ -135,11 +114,9 @@ def describe_specs(specs: list[ToolSpec]) -> str:
 
 
 def build_mcp_server(name: str, specs: list[ToolSpec], *, version: str = "1.0.0", **deps):
-    """Render `specs` → an SDK MCP server, binding each handler to the shared `deps`.
+    """Render `specs` into an SDK MCP server, binding each handler to the shared `deps`.
 
-    Each spec's `build(**deps)` returns the async handler; unknown deps are ignored by factories
-    (they take `**_`), so callers can pass a superset without coupling every tool to every dep.
-    """
+    Unknown deps are ignored by the factories, so callers can pass a superset."""
     tools = [tool(s.name, s.description, _render_schema(s.schema))(s.build(**deps))
              for s in specs]
     return create_sdk_mcp_server(name=name, version=version, tools=tools)

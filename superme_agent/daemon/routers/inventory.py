@@ -1,9 +1,6 @@
-"""TEMPORARY internals inventory — a single read-only snapshot of SuperMe's live data model + the
-agent-facing tool surface, for the "Internals" dashboard tab.
+"""A read-only snapshot of SuperMe's live data model and tool surface, for the Internals tab.
 
-Everything here is INTROSPECTED live (SQLite `sqlite_master`/`PRAGMA` for the schemas; the `ToolSpec`
-lists for the tools) so the view never drifts from the code. This whole surface — router + FE tab +
-nav entry — is a scaffold meant to be deleted once it has served its purpose; keep it self-contained.
+Everything is INTROSPECTED live, so the view never drifts from the code.
 """
 
 import logging

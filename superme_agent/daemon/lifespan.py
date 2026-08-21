@@ -1,9 +1,7 @@
-"""Daemon lifespan — startup hygiene + background loops.
+"""Daemon lifespan — startup hygiene and background loops.
 
-Replaces the deprecated `@app.on_event("startup")` hook with a modern `lifespan` context manager:
-on entry it reconciles orphaned runs and launches the idle-sweep heartbeat; on exit it cancels the
-loop cleanly. The heartbeat lives in `services.learning` (R4b) — a leaf module with no server.py
-dependency, so this imports it directly (no cycle).
+On entry it reconciles orphaned runs and launches the idle-sweep heartbeat; on exit it cancels the
+loop cleanly.
 """
 
 import asyncio
@@ -22,10 +20,8 @@ log = logging.getLogger("superme-agent")
 
 
 def _backfill_session_stamps() -> None:
-    """One-time migration (work-item-session-recognition-prd): stamp `session.item_id` for every
-    work-item that already carries a `session_id`, so in-progress items created before the stamp
-    existed aren't stranded as 'general' sessions. Write-once, so it never clobbers a real stamp
-    and is a no-op on subsequent starts. Best-effort — a bad repo must not block daemon startup."""
+    """One-time migration: stamp `session.item_id` for every work-item that already carries a
+    `session_id`. Write-once, so it never clobbers a real stamp."""
     try:
         pairs: list[tuple[str, str]] = []
         for rid in app_state.spine.repos():
@@ -52,19 +48,8 @@ def _backfill_session_stamps() -> None:
 def _reconcile_orphaned_sessions() -> None:
     """Retire sessions whose work-item no longer exists on disk.
 
-    Every product path that disposes an item already takes its sessions with it — clearance at
-    close, abandon, re-run, the Prompt X-ray teardown. What none of them covers is a folder that
-    leaves OUT OF BAND: a playground reset, a hand-deleted directory, a restored backup. The
-    session row survives, so the chat picker keeps offering a live composer over a thread whose
-    item is gone — and it is offered under a title that falls back to the raw id twice over,
-    because there is no item left to name it. Found live 2026-08-14 on `41c0bf90d16a`.
-
-    Retired, not deleted-by-the-owner: the item ended, nobody chose to discard the conversation.
-    `sessions.delete` preserves the run trace and stamps it `session_fate=retired` (never-delete-logs).
-
-    THE READ MUST SUCCEED BEFORE ANYTHING IS DROPPED. A repo whose dev tree fails to read yields
-    no live-id set, and treating that emptiness as "no items exist" would retire every session the
-    repo has. On any read failure this skips the repo entirely."""
+    No disposal path covers a folder that leaves out of band, leaving a composer over a vanished item.
+    A repo whose dev tree fails to read is skipped."""
     try:
         for rid in app_state.spine.repos():
             ctx = contexts.resolve(rid, "dev")
@@ -92,21 +77,12 @@ def _reconcile_orphaned_sessions() -> None:
 
 
 def _reconcile_expired_transcripts() -> None:
-    """Retire sessions whose TRANSCRIPT is gone — the other way a row outlives what it points at.
+    """Retire sessions whose TRANSCRIPT is gone.
 
-    The CLI garbage-collects its own transcripts on a retention clock (`cleanupPeriodDays`, 30 by
-    default), so this is not an anomaly to heal but a deadline every session eventually meets: at
-    day 30 the JSONL leaves and the row keeps standing. Nothing read it, so the row became a
-    counted-but-unopenable ghost — the repo tile counted it, the picker silently dropped it at the
-    missing-transcript check, and because it never appeared in a list the owner had no way to
-    remove it.
+    The CLI garbage-collects transcripts on a retention clock, so every session meets this deadline and
+    the row becomes a counted-but-unopenable ghost.
 
-    Retired, not deleted-by-the-owner: nobody chose to drop the conversation, its resume material
-    simply expired. `sessions.delete` preserves the run trace and stamps it `session_fate=retired`
-    (never-delete-logs), so the activity log still shows what the session did.
-
-    Only ever acts on a MISSING file. A read failure is not a missing file, so a permissions blip
-    or an unmounted home can never be mistaken for expiry."""
+    Only ever acts on a MISSING file."""
     try:
         for rid in app_state.spine.repos():
             ctx = contexts.resolve(rid, "dev")
@@ -124,11 +100,10 @@ def _reconcile_expired_transcripts() -> None:
 
 
 def _reconcile_worktrees() -> None:
-    """Startup reconciliation (workspace-workflow S4/D4, nimbalyst punch-list): recorded
-    worktrees vs disk vs branches, per repo. Heals a kill-mid-create (branch exists, dir missing
-    → re-add), reports what it can't fix (missing branch, orphan dirs — never guesses, never
-    deletes), and finishes a terminal cleanup a dying daemon dropped (item done, dir still on
-    disk → remove; branch kept). Best-effort — a bad repo must never block daemon startup."""
+    """Reconcile recorded worktrees against disk and branches, per repo.
+
+    Heals a kill-mid-create, reports what it cannot fix, and finishes a terminal cleanup a dying daemon
+    dropped."""
     try:
         for rid in app_state.spine.repos():
             ctx = contexts.resolve(rid, "dev")
@@ -164,49 +139,25 @@ def _reconcile_worktrees() -> None:
         log.exception("worktree reconciliation failed (non-fatal)")
 
 
-# The run features that ARE a phase's own background work, and so can be re-fired by re-running
-# that phase (`services.resume` dispatches exactly these). Everything else that can orphan —
-# `chat` (the owner was talking), `deputy` (a judgment, re-fired by the gate seam), `resolve`,
-# `compact`, and the learning runs — is deliberately absent: re-running the PHASE would not be
-# re-running what died, so those get the label and wait for the owner's click.
+# Run features that ARE a phase's own background work; for everything else, re-running the phase
+# re-runs nothing.
 _AUTO_RESUME_FEATURES = {"triage", "plan", "build", "vet", "investigate", "review", "close"}
-# How many items may auto-resume on one boot. A restart after a long outage can strand a whole
-# cohort, and firing every one of them at once spends real tokens the owner never asked for at a
-# moment they may not even be watching. Anything over the cap keeps its `error` label and its
-# Resume button — and is LOGGED, because a silent cap reads as "everything resumed" when it didn't.
+# A restart after an outage can strand a cohort, and firing all at once spends tokens nobody asked
+# for.
 _MAX_AUTO_RESUME = 3
 
 
 def _reconcile_orphaned_items(orphans: list[dict]) -> None:
-    """Heal the work-items whose run the spine just flipped `running → aborted` (dogfood D3,
-    recovery R3).
+    """Heal the work-items whose run the spine just flipped to `aborted`.
 
-    `spine.reconcile()` heals the RUN row; without this the ITEM stays `active` with no run and
-    nothing that will ever start one — permanently wedged, and until the attention engine learned
-    the stall rule (D2), completely silent. Restarting the daemon mid-run is routine in this
-    project, so this was a recurring way to lose an item.
+    Without this the item stays `active` with no run and nothing to start one.
 
-    **Two acts, in order** (R3). First LABEL: every orphan becomes `error` carrying "a daemon
-    restart stopped this", which is the honest state — the run stopped — and gives the owner a
-    Resume button whatever happens next. Then RESUME: if the dead run was a phase's own background
-    work, re-fire it through `services.resume`, the SAME path the owner's button uses. An automatic
-    path that resumed different phases than the manual one would drift, and the drift would only
-    show up during an outage.
-
-    This replaces parking everything at `awaiting_human`. That was honest about the run being gone
-    but wrong about what it meant: `awaiting_human` claims a DECISION is wanted, so a build stopped
-    by a restart looked identical to one waiting on the owner's judgment, and the loop that was
-    meant to be human-free needed a click to breathe again. Nothing about the work was lost — the
-    branch, worktree and artifacts all stood — only the run had to start over.
-
-    Terminal items are left alone; `_reconcile_close_steps` owns those. Best-effort and idempotent."""
-    # The WHOLE body is guarded, like every reconciler here. Housekeeping must never be able to
-    # stop the daemon booting — the first cut of this raised at an import and took startup down
-    # with it, which is a far worse failure than the stranded item it was fixing.
+    Two acts: LABEL every orphan `error`, then RESUME those whose run was a phase's own."""
+    # The WHOLE body is guarded: housekeeping must never be able to stop the daemon booting.
     from .services.resume import resume_item
     try:
-        # feature per (repo, item): what was actually running when the daemon died. Last writer
-        # wins on the rare item with two orphaned rows — they cannot differ in phase.
+        # What was actually running when the daemon died. Last writer wins on an item with two
+        # orphaned rows.
         feature_of: dict[tuple[str, str], str] = {}
         items_by_repo: dict[str, set[str]] = {}
         for o in orphans:
@@ -229,9 +180,8 @@ def _reconcile_orphaned_items(orphans: list[dict]) -> None:
                             continue
                         phase = str(it.get("phase") or "current")
                         feature = feature_of.get((rid, item_id), "")
-                        # LABEL first, always — even when the resume below succeeds a moment later.
-                        # It is what makes a failed resume land back on a truthful state instead of
-                        # `active` with nothing running.
+                        # Label first: it is what makes a failed resume land on a truthful state,
+                        # not `active` with nothing running.
                         if app_state.dev.set_work_item_error(
                                 dev_root, item_id,
                                 f"a daemon restart stopped the {phase} run"):
@@ -267,17 +217,10 @@ def _reconcile_orphaned_items(orphans: list[dict]) -> None:
 
 
 def _reconcile_stranded_proposals() -> None:
-    """Free the learning proposals a dead `write` run left mid-flight (recovery R3).
+    """Free the learning proposals a dead `write` run left mid-flight.
 
-    `writing` is a TRANSIENT status: the write runner sets it, then moves the proposal to `drafted`
-    or — if the agent never staged anything — puts it back to `proposed` so the owner can re-approve.
-    That second branch only runs if the runner reaches its own tail. A daemon that dies mid-write
-    never does, so the proposal sits at `writing` forever: invisible to the owner's queue (which
-    lists `proposed`), invisible to the drafted gate, and picked up by nothing. Verified 2026-07-30
-    that no reconciler existed for it — the one hole in the learning pipeline with no way out.
-
-    No run is re-fired here. A write is cheap to re-approve and the owner gates it anyway, so the
-    honest reset is back to `proposed` — where it was before the approval that started the run."""
+    `writing` is TRANSIENT, so a daemon dying mid-write leaves the proposal there, invisible to every
+    queue. No run is re-fired; the honest reset is back to `proposed`."""
     try:
         freed = 0
         for rid in app_state.spine.repos():
@@ -299,12 +242,10 @@ def _reconcile_stranded_proposals() -> None:
 
 
 def _reconcile_close_steps() -> None:
-    """Startup reconciliation of the CLOSE step list (S6/D8, nimbalyst archive crash-hole
-    lesson): a terminal transition is an ordered, re-runnable step list — a daemon dying mid-close
-    leaves a terminal item with unfinished steps, healed here on the next start. Per terminal
-    item: execution.md snapshot present (re-renderable — run rows are kept forever) · run rows
-    released · a paused parent whose last open blocking child went terminal resumed. The worktree
-    step is _reconcile_worktrees' job. Idempotent + best-effort."""
+    """A terminal transition is an ordered, re-runnable step list, so a daemon dying mid-close leaves
+    unfinished steps, healed here on the next start.
+
+    The worktree step belongs to `_reconcile_worktrees`."""
     from ..core import status_router
     from .services import scheduler
     from .services.runs import _render_execution_md
@@ -330,9 +271,8 @@ def _reconcile_close_steps() -> None:
                                                      _render_execution_md(rid, item_id, it))
                         log.info("close reconcile [%s]: re-snapshot execution.md for %s",
                                  rid, item_id)
-                    # The ROW half alone is right here: this is boot, so the task registry is
-                    # empty by construction and there is nothing to cancel. Every other disposal
-                    # path goes through `runs.stop_item_work`.
+                    # The row half alone: this is boot, so the task registry is empty and there is
+                    # nothing to cancel.
                     freed = app_state.spine.release_item_runs(rid, item_id)
                     if freed:
                         log.info("close reconcile [%s]: released %d run(s) for terminal %s",
@@ -341,10 +281,8 @@ def _reconcile_close_steps() -> None:
                     if resume_id and app_state.dev.set_work_item_status(dev_root, resume_id,
                                                                         "active"):
                         log.info("close reconcile [%s]: resumed paused parent %s", rid, resume_id)
-                    # Peers parked on this terminal item (`after:`). The live routes already fire
-                    # this; the reconcile catches a cohort stranded by a daemon death mid-release,
-                    # which for an autopiloted launch is the difference between "resumes on its
-                    # own" and "silently never runs again".
+                    # Peers parked on this terminal item. Catches a cohort stranded by a daemon
+                    # death mid-release.
                     scheduler.release_downstream(app_state.dev, dev_root, app_state.dev_store,
                                                  rid, items, item_id, cause="reconcile")
                 except Exception:
@@ -355,50 +293,43 @@ def _reconcile_close_steps() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Flip any runs orphaned by a previous daemon's exit (running → aborted). Was at module import
-    # before; doing it here keeps app_state import side-effect-free and runs it once per app start.
+    # Flip runs orphaned by a previous daemon's exit. Here rather than at import, so `app_state`
+    # stays side-effect-free.
     _orphans = app_state.spine.reconcile()
-    # Re-pin the learning sub-agents' `.md` model to their tier's current concrete id (so a
-    # MODEL_TIERS bump auto-propagates to the files). No-op when already current.
+    # Re-pin the learning sub-agents' model to their tier's current concrete id. No-op when
+    # already current.
     app_state.spine.reconcile_agent_models()
-    # Migrate any legacy CONCRETE picker override (system default + per-repo) back to its tier alias —
-    # the canonical DB form, so a saved pick auto-tracks a MODEL_TIERS bump. No-op when already alias.
+    # Migrate a legacy concrete override back to its tier alias, the canonical form, so a pick
+    # tracks a tier bump.
     app_state.spine.reconcile_model_overrides()
     # One-time: stamp durable work-item identity onto pre-existing sessions (idempotent).
     _backfill_session_stamps()
-    # …then the other direction: sessions pointing at an item that is no longer on disk. Runs after
-    # the backfill so a session that was merely UNSTAMPED is claimed by its item first, and never
-    # mistaken for an orphan.
+    # Runs after the backfill, so a merely unstamped session is claimed by its item and never read
+    # as an orphan.
     _reconcile_orphaned_sessions()
-    # …and the third way a session row outlives its subject: the CLI's transcript retention clock
-    # expired the JSONL out from under it. Runs after both passes above so a row is only ever
-    # judged on its transcript once its item question is settled.
+    # The third way a row outlives its subject: the retention clock expired the transcript out
+    # from under it.
     _reconcile_expired_transcripts()
-    # S4 git layer: heal recorded-worktree drift (kill-mid-create, deleted dirs, dropped terminal
-    # cleanups) before any run can touch a tree.
+    # heal recorded-worktree drift before any run reads a tree that is not there
     _reconcile_worktrees()
-    # S6 close protocol: finish any ordered close steps a dying daemon dropped mid-transition.
+    # finish any ordered close steps a dying daemon dropped mid-transition
     _reconcile_close_steps()
-    # D3 + R3: label the NON-terminal items whose run died with the last daemon, then auto-resume
-    # the ones whose dead run was a phase's own background work. Runs after the close reconcile so
-    # an item that was mid-close-transition is finished by that pass first and never touched here.
+    # Runs after the close reconcile, so an item mid-close-transition is finished by that pass,
+    # not this one.
     _reconcile_orphaned_items(_orphans)
-    # R3: and free any learning proposal a dead `write` run left stranded at `writing` — the one
-    # hole in that pipeline with no way out.
+    # Free any learning proposal a dead `write` run left at `writing` — the one hole with no way
+    # out.
     _reconcile_stranded_proposals()
 
-    # The dashboard push channel's ONE wiring point (routing-audit §7.6). Every state change worth
-    # showing the owner already writes a dev event; this turns each into a cache-invalidation topic
-    # for any open `/ws/dashboard` panel. Registered here rather than at import so a test or a script
-    # that imports the daemon doesn't acquire a live observer.
+    # Every state change worth showing already writes a dev event; this turns each into a cache-
+    # invalidation topic.
     dev_store.subscribe_events(dashboard_stream.publish_event)
 
     task = asyncio.create_task(_idle_sweep_loop())
     log.info("idle sweep loop started (every %ds, idle threshold %ds, auto-learning=%s)",
              SWEEP_POLL_SECONDS, SWEEP_IDLE_SECONDS, app_state.spine.get_learning_enabled())
-    # The stall watchdog: an item run that stops emitting for STALL_SECONDS is stopped, labelled
-    # `error` and handed back through Resume. The restart reconcilers above cover runs whose task
-    # died WITH the daemon; this one covers the run still nominally alive inside it.
+    # The reconcilers above cover runs whose task died WITH the daemon; the watchdog covers one
+    # still alive inside it.
     stall_task = asyncio.create_task(watchdog.watch_loop())
     log.info("stall watchdog started (every %ds, stall threshold %ds)",
              watchdog.POLL_SECONDS, watchdog.STALL_SECONDS)

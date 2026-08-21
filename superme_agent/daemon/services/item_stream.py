@@ -1,16 +1,7 @@
-"""In-process pub/sub of a work-item's live turn events, keyed by `item_id` (F2 unified timeline).
+"""In-process pub/sub of a work-item's live turn events, keyed by `item_id`.
 
-Every run's events already funnel through `runs.capture_event` — the ONE choke point shared by the
-interactive turn (ws.py) and every background phase run (loop.py / runs.py). That choke also
-publishes a framed event HERE, so any WebSocket panel *watching* an item receives its build/vet/
-intake turns live — not only the turns that panel fired itself. This is what lets the autonomous
-build & vet phases stream into the panel in real time.
-
-Pure in-memory, single process (the runner and the WS handler share this module in one daemon), and
-nothing is persisted — the durable record is the `run_event` trail. Delivery is best-effort: a full
-subscriber queue (a stalled client) DROPS the frame rather than backpressure the runner; the panel
-re-syncs the gap from the history endpoint. Publish/subscribe both run on the daemon's single event
-loop, so `put_nowait` needs no locking.
+Nothing is persisted — the durable record is the `run_event` trail. Delivery is best-effort: a full
+subscriber queue drops the frame rather than backpressure the runner.
 """
 
 from __future__ import annotations
@@ -44,9 +35,10 @@ def unsubscribe(item_id: str, q: asyncio.Queue) -> None:
 
 
 def publish(item_id: str, frame: dict) -> None:
-    """Fan `frame` out to every panel watching `item_id`. Non-blocking and best-effort: a full queue
-    (a stalled client) drops the frame — the panel's history refresh fills any gap — so a slow
-    consumer can never backpressure the agent run producing the events."""
+    """Fan `frame` out to every panel watching `item_id`.
+
+    Non-blocking and best-effort: a full queue drops the frame, and the panel's history refresh fills
+    the gap, so a slow consumer can never backpressure the run."""
     subs = _subscribers.get(str(item_id))
     if not subs:
         return

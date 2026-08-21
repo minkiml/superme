@@ -1,17 +1,7 @@
-"""Run-transport tools — the structured endings of kernel-fired runs (workflow-renovation-v2 §3.2).
+"""Run-transport tools — the structured endings of kernel-fired runs.
 
-Two tools, one pattern: a TWO-GROUP schema splits the payload at declaration time into `machine`
-(the kernel routes/executes on it — never rendered to the user) and `user` (rendered wholesale —
-the kernel may read it but never branches on it). Validated at call time; the tool RESULT returned
-to the agent is minimal (`ok`), never an echo of the payload (no double-carry in long threads).
-The payload reaches the firing runner through a per-run SINK dict bound at server build — the
-runner reads it after the turn ends. This replaces the retired completion-report / deputy-verdict
-FENCES and their regex parsers (core/session_contract.py).
-
-  report_completion — every kernel-fired work-item run's FINAL act (the run protocol in the
-                      Current-focus background variant names it; kernel_speech.work_item_preamble).
-  deputy_verdict    — the deputy dispatch's FINAL act (its own contract, never report_completion;
-                      named by kernel_speech.deputy_preamble).
+A two-group schema splits the payload into `machine`, which the kernel routes on, and `user`, which
+is rendered wholesale. The payload reaches the firing runner through a per-run SINK.
 """
 
 from __future__ import annotations
@@ -29,9 +19,8 @@ def _err(text: str) -> dict:
     return {"content": [{"type": "text", "text": text}], "is_error": True}
 
 
-# The outcomes the kernel routes on. `needs_user` (plan's grill) and `split` (plan's
-# sub-item outcome) are declared ahead of their full routing (renovation slices 3+) — until then
-# both rest the item at the owner's gate, which is the safe reading of each.
+# The outcomes the kernel routes on. `needs_user` and `split` both rest the item at the owner's
+# gate.
 RUN_OUTCOMES = ("success", "partial", "clean_noop", "blocked", "needs_user", "split",
                 "revise", "exhausted", "stagnated")
 
@@ -41,15 +30,8 @@ DEPUTY_GATES = ("triage", "plan", "review")
 
 # --------------------------------------------------------------------------- report_completion
 
-# The four types a work-item's landing commit can honestly carry. `feat`/`fix`/`refactor` are a
-# complete partition of "code changed" — did observable behaviour GAIN something, get CORRECTED,
-# or stay the SAME — which turns an open-ended guess into a three-way decision. `chore` is the
-# fourth because dependency/tooling/build items are genuinely none of the three; it is defined
-# narrowly (not product code) so it does not become the drawer for "unsure".
-# Deliberately absent: `docs` and `style` — vet has nothing to verify in either, so an item that
-# would carry them is not an implementation item at all, it is a triage misclassification. `test`
-# and `perf` are absent because build writes tests INSIDE the item it serves. Adding a type later
-# leaves existing history valid; removing one does not.
+# `feat`, `fix` and `refactor` partition "code changed"; `chore` is narrowly non-product, so it is
+# not a drawer for "unsure".
 COMMIT_TYPES = ("feat", "fix", "refactor", "chore")
 
 
@@ -117,8 +99,9 @@ class ReportCompletionArgs(TypedDict, total=False):
 
 def _open_questions(raw) -> tuple[list[dict], str]:
     """Normalize `user.questions` to the four-field shape, or return the retry-shaped complaint.
-    A bare string is refused rather than wrapped: a question that arrived as prose is one the
-    agent has not separated from its own reasoning, and that is exactly what the fields fix."""
+
+    A bare string is refused rather than wrapped: a question that arrived as prose is one the agent has
+    not separated from its own reasoning."""
     out: list[dict] = []
     for i, q in enumerate(raw or [], 1):
         if not isinstance(q, dict):
@@ -141,10 +124,8 @@ SUBJECT_MAX = 50
 def _commit_spec(raw) -> tuple[dict | None, str]:
     """Normalize `machine.commit`, or return the retry-shaped complaint.
 
-    The commit-message rules that are MECHANICAL are checked here rather than asked for in prose,
-    because this is the one artifact of a work-item that outlives the workspace: a subject that is
-    too long or ends in a period is wrong forever. Imperative mood is the one rule left to the
-    agent — nothing can check it."""
+    The MECHANICAL commit-message rules are checked here rather than asked for in prose, because a
+    subject that is too long is wrong forever. Imperative mood is left to the agent."""
     if raw in (None, {}):
         return None, ""
     if not isinstance(raw, dict):
@@ -227,8 +208,9 @@ class VerdictMachine(TypedDict, total=False):
 
 
 def _lines(raw) -> list[str]:
-    """A list field → its non-empty lines, one point each. A single string is accepted and read as
-    one point rather than refused: the shape is the contract, but a deputy that writes one line
+    """A list field to its non-empty lines, one point each.
+
+    A single string is read as one point rather than refused: the shape is the contract, but one line
     instead of a one-item list has still said the thing."""
     if isinstance(raw, str):
         return [raw.strip()] if raw.strip() else []
@@ -238,12 +220,10 @@ def _lines(raw) -> list[str]:
 
 
 def _escalation_md(esc: dict) -> str:
-    """The page card, assembled HERE so every escalation reads the same (owner, 2026-08-08).
+    """The page card, assembled HERE so every escalation reads the same.
 
-    The deputy supplies the parts; the kernel supplies the shape. Letting each run format its own
-    produced one prose blob per escalation, and the owner reading it cold had to find the summary,
-    the worry and the ask inside a wall. Bold labels + bullets, because the surfaces that render
-    this already colour markdown — the structure is what makes the colour mean something."""
+    The deputy supplies the parts; the kernel supplies the shape. Bold labels and bullets, because the
+    surfaces that render this already colour markdown."""
     out = [f"**Issue summary:** {' '.join(str(esc.get('summary') or '').split())}"]
     for label, key in (("Concern", "concerns"), ("What to do", "what_to_do")):
         if (points := _lines(esc.get(key))):
@@ -254,10 +234,7 @@ def _escalation_md(esc: dict) -> str:
 class VerdictEscalation(TypedDict, total=False):
     """The owner's page card. THREE PARTS, and the middle two are LISTS — one point per entry.
 
-    A paged owner reads this cold, usually on a phone, deciding whether to stop what they are doing.
-    Prose ran the situation, the worry and the ask together into one block they had to parse; the
-    parts are what they actually scan. The kernel renders the markdown (see `_escalation_md`), so
-    the shape cannot drift between deputies."""
+    A paged owner reads this cold. The kernel renders the markdown, so the shape cannot drift."""
     summary: Required[Annotated[str, "ONE line, plain and concrete: what is going on. No preamble, "
                                      "no restating the item title"]]
     concerns: Required[Annotated[list[str], "why this genuinely needs the owner — one short, plain "
@@ -304,9 +281,8 @@ def _deputy_verdict(*, verdict_sink: dict | None = None, **_):
         because = str(user.get("because") or "").strip()
         if not checked or not because:
             return _err("user.checked and user.because are both required.")
-        # `because` is the decision bubble the owner reads in the channel, so the length limit is
-        # enforced, not suggested — an unenforced cap produced 300-char run-ons that truncated
-        # mid-sentence. The reasoning that didn't fit belongs in `checked`, which the Deputy tab shows.
+        # The cap is enforced, not suggested: an unenforced one produced run-ons that truncated
+        # mid-sentence.
         if len(because) > 200:
             return _err(f"user.because is {len(because)} characters — it is the one line the owner "
                         "reads in the channel, so it must be a single sentence under 200. Say the "

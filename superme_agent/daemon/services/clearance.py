@@ -1,18 +1,8 @@
-"""Mechanical clearance — the post-CLOSE kernel hook (workflow-renovation-v2 §2, slice 5d).
+"""Mechanical clearance — the post-CLOSE kernel hook.
 
-Clearance is what makes a work-item **Done**, and it is MECHANICAL: no agent proposes it and no
-owner clicks it. The closing run's job is knowledge (anchor-doc ops + the weekly change-log
-entry); the moment it reports, the kernel clears the item — execution snapshot, terminal stamp,
-worktree removal, parent + downstream release, session and run-row reclamation.
-
-The rule that shapes this module: **clearance always completes.** A closing run that crashes is
-retried by the driver; after the retry budget it clears ANYWAY with the knowledge gap on record
-(`close.knowledge_failed`). A broken closing run is a SuperMe fault to fix — never a work-item
-that sits at close forever.
-
-Clearance still refuses exactly one thing: a non-terminal blocking child (D3). That is not a
-fault — the parent is genuinely waiting on work that exists — so it rests and clears itself when
-the last child clears (the resume branch below re-enters clearance for the parent).
+Clearance is what makes a work-item Done: no agent proposes it and no owner clicks it. It ALWAYS
+COMPLETES, and refuses exactly one thing — a non-terminal blocking child, which is genuine
+waiting.
 """
 
 import logging
@@ -25,8 +15,8 @@ from ...gateway import contexts
 
 log = logging.getLogger("superme-agent")
 
-# How many times the kernel re-fires a closing run that produced no completion report before it
-# clears the item anyway. Two retries, then the gap is recorded and the item moves on.
+# Two retries of a closing run that reported nothing, then the gap is recorded and the item moves
+# on.
 MAX_CLOSE_RETRY = 2
 
 _MAX_PARENT_DEPTH = 4   # a cleared child releases its parent, which may itself be clearable
@@ -38,13 +28,11 @@ def _refused(reason: str) -> dict:
 
 def clear_item(context_id: str, item_id: str, *, actor: str = "daemon",
                knowledge_gap: str | None = None, _depth: int = 0) -> dict:
-    """Clear a close-phase work-item to terminal. Returns `{"ok": True, ...}` on success, or
-    `{"ok": False, "refused": <why>}` when the item genuinely cannot clear yet (blocking child,
-    a run still in flight, not at close). Never raises; never deletes a log row.
+    """Clear a close-phase work-item to terminal.
 
-    `knowledge_gap` records that the closing run never landed its knowledge writes — the item
-    clears regardless (clearance always completes) and the gap goes on the permanent trail.
-    """
+    Returns `{"ok": False, "refused": …}` when the item genuinely cannot clear yet. Never raises, never
+    deletes a log row. `knowledge_gap` records that the closing run never landed its writes; the item
+    clears regardless."""
     ctx = contexts.resolve(context_id, "dev")
     if not ctx.internal_root:
         return _refused("context has no internal root")
@@ -58,22 +46,15 @@ def clear_item(context_id: str, item_id: str, *, actor: str = "daemon",
         return _refused("only close-phase items can be cleared")
     if _spine.is_item_running(context_id, item_id):
         return _refused("a run is in progress for this item")
-    # Close criteria (S6/D8): the kind's declared criteria evaluated MECHANICALLY. After slice 5a
-    # that is children-terminal and (for research) the report + its itemization decision —
-    # review's exit locked code and git, so nothing about the WORK can refuse here.
+    # The kind's declared criteria, evaluated mechanically. Review's exit locked code and git, so
+    # the WORK cannot refuse here.
     all_items = _dev.read_all(dev_root)["work_items"]
     cr = gate_briefs.close_readiness(item, dev_root / "work-items" / item_id, all_items)
     if not cr["ok"]:
         failed = [c for c in cr["checks"] if not c["ok"]]
         fails = "; ".join(f"{c['criterion']}: {c['detail']}" for c in failed)
-        # THE STATUS MUST NAME WHAT WILL RELEASE IT (owner, 2026-08-09). Every failing criterion
-        # parked the item at `awaiting_child`, but that status is a promise with a mechanism behind
-        # it: `parent_to_resume` releases it when the last open BLOCKING CHILD terminates. An item
-        # that fails `required_artifacts` has no children, so nothing could ever fire — a merged
-        # item sat at close forever, badged "blocked on sub-item", waiting on a sub-item that did
-        # not exist. Only a genuine children failure keeps the auto-resuming status; everything
-        # else is `awaiting_human`, the one status that pages the owner, because a person is now
-        # the only thing that can move it.
+        # The status must name what will release it: only a children failure keeps
+        # `awaiting_child`, which has a mechanism behind it.
         waits_on_child = any(str(c["criterion"]) == "children_terminal" for c in failed)
         _dev.set_work_item_status(dev_root, item_id,
                                   "awaiting_child" if waits_on_child else "awaiting_human")
@@ -91,9 +72,8 @@ def clear_item(context_id: str, item_id: str, *, actor: str = "daemon",
     _dev.write_artifact(dev_root, item_id, "execution.md", md)
     # 2. terminal: status=done + outcome=completed + done_at (status change, never a delete).
     _dev.set_work_item_terminal(dev_root, item_id, "completed")
-    # 2a. S4 terminal git cleanup: remove the worktree DIR, KEEP the branch ref (near-free trace —
-    #     never-delete holds; the record on the item stays too). Failure is surfaced, never silent,
-    #     and never blocks clearance (the item is done; a stray dir is a reconciliation concern).
+    # Remove the worktree dir, keep the branch ref. Failure is surfaced but never blocks
+    # clearance.
     worktree_removed = None
     if item.get("git_worktree"):
         try:
@@ -102,9 +82,7 @@ def clear_item(context_id: str, item_id: str, *, actor: str = "daemon",
         except (git_layer.GitError, git_layer.GitBusy) as e:
             worktree_removed = False
             log.warning("worktree cleanup failed for %s: %s", item_id, e)
-    # 2b. typed-awaiting router: if this was the last open BLOCKING child of an awaiting_child
-    #     parent, auto-resume the parent (no human involved — D2). A parent released at its own
-    #     close phase clears straight through — nothing is left holding it.
+    # If this was the last open blocking child, auto-resume the parent. No human involved.
     for it in all_items:
         if it.get("id") == item_id:
             it["status"] = "done"
@@ -121,8 +99,7 @@ def clear_item(context_id: str, item_id: str, *, actor: str = "daemon",
                 and kind_profiles.is_final_phase(parent.get("kind"),
                                                  parent.get("phase") or "triage")):
             clear_item(context_id, resume_id, actor="daemon", _depth=_depth + 1)
-    # 2c. peer scheduler: release every item parked at `awaiting_upstream` on this one (the
-    #     `after:` edge). Only a COMPLETED upstream releases — see services/scheduler.py.
+    # Release every item parked on this one's `after:` edge. Only a COMPLETED upstream releases.
     for it in all_items:
         if it.get("id") == item_id:
             it["outcome"] = "completed"
@@ -131,12 +108,8 @@ def clear_item(context_id: str, item_id: str, *, actor: str = "daemon",
                                  cause="completed")
     # An item clearing out of the pipeline frees an autopilot slot — pump the queue.
     gates.pump_autopilot_slots(context_id)
-    # 3. reclaim disk: `stop_item_work` cancels the item's task and then closes any live run row
-    #    (the rows themselves are permanent — never-delete-logs); the session transcript is
-    #    reclaimed AFTER a final capture
-    #    sweep (WI-8) — the sweep must read the transcript before it's purged, so the purge is
-    #    chained behind the background sweep. When auto-learning is OFF we skip the sweep but
-    #    STILL purge (disk reclamation is not a learning concern).
+    # The transcript purge is chained behind the sweep, which must read it first. With learning
+    # off, purge anyway.
     from .learning import _fire_sweep_bg   # lazy
     session_ids = _dev.work_item_session_ids(item)   # ALL role threads (intake/build/vet + legacy)
     for sid in session_ids:
@@ -151,12 +124,8 @@ def clear_item(context_id: str, item_id: str, *, actor: str = "daemon",
                          item_id=item_id, actor=actor,
                          meta={"runs_freed": runs_freed,
                                **({"knowledge_gap": knowledge_gap} if knowledge_gap else {})})
-    # A throwaway X-ray probe tears itself down HERE, at the item's terminal moment — not only when
-    # it parks at the close gate. The gates hook fires on `close` + `awaiting_human`; a probe whose
-    # close run completes cleanly never rests in that state, so it sailed past teardown and left its
-    # folder, worktree, branch and a permanently-"running" probe state behind — which then blocked
-    # every later probe, because the launcher refuses to mint a second while one is in flight.
-    # Clearance is the one moment every finished item passes through, probe or not.
+    # A probe tears itself down HERE, at the terminal moment: clearance is the one point every
+    # finished item passes.
     if _autopilot.is_prompt_extraction(item):
         from . import prompt_extraction as px
         px.teardown(context_id, item_id, reason="probe completed")

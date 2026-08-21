@@ -1,11 +1,7 @@
-"""Base in-process tools — available in EVERY mode (core + dev), unlike dev_tools.py.
+"""Base in-process tools — available in EVERY mode, unlike `dev_tools.py`.
 
-Right now this is just `pull_constitution`: the on-demand loader for the frontmatter-first
-constitution model (context-model-spec §2). The always-on context carries only a CATALOG of
-constitution names + descriptions; the body is fetched on demand by this tool, by name. Chosen
-over raw `Read` so it is scope-safe (only ever resolves the host's in-scope items — the caller
-binds the host's universal + repo constitution homes as deps), exposes no harness paths, and can
-log usage. Constitutions exist in both core and dev, so this server loads in both modes.
+`pull_constitution` is the on-demand loader for the frontmatter-first model. Chosen over raw `Read`
+so it is scope-safe and exposes no harness paths.
 """
 
 from __future__ import annotations
@@ -56,10 +52,10 @@ class SuggestAssetsArgs(TypedDict, total=False):
 
 
 def _suggest_assets(*, activated: set | None = None, repo_dir: Path | None = None, **_):
-    """The spec→asset bridge, run by onboarding: relevance-rank the shared ASSET POOL against the
-    project spec and AUTO-ADOPT (enable) the confidently-relevant items for this repo. Confident = the
-    spec shares a term with the asset's slug or description, not merely its body. The owner then curates
-    them in the dashboard (disable / drop / + Add). The pool is shared; adoption is per-repo (no copy)."""
+    """Relevance-rank the shared ASSET POOL against the project spec and auto-adopt the confidently
+    relevant ones.
+
+    Confident means the spec shares a term with the asset's slug or description."""
     async def suggest_assets(args: dict) -> dict:
         spec = str(args.get("spec") or "").strip()
         if not spec:

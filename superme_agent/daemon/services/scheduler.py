@@ -1,13 +1,7 @@
 """Peer scheduler — the `after:` edge's release hook.
 
-`core/status_router.py` decides WHO is released (pure, over item dicts); this module performs the
-writes and logs the events. It exists as one function rather than four inlined blocks because a
-work-item can go terminal down four different paths — complete, abandon/supersede, hard delete, and
-the startup reconcile — and a peer parked at `awaiting_upstream` that only some of them release is
-work that silently never runs.
-
-Called AFTER the terminal write, with `items` already carrying the terminal item's new state (the
-caller patches its own in-memory copy — same convention the parent-resume blocks use).
+One function rather than four inlined blocks, because an item can go terminal down four paths, and
+a peer only some of them release is work that silently never runs.
 """
 
 from __future__ import annotations
@@ -22,17 +16,10 @@ log = logging.getLogger("superme-agent")
 
 def release_downstream(dev, dev_root: Path, dev_store, context_id: str,
                        items: list[dict], upstream_id: str, *, cause: str) -> dict:
-    """Fire the peers waiting on `upstream_id`. Returns `{released, paged}` (both id lists).
+    """Fire the peers waiting on `upstream_id`.
 
-    - **released** — every upstream completed, so the item goes `active` and the normal scheduler
-      picks it up. No human involved: this is the whole point of the edge.
-    - **paged** — an upstream ended abandoned or superseded. The wait is now pointless and nothing
-      will release it on its own, so the item goes `awaiting_human` with the dead upstream named.
-      Auto-starting instead would build against a predecessor that never landed; leaving it parked
-      would hide it forever. Paging is the only honest third option.
-
-    Best-effort per item: one bad write must not strand the rest of the cohort.
-    """
+    Released: every upstream completed. Paged: one ended abandoned, so nothing will release it and
+    auto-starting would build on a predecessor that never landed."""
     released, paged = status_router.items_to_release(items, str(upstream_id))
     autopilot = {str(it.get("id")): bool(it.get("autopilot")) for it in items}
     for iid in released:
@@ -43,9 +30,8 @@ def release_downstream(dev, dev_root: Path, dev_store, context_id: str,
                                     item_id=iid, actor="daemon",
                                     meta={"upstream": str(upstream_id), "cause": cause})
                 log.info("scheduler: released %s (upstream %s %s)", iid, upstream_id, cause)
-                # An autopilot peer must not just go `active` and sit — it owes a triage run to
-                # start its chain, the same first-kick the FE push and itemize give (slice 4c).
-                # Hand-driven peers correctly wait for the owner's click.
+                # An autopilot peer owes a triage run to start its chain; a hand-driven one
+                # correctly waits for the owner.
                 if autopilot.get(iid):
                     try:
                         from ..app_state import get_spine
