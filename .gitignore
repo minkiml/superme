@@ -49,18 +49,15 @@ superme-docs/
 # Internal authoring/practice guidance — private to the dev, never on remote
 Best-superme-context-practice-and-other-guidance/
 
-# scripts/ holds internal dev/test runners (per-slice test_*.py, drivers, one-off migrations) —
-# local-only, never on remote. Keep ONLY the shared infra tooling + its golden snapshots:
-#   parity.py / parity_baseline.json  = API-contract (route + OpenAPI) parity net
-#   ws_schema.py                      = regenerates the typed WS frame schema
-#   prompt_baseline.json              = kernel-speech / launch-prompt parity net (test_thread3.py)
-#   check_fast.sh                     = shared dev helper
-/scripts/*
-!/scripts/parity.py
-!/scripts/parity_baseline.json
-!/scripts/prompt_baseline.json
-!/scripts/ws_schema.py
-!/scripts/check_fast.sh
+# scripts/ ships: the test suites and the gate tooling they run beside. What stays local is
+# everything bound to one machine or already spent — a one-shot migration, a driver pointed at
+# the owner's own playground, measurement experiments, and throwaway analysis tools.
+/scripts/__pycache__/
+/scripts/comment_pass/
+/scripts/migrate_phase_rename.py
+/scripts/pg_drive.py
+/scripts/compaction_bakeoff.py
+/scripts/probe_context_floor.py
 
 # Per-worktree vet environment (the vet skill's scripts/vet_env.sh): pid/port state + the server's
 # log. Scratch, per-worktree, and dies with the dir — but a worktree IS a checkout, so without this

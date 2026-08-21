@@ -1,0 +1,312 @@
+"""BV-S4 gate test — vet session mechanics (build-vet-loop §9 step 4).
+
+Covers: the vet-report machinery (cycle numbering, code-owned envelope, latest/handoff cap) and
+its MECHANICAL refusals (verdict without evidence · verdict contradicting the ledger · unknown /
+missing plan checks · failing verdicts without findings); the read-only permission layer
+(`deny_write_tools` kills file-writes outright — even inside the freeze boundary, with no human
+prompt — while the shell keeps its in-boundary autonomy for RUNNING checks); the `file_vet_report`
+MCP tool end-to-end incl. bound-item scoping; `reset_vet_thread` (vet forgets: previous cycle's
+thread retired + slot cleared, no-op on cycle 1); tool registration; and the vet preamble's
+read-only contract. Self-cleaning (tempdirs). No daemon needed.
+
+Run: PYTHONPATH=. python -m scripts.test_bv_s4
+"""
+
+import asyncio
+import subprocess
+import tempfile
+from pathlib import Path
+from types import SimpleNamespace
+
+from superme_agent.core import artifacts as A
+from superme_agent.core.permissions import VET_READONLY_NUDGE, build_can_use_tool
+from superme_agent.core.kernel_speech import work_item_preamble
+
+PASS = 0
+
+PLAN = """---
+artifact: plan
+---
+# Plan — t
+
+## Approach
+x
+
+## Tasks
+- [x] a
+
+## Inner checks
+- `pytest -q`
+
+## Vet plan
+depth: checks
+reason: two contained checks cover the surface
+env: none
+
+### alpha-check
+- traces: d-x
+- mode: command
+- scenario: run the alpha suite
+- expect: pytest exits 0 with exactly 3 passed and no skips
+
+### beta-check
+- traces: d-x
+- mode: inspection
+- scenario: read the module
+- expect: module.py defines beta() returning the literal string 'beta'
+"""
+
+
+def ok(name: str, cond: bool, detail: str = "") -> None:
+    global PASS
+    assert cond, f"FAIL: {name} {detail}"
+    PASS += 1
+    print(f"  ok  {name}")
+
+
+def make_item(tmp: Path, name: str) -> Path:
+    d = tmp / name
+    (d / "artifacts").mkdir(parents=True)
+    (d / "item.md").write_text("---\nid: x\n---\n")
+    (d / "artifacts" / "plan.md").write_text(PLAN)
+    return d
+
+
+def make_repo(tmp: Path) -> Path:
+    repo = tmp / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    (repo / "a.py").write_text("x = 1\n")
+    subprocess.run(["git", "add", "."], cwd=repo, check=True)
+    subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t",
+                    "commit", "-qm", "init"], cwd=repo, check=True)
+    return repo
+
+
+def _lenses(d) -> None:
+    """The three standing lenses, owed on every cycle before the report will write
+    (verification-model §3). Not what this suite is testing — just the bar it now has to clear."""
+    for ln in A.STANDING_LENSES:
+        A.record_lens(d, lens=ln, probed="read the diff through this lens")
+
+def test_report_machinery(tmp: Path, repo: Path) -> None:
+    print("cycle-report machinery (fence entries + derived report + refusals)")
+    d = make_item(tmp, "item-report")
+
+    ok("no cycle reports yet", A.latest_cycle_report(d) is None)
+
+    # Report refused while nothing (or not everything) is recorded.
+    try:
+        A.write_vet_user_report(d, repo)
+        ok("report refused with nothing recorded", False)
+    except ValueError as e:
+        ok("report refused with nothing recorded", "no recorded entry" in str(e), str(e))
+
+    # Recording refuses invented / glued check ids (join-key integrity).
+    try:
+        A.record_verification(d, repo, check="ghost-check", how="h", result="r", passed=True)
+        ok("invented check id refused", False)
+    except ValueError as e:
+        ok("invented check id refused", "not a vet-plan check id" in str(e), str(e))
+    try:
+        A.record_verification(d, repo, check="alpha-check — the alpha suite", how="h",
+                              result="r", passed=True)
+        ok("glued check id refused", False)
+    except ValueError as e:
+        ok("glued check id refused", "glues a description" in str(e), str(e))
+
+    e1 = A.record_verification(d, repo, check="alpha-check", how="pytest -q",
+                               result="3 passed", passed=True)
+    ok("first record scaffolds cycle 1 and lands in its fence",
+       e1["cycle"] == 1 and (d / "artifacts" / "build-vet-1.md").exists()
+       and "```checks" in (d / "artifacts" / "build-vet-1.md").read_text())
+    try:
+        A.write_vet_user_report(d, repo)
+        ok("report still refused while a plan check is unrecorded", False)
+    except ValueError as e:
+        ok("report still refused while a plan check is unrecorded",
+           "beta-check" in str(e), str(e))
+    A.record_verification(d, repo, check="beta-check", how="read module.py",
+                          result="beta() returns 'BETA' uppercase", passed=False,
+                          note="expected 'beta', got 'BETA'")
+    # Every failing check owes a diagnosis before the report will write (verification-model §5) —
+    # the report is the last moment anyone can still be asked where it broke.
+    A.record_diagnosis(d, check="beta-check", where="module.py:8",
+                       why="beta() upper-cases its return value")
+
+    _lenses(d)
+    r1 = A.write_vet_user_report(d, repo, summary="beta is still wrong",
+                                 confirms="- alpha holds", looked_at="- read the diff")
+    text = Path(r1["path"]).read_text()
+    ok("the verdict is derived from the fence, never asserted by vet",
+       r1["verdict"] == "failed" and r1["failed"] == ["beta-check"])
+    ok("…and the failing check is MACHINE-authored into the report, whatever vet wrote",
+       "## What didn't hold" in text and "beta-check" in text
+       and "module.py:8" in text, text[:400])
+    ok("…while vet's own narrative is carried verbatim",
+       "beta is still wrong" in text and "- alpha holds" in text
+       and "- read the diff" in text)
+    ok("the passing check is NOT re-listed — the Task tab carries the per-check evidence",
+       "alpha-check" not in text)
+
+    # Driver closes cycle 1; next scaffold opens cycle 2; fix lands and the report flips.
+    A.append_cycle_outcome(d, evidence="failed", decision="build", reason="beta red")
+    cy2 = A.scaffold_cycle(d, title="t")
+    ok("outcome closes the cycle → next scaffold is cycle 2", cy2["cycle"] == 2)
+    A.record_verification(d, repo, check="beta-check", how="read module.py",
+                          result="beta() returns 'beta'", passed=True)
+    _lenses(d)
+    r2 = A.write_vet_user_report(d, repo, summary="all green now")
+    text2 = Path(r2["path"]).read_text()
+    ok("the re-written report drops the didn't-hold block once nothing is red",
+       r2["failed"] == [] and "What didn't hold" not in text2, text2[:400])
+    ok("…and the ✗→✓ history survives where the Task tab reads it",
+       [h["passed"] for r_ in A.proof_rows(d) for v in r_["verified"]
+        if v["check"] == "beta-check" for h in v["history"]] == [False, True])
+    latest = A.latest_cycle_report(d)
+    ok("latest cycle report = newest cycle", latest["cycle"] == 2)
+    ok("char cap honored", A.latest_cycle_report(d, char_cap=10)["truncated"] is True)
+
+
+def _decide(fn, tool: str, args: dict):
+    return asyncio.run(fn(tool, args, None))
+
+
+def test_readonly_permissions(tmp: Path) -> None:
+    print("vet read-only permission layer")
+    wt = tmp / "wt"
+    wt.mkdir()
+    prompts: list[str] = []
+
+    async def approve(tool, args):
+        prompts.append(tool)
+        return True
+
+    fn = build_can_use_tool(approve, cwd=wt, write_boundary=[wt],
+                            deny_write_tools=VET_READONLY_NUDGE)
+    r = _decide(fn, "Write", {"file_path": str(wt / "f.py"), "content": "x"})
+    # `in`, not `==`: every refusal also carries the kernel's running tally of refused calls, so the
+    # invariant here is that vet's own reason is the one given — not that it is the whole message.
+    ok("Write denied even INSIDE the freeze boundary",
+       type(r).__name__ == "PermissionResultDeny" and VET_READONLY_NUDGE in r.message)
+    r = _decide(fn, "Edit", {"file_path": str(wt / "f.py"), "old_string": "a", "new_string": "b"})
+    ok("Edit denied", type(r).__name__ == "PermissionResultDeny")
+    ok("no human prompt was involved", prompts == [])
+    r = _decide(fn, "Bash", {"command": "cat f.py"})
+    ok("read-only Bash still auto-allows", type(r).__name__ == "PermissionResultAllow")
+    r = _decide(fn, "Bash", {"command": "pytest -q"})
+    ok("mutating Bash inside the boundary still auto-allows (running checks IS the job)",
+       type(r).__name__ == "PermissionResultAllow")
+    # Control: without the flag, the boundary auto-allows the same Write.
+    fn2 = build_can_use_tool(approve, cwd=wt, write_boundary=[wt])
+    r = _decide(fn2, "Write", {"file_path": str(wt / "f.py"), "content": "x"})
+    ok("without the flag the boundary allows in-boundary writes (build unchanged)",
+       type(r).__name__ == "PermissionResultAllow")
+
+
+def test_tool(tmp: Path, repo: Path) -> None:
+    print("file_vet_report MCP tool")
+    from superme_agent.harness.tools.dev_tools import _file_vet_report
+    dev_root = tmp / "devroot"
+    d = dev_root / "work-items" / "it1"
+    (d / "artifacts").mkdir(parents=True)
+    (d / "item.md").write_text("---\nid: it1\n---\n")
+    (d / "artifacts" / "plan.md").write_text(PLAN)
+    A.record_verification(d, repo, check="alpha-check", how="pytest -q",
+                          result="3 passed", passed=True)
+
+    events: list[tuple] = []
+    store = SimpleNamespace(log_event=lambda *a, **k: events.append((a, k)))
+    tool = _file_vet_report(store=store, context_id="c", dev_root=dev_root,
+                            repo_dir=repo, bound_item_id="it1")
+
+    r = asyncio.run(tool({"item_id": "other"}))
+    ok("cross-item call refused", r.get("is_error"))
+    r = asyncio.run(tool({"item_id": "it1"}))
+    ok("tool surfaces the mechanical refusal (unrecorded plan check)",
+       r.get("is_error") and "beta-check" in r["content"][0]["text"], str(r))
+    A.record_verification(d, repo, check="beta-check", how="read",
+                          result="'beta' ok", passed=True)
+    _lenses(d)
+    r = asyncio.run(tool({"item_id": "it1", "observations": "none real"}))
+    ok("happy path writes reports/report-vet.md + logs the event",
+       not r.get("is_error") and (d / "reports" / "report-vet.md").exists()
+       and events and events[0][0][1] == "vet.report", str(r))
+    ok("tool tells vet its job is done (no fixing)",
+       "do not attempt fixes" in r["content"][0]["text"])
+
+
+def test_reset_vet_thread(tmp: Path) -> None:
+    print("reset_vet_thread (vet forgets)")
+    from superme_agent.daemon.services.runs import reset_vet_thread
+    deleted: list[tuple] = []
+    cleared: list[tuple] = []
+    sessions = SimpleNamespace(delete=lambda ctx, sid, cause: deleted.append((sid, cause)))
+    dev = SimpleNamespace(set_work_item_session=lambda root, iid, sid, slot: cleared.append((iid, sid, slot)))
+    ctx = SimpleNamespace(internal_root=tmp)
+
+    ok("cycle 1 (no vet slot) is a no-op",
+       reset_vet_thread(ctx, {"id": "i1", "sessions": {"plan": "s-p"}},
+                        dev=dev, sessions=sessions) is False and not deleted)
+    ok("re-entry retires the previous vet thread + clears the slot",
+       reset_vet_thread(ctx, {"id": "i1", "sessions": {"vet": "s-v1", "build": "s-b"}},
+                        dev=dev, sessions=sessions) is True
+       and deleted == [("s-v1", "retired")] and cleared == [("i1", None, "vet")])
+    ok("other phases' threads untouched", all(s[0] != "s-b" for s in deleted))
+
+
+def test_preamble_and_registration() -> None:
+    print("preamble + registration")
+    item = {"title": "t", "phase": "vet", "kind": "implementation", "git_worktree": "/wt"}
+    p = work_item_preamble("i1", item, "/items/i1")
+    ok("vet preamble states the read-only contract",
+       "read-only" in p and "file_vet_report" in p and "never fix it" in p, p[:400])
+    build_p = work_item_preamble("i1", {**item, "phase": "build"}, "/items/i1")
+    ok("build preamble unchanged (owns its worktree)", "all code changes happen" in build_p)
+    from superme_agent.harness.tools.dev_tools import _ITEM_DEV_TOOLS
+    ok("file_vet_report registered", "file_vet_report" in {t.name for t in _ITEM_DEV_TOOLS})
+    from superme_agent.harness.policy import SAFE_TOOLS
+    ok("file_vet_report auto-allows (vet's only pen — a prompt would park background cycles)",
+       "mcp__dev__file_vet_report" in SAFE_TOOLS)
+
+
+def test_scope_vs_ops() -> None:
+    """§2.1 — the declared authorization scope is checked against the STAGED OPS. The
+    reserved/delegable split is declared by the agent it constrains, so on its own it is an honour
+    system; this is the code that makes the obvious lie refusable."""
+    print("authorization scope vs staged ops (§2.1)")
+    from superme_agent.core import artifacts as A
+    intent = [{"doc": "project-prd", "section": "Deliverables", "op": "update", "content": "x"},
+              {"doc": "project-prd", "section": "Success signals", "op": "update", "content": "y"}]
+    sync = [{"doc": "architecture", "section": "Stack", "op": "update", "content": "z"}]
+    ok("intent-defining ops are detected", len(A.intent_ops(intent)) == 2)
+    ok("descriptive-doc ops are not", A.intent_ops(sync) == [])
+    ok("delegable scope + intent ops → refused, names the scope to use",
+       "roadmap-scope" in A.scope_mismatch("doc-sync", intent))
+    ok("delegable scope + sync ops → allowed", A.scope_mismatch("doc-sync", sync) == "")
+    ok("RESERVED scope passes through unchecked (it already reaches the owner)",
+       A.scope_mismatch("roadmap-scope", intent) == "")
+    ok("no staged ops → nothing to contradict", A.scope_mismatch("doc-sync", []) == "")
+    # The live case that motivated it: dropping `--csv` from d-reporting + rewriting its signal
+    # row was filed as `doc-sync` (item b229793bcf9a, 2026-07-27). A deputy would have granted it.
+    ok("the 2026-07-27 mislabel would now be refused",
+       A.scope_mismatch("doc-sync", [{"doc": "project-prd", "section": "Deliverables",
+                                      "op": "update", "content": "drop --csv"}]) != "")
+
+
+
+def main() -> None:
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        repo = make_repo(tmp)
+        test_report_machinery(tmp, repo)
+        test_readonly_permissions(tmp)
+        test_tool(tmp, repo)
+        test_reset_vet_thread(tmp)
+        test_preamble_and_registration()
+        test_scope_vs_ops()
+    print(f"\nALL GREEN — {PASS} checks passed (self-cleaned).")
+
+
+if __name__ == "__main__":
+    main()

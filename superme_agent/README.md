@@ -62,7 +62,7 @@ superme_agent/
 ├─ local-harness/   per-host local harness — <id>/<mode>/
 ├─ config/          system.yaml (tracked) · repos.yaml (local, seeded from repos.example.yaml)
 └─ paths.py         where everything is — paths, .env, the daemon's address
-scripts/            check_fast.sh (the gate) · parity · sweep/E2E tests (gitignored)
+scripts/            check_fast.sh (the gate) · parity · the test suites
 web/                bff/ (reverse proxy) · frontend/ (cockpit)
 superme-knowledge/  the knowledge repo (sibling, gitignored) — see its README
 ```

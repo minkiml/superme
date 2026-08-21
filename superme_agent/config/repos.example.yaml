@@ -16,7 +16,7 @@ repos:
     label: SuperMe hub
     cwd: "."                 # repo root
     layer: global
-    persona_append: ""
+    persona_append: "" # optional suffix to the global persona. leaving it empty is fine. 
     extra_mcp: []
     anchor_branch: main
     vet_env:                      # how to boot a server running a work item's worktree
@@ -24,8 +24,3 @@ repos:
       port_env: SUPERME_DAEMON_PORT
       ready: /openapi.json
       url_env: SUPERME_DAEMON_URL
-
-    # Gitignored paths that are nonetheless this repo's SOURCE. A read-only worktree
-    # mirrors them, so a sweep over a plain checkout cannot call live code dead.
-    source_ignored:
-      - scripts
