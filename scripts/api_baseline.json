@@ -7793,7 +7793,7 @@
    "sig": "class"
   },
   "_begin_run": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.lifecycle",
    "sig": "def(ctx, context_id: str, item_id: str, kind: str = 'plan', model: str | None = None, phase: str | None = None) -> int | None"
   },
   "_load": {
@@ -7805,7 +7805,7 @@
    "sig": "def(item: dict) -> str"
   },
   "_run_background_resolve": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.background",
    "sig": "def(ctx, context_id: str, item_id: str, worktree: pathlib.Path, conflicts: list[str], model: str | None = None, effort: str | None = None) -> None"
   },
   "dev_work_item_git": {
@@ -8464,7 +8464,7 @@
    "sig": "def(context_id: str)"
   },
   "fire_auto_triage": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.phases",
    "sig": "def(context_id: str, item_id: str, spine) -> bool"
   },
   "get_dev": {
@@ -9392,7 +9392,7 @@
    "sig": "def(body: SweepLaunchBody, dev: DevKnowledgeService = Depends(dependency=<function get_dev>, use_cache=True, scope=None), dev_store: DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None), spine: SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
   },
   "fire_first_investigate": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.phases",
    "sig": "def(context_id: str, item_id: str, spine) -> bool"
   },
   "get_dev": {
@@ -9744,7 +9744,7 @@
    "sig": "class"
   },
   "_begin_run": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.lifecycle",
    "sig": "def(ctx, context_id: str, item_id: str, kind: str = 'plan', model: str | None = None, phase: str | None = None) -> int | None"
   },
   "_dev_root": {
@@ -9752,11 +9752,11 @@
    "sig": "def(context_id: str)"
   },
   "_run_background_plan": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.background",
    "sig": "def(ctx, context_id: str, item_id: str, item_dir: pathlib.Path, model: str | None = None, effort: str | None = None) -> None"
   },
   "build_item_timeline": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.timeline",
    "sig": "def(context_id: str, item_id: str) -> dict"
   },
   "dev_prompt_extraction_run": {
@@ -10680,7 +10680,7 @@
    "sig": "class"
   },
   "_LiveTokens": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.lifecycle",
    "methods": [
     "_num(value) -> int",
     "bump(self, context_id: str, item_id: str, ev) -> None",
@@ -10693,7 +10693,7 @@
    "sig": "value:AgentService"
   },
   "_begin_run": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.lifecycle",
    "sig": "def(ctx, context_id: str, item_id: str, kind: str = 'plan', model: str | None = None, phase: str | None = None) -> int | None"
   },
   "_cache_slash": {
@@ -10714,7 +10714,7 @@
    "sig": "value:DevStore"
   },
   "_end_run": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.lifecycle",
    "sig": "def(ctx, context_id: str, item_id: str, tokens: int | None, status: str = 'active', usage: dict | None = None, ctx_pct: int | None = None, outcome: str | None = None, session_id: str | None = None, summary: str = '') -> None"
   },
   "_latest_report_outcome": {
@@ -10748,15 +10748,15 @@
    "sig": "def(tool_name: str, tool_input: dict) -> str"
   },
   "bank_auto_checkpoint": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.checkpoints",
    "sig": "def(ctx, item_id: str, *, since: float | None = None) -> bool"
   },
   "capture_event": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.capture",
    "sig": "def(repo_id: str, ev, *, run_id: int | None = None, item_id: str | None = None, publish_live: bool = True) -> None"
   },
   "capture_prompt": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.capture",
    "sig": "def(repo_id: str, prompt: str, *, run_id: int | None = None, item_id: str | None = None) -> None"
   },
   "classify": {
@@ -10764,11 +10764,11 @@
    "sig": "def(*, exc: BaseException | None = None, reply: str | None = None, did_work: bool = False) -> Fault"
   },
   "compacted_checkpoint": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.checkpoints",
    "sig": "def(ctx, item: dict, session_id: str | None) -> str | None"
   },
   "compacted_session_memory": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.checkpoints",
    "sig": "def(ctx, session_id: str | None) -> str | None"
   },
   "compaction_notice": {
@@ -10792,7 +10792,7 @@
    "sig": "def(ev: Init | TextDelta | Status | ToolResult | Usage | Result) -> dict"
   },
   "fire_auto_triage": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.phases",
    "sig": "def(context_id: str, item_id: str, spine) -> bool"
   },
   "general_preamble": {
@@ -10819,7 +10819,7 @@
    "sig": "def(msg: dict) -> TurnFrame | ApprovalResponseFrame | WatchFrame | None"
   },
   "read_completion": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.completion",
    "sig": "def(context_id: str, item_id: str, sink: dict, run_id: int | None = None) -> dict | None"
   },
   "resolve_item_session": {
@@ -12691,7 +12691,7 @@
    "sig": "class"
   },
   "_LiveTokens": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.lifecycle",
    "methods": [
     "_num(value) -> int",
     "bump(self, context_id: str, item_id: str, ev) -> None",
@@ -12717,7 +12717,7 @@
    "sig": "value:AgentService"
   },
   "_begin_run": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.lifecycle",
    "sig": "def(ctx, context_id: str, item_id: str, kind: str = 'plan', model: str | None = None, phase: str | None = None) -> int | None"
   },
   "_build_delta": {
@@ -12732,7 +12732,7 @@
    "sig": "value:DevKnowledgeService"
   },
   "_dev_mcp": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.lifecycle",
    "sig": "def(ctx, repo_dir: pathlib.Path, item_id: str, *, scope: str) -> dict"
   },
   "_dev_store": {
@@ -12785,15 +12785,15 @@
    "sig": "value:_Feature"
   },
   "capture_event": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.capture",
    "sig": "def(repo_id: str, ev, *, run_id: int | None = None, item_id: str | None = None, publish_live: bool = True) -> None"
   },
   "capture_prompt": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.capture",
    "sig": "def(repo_id: str, prompt: str, *, run_id: int | None = None, item_id: str | None = None) -> None"
   },
   "capture_run_input": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.capture",
    "sig": "def(context_id: str, item_id: str, *, ctx, system_append: str | None, prompt: str, background: bool, phase: str | None, surface: dict | None = None) -> None"
   },
   "deny_all": {
@@ -12812,7 +12812,7 @@
    "sig": "def(sink: 'dict')"
   },
   "retry_notice": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.lifecycle",
    "sig": "def(context_id: str, item_id: str, phase: str)"
   },
   "run_deputy_gate": {
@@ -12820,7 +12820,7 @@
    "sig": "def(context_id: 'str', item_id: 'str') -> 'None'"
   },
   "surface_from_turn": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.capture",
    "sig": "def(turn_kwargs: dict, *, mcp: list[str] | None = None) -> dict"
   }
  },
@@ -13154,7 +13154,7 @@
    "sig": "def(context_id: 'str', dev_root: 'Path', cohort: 'str') -> 'dict'"
   },
   "fire_auto_triage": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.phases",
    "sig": "def(context_id: str, item_id: str, spine) -> bool"
   },
   "launch_cohort": {
@@ -13285,11 +13285,11 @@
    "sig": "value:set"
   },
   "capture_event": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.capture",
    "sig": "def(repo_id: str, ev, *, run_id: int | None = None, item_id: str | None = None, publish_live: bool = True) -> None"
   },
   "capture_prompt": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.capture",
    "sig": "def(repo_id: str, prompt: str, *, run_id: int | None = None, item_id: str | None = None) -> None"
   },
   "deny_all": {
@@ -13350,7 +13350,7 @@
    "sig": "value:str"
   },
   "_LiveTokens": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.lifecycle",
    "methods": [
     "_num(value) -> int",
     "bump(self, context_id: str, item_id: str, ev) -> None",
@@ -13369,7 +13369,7 @@
    "sig": "value:AgentService"
   },
   "_begin_run": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.lifecycle",
    "sig": "def(ctx, context_id: str, item_id: str, kind: str = 'plan', model: str | None = None, phase: str | None = None) -> int | None"
   },
   "_cas_phase": {
@@ -13387,7 +13387,7 @@
    "sig": "value:DevStore"
   },
   "_end_run": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.lifecycle",
    "sig": "def(ctx, context_id: str, item_id: str, tokens: int | None, status: str = 'active', usage: dict | None = None, ctx_pct: int | None = None, outcome: str | None = None, session_id: str | None = None, summary: str = '') -> None"
   },
   "_exit_no_progress": {
@@ -13437,23 +13437,23 @@
    "sig": "def(item_dir: pathlib.Path, wt) -> bool"
   },
   "bank_auto_checkpoint": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.checkpoints",
    "sig": "def(ctx, item_id: str, *, since: float | None = None) -> bool"
   },
   "capture_event": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.capture",
    "sig": "def(repo_id: str, ev, *, run_id: int | None = None, item_id: str | None = None, publish_live: bool = True) -> None"
   },
   "capture_prompt": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.capture",
    "sig": "def(repo_id: str, prompt: str, *, run_id: int | None = None, item_id: str | None = None) -> None"
   },
   "capture_run_input": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.capture",
    "sig": "def(context_id: str, item_id: str, *, ctx, system_append: str | None, prompt: str, background: bool, phase: str | None, surface: dict | None = None) -> None"
   },
   "compacted_checkpoint": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.checkpoints",
    "sig": "def(ctx, item: dict, session_id: str | None) -> str | None"
   },
   "decide_after_build": {
@@ -13473,11 +13473,11 @@
    "sig": "def(ctx, context_id: str, item_id: str, auth_id: str, *, by: str) -> tuple[bool, str]"
   },
   "ensure_completion": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.completion",
    "sig": "def(ctx, context_id: str, item_id: str, sink: dict, *, skill: str, session_id: str | None, model: str | None, effort: str | None, run_id: int | None = None) -> dict | None"
   },
   "fire_auto_triage": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.phases",
    "sig": "def(context_id: str, item_id: str, spine) -> bool"
   },
   "grant_authorization": {
@@ -13496,19 +13496,19 @@
    "sig": "def(sink: 'dict')"
   },
   "mark_item_error": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.lifecycle",
    "sig": "def(ctx, context_id: str, item_id: str, reason: str, *, phase: str = '') -> bool"
   },
   "read_completion": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.completion",
    "sig": "def(context_id: str, item_id: str, sink: dict, run_id: int | None = None) -> dict | None"
   },
   "reset_vet_thread": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.checkpoints",
    "sig": "def(ctx, item: dict, *, dev=None, sessions=None) -> bool"
   },
   "retry_notice": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.lifecycle",
    "sig": "def(context_id: str, item_id: str, phase: str)"
   },
   "start_build_cycle": {
@@ -13524,7 +13524,7 @@
    "sig": "def(ctx, context_id: str, item_id: str) -> tuple[bool, str]"
   },
   "surface_from_turn": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.capture",
    "sig": "def(turn_kwargs: dict, *, mcp: list[str] | None = None) -> dict"
   }
  },
@@ -13739,19 +13739,218 @@
   "DEFAULT_RUN_MODEL": {
    "sig": "value:str"
   },
+  "UNREPORTED": {
+   "sig": "value:str"
+  },
+  "_LiveTokens": {
+   "home": "superme_agent.daemon.services.runs.lifecycle",
+   "methods": [
+    "_num(value) -> int",
+    "bump(self, context_id: str, item_id: str, ev) -> None",
+    "tokens(self) -> int",
+    "usage(self, final: dict | None = None) -> dict | None"
+   ],
+   "sig": "class"
+  },
+  "_PHASE_FEEDBACK_SKILL": {
+   "sig": "value:dict"
+  },
+  "_PROMPT_CAP": {
+   "sig": "value:int"
+  },
+  "_REPLY_CAP": {
+   "sig": "value:int"
+  },
+  "_RESULT_CAP": {
+   "sig": "value:int"
+  },
+  "_ROUTES_BACK": {
+   "sig": "value:tuple"
+  },
+  "_SEND_BACK_TARGET": {
+   "sig": "value:dict"
+  },
+  "_artifact_desc": {
+   "home": "superme_agent.daemon.services.runs.capture",
+   "sig": "def(tool_name: str, ti: dict) -> tuple[str, str, str]"
+  },
+  "_artifact_payload": {
+   "home": "superme_agent.daemon.services.runs.capture",
+   "sig": "def(tool_name: str, ti: dict) -> str | None"
+  },
+  "_authored_extras": {
+   "home": "superme_agent.daemon.services.runs.capture",
+   "sig": "def(ctx, item: dict, phase: str | None, mcp: list[str]) -> dict"
+  },
+  "_background_intake_run": {
+   "home": "superme_agent.daemon.services.runs.background",
+   "sig": "def(ctx, context_id: str, item_id: str, item_dir: pathlib.Path, *, skill: str, model: str | None = None, effort: str | None = None) -> None"
+  },
+  "_begin_run": {
+   "home": "superme_agent.daemon.services.runs.lifecycle",
+   "sig": "def(ctx, context_id: str, item_id: str, kind: str = 'plan', model: str | None = None, phase: str | None = None) -> int | None"
+  },
+  "_capture_event": {
+   "home": "superme_agent.daemon.services.runs.capture",
+   "sig": "def(repo_id: str, ev, *, run_id: int | None = None, item_id: str | None = None, publish_live: bool = True) -> None"
+  },
+  "_clear_or_retry": {
+   "home": "superme_agent.daemon.services.runs.close",
+   "sig": "def(context_id: str, item_id: str, outcome: str) -> None"
+  },
+  "_dev_mcp": {
+   "home": "superme_agent.daemon.services.runs.lifecycle",
+   "sig": "def(ctx, repo_dir: pathlib.Path, item_id: str, *, scope: str) -> dict"
+  },
+  "_end_run": {
+   "home": "superme_agent.daemon.services.runs.lifecycle",
+   "sig": "def(ctx, context_id: str, item_id: str, tokens: int | None, status: str = 'active', usage: dict | None = None, ctx_pct: int | None = None, outcome: str | None = None, session_id: str | None = None, summary: str = '') -> None"
+  },
+  "_int_or_none": {
+   "home": "superme_agent.daemon.services.runs.capture",
+   "sig": "def(value) -> int | None"
+  },
+  "_publish_timeline": {
+   "home": "superme_agent.daemon.services.runs.capture",
+   "sig": "def(item_id: str | None, run_id: int | None, kind: str, name: str, description: str, tool_id: str | None, parent_tool_id: str | None) -> None"
+  },
+  "_render_execution_md": {
+   "home": "superme_agent.daemon.services.runs.timeline",
+   "sig": "def(context_id: str, item_id: str, item: dict) -> str"
+  },
+  "_result_row": {
+   "home": "superme_agent.daemon.services.runs.capture",
+   "sig": "def(ev: ToolResult) -> tuple[str, str]"
+  },
+  "_run_background_close": {
+   "home": "superme_agent.daemon.services.runs.close",
+   "sig": "def(ctx, context_id: str, item_id: str, item_dir: pathlib.Path, model: str | None = None, effort: str | None = None) -> None"
+  },
+  "_run_background_item_skill": {
+   "home": "superme_agent.daemon.services.runs.background",
+   "sig": "def(ctx, context_id: str, item_id: str, item_dir: pathlib.Path, skill: str, model: str | None = None, effort: str | None = None) -> None"
+  },
+  "_run_background_plan": {
+   "home": "superme_agent.daemon.services.runs.background",
+   "sig": "def(ctx, context_id: str, item_id: str, item_dir: pathlib.Path, model: str | None = None, effort: str | None = None) -> None"
+  },
+  "_run_background_resolve": {
+   "home": "superme_agent.daemon.services.runs.background",
+   "sig": "def(ctx, context_id: str, item_id: str, worktree: pathlib.Path, conflicts: list[str], model: str | None = None, effort: str | None = None) -> None"
+  },
+  "_run_background_triage": {
+   "home": "superme_agent.daemon.services.runs.background",
+   "sig": "def(ctx, context_id: str, item_id: str, item_dir: pathlib.Path, model: str | None = None, effort: str | None = None) -> None"
+  },
+  "_run_deputy_feedback_turn": {
+   "home": "superme_agent.daemon.services.runs.phases",
+   "sig": "def(ctx, context_id: str, item_id: str, item_dir: pathlib.Path, *, session_id: str | None, phase: str, prompt: str, model: str | None, effort: str | None) -> None"
+  },
+  "_send_back_phase": {
+   "home": "superme_agent.daemon.services.runs.phases",
+   "sig": "def(item: dict) -> str"
+  },
+  "_set_status": {
+   "home": "superme_agent.daemon.services.runs.lifecycle",
+   "sig": "def(ctx, item_id: str, status: str) -> None"
+  },
+  "_short_path": {
+   "home": "superme_agent.daemon.services.runs.capture",
+   "sig": "def(p, keep: int = 4) -> str"
+  },
+  "bank_auto_checkpoint": {
+   "home": "superme_agent.daemon.services.runs.checkpoints",
+   "sig": "def(ctx, item_id: str, *, since: float | None = None) -> bool"
+  },
+  "build_item_timeline": {
+   "home": "superme_agent.daemon.services.runs.timeline",
+   "sig": "def(context_id: str, item_id: str) -> dict"
+  },
+  "capture_event": {
+   "home": "superme_agent.daemon.services.runs.capture",
+   "sig": "def(repo_id: str, ev, *, run_id: int | None = None, item_id: str | None = None, publish_live: bool = True) -> None"
+  },
+  "capture_prompt": {
+   "home": "superme_agent.daemon.services.runs.capture",
+   "sig": "def(repo_id: str, prompt: str, *, run_id: int | None = None, item_id: str | None = None) -> None"
+  },
+  "capture_run_input": {
+   "home": "superme_agent.daemon.services.runs.capture",
+   "sig": "def(context_id: str, item_id: str, *, ctx, system_append: str | None, prompt: str, background: bool, phase: str | None, surface: dict | None = None) -> None"
+  },
+  "compacted_checkpoint": {
+   "home": "superme_agent.daemon.services.runs.checkpoints",
+   "sig": "def(ctx, item: dict, session_id: str | None) -> str | None"
+  },
+  "compacted_session_memory": {
+   "home": "superme_agent.daemon.services.runs.checkpoints",
+   "sig": "def(ctx, session_id: str | None) -> str | None"
+  },
+  "ensure_completion": {
+   "home": "superme_agent.daemon.services.runs.completion",
+   "sig": "def(ctx, context_id: str, item_id: str, sink: dict, *, skill: str, session_id: str | None, model: str | None, effort: str | None, run_id: int | None = None) -> dict | None"
+  },
+  "fire_auto_triage": {
+   "home": "superme_agent.daemon.services.runs.phases",
+   "sig": "def(context_id: str, item_id: str, spine) -> bool"
+  },
+  "fire_close_run": {
+   "home": "superme_agent.daemon.services.runs.close",
+   "sig": "def(context_id: str, item_id: str, spine) -> bool"
+  },
+  "fire_deputy_feedback": {
+   "home": "superme_agent.daemon.services.runs.phases",
+   "sig": "def(context_id: str, item_id: str, *, phase: str, feedback: str, digest: str | None = None) -> bool"
+  },
+  "fire_first_investigate": {
+   "home": "superme_agent.daemon.services.runs.phases",
+   "sig": "def(context_id: str, item_id: str, spine) -> bool"
+  },
+  "fire_phase_feedback": {
+   "home": "superme_agent.daemon.services.runs.phases",
+   "sig": "def(context_id: str, item_id: str, *, phase: str, feedback: str, digest: str | None = None, by: str = 'deputy') -> bool"
+  },
+  "fire_review_entry": {
+   "home": "superme_agent.daemon.services.runs.phases",
+   "sig": "def(context_id: str, item_id: str, spine) -> bool"
+  },
+  "log": {
+   "sig": "value:Logger"
+  },
+  "mark_item_error": {
+   "home": "superme_agent.daemon.services.runs.lifecycle",
+   "sig": "def(ctx, context_id: str, item_id: str, reason: str, *, phase: str = '') -> bool"
+  },
+  "read_completion": {
+   "home": "superme_agent.daemon.services.runs.completion",
+   "sig": "def(context_id: str, item_id: str, sink: dict, run_id: int | None = None) -> dict | None"
+  },
+  "reset_vet_thread": {
+   "home": "superme_agent.daemon.services.runs.checkpoints",
+   "sig": "def(ctx, item: dict, *, dev=None, sessions=None) -> bool"
+  },
+  "retry_notice": {
+   "home": "superme_agent.daemon.services.runs.lifecycle",
+   "sig": "def(context_id: str, item_id: str, phase: str)"
+  },
+  "stop_item_work": {
+   "home": "superme_agent.daemon.services.runs.lifecycle",
+   "sig": "def(context_id: str, item_id: str, *, expect_live: bool = False) -> tuple[int, bool]"
+  },
+  "surface_from_turn": {
+   "home": "superme_agent.daemon.services.runs.capture",
+   "sig": "def(turn_kwargs: dict, *, mcp: list[str] | None = None) -> dict"
+  },
+  "turn_surface": {
+   "home": "superme_agent.daemon.services.runs.capture",
+   "sig": "def(*, model: str | None = None, effort: str | None = None, mcp: list[str] | None = None, write_boundary: list | None = None, sandbox_writes: list | None = None, read_only: bool = False, approve: str = 'denied', resumes: bool = False) -> dict"
+  }
+ },
+ "superme_agent.daemon.services.runs.background": {
   "Init": {
    "home": "superme_agent.core.events",
    "methods": [],
    "sig": "class"
-  },
-  "MODEL_TIERS": {
-   "sig": "value:dict"
-  },
-  "PROMPT_EXTRACTION_FEATURE": {
-   "sig": "value:str"
-  },
-  "RETRY_LADDER": {
-   "sig": "value:tuple"
   },
   "ResilientTurn": {
    "home": "superme_agent.daemon.services.turns",
@@ -13790,7 +13989,532 @@
    "sig": "class"
   },
   "_LiveTokens": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.lifecycle",
+   "methods": [
+    "_num(value) -> int",
+    "bump(self, context_id: str, item_id: str, ev) -> None",
+    "tokens(self) -> int",
+    "usage(self, final: dict | None = None) -> dict | None"
+   ],
+   "sig": "class"
+  },
+  "_agent": {
+   "sig": "value:AgentService"
+  },
+  "_background_intake_run": {
+   "home": "superme_agent.daemon.services.runs.background",
+   "sig": "def(ctx, context_id: str, item_id: str, item_dir: pathlib.Path, *, skill: str, model: str | None = None, effort: str | None = None) -> None"
+  },
+  "_cache_slash": {
+   "home": "superme_agent.daemon.deps",
+   "sig": "def(context_id: str, slash_commands: list) -> None"
+  },
+  "_clear_or_retry": {
+   "home": "superme_agent.daemon.services.runs.close",
+   "sig": "def(context_id: str, item_id: str, outcome: str) -> None"
+  },
+  "_dev": {
+   "sig": "value:DevKnowledgeService"
+  },
+  "_dev_mcp": {
+   "home": "superme_agent.daemon.services.runs.lifecycle",
+   "sig": "def(ctx, repo_dir: pathlib.Path, item_id: str, *, scope: str) -> dict"
+  },
+  "_dev_store": {
+   "sig": "value:DevStore"
+  },
+  "_end_run": {
+   "home": "superme_agent.daemon.services.runs.lifecycle",
+   "sig": "def(ctx, context_id: str, item_id: str, tokens: int | None, status: str = 'active', usage: dict | None = None, ctx_pct: int | None = None, outcome: str | None = None, session_id: str | None = None, summary: str = '') -> None"
+  },
+  "_run_background_item_skill": {
+   "home": "superme_agent.daemon.services.runs.background",
+   "sig": "def(ctx, context_id: str, item_id: str, item_dir: pathlib.Path, skill: str, model: str | None = None, effort: str | None = None) -> None"
+  },
+  "_run_background_plan": {
+   "home": "superme_agent.daemon.services.runs.background",
+   "sig": "def(ctx, context_id: str, item_id: str, item_dir: pathlib.Path, model: str | None = None, effort: str | None = None) -> None"
+  },
+  "_run_background_resolve": {
+   "home": "superme_agent.daemon.services.runs.background",
+   "sig": "def(ctx, context_id: str, item_id: str, worktree: pathlib.Path, conflicts: list[str], model: str | None = None, effort: str | None = None) -> None"
+  },
+  "_run_background_triage": {
+   "home": "superme_agent.daemon.services.runs.background",
+   "sig": "def(ctx, context_id: str, item_id: str, item_dir: pathlib.Path, model: str | None = None, effort: str | None = None) -> None"
+  },
+  "_sessions": {
+   "sig": "value:SessionStore"
+  },
+  "_spine": {
+   "sig": "value:SystemSpine"
+  },
+  "bank_auto_checkpoint": {
+   "home": "superme_agent.daemon.services.runs.checkpoints",
+   "sig": "def(ctx, item_id: str, *, since: float | None = None) -> bool"
+  },
+  "capture_event": {
+   "home": "superme_agent.daemon.services.runs.capture",
+   "sig": "def(repo_id: str, ev, *, run_id: int | None = None, item_id: str | None = None, publish_live: bool = True) -> None"
+  },
+  "capture_prompt": {
+   "home": "superme_agent.daemon.services.runs.capture",
+   "sig": "def(repo_id: str, prompt: str, *, run_id: int | None = None, item_id: str | None = None) -> None"
+  },
+  "capture_run_input": {
+   "home": "superme_agent.daemon.services.runs.capture",
+   "sig": "def(context_id: str, item_id: str, *, ctx, system_append: str | None, prompt: str, background: bool, phase: str | None, surface: dict | None = None) -> None"
+  },
+  "deny_all": {
+   "home": "superme_agent.core.permissions",
+   "sig": "def(tool_name: str, tool_input: dict) -> bool | str"
+  },
+  "ensure_completion": {
+   "home": "superme_agent.daemon.services.runs.completion",
+   "sig": "def(ctx, context_id: str, item_id: str, sink: dict, *, skill: str, session_id: str | None, model: str | None, effort: str | None, run_id: int | None = None) -> dict | None"
+  },
+  "log": {
+   "sig": "value:Logger"
+  },
+  "make_run_report_server": {
+   "home": "superme_agent.harness.tools.run_tools",
+   "sig": "def(sink: 'dict')"
+  },
+  "mark_item_error": {
+   "home": "superme_agent.daemon.services.runs.lifecycle",
+   "sig": "def(ctx, context_id: str, item_id: str, reason: str, *, phase: str = '') -> bool"
+  },
+  "reset_vet_thread": {
+   "home": "superme_agent.daemon.services.runs.checkpoints",
+   "sig": "def(ctx, item: dict, *, dev=None, sessions=None) -> bool"
+  },
+  "retry_notice": {
+   "home": "superme_agent.daemon.services.runs.lifecycle",
+   "sig": "def(context_id: str, item_id: str, phase: str)"
+  },
+  "scoped_writes_approve": {
+   "home": "superme_agent.core.permissions",
+   "sig": "def(allowed_dir: pathlib.Path, fallback: Callable[[str, dict], Awaitable[bool | str]]) -> Callable[[str, dict], Awaitable[bool | str]]"
+  },
+  "surface_from_turn": {
+   "home": "superme_agent.daemon.services.runs.capture",
+   "sig": "def(turn_kwargs: dict, *, mcp: list[str] | None = None) -> dict"
+  }
+ },
+ "superme_agent.daemon.services.runs.capture": {
+  "PROMPT_EXTRACTION_FEATURE": {
+   "sig": "value:str"
+  },
+  "Status": {
+   "home": "superme_agent.core.events",
+   "methods": [],
+   "sig": "class"
+  },
+  "TextDelta": {
+   "home": "superme_agent.core.events",
+   "methods": [],
+   "sig": "class"
+  },
+  "ToolResult": {
+   "home": "superme_agent.core.events",
+   "methods": [],
+   "sig": "class"
+  },
+  "_PROMPT_CAP": {
+   "sig": "value:int"
+  },
+  "_REPLY_CAP": {
+   "sig": "value:int"
+  },
+  "_RESULT_CAP": {
+   "sig": "value:int"
+  },
+  "_agent": {
+   "sig": "value:AgentService"
+  },
+  "_artifact_desc": {
+   "home": "superme_agent.daemon.services.runs.capture",
+   "sig": "def(tool_name: str, ti: dict) -> tuple[str, str, str]"
+  },
+  "_artifact_payload": {
+   "home": "superme_agent.daemon.services.runs.capture",
+   "sig": "def(tool_name: str, ti: dict) -> str | None"
+  },
+  "_authored_extras": {
+   "home": "superme_agent.daemon.services.runs.capture",
+   "sig": "def(ctx, item: dict, phase: str | None, mcp: list[str]) -> dict"
+  },
+  "_capture_event": {
+   "home": "superme_agent.daemon.services.runs.capture",
+   "sig": "def(repo_id: str, ev, *, run_id: int | None = None, item_id: str | None = None, publish_live: bool = True) -> None"
+  },
+  "_dev": {
+   "sig": "value:DevKnowledgeService"
+  },
+  "_int_or_none": {
+   "home": "superme_agent.daemon.services.runs.capture",
+   "sig": "def(value) -> int | None"
+  },
+  "_publish_timeline": {
+   "home": "superme_agent.daemon.services.runs.capture",
+   "sig": "def(item_id: str | None, run_id: int | None, kind: str, name: str, description: str, tool_id: str | None, parent_tool_id: str | None) -> None"
+  },
+  "_result_row": {
+   "home": "superme_agent.daemon.services.runs.capture",
+   "sig": "def(ev: ToolResult) -> tuple[str, str]"
+  },
+  "_short_path": {
+   "home": "superme_agent.daemon.services.runs.capture",
+   "sig": "def(p, keep: int = 4) -> str"
+  },
+  "_spine": {
+   "sig": "value:SystemSpine"
+  },
+  "capture_event": {
+   "home": "superme_agent.daemon.services.runs.capture",
+   "sig": "def(repo_id: str, ev, *, run_id: int | None = None, item_id: str | None = None, publish_live: bool = True) -> None"
+  },
+  "capture_prompt": {
+   "home": "superme_agent.daemon.services.runs.capture",
+   "sig": "def(repo_id: str, prompt: str, *, run_id: int | None = None, item_id: str | None = None) -> None"
+  },
+  "capture_run_input": {
+   "home": "superme_agent.daemon.services.runs.capture",
+   "sig": "def(context_id: str, item_id: str, *, ctx, system_append: str | None, prompt: str, background: bool, phase: str | None, surface: dict | None = None) -> None"
+  },
+  "log": {
+   "sig": "value:Logger"
+  },
+  "surface_from_turn": {
+   "home": "superme_agent.daemon.services.runs.capture",
+   "sig": "def(turn_kwargs: dict, *, mcp: list[str] | None = None) -> dict"
+  },
+  "turn_surface": {
+   "home": "superme_agent.daemon.services.runs.capture",
+   "sig": "def(*, model: str | None = None, effort: str | None = None, mcp: list[str] | None = None, write_boundary: list | None = None, sandbox_writes: list | None = None, read_only: bool = False, approve: str = 'denied', resumes: bool = False) -> dict"
+  }
+ },
+ "superme_agent.daemon.services.runs.checkpoints": {
+  "_dev": {
+   "sig": "value:DevKnowledgeService"
+  },
+  "_sessions": {
+   "sig": "value:SessionStore"
+  },
+  "_spine": {
+   "sig": "value:SystemSpine"
+  },
+  "bank_auto_checkpoint": {
+   "home": "superme_agent.daemon.services.runs.checkpoints",
+   "sig": "def(ctx, item_id: str, *, since: float | None = None) -> bool"
+  },
+  "compacted_checkpoint": {
+   "home": "superme_agent.daemon.services.runs.checkpoints",
+   "sig": "def(ctx, item: dict, session_id: str | None) -> str | None"
+  },
+  "compacted_session_memory": {
+   "home": "superme_agent.daemon.services.runs.checkpoints",
+   "sig": "def(ctx, session_id: str | None) -> str | None"
+  },
+  "reset_vet_thread": {
+   "home": "superme_agent.daemon.services.runs.checkpoints",
+   "sig": "def(ctx, item: dict, *, dev=None, sessions=None) -> bool"
+  }
+ },
+ "superme_agent.daemon.services.runs.close": {
+  "Init": {
+   "home": "superme_agent.core.events",
+   "methods": [],
+   "sig": "class"
+  },
+  "ResilientTurn": {
+   "home": "superme_agent.daemon.services.turns",
+   "methods": [
+    "_attempts(self, agent, ctx, prompt: str, **kw) -> collections.abc.AsyncIterator",
+    "stream(self, agent, ctx, prompt: str, **kw) -> collections.abc.AsyncIterator"
+   ],
+   "sig": "class"
+  },
+  "Result": {
+   "home": "superme_agent.core.events",
+   "methods": [],
+   "sig": "class"
+  },
+  "Status": {
+   "home": "superme_agent.core.events",
+   "methods": [],
+   "sig": "class"
+  },
+  "TextDelta": {
+   "home": "superme_agent.core.events",
+   "methods": [],
+   "sig": "class"
+  },
+  "ToolResult": {
+   "home": "superme_agent.core.events",
+   "methods": [],
+   "sig": "class"
+  },
+  "Usage": {
+   "home": "superme_agent.core.events",
+   "methods": [],
+   "sig": "class"
+  },
+  "_LiveTokens": {
+   "home": "superme_agent.daemon.services.runs.lifecycle",
+   "methods": [
+    "_num(value) -> int",
+    "bump(self, context_id: str, item_id: str, ev) -> None",
+    "tokens(self) -> int",
+    "usage(self, final: dict | None = None) -> dict | None"
+   ],
+   "sig": "class"
+  },
+  "_agent": {
+   "sig": "value:AgentService"
+  },
+  "_begin_run": {
+   "home": "superme_agent.daemon.services.runs.lifecycle",
+   "sig": "def(ctx, context_id: str, item_id: str, kind: str = 'plan', model: str | None = None, phase: str | None = None) -> int | None"
+  },
+  "_cache_slash": {
+   "home": "superme_agent.daemon.deps",
+   "sig": "def(context_id: str, slash_commands: list) -> None"
+  },
+  "_clear_or_retry": {
+   "home": "superme_agent.daemon.services.runs.close",
+   "sig": "def(context_id: str, item_id: str, outcome: str) -> None"
+  },
+  "_dev": {
+   "sig": "value:DevKnowledgeService"
+  },
+  "_dev_mcp": {
+   "home": "superme_agent.daemon.services.runs.lifecycle",
+   "sig": "def(ctx, repo_dir: pathlib.Path, item_id: str, *, scope: str) -> dict"
+  },
+  "_dev_store": {
+   "sig": "value:DevStore"
+  },
+  "_end_run": {
+   "home": "superme_agent.daemon.services.runs.lifecycle",
+   "sig": "def(ctx, context_id: str, item_id: str, tokens: int | None, status: str = 'active', usage: dict | None = None, ctx_pct: int | None = None, outcome: str | None = None, session_id: str | None = None, summary: str = '') -> None"
+  },
+  "_run_background_close": {
+   "home": "superme_agent.daemon.services.runs.close",
+   "sig": "def(ctx, context_id: str, item_id: str, item_dir: pathlib.Path, model: str | None = None, effort: str | None = None) -> None"
+  },
+  "_sessions": {
+   "sig": "value:SessionStore"
+  },
+  "_spine": {
+   "sig": "value:SystemSpine"
+  },
+  "bank_auto_checkpoint": {
+   "home": "superme_agent.daemon.services.runs.checkpoints",
+   "sig": "def(ctx, item_id: str, *, since: float | None = None) -> bool"
+  },
+  "capture_event": {
+   "home": "superme_agent.daemon.services.runs.capture",
+   "sig": "def(repo_id: str, ev, *, run_id: int | None = None, item_id: str | None = None, publish_live: bool = True) -> None"
+  },
+  "capture_prompt": {
+   "home": "superme_agent.daemon.services.runs.capture",
+   "sig": "def(repo_id: str, prompt: str, *, run_id: int | None = None, item_id: str | None = None) -> None"
+  },
+  "capture_run_input": {
+   "home": "superme_agent.daemon.services.runs.capture",
+   "sig": "def(context_id: str, item_id: str, *, ctx, system_append: str | None, prompt: str, background: bool, phase: str | None, surface: dict | None = None) -> None"
+  },
+  "compacted_checkpoint": {
+   "home": "superme_agent.daemon.services.runs.checkpoints",
+   "sig": "def(ctx, item: dict, session_id: str | None) -> str | None"
+  },
+  "deny_all": {
+   "home": "superme_agent.core.permissions",
+   "sig": "def(tool_name: str, tool_input: dict) -> bool | str"
+  },
+  "ensure_completion": {
+   "home": "superme_agent.daemon.services.runs.completion",
+   "sig": "def(ctx, context_id: str, item_id: str, sink: dict, *, skill: str, session_id: str | None, model: str | None, effort: str | None, run_id: int | None = None) -> dict | None"
+  },
+  "fire_close_run": {
+   "home": "superme_agent.daemon.services.runs.close",
+   "sig": "def(context_id: str, item_id: str, spine) -> bool"
+  },
+  "log": {
+   "sig": "value:Logger"
+  },
+  "make_run_report_server": {
+   "home": "superme_agent.harness.tools.run_tools",
+   "sig": "def(sink: 'dict')"
+  },
+  "mark_item_error": {
+   "home": "superme_agent.daemon.services.runs.lifecycle",
+   "sig": "def(ctx, context_id: str, item_id: str, reason: str, *, phase: str = '') -> bool"
+  },
+  "retry_notice": {
+   "home": "superme_agent.daemon.services.runs.lifecycle",
+   "sig": "def(context_id: str, item_id: str, phase: str)"
+  },
+  "scoped_writes_approve": {
+   "home": "superme_agent.core.permissions",
+   "sig": "def(allowed_dir: pathlib.Path, fallback: Callable[[str, dict], Awaitable[bool | str]]) -> Callable[[str, dict], Awaitable[bool | str]]"
+  },
+  "surface_from_turn": {
+   "home": "superme_agent.daemon.services.runs.capture",
+   "sig": "def(turn_kwargs: dict, *, mcp: list[str] | None = None) -> dict"
+  }
+ },
+ "superme_agent.daemon.services.runs.completion": {
+  "ResilientTurn": {
+   "home": "superme_agent.daemon.services.turns",
+   "methods": [
+    "_attempts(self, agent, ctx, prompt: str, **kw) -> collections.abc.AsyncIterator",
+    "stream(self, agent, ctx, prompt: str, **kw) -> collections.abc.AsyncIterator"
+   ],
+   "sig": "class"
+  },
+  "UNREPORTED": {
+   "sig": "value:str"
+  },
+  "_agent": {
+   "sig": "value:AgentService"
+  },
+  "_dev_store": {
+   "sig": "value:DevStore"
+  },
+  "_spine": {
+   "sig": "value:SystemSpine"
+  },
+  "deny_all": {
+   "home": "superme_agent.core.permissions",
+   "sig": "def(tool_name: str, tool_input: dict) -> bool | str"
+  },
+  "ensure_completion": {
+   "home": "superme_agent.daemon.services.runs.completion",
+   "sig": "def(ctx, context_id: str, item_id: str, sink: dict, *, skill: str, session_id: str | None, model: str | None, effort: str | None, run_id: int | None = None) -> dict | None"
+  },
+  "log": {
+   "sig": "value:Logger"
+  },
+  "make_run_report_server": {
+   "home": "superme_agent.harness.tools.run_tools",
+   "sig": "def(sink: 'dict')"
+  },
+  "read_completion": {
+   "home": "superme_agent.daemon.services.runs.completion",
+   "sig": "def(context_id: str, item_id: str, sink: dict, run_id: int | None = None) -> dict | None"
+  }
+ },
+ "superme_agent.daemon.services.runs.lifecycle": {
+  "DEFAULT_RUN_MODEL": {
+   "sig": "value:str"
+  },
+  "MODEL_TIERS": {
+   "sig": "value:dict"
+  },
+  "RETRY_LADDER": {
+   "sig": "value:tuple"
+  },
+  "_LiveTokens": {
+   "home": "superme_agent.daemon.services.runs.lifecycle",
+   "methods": [
+    "_num(value) -> int",
+    "bump(self, context_id: str, item_id: str, ev) -> None",
+    "tokens(self) -> int",
+    "usage(self, final: dict | None = None) -> dict | None"
+   ],
+   "sig": "class"
+  },
+  "_begin_run": {
+   "home": "superme_agent.daemon.services.runs.lifecycle",
+   "sig": "def(ctx, context_id: str, item_id: str, kind: str = 'plan', model: str | None = None, phase: str | None = None) -> int | None"
+  },
+  "_dev": {
+   "sig": "value:DevKnowledgeService"
+  },
+  "_dev_mcp": {
+   "home": "superme_agent.daemon.services.runs.lifecycle",
+   "sig": "def(ctx, repo_dir: pathlib.Path, item_id: str, *, scope: str) -> dict"
+  },
+  "_dev_store": {
+   "sig": "value:DevStore"
+  },
+  "_end_run": {
+   "home": "superme_agent.daemon.services.runs.lifecycle",
+   "sig": "def(ctx, context_id: str, item_id: str, tokens: int | None, status: str = 'active', usage: dict | None = None, ctx_pct: int | None = None, outcome: str | None = None, session_id: str | None = None, summary: str = '') -> None"
+  },
+  "_set_status": {
+   "home": "superme_agent.daemon.services.runs.lifecycle",
+   "sig": "def(ctx, item_id: str, status: str) -> None"
+  },
+  "_spine": {
+   "sig": "value:SystemSpine"
+  },
+  "log": {
+   "sig": "value:Logger"
+  },
+  "make_dev_mcp_server": {
+   "home": "superme_agent.harness.tools.dev_tools.scopes",
+   "sig": "def(store, context_id: str, *, scope: str, **deps)"
+  },
+  "mark_item_error": {
+   "home": "superme_agent.daemon.services.runs.lifecycle",
+   "sig": "def(ctx, context_id: str, item_id: str, reason: str, *, phase: str = '') -> bool"
+  },
+  "retry_notice": {
+   "home": "superme_agent.daemon.services.runs.lifecycle",
+   "sig": "def(context_id: str, item_id: str, phase: str)"
+  },
+  "stop_item_work": {
+   "home": "superme_agent.daemon.services.runs.lifecycle",
+   "sig": "def(context_id: str, item_id: str, *, expect_live: bool = False) -> tuple[int, bool]"
+  }
+ },
+ "superme_agent.daemon.services.runs.phases": {
+  "Init": {
+   "home": "superme_agent.core.events",
+   "methods": [],
+   "sig": "class"
+  },
+  "ResilientTurn": {
+   "home": "superme_agent.daemon.services.turns",
+   "methods": [
+    "_attempts(self, agent, ctx, prompt: str, **kw) -> collections.abc.AsyncIterator",
+    "stream(self, agent, ctx, prompt: str, **kw) -> collections.abc.AsyncIterator"
+   ],
+   "sig": "class"
+  },
+  "Result": {
+   "home": "superme_agent.core.events",
+   "methods": [],
+   "sig": "class"
+  },
+  "Status": {
+   "home": "superme_agent.core.events",
+   "methods": [],
+   "sig": "class"
+  },
+  "TextDelta": {
+   "home": "superme_agent.core.events",
+   "methods": [],
+   "sig": "class"
+  },
+  "ToolResult": {
+   "home": "superme_agent.core.events",
+   "methods": [],
+   "sig": "class"
+  },
+  "UNREPORTED": {
+   "sig": "value:str"
+  },
+  "Usage": {
+   "home": "superme_agent.core.events",
+   "methods": [],
+   "sig": "class"
+  },
+  "_LiveTokens": {
+   "home": "superme_agent.daemon.services.runs.lifecycle",
    "methods": [
     "_num(value) -> int",
     "bump(self, context_id: str, item_id: str, ev) -> None",
@@ -13802,15 +14526,6 @@
   "_PHASE_FEEDBACK_SKILL": {
    "sig": "value:dict"
   },
-  "_PROMPT_CAP": {
-   "sig": "value:int"
-  },
-  "_REPLY_CAP": {
-   "sig": "value:int"
-  },
-  "_RESULT_CAP": {
-   "sig": "value:int"
-  },
   "_ROUTES_BACK": {
    "sig": "value:tuple"
   },
@@ -13820,212 +14535,125 @@
   "_agent": {
    "sig": "value:AgentService"
   },
-  "_artifact_desc": {
-   "home": "superme_agent.daemon.services.runs",
-   "sig": "def(tool_name: str, ti: dict) -> tuple[str, str, str]"
-  },
-  "_artifact_payload": {
-   "home": "superme_agent.daemon.services.runs",
-   "sig": "def(tool_name: str, ti: dict) -> str | None"
-  },
-  "_authored_extras": {
-   "home": "superme_agent.daemon.services.runs",
-   "sig": "def(ctx, item: dict, phase: str | None, mcp: list[str]) -> dict"
-  },
-  "_background_intake_run": {
-   "home": "superme_agent.daemon.services.runs",
-   "sig": "def(ctx, context_id: str, item_id: str, item_dir: pathlib.Path, *, skill: str, model: str | None = None, effort: str | None = None) -> None"
-  },
   "_begin_run": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.lifecycle",
    "sig": "def(ctx, context_id: str, item_id: str, kind: str = 'plan', model: str | None = None, phase: str | None = None) -> int | None"
   },
   "_cache_slash": {
    "home": "superme_agent.daemon.deps",
    "sig": "def(context_id: str, slash_commands: list) -> None"
   },
-  "_capture_event": {
-   "home": "superme_agent.daemon.services.runs",
-   "sig": "def(repo_id: str, ev, *, run_id: int | None = None, item_id: str | None = None, publish_live: bool = True) -> None"
-  },
-  "_clear_or_retry": {
-   "home": "superme_agent.daemon.services.runs",
-   "sig": "def(context_id: str, item_id: str, outcome: str) -> None"
-  },
   "_dev": {
    "sig": "value:DevKnowledgeService"
   },
   "_dev_mcp": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.lifecycle",
    "sig": "def(ctx, repo_dir: pathlib.Path, item_id: str, *, scope: str) -> dict"
   },
   "_dev_store": {
    "sig": "value:DevStore"
   },
   "_end_run": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.lifecycle",
    "sig": "def(ctx, context_id: str, item_id: str, tokens: int | None, status: str = 'active', usage: dict | None = None, ctx_pct: int | None = None, outcome: str | None = None, session_id: str | None = None, summary: str = '') -> None"
   },
-  "_int_or_none": {
-   "home": "superme_agent.daemon.services.runs",
-   "sig": "def(value) -> int | None"
-  },
-  "_publish_timeline": {
-   "home": "superme_agent.daemon.services.runs",
-   "sig": "def(item_id: str | None, run_id: int | None, kind: str, name: str, description: str, tool_id: str | None, parent_tool_id: str | None) -> None"
-  },
-  "_render_execution_md": {
-   "home": "superme_agent.daemon.services.runs",
-   "sig": "def(context_id: str, item_id: str, item: dict) -> str"
-  },
-  "_result_row": {
-   "home": "superme_agent.daemon.services.runs",
-   "sig": "def(ev: ToolResult) -> tuple[str, str]"
-  },
-  "_run_background_close": {
-   "home": "superme_agent.daemon.services.runs",
-   "sig": "def(ctx, context_id: str, item_id: str, item_dir: pathlib.Path, model: str | None = None, effort: str | None = None) -> None"
-  },
   "_run_background_item_skill": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.background",
    "sig": "def(ctx, context_id: str, item_id: str, item_dir: pathlib.Path, skill: str, model: str | None = None, effort: str | None = None) -> None"
   },
-  "_run_background_plan": {
-   "home": "superme_agent.daemon.services.runs",
-   "sig": "def(ctx, context_id: str, item_id: str, item_dir: pathlib.Path, model: str | None = None, effort: str | None = None) -> None"
-  },
-  "_run_background_resolve": {
-   "home": "superme_agent.daemon.services.runs",
-   "sig": "def(ctx, context_id: str, item_id: str, worktree: pathlib.Path, conflicts: list[str], model: str | None = None, effort: str | None = None) -> None"
-  },
   "_run_background_triage": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.background",
    "sig": "def(ctx, context_id: str, item_id: str, item_dir: pathlib.Path, model: str | None = None, effort: str | None = None) -> None"
   },
   "_run_deputy_feedback_turn": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.phases",
    "sig": "def(ctx, context_id: str, item_id: str, item_dir: pathlib.Path, *, session_id: str | None, phase: str, prompt: str, model: str | None, effort: str | None) -> None"
   },
   "_send_back_phase": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.phases",
    "sig": "def(item: dict) -> str"
   },
   "_sessions": {
    "sig": "value:SessionStore"
   },
-  "_set_status": {
-   "home": "superme_agent.daemon.services.runs",
-   "sig": "def(ctx, item_id: str, status: str) -> None"
-  },
-  "_short_path": {
-   "home": "superme_agent.daemon.services.runs",
-   "sig": "def(p, keep: int = 4) -> str"
-  },
   "_spine": {
    "sig": "value:SystemSpine"
   },
   "bank_auto_checkpoint": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.checkpoints",
    "sig": "def(ctx, item_id: str, *, since: float | None = None) -> bool"
   },
-  "build_item_timeline": {
-   "home": "superme_agent.daemon.services.runs",
-   "sig": "def(context_id: str, item_id: str) -> dict"
-  },
   "capture_event": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.capture",
    "sig": "def(repo_id: str, ev, *, run_id: int | None = None, item_id: str | None = None, publish_live: bool = True) -> None"
   },
   "capture_prompt": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.capture",
    "sig": "def(repo_id: str, prompt: str, *, run_id: int | None = None, item_id: str | None = None) -> None"
   },
-  "capture_run_input": {
-   "home": "superme_agent.daemon.services.runs",
-   "sig": "def(context_id: str, item_id: str, *, ctx, system_append: str | None, prompt: str, background: bool, phase: str | None, surface: dict | None = None) -> None"
-  },
   "compacted_checkpoint": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.checkpoints",
    "sig": "def(ctx, item: dict, session_id: str | None) -> str | None"
-  },
-  "compacted_session_memory": {
-   "home": "superme_agent.daemon.services.runs",
-   "sig": "def(ctx, session_id: str | None) -> str | None"
   },
   "deny_all": {
    "home": "superme_agent.core.permissions",
    "sig": "def(tool_name: str, tool_input: dict) -> bool | str"
   },
   "ensure_completion": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.completion",
    "sig": "def(ctx, context_id: str, item_id: str, sink: dict, *, skill: str, session_id: str | None, model: str | None, effort: str | None, run_id: int | None = None) -> dict | None"
   },
   "fire_auto_triage": {
-   "home": "superme_agent.daemon.services.runs",
-   "sig": "def(context_id: str, item_id: str, spine) -> bool"
-  },
-  "fire_close_run": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.phases",
    "sig": "def(context_id: str, item_id: str, spine) -> bool"
   },
   "fire_deputy_feedback": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.phases",
    "sig": "def(context_id: str, item_id: str, *, phase: str, feedback: str, digest: str | None = None) -> bool"
   },
   "fire_first_investigate": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.phases",
    "sig": "def(context_id: str, item_id: str, spine) -> bool"
   },
   "fire_phase_feedback": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.phases",
    "sig": "def(context_id: str, item_id: str, *, phase: str, feedback: str, digest: str | None = None, by: str = 'deputy') -> bool"
   },
   "fire_review_entry": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.phases",
    "sig": "def(context_id: str, item_id: str, spine) -> bool"
   },
   "log": {
    "sig": "value:Logger"
-  },
-  "make_dev_mcp_server": {
-   "home": "superme_agent.harness.tools.dev_tools.scopes",
-   "sig": "def(store, context_id: str, *, scope: str, **deps)"
   },
   "make_run_report_server": {
    "home": "superme_agent.harness.tools.run_tools",
    "sig": "def(sink: 'dict')"
   },
   "mark_item_error": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.lifecycle",
    "sig": "def(ctx, context_id: str, item_id: str, reason: str, *, phase: str = '') -> bool"
   },
-  "read_completion": {
-   "home": "superme_agent.daemon.services.runs",
-   "sig": "def(context_id: str, item_id: str, sink: dict, run_id: int | None = None) -> dict | None"
-  },
-  "reset_vet_thread": {
-   "home": "superme_agent.daemon.services.runs",
-   "sig": "def(ctx, item: dict, *, dev=None, sessions=None) -> bool"
-  },
   "retry_notice": {
-   "home": "superme_agent.daemon.services.runs",
+   "home": "superme_agent.daemon.services.runs.lifecycle",
    "sig": "def(context_id: str, item_id: str, phase: str)"
   },
   "scoped_writes_approve": {
    "home": "superme_agent.core.permissions",
    "sig": "def(allowed_dir: pathlib.Path, fallback: Callable[[str, dict], Awaitable[bool | str]]) -> Callable[[str, dict], Awaitable[bool | str]]"
+  }
+ },
+ "superme_agent.daemon.services.runs.timeline": {
+  "_render_execution_md": {
+   "home": "superme_agent.daemon.services.runs.timeline",
+   "sig": "def(context_id: str, item_id: str, item: dict) -> str"
   },
-  "stop_item_work": {
-   "home": "superme_agent.daemon.services.runs",
-   "sig": "def(context_id: str, item_id: str, *, expect_live: bool = False) -> tuple[int, bool]"
+  "_spine": {
+   "sig": "value:SystemSpine"
   },
-  "surface_from_turn": {
-   "home": "superme_agent.daemon.services.runs",
-   "sig": "def(turn_kwargs: dict, *, mcp: list[str] | None = None) -> dict"
-  },
-  "turn_surface": {
-   "home": "superme_agent.daemon.services.runs",
-   "sig": "def(*, model: str | None = None, effort: str | None = None, mcp: list[str] | None = None, write_boundary: list | None = None, sandbox_writes: list | None = None, read_only: bool = False, approve: str = 'denied', resumes: bool = False) -> dict"
+  "build_item_timeline": {
+   "home": "superme_agent.daemon.services.runs.timeline",
+   "sig": "def(context_id: str, item_id: str) -> dict"
   }
  },
  "superme_agent.daemon.services.scheduler": {

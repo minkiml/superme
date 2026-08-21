@@ -310,8 +310,8 @@ def test_the_agent_is_told_where_it_is():
 
 def test_the_total_counts_subagents_and_cannot_kill_a_run():
     from types import SimpleNamespace
-    from superme_agent.daemon.services.runs import _LiveTokens
-    import superme_agent.daemon.services.runs as RN
+    from superme_agent.daemon.services.runs.lifecycle import _LiveTokens
+    from superme_agent.daemon.services.runs import lifecycle as RN
 
     written: list[int] = []
     real = RN._spine

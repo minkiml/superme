@@ -30,7 +30,7 @@ def _norm(text: str) -> str:
 # ------------------------------------------------------------------ triage runner = intake driver
 def test_triage_runner_delegates() -> None:
     print("triage runner — thin wrapper over the shared intake-phase driver")
-    from superme_agent.daemon.services import runs
+    from superme_agent.daemon.services.runs import background as runs
 
     seen = {}
 
@@ -59,7 +59,7 @@ def test_triage_runner_delegates() -> None:
 def test_fire_auto_triage() -> None:
     print("fire_auto_triage — opens a triage run + schedules the background pass, best-effort")
     from tempfile import TemporaryDirectory
-    from superme_agent.daemon.services import runs as RN
+    from superme_agent.daemon.services.runs import phases as RN
     from superme_agent.gateway import contexts as GW
 
     ITEM = ("---\nid: i1\ntitle: T\nkind: implementation\nstatus: {status}\nphase: {phase}\n"

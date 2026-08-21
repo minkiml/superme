@@ -459,7 +459,8 @@ def test_tools(tmp: Path) -> None:
 
 def test_close_driver() -> None:
     print("close driver: report ⇒ clear · no report ⇒ retry ×2 ⇒ clear ANYWAY")
-    from superme_agent.daemon.services import runs as R, clearance as C
+    from superme_agent.daemon.services import clearance as C
+    from superme_agent.daemon.services.runs import close as R
     seen: dict = {"clears": [], "fires": 0, "retry_events": 0}
     saved = (C.clear_item, C.close_retries, R.fire_close_run, R._dev_store)
 

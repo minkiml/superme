@@ -12,7 +12,7 @@ from tempfile import TemporaryDirectory
 
 from superme_agent.core import spine as spine_mod
 from superme_agent.core.events import Status, ToolResult
-from superme_agent.daemon.services import runs as runs_svc
+from superme_agent.daemon.services.runs import capture as runs_svc
 from scripts.sources import src
 
 PASS = 0

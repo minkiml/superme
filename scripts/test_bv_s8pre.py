@@ -177,7 +177,7 @@ class _FakeAgent:
 
 def test_f8_background_mcp(tmp: Path) -> None:
     print("F8-residual — background plan/resolve mount the dev MCP")
-    from superme_agent.daemon.services import runs as R
+    from superme_agent.daemon.services.runs import background as R, lifecycle as RL
     from superme_agent.core import git_layer
 
     dev = DevKnowledgeService()
@@ -190,7 +190,7 @@ def test_f8_background_mcp(tmp: Path) -> None:
     item_dir = root / "work-items" / wid
 
     # `scope` is required: a background run mounts its phase's tools, not the whole catalogue.
-    mount = R._dev_mcp(ctx, ctx.cwd, wid, scope="plan")
+    mount = RL._dev_mcp(ctx, ctx.cwd, wid, scope="plan")
     ok("_dev_mcp returns a dev-keyed mount", isinstance(mount, dict) and mount.get("dev"))
 
     saved = {n: getattr(R, n) for n in

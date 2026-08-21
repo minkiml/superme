@@ -14,6 +14,7 @@ from tempfile import TemporaryDirectory
 
 from superme_agent.core import plan_revision as PR
 from superme_agent.daemon.services import runs as R
+from superme_agent.daemon.services.runs import lifecycle as RL, phases as RP
 from superme_agent.harness.tools.dev_tools import _revise_plan
 from scripts.sources import src
 
@@ -418,7 +419,7 @@ def test_revise_outcome_routes(tmp: Path) -> None:
     fired: list = []
     advanced: list = []
     orig_fire, orig_spine, orig_store, orig_status = (
-        R.fire_phase_feedback, R._spine, R._dev_store, R._set_status)
+        RP.fire_phase_feedback, RL._spine, RL._dev_store, RL._set_status)
 
     class _Spine:
         def live_run(self, *a): return {"feature": "review"}
@@ -426,11 +427,11 @@ def test_revise_outcome_routes(tmp: Path) -> None:
         def run_tokens(self, rid): return 0
 
     try:
-        R.fire_phase_feedback = lambda cid, iid, **kw: fired.append((iid, kw)) or True
-        R._spine, R._dev_store = _Spine(), _Store()
-        R._set_status = lambda *a, **kw: None
-        R._end_run(None, "c", "it7", 0, status="awaiting_human", outcome="revise",
-                   summary="the approach misses the empty case")
+        RP.fire_phase_feedback = lambda cid, iid, **kw: fired.append((iid, kw)) or True
+        RL._spine, RL._dev_store = _Spine(), _Store()
+        RL._set_status = lambda *a, **kw: None
+        RL._end_run(None, "c", "it7", 0, status="awaiting_human", outcome="revise",
+                    summary="the approach misses the empty case")
         ok("revise routes the conversation back to plan, owner-attributed",
            len(fired) == 1 and fired[0][1]["phase"] == "review" and fired[0][1]["by"] == "owner"
            and fired[0][1]["feedback"] == "the approach misses the empty case")
@@ -439,16 +440,16 @@ def test_revise_outcome_routes(tmp: Path) -> None:
         # never ran.
         fired.clear()
         _Spine.live_run = lambda self, *a: {"feature": "build", "phase": "build"}
-        R._end_run(None, "c", "it7", 0, status="active", outcome="revise",
-                   summary="the plan's commands point at the wrong tree")
+        RL._end_run(None, "c", "it7", 0, status="active", outcome="revise",
+                    summary="the plan's commands point at the wrong tree")
         ok("a build's revise is left to the loop driver — one writer per transition", not fired)
 
         # THE OWNER'S OWN ROUTE BACK. An interactive turn at review is `feature='chat'`, so a
         # branch reading the FEATURE never fires.
         fired.clear()
         _Spine.live_run = lambda self, *a: {"feature": "chat", "phase": "review"}
-        R._end_run(None, "c", "it7", 0, status="active", outcome="revise",
-                   summary="you covered storage and stopped; the callers are part of the surface")
+        RL._end_run(None, "c", "it7", 0, status="active", outcome="revise",
+                    summary="you covered storage and stopped; the callers are part of the surface")
         ok("an OWNER's revise, concluded in chat at review, routes exactly like the run's",
            len(fired) == 1 and fired[0][1]["phase"] == "review" and fired[0][1]["by"] == "owner")
         ok("…because routing reads the run's PHASE, never the surface that ran it",
@@ -457,10 +458,10 @@ def test_revise_outcome_routes(tmp: Path) -> None:
         # A chat turn at a phase that is NOT review still belongs to that phase's driver.
         fired.clear()
         _Spine.live_run = lambda self, *a: {"feature": "chat", "phase": "build"}
-        R._end_run(None, "c", "it7", 0, status="active", outcome="revise", summary="nope")
+        RL._end_run(None, "c", "it7", 0, status="active", outcome="revise", summary="nope")
         ok("…and a chat turn at build is still the loop's to route", not fired)
     finally:
-        R.fire_phase_feedback, R._spine, R._dev_store, R._set_status = (
+        RP.fire_phase_feedback, RL._spine, RL._dev_store, RL._set_status = (
             orig_fire, orig_spine, orig_store, orig_status)
 
 
@@ -484,20 +485,20 @@ def test_fire_phase_feedback_owner(tmp: Path) -> None:
         def effective_effort(self, cid, **kw): return "medium"
         def stamp_session_item(self, *a): pass
 
-    orig = (GW.resolve, R._dev_store, R._spine, R._begin_run, R._run_deputy_feedback_turn)
+    orig = (GW.resolve, RP._dev_store, RP._spine, RP._begin_run, RP._run_deputy_feedback_turn)
     try:
         GW.resolve = lambda cid, mode: _Ctx(internal_root=real, cwd=tmp, id=cid)
-        R._dev_store = store
-        R._spine = _Spine()
-        R._begin_run = lambda *a, **kw: began.append((a, kw)) or 7
+        RP._dev_store = store
+        RP._spine = _Spine()
+        RP._begin_run = lambda *a, **kw: began.append((a, kw)) or 7
 
         async def fake_turn(*a, **kw):
             tasks.append((a, kw))
 
-        R._run_deputy_feedback_turn = fake_turn
+        RP._run_deputy_feedback_turn = fake_turn
 
         async def go():
-            out = R.fire_phase_feedback("c", "it7", phase="review", feedback=FEEDBACK,
+            out = RP.fire_phase_feedback("c", "it7", phase="review", feedback=FEEDBACK,
                                         digest="DIGEST", by="owner")
             await asyncio.sleep(0)   # let the created task run
             return out
@@ -522,7 +523,7 @@ def test_fire_phase_feedback_owner(tmp: Path) -> None:
         ok("...and a non-plan phase's trigger doesn't carry that instruction",
            "revise_plan" not in KS.phase_feedback_trigger("it7", "t", "triage", "triage", FEEDBACK))
     finally:
-        GW.resolve, R._dev_store, R._spine, R._begin_run, R._run_deputy_feedback_turn = orig
+        GW.resolve, RP._dev_store, RP._spine, RP._begin_run, RP._run_deputy_feedback_turn = orig
 
 
 # ---------------------------------------------------------------------------- the gate check
