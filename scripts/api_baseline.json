@@ -34,7 +34,7 @@
    "sig": "class"
   },
   "DevKnowledgeService": {
-   "home": "superme_agent.core.dev_knowledge",
+   "home": "superme_agent.core.dev_knowledge.store",
    "methods": [
     "_general_path(self, dev_root: pathlib.Path, name: str) -> pathlib.Path | None",
     "_glance(self, items: list[dict], inbox: list[dict]) -> dict",
@@ -246,7 +246,7 @@
    "sig": "class"
   },
   "DevKnowledgeService": {
-   "home": "superme_agent.core.dev_knowledge",
+   "home": "superme_agent.core.dev_knowledge.store",
    "methods": [
     "_general_path(self, dev_root: pathlib.Path, name: str) -> pathlib.Path | None",
     "_glance(self, items: list[dict], inbox: list[dict]) -> dict",
@@ -2622,7 +2622,7 @@
    "sig": "value:tuple"
   },
   "DevKnowledgeService": {
-   "home": "superme_agent.core.dev_knowledge",
+   "home": "superme_agent.core.dev_knowledge.store",
    "methods": [
     "_general_path(self, dev_root: pathlib.Path, name: str) -> pathlib.Path | None",
     "_glance(self, items: list[dict], inbox: list[dict]) -> dict",
@@ -2722,79 +2722,273 @@
    "sig": "value:Pattern"
   },
   "_bullets": {
-   "home": "superme_agent.core.dev_knowledge",
+   "home": "superme_agent.core.dev_knowledge.general",
    "sig": "def(section: str) -> list[str]"
   },
   "_deemph": {
-   "home": "superme_agent.core.dev_knowledge",
+   "home": "superme_agent.core.dev_knowledge.general",
    "sig": "def(s: str) -> str"
   },
   "_ensure_knowledge_ignore": {
-   "home": "superme_agent.core.dev_knowledge",
+   "home": "superme_agent.core.dev_knowledge.common",
    "sig": "def(dev_root: pathlib.Path) -> None"
   },
   "_first_para": {
-   "home": "superme_agent.core.dev_knowledge",
+   "home": "superme_agent.core.dev_knowledge.general",
    "sig": "def(text: str, cap: int = 240) -> str | None"
   },
   "_iso_epoch": {
-   "home": "superme_agent.core.dev_knowledge",
+   "home": "superme_agent.core.dev_knowledge.common",
    "sig": "def(iso: str | None) -> float | None"
   },
   "_item_view": {
-   "home": "superme_agent.core.dev_knowledge",
+   "home": "superme_agent.core.dev_knowledge.parse",
    "sig": "def(it: dict) -> dict"
   },
   "_kv_bullets": {
-   "home": "superme_agent.core.dev_knowledge",
+   "home": "superme_agent.core.dev_knowledge.general",
    "sig": "def(section: str) -> dict[str, str]"
   },
   "_kv_list": {
-   "home": "superme_agent.core.dev_knowledge",
+   "home": "superme_agent.core.dev_knowledge.general",
    "sig": "def(section: str) -> list[dict]"
   },
   "_norm_artifact": {
-   "home": "superme_agent.core.dev_knowledge",
+   "home": "superme_agent.core.dev_knowledge.parse",
    "sig": "def(a) -> dict"
   },
   "_norm_artifacts": {
-   "home": "superme_agent.core.dev_knowledge",
+   "home": "superme_agent.core.dev_knowledge.parse",
    "sig": "def(raw) -> list[dict]"
   },
   "_parse_deliverables": {
-   "home": "superme_agent.core.dev_knowledge",
+   "home": "superme_agent.core.dev_knowledge.general",
    "sig": "def(prd_text: str) -> list[dict]"
   },
   "_parse_md": {
-   "home": "superme_agent.core.dev_knowledge",
+   "home": "superme_agent.core.dev_knowledge.common",
    "sig": "def(text: str) -> tuple[dict, str]"
   },
   "_parse_waves": {
-   "home": "superme_agent.core.dev_knowledge",
+   "home": "superme_agent.core.dev_knowledge.general",
    "sig": "def(roadmap_text: str) -> list[dict]"
   },
   "_project_name": {
-   "home": "superme_agent.core.dev_knowledge",
+   "home": "superme_agent.core.dev_knowledge.general",
    "sig": "def(prd_text: str) -> str | None"
   },
   "_rollup": {
-   "home": "superme_agent.core.dev_knowledge",
+   "home": "superme_agent.core.dev_knowledge.parse",
    "sig": "def(views: list[dict]) -> dict"
   },
   "_section": {
-   "home": "superme_agent.core.dev_knowledge",
+   "home": "superme_agent.core.dev_knowledge.general",
    "sig": "def(text: str, heading: str) -> str"
   },
   "_session_fields": {
-   "home": "superme_agent.core.dev_knowledge",
+   "home": "superme_agent.core.dev_knowledge.parse",
    "sig": "def(meta: dict) -> tuple[dict, str | None]"
   },
   "_strip_fences": {
-   "home": "superme_agent.core.dev_knowledge",
+   "home": "superme_agent.core.dev_knowledge.general",
    "sig": "def(text: str) -> str"
   },
   "_toposort_keys": {
-   "home": "superme_agent.core.dev_knowledge",
+   "home": "superme_agent.core.dev_knowledge.parse",
+   "sig": "def(specs: list[dict]) -> list[str]"
+  }
+ },
+ "superme_agent.core.dev_knowledge.common": {
+  "_FRONTMATTER": {
+   "sig": "value:Pattern"
+  },
+  "_KNOWLEDGE_IGNORE": {
+   "sig": "value:str"
+  },
+  "_ensure_knowledge_ignore": {
+   "home": "superme_agent.core.dev_knowledge.common",
+   "sig": "def(dev_root: pathlib.Path) -> None"
+  },
+  "_iso_epoch": {
+   "home": "superme_agent.core.dev_knowledge.common",
+   "sig": "def(iso: str | None) -> float | None"
+  },
+  "_parse_md": {
+   "home": "superme_agent.core.dev_knowledge.common",
+   "sig": "def(text: str) -> tuple[dict, str]"
+  }
+ },
+ "superme_agent.core.dev_knowledge.fields": {
+  "FieldOps": {
+   "home": "superme_agent.core.dev_knowledge.fields",
+   "methods": [
+    "_set_item_field(self, dev_root: pathlib.Path, item_id: str, key: str, value: str, after: tuple[str, ...] = ()) -> bool",
+    "set_work_item_autopilot(self, dev_root: pathlib.Path, item_id: str, on: bool) -> bool",
+    "set_work_item_effort(self, dev_root: pathlib.Path, item_id: str, effort: str) -> bool",
+    "set_work_item_error(self, dev_root: pathlib.Path, item_id: str, reason: str) -> bool",
+    "set_work_item_fanout(self, dev_root: pathlib.Path, item_id: str, fanout: str) -> bool",
+    "set_work_item_git(self, dev_root: pathlib.Path, item_id: str, **fields) -> bool",
+    "set_work_item_handoff_mark(self, dev_root: pathlib.Path, item_id: str, mark: int) -> bool",
+    "set_work_item_kind(self, dev_root: pathlib.Path, item_id: str, kind: str) -> bool",
+    "set_work_item_model(self, dev_root: pathlib.Path, item_id: str, model: str) -> bool",
+    "set_work_item_phase(self, dev_root: pathlib.Path, item_id: str, phase: str) -> bool",
+    "set_work_item_research_kind(self, dev_root: pathlib.Path, item_id: str, research_kind: str, reason: str) -> bool",
+    "set_work_item_role_effort(self, dev_root: pathlib.Path, item_id: str, role: str, effort: str) -> bool",
+    "set_work_item_role_model(self, dev_root: pathlib.Path, item_id: str, role: str, model: str) -> bool",
+    "set_work_item_scaffold(self, dev_root: pathlib.Path, item_id: str, *, wave: str | None = None, deliverable: str | None = None) -> bool",
+    "set_work_item_scale(self, dev_root: pathlib.Path, item_id: str, scale: str, reason: str) -> bool",
+    "set_work_item_seen(self, dev_root: pathlib.Path, item_id: str) -> bool",
+    "set_work_item_session(self, dev_root: pathlib.Path, item_id: str, session_id: str | None, slot: str = 'triage') -> bool",
+    "set_work_item_status(self, dev_root: pathlib.Path, item_id: str, status: str) -> bool",
+    "set_work_item_terminal(self, dev_root: pathlib.Path, item_id: str, outcome: str = 'completed', *, superseded_by: str | None = None) -> bool",
+    "set_work_item_title(self, dev_root: pathlib.Path, item_id: str, title: str) -> bool",
+    "set_work_item_triaged(self, dev_root: pathlib.Path, item_id: str) -> bool",
+    "write_artifact(self, dev_root: pathlib.Path, item_id: str, name: str, text: str) -> bool"
+   ],
+   "sig": "class"
+  },
+  "_FRONTMATTER": {
+   "sig": "value:Pattern"
+  },
+  "_parse_md": {
+   "home": "superme_agent.core.dev_knowledge.common",
+   "sig": "def(text: str) -> tuple[dict, str]"
+  },
+  "check_title": {
+   "home": "superme_agent.core.titles",
+   "sig": "def(raw, *, description: str = '') -> str"
+  },
+  "normalize_title": {
+   "home": "superme_agent.core.titles",
+   "sig": "def(raw, *, description: str = '') -> str"
+  }
+ },
+ "superme_agent.core.dev_knowledge.general": {
+  "ANCHOR_DOCS": {
+   "sig": "value:tuple"
+  },
+  "GeneralOps": {
+   "home": "superme_agent.core.dev_knowledge.general",
+   "methods": [
+    "_general_path(self, dev_root: pathlib.Path, name: str) -> pathlib.Path | None",
+    "deliverable_success_signal(self, dev_root: pathlib.Path, deliverable_id: str) -> str | None",
+    "general_docs(self, dev_root: pathlib.Path) -> list[dict]",
+    "lint_general(self, dev_root: pathlib.Path, *, stale_days: int = 90) -> dict",
+    "orient_digest(self, dev_root: pathlib.Path, items: list[dict] | None = None, *, in_progress: bool = True) -> str | None",
+    "project_established(self, dev_root: pathlib.Path) -> bool",
+    "read_general_doc(self, dev_root: pathlib.Path, name: str) -> str | None",
+    "read_portrait(self, dev_root: pathlib.Path) -> dict",
+    "roadmap_board(self, dev_root: pathlib.Path, items: list[dict] | None = None) -> dict",
+    "write_general_doc(self, dev_root: pathlib.Path, name: str, text: str) -> bool"
+   ],
+   "sig": "class"
+  },
+  "LEGACY_DOCS": {
+   "sig": "value:tuple"
+  },
+  "_DELIVERABLE_RE": {
+   "sig": "value:Pattern"
+  },
+  "_D_FIELD_RE": {
+   "sig": "value:Pattern"
+  },
+  "_GLYPHS": {
+   "sig": "value:dict"
+  },
+  "_HEADING_RE": {
+   "sig": "value:Pattern"
+  },
+  "_KV_RE": {
+   "sig": "value:Pattern"
+  },
+  "_KV_STRICT_RE": {
+   "sig": "value:Pattern"
+  },
+  "_LIBRARY_DOC": {
+   "sig": "value:str"
+  },
+  "_LIVE_STATUSES": {
+   "sig": "value:tuple"
+  },
+  "_PLAIN_BULLET_RE": {
+   "sig": "value:Pattern"
+  },
+  "_WAVE_RE": {
+   "sig": "value:Pattern"
+  },
+  "_bullets": {
+   "home": "superme_agent.core.dev_knowledge.general",
+   "sig": "def(section: str) -> list[str]"
+  },
+  "_deemph": {
+   "home": "superme_agent.core.dev_knowledge.general",
+   "sig": "def(s: str) -> str"
+  },
+  "_first_para": {
+   "home": "superme_agent.core.dev_knowledge.general",
+   "sig": "def(text: str, cap: int = 240) -> str | None"
+  },
+  "_item_view": {
+   "home": "superme_agent.core.dev_knowledge.parse",
+   "sig": "def(it: dict) -> dict"
+  },
+  "_kv_bullets": {
+   "home": "superme_agent.core.dev_knowledge.general",
+   "sig": "def(section: str) -> dict[str, str]"
+  },
+  "_kv_list": {
+   "home": "superme_agent.core.dev_knowledge.general",
+   "sig": "def(section: str) -> list[dict]"
+  },
+  "_parse_deliverables": {
+   "home": "superme_agent.core.dev_knowledge.general",
+   "sig": "def(prd_text: str) -> list[dict]"
+  },
+  "_parse_waves": {
+   "home": "superme_agent.core.dev_knowledge.general",
+   "sig": "def(roadmap_text: str) -> list[dict]"
+  },
+  "_project_name": {
+   "home": "superme_agent.core.dev_knowledge.general",
+   "sig": "def(prd_text: str) -> str | None"
+  },
+  "_rollup": {
+   "home": "superme_agent.core.dev_knowledge.parse",
+   "sig": "def(views: list[dict]) -> dict"
+  },
+  "_section": {
+   "home": "superme_agent.core.dev_knowledge.general",
+   "sig": "def(text: str, heading: str) -> str"
+  },
+  "_strip_fences": {
+   "home": "superme_agent.core.dev_knowledge.general",
+   "sig": "def(text: str) -> str"
+  }
+ },
+ "superme_agent.core.dev_knowledge.lifecycle": {
+  "LifecycleOps": {
+   "home": "superme_agent.core.dev_knowledge.lifecycle",
+   "methods": [
+    "create_work_item(self, dev_root: pathlib.Path, title: str, description: str = '', *, session_id: str | None = None, kind: str, proposed_kind: str | None = None, spawned_from: dict | None = None, inbox_id: int | None = None, after: list[str] | None = None, autopilot: bool = False, cohort: str | None = None, prompt_extraction: bool = False, research_kind: str | None = None, born_at: str | None = None) -> dict",
+    "delete_work_item(self, dev_root: pathlib.Path, item_id: str) -> bool",
+    "itemize_launch(self, dev_root: pathlib.Path, items: list[dict], *, session_id: str | None = None, cohort: str | None = None) -> dict",
+    "reset_work_item(self, dev_root: pathlib.Path, item_id: str) -> dict | None"
+   ],
+   "sig": "class"
+  },
+  "_SPAWN_RELATIONS": {
+   "sig": "value:tuple"
+  },
+  "_ensure_knowledge_ignore": {
+   "home": "superme_agent.core.dev_knowledge.common",
+   "sig": "def(dev_root: pathlib.Path) -> None"
+  },
+  "_parse_md": {
+   "home": "superme_agent.core.dev_knowledge.common",
+   "sig": "def(text: str) -> tuple[dict, str]"
+  },
+  "_toposort_keys": {
+   "home": "superme_agent.core.dev_knowledge.parse",
    "sig": "def(specs: list[dict]) -> list[str]"
   },
   "check_title": {
@@ -2804,6 +2998,212 @@
   "normalize_title": {
    "home": "superme_agent.core.titles",
    "sig": "def(raw, *, description: str = '') -> str"
+  }
+ },
+ "superme_agent.core.dev_knowledge.parse": {
+  "_LIVE_STATUSES": {
+   "sig": "value:tuple"
+  },
+  "_PHASE_RANK": {
+   "sig": "value:dict"
+  },
+  "_SPAWN_RELATIONS": {
+   "sig": "value:tuple"
+  },
+  "_STATUS_RANK": {
+   "sig": "value:dict"
+  },
+  "_item_view": {
+   "home": "superme_agent.core.dev_knowledge.parse",
+   "sig": "def(it: dict) -> dict"
+  },
+  "_norm_artifact": {
+   "home": "superme_agent.core.dev_knowledge.parse",
+   "sig": "def(a) -> dict"
+  },
+  "_norm_artifacts": {
+   "home": "superme_agent.core.dev_knowledge.parse",
+   "sig": "def(raw) -> list[dict]"
+  },
+  "_rollup": {
+   "home": "superme_agent.core.dev_knowledge.parse",
+   "sig": "def(views: list[dict]) -> dict"
+  },
+  "_session_fields": {
+   "home": "superme_agent.core.dev_knowledge.parse",
+   "sig": "def(meta: dict) -> tuple[dict, str | None]"
+  },
+  "_toposort_keys": {
+   "home": "superme_agent.core.dev_knowledge.parse",
+   "sig": "def(specs: list[dict]) -> list[str]"
+  }
+ },
+ "superme_agent.core.dev_knowledge.read": {
+  "ReadOps": {
+   "home": "superme_agent.core.dev_knowledge.read",
+   "methods": [
+    "_glance(self, items: list[dict], inbox: list[dict]) -> dict",
+    "_read_work_items(self, base: pathlib.Path) -> list[dict]",
+    "_task_lines(self, dev_root: pathlib.Path, item_id: str) -> list[str]",
+    "enrich_work_items(self, dev_root: pathlib.Path, items: list[dict], live_by_item: dict[str, dict], stats: dict[str, dict]) -> None",
+    "read_all(self, dev_root: pathlib.Path, inbox: list[dict] | None = None) -> dict",
+    "read_artifact_text(self, dev_root: pathlib.Path, item_id: str, name: str) -> str | None",
+    "read_tasks(self, dev_root: pathlib.Path, item_id: str) -> list[dict] | None",
+    "read_work_item(self, dev_root: pathlib.Path, item_id: str) -> dict | None",
+    "task_progress(self, dev_root: pathlib.Path, item_id: str) -> dict | None",
+    "work_item_session_ids(self, item: dict) -> list[str]"
+   ],
+   "sig": "class"
+  },
+  "_PHASE_RANK": {
+   "sig": "value:dict"
+  },
+  "_STATUS_RANK": {
+   "sig": "value:dict"
+  },
+  "_iso_epoch": {
+   "home": "superme_agent.core.dev_knowledge.common",
+   "sig": "def(iso: str | None) -> float | None"
+  },
+  "_norm_artifacts": {
+   "home": "superme_agent.core.dev_knowledge.parse",
+   "sig": "def(raw) -> list[dict]"
+  },
+  "_parse_md": {
+   "home": "superme_agent.core.dev_knowledge.common",
+   "sig": "def(text: str) -> tuple[dict, str]"
+  },
+  "_section": {
+   "home": "superme_agent.core.dev_knowledge.general",
+   "sig": "def(text: str, heading: str) -> str"
+  },
+  "_session_fields": {
+   "home": "superme_agent.core.dev_knowledge.parse",
+   "sig": "def(meta: dict) -> tuple[dict, str | None]"
+  }
+ },
+ "superme_agent.core.dev_knowledge.store": {
+  "DevKnowledgeService": {
+   "home": "superme_agent.core.dev_knowledge.store",
+   "methods": [
+    "_general_path(self, dev_root: pathlib.Path, name: str) -> pathlib.Path | None",
+    "_glance(self, items: list[dict], inbox: list[dict]) -> dict",
+    "_read_work_items(self, base: pathlib.Path) -> list[dict]",
+    "_set_item_field(self, dev_root: pathlib.Path, item_id: str, key: str, value: str, after: tuple[str, ...] = ()) -> bool",
+    "_task_lines(self, dev_root: pathlib.Path, item_id: str) -> list[str]",
+    "create_work_item(self, dev_root: pathlib.Path, title: str, description: str = '', *, session_id: str | None = None, kind: str, proposed_kind: str | None = None, spawned_from: dict | None = None, inbox_id: int | None = None, after: list[str] | None = None, autopilot: bool = False, cohort: str | None = None, prompt_extraction: bool = False, research_kind: str | None = None, born_at: str | None = None) -> dict",
+    "delete_work_item(self, dev_root: pathlib.Path, item_id: str) -> bool",
+    "deliverable_success_signal(self, dev_root: pathlib.Path, deliverable_id: str) -> str | None",
+    "enrich_work_items(self, dev_root: pathlib.Path, items: list[dict], live_by_item: dict[str, dict], stats: dict[str, dict]) -> None",
+    "general_docs(self, dev_root: pathlib.Path) -> list[dict]",
+    "itemize_launch(self, dev_root: pathlib.Path, items: list[dict], *, session_id: str | None = None, cohort: str | None = None) -> dict",
+    "lint_general(self, dev_root: pathlib.Path, *, stale_days: int = 90) -> dict",
+    "orient_digest(self, dev_root: pathlib.Path, items: list[dict] | None = None, *, in_progress: bool = True) -> str | None",
+    "project_established(self, dev_root: pathlib.Path) -> bool",
+    "read_all(self, dev_root: pathlib.Path, inbox: list[dict] | None = None) -> dict",
+    "read_artifact_text(self, dev_root: pathlib.Path, item_id: str, name: str) -> str | None",
+    "read_general_doc(self, dev_root: pathlib.Path, name: str) -> str | None",
+    "read_portrait(self, dev_root: pathlib.Path) -> dict",
+    "read_tasks(self, dev_root: pathlib.Path, item_id: str) -> list[dict] | None",
+    "read_work_item(self, dev_root: pathlib.Path, item_id: str) -> dict | None",
+    "reset_work_item(self, dev_root: pathlib.Path, item_id: str) -> dict | None",
+    "roadmap_board(self, dev_root: pathlib.Path, items: list[dict] | None = None) -> dict",
+    "set_work_item_autopilot(self, dev_root: pathlib.Path, item_id: str, on: bool) -> bool",
+    "set_work_item_effort(self, dev_root: pathlib.Path, item_id: str, effort: str) -> bool",
+    "set_work_item_error(self, dev_root: pathlib.Path, item_id: str, reason: str) -> bool",
+    "set_work_item_fanout(self, dev_root: pathlib.Path, item_id: str, fanout: str) -> bool",
+    "set_work_item_git(self, dev_root: pathlib.Path, item_id: str, **fields) -> bool",
+    "set_work_item_handoff_mark(self, dev_root: pathlib.Path, item_id: str, mark: int) -> bool",
+    "set_work_item_kind(self, dev_root: pathlib.Path, item_id: str, kind: str) -> bool",
+    "set_work_item_model(self, dev_root: pathlib.Path, item_id: str, model: str) -> bool",
+    "set_work_item_phase(self, dev_root: pathlib.Path, item_id: str, phase: str) -> bool",
+    "set_work_item_research_kind(self, dev_root: pathlib.Path, item_id: str, research_kind: str, reason: str) -> bool",
+    "set_work_item_role_effort(self, dev_root: pathlib.Path, item_id: str, role: str, effort: str) -> bool",
+    "set_work_item_role_model(self, dev_root: pathlib.Path, item_id: str, role: str, model: str) -> bool",
+    "set_work_item_scaffold(self, dev_root: pathlib.Path, item_id: str, *, wave: str | None = None, deliverable: str | None = None) -> bool",
+    "set_work_item_scale(self, dev_root: pathlib.Path, item_id: str, scale: str, reason: str) -> bool",
+    "set_work_item_seen(self, dev_root: pathlib.Path, item_id: str) -> bool",
+    "set_work_item_session(self, dev_root: pathlib.Path, item_id: str, session_id: str | None, slot: str = 'triage') -> bool",
+    "set_work_item_status(self, dev_root: pathlib.Path, item_id: str, status: str) -> bool",
+    "set_work_item_terminal(self, dev_root: pathlib.Path, item_id: str, outcome: str = 'completed', *, superseded_by: str | None = None) -> bool",
+    "set_work_item_title(self, dev_root: pathlib.Path, item_id: str, title: str) -> bool",
+    "set_work_item_triaged(self, dev_root: pathlib.Path, item_id: str) -> bool",
+    "task_progress(self, dev_root: pathlib.Path, item_id: str) -> dict | None",
+    "work_item_session_ids(self, item: dict) -> list[str]",
+    "write_artifact(self, dev_root: pathlib.Path, item_id: str, name: str, text: str) -> bool",
+    "write_general_doc(self, dev_root: pathlib.Path, name: str, text: str) -> bool"
+   ],
+   "sig": "class"
+  },
+  "FieldOps": {
+   "home": "superme_agent.core.dev_knowledge.fields",
+   "methods": [
+    "_set_item_field(self, dev_root: pathlib.Path, item_id: str, key: str, value: str, after: tuple[str, ...] = ()) -> bool",
+    "set_work_item_autopilot(self, dev_root: pathlib.Path, item_id: str, on: bool) -> bool",
+    "set_work_item_effort(self, dev_root: pathlib.Path, item_id: str, effort: str) -> bool",
+    "set_work_item_error(self, dev_root: pathlib.Path, item_id: str, reason: str) -> bool",
+    "set_work_item_fanout(self, dev_root: pathlib.Path, item_id: str, fanout: str) -> bool",
+    "set_work_item_git(self, dev_root: pathlib.Path, item_id: str, **fields) -> bool",
+    "set_work_item_handoff_mark(self, dev_root: pathlib.Path, item_id: str, mark: int) -> bool",
+    "set_work_item_kind(self, dev_root: pathlib.Path, item_id: str, kind: str) -> bool",
+    "set_work_item_model(self, dev_root: pathlib.Path, item_id: str, model: str) -> bool",
+    "set_work_item_phase(self, dev_root: pathlib.Path, item_id: str, phase: str) -> bool",
+    "set_work_item_research_kind(self, dev_root: pathlib.Path, item_id: str, research_kind: str, reason: str) -> bool",
+    "set_work_item_role_effort(self, dev_root: pathlib.Path, item_id: str, role: str, effort: str) -> bool",
+    "set_work_item_role_model(self, dev_root: pathlib.Path, item_id: str, role: str, model: str) -> bool",
+    "set_work_item_scaffold(self, dev_root: pathlib.Path, item_id: str, *, wave: str | None = None, deliverable: str | None = None) -> bool",
+    "set_work_item_scale(self, dev_root: pathlib.Path, item_id: str, scale: str, reason: str) -> bool",
+    "set_work_item_seen(self, dev_root: pathlib.Path, item_id: str) -> bool",
+    "set_work_item_session(self, dev_root: pathlib.Path, item_id: str, session_id: str | None, slot: str = 'triage') -> bool",
+    "set_work_item_status(self, dev_root: pathlib.Path, item_id: str, status: str) -> bool",
+    "set_work_item_terminal(self, dev_root: pathlib.Path, item_id: str, outcome: str = 'completed', *, superseded_by: str | None = None) -> bool",
+    "set_work_item_title(self, dev_root: pathlib.Path, item_id: str, title: str) -> bool",
+    "set_work_item_triaged(self, dev_root: pathlib.Path, item_id: str) -> bool",
+    "write_artifact(self, dev_root: pathlib.Path, item_id: str, name: str, text: str) -> bool"
+   ],
+   "sig": "class"
+  },
+  "GeneralOps": {
+   "home": "superme_agent.core.dev_knowledge.general",
+   "methods": [
+    "_general_path(self, dev_root: pathlib.Path, name: str) -> pathlib.Path | None",
+    "deliverable_success_signal(self, dev_root: pathlib.Path, deliverable_id: str) -> str | None",
+    "general_docs(self, dev_root: pathlib.Path) -> list[dict]",
+    "lint_general(self, dev_root: pathlib.Path, *, stale_days: int = 90) -> dict",
+    "orient_digest(self, dev_root: pathlib.Path, items: list[dict] | None = None, *, in_progress: bool = True) -> str | None",
+    "project_established(self, dev_root: pathlib.Path) -> bool",
+    "read_general_doc(self, dev_root: pathlib.Path, name: str) -> str | None",
+    "read_portrait(self, dev_root: pathlib.Path) -> dict",
+    "roadmap_board(self, dev_root: pathlib.Path, items: list[dict] | None = None) -> dict",
+    "write_general_doc(self, dev_root: pathlib.Path, name: str, text: str) -> bool"
+   ],
+   "sig": "class"
+  },
+  "LifecycleOps": {
+   "home": "superme_agent.core.dev_knowledge.lifecycle",
+   "methods": [
+    "create_work_item(self, dev_root: pathlib.Path, title: str, description: str = '', *, session_id: str | None = None, kind: str, proposed_kind: str | None = None, spawned_from: dict | None = None, inbox_id: int | None = None, after: list[str] | None = None, autopilot: bool = False, cohort: str | None = None, prompt_extraction: bool = False, research_kind: str | None = None, born_at: str | None = None) -> dict",
+    "delete_work_item(self, dev_root: pathlib.Path, item_id: str) -> bool",
+    "itemize_launch(self, dev_root: pathlib.Path, items: list[dict], *, session_id: str | None = None, cohort: str | None = None) -> dict",
+    "reset_work_item(self, dev_root: pathlib.Path, item_id: str) -> dict | None"
+   ],
+   "sig": "class"
+  },
+  "ReadOps": {
+   "home": "superme_agent.core.dev_knowledge.read",
+   "methods": [
+    "_glance(self, items: list[dict], inbox: list[dict]) -> dict",
+    "_read_work_items(self, base: pathlib.Path) -> list[dict]",
+    "_task_lines(self, dev_root: pathlib.Path, item_id: str) -> list[str]",
+    "enrich_work_items(self, dev_root: pathlib.Path, items: list[dict], live_by_item: dict[str, dict], stats: dict[str, dict]) -> None",
+    "read_all(self, dev_root: pathlib.Path, inbox: list[dict] | None = None) -> dict",
+    "read_artifact_text(self, dev_root: pathlib.Path, item_id: str, name: str) -> str | None",
+    "read_tasks(self, dev_root: pathlib.Path, item_id: str) -> list[dict] | None",
+    "read_work_item(self, dev_root: pathlib.Path, item_id: str) -> dict | None",
+    "task_progress(self, dev_root: pathlib.Path, item_id: str) -> dict | None",
+    "work_item_session_ids(self, item: dict) -> list[str]"
+   ],
+   "sig": "class"
   }
  },
  "superme_agent.core.dev_store": {
@@ -3353,7 +3753,7 @@
  },
  "superme_agent.core.inbox_flow": {
   "DevKnowledgeService": {
-   "home": "superme_agent.core.dev_knowledge",
+   "home": "superme_agent.core.dev_knowledge.store",
    "methods": [
     "_general_path(self, dev_root: pathlib.Path, name: str) -> pathlib.Path | None",
     "_glance(self, items: list[dict], inbox: list[dict]) -> dict",
@@ -3717,7 +4117,7 @@
    "sig": "value:tuple"
   },
   "DevKnowledgeService": {
-   "home": "superme_agent.core.dev_knowledge",
+   "home": "superme_agent.core.dev_knowledge.store",
    "methods": [
     "_general_path(self, dev_root: pathlib.Path, name: str) -> pathlib.Path | None",
     "_glance(self, items: list[dict], inbox: list[dict]) -> dict",
@@ -3798,7 +4198,7 @@
    "sig": "def(dev_root: pathlib.Path, doc: str) -> pathlib.Path | None"
   },
   "_parse_deliverables": {
-   "home": "superme_agent.core.dev_knowledge",
+   "home": "superme_agent.core.dev_knowledge.general",
    "sig": "def(prd_text: str) -> list[dict]"
   },
   "_sections": {
@@ -5958,7 +6358,7 @@
    "sig": "value:PosixPath"
   },
   "DevKnowledgeService": {
-   "home": "superme_agent.core.dev_knowledge",
+   "home": "superme_agent.core.dev_knowledge.store",
    "methods": [
     "_general_path(self, dev_root: pathlib.Path, name: str) -> pathlib.Path | None",
     "_glance(self, items: list[dict], inbox: list[dict]) -> dict",
@@ -6479,7 +6879,7 @@
    "sig": "class"
   },
   "DevKnowledgeService": {
-   "home": "superme_agent.core.dev_knowledge",
+   "home": "superme_agent.core.dev_knowledge.store",
    "methods": [
     "_general_path(self, dev_root: pathlib.Path, name: str) -> pathlib.Path | None",
     "_glance(self, items: list[dict], inbox: list[dict]) -> dict",
@@ -6819,7 +7219,7 @@
    "sig": "class"
   },
   "DevKnowledgeService": {
-   "home": "superme_agent.core.dev_knowledge",
+   "home": "superme_agent.core.dev_knowledge.store",
    "methods": [
     "_general_path(self, dev_root: pathlib.Path, name: str) -> pathlib.Path | None",
     "_glance(self, items: list[dict], inbox: list[dict]) -> dict",
@@ -7127,7 +7527,7 @@
  },
  "superme_agent.daemon.routers.dev.git": {
   "DevKnowledgeService": {
-   "home": "superme_agent.core.dev_knowledge",
+   "home": "superme_agent.core.dev_knowledge.store",
    "methods": [
     "_general_path(self, dev_root: pathlib.Path, name: str) -> pathlib.Path | None",
     "_glance(self, items: list[dict], inbox: list[dict]) -> dict",
@@ -7756,7 +8156,7 @@
  },
  "superme_agent.daemon.routers.dev.inbox": {
   "DevKnowledgeService": {
-   "home": "superme_agent.core.dev_knowledge",
+   "home": "superme_agent.core.dev_knowledge.store",
    "methods": [
     "_general_path(self, dev_root: pathlib.Path, name: str) -> pathlib.Path | None",
     "_glance(self, items: list[dict], inbox: list[dict]) -> dict",
@@ -8443,7 +8843,7 @@
    "sig": "class"
   },
   "DevKnowledgeService": {
-   "home": "superme_agent.core.dev_knowledge",
+   "home": "superme_agent.core.dev_knowledge.store",
    "methods": [
     "_general_path(self, dev_root: pathlib.Path, name: str) -> pathlib.Path | None",
     "_glance(self, items: list[dict], inbox: list[dict]) -> dict",
@@ -8689,11 +9089,11 @@
    "sig": "class"
   },
   "_parse_deliverables": {
-   "home": "superme_agent.core.dev_knowledge",
+   "home": "superme_agent.core.dev_knowledge.general",
    "sig": "def(prd_text: str) -> list[dict]"
   },
   "_parse_waves": {
-   "home": "superme_agent.core.dev_knowledge",
+   "home": "superme_agent.core.dev_knowledge.general",
    "sig": "def(roadmap_text: str) -> list[dict]"
   },
   "dev_attention": {
@@ -8734,7 +9134,7 @@
  },
  "superme_agent.daemon.routers.dev.sweeps": {
   "DevKnowledgeService": {
-   "home": "superme_agent.core.dev_knowledge",
+   "home": "superme_agent.core.dev_knowledge.store",
    "methods": [
     "_general_path(self, dev_root: pathlib.Path, name: str) -> pathlib.Path | None",
     "_glance(self, items: list[dict], inbox: list[dict]) -> dict",
@@ -9029,7 +9429,7 @@
    "sig": "value:str"
   },
   "DevKnowledgeService": {
-   "home": "superme_agent.core.dev_knowledge",
+   "home": "superme_agent.core.dev_knowledge.store",
    "methods": [
     "_general_path(self, dev_root: pathlib.Path, name: str) -> pathlib.Path | None",
     "_glance(self, items: list[dict], inbox: list[dict]) -> dict",
@@ -9624,7 +10024,7 @@
  },
  "superme_agent.daemon.routers.sessions": {
   "DevKnowledgeService": {
-   "home": "superme_agent.core.dev_knowledge",
+   "home": "superme_agent.core.dev_knowledge.store",
    "methods": [
     "_general_path(self, dev_root: pathlib.Path, name: str) -> pathlib.Path | None",
     "_glance(self, items: list[dict], inbox: list[dict]) -> dict",
