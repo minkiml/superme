@@ -1,71 +1,59 @@
-# Secrets
+# Secrets — .env.example is the tracked template.
 .env
+.env.*
+!.env.example
 
-# macOS Finder metadata (matches at any depth)
+# macOS Finder metadata
 .DS_Store
 
-# Local runtime state (per-environment, not committed)
-.sessions.json
-.sessions.v1.json
-.context_models.json
+# Local runtime state: the stores the daemon owns, plus hand-made backups.
 .slash_commands.json
 .dev.db
 .system.db
-# local DB backups (created before migrations/cleanups; never commit)
 .dev.db.*
 .system.db.*
-# scratch DBs a test run leaves anywhere in the tree (the roots above only match this dir)
-**/.dev_dummy.db
-**/.dev.db
-**/.system.db
 
-# Private, lifelong SuperMe knowledge (its own private repo; never in the app repo).
-# superme-global-knowledge/ = today's home; superme-knowledge/ = the renovation target (placeholder).
-superme-global-knowledge/
+# Private knowledge home — per-user, never in the app repo.
 superme-knowledge/
 
-# local-harness holds each user's OWN per-repo operational cells (constitutions, skills, agents,
-# mandates, .assets, per-repo plugin manifests) — per-deployment state, authored/regenerated
-# locally (plugin.json self-scaffolds; cells self-create on connect). Only the SHARED `asset/`
-# pool ships (+ this dir's README). Everything else — global/, dummy/, and any connected repo's
-# cell — is the user's own local-harness and must not be committed.
+# Local repo registry: the spine writes this machine's paths into it.
+# Seeded from config/repos.example.yaml on first start.
+/superme_agent/config/repos.yaml
+
+# Per-user operational cells. Only the shared asset pool and this dir's README ship.
 superme_agent/local-harness/*
 !superme_agent/local-harness/asset/
 !superme_agent/local-harness/README.md
+
+# Per-worktree vet-environment state, written by the vet skill's boot script.
+.vet-env.json
+.vet-env.log
 
 # Python
 __pycache__/
 *.py[cod]
 .venv/
 venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
 
+# Editors
+.idea/
+.vscode/
 
-# Local
+# The developer's own notes and drafts.
 TODO.md
-task1_todo.md
 general_docs/
 superme-docs/
-
-# Internal authoring/practice guidance — private to the dev, never on remote
 Best-superme-context-practice-and-other-guidance/
 
-# scripts/ ships: the test suites and the gate tooling they run beside. What stays local is
-# everything bound to one machine or already spent — a one-shot migration, a driver pointed at
-# the owner's own playground, measurement experiments, and throwaway analysis tools.
+# scripts/ ships its suites and gate tooling; what stays local is machine-bound or spent.
 /scripts/__pycache__/
 /scripts/comment_pass/
 /scripts/migrate_phase_rename.py
 /scripts/pg_drive.py
 /scripts/compaction_bakeoff.py
 /scripts/probe_context_floor.py
-
-# Per-worktree vet environment (the vet skill's scripts/vet_env.sh): pid/port state + the server's
-# log. Scratch, per-worktree, and dies with the dir — but a worktree IS a checkout, so without this
-# it would sit in every `git status` a build agent runs.
-.vet-env.json
-.vet-env.log
-.vet-env.pid
-
-# Local repo registry: the spine writes to it, so it holds this machine's paths.
-# Seeded from config/repos.example.yaml on first start.
-/superme_agent/config/repos.yaml
