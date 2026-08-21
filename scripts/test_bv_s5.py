@@ -695,7 +695,9 @@ def test_start_guards(tmp: Path) -> None:
 def test_registration() -> None:
     print("route + taxonomy + skill contracts")
     from superme_agent.daemon.server import app
-    paths = {r.path for r in app.routes}
+    # Read the schema, not app.routes: how FastAPI stores an included router is private
+    # and has changed, while the generated document is the contract.
+    paths = set(app.openapi()["paths"])
     # `/vet` and `/plan` collapsed into ONE `/run` (owner, 2026-07-31): one door onto the
     # dispatcher both already shared, so a phase can never be missing a firer again.
     ok("POST /dev/work-items/{item_id}/run is registered", "/dev/work-items/{item_id}/run" in paths)
