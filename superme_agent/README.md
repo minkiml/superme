@@ -60,19 +60,17 @@ superme_agent/
 ├─ gateway/         contexts.py — (repo, mode) → Context resolution
 ├─ harness/         the UNIVERSAL portable brain (SELF, charters, constitution, plugins, tools, policy, forge_kit)
 ├─ local-harness/   per-host local harness — <id>/<mode>/
-├─ config/          repos.yaml (registered repos) · system.yaml
-├─ paths.py         where everything is — paths, .env, the daemon's address
-└─ validators/
+├─ config/          system.yaml (tracked) · repos.yaml (local, seeded from repos.example.yaml)
+└─ paths.py         where everything is — paths, .env, the daemon's address
 scripts/            check_fast.sh (the gate) · parity · sweep/E2E tests (gitignored)
-web/                bff/ (reverse proxy) · frontend/ (cockpit) · dev.sh (launch all three)
+web/                bff/ (reverse proxy) · frontend/ (cockpit)
 superme-knowledge/  the knowledge repo (sibling, gitignored) — see its README
 ```
 
 ## Run
 
 ```bash
-conda activate my-agent
-bash web/dev.sh          # daemon (:8787) + BFF (:8000) + Vite (:5173); Ctrl-C stops all three
+python run_superme.py    # daemon (:8787) + BFF (:8000) + Vite (:5173); Ctrl-C stops all three
 ```
 
 Then open http://localhost:5173. To run a layer alone: `python -m superme_agent.daemon` /

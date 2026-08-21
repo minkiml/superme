@@ -143,9 +143,7 @@ def _summary() -> int:
         print(f"NOT READY — {len(bad)} to fix: " + ", ".join(bad))
         return 1
     print("READY. Start the stack with:\n")
-    print("    python -m superme_agent.daemon        # core daemon")
-    print("    python -m web.bff                     # web BFF")
-    print("    npm run dev --prefix web/frontend     # frontend\n")
+    print("    python run_superme.py\n")
     print(f"Then open http://localhost:{os.environ.get('VITE_PORT', '5173')}\n")
     return 0
 
