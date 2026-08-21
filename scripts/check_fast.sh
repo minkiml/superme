@@ -9,7 +9,15 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
-PY="${SUPERME_PY:-/opt/homebrew/Caskroom/miniconda/base/envs/my-agent/bin/python}"
+# The interpreter to run this repo's Python with: `SUPERME_PY` pins one, otherwise whatever
+# the active environment puts on PATH. Never a hardcoded path — that is one machine's answer.
+PY="${SUPERME_PY:-}"
+if [ -z "$PY" ]; then
+    for c in python3 python; do
+        command -v "$c" >/dev/null 2>&1 && { PY="$c"; break; }
+    done
+fi
+[ -n "$PY" ] || { echo "no python on PATH — set SUPERME_PY to an interpreter" >&2; exit 1; }
 EXTRA=""; [ "${STRICT:-0}" = "1" ] && EXTRA="--strict-shapes"
 
 # Load the app fresh, because parity below hits the LIVE daemon: without this, a stale

@@ -68,3 +68,7 @@ Best-superme-context-practice-and-other-guidance/
 .vet-env.json
 .vet-env.log
 .vet-env.pid
+
+# Local repo registry: the spine writes to it, so it holds this machine's paths.
+# Seeded from config/repos.example.yaml on first start.
+/superme_agent/config/repos.yaml

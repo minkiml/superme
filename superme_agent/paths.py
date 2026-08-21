@@ -51,6 +51,8 @@ def plugins_for(mode: str, op_home: Path | None = None) -> list[str]:
 CONFIG_DIR = APP_DIR / "config"
 SYSTEM_CONFIG_FILE = CONFIG_DIR / "system.yaml"      # singleton static-meta
 REPOS_CONFIG_FILE = CONFIG_DIR / "repos.yaml"        # repo registry, scope-aware
+# The registry is local state — the spine writes to it — so the tracked file is a seed.
+REPOS_SEED_FILE = CONFIG_DIR / "repos.example.yaml"
 SYSTEM_DB_FILE = APP_DIR / ".system.db"              # live: session, run, model_override
 # One gitignored knowledge repo holds every connected repo's sub-home, keyed by repo id.
 KNOWLEDGE_REPO_DIR = Path(

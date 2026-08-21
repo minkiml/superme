@@ -1,5 +1,9 @@
 # System spine — the repo registry, scope-aware.
 #
+# Seed for a fresh install: the spine copies this to repos.yaml on first start, then OWNS
+# that copy — connecting a domain appends an entry, so the live file is local state and is
+# never committed. Edit repos.yaml, not this file.
+#
 # Each repo's static half; the global hub is a first-class entry. Every repo spans the
 # {core, dev} scope lattice, and the per-scope home paths are derived by convention in
 # spine.py rather than pinned here, so relocating them edits one function.
@@ -14,29 +18,14 @@ repos:
     layer: global
     persona_append: ""
     extra_mcp: []
+    anchor_branch: main
     vet_env:                      # how to boot a server running a work item's worktree
       cmd: "{py} -m superme_agent.daemon"
       port_env: SUPERME_DAEMON_PORT
       ready: /openapi.json
       url_env: SUPERME_DAEMON_URL
-    anchor_branch: superme-dev
 
     # Gitignored paths that are nonetheless this repo's SOURCE. A read-only worktree
     # mirrors them, so a sweep over a plain checkout cannot call live code dead.
     source_ignored:
       - scripts
-  dummy:
-    label: Dummy Project
-    cwd: "/Users/cooma/Developer/my_docs/dummy_project"
-    layer: local
-    persona_append: ""
-    extra_mcp: []
-  test-playground:
-    label: test-playground
-    cwd: /Users/cooma/Developer/my_docs/test-playground
-    layer: local
-    persona_append: ''
-    extra_mcp: []
-    onboarding: project-init
-    review_mode: strict
-    anchor_branch: main

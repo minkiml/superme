@@ -6,6 +6,7 @@ those arrive as plain parameters.
 """
 
 import logging
+import sys
 from collections import deque
 from pathlib import Path
 from typing import AsyncIterator
@@ -362,7 +363,9 @@ class AgentService:
                 protected_nudge=protected_nudge,
             ),
             # The CLI's native auto-memory is on by default and is not gated by setting_sources.
-            env={"CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1"},
+            # SUPERME_PY pins the interpreter running SuperMe, so a script the agent shells out
+            # to uses it rather than whatever the inherited PATH happens to resolve.
+            env={"CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1", "SUPERME_PY": sys.executable},
             **sandbox_options(sandbox_writes),
         )
 

@@ -17,6 +17,7 @@ from ..paths import (
     KNOWLEDGE_REPO_DIR,
     LOCAL_HARNESS_DIR,
     REPOS_CONFIG_FILE,
+    REPOS_SEED_FILE,
     ROOT_DIR,
     SYSTEM_CONFIG_FILE,
     SYSTEM_DB_FILE,
@@ -243,7 +244,20 @@ class SystemSpine:
         self.db_path = Path(db_path)
         self._system_config_path = Path(system_config)
         self._repos_config_path = Path(repos_config)
+        self._seed_repos_config()
         self._init_db()
+
+    def _seed_repos_config(self) -> None:
+        """Copy the tracked seed into place on a fresh install; never overwrite a live registry."""
+        path = self._repos_config_path
+        if path.exists() or not REPOS_SEED_FILE.is_file():
+            return
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(REPOS_SEED_FILE.read_text())
+            log.info("seeded %s from %s", path.name, REPOS_SEED_FILE.name)
+        except OSError as e:
+            log.warning("could not seed %s (%s); starting with no repos", path.name, e)
 
     # --- connection / schema ----------------------------------------------------
     def _conn(self) -> sqlite3.Connection:
