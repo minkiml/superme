@@ -1,18 +1,10 @@
-"""BV-S3 gate test (LIVE half) — the phase→session map on the dummy repo. COSTS TOKENS (5 tiny
-turns). Drives what the offline suite can't: real ws turns minting real sessions per role.
+"""The phase-to-session map, driven by real turns. COSTS TOKENS — five tiny turns.
 
-The step-3 claims verified live:
-  · a triage turn births the INTAKE session (repo cwd, spine kind='intake', item.md slot);
-  · a build turn (post-worktree) births a SEPARATE build session (worktree cwd, kind='build')
-    and the intake thread SURVIVES — the old rotation retired it;
-  · a second build turn RESUMES the same build session (build remembers);
-  · a vet turn births its own session (kind='vet');
-  · a review turn RETURNS to the intake session — same id, no mint (intake narrates end-to-end);
-  · abandon retires ALL role threads (every transcript gone, spine rows dropped).
+Triage births intake, build births its own and RESUMES it, vet births its own, and review returns
+to intake. Abandon retires every role thread.
 
-Artifacts are script-written stand-ins (s6_live pattern) so gates pass without agent work.
-Self-cleaning: abandon + s6_live-style repo/knowledge restore.
-Run with the daemon up: PYTHONPATH=. python -m scripts.test_bv_s3_live
+Needs SUPERME_TEST_REPO and a running daemon.
+Run: PYTHONPATH=. python -m scripts.test_bv_s3_live
 """
 
 import os
@@ -32,8 +24,8 @@ from superme_agent.core import git_layer
 B = "http://127.0.0.1:8787"
 WS = "ws://127.0.0.1:8787/ws/agent"
 CTX = "dummy"
-# This suite MUTATES the repo it points at: `git reset --hard`, `git clean -fd`, branch
-# deletion. Name a throwaway one, and never a repo holding work you want.
+# This suite MUTATES the repo it points at: reset, clean, branch deletion.
+# Name a throwaway one, never a repo holding work you want.
 REPO = Path(os.environ.get("SUPERME_TEST_REPO") or "~/superme-test-repo").expanduser()
 if not (REPO / ".git").is_dir():
     raise SystemExit(f"SUPERME_TEST_REPO is not a git repo: {REPO}")

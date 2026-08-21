@@ -1,16 +1,7 @@
-"""The dashboard invalidation channel — routing-audit §7.6. Offline, no daemon.
+"""The dashboard invalidation channel.
 
-The property under test is the one the whole design rests on: **the channel carries TOPICS, never
-values.** That is what lets push and poll coexist — every number on screen still comes from exactly
-one place (the HTTP read), so a pushed frame cannot contradict a polled one. A test that only
-checked "a frame arrives" would pass just as happily on the dangerous version of this feature, so
-the frame's SHAPE is asserted explicitly here, not incidentally.
-
-Also covered: the coalescing that keeps a build's event burst from becoming a refetch storm, the
-no-subscribers short-circuit that makes an unattended autopilot run cost nothing, and the
-`dev_store.log_event` observer seam — the single instrumentation point standing in for 78 call
-sites, which is worth a test precisely because nothing else would notice if it silently stopped
-firing.
+It carries TOPICS, never values, so a pushed frame cannot contradict a polled one. The frame's
+SHAPE is asserted, because "a frame arrives" would pass on the dangerous version too.
 
 Run: PYTHONPATH=. python -m scripts.test_dashboard_push
 """
@@ -38,9 +29,7 @@ def test_topics() -> None:
     ok("a repo's event invalidates that repo's topic", "dev:test-playground:" in t)
     ok("...and the system numbers it also moves (tokens · attention · roster counts)",
        D.TOPIC_SYSTEM in t)
-    # The FE key grammar nests (`dev:<ctx>:item:<id>:...` lives UNDER `dev:<ctx>:`), so a repo-level
-    # topic already reaches every open item. Emitting a per-item topic too would make this module
-    # responsible for knowing which FE views care about which event kinds — coupling that rots.
+    # The FE key grammar nests, so a repo-level topic already reaches every open item.
     ok("no per-item topic: the repo prefix already covers the item keys nested under it",
        not any(":item:" in x for x in t))
     ok("a repo-less event still invalidates the system bucket", D.topics_for({}) == [D.TOPIC_SYSTEM])
@@ -54,9 +43,8 @@ async def test_frame_carries_topics_only() -> None:
         frame = await asyncio.wait_for(q.get(), timeout=2)
         ok("frame type is `invalidate`", frame["type"] == "invalidate")
         ok("it carries the topics", sorted(frame["topics"]) == ["dev:r1:", "sys:"])
-        # THE assertion. If a future change starts shipping the changed rows down this socket, the
-        # browser gains a second source for values it also fetches over HTTP, and the two can
-        # disagree — the exact failure mode the audit deferred push over. Keep the frame this thin.
+        # THE assertion: shipping values down this socket gives the browser a second source for
+        # what it also fetches, and the two can disagree.
         ok("it carries NOTHING else — no rows, no counts, no item payload",
            set(frame.keys()) == {"type", "topics"})
     finally:
@@ -91,8 +79,7 @@ def test_no_subscribers_is_free() -> None:
     before = set(D._pending)
     D.publish_event({"context_id": "r1", "kind": "build.start"})
     ok("publish with no panel open does not even queue a topic", set(D._pending) == before)
-    # This matters because the common case IS unattended: autopilot runs for minutes with no browser
-    # open, and the push channel must not add work to that path.
+    # The common case IS unattended, and the push channel must add no work to that path.
 
 
 async def test_observer_seam(tmp: Path) -> None:
@@ -114,9 +101,8 @@ async def test_observer_seam(tmp: Path) -> None:
         ok("the observer saw the event", len(seen) == 1 and seen[0]["context_id"] == "r1")
         ok("...with the fields topics_for needs", "context_id" in seen[0])
         ok("a raising observer was called", boom_calls["n"] == 1)
-        # The point: notification is a side-channel. A broken notifier must never fail the write that
-        # triggered it — losing an invalidation costs one backstop poll; losing the event costs the
-        # durable trail.
+        # Notification is a side-channel: losing an invalidation costs one poll, losing the event
+        # costs the durable trail.
         rows = store.list_events("r1")
         ok("...and the event is still durably logged", len(rows) == 1)
     finally:
@@ -131,17 +117,14 @@ def test_backstop_contract() -> None:
     ok("a backstop exists and is slow", "BACKSTOP_MS = 30_000" in src)
     ok("it applies only to ordinary-cadence feeds",
        "pushOnline && ms >= BACKSTOP_FLOOR_MS ? BACKSTOP_MS : ms" in src)
-    # A sub-5s subscriber is watching something that changes continuously and writes no dev event
-    # (a live run's token counter) — nothing pushes for it, so slowing it would be a real regression.
+    # A very fast subscriber watches something continuous that writes no event, so slowing it
+    # would regress.
     ok("...leaving fast live-run feeds alone", "BACKSTOP_FLOOR_MS = 5000" in src)
     ok("losing the channel re-times every live feed on the spot",
        "entries.forEach((e) => { if (e.subs.size) schedule(e) })" in src)
 
-    # The backstop stretched idle feeds from 5s to 30s, which silently invalidated the status bar's
-    # hard-coded 20s "gone quiet" threshold: a healthy screen started reporting "No update for 21s"
-    # for a third of every cycle. A false alarm costs an honesty indicator more than a missed one, so
-    # the threshold must be DERIVED from the cadence in force — pinned here because the two numbers
-    # live in different files and drifted apart once already.
+    # The "gone quiet" threshold is DERIVED from the cadence in force; the two numbers live in
+    # different files.
     ok("the store reports the slowest cadence in force", "slowestMs," in src)
     bar = Path("web/frontend/src/features/shell/StatusBar.tsx").read_text()
     ok("...and the staleness threshold is derived from it, not a constant",

@@ -1,12 +1,7 @@
-"""BV-S6 gate test — handoff promotion into intake (build-vet-loop §1.4 / §9 step 6).
+"""Handoff promotion into intake.
 
-Covers: `render_handoff_block` (nothing-new → None; NEW driver decisions rendered in time order
-with attribution; the LATEST new cycle's vet report verbatim + older new cycles collapsed to
-verdict one-liners — the O10 cap rule; total/report caps honored; a garbage/absent watermark
-reads as 0; decisions with no report render without a report section) and the
-`handoffs_promoted` watermark writer (insert + rewrite + idempotent skip + read-back through
-`read_work_item`). The ws injection seam (intake-turn prefix + mark-advance at Result) is the
-LIVE suite's claim. Self-cleaning (tempdirs). No daemon needed.
+Only what is NEW since the watermark renders: the latest cycle's report verbatim, older ones
+collapsed to one-liners. An absent or garbage watermark reads as zero, never as everything.
 
 Run: PYTHONPATH=. python -m scripts.test_bv_s6
 """
@@ -138,9 +133,8 @@ def test_render(tmp: Path, repo: Path) -> None:
     (d3 / "artifacts").mkdir(parents=True)
     (d3 / "artifacts" / "plan.md").write_text(PLAN)
     cy = A.scaffold_cycle(d3, title="t")
-    # Target the §Built HEADING, not the slot's prose — a fixture keyed to the template's wording
-    # silently stops testing anything the moment that wording changes (it did, in slice 6c, and this
-    # cap assertion passed for a block that was never oversized).
+    # Target the HEADING, not the slot's prose: a fixture keyed to wording stops testing anything
+    # the moment that wording changes.
     Path(cy["path"]).write_text(Path(cy["path"]).read_text().replace(
         "## Built\n", "## Built\n" + "very long build detail " * 800 + "\n"))
     A.record_verification(d3, repo, check="alpha-check", how="pytest", result="ok", passed=True)

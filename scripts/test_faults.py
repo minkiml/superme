@@ -1,16 +1,8 @@
-"""Fault classification + the retry ladder (recovery-resilience R1).
+"""Fault classification and the retry ladder.
 
-The defect this closes: every runner answered "why did this turn fail" locally and differently, so
-"Anthropic was overloaded for ninety seconds" and "we passed a bad argument" produced the same
-outcome — page the owner. Worse, an upstream error handed back as assistant TEXT raised nothing at
-all, and the loop recorded a build cycle that never ran as a success (run 804, 2026-07-30).
-
-This suite pins: the three kinds and their conservative default, the reply-vs-exception paths, the
-owner's 1m·3m·5m×5 schedule, the rate-limit window rule, the "never replay a turn that did
-anything" safety rule, and the wiring — every background runner goes through `ResilientTurn`, the
-interactive one classifies without waiting, and `is_infra_reply` is gone from loop.py.
-
-Self-cleaning: pure functions + a fake agent. No daemon, no spine, no network.
+An overloaded upstream and a bad argument used to reach the same outcome: page the owner. An
+upstream error handed back as assistant TEXT raised nothing, so a cycle that never ran scored
+as a success.
 
 Run: PYTHONPATH=. python -m scripts.test_faults
 """
@@ -78,8 +70,8 @@ def test_reply_path_is_narrow() -> None:
 
     ok("the SDK's error prefix at the START of a reply is caught",
        classify(reply="API Error: 529 Overloaded").failed)
-    # The anchor: an agent WRITING about an error is reporting, not failing. This is what stops the
-    # classifier from calling a successful vet run a fault because it quoted a log line.
+    # An agent WRITING about an error is reporting, not failing, so quoting a log line is not a
+    # fault.
     ok("an error mentioned mid-sentence is NOT a failure",
        not classify(reply="I looked into the API Error: 500 we saw earlier and fixed it").failed)
     ok("a turn that called a tool is never judged by its reply",
@@ -210,8 +202,7 @@ def test_resilient_turn() -> None:
         ok("…and hands back the typed verdict", t.fault.kind == "transient")
 
         # THE SAFETY RULE: a turn that touched anything is never replayed, however retryable the
-        # failure looks. Re-running a turn that already edited files or committed would double
-        # those effects to save a wait.
+        # failure looks.
         slept.clear()
         agent = _FakeAgent([[Status("Bash", {"command": "git commit"}), TimeoutError("died")]])
 
@@ -264,8 +255,8 @@ def test_every_background_runner_is_wrapped() -> None:
 
     runners = {
         "superme_agent/daemon/services/loop.py": 2,        # vet + build
-        # + the completion backstop (retry=False — see ensure_completion): it is a real background
-        # turn and so must be classified, but it never climbs the ladder.
+        # The completion backstop is a real background turn, so it is classified — but never
+        # retried.
         "superme_agent/daemon/services/runs.py": 5,        # deputy-feedback, close, intake, resolve, backstop
         "superme_agent/daemon/services/learning.py": 3,    # distill, write, sweep
         "superme_agent/daemon/services/deputy.py": 1,      # the judge

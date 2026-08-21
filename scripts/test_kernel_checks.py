@@ -1,16 +1,8 @@
-"""Kernel-executed verification checks (verification-model design §4, stage 2).
+"""Kernel-executed verification checks.
 
-The defect this closes: every check, however mechanical, cost a vet session's attention and arrived
-as an agent's report of what it saw. A check that is one command has no judgment in it — so the
-kernel runs it, in the sandbox, and writes the verdict itself. Evidence then re-runs for free each
-cycle instead of expiring into a fingerprint mismatch, and nothing downstream can revise it.
-
-This suite pins: the `run:` field on the plan contract, the kernel-side sandbox profile's two
-guarantees, exit-code-decides, the machine record and its provenance, the refusal that makes a
-machine entry final, deferrals never being executed, and the trigger that tells vet what is done.
-
-It EXECUTES real commands through the real seatbelt wrapper — that is the behaviour under test,
-and a mocked subprocess would pin nothing. Self-cleaning: a temp item folder, no daemon, no spine.
+A check that is one command has no judgment in it, so the kernel runs it and writes the verdict
+itself — final, and re-run free each cycle. Real commands run here: a mocked subprocess would
+pin nothing.
 
 Run: PYTHONPATH=. python -m scripts.test_kernel_checks
 """
@@ -109,9 +101,8 @@ def test_kernel_sandbox_holds():
            kernel_command("true", []) is None)
         return
     inside = Path(tempfile.mkdtemp(prefix="kbox-"))
-    # Deliberately NOT under the per-user TMPDIR: that whole subpath is writable on purpose (see
-    # the profile's note), so a denial proved there would prove nothing. Shared /tmp is the real
-    # out-of-boundary target — world-visible, and exactly the channel the boundary must close.
+    # NOT under the per-user temp dir, which is writable on purpose: shared /tmp is the real out-
+    # of-boundary target.
     outside = Path(tempfile.mkdtemp(prefix="kbox-out-", dir="/private/tmp"))
 
     def run(cmd: str) -> int:
@@ -197,8 +188,7 @@ def test_the_loop_runs_them_before_the_session():
 
     vet_skill = " ".join((ROOT / "superme_agent/harness/plugins/superme-dev/skills/vet/SKILL.md").read_text().split())
     # The RULE, not the sentence: the vetter must be told the kernel already ran some checks and
-    # that re-running them is refused. Pinning the old wording verbatim turned a copy edit into a
-    # red build while the rule was intact.
+    # that re-running them is refused.
     ok("the vet skill says kernel-run checks are already done, and not to redo them",
        "kernel already executed" in vet_skill.lower()
        and "refuses a second entry" in vet_skill.lower())

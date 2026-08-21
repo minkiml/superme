@@ -1,9 +1,7 @@
-"""WS-S1 gate test — contract & kernel state machine (workspace-workflow PRD stage S1).
+"""The work-item contract and the kernel state machine, at module level.
 
-Pure module-level unit tests (no daemon): KIND_PROFILES loud-fail + sequencing, work-item
-create/read round-trip of the new contract fields, terminal setter rules, the typed-awaiting
-status router (parent resumes exactly when the LAST blocking sibling closes), children-terminal
-scan, inbox spawned_from column round-trip, and glance buckets. Self-cleaning (tempdirs).
+Kind profiles fail loudly, terminal setters hold their rules, and a parent resumes exactly when
+its LAST blocking sibling closes.
 
 Run: PYTHONPATH=. python -m scripts.test_ws_s1
 """
@@ -47,11 +45,7 @@ def test_kind_profiles() -> None:
     while p:
         seq.append(p)
         p = kp.next_phase("research", p)
-    # The shared spine is triage · ‹WORK› · review · close. `plan` is NOT in it: it belongs to the
-    # kinds that VET, because its real product is the vet-plan — the Done criteria build is measured
-    # against. Research has no vet, so plan there could only restate the family guide (see
-    # research-sweep-model-design §3). The old `report` PHASE is retired too (it sat where review
-    # belongs; its work is the review-ENTRY skill).
+    # The shared spine is triage, work, review, close. `plan` belongs to the kinds that VET.
     ok("research pipeline", seq == ["triage", "investigate", "review", "close"], str(seq))
     ok("spine phases are shared by every kind",
        all(set(("triage", "review", "close")) <= set(p.phases)
@@ -78,9 +72,8 @@ def test_kind_profiles() -> None:
        kp.get_profile("implementation").worktree and not kp.get_profile("research").worktree
        and kp.get_profile("implementation").knowledge_writes
        and not kp.get_profile("research").knowledge_writes)
-    # `review` joined the list when review gained its own agent-facing record: close reads what it
-    # settled, the landing commit reads its `**Delivered:**`, and a revision cycle reads what is
-    # off the table. A close with no record is a close reading the owner's report instead.
+    # Close reads what review settled, and the landing commit reads its delivered line. A close
+    # with no record reads the owner's report.
     ok("required artifacts declared (readiness/closeout demolished — §3.1)",
        kp.get_profile("implementation").required_artifacts == ("plan", "review")
        and kp.get_profile("research").required_artifacts
@@ -167,8 +160,7 @@ def test_status_router() -> None:
     # First blocking child closes → sibling C2 still open → NO resume.
     c1["status"] = "done"
     ok("no resume while a blocking sibling is open", sr.parent_to_resume(items, c1) is None)
-    # Last blocking child closes → resume, even with the PARALLEL child still open: mid-pipeline
-    # only `blocking` holds a parent, which is the whole meaning of the `parallel` relation.
+    # Only `blocking` holds a parent mid-pipeline, which is the whole meaning of `parallel`.
     c2["status"] = "done"
     ok("resume on last blocking close", sr.parent_to_resume(items, c2) == "P")
     sp["status"] = "done"
@@ -181,11 +173,8 @@ def test_status_router() -> None:
     all_done, opens = sr.children_terminal(items, "P")
     ok("parallel children gate completion", not all_done and opens == ["C3"], str(opens))
 
-    # --- the close-phase asymmetry (2026-07-31) ------------------------------------------------
-    # `children_terminal` counts BOTH relations; `parent_to_resume` used to release on `blocking`
-    # only. A parent that reached close with an open PARALLEL child therefore parked at
-    # `awaiting_child` with no releaser anywhere — and `awaiting_child` does not page the owner, so
-    # it sat silently forever. Both now read `holding_children`.
+    # --- the close-phase asymmetry -------------------------------------- A parent reaching close
+    # with an open PARALLEL child had no releaser, in a state pageing nobody.
     par = {"id": "Q", "status": "awaiting_child", "phase": "close", "kind": "implementation"}
     pk = {"id": "QC", "status": "active", "spawned_from": {"item": "Q", "relation": "parallel"}}
     fam = [par, pk]
@@ -197,8 +186,8 @@ def test_status_router() -> None:
     blk = {"id": "QB", "status": "active", "spawned_from": {"item": "Q", "relation": "blocking"}}
     ok("not while a blocking sibling is still open",
        sr.parent_to_resume([par, pk, blk], pk) is None)
-    # The close criterion asks the CLOSE question from every phase — the drilldown previews it from
-    # review, and a preview that quietly asked the mid-pipeline question would show a clean gate.
+    # The close criterion asks the CLOSE question from every phase; a preview asking the mid-
+    # pipeline one would show a clean gate.
     ok("the close criterion is phase-independent",
        all(sr.children_terminal([{**par, "phase": p}, blk], "Q") == (False, ["QB"])
            for p in ("build", "vet", "review", "close")))
@@ -239,8 +228,8 @@ def test_peer_sequencing() -> None:
     ok("abandoned upstream pages, never releases", not rel and page == ["F"], f"{rel} {page}")
     ok("failed upstream reported separately", sr.upstream_state([e, f], f) == ([], ["E"]))
 
-    # A MISSING upstream counts as satisfied — a hard-deleted predecessor must not wedge its
-    # downstream at awaiting_upstream forever with nothing left that could ever release it.
+    # A MISSING upstream counts as satisfied: a deleted predecessor must not wedge its downstream
+    # forever.
     g = item("G", status="awaiting_upstream", after=["GONE"])
     ok("missing upstream is satisfied, not a wedge",
        sr.items_to_release([g], "GONE") == (["G"], []))
@@ -389,8 +378,8 @@ def test_deputy(tmp: Path) -> None:
     ok("strictness default aligned",
        SystemSpine.DEPUTY_STRICTNESS_DEFAULT == KS.DEPUTY_STRICTNESS_DEFAULT == "medium")
 
-    # deputy_verdict tool: valid decisions land in the sink; cross-field floor holds (an invalid
-    # call errors back to the agent — the executor never sees it, so it falls to the owner).
+    # Valid decisions land in the sink; an invalid call errors back to the agent and falls to the
+    # owner.
     sink: dict = {}
     call = RT._deputy_verdict(verdict_sink=sink)
     r = asyncio.run(call({"machine": {"decision": "approve", "gate": "plan"},
@@ -404,9 +393,8 @@ def test_deputy(tmp: Path) -> None:
     ok("send_back without change rejected", asyncio.run(call(
         {"machine": {"decision": "send_back", "gate": "plan"},
          "user": {"checked": "c", "because": "b"}})).get("is_error") is True)
-    # The page card is THREE parts and two of them are lists (owner, 2026-08-08). An escalation
-    # missing either list is refused, because a paragraph where a list belongs is the whole failure
-    # the shape exists to prevent.
+    # Two of the three parts are lists, and a paragraph where a list belongs is the failure the
+    # shape exists to prevent.
     ok("escalate without what_to_do rejected", asyncio.run(call(
         {"machine": {"decision": "escalate", "gate": "review"},
          "user": {"checked": "c", "because": "b",
@@ -425,8 +413,7 @@ def test_deputy(tmp: Path) -> None:
     ok("escalation carries every part the deputy gave",
        v2["decision"] == "escalate" and "Run export" in esc and "CSV" in esc
        and "feel is not testable" in esc)
-    # The KERNEL owns the layout, so it cannot drift between deputies: labelled bold heads and one
-    # bullet per point. The surfaces render this as markdown.
+    # The KERNEL owns the layout, so it cannot drift between deputies.
     ok("escalation is assembled as the labelled markdown card",
        esc.startswith("**Issue summary:** Open /dash")
        and "**Concern:**" in esc and "**What to do:**" in esc
@@ -442,9 +429,8 @@ def test_deputy(tmp: Path) -> None:
     ok("unknown strictness falls back to medium",
        KS.deputy_preamble("bogus") == KS.deputy_preamble("medium"))
 
-    # The deputy's payload (slice 6b): the OWNER's report verbatim + the typed gate state's check
-    # rows + a PATH to the contract. Never a flattened brief, and never the owner's decision block —
-    # a judge handed a verdict judges the verdict.
+    # The owner's report and the typed rows, never their decision: a judge handed a verdict judges
+    # it.
     state = {"phase": "review", "checks": [
         {"criterion": "evidence_fresh", "ok": False, "detail": "c3 FAILED", "blocking": True},
         {"criterion": "git_fresh", "ok": True, "detail": "behind 0", "blocking": False}],
@@ -461,9 +447,8 @@ def test_deputy(tmp: Path) -> None:
     ok("check rows carry the must-resolve mark the owner's Approve depends on",
        "evidence_fresh" in b and "must-resolve" in b and "greyed" in b)
     ok("review injects the verbatim success signal", "SIG-VERBATIM" in b)
-    # The gap this closed: `vet_note` was a parameter NO call site ever filled, so the gate that
-    # decides the merge was told to "read the evidence ledger embedded in the brief above" — where
-    # the brief carried a one-line entry COUNT and no verdicts at all.
+    # A parameter no call site filled told the merge gate to read an evidence ledger that carried
+    # a count and no verdicts.
     ok("review sees the vet's actual per-check verdicts",
        "c3" in b and "FAIL" in b and "pytest" in b)
     ok("the owner's decision block is GONE — no recommendation is fed to the judge",
@@ -475,8 +460,8 @@ def test_deputy(tmp: Path) -> None:
     ok("a phase with no report says so, and points at the contract instead",
        "no report-plan.md exists" in b2)
 
-    # Mandate seeds on first read (per-repo governance home); decision log is a per-ITEM JSONL trail
-    # in the item's own dir; the digest is item+GATE scoped (no cross-item precedent — that's the mandate).
+    # Mandate is per-repo, the decision log per-item, the digest item-and-gate scoped: no cross-
+    # item precedent.
     d = tmp / "deputy-dev"
     ok("mandate seeds", "Deputy mandate" in D.read_mandate(d) and D.mandate_path(d).exists())
     itemA = tmp / "work-items" / "itemA"
@@ -513,17 +498,14 @@ def test_deputy(tmp: Path) -> None:
        and dsvc.deputy_gate_for({"phase": "review"}) == "review"
        and dsvc.deputy_gate_for({"phase": "build"}) is None
        and dsvc.deputy_gate_for({"phase": "close"}) is None)
-    # ...and a phase the deputy does NOT judge still gets MECHANICALLY advanced. Live 2026-08-13:
-    # this branch used to `return` there, so every autopilot research item stranded at `investigate`
-    # — not a gate, and (unlike build, which the build⟷vet loop drives) with no self-driver either.
+    # ...and a phase the deputy does NOT judge is still advanced mechanically, or an autopilot
+    # item strands with no self-driver.
     gsrc = Path("superme_agent/daemon/services/gates.py").read_text()
     ok("a non-gate phase falls THROUGH the deputy branch to the mechanical advance",
        "if deputy_svc.deputy_gate_for(item) is not None:" in gsrc
        and "if deputy_svc.deputy_gate_for(item) is None:\n                return" not in gsrc)
 
-    # send-back dispatch (deputy-live-turns Q1-A): under cap, a triage/plan send-back FIRES a live
-    # turn at the agent (fire_deputy_feedback) — it does NOT hand the owner a park; at cap it escalates;
-    # an undeliverable turn falls to the owner honestly. Patch the seams so the branch logic is pure.
+    # Under cap a send-back FIRES a live turn rather than parking the owner; at cap it escalates.
     from superme_agent.daemon.services import runs as rsvc
     import types as _t
     class _Cap:
@@ -555,8 +537,7 @@ def test_deputy(tmp: Path) -> None:
         rsvc.fire_deputy_feedback = lambda cid, iid, **kw: False
         dsvc._do_send_back(ctx, "ctx", "itmX", "triage", verdict)
         ok("undeliverable send-back escalates to the owner", "deputy.escalate" in cap.escalated)
-        # (d) review send-back (Q1-B) → fires with phase='review' AND a downstream digest, so
-        # fire_deputy_feedback can flip review→plan and hand the re-plan its context.
+        # A review send-back fires with a downstream digest, so the re-plan gets its context.
         fired.clear(); cap.escalated.clear()
         kw_seen = {}
         rsvc.fire_deputy_feedback = lambda cid, iid, **kw: (kw_seen.update(kw) or True)
@@ -573,20 +554,20 @@ def test_deputy(tmp: Path) -> None:
     finally:
         dsvc._dev, dsvc._dev_store, rsvc.fire_deputy_feedback, D.count_send_backs = saved
 
-    # digest builder (Q1-B): readiness + latest vet report → one context blob; empty item → None.
+    # digest builder: readiness + latest vet report → one context blob; empty item → None.
     from superme_agent.core import artifacts as _A
     from superme_agent.daemon.services import git_ops as GO
     idir = tmp / "wi-dig"; (idir / "artifacts").mkdir(parents=True)
     ok("empty item → no digest", GO.build_downstream_digest(idir) is None)
-    # The digest reads review's AGENT-facing record, not the owner's report: a re-plan needs the
-    # change inventory and the settled decisions, none of which the owner's prose carries.
+    # The digest reads review's AGENT-facing record: a re-plan needs the change inventory the
+    # owner's prose never carries.
     (idir / "artifacts" / "review.md").write_text("## Change inventory\nbuilt the thing\n")
     (idir / "artifacts" / "build-vet-1.md").write_text("## Verification\nedge case X fails\n")
     dig = GO.build_downstream_digest(idir)
     ok("digest carries the review RECORD + cycle report",
        dig and "built the thing" in dig and "edge case X fails" in dig and "build-vet-1.md" in dig)
 
-    # slice 3 — delta feed + forward-only lifetime (flow-through) + per-gate cap.
+    # delta feed + forward-only lifetime + per-gate cap.
     di = tmp / "wi-slice3"
     ok("delta is None on a first judgment (no prior send-back at this gate)",
        dsvc._build_delta(di, "plan", {}) is None)
@@ -687,10 +668,10 @@ def test_glance(dev: DevKnowledgeService, root: Path) -> None:
 
 
 def test_item_scale(dev: DevKnowledgeService, tmp: Path) -> None:
-    """Scale is the CONTENT dial (kind_profiles.ITEM_SCALES) — triage's judgment, carried into every
-    later phase's turn. Pins the two properties the design rests on: an unjudged item behaves
-    exactly as it does today, and a `small` one is told a boundary plus what to do when the boundary
-    is wrong. Wording is not pinned; the presence of a reason and of an escape hatch is."""
+    """Scale is the CONTENT dial: triage's judgment, carried into every later phase's turn.
+
+    A small item is told a boundary plus what to do when the boundary is wrong; the reason and
+    the escape hatch are what is pinned."""
     from superme_agent.core import kernel_speech as ks
     print("item scale — the content dial")
     root = tmp / "scale-dev"
@@ -712,11 +693,7 @@ def test_item_scale(dev: DevKnowledgeService, tmp: Path) -> None:
     small = dev.read_work_item(root, wid)
     ok("scale + reason persist, reason collapsed to one line",
        kp.item_scale(small) == "small" and small["scale_reason"] == "one line in status_router")
-    # Frontmatter is written through `re.sub`, which parses backslash escapes in a replacement
-    # STRING — and `json.dumps` writes non-ASCII as \uXXXX. A reason or title carrying a curly
-    # quote raised "bad escape \u" and killed the write (caught live, run 1084). Both setters now
-    # replace via a function; these two pin that, because the failure needs no exotic input at all —
-    # an agent writing prose reaches for typographic punctuation on its own.
+    # `re.sub` parses backslash escapes in its replacement, so a curly quote killed the write.
     fancy = "the owner\u2019s ask names it \u2014 one \u201cquiet\u201d guard"
     dev.set_work_item_scale(root, wid, "small", fancy)
     ok("a reason with typographic punctuation survives",
@@ -742,8 +719,7 @@ def test_item_scale(dev: DevKnowledgeService, tmp: Path) -> None:
     ok("standard costs no preamble floor", "scaled `small`" not in at_std)
     ok("small names a read boundary and a write bound",
        "small" in at_small.lower() and "read" in at_small.lower())
-    # The load-bearing clause: structure stays whole at small, so an agent with nothing to say must
-    # have somewhere to put that other than padding.
+    # Structure stays whole at small, so an agent with nothing to say has somewhere to put that.
     ok("small gives overflow an escape hatch instead of filler",
        "misjudged" in at_small and "pad" in at_small)
 

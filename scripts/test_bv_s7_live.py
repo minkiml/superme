@@ -1,24 +1,9 @@
-"""BV-S7 gate test (LIVE half) — the review router closing the full circle. COSTS TOKENS
-(≈4 real agent runs on the dummy repo: vet-pass → interactive routing turn → build → vet-pass).
-Drives what the offline suite can't: a REAL intake agent at the review gate phrases the owner's
-feedback into a vet-plan check via `route_review_feedback` (auto-allowed, mid-turn), the deferred
-hop waits out the routing turn's run-lock and fires a build cycle handed the feedback verbatim,
-the build session implements the NEW requirement, and a fresh vet passes EVERY check — landing
-the item back at review with zero human actions after the feedback message.
+"""The review router closing the full circle. COSTS TOKENS.
 
-Claims verified live:
-  · the loop reaches review on its own (cycle 1 passes — s5_live already proved the fail path);
-  · the intake turn routes: `review.route` event + a `### <check>` block with review provenance
-    appended to plan.md, depth/env intact, the plan still gate-clean;
-  · the item re-enters build and the loop self-drives back to review (routing turn = the LAST
-    human action);
-  · the worktree gained the routed requirement (extra() prints s7-extra) and it was committed;
-  · the final vet report verdicts BOTH checks PASS; attempts.md shows review → review exits;
-  · run history: chat (routing turn) + the loop hops; no run row left open.
+A real intake agent turns the owner's feedback into a vet-plan check, build implements it, and a
+fresh vet passes — with no human action after the feedback.
 
-Artifacts are script-written stand-ins for the gate advances (s6_live pattern). Self-cleaning:
-abandon + repo/knowledge restore. Run with the daemon up:
-PYTHONPATH=. python -m scripts.test_bv_s7_live
+Needs SUPERME_TEST_REPO and a running daemon.
 """
 
 import os
@@ -39,8 +24,8 @@ from superme_agent.core import git_layer
 B = "http://127.0.0.1:8787"
 WS = "ws://127.0.0.1:8787/ws/agent"
 CTX = "dummy"
-# This suite MUTATES the repo it points at: `git reset --hard`, `git clean -fd`, branch
-# deletion. Name a throwaway one, and never a repo holding work you want.
+# This suite MUTATES the repo it points at: reset, clean, branch deletion.
+# Name a throwaway one, never a repo holding work you want.
 REPO = Path(os.environ.get("SUPERME_TEST_REPO") or "~/superme-test-repo").expanduser()
 if not (REPO / ".git").is_dir():
     raise SystemExit(f"SUPERME_TEST_REPO is not a git repo: {REPO}")

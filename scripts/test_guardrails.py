@@ -1,25 +1,11 @@
-import re
-"""The three run guardrails added 2026-08-14, after the hub stall.
+"""The three run guardrails: a subagent cap, a stall detector, an isolated tree.
 
-One incident produced all three. A research run spawned five Explore subagents over the SuperMe
-hub; every one fell silent within three seconds of the others; the run then held `running` for
-twenty-four minutes with no events and 452k tokens spent, and finished only because a restart
-aborted it. Three things were missing, and each is pinned here:
-
-1. **A subagent cap.** `Agent` sat in SAFE_TOOLS — auto-allowed, unbounded, uncounted.
-2. **A stall detector.** Nothing read the gap between a run's last event and now.
-3. **An isolated tree for read-only work.** The run's cwd was the live repository, and the OS
-   sandbox makes a run's own cwd writable — so the permission classifier was the only wall.
-
-What this suite asserts is the RULE, never a sentence: the cap's arithmetic, the stall threshold's
-arithmetic, and the profile/wiring facts the three depend on. Deny messages and preamble prose are
-read only for the ONE property that is load-bearing — that the cap tells the agent it was capped,
-because a silently narrowed sweep reads at the gate like a complete one.
-
-Self-cleaning: pure functions, a temp git repo, and source reads. No daemon, no spine, no network.
+The cap must TELL the agent it was capped, because a silently narrowed sweep reads at the gate
+like a complete one.
 
 Run: PYTHONPATH=. python -m scripts.test_guardrails
 """
+import re
 
 import asyncio
 import subprocess
@@ -63,8 +49,8 @@ def test_the_cap_counts_and_then_refuses():
        sum(1 for r in results if allowed(r)) == MAX_SUBAGENTS)
     ok("…and every spawn after that is refused",
        all(not allowed(r) for r in results[MAX_SUBAGENTS:]))
-    # THE load-bearing property of the message: a capped reader must be able to report that it was
-    # capped. Silence here is indistinguishable from "the surface had nothing more in it".
+    # A capped reader must be able to report that it was capped: silence reads as an empty
+    # surface.
     msg = str(getattr(results[-1], "message", ""))
     ok("the refusal tells the agent the LIMIT is why, not that the brief was wrong",
        "limit" in msg.lower() and str(MAX_SUBAGENTS) in msg)
@@ -90,8 +76,8 @@ def test_both_spawn_names_are_covered():
 
 
 def test_the_cap_is_on_by_default():
-    # Default-ON at the ONE place every turn's options are built, rather than passed per runner:
-    # a runner that forgot the argument would be exactly the run nobody could stop.
+    # Default-ON where every turn's options are built: a runner that forgot it would be the run
+    # nobody could stop.
     perms = src("superme_agent/core/permissions.py")
     ok("the cap defaults to the policy value, not to None",
        "subagent_cap: int | None = MAX_SUBAGENTS" in perms)
@@ -115,9 +101,8 @@ def _run_row(minutes_quiet: float, **kw) -> dict:
 
 
 def test_the_stall_rule(monkeypatched=None):
-    # Every fixture is a MEASURED shape, not an invented one (all live, 2026-08-14): 2s is a
-    # healthy run's rhythm; 70s is a post-fan-out synthesis pause, which a 1-minute bar killed and
-    # cost 398k tokens; 24 minutes is the incident this exists for.
+    # Every fixture is a MEASURED shape: a healthy rhythm, a post-fan-out synthesis pause, and the
+    # incident this exists for.
     rows = [_run_row(2 / 60), _run_row(70 / 60), _run_row(21), _run_row(24)]
     watchdog._spine.live_item_runs_quiet_since = lambda: rows      # noqa: SLF001 — the read, stubbed
     stalled = watchdog.stalled_runs()
@@ -128,9 +113,8 @@ def test_the_stall_rule(monkeypatched=None):
        all(s["quiet_seconds"] >= watchdog.STALL_SECONDS for s in stalled))
     ok("the incident's own shape (24 minutes of silence) IS caught",
        any(s["quiet_seconds"] > 20 * 60 for s in stalled))
-    # TWENTY MINUTES — restored 2026-08-14 after the 1-minute bar killed a healthy run. Pinned as a
-    # RANGE, not the literal, so the suite says what the number has to BE — above every legitimate
-    # pause ever measured, below the incident — instead of restating a constant back to itself.
+    # Pinned as a RANGE, not the literal: above every legitimate pause measured, below the
+    # incident. A literal would restate a constant back to itself.
     ok("the threshold is far above a healthy run's rhythm and far below the incident",
        5 * 60 <= watchdog.STALL_SECONDS <= 30 * 60)
     ok("…and the SHIPPED default is that, not whatever a test env last set",
@@ -140,8 +124,8 @@ def test_the_stall_rule(monkeypatched=None):
 
 
 def test_quiet_since_falls_back_to_the_start():
-    # A run that has emitted NOTHING has no event to age from — its own start is the last sign of
-    # life, or a hung first call would be invisible forever (a LEFT JOIN handing back NULL).
+    # A run that emitted NOTHING ages from its own start, or a hung first call is invisible
+    # forever.
     spine = src("superme_agent/core/spine.py")
     ok("the read coalesces the newest event with the run's start",
        "COALESCE(MAX(e.created_at), r.started_at)" in spine)
@@ -176,9 +160,10 @@ def test_the_registry_is_bound_where_every_item_run_passes():
 
 
 def test_disposal_stops_the_task_not_just_the_row():
-    """A disposed item must stop RUNNING, not merely stop claiming to run. The row half alone let a
-    turn outlive its own item and write into a folder the caller was removing — an orphan
-    artifacts/ shell with no item.md and no terminal event behind it."""
+    """A disposed item must stop RUNNING, not merely stop claiming to run.
+
+    The row half alone let a turn outlive its item and write into a folder the caller was
+    removing."""
     runs = src("superme_agent/daemon/services/runs.py")
     # The CODE, not the docstring above it — which names both halves while explaining the order.
     body = runs.split("def stop_item_work", 1)[1].split('"""')[2]
@@ -204,11 +189,8 @@ def test_disposal_stops_the_task_not_just_the_row():
     ok("disposal does not shout when there is nothing to cancel — that is the normal case",
        run_tasks.cancel("r", "nobody", expect_live=False) is False)
 
-    # THE SAFETY PROPERTY, and it is not local to any one file: clearance runs INSIDE the close
-    # task, so if the item were still registered when it fired, the item would cancel its own
-    # closing run mid-clearance. It is safe only because `stream` releases the registration in its
-    # `finally`, and an async generator reaches `finally` on EXHAUSTION — a `break` would close it
-    # later (at GC), leaving the key live exactly when clearance asks. So the loop must not break.
+    # THE SAFETY PROPERTY: a still-registered item would cancel its own closing run, so the loop
+    # must not break.
     turns = src("superme_agent/daemon/services/turns.py")
     ok("the registration is released in the stream's finally", "finally:" in turns
        and turns.index("finally:") < turns.index("run_tasks.release"))
@@ -239,8 +221,8 @@ def test_the_profile_separates_isolation_from_landing():
 
 
 def test_every_research_phase_reads_from_the_same_tree():
-    # One item, one thread, one cwd. A phase that read the repo and a phase that read the tree
-    # would be one agent watching its own paths move (and the CLI stores transcripts per cwd).
+    # One item, one thread, one cwd: two phases on different trees is one agent watching its own
+    # paths move.
     ok("a research intake phase runs at the tree",
        kind_profiles.role_uses_worktree("intake", "research") is True)
     ok("an implementation intake phase still runs at the repo",
@@ -280,8 +262,8 @@ def test_the_tree_is_detached_and_disposable():
                not [a for a in acts if a.get("action") == "broken"])
         finally:
             git_layer.remove_worktree(repo, "testrepo", "aaaabbbbcccc")
-            # The worktrees home is OUTSIDE the temp dir (`~/.superme/worktrees/<repo>`), so the
-            # suite has to take its own parent back or every run leaves a `testrepo/` behind.
+            # The worktrees home is OUTSIDE the temp dir, so the suite must take its own parent
+            # back.
             root = git_layer.worktrees_root("testrepo")
             if root.is_dir() and not any(root.iterdir()):
                 root.rmdir()
@@ -300,8 +282,8 @@ def test_creation_and_cleanup_are_wired():
     ok("…and falls back to the live repo rather than failing a run", "return ctx.cwd" in ops)
     ok("the tree is recorded as the item's git_worktree, which is what cleanup reads",
        "git_worktree=rec[\"worktree\"]" in ops)
-    # CLEARANCE. Both terminal doors already remove `git_worktree`; the point of this check is that
-    # the scratch tree rides the SAME path, so it can never grow its own forgotten cleanup.
+    # CLEARANCE: the scratch tree rides the SAME path, so it cannot grow its own forgotten
+    # cleanup.
     clear = src("superme_agent/daemon/services/clearance.py")
     drop = src("superme_agent/daemon/routers/dev/gates.py")
     ok("close removes it", 'item.get("git_worktree")' in clear and "remove_worktree" in clear)
@@ -371,11 +353,10 @@ def test_the_total_counts_subagents_and_cannot_kill_a_run():
 # ── 5 · nothing about DESCRIBING the work may stop it ───────────────────────────────────────────
 
 def test_a_trail_row_cannot_kill_a_run():
-    """The bug that cost ~1.4M tokens on 2026-08-14 (hub runs 1399-1401).
+    """A malformed tool argument must not kill the run that made it.
 
-    A `Read` whose `limit` arrived as a LIST raised TypeError out of the trail formatter, out of
-    `capture_event`, and out of the run's own asyncio task. The work died mid-investigation and the
-    row sat `running` until the stall watchdog closed it 20 minutes later — three times."""
+    One raised out of the trail formatter, out of the capture, and out of the run's own task,
+    leaving the row `running` until the watchdog closed it."""
     from superme_agent.daemon.services.runs import _artifact_desc, capture_event
 
     ok("the exact killer input now formats instead of raising",

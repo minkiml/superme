@@ -1,13 +1,7 @@
-"""BV-S4 gate test — vet session mechanics (build-vet-loop §9 step 4).
+"""Vet session mechanics, and the refusals that make a verdict mean something.
 
-Covers: the vet-report machinery (cycle numbering, code-owned envelope, latest/handoff cap) and
-its MECHANICAL refusals (verdict without evidence · verdict contradicting the ledger · unknown /
-missing plan checks · failing verdicts without findings); the read-only permission layer
-(`deny_write_tools` kills file-writes outright — even inside the freeze boundary, with no human
-prompt — while the shell keeps its in-boundary autonomy for RUNNING checks); the `file_vet_report`
-MCP tool end-to-end incl. bound-item scoping; `reset_vet_thread` (vet forgets: previous cycle's
-thread retired + slot cleared, no-op on cycle 1); tool registration; and the vet preamble's
-read-only contract. Self-cleaning (tempdirs). No daemon needed.
+A verdict without evidence, or contradicting the ledger, is refused. Vet's file-writes are dead
+outright — even inside the freeze boundary — while its shell keeps autonomy to RUN checks.
 
 Run: PYTHONPATH=. python -m scripts.test_bv_s4
 """
@@ -85,7 +79,7 @@ def make_repo(tmp: Path) -> Path:
 
 def _lenses(d) -> None:
     """The three standing lenses, owed on every cycle before the report will write
-    (verification-model §3). Not what this suite is testing — just the bar it now has to clear."""
+    Not what this suite is testing — just the bar it now has to clear."""
     for ln in A.STANDING_LENSES:
         A.record_lens(d, lens=ln, probed="read the diff through this lens")
 
@@ -129,8 +123,7 @@ def test_report_machinery(tmp: Path, repo: Path) -> None:
     A.record_verification(d, repo, check="beta-check", how="read module.py",
                           result="beta() returns 'BETA' uppercase", passed=False,
                           note="expected 'beta', got 'BETA'")
-    # Every failing check owes a diagnosis before the report will write (verification-model §5) —
-    # the report is the last moment anyone can still be asked where it broke.
+    # Every failing check owes a diagnosis before the report will write.
     A.record_diagnosis(d, check="beta-check", where="module.py:8",
                        why="beta() upper-cases its return value")
 
@@ -185,8 +178,8 @@ def test_readonly_permissions(tmp: Path) -> None:
     fn = build_can_use_tool(approve, cwd=wt, write_boundary=[wt],
                             deny_write_tools=VET_READONLY_NUDGE)
     r = _decide(fn, "Write", {"file_path": str(wt / "f.py"), "content": "x"})
-    # `in`, not `==`: every refusal also carries the kernel's running tally of refused calls, so the
-    # invariant here is that vet's own reason is the one given — not that it is the whole message.
+    # `in`, not `==`: a refusal also carries the kernel's tally, so the invariant is that vet's
+    # reason is the one given.
     ok("Write denied even INSIDE the freeze boundary",
        type(r).__name__ == "PermissionResultDeny" and VET_READONLY_NUDGE in r.message)
     r = _decide(fn, "Edit", {"file_path": str(wt / "f.py"), "old_string": "a", "new_string": "b"})
@@ -271,7 +264,7 @@ def test_preamble_and_registration() -> None:
 
 
 def test_scope_vs_ops() -> None:
-    """§2.1 — the declared authorization scope is checked against the STAGED OPS. The
+    """The declared authorization scope is checked against the STAGED OPS. The
     reserved/delegable split is declared by the agent it constrains, so on its own it is an honour
     system; this is the code that makes the obvious lie refusable."""
     print("authorization scope vs staged ops (§2.1)")
@@ -287,8 +280,8 @@ def test_scope_vs_ops() -> None:
     ok("RESERVED scope passes through unchecked (it already reaches the owner)",
        A.scope_mismatch("roadmap-scope", intent) == "")
     ok("no staged ops → nothing to contradict", A.scope_mismatch("doc-sync", []) == "")
-    # The live case that motivated it: dropping `--csv` from d-reporting + rewriting its signal
-    # row was filed as `doc-sync` (item b229793bcf9a, 2026-07-27). A deputy would have granted it.
+    # The case that motivated it: a real behaviour change filed as `doc-sync` would have been
+    # granted.
     ok("the 2026-07-27 mislabel would now be refused",
        A.scope_mismatch("doc-sync", [{"doc": "project-prd", "section": "Deliverables",
                                       "op": "update", "content": "drop --csv"}]) != "")

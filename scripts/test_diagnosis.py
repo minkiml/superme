@@ -1,19 +1,7 @@
-"""Vet diagnoses; build remedies (verification-model design §5, stage 3).
+"""Vet diagnoses; build remedies.
 
-The defect this closes: a failed check said "exit 1" and the next build cycle started by finding
-the failure again — re-deriving what the vetter had already established minutes earlier. A failure
-now carries where it broke, why, and what could not be determined, and that reading leads the next
-cycle's work order.
-
-Two rules give it teeth, and both are pinned here: the vet report is REFUSED while a failing check
-has no diagnosis this cycle, and a diagnosis is a separate ledger entry from the verdict — so a
-kernel-run failure can be diagnosed without an agent rewriting a machine verdict.
-
-The one thing vet must never record is the FIX. If it names the change, the next cycle implements
-vet's idea and vet then grades its own design; that rule lives in the skill and the tool copy, and
-this suite pins that both say it.
-
-Self-cleaning: temp item folders. No daemon, no spine, no network.
+A failure carries where it broke and what could not be determined, so the next cycle does not
+re-derive it. Vet must never name the FIX — it would then grade its own design.
 
 Run: PYTHONPATH=. python -m scripts.test_diagnosis
 """
@@ -80,7 +68,7 @@ def _fail(item: Path, check: str, **kw) -> None:
 
 def _lenses(d) -> None:
     """The three standing lenses, owed on every cycle before the report will write
-    (verification-model §3). Not what this suite is testing — just the bar it now has to clear."""
+    Not what this suite is testing — just the bar it now has to clear."""
     for ln in _arts.STANDING_LENSES:
         _arts.record_lens(d, lens=ln, probed="read the diff through this lens")
 
@@ -165,8 +153,7 @@ def test_the_report_refuses_an_undiagnosed_failure():
     r = _arts.write_vet_user_report(item, None)
     text = Path(r["path"]).read_text()
     ok("…and once diagnosed it writes", "## What didn't hold" in text)
-    # The section is MACHINE-authored off the ledger (slice 4). Vet writes the rest of this report,
-    # so a red result has to arrive here regardless of what vet chose to say about it.
+    # MACHINE-authored off the ledger: a red result arrives regardless of what vet chose to say.
     ok("the failure leads with what STOPPED being true, not with a check id",
        "an expense recorded with an explicit date keeps that date** — did not hold" in text)
     ok("…and carries the located source the reader will actually open",

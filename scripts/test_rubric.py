@@ -1,19 +1,7 @@
-"""A check may carry a rubric (verification-model design §2, stage 4).
+"""A check may carry a rubric.
 
-The defect this closes: a check had exactly one bar — a binary `expect` line. Plenty of real
-checks want an exit code AND a judgment about what was printed, and squeezing that into one
-sentence produced the unfalsifiable `expect` the soft flags were invented to catch. A rubric holds
-several criteria, each judged and RECORDED separately, so a failure names which one missed rather
-than reporting "2 of 3".
-
-Two rules are enforced rather than asked for, because a partial record and a partial pass look
-identical from outside: every planned criterion must be accounted for, and any missed criterion
-fails the check. A rubric is the bar, not a score.
-
-The design's other rule — no quotas ("find at least two unhandled inputs" manufactures findings) —
-cannot be mechanically checked, so it lives in the plan skill and this suite pins that it is said.
-
-Self-cleaning: temp item folders. No daemon, no spine, no network.
+One binary `expect` line is how an unfalsifiable expectation gets written. Every criterion must
+be accounted for and any missed one fails: a rubric is the bar, not a score.
 
 Run: PYTHONPATH=. python -m scripts.test_rubric
 """
@@ -86,7 +74,7 @@ def _rubric(item: Path) -> list[str]:
 
 def _lenses(d) -> None:
     """The three standing lenses, owed on every cycle before the report will write
-    (verification-model §3). Not what this suite is testing — just the bar it now has to clear."""
+    Not what this suite is testing — just the bar it now has to clear."""
     for ln in _arts.STANDING_LENSES:
         _arts.record_lens(d, lens=ln, probed="read the diff through this lens")
 
@@ -186,9 +174,8 @@ def test_the_reader_sees_which_criterion_missed():
     _arts.record_verification(item, None, check="suite", how="ran", result="exit 0", passed=True)
     _lenses(item)
     text = Path(_arts.write_vet_user_report(item, None)["path"]).read_text()
-    # The score left the vet report with the rest of the per-check table; it rides the Proof row,
-    # criterion by criterion, where the Task tab shows it. What the REPORT owes is that the rubric
-    # check came back red at all — machine-authored, so vet cannot write around it.
+    # The score rides the Proof row, criterion by criterion. What the REPORT owes is that the
+    # check came back red at all, machine-authored.
     ok("a missed rubric reaches the owner's report as a failure",
        "## What didn't hold" in text and "cli.py:31" in text)
     ok("…and the criteria themselves stay judged one by one on the record",
@@ -201,8 +188,8 @@ def test_the_reader_sees_which_criterion_missed():
     ok("the Proof row carries the judged criteria", len(v["criteria"]) == 3)
     planned = next(v for r_ in rows for v in r_["verified"] if v["check"] == "suite")
     ok("…and a check with no rubric carries none", planned["criteria"] == [])
-    # Found while writing this suite: a `covers:` naming a task the plan never declared routed the
-    # row to a bucket nothing read, so the check vanished from Proof entirely.
+    # A `covers:` naming an undeclared task routes the row to a bucket nothing reads, so the check
+    # vanishes from Proof.
     ok("a check covering an undeclared task is shown item-wide, never dropped",
        any(v["check"] == "err-msg" for r_ in rows if r_["task"] == "" for v in r_["verified"]))
 

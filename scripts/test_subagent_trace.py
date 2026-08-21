@@ -1,18 +1,7 @@
 """Sub-agent attribution in the execution trace.
 
-Four SuperMe phase skills delegate: `plan` fans out Explore readers, `investigate` one subagent per
-question, `vet` one per check (haiku), `retrofit`/`project-init` one per subsystem. Those children's
-tool calls arrive on the PARENT's event stream, interleaved — so a trail that drops the SDK's
-`parent_tool_use_id` renders three parallel readers as one confused agent, and a "why did this run
-fail" diagnosis cannot tell whose Bash was denied.
-
-This suite pins the whole path: the SDK field survives translation (`Status`/`ToolResult`), both
-trails store and return it (`run_event` for Activity/diagnosis, `run_artifact` for the work-item),
-the archived `execution.md` and the diagnosis-tool render indent a child under its spawn, the FE
-pairing hands the row a `depth`, and an Agent call with no recognizable type key falls back to its
-DESCRIPTION rather than the useless literal "agent".
-
-Self-cleaning (tempdir spine). No daemon needed.
+Children's tool calls arrive interleaved on the PARENT's stream, so a trail that drops the SDK's
+`parent_tool_use_id` renders three parallel readers as one confused agent.
 
 Run: PYTHONPATH=. python -m scripts.test_subagent_trace
 """
@@ -72,8 +61,7 @@ def test_spawn_label() -> None:
        (kind, head, detail) == ("subagent", "Agent", "Subagent (superme-dev:capture)"))
     ok("the legacy `Task` tool name maps identically",
        runs_svc._artifact_desc("Task", {"subagent_type": "Explore"})[2] == "Subagent (Explore)")
-    # The real defect this replaced: 2 of 24 recorded spawns had no type key and read "Agent - agent"
-    # — a row saying an agent ran an agent.
+    # The defect this replaced: a spawn with no type key rendered as an agent running an agent.
     _, _, d = runs_svc._artifact_desc("Agent", {"description": "Map how the loop driver fires"})
     ok("no type key → the spawn's own description names the work",
        d == "Subagent (Map how the loop driver fires)")
@@ -81,8 +69,8 @@ def test_spawn_label() -> None:
     ok("...and with nothing at all it still says a SUB-AGENT ran, never 'agent'", d2 == "Subagent")
     _, _, long = runs_svc._artifact_desc("Agent", {"description": "x" * 200})
     ok("the inner text is capped (a description is a sentence, not a payload)", len(long) <= 60)
-    # `vet` fans out on haiku and `plan` on sonnet BY SKILL INSTRUCTION. Recording the override is
-    # what makes "was the instruction followed" answerable from the trail rather than from faith.
+    # Tiers are chosen BY SKILL INSTRUCTION, and recording the override makes "was it followed"
+    # answerable from the trail.
     _, _, m = runs_svc._artifact_desc("Agent", {"subagent_type": "Explore", "model": "haiku"})
     ok("a model override rides along inside the parens", m == "Subagent (Explore · haiku)")
     _, _, nom = runs_svc._artifact_desc("Agent", {"subagent_type": "Explore"})
@@ -180,13 +168,12 @@ def test_trace_tab_panes() -> None:
 
 
 def test_runs_pane_sees_every_run(tmp: Path) -> None:
-    """The Runs pane groups by RUN, so a run that recorded no CALL must still appear — otherwise
-    the pane silently answers "this item had 17 runs" when it had 34. The live case that exposed
-    it: every `deputy` run (20+ real calls, written to run_event only) and every `compact` run."""
+    """The Runs pane groups by RUN, so a run that recorded no CALL must still appear.
+
+    Otherwise it answers "17 runs" for an item that had 34."""
     print("the item's Runs pane sees every run, and the duplicate trail is retired")
     sp = _spine_at(tmp / "s3.db")
-    # One live run per item is a DB invariant (idx_run_one_live), so these are sequential — which is
-    # also the real shape: build finishes, then the deputy judges what it produced.
+    # One live run per item is a DB invariant, so these are sequential — which is the real shape.
     build = sp.start_run("repoX", feature="build", item_id="itemC")
     sp.log_run_event(repo_id="repoX", kind="tool", name="Read", run_id=build, item_id="itemC")
     sp.finish_run(build, tokens=0)
@@ -210,9 +197,7 @@ def test_runs_pane_sees_every_run(tmp: Path) -> None:
     ok("...which the wire type must allow, or the whole response 500s",
        "prompt" in ArtifactKind.__args__ and "reply" in ArtifactKind.__args__)
     modal = (ROOT / "web/frontend/src/features/dev/WorkItemModal.tsx").read_text()
-    # A run number alone says nothing about what ran. The header names the FEATURE in words, and
-    # a chat turn is further qualified by the phase it happened in — 'chat' is the one kind that
-    # occurs in every phase, so the phase is what tells two of them apart.
+    # A run number says nothing about what ran, so the header names the FEATURE and the phase.
     ok("the group header names WHAT the run was", "RUN_KIND" in modal
        and "deputy: 'deputy judgment'" in modal
        and "meta?.feature === 'chat' && meta.phase ? `${meta.phase}:${kind}`" in modal)
@@ -221,10 +206,9 @@ def test_runs_pane_sees_every_run(tmp: Path) -> None:
 
 
 def test_compacted_build_thread_reloads_its_skill() -> None:
-    """Build REMEMBERS: cycle 1 invokes `superme-dev:build`, later cycles resume that thread with
-    the procedure already in the transcript and skip the call. A compaction can cut the procedure
-    away — and the unchanged "Run superme-dev:build" line will not make an agent re-read something
-    it believes it already has. So the trigger must say what CHANGED."""
+    """Build REMEMBERS, so later cycles resume a thread that already holds the procedure.
+
+    A compaction can cut that away, and an unchanged trigger will not make an agent re-read it."""
     print("a compacted build thread is told to re-invoke its skill")
     from superme_agent.core.kernel_speech import build_loop_trigger
     normal = build_loop_trigger("it1", "T", 2, "…report…")
@@ -241,13 +225,13 @@ def test_compacted_build_thread_reloads_its_skill() -> None:
 
 
 def test_api_error_is_a_fault_not_a_success() -> None:
-    """Build run 804 (2026-07-30): the whole trail was `prompt` + one "API Error: 529 Overloaded",
-    and it was stamped `outcome=success`, then VETTED. The SDK surfaces that as assistant text, not
-    an exception, so `turn_error` stayed False and the cycle read as a clean advance."""
+    """An upstream error arrives as assistant TEXT, not an exception.
+
+    So a turn whose whole output was one API error raised nothing, and the cycle was stamped a
+    success and then vetted."""
     print("an API error that arrives as text is a fault, not a successful cycle")
-    # R1 moved this judgment out of loop.py into the ONE classifier every runner shares
-    # (core/faults.py, exercised in depth by scripts/test_faults.py). What this suite still owns is
-    # the loop-side consequence: whatever the classifier says, an empty cycle must not advance.
+    # The judgment lives in the ONE classifier every runner shares. What this suite owns is the
+    # consequence: an empty cycle must not advance.
     from superme_agent.core.faults import classify
     from superme_agent.daemon.services.loop import decide_after_build
     ok("the SDK's own error line is recognized",

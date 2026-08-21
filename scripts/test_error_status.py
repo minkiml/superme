@@ -1,20 +1,7 @@
-"""`error` — the item whose work STOPPED (recovery-resilience R2).
+"""`error` — the item whose work STOPPED.
 
-Before this, a run that died left its item in one of two lies. `awaiting_human` claimed a decision
-was wanted — the owner would open the gate and find no report and no explanation. `active` claimed
-something was working — the board read IN PROGRESS with a frozen timer, which is how an outage
-looked for hours during the 2026-07-30 E2E. Neither said "this stopped".
-
-`error` is that third answer, and it is deliberately NOT the run-level `system_fault` (owner,
-2026-07-31): a system fault is a run that COMPLETED while our machinery misbehaved — review's
-business, the work advanced — while `error` is a run that stopped, so the item stays where it died.
-Never terminal: it is the entry point for Resume (R4) and re-run (R5).
-
-This suite pins: the status is in the vocabulary and outranks every other attention claim, the
-reason is stored and cleared honestly, the loop stops rather than advancing past work that never
-happened, every item runner writes it through the one writer, and the FE renders it red.
-
-Self-cleaning (tempdir work-items). No daemon needed.
+Without it a dead run left two lies: `awaiting_human` claims a decision is wanted, `active`
+claims something is working. Never terminal — it is the entry point for Resume and re-run.
 
 Run: PYTHONPATH=. python -m scripts.test_error_status
 """
@@ -131,8 +118,7 @@ def test_error_outranks_every_other_claim() -> None:
     ok("a missing reason degrades to the plain fact, not a fabricated one",
        bare["buckets"]["error"][0]["reason"] == "the work stopped during vet")
 
-    # A live run must not out-tier a stopped item (an errored item has no live run by definition,
-    # but the ordering is what guarantees it can never be masked).
+    # A live run must not out-tier a stopped item; the ordering is what guarantees it.
     masked = attention.assign([stopped], running_ids={"a"})
     ok("even a stray running row cannot mask an errored item",
        masked["badge"]["tier"] == "error")
@@ -155,14 +141,12 @@ def test_loop_stops_instead_of_advancing() -> None:
     ok("…typed as such, not as system_fault", d["exit"] == "error")
     ok("…carrying R1's own classification verbatim", "529" in d["reason"])
 
-    # R1's ladder already retried this turn up to seven times — a second ladder here would only
-    # multiply the wait, so the old immediate re-vet is gone for THIS cause.
+    # The ladder already retried this turn, and a second one would only multiply the wait.
     ok("no second retry ladder for a stopped turn",
        decide_after_vet(live, evidence={"status": "passed"}, fingerprint="", attempts=[],
                         spent=0, budget=100, turn_error=True, faults=0)["action"] == "error")
 
-    # …but the OTHER fault — a run that finished and recorded nothing — keeps its retry, because
-    # re-running vet IS the cure for a lost ledger, and it is genuinely `system_fault`.
+    # …but a run that finished and recorded nothing keeps its retry: re-running IS the cure.
     d2 = decide_after_vet(live, evidence={"status": "unverified"}, fingerprint="", attempts=[],
                           spent=0, budget=100, turn_error=False, faults=0)
     ok("an empty ledger still retries", d2["action"] == "revet")
@@ -200,8 +184,7 @@ def test_every_item_runner_labels_its_stop() -> None:
     ok("…best-effort: labelling a failure must not itself raise",
        "could not mark %s as error" in runs)
 
-    # Every runner that owns an ITEM. (distill/write/sweep own proposals, not items — they mark the
-    # RUN aborted, which they already did; there is no item to stop.)
+    # Every runner that owns an ITEM. The proposal runners mark the RUN aborted; there is no item.
     ok("background intake stops rather than paging an empty gate",
        'mark_item_error(ctx, context_id, item_id, turn.fault.reason, phase=skill)' in runs)
     ok("the deputy send-back re-run stops the same way",

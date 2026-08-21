@@ -1,16 +1,7 @@
-"""BV-S5 gate test — the loop driver + breakers (build-vet-loop §9 step 5).
+"""The build-vet loop driver and its breakers.
 
-Covers: the attempts ledger (append-only driver decisions + parse-back); the convergence
-fingerprint (§8·O3 — normalized failure signatures: hex/timestamps/long numbers scrubbed, empty
-when green, stable across incidental variation, moved by real change); EVERY branch of the pure
-driver decision `decide_after_vet` (sticky owner holds · CAS pre-check · SuperMe faults retried
-then exited as `system_fault` · stale re-vet · passed→review · budget · convergence by
-APPEARANCE COUNT · the happy build hop — and the invariant that NO branch parks inside the loop);
-the fingerprint's tracked-only scope + the no-progress guard that skips a pointless vet
-altogether; the CAS phase flip; the spine's loop settings (budget default/precedence) +
-the `item_phase_tokens` meter (build+vet only, legacy fallback); start_vet_run's guard chain;
-the `/vet` route registration; taxonomy + skill contracts. Self-cleaning (tempdirs + temp spine
-DB). No daemon needed.
+Every branch of the pure decision `decide_after_vet`, plus the invariant no branch may break:
+none of them parks inside the loop. Convergence is counted by appearance, not by equality.
 
 Run: PYTHONPATH=. python -m scripts.test_bv_s5
 """
@@ -69,7 +60,7 @@ def _d(**kw) -> dict:
 
 def _lenses(d) -> None:
     """The three standing lenses, owed on every cycle before the report will write
-    (verification-model §3). Not what this suite is testing — just the bar it now has to clear."""
+    Not what this suite is testing — just the bar it now has to clear."""
     for ln in A.STANDING_LENSES:
         A.record_lens(d, lens=ln, probed="read the diff through this lens")
 
@@ -130,8 +121,7 @@ def test_fingerprint_scope(tmp: Path) -> None:
     print("fingerprint scope — tracked content only (2026-07-30)")
     repo = make_repo(tmp / "fps")
     fp0 = A.repo_fingerprint(repo)
-    # A vet run's own litter: coverage files, temp dbs, logs. UNTRACKED, and therefore invisible —
-    # counting it made a vet stale its own evidence, the same false positive that wedged close (D5).
+    # A vet run's own litter is untracked, and counting it made vet stale its own evidence.
     (repo / ".coverage").write_text("junk")
     (repo / "tmp.log").write_text("noise")
     ok("untracked litter does NOT move the fingerprint", A.repo_fingerprint(repo) == fp0)
@@ -165,17 +155,16 @@ def test_no_progress_guard(tmp: Path, repo: Path) -> None:
     ok("a real build edit counts as movement", L._tree_moved_since_evidence(d, repo) is True)
     (repo / "a.py").write_text("x = 1\n")
 
-    # The second input the tree cannot see: vet grades the tree AGAINST the plan, and plan.md is
-    # not in the worktree. A revision that fixes a broken check must be VETTED, not skipped.
+    # Vet grades the tree AGAINST the plan, which is not in the worktree, so a revision fixing a
+    # broken check must be vetted.
     print("no-progress guard — a revision since the last verdict always re-vets")
     ok("an unrevised plan reads as not-moved", L._plan_moved_since_evidence(d) is False)
     (d / "artifacts" / "plan.md").write_text(
         "# Plan\n\n## Revision r1 — 2026-08-07T10:00:00\n- scope: targeted\n\n## Tasks\n")
     ok("a revision recorded after the last verdict forces a vet",
        L._plan_moved_since_evidence(d) is True)
-    # ...and once a cycle has actually run under that revision, the guard goes quiet again — the
-    # rule is "verify the new plan once", not "never skip again". (Closing the open cycle first is
-    # what the driver does on its way out, and it is what lets the next scaffold open a new one.)
+    # ...and once a cycle has run under that revision the guard goes quiet: verify the new plan
+    # once, not never skip again.
     A.append_cycle_outcome(d, evidence="failed", decision="review", reason="handed over")
     A.scaffold_cycle(d, title="after the revision")
     A.record_verification(d, repo, check="a", how="pytest", result="ok", passed=True)
@@ -228,16 +217,16 @@ def test_depth_none(tmp: Path, repo: Path) -> None:
         "depth: none\nreason: renames a constant, nothing observable changes\nenv: none\n")
     ok("the plan's depth is readable from one place", A.plan_vet_depth(d) == "none")
 
-    # Before: an empty ledger read `unverified`, and the driver failed the item closed — so the
-    # escape hatch the plan gate advertises was a dead end.
+    # An empty ledger reading as failure made the escape hatch the plan gate advertises a dead
+    # end.
     ev = A.evidence_status(d, repo)
     ok("empty ledger under depth:none derives PASSED, not unverified",
        ev["status"] == "passed" and ev["entries"] == 0 and ev["not_required"] is True)
     ok("...so the loop driver advances it to review",
        _d(evidence=ev)["action"] == "review")
 
-    # The authority is the PLAN, not the vetter: with no check ids there is nothing to record
-    # against, and a free-form entry here would drive the loop off something vet invented.
+    # The authority is the PLAN, not the vetter: with no check ids, a free-form entry would drive
+    # the loop off something vet invented.
     try:
         A.record_verification(d, repo, check="looks-fine", how="read", result="ok", passed=True)
         ok("recording under depth:none refused", False, "should have raised")
@@ -245,8 +234,8 @@ def test_depth_none(tmp: Path, repo: Path) -> None:
         ok("recording under depth:none is refused, and names the way to disagree",
            "depth: none" in str(e) and "revise" in str(e))
 
-    # The cycle report says so in the KERNEL's words — an empty §Verification would be
-    # indistinguishable from a vet that gave up.
+    # The KERNEL says so: an empty verification section is indistinguishable from a vet that gave
+    # up.
     A.scaffold_cycle(d, title="t")
     p = A.note_no_verification(d)
     body = Path(p).read_text()
@@ -331,12 +320,12 @@ def test_deferred_authorization(tmp: Path, repo: Path) -> None:
        upd["status"] == "granted" and upd["by"] == "owner" and not A.pending_authorizations(d))
     ok("after grant the deferral lifts — the un-done work is a real FAIL again (rebuild needed)",
        A.evidence_status(d, repo)["status"] == "failed")
-    # A build that requested an authorization still ADVANCES toward vet (BV-A1) — never pages.
+    # A build that requested an authorization still ADVANCES toward vet — never pages.
     bd = decide_after_build({"id": "i", "status": "active", "phase": "build"},
                             outcome="partial", turn_error=False)
     ok("build with a deferral reports partial → advances toward vet", bd["stopping"] is False)
 
-    # BV-A2.3 DENY path: a denied request WAIVES its check so the item can close with the gap on record.
+    # DENY path: a denied request WAIVES its check so the item can close with the gap on record.
     d2 = make_item_dir(tmp, "item-deny")
     plan2 = d2 / "artifacts" / A.artifact_file("plan")
     plan2.write_text("# P\n\n## Vet plan\ndepth: checks\nreason: r\nenv: none\n\n"
@@ -352,7 +341,7 @@ def test_deferred_authorization(tmp: Path, repo: Path) -> None:
     ok("DENY waives the walled check → the rest passes (gap on record)",
        ev2["status"] == "passed" and ev2.get("waived") == ["walled"])
 
-    # BV-A2.3 FLOOR (the delegation gate — the check _do_grant enforces before granting):
+    # FLOOR (the delegation gate — the check _do_grant enforces before granting):
     sp = SystemSpine(db_path=tmp / "auth.db")
     delegated = sp.get_deputy_delegated_authority()
     ok("a sync-to-reality scope is delegated (deputy may grant)", "doc-sync" in delegated)
@@ -388,16 +377,14 @@ def test_p4_permissions() -> None:
        P.approval_signature("Bash", {"command": "git commit -m x"}) == "Bash:git commit"
        and P.approval_signature("Bash", {"command": "git push"}) == "Bash:git push")
     ok("non-Bash tools key by name", P.approval_signature("Edit", {"file_path": "/a"}) == "tool:Edit")
-    # scoped_writes_approve governs Bash too (the intake/research runner's policy): those sessions
-    # keep the REPO cwd, so a throwaway measurement has to name its own folder to be auto-allowed.
-    # Under deny_all there is no human to ask, so without this a research item cannot measure at all.
+    # These sessions keep the REPO cwd, so a throwaway measurement must name its own folder. Under
+    # deny-all there is nobody to ask.
     import asyncio as _aio
     item = _P("/tmp/itemx")
     approve = P.scoped_writes_approve(item, P.deny_all)
 
-    # A deny is now "anything that isn't True" — the fallback hands back the REASON it denied
-    # (permissions: a background run with nobody to ask says so), not a bare False. The invariant
-    # under test is allow-vs-deny; the sentence is not this suite's business.
+    # A deny hands back the REASON, not a bare False. The invariant is allow-versus-deny; the
+    # sentence is not this suite's business.
     def _ask(tool: str, **inp):
         return _aio.run(approve(tool, inp))
 
@@ -427,11 +414,8 @@ def test_decision() -> None:
     ok("terminal item → none", r["action"] == "none")
     r = _d(item={"id": "i", "status": "active", "phase": "build"})
     ok("item off vet (CAS pre-check) → none", r["action"] == "none")
-    # --- The two faults SPLIT at recovery R2 (owner, 2026-07-31). A STOPPED run (turn_error) is
-    # `error`: R1's ladder already retried it up to seven times, so there is nothing left to retry
-    # and the item holds where it died for Resume/re-run. A run that FINISHED but recorded nothing
-    # is still `system_fault`: re-running vet IS the cure for a lost ledger, so it keeps its retry
-    # and still exits to review, because the work itself did advance.
+    # --- the two faults split ----------------------------------------- A STOPPED run has nothing
+    # left to retry; one that recorded nothing keeps its retry.
     r = _d(turn_error=True)
     ok("a stopped vet run → error, held where it died",
        r["action"] == "error" and r["status"] == "error" and r["exit"] == "error")
@@ -444,8 +428,8 @@ def test_decision() -> None:
     r = _d(evidence={"status": "unverified"}, faults=2)
     ok("...and past the cap it also reaches review, not a park",
        r["action"] == "review" and r["exit"] == "system_fault")
-    # Stale: always re-vet. The consecutive cap is RETIRED — the fingerprint no longer counts
-    # untracked files, so a vet run's own test litter can't fake staleness.
+    # Stale: always re-vet. The fingerprint ignores untracked files, so test litter cannot fake
+    # it.
     r = _d(evidence={"status": "stale", "stale_checks": ["a"]})
     ok("stale → re-vet", r["action"] == "revet" and r["status"] == "active")
     r = _d(evidence={"status": "stale"}, attempts=[{"cycle": 1, "decision": "revet"}])
@@ -470,8 +454,8 @@ def test_decision() -> None:
            dict(evidence=failed, fingerprint="f", spent=100, budget=100),
            dict(evidence=failed, fingerprint="f",
                 attempts=[{"fingerprint": "f"}, {"fingerprint": "f"}]))))
-    # Convergence counts APPEARANCES, capped at _MAX_RECURRENCE (3, owner's call): one repeat is
-    # not proof of a wall — build may be closing in while the failure text holds still.
+    # Convergence counts APPEARANCES: one repeat is no proof of a wall, since build may be closing
+    # in.
     r = _d(evidence=failed, fingerprint="ff1",
            attempts=[{"cycle": 1, "decision": "build", "fingerprint": "ff1"}])
     ok("a SECOND appearance still buys a cycle (trials, not one strike)", r["action"] == "build")
@@ -490,8 +474,7 @@ def test_decision() -> None:
        r["action"] == "review" and r["exit"] == "not_converging")
     r = _d(evidence=failed, fingerprint="", attempts=[{"fingerprint": ""}, {"fingerprint": ""}])
     ok("empty fingerprint never trips the guard", r["action"] == "build")
-    # `loop_autorun` is RETIRED (owner, 2026-07-30): build⟷vet is human-free by contract, so a
-    # switch that rested every hop at `awaiting_human` inside the loop had no case it served.
+    # The loop is human-free by contract, so a switch resting every hop inside it served no case.
     ok("no autorun switch survives — the loop never degrades to decide-and-page",
        "autorun" not in _inspect.signature(decide_after_vet).parameters
        and not hasattr(SystemSpine, "get_loop_autorun")
@@ -502,9 +485,8 @@ def test_build_decision() -> None:
     print("decide_after_build — BV-A1 content walls never page mid-loop")
     from superme_agent.daemon.services.loop import decide_after_build
     live = {"id": "i", "status": "active", "phase": "build"}
-    # A content wall is NOT a page: success/partial/blocked/clean_noop all advance toward vet — and
-    # BV-A2: `approval_required` (a deferred authorization) advances too. It surfaces at REVIEW, never
-    # a mid-build page. Only an infra crash stops here.
+    # A content wall is NOT a page: every outcome advances toward vet. Only an infra crash stops
+    # here.
     for oc in ("success", "partial", "blocked", "clean_noop", "exhausted", "stagnated",
                "approval_required", None):
         r = decide_after_build(live, outcome=oc, turn_error=False)
@@ -513,10 +495,8 @@ def test_build_decision() -> None:
     r = decide_after_build(live, outcome="success", turn_error=True)
     ok("turn_error (infra crash) → holds (BV-B will retry; today it pages)",
        r["stopping"] is True and r["klass"] == "infra")
-    # `revise` — the build concluded the PLAN is wrong. It stops the cycle and the DRIVER routes it
-    # to plan. It used to be routed from inside `report_completion` instead, so two writers moved
-    # one transition: the item went to plan and started a plan run, and this branch then logged
-    # `build → vet` on top of it (live, f0bda271d766). One writer, and never a silent advance.
+    # `revise` stops the cycle and the DRIVER routes it. Routed from inside the report instead,
+    # two writers moved one transition.
     r = decide_after_build(live, outcome="revise", turn_error=False)
     ok("outcome='revise' stops the build cycle instead of advancing to vet",
        r["stopping"] is True and r["klass"] == "revise")
@@ -571,7 +551,7 @@ def test_spine_loop_settings(tmp: Path) -> None:
        and sp.effective_loop_budget("r", None) == 123_000)
     sp.set_loop_budget(None)
     ok("clearing returns the default", sp.get_loop_budget() == 500_000)
-    # BV-A2.2: delegated deputy authority — default = the sync-to-reality set, settable per-system.
+    # Delegated deputy authority — default = the sync-to-reality set, settable per-system.
     ok("delegated authority defaults to the sync-to-reality set",
        sp.get_deputy_delegated_authority() == ["doc-sync", "rename-to-shipped", "roadmap-mark-done"])
     sp.set_deputy_delegated_authority(["doc-sync"])
@@ -686,9 +666,8 @@ def test_start_guards(tmp: Path) -> None:
                len(calls2) == 1 and "plan.md" in calls2[0] and "vet-report" not in calls2[0])
         finally:
             L._begin_run, L._run_background_build = real_begin, real_build
-        # Continue-build (BV-A1) was RETIRED 2026-07-31 together with its trigger: since "the
-        # loop never parks", no build ever rests at `awaiting_human` with a paged reason, so the
-        # entry point had no reachable caller. A stopped build is `error` + Resume (see test_resume).
+        # The loop never parks, so no build rests at a paged reason and this entry point had no
+        # caller.
     asyncio.run(run())
 
 
@@ -698,8 +677,7 @@ def test_registration() -> None:
     # Read the schema, not app.routes: how FastAPI stores an included router is private
     # and has changed, while the generated document is the contract.
     paths = set(app.openapi()["paths"])
-    # `/vet` and `/plan` collapsed into ONE `/run` (owner, 2026-07-31): one door onto the
-    # dispatcher both already shared, so a phase can never be missing a firer again.
+    # One door onto the dispatcher both already shared, so no phase can be missing a firer.
     ok("POST /dev/work-items/{item_id}/run is registered", "/dev/work-items/{item_id}/run" in paths)
     ok("...and the per-phase doors it replaced are gone",
        "/dev/work-items/{item_id}/vet" not in paths and "/dev/work-items/{item_id}/plan" not in paths)

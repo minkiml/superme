@@ -1,12 +1,7 @@
-"""BV-S3 gate test — session kinds: the explicit phase→session map (build-vet-loop §9 step 3).
+"""Session kinds: the explicit phase-to-session map.
 
-Covers: the role map (intake narrates · build remembers · vet forgets) is total over both kinds'
-pipelines and fails loud off it; item.md role slots (`session_<role>`) write/read/insert, legacy
-`session_id` fallback + NULL-on-slot-write; the computed `session_id` follows the phase — and the
-INTAKE THREAD SURVIVES build entry (the retirement accident this step removes); ws.py's
-resolve_item_session decision function (slot pick, mint, legacy cwd-implied adoption, redirect
-semantics); lifecycle helpers see every thread; preset titles carry the role.
-Self-cleaning (tempdirs). No daemon needed.
+Intake narrates, build remembers, vet forgets. The map is total over both kinds' pipelines and
+fails loudly off it, and the intake thread survives build entry.
 
 Run: PYTHONPATH=. python -m scripts.test_bv_s3
 """
@@ -36,8 +31,7 @@ def ok(name: str, cond: bool, detail: str = "") -> None:
 
 def test_role_map() -> None:
     print("role map (§1.3)")
-    # The spine's phases + each kind's ‹WORK›. Research has no fresh-perspective boundary anywhere,
-    # so its whole life is one intake thread; the retired `report` phase is gone from the map.
+    # Research has no fresh-perspective boundary, so its whole life is one intake thread.
     want = {"triage": "intake", "plan": "intake", "review": "intake", "close": "intake",
             "build": "build", "vet": "vet", "investigate": "intake"}
     ok("every pipeline phase has a role",
@@ -94,8 +88,8 @@ def test_slots(tmp: Path) -> None:
        dev.read_work_item(root, wid)["session_id"] is None)
     dev.set_work_item_session(root, wid, "sid-review", slot="review")
 
-    # THE RULE, second half: the SAME phase again resumes its own thread. This is the whole point —
-    # a revise round sends the item back and forward, and review must remember its own last pass.
+    # THE RULE, second half: the same phase resumes its own thread, because a revise round sends
+    # the item back and forward.
     dev.set_work_item_phase(root, wid, "plan")
     ok("back at plan (a revise round): plan's OWN thread returns",
        dev.read_work_item(root, wid)["session_id"] == "sid-plan")
@@ -145,8 +139,8 @@ def test_legacy(tmp: Path) -> None:
     ok("no stale legacy shadow at review (fresh mint)",
        dev.read_work_item(root, wid)["session_id"] is None)
 
-    # An item IN FLIGHT when sessions went per-phase carries the retired shared `intake` slot.
-    # It must keep its thread at every intake phase — and lose it the moment a real slot is written.
+    # An item carrying the retired shared slot keeps its thread at every intake phase, and loses
+    # it once a real slot is written.
     root2 = tmp / "devroot-preslit"
     wid2 = dev.create_work_item(root2, "pre-split item", kind="implementation")["id"]
     md2 = root2 / "work-items" / wid2 / "item.md"
@@ -216,9 +210,10 @@ def test_resolve(tmp: Path) -> None:
 
 
 def test_reentry_delta(tmp: Path) -> None:
-    """The other half of the per-phase-session rule. Resuming gives the phase its own memory; this
-    is what stops that memory from OUTRANKING the disk. Measured live 2026-08-13: a review resumed
-    its thread over a rewritten investigation and reported "nothing has changed"."""
+    """The other half of the per-phase-session rule.
+
+    Resuming gives the phase its own memory; this stops that memory OUTRANKING the disk. A review
+    resuming over a rewritten investigation would otherwise report that nothing had changed."""
     print("a re-entered phase is told what changed since IT last ran")
     sp = SystemSpine(db_path=tmp / "reentry.db")
     repo, wid = "r-reentry", "abc123def456"
@@ -258,8 +253,7 @@ def test_reentry_delta(tmp: Path) -> None:
     ok("...and an unparseable one is not silently treated as epoch",
        _arts.changed_since(item, "whenever") == [])
 
-    # The trigger. Silence is the correct output for a first entry; naming files is the correct
-    # output for a re-entry, and "be careful" would be neither.
+    # The trigger: silence for a first entry, named files for a re-entry. "Be careful" is neither.
     plain = kernel_speech.intake_trigger("review", wid, "T")
     ok("first entry: the thin trigger, unchanged", plain.strip().endswith('("T").')
        and "\n" not in plain)
@@ -275,9 +269,8 @@ def test_reentry_delta(tmp: Path) -> None:
        "do not conclude that nothing changed" in re_entry)
     ok("the trigger is still dropped from replay (prefix match survives the appended block)",
        _is_noise({}, kernel_speech.intake_trigger("plan", wid, "T", got)))
-    # EVERY skill the intake runner can be fired with, or the owner opens that phase's session and
-    # reads the kernel's order to itself as their own first message. The list carried only
-    # plan+triage for months because the others grew runners later.
+    # EVERY skill the intake runner can fire, or the owner opens that session and reads the
+    # kernel's order as their own first message.
     for sk in ("triage", "plan", "investigate", "review", "close", "itemize"):
         ok(f"…and so is `{sk}`'s — no phase shows its trigger as the owner's words",
            _is_noise({}, kernel_speech.intake_trigger(sk, wid, "T"))

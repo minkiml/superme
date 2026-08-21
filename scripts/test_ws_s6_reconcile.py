@@ -1,11 +1,7 @@
-"""WS-S6 gate (reconcile half) — kill-mid-close healed by startup reconciliation (D8/nimbalyst).
+"""A daemon killed mid-close, healed by startup reconciliation.
 
-Two subcommands around a REAL daemon restart:
-  setup   — builds a dummy work-item up to a live worktree, then manufactures the exact state a
-            daemon dying mid-close leaves behind: item flipped terminal(completed) but the
-            worktree dir still on disk, no execution.md snapshot, and a run row stuck 'running'.
-  verify  — after the daemon restart: the worktree dir is gone (branch kept), execution.md was
-            re-snapshot, and the stuck run was released to 'aborted'. Then cleans everything up.
+`setup` manufactures the exact leftover state; `verify` asserts the restart cleaned it. Two
+subcommands because a real restart has to happen between them.
 
 Run: PYTHONPATH=. python -m scripts.test_ws_s6_reconcile setup
      (restart the daemon)
@@ -22,8 +18,7 @@ from pathlib import Path
 
 B = "http://127.0.0.1:8787"
 CTX = "dummy"
-# This suite MUTATES the repo it points at: `git reset --hard`, `git clean -fd`, branch
-# deletion. Name a throwaway one, and never a repo holding work you want.
+# This suite MUTATES the repo it points at: reset, clean, branch deletion. Name a throwaway one.
 REPO = Path(os.environ.get("SUPERME_TEST_REPO") or "~/superme-test-repo").expanduser()
 if not (REPO / ".git").is_dir():
     raise SystemExit(f"SUPERME_TEST_REPO is not a git repo: {REPO}")

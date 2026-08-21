@@ -1,13 +1,7 @@
-"""WS-S5 gate test (LIVE half) — real phase sessions on the dummy repo. COSTS TOKENS.
+"""Real phase sessions driven by a live agent. COSTS TOKENS.
 
-Drives the PRD S5 gate items that need a live agent: a real triage turn at session birth (the
-orient block lands in the transcript EXACTLY ONCE — a resumed second turn must not re-inject it);
-a background plan run that emits plan.md with a ## Tasks checklist, ends with a structured
-completion report (outcome persisted on the run row), leaves the item awaiting_human, and has a
-latest checkpoint banked (the agent's own or the daemon's fallback). Self-cleaning: the work-item
-(still pre-build) is hard-deleted at the end.
-
-Run with the daemon up: PYTHONPATH=. python -m scripts.test_ws_s5_live
+The orient block lands in the transcript EXACTLY once: a resumed second turn must not re-inject
+it. Needs a running daemon.
 """
 
 import asyncio

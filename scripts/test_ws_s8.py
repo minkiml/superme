@@ -1,13 +1,7 @@
-"""WS-S8 gate test (unit half) — compaction runtime mechanics (PRD stage S8/D11).
+"""Compaction runtime mechanics, without a daemon or an LLM.
 
-Covers, without a daemon or LLM: the floor-aware config guard (a trigger the incompressible
-floor would exceed is refused; per-session floors RAISE the effective trigger); the trigger
-decision (below-trigger / defer latch / attempts cap / back-off all block; over-trigger fires);
-the pure effectiveness verdict (real pre/post tokens vs min-gain; no boundary = ineffective);
-strike accumulation semantics; and the spine config round-trip with defaults. The LIVE half
-(real session on the dummy repo: checkpoint-before-boundary order in the trace, real verdict
-numbers, two-strike back-off → awaiting_human, cold-start from the banked checkpoint) runs
-separately.
+A trigger the incompressible floor would exceed is refused, and a per-session floor raises the
+effective one. The effectiveness verdict is pure: no boundary means ineffective.
 
 Run: PYTHONPATH=. python -m scripts.test_ws_s8
 """
@@ -81,23 +75,19 @@ def test_verdict() -> None:
     ok("no boundary recorded = ineffective",
        not C.judge_effectiveness(None, 30)["effective"]
        and not C.judge_effectiveness({}, "auto")["effective"])
-    # AUTO: judged against RECLAIMABLE (pre − floor), not the total, and with the post side
-    # restated onto the pre side's basis — `preTokens` includes the floor, `postTokens` does not.
-    # A preload-heavy session (floor 10k of 100k) shrinking to 5k really lands at 15k, so it
-    # reclaimed 85k of 90k = 94% → effective; the flat rule would agree here but not below.
+    # Judged against RECLAIMABLE with both sides on one basis: a preload-heavy floor is not shed.
     v = C.judge_effectiveness({"preTokens": 100_000, "postTokens": 5_000}, "auto",
                               floor_tokens=10_000)
     ok("auto: judged by reclaimable, post restated onto the floor-inclusive basis",
        v["effective"] and v["mode"] == "auto" and v["reclaimable"] == 90_000
        and v["post_tokens_with_floor"] == 15_000 and v["reclaimed_ratio"] == 0.94)
-    # A bloated session (floor 5k) shrinking 100k→60k really lands at 65k: reclaimed 35k of 95k
-    # = 37% → STRIKE, even though its flat gain (40%) would have passed the old 30% rule.
+    # A bloated session's floor is not shed, so a flat gain that passes the old rule still
+    # strikes.
     v = C.judge_effectiveness({"preTokens": 100_000, "postTokens": 60_000}, "auto",
                               floor_tokens=5_000)
     ok("auto: bloated session's mediocre reclaim = STRIKE despite 40% flat gain",
        not v["effective"] and v["reclaimed_ratio"] < C.AUTO_RECLAIM_FRACTION)
-    # The basis bug this fix closes: with the raw post, an 87%-of-reclaimable compaction recorded
-    # 1.09 — a ratio above 1.0 is proof the two numbers were not comparable.
+    # A ratio above 1.0 is proof the two numbers were not comparable.
     v = C.judge_effectiveness({"preTokens": 120_661, "postTokens": 12_025}, "auto",
                               floor_tokens=21_297)
     ok("auto: the real 2026-07-28 compaction no longer scores above 1.0",
@@ -155,7 +145,7 @@ def test_compaction_notice() -> None:
 
 
 def test_session_memory(tmp: Path) -> None:
-    """T5 — a session with no work-item has no checkpoint folder and no artifacts, so
+    """A session with no work-item has no checkpoint folder and no artifacts, so
     `session-memory/<sid>.md` is the ONLY thing that survives its compaction."""
     print("session memory (general sessions)")
     from superme_agent.core import artifacts as A
@@ -164,8 +154,8 @@ def test_session_memory(tmp: Path) -> None:
     p = A.session_memory_path(root, "sess-1")
     ok("the path is derived from the session id — nothing to store a pointer in",
        str(p).endswith("dev/session-memory/sess-1.md"))
-    # The AGENT writes this file (no item tools in a general session, so no `write_checkpoint`),
-    # which is why there is no kernel-side writer to call here — this is what the skill produces.
+    # The AGENT writes this file: a general session has no item tools, so there is no kernel
+    # writer.
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text("## Working on\nw1\n\n## Decisions\n—\n\n## Remaining\nr1\n\n## Notes\n—\n")
     got = A.read_session_memory(root, "sess-1")
@@ -179,8 +169,7 @@ def test_session_memory(tmp: Path) -> None:
     ok("the read is char-capped like every other artifact read",
        len(A.read_session_memory(root, "sess-1", char_cap=100)["text"]) == 100
        and A.read_session_memory(root, "sess-1", char_cap=100)["truncated"])
-    # The notice a general session gets: no item folder, so it must NOT send the thread to
-    # "the item's artifacts" — the banked memory is all there is.
+    # A general session has no item folder, so the notice must not point at one.
     from superme_agent.core import kernel_speech as KS
     gen = KS.compaction_notice(str(p), has_artifacts=False)
     ok("general notice drops the item-artifacts fallback",
@@ -190,7 +179,7 @@ def test_session_memory(tmp: Path) -> None:
 
 
 def test_forced_trigger(monkey_cfg, fills: dict) -> None:
-    """T5 — the owner's manual "compact now" rides the SAME decision, threshold bypassed."""
+    """The owner's manual "compact now" rides the SAME decision, threshold bypassed."""
     print("manual compaction (force)")
     monkey_cfg({"trigger_pct": 90, "by_kind": {}, "min_gain_pct": 30})
     C._state.clear()
@@ -229,8 +218,7 @@ def test_config_roundtrip(tmp: Path) -> None:
 
 
 def main() -> None:
-    # Route the two spine reads `due`/`effective_trigger` make at stubs, so no daemon spine (and
-    # no real run history) is touched: the config, and the session's last recorded fill.
+    # Route the spine reads at stubs, so no daemon spine and no real run history is touched.
     cfg_holder: dict = {}
     fills: dict = {}
 

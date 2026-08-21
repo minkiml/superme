@@ -1,18 +1,9 @@
-"""BV-S8pre gate test — the pre-step-8 fix batch (playground-e2e-blockers F0/F1/F2/F8-residual).
+"""Four fixes that a live walk-through surfaced, all checkable offline.
 
-Covers, offline (no daemon, no tokens):
-  F0 · a client resume naming a session with NO stored row is dangling → the turn mints fresh
-       (`_live_resume` semantics + its wiring into the ws turn path);
-  F1 · `triage_ran` reads the `triaged_at` stamp — written only by `set_triage_classification` —
-       not the old kind+body tautology an inbox push already satisfied (setter idempotency, tool
-       stamping, phase guard, gate-brief check both ways);
-  F2 · the review merge is phase-gated: the route 409s outside `review` (and still reaches its
-       ordinary refusals AT review); the FE Merge button renders review-only;
-  F8 · background plan/resolve runs mount the dev MCP server (same as the loop runners) — the
-       run_turn call actually carries `extra_mcp_servers={"dev": ...}`.
+A resume naming an unknown session mints a fresh one; `triage_ran` reads a stamp rather than a
+tautology an inbox push already satisfied; merge is phase-gated; background runs mount dev tools.
 
-Self-cleaning (tempdirs; monkeypatched module globals restored). Run:
-PYTHONPATH=. python -m scripts.test_bv_s8pre
+Run: PYTHONPATH=. python -m scripts.test_bv_s8pre
 """
 
 import asyncio
@@ -39,7 +30,7 @@ def _norm(text: str) -> str:
     return re.sub(r"\s+", " ", text)
 
 
-# ------------------------------------------------------------------ F0: dangling resume
+# ------------------------------------------------------------------ dangling resume
 def test_f0_dangling_resume() -> None:
     print("F0 — dangling msg.resume mints fresh")
     from superme_agent.daemon.routers.ws import _live_resume
@@ -51,7 +42,7 @@ def test_f0_dangling_resume() -> None:
        "turn_resume = _live_resume(msg.resume, resumed)" in src)
 
 
-# ------------------------------------------------------------------ F1: triaged_at stamp
+# ------------------------------------------------------------------ triaged_at stamp
 def test_f1_triaged_stamp(tmp: Path) -> None:
     print("F1 — triage_ran reads the triaged_at stamp")
     dev = DevKnowledgeService()
@@ -92,9 +83,8 @@ def test_f1_triaged_stamp(tmp: Path) -> None:
                                           bound_item_id=iid)
 
     wid3 = dev.create_work_item(root, "f1 tool probe", kind="implementation")["id"]
-    # Triage NAMES the item in the same call that classifies it, so the stamp rides with a title.
-    # Scale rides in the same call as the kind (kind_profiles.ITEM_SCALES) — one judgment, one
-    # recording surface — so a classification without it is refused rather than defaulted.
+    # Triage names, classifies and scales in ONE call — one judgment, one recording surface — so a
+    # classification without scale is refused, never defaulted.
     r = asyncio.run(tool_for(wid3)({"item_id": wid3, "title": "Probe the triage stamp",
                                     "kind": "implementation", "scale": "standard",
                                     "scale_reason": "touches the run path in two places"}))
@@ -113,7 +103,7 @@ def test_f1_triaged_stamp(tmp: Path) -> None:
        r.get("is_error") and not item4.get("triaged_at"), str(r))
 
 
-# ------------------------------------------------------------------ F2: merge phase gate
+# ------------------------------------------------------------------ merge phase gate
 def test_f2_merge_gate(tmp: Path) -> None:
     print("F2 — the review merge is review-phase-only")
     from fastapi import HTTPException
@@ -142,8 +132,8 @@ def test_f2_merge_gate(tmp: Path) -> None:
             except HTTPException as e:
                 ok(f"merge in `{phase}` → 409",
                    e.status_code == 409 and "review-gate action" in str(e.detail), str(e.detail))
-        # AT review the phase gate opens — the route proceeds to its ordinary refusals
-        # (here: no branch), proving the gate keys on phase, not on anything else.
+        # AT review the gate opens and the route reaches its ordinary refusals, proving it keys on
+        # phase.
         items["i1"] = {"id": "i1", "phase": "review"}
         try:
             merge("i1")
@@ -155,31 +145,22 @@ def test_f2_merge_gate(tmp: Path) -> None:
         GR.contexts = real_contexts
 
     fe = _norm(Path("web/frontend/src/features/dev/WorkItemModal.tsx").read_text())
-    # Was: assert the FE's own `disabled={health.merged || review_mode !== 'strict' || !prOpen}`.
-    # Slice 6 moved that rule SERVER-SIDE — the owner's input was that activation must be computed
-    # once, and the landing rule was being encoded twice (here, and in the gate that enforces it).
-    # The invariant now is that the component READS `active`, and the rule it used to hold is gone.
-    # The Merge BUTTON is gone (owner, 2026-08-03): it posted the identical `advanceWorkItem`
-    # request as the review gate's Approve while skipping Approve's locks, so the duplicate was
-    # also the bypass. What survives is the rule it was originally pinned for — the FE never
-    # re-derives the landing rule; the server computes activation once.
+    # Activation is computed once, SERVER-SIDE, so the component only READS it. The removed button
+    # skipped Approve's locks.
     ok("the FE never re-derives the landing rule",
        "review_mode !== 'strict'" not in fe and "prOpen" not in fe)
     ok("...and one control performs the gate's act, not two",
        "a.id === 'merge'" not in fe and "merge: () => advanceWorkItem" not in fe)
     # A relevant control is still never hidden — it renders disabled with the server's reason,
-    # because an absent button reads as a missing feature (owner rule, 2026-07-29).
+    # because an absent button reads as a missing feature.
     ok("...while the git controls that remain carry the server's reason as their tooltip",
        "disabled={!pr.active}" in fe and "title={pr.reason}" in fe)
-    # There is NO owner-facing freshness sync (2026-08-01). Sync happens at the three moments that
-    # matter — the build agent mid-build, the merge act at Approve (path-overlap aware), and
-    # Resolve-with-Agent for the conflict case — so a manual press only ever paid an unconditional
-    # vet cycle. Button, api fn and route are all deleted; this pins that they stay deleted.
+    # There is NO owner-facing freshness sync: it happens at the three moments that matter.
     ok("no owner-facing freshness sync survives on the Git tab",
        "Sync from" not in fe and "syncWorkItemGit" not in fe)
 
 
-# ------------------------------------------------------------------ F8: background dev MCP
+# ------------------------------------------------------------------ background dev MCP
 class _FakeAgent:
     def __init__(self):
         self.kw = None
@@ -207,8 +188,7 @@ def test_f8_background_mcp(tmp: Path) -> None:
     wid = dev.create_work_item(root, "f8 item", kind="implementation")["id"]
     item_dir = root / "work-items" / wid
 
-    # `scope` is required since the tool-scope table landed — a background run mounts the tools of
-    # the phase it is running, not the whole catalogue (scripts/test_tool_scopes.py owns that pin).
+    # `scope` is required: a background run mounts its phase's tools, not the whole catalogue.
     mount = R._dev_mcp(ctx, ctx.cwd, wid, scope="plan")
     ok("_dev_mcp returns a dev-keyed mount", isinstance(mount, dict) and mount.get("dev"))
 
@@ -249,7 +229,7 @@ def test_f8_background_mcp(tmp: Path) -> None:
         for n, v in saved.items():
             setattr(R, n, v)
 
-    # The loop runners keep their own mount (step 5) — this batch changed plan/resolve only.
+    # The loop runners keep their own mount — this batch changed plan/resolve only.
     loop_src = Path("superme_agent/daemon/services/loop.py").read_text()
     ok("loop runners still mount dev MCP", loop_src.count("**_dev_mcp(") >= 2)
 

@@ -1,16 +1,7 @@
-"""The router shell — routing-audit §3.1 / §6, slice 3. Offline, no daemon, no browser.
+"""The router shell: the path grammar, and the state it replaced.
 
-Two things worth a test, and they are different in kind:
-
-1. **The path grammar round-trips.** `parse` and `build` are each other's inverse for every real
-   address, and every non-address collapses to `/`. This is pure logic, extracted from the source
-   and exercised directly, so a broken matcher fails here rather than in a browser.
-
-2. **The old state is GONE, not shadowed.** §6.3's first invariant is one writer per row: after this
-   slice nothing may hold `active` or `dest` as component state, because two sources for "where am
-   I" is the entire defect being removed. That is a property of the SOURCE, not of any runtime
-   behaviour — a reintroduced `useState` would keep working perfectly while quietly restoring the
-   bug — so it is asserted against the file.
+`parse` and `build` are each other's inverse for every real address. One writer per row is a
+property of the SOURCE — a reintroduced `useState` would work perfectly while restoring the bug.
 
 Run: PYTHONPATH=. python -m scripts.test_router
 """
@@ -33,17 +24,15 @@ def ok(msg: str, cond: bool = True) -> None:
 DEV_TABS = ["pipeline", "workspace", "project", "activity"]
 STATS_TILES = ["tokens", "ops", "learning"]  # `?stats=` — a QUERY overlay, not a path (see below)
 SURFACES = ["activity", "internals"]
-# Sections of the System config popup — a QUERY overlay (`?config=`), like `?stats=`, because the
-# popup opens OVER the surface you were on. Foundations and Config were PAGES until the popup
-# absorbed them, which is why SURFACES lost two entries and LEGACY_* below exists at all.
+# A QUERY overlay, because the popup opens OVER the surface you were on. Two of these were PAGES
+# until it absorbed them.
 CONFIG_SECTIONS = ["general", "learning", "identity", "constitution", "skills", "agents",
                    "psettings", "plearning", "partifacts", "pxray"]
 LEGACY_SECTION = {"/config": "general", "/foundations": "identity"}
 LEGACY_DEV_TAB = {"learning": "plearning", "artifacts": "partifacts", "promptxray": "pxray"}
 PHASES = ["triage", "plan", "build", "vet", "investigate", "review", "close"]
-# Slice 6 re-keyed the drilldown's two segments from `phase/sub` to `tab/sub`: the stepper became a
-# progress bar that is deliberately not clickable, so the address names the TAB you are on. A phase
-# still appears — as the Reports tab's sub.
+# The drilldown's segments are `tab/sub`: the stepper is not clickable, so the address names the
+# TAB. A phase appears as the Reports tab's sub.
 ITEM_TABS = ["quick", "reports", "trace", "git"]
 ITEM_SUBS = ["now", "deputy", "proof", "auth", "runs", "timeline"] + PHASES
 
@@ -98,7 +87,7 @@ def test_grammar() -> None:
         "/", "/activity", "/internals",
         "/repo/test-playground", "/repo/test-playground/core", "/repo/test-playground/dev",
         *[f"/repo/test-playground/dev/{t}" for t in DEV_TABS if t != "pipeline"],
-        # slice 4, re-keyed in slice 6 — the drilldown's three depths plus the PR page
+        # The drilldown's three depths plus the PR page
         "/repo/test-playground/item/abc123",
         *[f"/repo/test-playground/item/abc123/{tb}" for tb in ITEM_TABS],
         "/repo/test-playground/item/abc123/quick/proof",
@@ -111,8 +100,8 @@ def test_grammar() -> None:
         assert build(parse(a)) == a, f"{a} → {build(parse(a))}"
     ok(f"all {len(addresses)} real addresses round-trip parse→build unchanged")
 
-    # Canonicalisation, not 404s. Each of these renders something real; the URL is rewritten to the
-    # one true form so a view never has two addresses.
+    # Canonicalisation, not 404s: each renders something real, rewritten so a view has one
+    # address.
     ok("`/repo/x/dev/pipeline` canonicalises to the bare `/repo/x/dev`",
        build(parse("/repo/x/dev/pipeline")) == "/repo/x/dev")
     ok("an unknown tab falls back to the workspace rather than 404ing",
@@ -121,14 +110,14 @@ def test_grammar() -> None:
         assert build(parse(junk)) == "/", f"{junk} → {build(parse(junk))}"
     ok("junk paths collapse to `/` (rendering the Nexus under a lying address is the failure)")
 
-    # `activity` is BOTH a nav surface and a dev tab. Two different addresses, no ambiguity — worth
-    # pinning because a flattened route table would have collided them.
+    # `activity` is BOTH a nav surface and a dev tab: two addresses, and a flattened table would
+    # have collided them.
     ok("`/activity` is the global feed, `/repo/x/dev/activity` is the repo's — distinct",
        parse("/activity") == ("surface", "activity") and parse("/repo/x/dev/activity") == ("dev", "x", "activity"))
 
 
 def test_item_grammar() -> None:
-    """Slice 4, re-keyed in slice 6. The drilldown's segments carry a meaning the dev tabs don't: an
+    """The drilldown's segments carry a meaning the dev tabs don't: an
     ABSENT tab is not a default someone chose, it is `whatever the drilldown opens on`."""
     print("item drilldown — tab/sub segments, and `pr` sharing the tab slot")
     ok("a bare item address leaves the tab UNSET",
@@ -140,26 +129,24 @@ def test_item_grammar() -> None:
     ok("Reports' sub is a PHASE — the one place a phase is still addressable",
        parse("/repo/x/item/i7/reports/build") == ("item", "x", "i7", "reports", "build"))
 
-    # `pr` occupies the tab slot. It is safe ONLY because both vocabularies are closed and `pr` is
-    # not a tab — the assertion that keeps a future tab named `pr` from silently eating the page.
+    # `pr` occupies the tab slot, safe only because both vocabularies are closed and `pr` is not a
+    # tab.
     ok("`/item/:id/pr` is the PR page, never a tab", parse("/repo/x/item/i7/pr") == ("pr", "x", "i7"))
     ok("...and `pr` is not in the tab vocabulary, which is what makes that unambiguous",
        "pr" not in ITEM_TABS)
 
     ok("an unknown tab drops to the default rather than 404ing",
        build(parse("/repo/x/item/i7/bogus")) == "/repo/x/item/i7")
-    # A sub is meaningless without its tab: there is no `/item/i7//proof`, so the segment is dropped
-    # rather than being silently re-homed onto whatever tab happens to be open.
+    # A sub is meaningless without its tab, so it is dropped rather than re-homed onto whatever is
+    # open.
     ok("a sub without a valid tab is dropped, not re-homed",
        build(parse("/repo/x/item/i7/bogus/proof")) == "/repo/x/item/i7")
     ok("a sub that isn't in the vocabulary is dropped, keeping the tab",
        build(parse("/repo/x/item/i7/quick/nope")) == "/repo/x/item/i7/quick")
     ok("`/repo/x/item` with no id is not an address at all — it collapses to `/`",
        build(parse("/repo/x/item")) == "/")
-    # Trailing junk TRUNCATES to the valid prefix rather than collapsing home — the same rule the
-    # dev tabs already follow (`/dev/project/extra` -> `/dev/project`). Canonicalisation then
-    # rewrites the address to what is actually on screen, which is the property that matters: the
-    # owner keeps the view they asked for and the URL stops lying about it.
+    # Trailing junk TRUNCATES to the valid prefix, then canonicalises: the owner keeps the view
+    # and the URL stops lying.
     ok("trailing junk truncates to the deepest valid address, consistent with `/dev/:tab`",
        build(parse("/repo/x/item/i7/quick/proof/extra")) == "/repo/x/item/i7/quick/proof"
        and build(parse("/repo/x/dev/project/extra")) == "/repo/x/dev/project")
@@ -169,19 +156,16 @@ def test_slice5_grammar() -> None:
     """Slice 5. Two shapes that look unlike each other but are the same idea: something that used to
     be an overlay flag now has an address."""
     print("stats tiles + the Pipeline tab's second pane")
-    # The tiles live in the QUERY (`?stats=tokens`), not a path segment. §6.1 tabled `/stats/:tile`
-    # and its rationale — the owner links to a token breakdown — is met either way; what a path
-    # ALSO did was displace the surface underneath, so a tile opened from Activity left the Nexus
-    # rendering behind the scrim. An overlay belongs over where you are. Pinned because reverting to
-    # a segment would look like a tidy-up and would silently bring that back.
+    # The tiles live in the QUERY, not a path segment: a path displaced the surface underneath,
+    # and an overlay belongs over where you are.
     ok("no tile is a PATH — a drill-in must not replace the surface it opens over",
        all(build(parse(f"/stats/{t}")) == "/" for t in STATS_TILES))
     app_src = (SRC / "App.tsx").read_text()
     ok("...they are read from `?stats=` instead", "useParam('stats')" in app_src)
     ok("...and closing is just dropping the param", "setParam('stats', null)" in app_src)
 
-    # `workspace` is a PEER of `pipeline` in the tab slot, not a segment under it — §6.1's call, on
-    # the grounds that you are looking at one pane or the other, never at one inside the other.
+    # `workspace` is a PEER of `pipeline`: you look at one pane or the other, never one inside the
+    # other.
     ok("the board is `/dev/workspace`, a sibling of `/dev`",
        parse("/repo/x/dev/workspace") == ("dev", "x", "workspace"))
     ok("...and the bare `/dev` is still the capture queue, so the landing pane did not move",
@@ -206,8 +190,7 @@ def test_config_overlay() -> None:
     app_src = (SRC / "App.tsx").read_text()
     ok("...it is read from `?config=` instead", "useParam('config')" in app_src)
 
-    # Foundations and Config were pages; three dev tabs were tabs. An old link must land on the
-    # same CONTENT, not silently on the Nexus, so arrival rewrites the address in place.
+    # An old link must land on the same CONTENT, so arrival rewrites the address in place.
     ok("`/foundations` and `/config` are no longer surfaces",
        "foundations" not in SURFACES and "config" not in SURFACES)
     ok("...and each rewrites to the section that absorbed it",
@@ -218,8 +201,7 @@ def test_config_overlay() -> None:
     ok("...so none of the three parses as a dev tab any more",
        all(build(parse(f"/repo/x/dev/{t}")) == "/repo/x/dev" for t in LEGACY_DEV_TAB))
 
-    # Every section must be renderable: an addressable section with no pane is a compile error,
-    # which is the property that stops the two lists drifting apart.
+    # An addressable section with no pane is a compile error, which stops the two lists drifting.
     cfg = (SRC / "features/config/SystemConfig.tsx").read_text()
     ok("the pane registry is exhaustive over the section vocabulary",
        "Record<ConfigSection, (repo: OrbitRepo, label: string) => ReactNode>" in cfg)
@@ -251,17 +233,16 @@ def test_port_matches_source() -> None:
     ok("STATS_TILES matches", [t.strip().strip("'") for t in tiles.split(",") if t.strip()] == STATS_TILES)
     phases = re.search(r"export const PHASES = \[(.*?)\] as const", src, re.S).group(1)
     ok("PHASES matches", [t.strip().strip("'") for t in phases.split(",") if t.strip()] == PHASES)
-    # ITEM_SUBS SPREADS PHASES in the source (`[...'now','deputy','proof', ...PHASES]`), which is the
-    # point: Reports' subs ARE the phases, and a phase added in one place must not need adding twice.
+    # Reports' subs ARE the phases, spread from one list, so adding a phase never means adding it
+    # twice.
     subs = re.search(r"export const ITEM_SUBS = \[(.*?)\] as const", src, re.S).group(1)
     ok("ITEM_SUBS spreads PHASES rather than re-listing them",
        "...PHASES" in subs
        and [x.strip().strip("'") for x in subs.split(",") if x.strip() and "PHASES" not in x]
            == ["now", "deputy", "proof", "auth", "runs", "timeline"])
 
-    # The PR page is a PATH now but must still be its own document: forked at the root, above App,
-    # so the tab carries none of the cockpit's polling. Both halves are asserted — being addressable
-    # and being a separate document are independent decisions and §3.1 wants both.
+    # Forked at the root, so the tab carries none of the cockpit's polling. Addressable and
+    # separate are independent decisions.
     entry = (SRC / "main.tsx").read_text()
     ok("the PR page still forks ABOVE App rather than becoming a route inside the shell",
        "route.name === 'pr' ? <PrPage" in entry)
@@ -288,14 +269,8 @@ def test_old_state_is_gone() -> None:
     ok("the dev tab is a prop from the route, not local state",
        "const [tab, setTab]" not in ws and "onTabChange" in ws)
 
-    # Still local BY DESIGN this slice (§6.2 / slice 4) — asserted so their eventual removal is a
-    # deliberate change to the inventory rather than something that quietly drifted.
-    # Slice 4 retired these two. `focusItem` existed ONLY to hand an id across a mount boundary —
-    # precisely the job a path does natively — and `reviewId` was the board's private copy of "which
-    # item is open". Asserted as ABSENT for the same reason as `active`/`dest`: reintroducing either
-    # would work perfectly while restoring the two-writers defect.
-    # Matched on the DECLARATION and the prop, not the bare word: both files still name `focusItem`
-    # in a comment explaining what replaced it, and that history is worth keeping.
+    # Asserted ABSENT: reintroducing either would work perfectly while restoring the two-writers
+    # defect. Matched on the DECLARATION, since a comment still names it.
     ok("`focusItem` is gone — the drilldown is an address, not a handed-over request",
        "const [focusItem," not in app and "focusItemId=" not in app)
     ok("gotoItem navigates straight to the item's address",
@@ -316,9 +291,7 @@ def test_old_state_is_gone() -> None:
     ok("`drill` is no longer component state — the URL carries it",
        "const [drill, setDrill]" not in app and "const drill = useParam('stats')" in app)
 
-    # The LAST row of §6.1 still holding local state, and deliberately: `/run/:runId` needs a
-    # `GET /runs/{run_id}` that does not exist (the feed is paged, so a run outside the loaded page
-    # cannot be resolved). Pinned so that adding the route and the address stays a decision.
+    # The last local state, deliberately: the address needs a route that does not exist yet.
     act = (SRC / "features/activity/GlobalActivity.tsx").read_text()
     ok("`openRun` is still local — /run/:runId is blocked on a per-run GET (see §12.3)",
        "const [openRun, setOpenRun]" in act)

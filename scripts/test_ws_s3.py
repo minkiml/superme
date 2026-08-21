@@ -1,10 +1,7 @@
-"""WS-S3 gate test — inbox routing & WorkGraph (workspace-workflow PRD stage S3).
+"""Inbox routing and the work graph.
 
-Covers the PRD gate: all three relation types spawn correctly (blocking/parallel AUTO-PUSH and
-land the brief in `preliminary/`; spawn waits for the owner's push); the children-terminal scan
-reports the parent unclosable; the blocking push pauses the parent; the graph builds correct
-nodes/edges/topo; the cycle guard trips on a manufactured loop; the inbox row survives push as
-trace. Exercises the REAL create_inbox_item tool factory (async) — no daemon needed. Self-cleaning.
+Blocking and parallel relations auto-push; spawn waits for the owner. A blocking push pauses the
+parent, the cycle guard trips on a manufactured loop, and the inbox row survives push as trace.
 
 Run: PYTHONPATH=. python -m scripts.test_ws_s3
 """
@@ -157,8 +154,8 @@ def test_tool_autopush(tmp: Path) -> None:
     dev = DevKnowledgeService()
     root = tmp / "toolroot"
     parent = dev.create_work_item(root, "tool parent", kind="implementation")["id"]
-    # The daemon injects the first-kick trigger; record what it's asked to triage (J: without it an
-    # auto-pushed child lands at triage/active with no run and wedges its parent there forever).
+    # Record what it is asked to triage: without it an auto-pushed child wedges its parent
+    # forever.
     kicked: list[str] = []
     tool = _create_inbox_item(store=store, context_id=CTX, dev_root=root,
                               fire_triage=lambda cid: (kicked.append(cid), True)[1])
@@ -168,18 +165,15 @@ def test_tool_autopush(tmp: Path) -> None:
 
     r = asyncio.run(call({"title": "bad", "body": "x", "relation": "blocking"}))
     ok("relation without parent rejected", "BOTH" in tool_result_text(r))
-    # WHAT AN INBOX ITEM IS, enforced at the one boundary that mints them: a thing that becomes a
-    # WORK ITEM when pushed. Caught live — a research ruling of "keep the file" was filed as an
-    # implementation ticket whose own body read "no file change needed; this records the decision".
-    # Checked AFTER the shape faults above: a malformed branch-off is the more basic mistake.
+    # WHAT AN INBOX ITEM IS: a thing that becomes a WORK ITEM when pushed. Checked after the shape
+    # faults.
     r = asyncio.run(call({"title": "a decision, not work", "body": "the owner ruled: keep it"}))
     ok("a row that cannot name which machinery it becomes is refused",
        "not an inbox item" in tool_result_text(r))
     ok("…and the refusal says where such a thing DOES belong, so it is not merely blocked",
        "belongs in the record that holds it" in tool_result_text(r))
-    # THE JOIN, not the file. Requiring the field at the tool while a skill still tells its agent to
-    # omit it is a run that fails on its own instructions — each file correct, the join wrong. Every
-    # skill that can reach `create_inbox_item` is checked against the boundary it calls.
+    # THE JOIN, not the file: a tool requiring what a skill says to omit fails on its own
+    # instructions.
     from pathlib import Path as _P
     _callers = [f for f in _P("superme_agent/harness/plugins").rglob("SKILL.md")
                 if "create_inbox_item" in f.read_text()]
@@ -230,9 +224,10 @@ def test_tool_autopush(tmp: Path) -> None:
 
 
 def test_push_tool(tmp: Path) -> None:
-    """The general session's OPERATE act: start an item the owner points at. Pins the refusals
-    (a phase session, an unknown id, a second push) as much as the happy path — an agent that can
-    start work has to be unable to start the wrong work."""
+    """The general session's OPERATE act: start an item the owner points at.
+
+    The refusals matter as much as the happy path — an agent that can start work has to be
+    unable to start the wrong work."""
     print("push_inbox_item tool (general-session path)")
     store = DevStore(tmp / "push.db")
     dev = DevKnowledgeService()

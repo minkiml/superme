@@ -1,16 +1,9 @@
 """Does the token surface add up?
 
-Every figure the dashboard shows comes from one table, through several breakdowns, onto four
-surfaces. Each breakdown is a different way of slicing the SAME money, so each must re-sum to the
-same total — and the moment one doesn't, the dashboard is confidently wrong rather than visibly
-broken, which is the failure mode worth a suite of its own.
-
-Read-only: it opens the live spine, computes, and asserts. Nothing is written.
+Each breakdown slices the same money, so each must re-sum to the same total. When one does not,
+the dashboard is confidently wrong rather than visibly broken. Read-only.
 
     PYTHONPATH=. python -m scripts.test_token_coherence
-
-Exits non-zero on an ARITHMETIC failure. A malformed row that costs no money is reported as a
-warning, not a failure — it is a data defect to fix at leisure, not a reason to hold a gate red.
 """
 
 import sqlite3
@@ -46,8 +39,8 @@ def main() -> int:
             "SELECT COALESCE(SUM(tok_input),0) i, COALESCE(SUM(tok_cache_creation),0) cc,"
             " COALESCE(SUM(tok_cache_read),0) cr, COALESCE(SUM(tok_output),0) o, COUNT(*) n FROM run"
         ).fetchone()
-        # Rows the day axis cannot place. They carry no tokens (a run that never reported usage), so
-        # the money still reconciles — but the run COUNT on the trend would be short by this many.
+        # Rows the day axis cannot place carry no tokens, so the money reconciles — but the
+        # trend's run count is short by this many.
         odd = c.execute(
             "SELECT id, feature, status, started_at,"
             " tok_input+tok_cache_creation+tok_cache_read+tok_output AS tok"

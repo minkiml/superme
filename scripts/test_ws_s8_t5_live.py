@@ -1,20 +1,7 @@
-"""T5 gate test (LIVE) — compaction on a session with NO work-item. COSTS TOKENS (~$0.1 on
-sonnet: one substantive turn + the handoff turn + the compaction summarization + one turn after).
+"""Compaction of a session with NO work-item. COSTS TOKENS.
 
-What it proves, end to end on a real general session:
-  1. `/compact` typed by the owner is INTERCEPTED by the kernel — not passed through to the CLI —
-     and rides the same sequence the threshold trigger uses, threshold bypassed.
-  2. The handoff turn runs and the thread writes `session-memory/<sid>.md` itself, with the four
-     sections, carrying the owner's unfulfilled ask (the one field the whole design turns on).
-  3. The compaction opens a plain SESSION run (item_id NULL) — the path that did not exist before
-     T5 — and it claims zero usage, because none was measured.
-  4. The read-back resolves: while the compaction is the session's newest finished run, the notice
-     is owed and points at the file; after one real turn it self-clears.
-
-Self-cleaning: the session is deleted and its memory file removed. Run rows are kept (never delete
-logs). Run with the daemon up on the NEW code:
-
-    PYTHONPATH=. python -m scripts.test_ws_s8_t5_live
+`/compact` typed by the owner is intercepted rather than passed to the CLI, and the compaction
+opens a plain session run claiming zero measured usage. Needs a running daemon.
 """
 
 import asyncio
@@ -62,7 +49,7 @@ def q(sql: str, args: tuple = ()) -> list[dict]:
 
 
 async def turn(prompt: str, *, resume: str | None = None) -> dict:
-    """One GENERAL turn — no work_item_id, so this is exactly the session shape T5 adds."""
+    """One GENERAL turn — no work_item_id, so this is the session shape with no item."""
     out = {"text": "", "session_id": None}
     async with websockets.connect(WS, max_size=None) as ws:
         await ws.send(json.dumps({"type": "turn", "prompt": prompt, "context_id": CTX,
@@ -109,10 +96,8 @@ def main() -> None:
     ok("session-memory/<sid>.md exists — the general session's only disk copy",
        memfile.exists(), str(memfile))
     text = memfile.read_text()
-    # The four field NAMES are the contract — not the heading level, not their order. Nothing
-    # parses this file; its reader is the next agent on this thread. (Live finding: the skill's
-    # worked example dictates the layout far more strongly than its prose, so the prose was made
-    # to point AT the example rather than describe a second format beside it.)
+    # The field NAMES are the contract, not their order: nothing parses this file, and its reader
+    # is the next agent on the thread.
     low = text.lower().replace("_", " ")
     ok("all four fields present — the same content contract as a work-item checkpoint",
        all(h in low for h in ("working on", "decisions", "remaining", "notes")))

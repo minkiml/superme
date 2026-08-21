@@ -1,21 +1,9 @@
-"""BV-S5 gate test (LIVE half) — the build⟷vet loop driving itself end-to-end. COSTS TOKENS
-(≈3 real agent runs on the dummy repo: vet-fail → build-fix → vet-pass). Drives what the offline
-suite can't: the daemon-side driver actually chains background runs off evidence_status(), the vet
-report hands off to a REAL build cycle that fixes the code, and the loop exits at the review gate
-on its own — zero human actions between the launch and the page.
+"""The build-vet loop driving itself end to end. COSTS TOKENS.
 
-Claims verified live:
-  · POST /dev/work-items/{id}/vet launches the loop; the item is left untouched by hand after;
-  · cycle 1: a real vet run FAILS the planted defect, files vet-report-1.md, ledger goes red;
-  · the driver flips vet→build and a build cycle (handed the report) fixes the worktree code;
-  · the driver flips build→vet, a FRESH vet run passes, and the item lands at review /
-    awaiting_human — the loop's only happy exit;
-  · attempts.md carries the driver's decisions (build → review) and loop events hit the dev log;
-  · run history shows the vet/build features; the cycle-1 vet thread was retired (vet forgets).
+A real vet fails a planted defect, a real build fixes it, and the loop exits at review on its
+own — no human action between the launch and the page.
 
-Artifacts are script-written stand-ins for the gate advances (s6_live pattern). Self-cleaning:
-abandon + repo/knowledge restore. Run with the daemon up:
-PYTHONPATH=. python -m scripts.test_bv_s5_live
+Needs SUPERME_TEST_REPO and a running daemon.
 """
 
 import os
@@ -32,8 +20,8 @@ from superme_agent.core import git_layer
 
 B = "http://127.0.0.1:8787"
 CTX = "dummy"
-# This suite MUTATES the repo it points at: `git reset --hard`, `git clean -fd`, branch
-# deletion. Name a throwaway one, and never a repo holding work you want.
+# This suite MUTATES the repo it points at: reset, clean, branch deletion.
+# Name a throwaway one, never a repo holding work you want.
 REPO = Path(os.environ.get("SUPERME_TEST_REPO") or "~/superme-test-repo").expanduser()
 if not (REPO / ".git").is_dir():
     raise SystemExit(f"SUPERME_TEST_REPO is not a git repo: {REPO}")

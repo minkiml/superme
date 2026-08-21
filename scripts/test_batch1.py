@@ -1,19 +1,9 @@
-"""Batch-1 gate test — the surface fixes after the step-8 playground walk-through.
+"""Surface fixes: the phase guard, the run's session, the Activity column, the board's reflow.
 
-Covers, offline (no daemon, no tokens):
-  · Plan-it phase guard — the `/plan` route 409s outside the `plan` phase (a plan run in triage
-    burned tokens on a self-blocking skill). `/plan` + `/vet` are now ONE `/run`; the rule
-    has one owner, server-side.
-  · run.session_id — `finish_item_run(session_id=...)` attaches the origin session to the item
-    run row, so `delete_session_record`'s `session_fate` labeling reaches it (a NULL session_id
-    made item runs unlabelable). Verified end-to-end: start → finish w/ session → delete → fate.
-  · Activity phase column — RunRow schema carries `phase`; run_history surfaces it; the FE feed
-    renders it.
-  · Card layout — the board REFLOWS its lanes (4 → 2 → 1, measured) rather than scrolling
-    sideways, and clamps the title, so narrow columns no longer wrap titles one word per line.
+A plan run fired outside the plan phase burned tokens on a self-blocking skill, so the rule has
+one owner and it is server-side.
 
-Self-cleaning (temp db; source assertions for the FE-only bits). Run:
-PYTHONPATH=. python -m scripts.test_batch1
+Run: PYTHONPATH=. python -m scripts.test_batch1
 """
 
 import asyncio
@@ -67,9 +57,8 @@ def test_plan_phase_guard(tmp: Path) -> None:
             return asyncio.run(WI.dev_work_item_run(
                 iid, WI.PlanBody(context_id="t"), dev=stub_dev, spine=stub_spine))
 
-        # `/plan` (and `/vet`) were REPLACED by one `/run` on 2026-07-31 — same invariant, one
-        # door: the route must refuse BEFORE opening a run, so a refusal costs zero tokens. The
-        # guard moved into `resume.run_phase`, which is also what the drilldown's button reads.
+        # One door, same invariant: the route must refuse BEFORE opening a run, so a refusal costs
+        # zero tokens.
         import superme_agent.daemon.services.resume as RES
         real_resolve = RES.contexts.resolve
         RES.contexts.resolve = lambda cid, mode: ctx
@@ -95,10 +84,8 @@ def test_plan_phase_guard(tmp: Path) -> None:
     finally:
         WI.contexts = real_contexts
 
-    # The FE no longer decides this. `isPlannable` was deleted 2026-07-31: it was a SECOND writer
-    # of the plannable rule (the first is `services/drilldown.py`, which the drilldown reads), and
-    # nothing rendered it. One rule, one owner — assert the owner still holds it, and that the
-    # duplicate has not crept back into the board surface.
+    # The FE no longer decides this: a second writer of the plannable rule, rendered by nothing.
+    # One rule, one owner.
     dd = _norm(Path("superme_agent/daemon/services/drilldown.py").read_text())
     ok("the launch rule lives server-side, and it is ONE control",
        'runnable = bool(RUNNABLE_PHASES & {phase})' in dd and '_act("run"' in dd)
@@ -149,18 +136,15 @@ def test_fe_surfaces() -> None:
     act = _norm(Path("web/frontend/src/features/activity/GlobalActivity.tsx").read_text())
     ok("Activity renders run.phase", "{r.phase &&" in act and "r.phase}" in act)
     panels = _norm(Path("web/frontend/src/features/dev/panels.tsx").read_text())
-    # The board REFLOWS instead of scrolling sideways: a horizontal scrollbar hides content
-    # behind a gesture nothing on screen advertises. Lanes halve (4 → 2 → 1, never 3, which
-    # strands one lane on a second row) off a MEASURED width, and each lane may shrink to zero
-    # (`minmax(0, 1fr)`) so the grid can never be wider than its container.
+    # The board REFLOWS rather than scrolling sideways, which hides content behind an unadvertised
+    # gesture.
     ok("board reflows its lanes rather than growing a sideways scrollbar",
        "minmax(0, 1fr)" in panels and "boardW >= 716 ? 4 : boardW >= 552 ? 2 : 1" in panels
        and "overflow-x-auto" not in panels)
     ok("card title truncates to one line (4-row card spec)",
        'className="truncate text-[12.5px] leading-snug text-fg"' in panels)
 
-    # The same rule, on the two surfaces that were still breaking it. A pane that cannot fit its
-    # content must SHED, and what it sheds must stay reachable — never clip, never scroll sideways.
+    # A pane that cannot fit its content must SHED, and what it sheds must stay reachable.
     layout = _norm(Path("web/frontend/src/lib/layout.ts").read_text())
     ok("a container is measured by a CALLBACK ref, so one that mounts late is still measured",
        "export function useContainerWidth<T extends HTMLElement>(): [(node: T | null) => void, number]" in layout)
@@ -184,9 +168,8 @@ def test_fe_surfaces() -> None:
     ok("a setting's control wraps below its label rather than crushing it",
        "flex flex-wrap items-center gap-x-4 gap-y-2" in ctl and "min-w-[9rem] flex-1" in ctl)
 
-    # Narrow surfaces SIMPLIFY rather than shrink: what goes is words, what stays is the figure,
-    # the mark and the one thing you would act on. Every dropped word survives in a tooltip or the
-    # drilldown, which is the line between simplifying and hiding.
+    # Narrow surfaces SIMPLIFY: words go, the figure and the actionable mark stay. Every dropped
+    # word survives elsewhere.
     ok("a card in a narrow lane says fill, spend and age, and drops the labels + the model",
        "const tightCards = laneW > 0 && laneW < 215" in panels
        and "{!tight && (model || ctx != null) && (" in panels
@@ -198,12 +181,11 @@ def test_fe_surfaces() -> None:
        "const down = w > 0 && w < 460" in dash and "<Connector label=\"push\" down={down} />" in dash)
     ok("the work-item stat row becomes five marks + five numbers on one line",
        "const chip = (Icon: LucideIcon" in dash and "if (tight) {" in dash)
-    # A picker shows the value IN FORCE. An "inherit" row beside the value it inherits is one
-    # answer wearing two labels, and picking either did the same thing.
+    # A picker shows the value IN FORCE: an inherit row beside it is one answer with two labels.
     pset = _norm(Path("web/frontend/src/features/config/sections/ProjectSettings.tsx").read_text())
     gen = _norm(Path("web/frontend/src/features/config/sections/General.tsx").read_text())
-    # Asserted on the option LISTS, not on the words "Default ·" — the comment explaining why that
-    # row is gone quotes it, and a check its own rationale trips is a check that reads as a bug.
+    # Asserted on the option LISTS: the comment explaining the removal quotes the words, and a
+    # check its own rationale trips reads as a bug.
     ok("no config picker offers a Default row beside the value it defaults to",
        all("const MODEL_OPTS = MODEL_CATALOG.map" in src
            and "const EFFORT_OPTS = EFFORT_CATALOG.map" in src
@@ -214,8 +196,7 @@ def test_fe_surfaces() -> None:
        and "toModelKey(repo.vetModel) || fallbackModel" in pset
        and "toModelKey(sys.deputy_model) || dFallbackModel" in gen)
 
-    # The item's run config is a model + an effort PER ROLE. Listed by hand it was six near-identical
-    # rows; the roles are DATA and the tab is a loop, so a new one is an entry, not a new pair of rows.
+    # The roles are DATA and the tab is a loop, so a new one is an entry, not a new pair of rows.
     ok("the run roles are a list, and the Setting tab renders it",
        "export const RUN_ROLES = [" in panels_src
        and "{RUN_ROLES.map((r) => {" in panels_src

@@ -1,19 +1,7 @@
-"""Re-run — starting a work-item over in place (recovery-resilience R5).
+"""Re-run: starting a work-item over in place.
 
-The last rung of the recovery ladder and the only destructive one. Resume (R4) re-fires a run and
-rewinds nothing; re-run throws the WORK away and keeps the ITEM. What makes it safe to offer is
-exactly which side of that line each thing falls on, so that is what this suite pins:
-
-    identity + relations + the ask   survive, or the work-graph loses an edge and the permanent
-                                     run/event trace orphans onto an id nothing points at
-    the produced work                goes, or the "fresh start" starts holding last attempt's plan
-    the branch and the trace         survive — code is not data, and logs are never deleted
-
-The frontmatter rule is a KEEPLIST, and the test that matters most is the one asserting an
-unclassified field is DROPPED: a clear-list would let a lifecycle field added next month ride
-through a re-run silently, and the item would come back carrying half of its old life.
-
-Self-cleaning (tempdir work-items). No daemon needed.
+Identity and relations survive, the produced work goes, the branch and trace stand. The
+frontmatter rule is a KEEPLIST, so a field added later cannot ride through a re-run unnoticed.
 
 Run: PYTHONPATH=. python -m scripts.test_rerun
 """
@@ -40,8 +28,7 @@ def src(rel: str) -> str:
     return (ROOT / rel).read_text()
 
 
-# A work-item at the END of a full lifecycle — every field the machinery writes, so the keeplist is
-# exercised against real accumulation rather than a hand-picked subset.
+# An item at the END of a full lifecycle, so the keeplist meets real accumulation.
 LIVED = """---
 id: aa11bb22cc33
 root_id: aa11bb22cc33
@@ -116,8 +103,8 @@ def test_keeps_and_clears(dev_root: Path) -> None:
                        ("inbox_id", 237), ("model", "sonnet"), ("effort", "high"),
                        ("autopilot", True), ("created_at", "2026-07-29"),
                        ("git_branch", "item/aa11bb22cc33-budgets"), ("git_base", "main")):
-        # str() on both sides: YAML reads a bare date as `datetime.date`, and the point here is
-        # that the VALUE round-trips, not which Python type it lands as.
+        # `str()` on both sides: the point is that the VALUE round-trips, not which type it lands
+        # as.
         ok(f"`{field}` survives — {'identity/relation' if field in ('title', 'kind', 'wave', 'deliverable', 'cohort', 'inbox_id') else 'owner config or the code line'}",
            str(it.get(field)) == str(val))
 
@@ -147,9 +134,8 @@ def test_entry_and_no_counter(dev_root: Path) -> None:
     ok("…which is what the item now reads as", it.get("phase") == "triage")
     ok("…active, so the entry run has something to run against", it.get("status") == "active")
 
-    # The counter is GONE (owner, 2026-07-31). It only ever existed to explain why an item's files
-    # were younger than its run history — and the soft delete ended that mismatch at the source, by
-    # taking the discarded rows out of the item's own views. A number nobody needs goes stale.
+    # The counter is GONE: the soft delete ended the mismatch it explained, and a number nobody
+    # needs goes stale.
     dev.reset_work_item(dev_root, "bb22cc33dd44")
     disk = (dev_root / "work-items" / "bb22cc33dd44" / "item.md").read_text()
     ok("a re-run writes NO generation field", "generation:" not in disk)
@@ -159,7 +145,7 @@ def test_entry_and_no_counter(dev_root: Path) -> None:
 
 
 def test_soft_delete_split(dev_root: Path) -> None:
-    """The reader split — the heart of the 2026-07-31 redesign. A re-run must leave the ITEM
+    """The reader split. A re-run must leave the ITEM
     looking fresh while the PROJECT's accounting still counts what the attempt cost. Nothing is
     deleted; rows are stamped `discarded_at` and readers choose a side."""
     print("\n[soft delete] the item forgets; the ledger does not")
@@ -179,8 +165,7 @@ def test_soft_delete_split(dev_root: Path) -> None:
         n = sp.discard_item_trace(rid, iid, at="2026-07-31T00:00:00+00:00")
         ok("the re-run stamps the row, it does not delete it", n["runs"] == 1)
 
-        # THE one that matters most: this feeds the loop's budget breaker. Counting a discarded
-        # attempt would hand the fresh one a spent budget and kill it on its first vet.
+        # This feeds the loop's budget breaker: counting a discarded attempt kills the fresh one.
         ok("the LOOP BUDGET no longer counts the discarded attempt",
            sp.item_phase_tokens(rid, iid) == 0)
         ok("the item's Runs pane is empty — it reads as a fresh item",
@@ -321,7 +306,7 @@ def test_wiring() -> None:
     ok("a reset that fires nothing lands at `error`, not `active` with no run",
        "set_work_item_error(" in body)
     ok("the restart leaves a trail the owner can read", '"item.rerun"' in body)
-    # The two halves added 2026-07-31, both pinned here because both are easy to silently lose:
+    # Both halves pinned here because both are easy to silently lose:
     ok("the ROWS are soft-deleted, never removed",
        "discard_item_trace(" in body and "discard_item_events(" in body)
     ok("…and stamped BEFORE the `item.rerun` event, so that event survives unstamped",

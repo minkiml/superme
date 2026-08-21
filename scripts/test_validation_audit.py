@@ -1,15 +1,7 @@
-"""Validation is build's, and its PROOF is vet's (verification-model amendment, 2026-08-07).
+"""Validation is build's, and its PROOF is vet's.
 
-Validation is the builder's self-check and stays build's to run — but written as prose
-(*"full suite: 106/106 pass"*) it cannot be checked by anything: build is both the runner and the
-only witness, and the sentence reads identically whether the suite passed, failed, or never ran.
-So build records each run as DATA, and vet audits the claim on its own pass by re-running the
-command it was given. A false green becomes a finding and goes back into the loop — no human, no
-new phase, no unit tests migrating into vet's own check list.
-
-Covers slice 1: the `## Validation` ```runs machine lane — recorder, reader, and its coexistence
-with the prose bullets the Task tab already reads.
-Self-cleaning (tempdirs). No daemon needed.
+Written as prose, "106/106 pass" reads identically whether the suite passed, failed or never
+ran, and build is both runner and only witness. So build records data, and vet re-runs it.
 
 Run: PYTHONPATH=. python scripts/test_validation_audit.py
 """
@@ -76,9 +68,9 @@ def test_the_command_is_the_identity() -> None:
 
 
 def test_the_machine_lane_and_the_prose_coexist() -> None:
-    """`## Validation` carries BOTH: build's per-task narrative (which the Task tab joins by task
-    id) and the machine lane beside it. Read line-wise, the fence would spill `- result:` and
-    `- passed:` into the untagged bullets and put raw ledger fields on a human surface."""
+    """`## Validation` carries BOTH build's per-task narrative and the machine lane beside it.
+
+    Read line-wise, the fence would spill raw ledger fields onto a human surface."""
     print("machine lane beside prose — each read by its own reader")
     d = item()
     A.record_validation(d, None, command="pytest -q", result="12 passed", passed=True)
@@ -94,7 +86,7 @@ def test_the_machine_lane_and_the_prose_coexist() -> None:
 
 
 def test_an_entry_stands_apart_from_the_one_before_it() -> None:
-    """A blank line between entries (owner, 2026-08-08). Packed back to back, a fence of six records
+    """A blank line between entries. Packed back to back, a fence of six records
     is one wall of text; the parser never sees the gap, so this is free."""
     print("the machine lanes are readable")
     d = item()
@@ -165,9 +157,10 @@ def test_the_suite_is_refused_as_a_check() -> None:
 
 
 def test_an_inherited_check_is_not_the_planner_s_prose() -> None:
-    """The sharpness lint asks the planner to sharpen wording. A `source: library` entry's wording
-    was settled when the repo adopted it — the planner cannot rewrite it, so the flag is a row
-    nobody can act on, printed on every item that cites the entry."""
+    """The sharpness lint asks the planner to sharpen wording.
+
+    An inherited entry's wording was settled when the repo adopted it, so flagging it prints a
+    row nobody can act on."""
     print("the sharpness lint leaves inherited checks alone")
     body = ("# Plan\n\n## Verification plan\ndepth: checks\nreason: r\nenv: none\n\n"
             "### c1\n- proves: it works.\n- traces: t\n- mode: command\n- scenario: s\n"

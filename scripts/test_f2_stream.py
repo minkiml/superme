@@ -1,8 +1,8 @@
-"""F2 live timeline — Stage 1: the item_stream broker + capture_event publish gate.
+"""The item-stream broker and the publish gate that feeds a watching panel.
 
-Offline, no daemon. Proves the in-process pub/sub that lets build/vet turns stream into a watching
-panel: item-scoped delivery, the has_subscribers gate (headless = no framing work), the capture-path
-frame shape, and unsubscribe key cleanup. Run: PYTHONPATH=. python -m scripts.test_f2_stream
+Delivery is item-scoped, and a headless run does no framing work at all.
+
+Run: PYTHONPATH=. python -m scripts.test_f2_stream
 """
 
 import asyncio
@@ -42,8 +42,8 @@ async def main() -> None:
     assert f2["parent_tool_id"] is None, f2
     ok("capture-path frame carries type/item_id/run_id/kind/name/tool_id")
 
-    # A call made INSIDE a sub-agent rides the same channel, carrying WHOSE call it was — the live
-    # panel needs it for the same reason the stored trail does (a fan-out interleaves its children).
+    # A sub-agent's call rides the same channel carrying WHOSE it was, because a fan-out
+    # interleaves its children.
     runs._publish_timeline("itemX", 7, "tool", "Read", "a.py", "tool_2", "spawn_1")
     f3 = await asyncio.wait_for(q.get(), timeout=1)
     assert f3["parent_tool_id"] == "spawn_1" and f3["tool_id"] == "tool_2", f3

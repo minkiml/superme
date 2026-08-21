@@ -1,12 +1,7 @@
-"""WS-S5 gate test (unit half) — phase-session contract & continuity (PRD stage S5).
+"""The phase-session contract and its continuity, without a daemon or an LLM.
 
-Covers, without a daemon or LLM: the run protocol rides ONLY the Current-focus background variant
-(the orient birth-block and the completion-report fence are retired — workflow-renovation-v2 §1);
-the report_completion tool validates its two-group payload and delivers it through the sink;
-the thin (kind,phase) preamble covers every phase and swaps edit boundaries with the worktree;
-worker tool-scoping refuses cross-item and unbound calls on the REAL tool factories; the
-session-end auto-checkpoint banks a fallback and defers to the agent's own; the spine persists a
-run outcome. The LIVE half (real triage turn + background plan on the dummy repo) runs separately.
+The completion tool validates its payload and delivers it through the sink; worker scoping
+refuses cross-item and unbound calls on the REAL factories.
 
 Run: PYTHONPATH=. python -m scripts.test_ws_s5
 """
@@ -75,8 +70,7 @@ def test_report_completion_tool() -> None:
     ok("questions only with needs_user", asyncio.run(call(
         {"machine": {"outcome": "success"},
          "user": {"summary": "s", "next": "n", "questions": [q4]}})).get("is_error") is True)
-    # The four-field shape is the tool's job (A): prose in place of an object, or a question
-    # carrying no recommendation, is refused with a retry-shaped complaint.
+    # The four-field shape is the tool's job: prose in place of an object is refused there.
     ok("a prose question is refused", asyncio.run(call(
         {"machine": {"outcome": "needs_user"},
          "user": {"summary": "s", "next": "n",
@@ -173,8 +167,7 @@ def test_session_count_excludes_agent_threads(tmp: Path) -> None:
     from superme_agent.core.kind_profiles import is_conversation
     from superme_agent.core.spine import SystemSpine
     sp = SystemSpine(db_path=tmp / "s5count.db")
-    # One of every kind the owner can open, plus the two headless ones (build/vet run in a worktree
-    # with no chat surface) and a legacy NULL-kind row.
+    # One of every kind the owner can open, the two headless ones, and a legacy NULL-kind row.
     for i, kind in enumerate(("general", "intake", "onboarding", "diagnosis", "build", "vet")):
         sp.record_session(f"s{i}", "/tmp", mode="dev", repo_id="repoC")
         sp.stamp_session_kind(f"s{i}", kind)

@@ -1,14 +1,7 @@
-"""BV-S6 gate test (LIVE half) — handoff promotion through the real ws seam. COSTS TOKENS
-(2 tiny turns on the dummy repo). Drives what the offline suite can't: the promotion block
-actually rides an intake turn into the REAL transcript (the agent narrates the loop from it),
-the `handoffs_promoted` watermark advances at Result, and a SECOND turn does NOT re-inject
-(exactly one promotion header in the transcript — the per-turn-append scar stays closed).
+"""Handoff promotion through the real socket seam. COSTS TOKENS.
 
-The loop record itself is script-seeded (a two-cycle fail→pass history, s6_live artifact
-pattern) — the loop's own live E2E is bv_s5_live; this probe isolates the §1.4 seam. The item
-stays at triage (intake role — mechanically identical to review for this seam, no worktree
-needed). Self-cleaning: pre-build hard delete. Run with the daemon up:
-PYTHONPATH=. python -m scripts.test_bv_s6_live
+The watermark advances at Result and a SECOND turn does not re-inject: exactly one promotion
+header, ever. Needs SUPERME_TEST_REPO and a running daemon.
 """
 
 import os
@@ -28,8 +21,8 @@ from superme_agent.core import artifacts as A
 B = "http://127.0.0.1:8787"
 WS = "ws://127.0.0.1:8787/ws/agent"
 CTX = "dummy"
-# This suite MUTATES the repo it points at: `git reset --hard`, `git clean -fd`, branch
-# deletion. Name a throwaway one, and never a repo holding work you want.
+# This suite MUTATES the repo it points at: reset, clean, branch deletion.
+# Name a throwaway one, never a repo holding work you want.
 REPO = Path(os.environ.get("SUPERME_TEST_REPO") or "~/superme-test-repo").expanduser()
 if not (REPO / ".git").is_dir():
     raise SystemExit(f"SUPERME_TEST_REPO is not a git repo: {REPO}")

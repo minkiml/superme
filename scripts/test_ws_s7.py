@@ -1,11 +1,7 @@
-"""WS-S7 gate test (unit half) — attention engine + drilldown feeds (PRD stage S7).
+"""The attention engine and the drilldown feeds.
 
-The S7 gate proper is a browser E2E (run 2026-07-16, green: badge orange on awaiting_human ·
-gate answerable from the rendered brief · spawn pushed from the graph · stepper/progress/tokens
-in the drilldown · closeout lands unread and clears on open). This script pins the mechanical
-substrate so regressions stay cheap: bucket assignment strict-priority + exactly-one-bucket ·
-badge = top tier only · seen-stamp semantics (clears unread, never bumps updated_at) · the
-checkpoint feed · workgraph git decoration · terminal items ask nothing at a gate.
+An item lands in exactly one bucket by strict priority, and the badge shows the top tier only. A
+seen-stamp clears unread without ever bumping `updated_at`.
 
 Run: PYTHONPATH=. python -m scripts.test_ws_s7
 """
@@ -57,10 +53,7 @@ def test_attention() -> None:
     ok("unread badge is blue", r2["badge"]["color"] == "blue")
     ok("empty state → no badge", AT.assign([items[1]], set())["badge"] is None)
 
-    # D2 (dogfood 2026-07-29): `active` at a gate with NO live run is a stall, not quiet work —
-    # nothing is moving it and only the owner can. It used to be silent here while the board's own
-    # derivation counted it, so the badge under-reported exactly the wedged items it exists to
-    # surface. One rule, computed here, read everywhere.
+    # `active` at a gate with NO live run is a stall. One rule, computed here, read everywhere.
     stalled = next(x for x in r["buckets"]["needs_you"] if x["id"] == "e")
     ok("active at a gate with no run pages as needs_you", stalled["bucket"] == "needs_you")
     ok("...and says it is STALLED, not a normal gate pause",
@@ -78,13 +71,10 @@ def test_attention() -> None:
 
 
 def test_orphan_reconcile(tmp: Path) -> None:
-    """D3 (dogfood 2026-07-29): the startup reconciler healed the RUN row and left the ITEM.
+    """The startup reconciler healed the RUN row and left the ITEM.
 
-    A daemon restart mid-run flipped `running → aborted`, so the run log stayed honest — but the
-    work-item kept `status='active'` with no run and nothing that would ever start one. Restarting
-    the daemon is routine here, so this quietly stranded items: the one that surfaced had been
-    finished-but-unparked for hours, close report written and gate green, simply never handed back.
-    `reconcile()` now reports WHICH items it orphaned so the caller can park them."""
+    The log stayed honest while the item kept `active` with no run and nothing to start one.
+    `reconcile()` now reports what it orphaned."""
     print("orphan reconcile (D3 — heal the item, not just the run)")
     from superme_agent.core.spine import SystemSpine
     sp = SystemSpine(db_path=tmp / "s.db", system_config=tmp / "sys.yaml",
@@ -109,18 +99,16 @@ def test_orphan_reconcile(tmp: Path) -> None:
     ok("lifespan captures the orphans and parks them",
        "_orphans = app_state.spine.reconcile()" in ls
        and "_reconcile_orphaned_items(_orphans)" in ls)
-    # Recovery R3 replaced parking-at-awaiting_human. That status claims a DECISION is wanted, so
-    # a build stopped by a restart looked identical to one waiting on the owner's judgment — and
-    # the human-free loop needed a click to breathe again. Orphans are now LABELLED `error` (the
-    # honest state: the run stopped) and the phase runs among them are re-fired automatically.
+    # Parking claims a DECISION is wanted, so a restart-stopped build looked like one waiting on
+    # the owner. Orphans are LABELLED `error` and re-fired.
     ok("...to `error`, carrying what stopped them",
        'set_work_item_error(' in ls and "a daemon restart stopped the" in ls)
     ok("...and the phase ones are auto-resumed through the shared service",
        "from .services.resume import resume_item" in ls and "auto-resumed" in ls)
     ok("...skipping terminal items (idempotent)",
        'str(it.get("status")) == "done"' in ls)
-    # The first cut raised at a bad import OUTSIDE the guard and took daemon STARTUP down with it —
-    # a far worse failure than the stranded item it was fixing. Housekeeping is never fatal.
+    # Housekeeping is never fatal: raising outside the guard took daemon STARTUP down, which is
+    # worse than the stranded item.
     ok("...and the whole body is guarded, so housekeeping can't stop the daemon booting",
        'log.exception("orphan reconciliation failed (non-fatal)")' in ls)
     ok("...after the close reconcile, so a mid-close item is finished there first",
@@ -142,7 +130,7 @@ def test_seen_stamp(tmp: Path) -> None:
     after = dev.read_work_item(root, iid)
     ok("a read receipt never bumps updated_at", after["updated_at"] == before["updated_at"])
     ok("id-like fields stay strings on single-item read",
-       isinstance(after["root_id"], str))  # the all-digit-id 500, fixed 2026-07-16
+       isinstance(after["root_id"], str))  # the all-digit-id 500
     dev.set_work_item_terminal(root, iid, "completed")
     it = dev.read_work_item(root, iid)
     ok("terminal + seen = quiet (not unread)",
@@ -157,8 +145,7 @@ def test_terminal_brief(tmp: Path) -> None:
     dev.set_work_item_terminal(root, iid, "abandoned")
     it = dev.read_work_item(root, iid)
     s = GB.gate_state(it, root / "work-items" / iid, root, None)
-    # A terminal item asks nothing: no gate is open and, with the brief's prose gone, that
-    # is now a typed fact rather than a sentence the surface had to find in markdown.
+    # A terminal item asks nothing, and that is now a typed fact rather than a sentence to find.
     ok("terminal → at_gate False + terminal True", not s["at_gate"] and s["terminal"])
 
 

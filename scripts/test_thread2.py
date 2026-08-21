@@ -1,19 +1,9 @@
-"""Thread-2 gate test — auto-triage on push (#120) + the always-stop-but-trivial triage gate.
+"""Auto-triage on push, and the gate that always stops.
 
-Covers, offline (no daemon, no tokens):
-  · The triage runner — `_run_background_triage` is a thin wrapper that drives `_background_intake_run`
-    with `skill="triage"` (shared intake-phase driver, same one `_run_background_plan` uses).
-  · Auto-fire on push — `_fire_auto_triage` opens a `triage` run (phase-stamped) and schedules the
-    background triage; it is BEST-EFFORT: no internal root, an already-running item, or a resolve
-    failure never raises (the push must still succeed) and never double-fires.
-  · The triage skill carries a "## Background runs" section that mandates
-    `set_triage_classification` (the stamp that lifts the gate).
-  · Replay hygiene — the triage trigger phrase is a `_NOISE_PREFIXES` entry, so it's stripped from
-    the session transcript like the plan trigger.
-  · FE — no stale "triage happens in chat" claim survives on the board surface.
+Firing is BEST-EFFORT: a missing root, an already-running item or a resolve failure never raises,
+because the push itself must still succeed — and it never double-fires.
 
-Self-cleaning (no db needed; stubs + source assertions). Run:
-PYTHONPATH=. python -m scripts.test_thread2
+Run: PYTHONPATH=. python -m scripts.test_thread2
 """
 
 import asyncio
@@ -146,8 +136,7 @@ def test_fire_auto_triage() -> None:
 def test_skill_and_sources() -> None:
     print("skill background section + replay hygiene + FE comment")
     skill = Path("superme_agent/harness/plugins/superme-dev/skills/triage/SKILL.md").read_text()
-    # Thread 3 retired the per-skill "## Background runs" narration; the delta that mattered — the
-    # classification stamp that lifts the gate — stayed, and is what this asserts.
+    # The per-skill narration is retired; the classification stamp that lifts the gate stayed.
     ok("triage skill mandates set_triage_classification (the gate stamp)",
        "set_triage_classification" in skill)
 
@@ -159,8 +148,8 @@ def test_skill_and_sources() -> None:
     ok("_is_noise still strips the plan trigger",
        sessions._is_noise({}, 'Run superme-dev:plan for work-item `x` ("t")'))
 
-    # The comment lived on the FE `isPlannable` helper, deleted 2026-07-31 with the helper. The
-    # claim it guarded — triage fires on push, not in chat — is asserted at its real owner above.
+    # The claim it guarded — triage fires on push, not in chat — is asserted at its real owner
+    # above.
     panels = _norm(Path("web/frontend/src/features/dev/panels.tsx").read_text())
     ok("the FE keeps no stale 'triage happens in chat' claim", "triage happens in chat" not in panels)
 

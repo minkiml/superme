@@ -1,20 +1,7 @@
-"""Thread 3 offline suite — run protocol + kernel-speech registry (spec §10 / §12.3).
+"""The run protocol and the kernel-speech registry, both directions.
 
-Covers, both directions of the rewrite (updated for workflow-renovation-v2 slice 1 — the fence
-contracts are RETIRED; run endings are the report_completion / deputy_verdict TOOLS):
-  · the run protocol rides ONLY `work_item_preamble(interactive=False)` (the Current-focus
-    background variant) and names the report_completion tool; no fence contract exists anywhere;
-  · every trigger is THIN: item id + its run-specific payload, none of the old boilerplate
-    (no narration, no inlined completion contract, no "follow the skill's autonomous-run");
-  · resolve keeps its conflict procedure; the learning triggers keep agent names + payloads;
-  · the skills' "## Background runs" sections: present, per-phase deltas intact, narration gone;
-  · every kernel-fired work-item runner mounts the report_completion sink server (and the deputy
-    its verdict server); no runner passes the retired `background=` kwarg to run_turn;
-  · SNAPSHOT: every kernel_speech entry rendered with fixture data is byte-compared against
-    `scripts/prompt_baseline.json` (parity-style). A missing baseline is (re)written; an edit to
-    any registry text is a deliberate re-baseline (delete the file and re-run);
-  · LINT: instruction-shaped markers must not appear in `superme_agent/` outside the registry
-    — the §12.1 admission rule, enforced.
+A trigger carries an item id and its payload, nothing more. Every registry entry is rendered
+against a byte baseline, so editing one is a deliberate re-baseline.
 
 Run: PYTHONPATH=. python scripts/test_thread3.py
 """
@@ -45,7 +32,7 @@ def ok(label: str, cond, detail: str = "") -> None:
     print(f"  ok - {label}")
 
 
-# Narration that must not exist anywhere agent-facing anymore (Thread 3 §0/§2).
+# Narration that must not exist anywhere agent-facing anymore.
 NARRATION = ("HEADLESS", "no human", "never ask questions", "autonomous mode",
              "autonomous-run instructions", "autonomous headless")
 
@@ -62,9 +49,8 @@ def test_run_protocol() -> None:
                                        "kind": "implementation"}, "/dir", interactive=False)
     fg = KS.work_item_preamble("it1", {"title": "T", "phase": "plan",
                                        "kind": "implementation"}, "/dir")
-    # Pin the CHANNEL and its three routes, not the sentence that introduces them. The old pin was
-    # the literal "fired this run", which a copy edit deleting a redundant clause turned red —
-    # the protocol was intact, only its opening had moved to where the fact is used.
+    # Pin the CHANNEL and its routes, not the sentence introducing them: a copy edit turned the
+    # old literal red while the protocol was intact.
     ok("background variant carries the protocol (never-page · assumptions · authorization · ending)",
        "**Run protocol:**" in bg and "## Assumptions" in bg and "request_authorization" in bg
        and "report_completion" in bg)
@@ -149,10 +135,8 @@ def test_runners_flip() -> None:
         "learning": (ROOT / "superme_agent/daemon/services/learning.py").read_text(),
         "deputy": (ROOT / "superme_agent/daemon/services/deputy.py").read_text(),
     }
-    # intake + feedback re-run + auto-close mount report_completion (resolve stays mechanical) —
-    # PLUS `ensure_completion`, the backstop that re-asks a run that ended undeclared, which mounts
-    # the same sink on its nudge turn. Four mounts, and the fourth is the point: pinning the count
-    # at 3 made adding the guarantee read as a regression.
+    # The backstop that re-asks an undeclared run mounts the same sink, and pinning the count
+    # lower made adding it read as a regression.
     ok("intake + feedback + close runners mount the report_completion sink",
        src["runs"].count("make_run_report_server(sink)") == 4)
     ok("the completion backstop exists and re-asks through the same sink",
@@ -175,9 +159,8 @@ def test_runners_flip() -> None:
 def test_skills() -> None:
     print("skills — Background runs sections keep deltas, lose narration")
     deltas = {
-        # Case-insensitive: the skill teaches the verification section throughout without
-        # quoting its heading (the scaffold carries that). Pinning the exact string
-        # made a copy edit read as a lost rule — assert the CONCEPT is still taught.
+        # Assert the CONCEPT is still taught: pinning the exact heading made a copy edit read as a
+        # lost rule.
         "plan": ("Decisions & clarifications", "verification"),
         "vet": ("record_verification", "file_vet_report"),
         "build": ("build-vet-<n>.md", "commit"),
@@ -215,7 +198,7 @@ def test_reader() -> None:
     ok("result is minimal, never an echo", r["content"][0]["text"] == "ok")
 
 
-# ------------------------------------------------------------------ registry snapshot (§12.3)
+# ------------------------------------------------------------------ registry snapshot
 FIXTURE_DIR = Path("/tmp/superme-thread3-fixture")   # FIXED path — it appears inside rendered text
 
 
@@ -257,8 +240,8 @@ def render_registry() -> dict[str, str]:
         "trigger.intake.plan": KS.intake_trigger("plan", "fix1", "Fixture"),
         "trigger.intake.triage": KS.intake_trigger("triage", "fix1", "Fixture"),
         "trigger.vet": KS.vet_trigger("fix1", "Fixture"),
-        # A FIXED path, not the resolved one: the wording is the contract, the install
-        # location is this machine's, and a baseline carrying it would fail everywhere else.
+        # A FIXED path: the wording is the contract, and a baseline carrying this machine's
+        # install location would fail everywhere else.
         "trigger.vet_env_note": KS.vet_env_note("/S/vet_env.sh"),
         "trigger.build_loop": KS.build_loop_trigger("fix1", "Fixture", 2, "REPORT"),
         "trigger.phase_feedback": KS.phase_feedback_trigger("fix1", "Fixture", "plan", "plan",
@@ -272,8 +255,8 @@ def render_registry() -> dict[str, str]:
              "clarification_answers": {"q": "a"}},
             slug="slug", workspace="/ws", existing_path="/rules.md", forge_kit="/fk"),
         "trigger.checkpoint": KS.checkpoint_trigger("fix1"),
-        # T5: the general-session twin — same skill, same content contract, and the write target
-        # named explicitly because there is no item folder and no `write_checkpoint` tool there.
+        # The general-session twin: same skill and contract, with the write target named
+        # explicitly.
         "trigger.checkpoint.session": KS.session_checkpoint_trigger(
             "/k/dev/session-memory/sess-1.md"),
         "trigger.capture": KS.capture_trigger("SLICE"),
@@ -289,7 +272,7 @@ def render_registry() -> dict[str, str]:
         "preamble.work_item.research": KS.work_item_preamble(
             "fix1", {"phase": "plan", "kind": "research", "title": "R"}, str(d)),
         "preamble.general": KS.general_preamble(),
-        # The general session's post-compaction notice (T5). `has_artifacts=False` — no item
+        # The general session's post-compaction notice. `has_artifacts=False` — no item
         # folder to fall back on, so the banked memory is the only surviving copy.
         "preamble.general.compacted": KS.general_preamble() + KS.compaction_notice(
             "/k/dev/session-memory/sess-1.md", has_artifacts=False),
@@ -331,9 +314,8 @@ def test_snapshot() -> None:
        not diff, f"changed: {diff}")
 
 
-# ------------------------------------------------------------------ outside-registry lint (§12.1)
-# Instruction-shaped markers that mean "kernel speech": if one appears in superme_agent/ outside
-# the registry, someone is authoring agent-directed prompt text at a surface again.
+# ------------------------------------------------------ outside-registry lint A kernel-speech
+# marker outside the registry means someone is authoring prompt text at a surface.
 LINT_MARKERS = ("Run superme-dev", "sub-agent (superme-dev", "```completion-report")
 # The registry itself + the replay noise-prefixes that match the triggers
 # (sessions._NOISE_PREFIXES) — consumers, not authors.

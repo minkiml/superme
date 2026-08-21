@@ -1,20 +1,7 @@
-"""Tool-scope suite — a session sees only the tools its work needs (skills review, finding T1).
+"""A session sees only the tools its work needs.
 
-Before this, one dev MCP server carried all 30 tools to every dev run whatever it was doing: build
-could call vet's `record_verification`, a read-only diagnosis session mounted
-`apply_knowledge_delta`, and a general chat with no item bound held all sixteen item pens. The
-separation lived in skill prose ("Fixes belong to the build session, never here") — unchecked, which
-is exactly the failure mode the prompt pass measured.
-
-`dev_tools.TOOL_SCOPES` is now the one table, and this suite pins it:
-  · every scope resolves, and its set is exactly what's declared (a widened scope is a deliberate
-    edit here, the same way a re-baseline is deliberate elsewhere);
-  · the INVARIANTS that make the table worth having — each recorder belongs to exactly one phase,
-    diagnosis writes nothing, an unbound chat holds no item pen;
-  · every SKILL's named tools are inside its own phase's scope, so no instruction can point at a
-    tool that session cannot see (the failure this change could introduce);
-  · every call site passes a scope the table knows, and none passes the retired `learning=` kwarg —
-    the typo guard, checked statically so it can never reach a live run.
+`dev_tools.TOOL_SCOPES` is the one table, and this pins it: each recorder belongs to one
+phase, diagnosis writes nothing, and every skill's named tools are inside its own scope.
 
 Run: PYTHONPATH=. python scripts/test_tool_scopes.py
 """
@@ -42,16 +29,15 @@ def ok(label: str, cond, detail: str = "") -> None:
     print(f"  ok - {label}")
 
 
-# The pinned surface. Editing a row here is the deliberate act of widening (or narrowing) what a
-# session can do — never a side effect of touching the runtime.
+# Editing a row here is the deliberate act of widening a scope, never a side effect.
 EXPECTED: dict[str, set[str]] = {
     "general": {"read_dev_log", "read_inbox", "read_run", "read_candidates", "read_proposals",
                 "create_inbox_item", "append_inbox_item", "push_inbox_item", "itemize_and_launch"},
     "onboarding": {"read_dev_log", "read_inbox", "create_inbox_item", "append_inbox_item",
                    "itemize_and_launch"},
     "diagnosis": {"read_dev_log", "read_run"},
-    # `read_decisions` joins every scope that can put a call to the owner: a phase that cannot see
-    # what they already settled will ask again, and a settled subject often makes an item smaller.
+    # Every scope that can ask the owner reads decisions first, or it asks what was already
+    # settled.
     "triage": {"scaffold_artifact", "set_triage_classification", "create_inbox_item",
                "file_triage_report", "read_decisions"},
     "plan": {"scaffold_artifact", "dry_run_checks", "read_verification_library",
@@ -66,8 +52,7 @@ EXPECTED: dict[str, set[str]] = {
               "file_close_report"},
     "investigate": {"scaffold_artifact", "write_checkpoint", "file_investigate_report",
                     "read_decisions"},
-    # `itemize_and_launch` is NOT here: it belongs to the chat scopes, where the owner approves each
-    # call. This run is a background one, and its own skill says never to use it.
+    # Not here: it belongs to the chat scopes, where the owner approves each call.
     "itemize": {"read_inbox", "read_dev_log", "create_inbox_item", "read_research_proposals"},
     "deputy": {"read_dev_log", "read_run"},
     "handoff": {"write_checkpoint"},
@@ -136,8 +121,7 @@ def test_invariants() -> None:
     ok("learning pens reach only the learning runs", not leaked, str(leaked))
 
 
-# A skill naming a tool its own session cannot see would be an instruction that always fails.
-# `report_completion` / `deputy_verdict` live on their own servers, so they are not dev-scoped.
+# A skill naming a tool its session cannot see is an instruction that always fails.
 OTHER_SERVERS = {"report_completion", "deputy_verdict"}
 ALL_TOOLS = {t.name for t in DEV_TOOLS}
 
@@ -155,9 +139,8 @@ def test_skills_name_only_visible_tools() -> None:
            str(missing))
 
 
-# Every runtime site that mounts the dev server, and the scope expression it passes. A literal is
-# checked against the table; a computed one (`scope=skill`) is listed here so the site is at least
-# ACCOUNTED for — a new mount with no entry fails this test.
+# Every site that mounts the dev server, with its scope. A computed one is listed so it is at
+# least accounted for.
 COMPUTED = ("scope=scope",          # the two _dev_mcp helpers, forwarding their caller's choice
             "scope=skill",          # the generic intake runner: the skill it fires IS the scope
             "scope=tool_scope",     # ws.py: session kind, or the bound item's current phase
@@ -165,9 +148,10 @@ COMPUTED = ("scope=scope",          # the two _dev_mcp helpers, forwarding their
 
 
 def _call_at(text: str, start: int) -> str:
-    """The whole call expression starting at `start`, paren-matched. A regex misses the sites whose
-    scope is itself a call (`scope=str(item.get("phase"))`) — and a site this test cannot SEE is a
-    site it cannot check, which is the one failure a call-site audit must not have."""
+    """The whole call expression starting at `start`, paren-matched.
+
+    A regex misses the sites whose scope is itself a call, and a site this test cannot SEE is a
+    site it cannot check."""
     depth, i = 0, text.index("(", start)
     for j in range(i, len(text)):
         if text[j] == "(":
@@ -211,9 +195,7 @@ def test_call_sites() -> None:
             call = _call_at(text, m.start())
             assert "scope=" in call, f"FAIL: {rel} mounts the dev server with no scope: {call[:90]}"
             sites.append((rel, f"scope={_arg_after(call, 'scope=')}"))
-    # 14 mounts today: ws · loop (helper body + build + vet) · runs (helper body + deputy-feedback
-    # + close + intake + resolve) · compaction · deputy · learning ×3. A new one lands here, or
-    # this fails — which is the whole point of counting rather than sampling.
+    # A new mount lands here or this fails, which is the point of counting rather than sampling.
     ok("every dev-server mount is accounted for", len(sites) == 14, f"{len(sites)} sites")
     for rel, expr in sites:
         literal = re.fullmatch(r'scope="([a-z]+)"', expr)
@@ -236,14 +218,10 @@ if __name__ == "__main__":
 
 
 def test_a_scoped_tool_is_not_refused_by_policy() -> None:
-    """A tool can be registered, scoped to a phase, and still refused at the callback — the two
-    lists are separate, and nothing joins them. A background run then reaches the step that needs
-    it, is denied with no one to ask, and finishes without the thing it was scoped to produce.
+    """A tool can be registered, scoped to a phase, and still refused at the callback.
 
-    `itemize_and_launch` is the one deliberate exception: it mints work items and launches runs, so
-    it prompts on the chat surfaces. Auto-allowing it here would silently remove that prompt — the
-    fix for its background path is a decision, not a list entry, so it stays named rather than
-    quietly added."""
+    Nothing joins the two lists, so a background run reaches the step that needs it and is denied
+    with nobody to ask."""
     from superme_agent.harness.policy import is_safe
     from superme_agent.harness.tools.dev_tools import TOOL_SCOPES
 

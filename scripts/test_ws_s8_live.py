@@ -1,13 +1,7 @@
-"""WS-S8 gate test (LIVE half) — the compaction runtime on a real dummy-repo session. COSTS
-TOKENS (~$0.2 on haiku: one fat turn to force the trigger + the compaction summarizations).
+"""The compaction runtime on a real session. COSTS TOKENS.
 
-Drives the PRD S8 gate: a floor-violating trigger config is REFUSED (409); a low trigger on a
-long work-item session fires the kernel's compaction — the pre-compaction checkpoint lands in
-`checkpoints/` BEFORE the compaction event (order verified in the dev-event trail); the verdict
-row logs REAL pre/post prompt tokens from the compact boundary; two ineffective compactions
-(min_gain forced absurdly high) → back-off latch + the item parked `awaiting_human` (the
-attention row); a FRESH session then cold-starts from exactly the banked checkpoint via the S5
-orient block. Self-cleaning: item deleted, config restored.
+The pre-compaction checkpoint lands BEFORE the compaction event, the verdict logs real boundary
+tokens, and two ineffective attempts latch a back-off. A fresh session cold-starts from the bank.
 
 Run with the daemon up: PYTHONPATH=. python -m scripts.test_ws_s8_live
 """

@@ -1,9 +1,8 @@
-"""A work-item's title is a label, and every path that mints one has to keep it that way.
+"""A work-item's title is a label, and every path that mints one must keep it that way.
 
-Pins the two halves of core/titles and the three mint points that use them: agents get a complaint
-they can retry on, the owner's untitled inbox push gets a floor it cannot fall through, and triage
-gets to rename what it has read. What is NOT pinned is any particular wording — only that a bad
-title is refused and a good one survives untouched.
+No particular wording is pinned — only that a bad title is refused and a good one survives.
+
+Run: PYTHONPATH=. python -m scripts.test_titles
 """
 
 import shutil
@@ -49,8 +48,8 @@ def test_the_four_ways_a_title_stops_being_a_label():
 
 
 def test_a_complaint_says_what_to_do():
-    # The message is delivered into an agent's turn as a tool error and is the only instruction it
-    # gets, so it has to name the field. Wording is free; the anchor is not.
+    # Delivered as a tool error, it is the only instruction the agent gets, so it must name the
+    # field.
     for bad in ("", "x" * 99, "Ends in a period."):
         ok("title" in check_title(bad).lower(), f"the complaint for {bad[:12]!r} names the field")
 

@@ -1,12 +1,8 @@
-"""WS-S4 gate test — the git layer (workspace-workflow PRD stage S4 / D4).
+"""The git layer, driven end to end against a throwaway repo.
 
-Scripted E2E on a throwaway git repo: transactional worktree create (+ failure unwind), kill-mid-
-create healed by reconciliation, commits in the worktree, freshness merge (sync_from_main), merge
-to main with backup ref + tagged auto-stash verified pop, overlap refusal, never-merge-twice,
-revert via backup ref (+ refusal once commits land on top), manufactured conflict → in-tree
-resolution → finish_merge (the same mechanical path the Resolve-with-Agent run drives), blocking
-child branches FROM parent and light-merges INTO it while the family merges to main once, the
-freeze boundary denies an outside write, and terminal removal keeps the branch ref. Self-cleaning.
+Transactional worktree create and its unwind, a kill mid-create healed by reconciliation,
+freshness merge, backup-ref revert, a manufactured conflict resolved in-tree, and the freeze
+boundary refusing an outside write.
 
 Run: PYTHONPATH=. python -m scripts.test_ws_s4
 """
@@ -51,9 +47,10 @@ def make_repo(tmp: Path) -> Path:
 
 
 def commit_all(cwd: Path, msg: str, task: str = "t1") -> None:
-    """Commit as a BUILD AGENT does — with the task trailer. `create_worktree` installs the
-    commit-msg gate, so a fixture that writes a bare message is refused by the repo it just made
-    (which is the point of the gate; these fixtures are about worktrees, not about style)."""
+    """Commit as a BUILD AGENT does, with the task trailer.
+
+    A fresh worktree installs the commit-msg gate, so a bare message is refused by the repo it
+    just made."""
     sh(cwd, "git", "add", "-A")
     sh(cwd, "git", "commit", "-m", f"{msg}\n\nSuperMe-Task: {task}")
 
@@ -65,8 +62,7 @@ def test_lifecycle(repo: Path) -> None:
     ok("branch name slugged", rec["branch"] == "item/aaa111-my-feature", rec["branch"])
     ok("worktree under the owned home keyed by repo id",
        wt.is_dir() and wt.parent == G.worktrees_home() / RID, str(wt))
-    # The two locations we rejected: inside the repo (git clean -fdx would eat in-flight work)
-    # and the old sibling `../<repo>_worktrees` (pollutes the owner's parent dir).
+    # Not inside the repo, which `git clean -fdx` would eat, and not the owner's parent dir.
     ok("worktree neither in-repo nor a repo sibling",
        repo not in wt.parents and wt.parent.parent != repo.parent, str(wt))
     ok("record has base sha", rec["base"] == "main" and len(rec["base_sha"]) == 40)
@@ -237,9 +233,8 @@ def test_freeze_boundary(repo: Path, tmp: Path) -> None:
     r = asyncio.run(check("Write", {"content": "no path at all"}))
     ok("pathless write fails closed", type(r).__name__ == "PermissionResultDeny")
 
-    # Bash under the boundary (F9): a phase agent in its own worktree owns its shell — tests,
-    # installs and commits must not park on a human, or the build⟷vet loop can't run.
-    # `never` still guards the escalation path: an auto-allow that regressed to a prompt raises.
+    # A phase agent in its own worktree owns its shell: tests and commits must not park on a
+    # human, or the loop cannot run.
     can_sh = build_can_use_tool(never, cwd=wt, write_boundary=[wt, item_dir])
 
     async def shell(cmd):
@@ -250,8 +245,7 @@ def test_freeze_boundary(repo: Path, tmp: Path) -> None:
         r = asyncio.run(shell(cmd))
         ok(f"shell auto-allows in-boundary: {cmd[:28]}", type(r).__name__ == "PermissionResultAllow")
 
-    # An absolute path outside the boundary is the accident this catches. It must NOT auto-allow —
-    # it escalates (here `never` raises, proving we reached the prompt rather than silently allowing).
+    # An absolute path outside the boundary must escalate, not auto-allow.
     for cmd in (f"rm -rf {repo}", "cat /etc/passwd > /tmp/leak.txt", "rm -rf /"):
         try:
             asyncio.run(shell(cmd))
@@ -275,14 +269,14 @@ def test_freeze_boundary(repo: Path, tmp: Path) -> None:
     except AssertionError as e:
         ok("cwd outside boundary → shell escalates", "escalated to approval" in str(e))
 
-    # Read-only shell is allowed everywhere (same access as Read/Grep) — including the `2>&1`
-    # carve-out (F7), which agents reach for constantly on ordinary reads.
+    # Read-only shell is allowed everywhere, including the redirect agents reach for on ordinary
+    # reads.
     r = asyncio.run(can_plain("Bash", {"command": "grep -rn foo . 2>&1"}, None))
     ok("read-only shell with 2>&1 auto-allows", type(r).__name__ == "PermissionResultAllow")
 
 
-    # Stopping the host is denied everywhere: a run is the daemon's child, so the project's own
-    # documented restart command is fatal from inside one (it took down three items live).
+    # Stopping the host is denied everywhere: a run is the daemon's child, so a restart is fatal
+    # from inside one.
     from superme_agent.core.permissions import kills_the_host
     for cmd, want in [
         ("kill $(lsof -ti:8787 -sTCP:LISTEN)", True),
@@ -357,10 +351,10 @@ def _spawn_listener(cwd: Path) -> subprocess.Popen:
 
 
 def test_general_session_shell() -> None:
-    """A general session's shell ASKS; it does not refuse. The classifier can prove read-only or
-    prove nothing, so refusing the unprovable refused reading the project's own data — and it broke
-    the premise `core.sandbox` skips interactive turns on ("a person is approving each command").
-    The file-WRITE tools still hard-deny: those name their target, so the mutation is a fact."""
+    """A general session's shell ASKS; it does not refuse.
+
+    The classifier can prove read-only or prove nothing, so refusing the unprovable refused reading
+    the project's own data. The file-WRITE tools still hard-deny: they name their target."""
     print("general-session shell (ask, don't refuse)")
     asked: list[str] = []
 
@@ -380,8 +374,8 @@ def test_general_session_shell() -> None:
         r = asyncio.run(can_never("Bash", {"command": cmd}, None))
         ok(f"read-only runs unprompted: {cmd[:28]}", type(r).__name__ == "PermissionResultAllow")
 
-    # Unprovable → the owner is ASKED. This is the whole fix: `sqlite3 … SELECT` is exactly as
-    # unprovable as `sqlite3 … DROP`, and refusing both meant refusing to read.
+    # Unprovable means ASK: a SELECT is exactly as unprovable as a DROP, so refusing both refuses
+    # to read.
     for cmd in ('sqlite3 app.db "SELECT count(*) FROM run"', 'psql -c "SELECT 1"',
                 'python -c "print(1)"'):
         asked.clear()
@@ -412,11 +406,10 @@ def test_general_session_shell() -> None:
 
 
 def test_denial_truth() -> None:
-    """A denial's message is the agent's only account of what happened, so the three ways an ask
-    can end must not share one sentence. They did — a timed-out card reported a refusal by a person
-    who never saw it, and the agent, reasoning from a false premise, invented a blocking rule and
-    sent the owner to look for it. Pins the SHAPES (distinct, and each names its own actor), not
-    the wording."""
+    """A denial is the agent's only account of what happened.
+
+    The three ways an ask can end must not share one sentence: a timed-out card reporting a
+    refusal invites the agent to invent a rule. Pins the SHAPES."""
     print("denial messages — three endings, three facts")
     from superme_agent.core.permissions import (APPROVAL_UNANSWERED, NO_HUMAN_TO_ASK, deny_all,
                                                 learning_write_approve)
@@ -434,16 +427,14 @@ def test_denial_truth() -> None:
 
     ok("three endings, three different messages", len({owner, unanswered, nobody}) == 3)
     ok("the owner's refusal names the owner", "owner" in owner.lower())
-    # The load-bearing one: silence must not be reported as somebody's decision, and must actively
-    # head off the hunt for a cause that isn't there.
+    # Silence must not read as somebody's decision, and must head off the hunt for a cause.
     ok("an unanswered ask denies nothing and blames nobody",
        "nobody refused" in unanswered.lower() and "unanswered" in unanswered.lower())
     ok("an unanswered ask forbids inventing a blocker",
        all(w in unanswered.lower() for w in ("rule", "don't go looking")))
     ok("a background run is told the gate is shut for the whole run",
        "background run" in nobody.lower() and "whole run" in nobody.lower())
-    # Each conversational denial also caps the reply — the essay after a bare "Denied by the owner."
-    # (a menu of alternatives, a theory, a re-pitch of unrelated work) was the visible damage.
+    # Each denial caps the reply too: the essay after it was the visible damage.
     for label, msg in (("owner refusal", owner), ("unanswered ask", unanswered)):
         ok(f"{label} asks for one line back", "one line" in msg.lower())
     ok("the owner's refusal bans the alternatives menu and the theory",
@@ -457,13 +448,10 @@ def test_denial_truth() -> None:
 
 
 def test_vet_env(repo: Path, tmp: Path) -> None:
-    """`stop_vet_env` + its call site. The worktree DIR takes the DB, the log and the `.env`
-    symlink with it; only this takes the PROCESS, and a server left listening holds a port and an
-    fd on an unlinked file with nothing left that would ever reap it.
+    """`stop_vet_env` and its call site: removing the worktree takes everything but the PROCESS.
 
-    The identity rule is the point: a server belongs to a worktree because its CWD is that worktree,
-    not because some state file remembers its pid. A live run accumulated two servers in one
-    worktree while the state file named only the last, and both outlived it."""
+    A server belongs to a worktree because its CWD is that worktree, never because a state file
+    remembers its pid."""
     wt = tmp / "novet"
     wt.mkdir()
     ok("empty dir → no servers found", G.servers_in(wt) == [])
@@ -516,9 +504,7 @@ def test_vet_env(repo: Path, tmp: Path) -> None:
 def main() -> None:
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
-        # Worktrees live under a SuperMe-owned home (~/.superme/worktrees/<repo-id>/); point it
-        # at the throwaway dir so a suite run never touches the real one. Read per call, so
-        # setting it here (after import) is enough.
+        # Point the worktree home at the throwaway dir, so a run never touches the real one.
         os.environ["SUPERME_WORKTREES_HOME"] = str(tmp / "worktrees-home")
         repo = make_repo(tmp)
         test_lifecycle(repo)

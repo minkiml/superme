@@ -1,18 +1,7 @@
-"""The three standing lenses (verification-model design §3, stage 5).
+"""The three standing lenses: intent, safety, robustness.
 
-The defect this closes: verification could only ever prove what the planner thought to ask for. If
-nobody wrote a check about injection, nothing looked for injection — and an item whose plan declared
-`depth: none` produced a cycle with no record at all. The lenses are the questions asked every time,
-independent of the plan: does this solve the stated problem, is it unsafe, what inputs were probed.
-
-Depth and lenses are separate axes, and this suite pins that: `depth: none` means "nothing to RUN",
-never "nothing to read". The report refuses without all three standing reads, so a cycle can no
-longer be silent about work nobody checked.
-
-The gating table is the other half — intent and safety gate on anything, robustness only on `high`,
-performance never — and a gating finding routes like any other failure, with NO new loop exit.
-
-Self-cleaning: temp item folders + the pure decision function. No daemon, no spine, no network.
+Verification could otherwise prove only what the planner thought to ask for. `depth: none` means
+nothing to RUN, never nothing to read, so no cycle is silent about work nobody checked.
 
 Run: PYTHONPATH=. python -m scripts.test_lenses
 """
@@ -161,9 +150,8 @@ def test_depth_none_still_owes_its_lenses():
         ok("…and the refusal says a clean read is a fine answer", "no findings is a fine answer" in str(e))
     _clean(item, robustness=[{"severity": "high", "text": "cli.py:31 — a None date crashes"}])
     text = Path(_arts.write_vet_user_report(item, None)["path"]).read_text()
-    # The lens TABLE moved to the Task tab, where it renders under plain-language questions; what
-    # stays in the report is vet's prose plus — machine-authored — any finding that GATES. Same
-    # one-writer rule as a failed check: what sends the item back cannot depend on the prose.
+    # The report keeps vet's prose plus, machine-authored, any finding that GATES: what sends the
+    # item back cannot depend on prose.
     ok("a gating finding is machine-authored into the report",
        "## What didn't hold" in text and "a None date crashes" in text
        and "raised by the robustness reading (high)" in text)
@@ -195,9 +183,8 @@ def test_wiring():
     ok("…forbids manufacturing a finding", "Nothing found is the right answer when nothing is wrong" in skill)
     ok("…and says they run under depth: none too",
        "including one whose plan declared `depth: none`" in " ".join(skill.split()))
-    # Pinned on STRUCTURE, not on the block's heading: the heading is owner-facing copy (it has
-    # been "Lenses" and is now the question each lens asks), and a copy edit must never read as a
-    # broken build. What must hold is that the payload carries them and the surface renders each.
+    # Pinned on STRUCTURE, not the heading: that is owner-facing copy, and an edit must not read
+    # as a broken build.
     modal = src("web/frontend/src/features/dev/WorkItemModal.tsx")
     ok("the surface can show them",
        "class LensRead" in src("superme_agent/daemon/schemas/dev/gates.py")

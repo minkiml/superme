@@ -1,20 +1,7 @@
-"""Auto-resume on a healthy restart, and the last dead end (recovery-resilience R3).
+"""Auto-resume on a healthy restart.
 
-SuperMe already healed its RUN rows on startup and parked the orphaned items at `awaiting_human`.
-That was honest about the run being gone and wrong about what it meant: `awaiting_human` claims a
-DECISION is wanted, so a build stopped by a restart looked identical to one waiting on the owner's
-judgment — and the loop that is meant to be human-free needed a click to breathe again. Nothing
-about the work was lost; only the run had to start over.
-
-R3 splits the two acts. LABEL every orphan `error` (R2's honest state, which also gives it a Resume
-button whatever happens next), then RESUME the ones whose dead run was a phase's own background
-work — through `services.resume`, the SAME path the owner's button uses.
-
-Also here: the learning pipeline's one hole with no way out. A `write` run that dies leaves its
-proposal at `writing` forever — invisible to the owner's queue (which lists `proposed`), invisible
-to the drafted gate, picked up by nothing.
-
-Self-cleaning (source + tempdir). No daemon needed.
+An orphaned item is labelled `error`, then resumed through the same path the owner's button
+uses — but only when its dead run was a phase's own background work.
 
 Run: PYTHONPATH=. python -m scripts.test_auto_resume
 """
@@ -130,7 +117,7 @@ def test_stranded_proposal() -> None:
 
 def test_merge_is_already_idempotent() -> None:
     """The plan listed "merge checks `git_merge_commit` first" as work. It is already true — the
-    guard shipped with slice 4c. Pinned here rather than rebuilt, so the claim stays checked."""
+    guard already shipped. Pinned here rather than rebuilt, so the claim stays checked."""
     print("\n[merge] re-firing a merge after a crash cannot merge twice")
 
     git = src("superme_agent/core/git_layer.py")

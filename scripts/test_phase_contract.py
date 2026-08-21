@@ -1,24 +1,7 @@
-"""The seam between what a skill INSTRUCTS and what the run can actually do.
+"""The seam between what a skill INSTRUCTS and what the run can do.
 
-Two live defects motivated this, and neither was visible to any existing suite. A report was filed
-to `artifacts/reports/` because the skill named a bare relative path and the agent resolved it
-against the directory it had been writing in. Then a report was not filed at all, because the tool
-that files it was registered and scoped but missing from the safe-tool policy, so a background run
-reached its last step and was refused with nobody to ask.
-
-Both are the same shape: a skill tells an agent to do something the wiring cannot deliver. Suites
-that read one file at a time cannot see it, because each file is individually correct — the defect
-lives in the disagreement between two of them.
-
-So this pins the joins:
-
-  1. A tool a skill NAMES must be registered, in that phase's scope, and allowed by the policy.
-     Any one of the three missing makes the instruction unfollowable.
-  2. A phase whose report the drilldown reads must have a PEN that writes it. A skill that names
-     the path instead is one confused resolution away from filing where nothing reads. This one is
-     a RATCHET: the pen-less list may shrink, never grow.
-
-Self-cleaning: source reads + registry imports. No daemon, no spine, no network.
+A tool a skill names must be registered, in that phase's scope, and policy-allowed. Each file is
+correct alone, so only the join can be wrong.
 
 Run: PYTHONPATH=. python -m scripts.test_phase_contract
 """
@@ -33,26 +16,18 @@ ROOT = Path(__file__).resolve().parents[1]
 SKILLS = ROOT / "superme_agent/harness/plugins/superme-dev/skills"
 PASS = 0
 
-# The phases that fire as a background run with a skill of the same name. `build` and `vet` run
-# from the loop, the rest from the intake runner; all of them have nobody to approve anything.
+# The phases that fire as a background run under a skill of the same name, none of which has
+# anybody to approve anything.
 PHASES = ("triage", "plan", "build", "vet", "review", "close", "investigate")
 
 # Reports the drilldown reads at `<item_dir>/reports/report-<phase>.md`.
 REPORTED = ("triage", "plan", "build", "vet", "review", "close", "investigate")
 
-# Scopes mounted on a run that has NOBODY TO ASK. The seven phases plus the kernel-fired turns that
-# are not a phase — those were unchecked, and that is how `itemize` came to mount a tool its own
-# skill forbids, whose only possible outcome was a refusal at the moment of real work.
-#
-# The chat scopes (`general`, `onboarding`, `diagnosis`) are deliberately excluded: a human is at
-# the keyboard approving each call there, so the policy allowlist — which exists to decide what may
-# proceed WITHOUT one — is not the gate that applies.
+# Scopes mounted on a run with NOBODY TO ASK. The chat scopes are excluded: a human approves each
+# call there.
 BACKGROUND_SCOPES = (*PHASES, "itemize", "deputy", "handoff", "resolve")
 
-# Phases whose report is still written by the agent from a path named in prose. EMPTY, and that is
-# the point: every reported phase now routes its write through a pen that owns the path. The set
-# stays because the ratchet is the value — a phase added here is a regression, and this suite fails
-# rather than letting the class quietly return.
+# Phases whose report is written from a path named in prose. EMPTY, and the ratchet is the value.
 NO_PEN_YET: set[str] = set()
 
 
@@ -92,12 +67,10 @@ def test_a_named_tool_is_a_tool_the_phase_can_call():
 
 
 def test_a_background_scope_mounts_nothing_it_cannot_use():
-    """The inverse of the check above, and the one that catches a tool nobody's prose mentions.
+    """The inverse check: a tool nobody's prose mentions.
 
-    Giving a background run a tool the policy forbids is worse than not giving it one: the model
-    sees it in its tool list, reaches for it at the moment it is needed, and is refused with nobody
-    to appeal to. Whatever that tool was for silently does not happen. So a scope with no human
-    behind it may mount ONLY tools that can actually proceed."""
+    The model reaches for it at the moment it is needed and is refused with nobody to appeal to,
+    so a scope with no human behind it mounts only what can proceed."""
     for scope in BACKGROUND_SCOPES:
         mounted = set(TOOL_SCOPES.get(scope, ()))
         refused = sorted(t for t in mounted if not is_safe(f"mcp__dev__{t}", {}))
@@ -118,8 +91,8 @@ def test_every_report_the_reader_asks_for_has_a_writer():
 
     ok(f"the phases with a pen own their path in code — {sorted(penned)}",
        penned == set(REPORTED) - NO_PEN_YET)
-    # Naming the path is fine — a skill may say what the pen produces. What matters is that the
-    # skill routes the agent THROUGH the pen, so the path is never the agent's to resolve.
+    # A skill may name what the pen produces; what matters is that it routes the agent THROUGH the
+    # pen.
     unrouted = sorted(p for p in penned if f"file_{p}_report" not in skill_text(p))
     ok(f"…and each one's skill names the pen, so the write never goes through prose — "
        f"missing {unrouted}", not unrouted)

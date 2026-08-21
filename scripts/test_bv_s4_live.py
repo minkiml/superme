@@ -1,18 +1,7 @@
-"""BV-S4 gate test (LIVE half) — vet read-only + report tool through the real SDK. COSTS TOKENS
-(4 small turns on the dummy repo). Drives what the offline suite can't: the deny reaches a REAL
-vet agent (no human prompt fires), and `record_validation_evidence` + `file_vet_report` are
-reachable and land through a live vet session.
+"""Vet's read-only boundary through the real SDK. COSTS TOKENS.
 
-Claims verified live:
-  · a vet turn's Write attempt is DENIED with the vet nudge (no file created, no approval prompt);
-  · the vet agent records evidence + files the cycle's report via the MCP tools — the report
-    lands as `artifacts/vet-report-1.md` with the code-owned envelope, and the `vet.report`
-    event hits the dev log;
-  · the vet session is role-stamped `vet` at the worktree cwd (step-3 map holding under step 4).
-
-Artifacts are script-written stand-ins for the gate advances (s6_live pattern).
-Self-cleaning: abandon + repo/knowledge restore.
-Run with the daemon up: PYTHONPATH=. python -m scripts.test_bv_s4_live
+A real vet agent's Write is DENIED with no approval prompt, while its report tools still land.
+Needs SUPERME_TEST_REPO and a running daemon.
 """
 
 import os
@@ -33,8 +22,8 @@ from superme_agent.core import git_layer
 B = "http://127.0.0.1:8787"
 WS = "ws://127.0.0.1:8787/ws/agent"
 CTX = "dummy"
-# This suite MUTATES the repo it points at: `git reset --hard`, `git clean -fd`, branch
-# deletion. Name a throwaway one, and never a repo holding work you want.
+# This suite MUTATES the repo it points at: reset, clean, branch deletion.
+# Name a throwaway one, never a repo holding work you want.
 REPO = Path(os.environ.get("SUPERME_TEST_REPO") or "~/superme-test-repo").expanduser()
 if not (REPO / ".git").is_dir():
     raise SystemExit(f"SUPERME_TEST_REPO is not a git repo: {REPO}")
@@ -186,10 +175,7 @@ def main() -> None:
             "nothing else.", work_item_id=iid)
         ok("no approval prompt fired (denied outright)", t1["approvals"] == 0)
         ok("no file was created", not (wt / "junk.txt").exists())
-        # Either shape proves the contract: the tool call fired and was DENIED with the vet nudge,
-        # or the agent refused up-front citing the preamble's read-only line (observed live —
-        # arguably the stronger outcome). The mechanical guarantees (no file, no prompt) are
-        # asserted separately above either way.
+        # Either shape proves it: the call fired and was DENIED, or the agent refused up front.
         low = t1["text"].lower()
         ok("the agent hit (or pre-empted) the vet read-only contract",
            "vet" in low and any(w in low for w in ("read-only", "disable", "denied", "write")),

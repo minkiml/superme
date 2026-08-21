@@ -1,16 +1,7 @@
-"""The per-repo verification library (verification-model design §8, stage 6).
+"""The per-repo verification library, and the governance it rests on.
 
-The defect this closes: every item's plan re-derived the same handful of checks from nothing — the
-suite runs, the migration is reversible, the endpoint still answers — each time worded slightly
-differently, and the repo learned nothing from the twenty items it had already verified.
-
-The governance is what this suite mostly pins, because the library's whole value rests on it:
-
-- vet NOMINATES (and only a check that has actually passed), close WRITES, the owner PROMOTES.
-- a standing entry is attached by the KERNEL at plan scaffold, not copied by hand.
-- an entry carrying item specifics is refused at the write, where someone is still looking.
-
-Self-cleaning: temp dev-roots and item folders. No daemon, no spine, no network.
+Vet nominates a check that has actually passed, close writes it, the owner promotes it. An entry
+carrying item specifics is refused at the write, where someone is still looking.
 
 Run: PYTHONPATH=. python -m scripts.test_library
 """
@@ -253,10 +244,8 @@ def test_only_a_move_promotes_and_the_prose_survives_it():
 # ── wiring ──────────────────────────────────────────────────────────────────────────────────────
 
 def test_close_actually_has_a_way_to_write_the_doc():
-    # The 2026-08-03 E2E's third blocker, in the same chain as the policy deny: vet nominated,
-    # close READ the nomination back as a ready-to-write block — and then had no legal write.
-    # `apply_knowledge_delta`'s `doc` enum listed the six original anchors and had never gained
-    # `verification`, so the doc the constitution names close as the writer of was unwritable.
+    # Vet nominated and close read it back, then had no legal write: the doc the constitution
+    # names close as the writer of was unwritable.
     tools = src("superme_agent/harness/tools/dev_tools.py")
     ok("the delta tool's doc enum offers the library",
        '"roadmap", "resources", "verification"' in tools)
@@ -285,9 +274,7 @@ def test_wiring():
     ok("…and it never prompts a human mid-loop",
        "mcp__dev__nominate_check" in src("superme_agent/harness/policy.py"))
     ok("plan and close read the library through one tool", '"read_verification_library"' in tools)
-    # The 2026-08-03 E2E: the tool was registered and wired into two skills but never allowlisted,
-    # so every call was DENIED and close reported "read_verification_library was unavailable this
-    # run". The library write path was dead end-to-end and the empty library hid it.
+    # Registered and wired into two skills but never allowlisted, so every call was denied.
     ok("…and reading it never needs a human — a background close would be denied otherwise",
        "mcp__dev__read_verification_library" in src("superme_agent/harness/policy.py"))
     ok("the scaffold attaches the standing entries itself", "standing=_vl.standing_blocks" in tools)
@@ -298,17 +285,15 @@ def test_wiring():
     ok("…and to leave the standing entries alone", "leave them exactly as they are" in " ".join(plan_skill.split()))
     vet_skill = src("superme_agent/harness/plugins/superme-dev/skills/vet/SKILL.md")
     ok("the vet skill carries the nomination duty", "nominate_check" in vet_skill)
-    # Rarity alone read as "don't": the live run nominated nothing at all, though
-    # `full-test-suite-passes` (covers: empty, passed twice) was the textbook entry. The skill now
-    # names the SHAPE to look for, which is a signal the plan already carries.
+    # Rarity alone read as "don't", so the skill names the SHAPE to look for — a signal the plan
+    # already carries.
     ok("…and names the shape that is usually repo-wide", "empty `covers:`" in vet_skill)
     close_skill = src("superme_agent/harness/plugins/superme-dev/skills/close/SKILL.md")
     ok("close knows it is the writer", "read_verification_library(item_id)" in close_skill)
     ok("…and that entries land available, never standing", "only the owner promotes" in close_skill)
 
-    # The doc is part of the anchor set now, so the anchor-set CONTRACT has to know it exists —
-    # otherwise every agent reads a tree diagram that doesn't list it and a guide folder missing
-    # its guide, and infers the file is stray.
+    # The anchor-set CONTRACT has to know the doc exists, or an agent reads a tree that omits it
+    # and infers the file is stray.
     con = src("superme_agent/harness/constitution/dev/dev-knowledge-structure.md")
     ok("the dev-knowledge constitution lists it in the tree", "verification.md" in con)
     ok("…and says it is machine-maintained, not hand-authored", "never hand-author" in con)

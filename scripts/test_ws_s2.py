@@ -1,10 +1,7 @@
-"""WS-S2 gate test — artifact machinery (workspace-workflow PRD stage S2).
+"""Artifact machinery: scaffold, fill, self-check.
 
-Covers the PRD gate: scaffold every artifact kind → fill → self-check passes; placeholder text
-fails the check; an edit after a green evidence entry flips the ledger stale; checkpoints are
-append-only and ordered; tasks parse from plan.md's `## Tasks`; the computed artifact-status map derives correctly.
-Also: review's own agent-facing record and the three readers that moved onto it.
-Self-cleaning (tempdirs + a scratch git repo). No daemon needed.
+Placeholder text fails the check, an edit after a green evidence entry flips the ledger stale,
+and checkpoints stay append-only and ordered.
 
 Run: PYTHONPATH=. python -m scripts.test_ws_s2
 """
@@ -33,8 +30,7 @@ def fill_all(path: Path, filler=lambda m: "real content") -> None:
     path.write_text(A.FILL.sub("filled — real content here", text))
 
 
-# Crude fill garbage fails the verification-plan §3.4 hard gate BY DESIGN — an implementation plan
-# fixture must carry a structurally valid `## Verification plan` (details tested in test_bv_s2).
+# Crude filler fails the hard gate BY DESIGN, so a plan fixture carries a valid verification plan.
 VET_OK = """depth: checks
 reason: contained change — inspection suffices
 env: none
@@ -91,17 +87,15 @@ def make_repo(tmp: Path) -> Path:
 
 def test_template_section_spec() -> None:
     print("template → section spec (fill detection spans the whole section)")
-    # A `<fill:…>` slot WRAPPED across lines matches neither line on its own. Detecting per-line
-    # made such a section read as optional, so the template silently stopped demanding the content
-    # it asks for — the one failure mode a derived-from-the-template check must not have.
+    # A fill slot WRAPPED across lines matches neither, so per-line detection made a required
+    # section read as optional.
     A._template_cache["__wrapped_probe"] = (
         "# T\n\n## One\n<fill:a slot that wraps\nacross two lines>\n\n## Two\nprose, no slot\n")
     ok("a wrapped slot still marks its section must-fill",
        A.template_section_spec("__wrapped_probe") == [("One", True), ("Two", False)],
        str(A.template_section_spec("__wrapped_probe")))
     A._template_cache.pop("__wrapped_probe")
-    # And the real templates keep the spec they had: a comment-only section (a pen's or the
-    # driver's) must merely EXIST, never be filled by the authoring agent.
+    # A comment-only section must merely EXIST, never be filled by the authoring agent.
     ok("research work-segment record derives four filled sections",
        A.template_section_spec("investigation")
        == [("Questions", True), ("Evidence", True), ("Dead ends", True), ("Open threads", True)])
@@ -131,7 +125,7 @@ def test_scaffold_and_check(item: Path) -> None:
         p = Path(r["path"])
         fill_all(p)
         if kind == "plan" and item_kind == "implementation":
-            fix_vet_plan(p)  # crude fill fails the §3.4 hard gate by design
+            fix_vet_plan(p)  # crude fill fails the hard gate by design
         issues = A.self_check(d, kind, item_kind=item_kind)
         assert not issues, f"{kind}: filled doc should pass, got {issues}"
         # Re-scaffold = no-op, never overwrite.
@@ -243,8 +237,8 @@ def test_pr_task_notes(tmp: Path) -> None:
     (item / "artifacts" / "plan.md").write_text(
         "## Tasks\n- [x] t1 — Add the flag\n- [x] t2 — Wire the command\n\n"
         "## Verification plan\ndepth: checks\n\n"
-        # Declared FIRST and covering BOTH tasks, so a naive first-wins pick hands t2 this line
-        # instead of its own — exactly what the first live run did.
+        # Declared first and covering both tasks, so a naive first-wins pick hands the wrong one
+        # over.
         "### shared-filter\n"
         "- proves: the shared filter narrows both surfaces the same way.\n"
         "- covers: t1, t2\n- mode: command\n\n"
@@ -270,8 +264,8 @@ def test_pr_task_notes(tmp: Path) -> None:
        str(notes.get("t2")))
     ok("`none` reads as nothing to say, not as the word", notes["t1"]["deviated"] == "",
        str(notes["t1"]))
-    # Seen on the first live run: build declares `none` and then justifies it, which read literally
-    # would put a restatement of the diff under a heading promising what the diff cannot show.
+    # Build declaring `none` and then justifying it would, read literally, put a diff restatement
+    # under a heading promising more.
     ok("`none.` followed by a justification is still nothing",
        A._note_fields("look: none. Predicate exactly matches plan: `text in note.lower()`")
        == {"look": ""},
@@ -284,9 +278,8 @@ def test_pr_task_notes(tmp: Path) -> None:
     guide = A.pr_task_guide(item)
     ok("`needed` is the covering check's proves line, not the task spec",
        guide["t1"]["needed"] == "the flag emits the documented shape.", str(guide["t1"]))
-    # A check covering two tasks states something true of BOTH, so it is a poor answer to "what did
-    # THIS task have to make true" — the narrowest check wins even when a shared one is declared
-    # first. Seen live: t2 ("wire the subcommand") showed the month-filter requirement.
+    # A check covering two tasks answers neither well, so the narrowest wins even when declared
+    # last.
     ok("the narrowest covering check answers, not whichever was declared first",
        guide["t2"]["needed"] == "the shared filter narrows both surfaces the same way."
        and guide["t1"]["needed"] != guide["t2"]["needed"], str(guide["t2"]))
@@ -358,9 +351,10 @@ def test_owner_edit(tmp: Path) -> None:
 
 
 def test_carry_owner_input(tmp: Path) -> None:
-    """The owner's words reach every phase MECHANICALLY. Each intake phase runs in its own session,
-    so anything they said earlier is gone from the thread; this is the block that carries the
-    durable copy — and it must never invent one from a scaffold."""
+    """The owner's words reach every phase MECHANICALLY.
+
+    Each intake phase runs in its own session, so anything said earlier is gone from the thread.
+    This block carries the durable copy, and must never invent one."""
     print("owner input carried into every phase")
     dev = DevKnowledgeService()
     root = tmp / "carry-root"
@@ -395,9 +389,10 @@ def test_carry_owner_input(tmp: Path) -> None:
 
 
 def test_report_read_hygiene(tmp: Path) -> None:
-    """A report's READ path drops what the author should have deleted. Every template says to
-    remove a block it has nothing to put under; the first report the owner ever read carried two
-    that survived. Structure only — the tokens are the contract, not any one sentence."""
+    """A report's READ path drops what the author should have deleted.
+
+    Every template says to remove a block it has nothing to put under, and the first report the
+    owner read carried two that survived. Structure only."""
     print("report read hygiene")
     item = tmp / "hygiene"
     (item / "reports").mkdir(parents=True)
@@ -428,35 +423,33 @@ def test_tool_registration() -> None:
        names == {"scaffold_artifact", "record_verification", "write_checkpoint",
                  "record_validation",   # build's self-check as DATA, so vet can audit the claim
                  "dry_run_checks",      # …and plan's smoke test of the `run:` blocks it just wrote
-                "sync_from_main",                            # joined in S4
-                "apply_knowledge_delta",    # joined in S6
-                "set_triage_classification",                 # joined in the audit batch (R6)
-                "file_vet_report",                           # joined in build-vet-loop step 4
-                "revise_plan",                               # joined in renovation slice D (§2.1)
-                "request_authorization",                     # joined with BV-A2.1 (deferred auth)
-                "record_lens",          # joined with the verification model (§3): the standing lenses
-                "record_diagnosis",     # joined with the verification model (§5): where/why/unknown
-                "nominate_check",       # the verification library (§8): vet nominates, close writes
+                "sync_from_main",                            # joined later
+                "apply_knowledge_delta",    # joined later
+                "set_triage_classification",                 # joined in the audit batch
+                "file_vet_report",                           # joined later 
+                "revise_plan",                               # joined in renovation slice D
+                "request_authorization",                     # joined with (deferred auth)
+                "record_lens",          # joined with the verification model: the standing lenses
+                "record_diagnosis",     # joined with the verification model: where/why/unknown
+                "nominate_check",       # the verification library: vet nominates, close writes
                 "read_verification_library",   # …and both plan and close read it through one tool
-                "file_plan_report",     # the plan gate's report pen (§10): the matrix is derived
+                "file_plan_report",     # the plan gate's report pen: the matrix is derived
                 "file_investigate_report",   # …and investigate's, which had no pen and no path
-                # the remaining four pens of the same seven-template set (human-report slice 3)
+                # the remaining four pens of the same seven-template set
                 "file_triage_report", "file_build_report", "file_review_report",
                 "file_close_report",
-                # the open-questions slice: itemize is handed the filed/withheld split instead of
-                # judging it, and every phase that can ask the owner something reads the ledger first
+                # Itemize is handed the filed-versus-withheld split rather than judging it, and
+                # every phase that can ask the owner reads the ledger first.
                 "read_research_proposals", "read_decisions"}
 
        and all(t in {x.name for x in DEV_TOOLS} for t in names))
 
 
 def test_review_record(tmp: Path) -> None:
-    """`artifacts/review.md` — review's own agent-facing record (human-report phase, slice 2).
+    """Review's own agent-facing record.
 
-    Review was the one phase with no agent doc, so its OWNER report had accumulated five fields
-    that only machines read: the landing-commit body, the research proposals, the itemization
-    decision, close's list of owed docs, and the re-plan digest. Each one moves here, and what the
-    owner reads becomes prose again."""
+    Review was the one phase with no agent doc, so its OWNER report had accumulated fields only
+    machines read. Each moves here, and what the owner reads becomes prose again."""
     print("review record — the phase's agent-facing doc")
     from superme_agent.core import kind_profiles as _kp
     from superme_agent.daemon.services import git_ops as _go
@@ -469,10 +462,8 @@ def test_review_record(tmp: Path) -> None:
        heads == ("Change inventory", "Against our own decisions",
                  "Settled — do not re-open in a revision cycle",
                  "Proven vs taken on trust", "Risks surviving merge", "Revision rounds"), str(heads))
-    # `## Against our own decisions` is REQUIRED, not optional, for the same reason `## Risks
-    # surviving merge` is: the sentence "nothing departs" is a finding, and an absent section is
-    # indistinguishable from a review that never looked. The two bars are judged separately — the
-    # plan says what the item owed, `decisions.md` says what the project had already settled.
+    # Required, not optional: "nothing departs" is a finding, and an absent section is
+    # indistinguishable from a review that never looked.
     ok("…and the departures section is required, so 'nothing departs' has to be SAID",
        ("Against our own decisions", True) in A.section_spec("review", "implementation"))
     ok("research has no departures section — it concluded nothing into the code",

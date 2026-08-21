@@ -1,20 +1,8 @@
-"""The OS-level shell sandbox (verification-model design §7, stage 1).
+"""The OS-level shell sandbox.
 
-The defect this closes: the freeze boundary read command STRINGS to decide where a run may write,
-and said so honestly in its own docstring — `cd /elsewhere && rm -rf` is not detectable by reading.
-Claude Code ships a kernel-level sandbox that SuperMe was passing nowhere. Now every run that
-touches a repository's code hands its already-declared write roots to the kernel too.
-
-This suite pins the policy (the two settings that make the boundary un-liftable and the one that
-keeps a dev-server check alive), the fragment's None-vs-empty contract, and the wiring — which
-runners opt in, and that the sandbox roots are the SAME roots the permission layer was already
-given, since two boundaries that can drift are worse than one.
-
-Behaviour the kernel provides is deliberately NOT asserted here (a sandboxed write failing is an
-OS fact, not ours, and asserting it would need a live agent) — it was probed live before wiring,
-and the findings are recorded in `core/sandbox.py`.
-
-Self-cleaning: pure functions + source reads. No daemon, no spine, no network.
+Reading a command string cannot tell where it writes — `cd /elsewhere && rm -rf` is invisible.
+The kernel gets the same write roots the permission layer already holds, because two
+boundaries that can drift are worse than one.
 
 Run: PYTHONPATH=. python -m scripts.test_sandbox
 """
@@ -44,8 +32,8 @@ def test_policy():
     p = sandbox_options([])["sandbox"]
     ok("the sandbox is on", p["enabled"] is True)
     ok("a command cannot opt itself out", p["allowUnsandboxedCommands"] is False)
-    # The permission callback carries the freeze boundary and the read-only phases; letting the
-    # CLI auto-approve shell would hand the sandbox a veto over rules it knows nothing about.
+    # The callback carries the freeze boundary, so auto-approving shell would hand the sandbox a
+    # veto over rules it knows nothing about.
     ok("the permission callback still decides every shell command",
        p["autoAllowBashIfSandboxed"] is False)
     ok("a check may bind a local port — a dev server is verification, not an escape",
@@ -76,12 +64,10 @@ def test_one_choke_point():
 
 def test_code_touching_runs_are_sandboxed():
     loop = src("superme_agent/daemon/services/loop.py")
-    # Each code-touching runner names its boundary ONCE and hands the same list to the turn, the
-    # sandbox, and the X-ray capture — so a capture can never claim a boundary the turn didn't get.
+    # Each runner names its boundary ONCE and hands the same list on, so a capture cannot claim a
+    # boundary the turn never got.
     ok("build + vet each define one write boundary", loop.count("boundary = [wt, item_dir]") == 2)
-    # TWO uses each now, not four. The runner names the boundary once in the kwargs it sends, and
-    # the X-ray reads that same dict (`surface_from_turn`) instead of restating the list — so the
-    # capture cannot describe a boundary the turn was not given, which is exactly what it did.
+    # The X-ray reads the turn's own kwargs instead of restating the list.
     ok("...and both sandbox the shell to it, off the one list the turn is sent",
        loop.count("sandbox_writes=boundary") == 2)
     ok("...and hold file writes to that list too",
@@ -91,21 +77,15 @@ def test_code_touching_runs_are_sandboxed():
        and "surface=turn_surface(" not in loop)
 
     runs = src("superme_agent/daemon/services/runs.py")
-    # intake (plan/triage/review/close/investigate) · deputy feedback · auto-close — three turns,
-    # each naming the item folder ONCE now that the X-ray reads the turn's kwargs instead of
-    # restating them.
+    # Three turns, each naming the item folder once now that the X-ray reads the turn's kwargs.
     ok("the three item-folder runners are sandboxed",
        runs.count("sandbox_writes=[item_dir") == 3)
-    # The shell boundary matches the write sandbox on every one of them. It did not: the intake
-    # runner sandboxed writes to the item folder and passed no shell boundary at all, so every
-    # command the read-only classifier could not prove was refused with no path to allow — for the
-    # run and for every reader it spawned.
+    # The shell boundary matches the write sandbox: without one, every unprovable command is
+    # refused with no path to allow.
     ok("...and the phase runners hand the shell the same folder they sandbox",
        runs.count("\n        write_boundary=[item_dir]") == 2)
-    # The intake runner is the one place the two lists legitimately differ, and only by ADDING:
-    # a research sweep's scratch worktree is nameable by its shell and writable by the kernel,
-    # while the write TOOLS stay pinned to the item folder. What the callback may allow and what
-    # the kernel will permit still cannot drift — the sandbox gets the union, never less.
+    # The one place the lists may differ, and only by ADDING: the sandbox gets the union, never
+    # less.
     ok("the research worktree reaches the shell and the kernel together",
        "shell_roots=scratch_tree" in runs
        and "sandbox_writes=[item_dir, *scratch_tree]" in runs)
@@ -148,13 +128,10 @@ def test_the_stale_claim_is_gone():
 
 
 def test_a_run_has_somewhere_to_put_a_temp_file():
-    """A boundary that only says where you may NOT write is half a rule: `$TMPDIR` is outside
-    every root SuperMe grants, so a shell that needs a file for intermediate output has nowhere
-    legal to put one. Each item folder can carry `scratch/`, inside the boundary by construction.
+    """A boundary saying only where you may NOT write is half a rule.
 
-    It is TRANSIENT, and that is half the contract: the folder is a person's to read, so a working
-    directory that outlives its work is clutter in it. Made when a run is told about it, dropped
-    again if that run never used it, removed outright at terminal."""
+    The system temp dir is outside every root SuperMe grants, so an item folder carries
+    `scratch/`. Transient by contract."""
     import asyncio
     import tempfile
 
@@ -217,9 +194,9 @@ def test_a_run_has_somewhere_to_put_a_temp_file():
 
 
 def test_the_shell_may_name_what_the_write_tools_may_not():
-    """A research sweep reads one tree and writes to another, so its honest commands name both —
-    and one path outside the write boundary refuses the whole command. `shell_roots` widens what
-    the SHELL may name without widening what any write tool may touch."""
+    """A sweep reads one tree and writes to another, so its honest commands name both.
+
+    `shell_roots` widens what the SHELL may name without widening what any write tool may touch."""
     import asyncio
     import tempfile
 
@@ -231,8 +208,7 @@ def test_the_shell_may_name_what_the_write_tools_may_not():
     scratch = ensure_scratch(item)
     wt = Path(tempfile.mkdtemp()) / "wt"
     wt.mkdir()
-    # The literal shape that was refused live: make the scratch dir, enter the tree being read,
-    # pipe an inventory out of it into the item folder.
+    # The shape that was refused: make the scratch dir, enter the tree, pipe an inventory out.
     both_trees = f"mkdir -p {scratch}\ncd {wt}\ngrep -rnE '^(def|class)' . | sort > {scratch}/s.txt"
 
     def gate(roots):
@@ -260,9 +236,9 @@ def test_the_shell_may_name_what_the_write_tools_may_not():
 
 
 def test_a_search_pattern_is_not_a_place():
-    """The boundary decides by reading a command's `/…` tokens as paths, and a regex is spelled
-    like one. A sweep whose files were all in bounds was refused for its own grep pattern, then
-    spent calls rebuilding the same output through another tool."""
+    """The boundary reads a command's `/…` tokens as paths, and a regex is spelled like one.
+
+    A sweep whose files were all in bounds was refused for its own grep pattern."""
     import asyncio
     import tempfile
 
@@ -343,9 +319,10 @@ def test_research_cannot_reach_the_codebase():
 
 
 def test_the_kernel_counts_what_it_refused():
-    """A report cannot honestly say "no tool was unavailable" when calls were refused — and each
-    individual refusal is read once, hundreds of calls before the report is written. The count is
-    the part the agent cannot reconstruct, so the kernel states it on every refusal."""
+    """A report cannot honestly claim no tool was unavailable when calls were refused.
+
+    Each refusal is read once, hundreds of calls earlier, so the count is the part the agent
+    cannot reconstruct."""
     import asyncio
     import re
 

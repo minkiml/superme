@@ -1,19 +1,7 @@
-"""Resume — restarting a work-item whose RUN stopped (recovery-resilience R4).
+"""Resume: re-firing the background run of an item whose RUN stopped.
 
-R2 gave a stopped item an honest status. This is the way out of it: re-fire the phase's own
-background run. Nothing is rewound — branch, worktree, artifacts and transcripts all stand — which
-is what makes Resume cheap enough to be a button, and what distinguishes it from re-run (R5), which
-deliberately throws work away.
-
-The name matters and is not interchangeable with Continue (owner, 2026-07-31). They read alike and
-do opposite things: Continue finalizes a build that hit a wall it could not pass (the RUN succeeded,
-the work stopped); Resume re-runs a run that never finished (the work is fine, the RUN stopped).
-
-This suite pins: the activation rule is ONE function shared by the button and the route (so a live
-button can never 409), every phase with a background run is resumable, a failed resume leaves the
-item exactly as it found it, and the surface offers it on both the card and the drilldown.
-
-Self-cleaning (tempdir work-items). No daemon needed.
+Nothing is rewound, which is what makes it cheap enough to be a button. Not Continue: that
+finalizes a build that hit a wall, where the run succeeded and the work stopped.
 
 Run: PYTHONPATH=. python -m scripts.test_resume
 """
@@ -68,8 +56,8 @@ def test_resume_reason() -> None:
     ok("a phase with no background run cannot resume", not can)
     ok("…naming the phase rather than failing silently", "queued" in why)
 
-    # Every phase that owns a background run must be resumable, or an outage during it produces a
-    # dead-end item — the exact thing this project set out to remove.
+    # Every phase owning a background run must be resumable, or an outage produces a dead-end
+    # item.
     for phase in ("triage", "plan", "build", "vet", "investigate", "review", "close"):
         ok(f"`{phase}` is resumable",
            resume_reason({"status": "error", "phase": phase}, running=False)[0])
@@ -94,8 +82,7 @@ def test_drilldown_control() -> None:
     stopped = {"id": "a", "status": "error", "phase": "build", "error_reason": "outage"}
     acts = _acts(stopped)
     ok("a stopped build offers Resume", acts["resume"]["active"])
-    # Continue (BV-A1) is GONE, not greyed: its trigger — a build parked `awaiting_human` with a
-    # paged reason — cannot occur now that the loop never parks, so there is nothing to render.
+    # Continue is GONE, not greyed: its trigger cannot occur now that the loop never parks.
     ok("Continue is not rendered at all", "continue" not in acts)
     ok("…and it has no home either", "continue" not in ACTION_HOMES)
 

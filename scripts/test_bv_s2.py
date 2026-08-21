@@ -1,12 +1,7 @@
-"""Build⟷vet loop stage-2 gate test — THE VET PLAN CONTRACT (build-vet-loop-design §3, §9 step 2).
+"""The vet plan contract.
 
-Covers: the implementation-plan template carries `## Inner checks` + `## Vet plan` (and no legacy
-slot); the parser round-trips the §3.2 worked example; every §3.4 HARD rule blocks and every SOFT
-rule flags-without-blocking; plan self_check enforces hard rules at the gate while legacy plans
-stay green read-only; inner checks parse to runnable command lines; check ids join the evidence
-ledger for free; the pre-main gate brief surfaces depth/reason and the vagueness flags; `proves:`
-is required and reaches the proof rows unaltered.
-Self-cleaning (tempdirs). No daemon needed.
+Every hard rule blocks and every soft rule flags without blocking. Check ids join the evidence
+ledger for free, and `proves:` reaches the proof rows unaltered.
 
 Run: PYTHONPATH=. python scripts/test_bv_s2.py
 """
@@ -28,7 +23,7 @@ def ok(name: str, cond: bool, detail: str = "") -> None:
     print(f"  ok  {name}")
 
 
-# The §3.2 worked example, verbatim shape.
+# The worked example, verbatim shape.
 GOOD_PLAN = """# Plan — tally
 
 ## Approach
@@ -135,8 +130,7 @@ def test_hard_rules() -> None:
        hard(plan_with("depth: checks\nreason: r\nenv: none\n",
                       "\n### one-check\n- proves: the product does the thing the brief asked for\n"
                       "- traces: t\n- mode: command\n- expect: exits zero\n"))))
-    # `expect` alone stopped being the required bar (verification-model §2): a check needs `expect`,
-    # a rubric, or both — what is enforced is that it can come back RED, not which shape says so.
+    # What is enforced is that a check can come back RED, not which shape says so.
     ok("a check with no bar at all is refused", any("has no way to fail" in i for i in
        hard(plan_with("depth: checks\nreason: r\nenv: none\n",
                       "\n### one-check\n- proves: the product does the thing the brief asked for\n"
@@ -175,7 +169,7 @@ def test_soft_rules() -> None:
        A.vet_plan_soft_flags(A.parse_vet_plan(short))))
     ok("a falsifiable expect passes clean",
        A.vet_plan_soft_flags(A.parse_vet_plan(GOOD_PLAN)) == [])
-    # BV-A2 small-fix: a check that targets the RETIRED doc spec.md is flagged (can't pass the loop).
+    # A check that targets the RETIRED doc spec.md is flagged (can't pass the loop).
     retired = plan_with("depth: checks\nreason: r\nenv: none\n",
                         CHECK_OK.replace("run `pytest -k one` in the worktree",
                                          "grep the four anchor docs including spec.md for `report`"))
@@ -187,9 +181,10 @@ def test_soft_rules() -> None:
 
 
 def test_proves_is_the_human_field() -> None:
-    """`proves:` — the one check field written for the OWNER (human-report phase, slice 1). Every
-    other field serves executing or judging, so before this the reports and the vetter each had to
-    infer what a green MEANT from a shell command, separately. Declared once, at plan."""
+    """`proves:` — the one check field written for the OWNER.
+
+    Every other field serves executing or judging, so before it there was nothing on the plan
+    gate that said what a check was FOR."""
     print("proves — the check says what a pass MEANS, in the owner's terms")
     vp = A.parse_vet_plan(GOOD_PLAN)
     ok("the field parses off a check",
@@ -300,9 +295,10 @@ def test_ledger_join() -> None:
 
 
 def test_gate_state_surface() -> None:
-    """The pre-main gate's vet-plan judgment, as the owner now reads it. The prose brief that used to
-    carry these warnings is gone (slice 6) — a soft flag is a NAMED, non-blocking check row, which is
-    what makes the difference between fatal and advisory visible instead of tone-of-voice."""
+    """The pre-main gate's vet-plan judgment, as the owner reads it.
+
+    A soft flag is a NAMED, non-blocking check row, which makes advisory-versus-fatal visible
+    instead of a tone of voice."""
     print("pre-main gate state — the depth/reason judgment surfaces as a non-blocking check row")
     with tempfile.TemporaryDirectory() as td:
         d = Path(td)
@@ -314,9 +310,8 @@ def test_gate_state_surface() -> None:
         item = {"id": "abc123def456", "title": "t", "kind": "implementation", "phase": "plan",
                 "status": "awaiting_human"}
         s = GB.gate_state(item, item_dir, d / "root", None, all_items=[item], events=[])
-        # The gate carries CHECK ROWS and nothing else — the `facts` chip list is gone (owner,
-        # 2026-08-02: every chip restated something already on the drilldown). The depth judgment
-        # still reaches the owner, in the row that can act on it.
+        # The gate carries CHECK ROWS and nothing else; the depth judgment reaches the owner in
+        # the row that can act on it.
         ok("a gate publishes no separate facts list", "facts" not in s)
         sharp = next(c for c in s["checks"] if c["criterion"] == "vet_plan_sharp")
         ok("a vague expect fails vet_plan_sharp, with the reason inline",
@@ -329,9 +324,8 @@ def test_gate_state_surface() -> None:
         (item_dir / "artifacts" / "plan.md").write_text("---\nartifact: plan\n---\n" + none_plan)
         s = GB.gate_state(item, item_dir, d / "root", None, all_items=[item], events=[])
         sharp = next(c for c in s["checks"] if c["criterion"] == "vet_plan_sharp")
-        # The warning says what actually happens (slice 5b): the vet pass RUNS and confirms there is
-        # nothing to check. It used to promise "NO vet pass will run", which nothing implemented —
-        # the run fired, recorded nothing, and the driver halted the item as unverified.
+        # The vet pass RUNS and confirms there is nothing to check; promising no run halted the
+        # item.
         ok("depth none warns that no CHECK runs — not that no vet pass runs",
            "NO check will run" in sharp["detail"] and "NO vet pass will run" not in sharp["detail"])
         ok("depth none is stated, not a refusal — the row names the depth and lets Approve stand",
