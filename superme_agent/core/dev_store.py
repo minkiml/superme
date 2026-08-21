@@ -1,11 +1,7 @@
 """DevStore — the dev cockpit's operational SQLite store.
 
-Per decision D-013, durable *knowledge* (plan/decisions/learnings/design) stays in
-markdown files, while *operational/queue/run* state lives here in a host-app SQLite DB
-keyed by context_id. Today that's the inbox triage queue (D-014); agent runs, sessions,
-evals, checkpoints, and approvals will join it as the cockpit grows active.
-
-Localhost, single-owner: short-lived connections per call are plenty.
+Durable KNOWLEDGE stays in markdown files; operational, queue and run state lives here, keyed by
+context_id. Localhost and single-owner, so short-lived connections per call are plenty.
 """
 
 import json
@@ -14,42 +10,30 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-# TWO kinds, and they differ in what the row can DO — which is the only reason a kind is worth
-# storing. `item` is a capture that becomes a WORK ITEM when pushed; `note` is the owner's own
-# thought, never pushed, there to be picked up in conversation. The predecessors — note/idea/todo/
-# question — were a flavour nothing read: no code branched on the value, so the four columns bought
-# a decision at capture time and paid nothing back. Only an owner can author a `note`; every agent
-# path mints `item`, which is what makes the distinction trustworthy rather than advisory.
+# They differ in what the row can DO, which is the only reason a kind is worth storing. An
+# `item` becomes a work-item when pushed; a `note` is the owner's own, never pushed. Only an
+# owner can author a note — every agent path mints `item`.
 _KINDS = {"item", "note"}
-# open = awaiting push · pushed = promoted to a work-item.
-# ("pushed" replaces the old "triaged" — the inbox→workspace gesture is "push".)
-# Dropping an item is a HARD DELETE (delete_inbox), not a soft status — so there is no
-# "dropped" state. (An agent-proposed row that's declined is deleted + its origin signalled.)
+# open = awaiting push · pushed = promoted. Dropping is a HARD DELETE, so there is no
+# "dropped" state.
 _STATUSES = {"open", "pushed"}
-# An inbox item's origin is a LIST — an item can accrue multiple origins over its life. It starts
-# with whoever created it ('user' or 'agent') and gains 'agent' when the itemize skill appends a new
-# discussion onto an existing item (so a user-made item touched by the agent reads ['user','agent']).
-# Stored as a JSON array in the TEXT column; legacy scalar values are coerced on read + migrated once.
+# A LIST: a row accrues origins over its life, starting with whoever created it. Stored as a
+# JSON array; legacy scalars are coerced on read.
 _ORIGINS = {"user", "agent"}
 # Branch-off relation vocabulary (workspace-workflow D3): blocking/parallel = children (auto-push,
 # gate the parent's completion) · spawn = provenance-only follow-up (owner-pushed).
 _SPAWN_RELATIONS = {"blocking", "parallel", "spawn"}
 
-# The per-role run config a row can carry, in column order. `vet` and `deputy` each resolve on their
-# own chain and never on the item's own model, so each needs its own pair of columns rather than a
-# flag on the existing one.
+# vet and deputy each resolve on their own chain, never the item's model, so each needs its
+# own pair rather than a flag on the existing one.
 _ROLE_COLS = ("vet_model", "vet_effort", "deputy_model", "deputy_effort")
 
 
-# --- event observers (the dashboard push channel's one instrumentation point) --------------------
-# Every state change worth showing the owner already funnels through `log_event` — 78 call sites
-# across 20 modules (run start/end, phase advance, gate decisions, deputy verdicts, git ops, inbox
-# pushes, learning). Rather than instrument each, the daemon registers ONE observer here and turns
-# each event into a cache-invalidation topic (see `daemon/services/dashboard_stream.py`).
+# Every state change worth showing already funnels through `log_event`, so the daemon
+# registers ONE observer here rather than instrumenting 78 call sites.
 #
-# Deliberately a plain synchronous callback list, NOT an asyncio queue: core is the data layer and
-# must not import the daemon or know a WebSocket exists. Observers are best-effort — one that raises
-# is logged and skipped, because a broken notifier must never fail the write that triggered it.
+# A plain synchronous callback list, not a queue: core must not know a WebSocket exists.
+# Best-effort — a broken notifier must never fail the write that triggered it.
 _event_observers: list = []
 
 
@@ -89,36 +73,25 @@ def _norm_origins(value, *, default: str = "user") -> list[str]:
         if v in _ORIGINS and v not in out:
             out.append(v)
     return out or [default]
-# Operational-learning CANDIDATE pool (WI-8; was tier-C "memory") — the capture end of
-# capture→distill→ratify→write→publish. A candidate is a rich, reversible OPERATIONAL observation
-# (behavior-shaping only — never reference knowledge) the owner reviews later; nothing is applied
-# here. See general_docs/learning-workflow-spec.md.
+# The capture end of capture→distill→ratify→write→publish. A candidate is a behaviour-shaping
+# observation the owner reviews later; nothing is applied here.
 _MEM_SOURCES = {"agent", "user"}          # who captured (user-injected still gets reviewed)
 # The operational form the agent GUESSES a candidate should become (advisory; distill decides).
 _MEM_FORM_HINTS = {"constitution", "skill", "agent"}
 _MEM_CAND_STATUSES = {"candidate", "processed", "promoted", "rejected", "dropped"}
-# PROPOSAL — distill's output (the typed, classified consolidation the owner ratifies at gate 1).
-# output_form = WHICH operational artifact it becomes; target_scope = WHERE it lands. Both are
-# distill's guess — the owner can override at ratify. The renovation (§4.11.5) collapsed the old
-# {fact, contract, core_candidate, recall_type} model: self-learning is OPERATIONAL and emits only
-# {constitution, skill, agent} (constitution = the one coarse behavior-governing bucket).
+# distill's output, ratified at gate 1. `output_form` is WHICH artifact it becomes,
+# `target_scope` WHERE it lands. Both are guesses the owner can override.
 _MEM_OUTPUT_FORMS = {"constitution", "skill", "agent"}
 _MEM_TARGET_SCOPES = {"repo_dev", "universal_dev", "core"}
-# Two-gate lifecycle: proposed (distill) → writing (gate-1 approved, write run in flight) →
-# drafted (write phase staged the artifact + eval) → published (gate-2 approved + written to disk).
-# Terminal: rejected/dropped/superseded.
+# proposed → writing → drafted → published. Terminal: rejected, dropped, superseded.
 _MEM_PROP_STATUSES = {"proposed", "writing", "drafted", "published", "rejected", "dropped",
                       "superseded", "retired"}  # retired = a published artifact the owner deleted
 _LINE = re.compile(r"^- \[( |x)\]\s*(\d{4}-\d{2}-\d{2})?\s*(\w+)?:?\s*(.*)$")
 
 
-# The item-scoped kinds the REPO activity view carries (owner, 2026-08-06). The test each one
-# passes: it is a fact about the project — work entered it, a branch was cut, a diff landed, a
-# deliverable finished. Everything else an item emits (`*.start`/`*.end`, `run.report`,
-# `loop.decision`, `phase.advance`, the deputy's own steps) is a step INSIDE one item's run: it
-# belongs to that item's drilldown, where there is exactly one item to follow. In the repo feed,
-# several items running at once interleave those steps into noise — and by volume they push the
-# dev-native rows (inbox, harness, memory, sweeps) straight out of the window.
+# The test each one passes: it is a fact about the PROJECT, not a step inside one item's run.
+# Steps belong in that item's drilldown; in the repo feed several items interleave them into
+# noise that pushes the dev-native rows out of the window.
 REPO_MILESTONE_KINDS = ("git.pr", "git.merge", "git.worktree", "inbox.push", "item.complete")
 
 
@@ -172,14 +145,10 @@ class DevStore:
                    )"""
             )
             c.execute("CREATE INDEX IF NOT EXISTS idx_inbox_ctx ON inbox(context_id, status)")
-            # Agent-run telemetry now lives in the system spine's `run` table (WI-4). Drop the
-            # legacy `runs` table from any pre-renovation .dev.db (its rows were migrated by WI-2).
+            # Run telemetry lives in the spine now; drop the legacy table.
             c.execute("DROP TABLE IF EXISTS runs")
-            # The event LOG (PRD §4.9) — the append-only activity firehose, orchestrator-written.
-            # DB-first (markdown log views render FROM this), so "what happened yesterday?" is a
-            # date-filtered WHERE, not a prose scan. `scope` (item|dev|global) + `item_id`
-            # (NULL = dev-native: inbox triage / merges / cleanups, attached to no work-item) give
-            # the containment read: item view = WHERE item_id=X; dev view = all the repo's rows.
+            # The append-only activity firehose. DB-first, so "what happened yesterday?" is a WHERE,
+            # not a prose scan. `scope` plus `item_id` give the containment read.
             c.execute(
                 """CREATE TABLE IF NOT EXISTS events (
                        id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -196,19 +165,14 @@ class DevStore:
             )
             c.execute("CREATE INDEX IF NOT EXISTS idx_events_ctx ON events(context_id, created_at)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_events_item ON events(context_id, item_id)")
-            # `discarded_at` — the re-run soft delete (owner, 2026-07-31), the dev-event twin of
-            # `run.discarded_at`. A re-run stamps this item's rows instead of deleting them; the
-            # item's own readers (Timeline, Deputy log, why-is-this-parked, the close-retry budget)
-            # filter to the current attempt, while the repo-wide feed still shows the whole history.
+            # The re-run soft delete: a re-run stamps rows instead of deleting them, so the item's own
+            # readers see the current attempt while the repo feed keeps the whole history.
             ev_cols = {r[1] for r in c.execute("PRAGMA table_info(events)").fetchall()}
             if "discarded_at" not in ev_cols:
                 c.execute("ALTER TABLE events ADD COLUMN discarded_at TEXT")
-            # Operational-learning CANDIDATE pool (WI-8) — operational/churny, so DB not files
-            # (same rationale as inbox/events). The capture sweep files a RICH row here: `signal` = the
-            # operational statement (what to do), `rationale` = why it matters / the trigger,
-            # `evidence` = concrete instance(s) + a session/work-item pointer, `form_hint` = the
-            # agent's guess at {constitution|skill|agent}. The bar (dev-charter): self-sufficient
-            # for a fresh-context distill. distill consolidates these into typed proposals.
+            # The capture sweep files a rich row: `signal` is what to do, `rationale` why it matters,
+            # `evidence` a concrete instance, `form_hint` the agent's guess at the artifact.
+            # The bar: self-sufficient for a fresh-context distill.
             c.execute(
                 """CREATE TABLE IF NOT EXISTS memory_candidate (
                        id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -327,28 +291,21 @@ class DevStore:
             # that is always in time. Stored 0/1, ON by default; carried into the item by inbox_flow.
             if "autopilot" not in cols:
                 c.execute("ALTER TABLE inbox ADD COLUMN autopilot INTEGER NOT NULL DEFAULT 1")
-            # `work_kind` = the PROPOSED work-item kind (kind_profiles.KIND_PROFILES key), set by
-            # whoever files the ticket. NULL = nobody has judged yet, which is exactly the behaviour
-            # every row had before this column: triage decides alone. Deliberately NOT named `kind`
-            # — that column already means the ticket's FLAVOUR (note|idea|todo|question), and two
-            # `kind`s on one row is the exact shape of the data-model audit's wrong-field bugs.
-            # The two roles that run on their OWN tier rather than the item's: `vet` checks what
-            # build produced, `deputy` judges the gates. Picking one here is the item-scoped end of
-            # a chain that otherwise reads the repo (vet) or the system (deputy) — never the item's
-            # own model, which is the coupling these roles exist to break. NULL = use that chain.
+            # `work_kind` is the PROPOSED kind; NULL means nobody has judged. Not named `kind` — that
+            # column already means the ticket's flavour, and two `kind`s on one row is how wrong-field
+            # bugs start.
+            # `vet` and `deputy` run on their own tier. Picking one here is the item-scoped end of a
+            # chain that otherwise reads the repo or the system. NULL = use that chain.
             for col in ("vet_model", "vet_effort", "deputy_model", "deputy_effort"):
                 if col not in cols:
                     c.execute(f"ALTER TABLE inbox ADD COLUMN {col} TEXT")
             if "work_kind" not in cols:
                 c.execute("ALTER TABLE inbox ADD COLUMN work_kind TEXT")
-            # note/idea/todo/question -> `item`, ALL of them, INCLUDING the old "note". Free notes
-            # did not exist before this migration, so no historical row can be one: the old "note"
-            # meant "a captured thought to push", not "mine, keep it off the board".
+            # All legacy flavours become `item`, the old "note" included: free notes did not exist
+            # before this migration, so no historical row can be one.
             #
-            # Keyed off the presence of a legacy value, not off the values themselves. A table
-            # holding `idea`/`todo`/`question` has never been migrated, so EVERY row in it predates
-            # free notes and converts. Once none remain the guard never fires again, which is what
-            # keeps a real owner-authored `note` safe from a second pass.
+            # Keyed off the PRESENCE of a legacy value, so once none remain the guard never fires again
+            # and a real owner-authored note is safe from a second pass.
             if c.execute("SELECT 1 FROM inbox WHERE kind IN ('idea','todo','question') "
                          "LIMIT 1").fetchone():
                 c.execute("UPDATE inbox SET kind='item'")
@@ -362,17 +319,14 @@ class DevStore:
                   model: str | None = None, effort: str | None = None,
                   autopilot: bool = True, work_kind: str | None = None,
                   role_config: dict | None = None) -> dict:
-        """`spawned_from` (D3) = the provenance edge a branch-off item carries from birth:
-        {item, relation: blocking|parallel|spawn, note?}. Validated here; NULL for plain captures.
-        `model`/`effort` (F3) = the run config chosen at capture, locked into the work-item at push;
-        NULL = inherit the repo/system default. `autopilot` = the same capture-time decision for
-        whether the item drives its own gates — ON by default (owner, 2026-08-02): driving itself is
-        the normal case, and the toggle is for the exceptions.
+        """File one inbox row.
 
-        `work_kind` = the PROPOSED work-item kind, which push carries onto the item and triage then
-        confirms or disputes. Validated LOUD against KIND_PROFILES rather than silently dropped: a
-        typo'd proposal that vanished would read at triage as "nobody proposed one", and the whole
-        point of the field is that triage can tell those two states apart."""
+        `spawned_from` is the provenance edge a branch-off carries from birth. `model`/`effort` are the
+        capture-time run config, locked onto the work-item at push. `autopilot` is on by default —
+        driving itself is the normal case.
+
+        `work_kind` is the PROPOSED kind. Validated LOUD rather than silently dropped: a typo that
+        vanished would read at triage as "nobody proposed one", and telling those apart is the point."""
         text = (text or "").strip()
         if not text:
             raise ValueError("empty inbox text")
@@ -406,10 +360,8 @@ class DevStore:
             return self._get(c, cur.lastrowid)
 
     def append_inbox(self, item_id: int, addition: str, *, origin_add: str = "agent") -> dict | None:
-        """APPEND to an existing inbox item — never edits its existing text. Adds `addition` under a
-        divider and unions `origin_add` into the item's origin list (so a user-made item the itemize
-        skill later augments reads ['user','agent']). Bumps updated_at. Used when the itemize skill
-        finds the work already ticketed but the new discussion adds something worth keeping."""
+        """APPEND to an existing row, never editing its text. Unions `origin_add` into the origin
+        list, so a user-made item the itemize skill augments reads ['user','agent']."""
         addition = (addition or "").strip()
         if not addition:
             raise ValueError("empty append text")
@@ -460,15 +412,10 @@ class DevStore:
         if sets.get("status") not in _STATUSES:
             sets.pop("status", None)
         if "work_kind" in sets:
-            # The one field here with a meaningful NULL, so it needs a way to be un-set: an empty
-            # string clears it back to undecided (a bare None can't reach here — the filter above
-            # reads None as "caller didn't mention this field"). Anything else must be a real kind.
+            # The one field with a meaningful NULL, so an empty string clears it back to undecided.
             #
-            # And an invalid one RAISES rather than being dropped like `kind`/`status` above. Those
-            # two can afford silence because their fallback is the value already on the row; this
-            # field's is NULL, which is itself a meaningful state — so a dropped typo would land
-            # the caller on "undecided" and read back exactly like a deliberate clear. Same reason
-            # `add_inbox` is loud: the whole point of the field is telling those two apart.
+            # An invalid value RAISES rather than being dropped: this field's fallback is NULL, which is
+            # itself a state, so a dropped typo would read back exactly like a deliberate clear.
             from .kind_profiles import KIND_PROFILES
             if not sets["work_kind"]:
                 sets["work_kind"] = None
@@ -476,9 +423,8 @@ class DevStore:
                 raise ValueError(f"work_kind must be one of {sorted(KIND_PROFILES)}")
         if "autopilot" in sets:
             sets["autopilot"] = int(bool(sets["autopilot"]))
-        # A role pick is CLEARABLE — "Default" means fall through to the repo/system chain, and the
-        # picker sends "" for it. Store that as NULL, so "never set" and "set back to default" are
-        # one state in the column rather than two that every reader would have to know about.
+        # Stored as NULL, so "never set" and "set back to default" are one state rather than two
+        # every reader would have to know about.
         for col in _ROLE_COLS:
             if sets.get(col) == "":
                 sets[col] = None
@@ -521,22 +467,17 @@ class DevStore:
         with self._conn() as c:
             return self._get(c, item_id)
 
-    # Agent-run telemetry moved to the system spine's `run` table (WI-4). The old DevStore
-    # `runs` table + its start_run/finish_run/run_stats/delete_runs methods are gone; the data
-    # was migrated by the WI-2 importer and the table is dropped in _init below.
 
     # --- event log (PRD §4.9) ---------------------------------------------------
 
     def log_event(self, context_id: str, kind: str, summary: str, *,
                   item_id: str | None = None, scope: str | None = None,
                   actor: str = "daemon", meta: dict | None = None) -> dict:
-        """Append one event to the log. `scope` auto-derives when omitted: an event with an
-        `item_id` is item-scoped, otherwise dev-native (item_id NULL). Append-only — never
-        edited. Returns the stored row (meta decoded).
+        """Append one event. `scope` auto-derives: an event with an `item_id` is item-scoped, else
+        dev-native. Append-only, never edited.
 
-        Also notifies any registered observer AFTER the row is committed (see `subscribe_events`) —
-        this is the single point the dashboard's live-push channel hangs off. Notification is
-        best-effort and cannot affect the write."""
+        Also notifies registered observers AFTER the commit — the single point the dashboard's live
+        push hangs off."""
         scope = scope or ("item" if item_id else "dev")
         with self._conn() as c:
             cur = c.execute(
@@ -620,9 +561,7 @@ class DevStore:
         mine.sort(key=lambda e: (e.get("created_at") or "", e.get("id") or 0))
         return mine[:limit]
 
-    # (delete_events removed — dev-activity events are historical trace and are never deleted; a
-    # deleted work-item keeps its events, and the item.drop marker records the deletion.
-    # session-deletion-trace-model.)
+    # Dev-activity events are historical trace and are never deleted.
 
     def _row_event(self, r: sqlite3.Row) -> dict:
         d = dict(r)
@@ -795,8 +734,7 @@ class DevStore:
             except (ValueError, TypeError):
                 existing = []
             merged_ids = sorted({*(int(i) for i in existing), *add})
-            # A forged (drafted) proposal's staged artifact no longer reflects the fuller candidate
-            # set → revert to proposed for re-forge, clearing the now-stale artifact + eval.
+            # A drafted artifact no longer reflects the fuller candidate set — revert for re-forge.
             reforge = cur_status == "drafted"
             sets = ["candidate_ids=?"]
             params: list = [json.dumps(merged_ids)]
