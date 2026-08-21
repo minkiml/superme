@@ -1,29 +1,15 @@
-"""Kernel speech — every in-code prompt the SuperMe kernel says to an agent, in one module.
+"""Kernel speech — every in-code prompt the kernel says to an agent, in one module.
 
-The registry (Thread 3 §12). Admission rule, applied to every entry:
-  1. AGENT-consumed only — owner-directed text (gate briefs, FE copy, log/event lines) lives on
-     its own surfaces, never here.
-  2. NOT bound to a code object that is its natural surface — tool definitions + their
-     result/error strings, permission denial messages, and artifact scaffolding templates stay
-     at their surface; file-based harness content (skills / agents / constitutions / persona /
-     charters) is untouched.
-Whatever survives both questions is kernel speech and MUST live here; nothing else may.
+Admission rule, applied to every entry:
+  1. AGENT-consumed only. Owner-directed text lives on its own surfaces.
+  2. NOT bound to a code object that is its natural surface — tool descriptions, deny messages
+     and artifact templates stay where they are, and file-based harness content is untouched.
 
-Layers (each entry's docstring states consumer · fires-when · durable vs per-turn):
-  - triggers    — the 8 background-run user-messages (durable in each run's transcript)
-  - preambles   — the per-kind session identity blocks (per-turn system layer, never durable)
-  - assemblers  — kernel speech built from durable item state (handoff / diagnosis trace),
-                  moved whole so this one file answers "what does the kernel say"
+Layers: triggers (background-run user messages, durable) · preambles (per-kind identity blocks,
+per-turn) · assemblers (kernel speech built from durable item state).
 
-Run endings are TOOLS, not fences (workflow-renovation-v2 §3.2): `report_completion` /
-`deputy_verdict` in `harness/tools/run_tools.py` — the schemas + param descriptions there ARE
-the contract; the run protocol that names them rides `work_item_preamble(interactive=False)` /
-`deputy_preamble` below. `scripts/test_thread3.py` snapshots every entry against
-`scripts/prompt_baseline.json` (parity-style): edits to any text here are deliberate
-re-baselines, and instruction-shaped strings elsewhere in `superme_agent/` fail its
-outside-registry lint.
-
-Pure functions over plain data — no daemon imports.
+`test_thread3` snapshots every entry against a baseline, so an edit here is a deliberate
+re-baseline, and instruction-shaped strings elsewhere fail its outside-registry lint.
 """
 
 import json
@@ -32,30 +18,20 @@ from pathlib import Path
 from . import artifacts, kind_profiles, sandbox
 
 
-# =============================================================================================
 # triggers (durable user-messages — each opens one background run's transcript)
-# =============================================================================================
 
 def intake_trigger(skill: str, item_id: str, title: str,
                    changed: list[str] | None = None) -> str:
-    """Consumer: the background plan/triage run (runs._background_intake_run) · durable. The task
-    delta is just WHICH skill for WHICH item — the procedure lives in the skill, the run protocol
-    in the Current-focus background variant (work_item_preamble). On replay,
-    sessions._NOISE_PREFIXES drops this phrase (one entry per intake skill — keep in sync).
+    """The background intake run's message · durable. The delta is just WHICH skill for WHICH
+    item; the procedure lives in the skill.
 
-    `changed` = the records rewritten since THIS PHASE's own last run, and it is the whole reason
-    this trigger takes an argument at all. Per-phase sessions made re-entry cheap (a review after a
-    revise round resumes the reviewer that already read the item) and in doing so created one
-    failure the old mint-every-time model could not have: measured live 2026-08-13 on
-    `20687ac32d63`, investigate rewrote both of its records, review resumed, answered "nothing has
-    changed since" from memory, and filed `clean_noop` over a report describing a superseded
-    investigation. The thread was not lying — nothing in the turn told it the disk had moved, and a
-    resumed agent's own transcript is the most convincing thing in its context.
+    `changed` is the records rewritten since THIS PHASE's own last run. Per-phase sessions made
+    re-entry cheap and created one failure with it: a resumed review answered "nothing has changed"
+    from memory and filed over a superseded investigation. A resumed agent's own transcript is the
+    most convincing thing in its context.
 
-    So the rule: an advance into a phase that ALREADY HOLDS A THREAD must name what changed since
-    that thread last ran. Named files, not "things may have changed" — a re-read is checkable and
-    an exhortation to be careful is not. Silent when nothing moved (a genuine no-op deserves one)
-    and silent on a phase's first entry (nothing to have missed)."""
+    So an advance into a phase that ALREADY HOLDS A THREAD must name what changed. Named files, not
+    "things may have changed" — a re-read is checkable, an exhortation is not."""
     base = f"Run superme-dev:{skill} for work-item `{item_id}` (\"{title}\")."
     if not changed:
         return base
@@ -73,16 +49,13 @@ def intake_trigger(skill: str, item_id: str, title: str,
 
 
 def completion_nudge(skill: str) -> str:
-    """Consumer: the kernel's completion BACKSTOP (runs.ensure_completion) · fired only when a run
-    ended without calling `report_completion`. Not a reminder to be polite about — the run is over
-    and the kernel is holding the row open for one thing.
+    """The completion BACKSTOP, fired only when a run ended without calling
+    `report_completion`.
 
-    Measured 2026-08-11: 99 of 544 runs ended undeclared, and the miss tracks whether anything
-    downstream breaks — 4% on build/vet (the loop routes on `outcome`) against 18-36% on the
-    phases that park at a gate either way. The cause is a real ambiguity, not laziness: for
-    triage/plan/review the PHASE ends when someone approves, so declaring "completion" reads as a
-    claim the agent knows it cannot make. Hence the wording: it asks about THIS RUN, says the phase
-    is not being advanced, and names the one call that ends it."""
+    The miss tracks whether anything downstream breaks: rare on build and vet, where the loop routes
+    on `outcome`, common on phases that park at a gate either way. The cause is real ambiguity — for
+    triage and review the PHASE ends when someone approves, so "completion" reads as a claim the
+    agent cannot make. Hence the wording: it asks about THIS RUN and names the one call."""
     return (
         f"Your {skill} run is over, but it never called `report_completion`, so the kernel has no "
         f"outcome for it. Call it now and nothing else.\n"
@@ -94,22 +67,17 @@ def completion_nudge(skill: str) -> str:
 
 
 def checkpoint_trigger(item_id: str) -> str:
-    """Consumer: the pre-compaction handoff turn (compaction.run_handoff_turn) · durable. Names
-    the skill and the reason — the reason is load-bearing here in a way it is not for other
-    triggers: the thread must know its memory is about to be replaced, or it writes a status
-    update instead of a handoff. Everything about WHAT to write lives in the skill."""
+    """The pre-compaction handoff turn · durable. The reason is load-bearing here: the thread
+    must know its memory is about to be replaced, or it writes a status update instead of a handoff."""
     return (f"This session is about to be compacted — its conversation will be replaced by a "
             f"summary you did not write. Run superme-dev:checkpoint for work-item `{item_id}` "
             f"now, so what only this conversation knows survives.")
 
 
 def session_checkpoint_trigger(memory_path: str) -> str:
-    """Consumer: the pre-compaction handoff turn of a session with NO work-item
-    (compaction.run_handoff_turn, `item_id=None`) · durable. Same skill and same content contract
-    as `checkpoint_trigger` — only the write target differs, because a general session has no
-    item folder and therefore no `write_checkpoint` tool to call. The exact path is named here so
-    the skill never has to derive it (and so the write lands inside the one directory the turn's
-    permission scope allows)."""
+    """The same for a session with NO work-item. Only the write target differs — a general
+    session has no item folder. The path is named so the skill never derives it, and so the write
+    lands inside the turn's permission scope."""
     return (f"This session is about to be compacted — its conversation will be replaced by a "
             f"summary you did not write. This session is not tied to a work-item, so run "
             f"superme-dev:checkpoint and WRITE the result to `{memory_path}` (create or overwrite "
@@ -117,21 +85,18 @@ def session_checkpoint_trigger(memory_path: str) -> str:
 
 
 def vet_env_script() -> str:
-    """Absolute path to the vet skill's `vet_env.sh`, or "" if it isn't there.
+    """Absolute path to the vet skill's `vet_env.sh`, or "" if absent.
 
-    Named here rather than left to the skill's prose because a Bash line has to be a REAL path: the
-    script lives in the install, not in the repo being vetted, so nothing relative resolves from the
-    worktree, and `${CLAUDE_PLUGIN_ROOT}` is a substitution we have never proved fires in a run.
-    A path the kernel resolved is a fact; a placeholder is a hope."""
+    Resolved here because a Bash line needs a REAL path: the script lives in the install, not the
+    repo being vetted, so nothing relative resolves. A path the kernel resolved is a fact."""
     from ..paths import DEV_PLUGIN_DIR
     p = DEV_PLUGIN_DIR / "skills" / "vet" / "scripts" / "vet_env.sh"
     return str(p) if p.is_file() else ""
 
 
 def vet_env_note(script: str) -> str:
-    """The two lines every phase that runs checks needs, with a REAL path in them. Shared so build
-    and vet are told the same thing: build's recorded validation commands are re-executed by vet,
-    so a command that boots the server differently from vet's is a disagreement about nothing."""
+    """The two lines every phase that runs checks needs, with a real path. Shared, so build and
+    vet are told the same thing — vet re-executes build's recorded commands."""
     return (f"\n\nThis repo can run its own server from THIS worktree — anything that queries one "
             f"must query that, never an instance already listening (it serves a different checkout, "
             f"where a deleted endpoint still answers):\n"
@@ -147,16 +112,12 @@ def vet_env_note(script: str) -> str:
 def vet_trigger(item_id: str, title: str, deferred: list[str] | None = None,
                 machine: list[dict] | None = None, audit: list[dict] | None = None,
                 vet_env: bool = False) -> str:
-    """Consumer: the background vet run (loop._run_background_vet) · durable (vet forgets — each
-    cycle's fresh transcript opens with this). `deferred` = vet-plan check ids the build declared
-    as needs-you deferrals (BV-A2/A3): the vetter must NOT judge them — they are intentional skips
-    awaiting the owner's authorization at review, so re-judging them is wasted work that never
-    converges. Naming them here is what stops the loop churning on a check only the owner can clear.
+    """The background vet run · durable (vet forgets, so each cycle opens with this).
 
-    `machine` = the checks the KERNEL already executed and recorded this cycle (design §4), as
-    [{check, passed, result}]. They are settled facts, not work: naming them stops the vetter
-    spending a subagent re-running an exam whose verdict is already in the ledger — and the ledger
-    refuses a second entry anyway, so an unwarned vetter would spend the run on a tool error."""
+    `deferred` are checks build declared as needs-you deferrals: intentional skips awaiting the
+    owner, so re-judging them never converges. `machine` are checks the KERNEL already ran this
+    cycle — settled facts, and the ledger refuses a second entry, so an unwarned vetter would spend
+    the run on a tool error."""
     base = f"Run superme-dev:vet for work-item `{item_id}` (\"{title}\")."
     if machine:
         lines = "\n".join(f"- `{m['check']}` — {'PASS' if m.get('passed') else 'FAIL'} "
@@ -165,11 +126,8 @@ def vet_trigger(item_id: str, title: str, deferred: list[str] | None = None,
                  "— they are DONE:\n" + lines + "\nDo not re-run or re-record them; a second entry "
                  "is refused. Read them as findings, perform the remaining checks yourself, and "
                  "cover all of them in your report.")
-    # The audit of BUILD's own validation claims. Only DISAGREEMENTS are named: an audit that
-    # agreed is the expected case and telling the vetter about it is spent budget. A disagreement
-    # is the opposite — it says a claim the whole cycle rests on is not true, and the vetter's
-    # report has to carry it (the machine block writes it either way, so this is orientation, not
-    # the record).
+    # Only DISAGREEMENTS are named: an audit that agreed is the expected case, while a
+    # disagreement says a claim the whole cycle rests on is untrue. Orientation, not the record.
     if (bad := [a for a in (audit or []) if not a.get("agrees")]):
         lines = "\n".join(
             f"- `{a['command']}` — build recorded "
@@ -192,10 +150,8 @@ def vet_trigger(item_id: str, title: str, deferred: list[str] | None = None,
 
 
 def build_first_trigger(item_id: str, title: str, vet_env: bool = False) -> str:
-    """Consumer: the loop's ENTRY build run (loop.start_first_build) · durable in the item's
-    fresh build thread. Build-first: the loop opens with an implementation cycle from the plan,
-    not a vet against an empty tree (a vet with nothing built is a wasted look). The plan IS the
-    work order here; the loop vets what this cycle produces."""
+    """The loop's ENTRY build run · durable. Build-first: the loop opens with an implementation
+    cycle from the plan, because a vet against an empty tree is a wasted look."""
     return (
         f"The build⟷vet loop just entered BUILD for work-item `{item_id}` (\"{title}\") — this is "
         f"the loop's opening cycle, nothing is built yet. Run superme-dev:build to implement the "
@@ -208,21 +164,15 @@ def build_first_trigger(item_id: str, title: str, vet_env: bool = False) -> str:
 def build_loop_trigger(item_id: str, title: str, cycle: int, report_text: str,
                        *, reload_skill: bool = False,
                        diagnoses: dict[str, dict] | None = None) -> str:
-    """Consumer: the loop's failure-hop build run (loop._run_background_build default) · durable
-    in the item's persistent build thread. The failed cycle's report IS the payload — the work
-    order, injected once here, never per-turn.
+    """The loop's failure-hop build run · durable in the persistent build thread. The failed
+    cycle's report IS the payload, injected once.
 
-    `reload_skill` when the thread was COMPACTED since its last cycle. Build REMEMBERS (one thread
-    across cycles), so cycle 1 invokes `superme-dev:build` and later cycles skip the call — the
-    procedure is already in the transcript. After a compaction that stops being true, and the same
-    "Run superme-dev:build" line the agent has already satisfied once will not make it re-read.
-    So say the thing that changed: the context was cut, invoke it again.
+    `reload_skill` when the thread was COMPACTED: build remembers across cycles, so later cycles
+    skip the skill call — after a compaction that stops being true, and repeating a line the agent
+    already satisfied will not make it re-read.
 
-    `diagnoses` = vet's located cause per failed check (design §5), lifted ABOVE the report because
-    it is the work order's first line: where it broke and why. The report carries the same entries
-    further down, but a build cycle that has to find them inside a wall of markdown starts by
-    re-deriving what vet already established. Vet never names the fix — that reasoning is build's,
-    and inside the same plan."""
+    `diagnoses` are vet's located causes, lifted ABOVE the report because they are the work order's
+    first line. Vet never names the fix — that reasoning is build's."""
     head = (
         "Your context was COMPACTED since the last cycle, so the build procedure may no longer be "
         "in it: invoke the `superme-dev:build` skill again before you start. Then fix"
@@ -246,17 +196,14 @@ def build_loop_trigger(item_id: str, title: str, cycle: int, report_text: str,
 
 def phase_feedback_trigger(item_id: str, title: str, phase: str, skill: str, feedback: str,
                            digest: str | None = None) -> str:
-    """Consumer: the deputy's send-back re-run (runs._run_deputy_feedback_turn) · durable — it
-    RESUMES the item's own session, so this lands as a real turn the agent answers in-thread (the
-    deputy's live turn; 3 speakers). The agent must NOT branch on who sent it — this is worded as
-    feedback to act on, exactly as the owner's would be. The feedback is the payload; the phase skill
-    owns the procedure and the docs/task-track updates. For a review→plan fall-back, `digest` carries
-    what happened downstream (built/vet/review) so the re-plan knows it's feedback from the earlier
-    plan's build results — never re-dump the plan itself (the agent reads plan.md; it is the contract)."""
+    """The deputy's send-back re-run · durable, resuming the item's own session.
+
+    Worded as feedback to act on, exactly as the owner's would be — the agent must NOT branch on who
+    sent it. `digest` carries what happened downstream, but never re-dumps the plan: the agent reads
+    plan.md, which is the contract."""
     digest_block = f"\n\nWhat happened downstream since the last plan (context for your re-plan):\n{digest}\n" if digest else ""
-    # A plan-phase round changes plan.md, and there is exactly one sanctioned way to do that
-    # (§2.1): `revise_plan`. Naming it here matters — the whole-file rewrite is the tempting move,
-    # and it silently discards the `- [x]` progress build already earned.
+    # There is one sanctioned way to change plan.md. Naming it matters: the whole-file rewrite is
+    # the tempting move, and it discards the progress build already earned.
     how = ("" if phase != "plan" else
            " Change `plan.md` ONLY through `revise_plan` — never rewrite the file. Split the "
            "feedback into its concerns and give each one its own scope: `resume` when the plan was "
@@ -274,12 +221,10 @@ def phase_feedback_trigger(item_id: str, title: str, phase: str, skill: str, fee
 
 
 def close_trigger(item_id: str, title: str) -> str:
-    """Consumer: the auto-fired close run (runs._run_background_close) · durable — it RESUMES the
-    item's intake thread (the whole narrative that knows what the item was for). This is the ONE
-    closing run: review's exit locked code and git, so close's whole job is knowledge — the anchor
-    docs + this week's change log — plus `reports/report-close.md`. Clearance to Done is
-    MECHANICAL and happens after the report (services/clearance); the run never completes the
-    item, and there is nothing for it to propose."""
+    """The auto-fired close run · durable, resuming the item's intake thread.
+
+    The ONE closing run. Review's exit locked code and git, so close's whole job is knowledge.
+    Clearance to Done is mechanical and happens after the report."""
     return (
         f"Work-item `{item_id}` (\"{title}\") merged and entered its CLOSE phase. Run "
         f"superme-dev:close: reflect what LANDED into the general anchor docs through "
@@ -319,10 +264,8 @@ def distill_trigger() -> str:
 
 def write_trigger(prop: dict, *, slug: str, workspace, existing_path: str | None,
                   forge_kit) -> str:
-    """Consumer: the background write run (learning._run_background_write) · durable in a
-    disposed transcript. Names the forge sub-agent + hands it the full proposal spec plus the
-    toolkit / scratch-space paths; the authoring + validation steps live in the forge agent and
-    its per-form skills."""
+    """The background write run · durable in a disposed transcript. Names the forge sub-agent
+    and hands it the proposal plus the toolkit paths; authoring lives in the agent."""
     fields = prop.get("fields")
     answers = prop.get("clarification_answers")
     parts = [
@@ -369,25 +312,17 @@ def capture_trigger(slice_text: str, focus: str | None = None) -> str:
     )
 
 
-# =============================================================================================
-# per-kind session preambles (per-turn system layer — never durable)
-# =============================================================================================
-# A SuperMe dev session runs as one of several AGENTS, each with its own identity (persona): how
-# the turn is centered, what it may touch, and (for subject-bearing agents) what it's pointed at.
-# Adding an agent = adding a preamble here, not threading conditionals through the ws turn loop
-# (session-kinds-diagnose). The daemon knows the session's stamp + establishment state, so it
-# picks the preamble; Core just appends what it's handed.
+# Per-kind session preambles: per-turn system layer, never durable. Adding an agent is adding
+# a preamble here, not conditionals in the ws turn loop. The daemon picks; Core appends.
 #
-#   general    — the free-discussion advisor. May author `general/` memory; no code / work-item mutation.
-#   work_item  — the builder, bound to one primary work-item. Centered on it; owns + advances it.
-#   onboarding — the general agent's ESTABLISH-MEMORY persona, used while a dev project has no
-#                memory yet (project-init / retrofit). Applied per-turn by project state, never by
-#                the session's stamped kind — it un-applies once memory exists.
-#   diagnosis  — the read-only inspector, pointed at a subject run (an Activity row).
+#   general    — the advisor. May author `general/` memory; no code or work-item mutation.
+#   work_item  — the builder, bound to one item. Owns and advances it.
+#   onboarding — the establish-memory persona, applied by project state rather than the
+#                session's stamp, so it un-applies once memory exists.
+#   diagnosis  — the read-only inspector, pointed at a subject run.
 
-# The THIN per-phase contract (workspace-workflow S5/D9: thin preamble, thick skill). One line of
-# WHAT this phase is + the phase skill that owns the PROCEDURE. Constraints/gates are derived in
-# work_item_preamble from live item state; this table carries only the per-phase constants.
+# Thin preamble, thick skill: one line of WHAT the phase is, plus the skill that owns the
+# procedure. Constraints are derived from live state; this table holds only the constants.
 _PHASE_CONTRACTS: dict[str, dict] = {
     "triage":      {"skill": "triage",
                     "what": "classify this item (kind, scope, deliverable) and shape its brief — no building yet"},
@@ -408,12 +343,9 @@ _PHASE_CONTRACTS: dict[str, dict] = {
                     "what": "answer the plan's research questions within its boundaries — read-only on code"},
 }
 
-# Per-KIND overrides: the spine's phases are shared, but what a phase MEANS can be the kind's.
-# EMPTY by design (renovation §2.2, 2026-07-29): kind variation belongs in a skill's TEMPLATES and
-# preconditions, never in a second skill. `review` was the one entry here — research pointed at a
-# parallel `research-report` skill — and absorbing it back is what made the review phase one thing
-# again. Kept as a seam: a future kind whose phase genuinely means something else states it here,
-# and the moment that entry names a NEW skill for a shared phase, this comment is the warning.
+# EMPTY by design: kind variation belongs in a skill's TEMPLATES, never in a second skill.
+# Kept as a seam — but the moment an entry here names a NEW skill for a shared phase, this
+# comment is the warning.
 _KIND_PHASE_CONTRACTS: dict[tuple[str, str], dict] = {}
 
 
@@ -424,18 +356,14 @@ def phase_contract(kind: str | None, phase: str) -> dict:
 
 
 def compaction_notice(checkpoint_path: str | None, *, has_artifacts: bool = True) -> str:
-    """The post-compaction continuity notice (compaction-redesign §13.3), owed for exactly as long
-    as no real turn has run since the compaction.
+    """The post-compaction continuity notice, owed until a real turn runs.
 
-    A POINTER, never the file's contents — a per-turn prompt must not carry a body (owner,
-    2026-07-28); `work_item_preamble` already points at the item folder. What was missing is a
-    REASON to open it: "read on demand" never fires, because a compacted agent does not know it
-    just lost its memory. Roughly 30 tokens, and conditional, so it is not permanent floor.
+    A POINTER, never contents — a per-turn prompt must not carry a body. What was missing is a
+    REASON to open it: "read on demand" never fires, because a compacted agent does not know it just
+    lost its memory.
 
-    It doubles as the safety envelope. Hermes wraps its summaries in "REFERENCE ONLY — the latest
-    message wins" because models resume cancelled work from a summary (five documented bugs). We
-    cannot wrap the CLI's `/compact` output — this line is ours, so the caution lands here.
-    """
+    It doubles as the safety envelope: models resume cancelled work from a summary, and this line is
+    the only place we can say the latest message wins."""
     if not checkpoint_path:
         return ""
     # `has_artifacts=False` for a general session: it has no item folder, so "trust the item's
@@ -453,24 +381,19 @@ def compaction_notice(checkpoint_path: str | None, *, has_artifacts: bool = True
 
 def work_item_preamble(item_id: str, item: dict, item_dir, *, interactive: bool = True,
                        compacted_checkpoint: str | None = None) -> str:
-    """Consumer: EVERY work-item-bound turn — interactive (ws.py) and every background runner
-    (intake triage/plan, build/vet loop, close, feedback re-runs) · per-turn. A THIN contract
-    derived from (item.kind, item.phase) — the current focus pointer, this phase's job + its
-    skill, the edit boundary, and the next gate. The PROCEDURE lives in the per-phase skill; the
-    orientation is on-demand (each phase skill names its directed reads; the item folder is the
-    ground truth) — this block rides every turn's system prompt, so it stays small. `interactive`
-    swaps the presence line AND, on kernel-fired runs, appends the run protocol (the counterpart +
-    the `report_completion` ending — workflow-renovation-v2 §1 block 5)."""
+    """EVERY work-item-bound turn, interactive and background · per-turn.
+
+    A THIN contract derived from (kind, phase): the focus pointer, this phase's job and skill, the
+    edit boundary, the next gate. The PROCEDURE lives in the skill and orientation is on demand,
+    because this rides every turn's system prompt.
+
+    `interactive` swaps the presence line and, on kernel-fired runs, appends the run protocol."""
     title = item.get("title") or item_id
     phase = str(item.get("phase") or "triage")
     kind = str(item.get("kind") or "implementation")
     c = phase_contract(kind, phase)
-    # The "FRESH thread" sentence was cut 2026-08-11 (owner). It EXPLAINED why the artifacts are all
-    # you know; the trace rule below is the same idea as a test you can apply, and an explanation
-    # whose test is stated beside it is the redundancy §4d is about. "Kernel-fired" went with it —
-    # the Run protocol's own opening ("no reply from a person arrives mid-run") is that fact stated
-    # where it is used. What SURVIVES is "sole subject": nothing else in the context stops a run
-    # wandering into a second item, and a background run has nobody to stop it.
+    # "Sole subject" survives because nothing else in the context stops a run wandering into a
+    # second item, and a background run has nobody to stop it.
     presence = (
         "This is an interactive chat — the user is present. Their interactions primarily "
         "center on this item unless they point elsewhere."
@@ -488,23 +411,16 @@ def work_item_preamble(item_id: str, item: dict, item_dir, *, interactive: bool 
         "the file, you have not read it.",
     ]
     if c:
-        # The skill name rides EVERY turn on purpose, even though every trigger already names it
-        # (kernel_speech's six `Run superme-dev:<skill>` lines). A trigger is one message; a
-        # compaction mid-cycle can replace it with a summary that drops it, and the next trigger
-        # (with its `reload_skill` nudge) is a cycle away — that gap IS bug #241. `c['what']` is
-        # not in the triggers at all.
+        # The skill name rides EVERY turn even though the triggers name it: a trigger is one message,
+        # and a mid-cycle compaction can replace it with a summary that drops it.
         lines.append(f"\n**This phase:** {c['what']} — procedure in the `superme-dev:{c['skill']}` "
                      f"skill.")
-    # SCALE (kind_profiles.ITEM_SCALES): triage's judgment, riding every later phase's turn. Only
-    # `small` says anything — `standard` IS the behaviour every skill already describes, so a line
-    # for it would be floor paid on every turn to change nothing.
+    # Only `small` says anything: `standard` IS what every skill already describes, so a line for
+    # it would be floor paid every turn to change nothing.
     #
-    # Written as two boundaries rather than "be concise", which is the instruction that produces no
-    # change. And the overflow clause matters more than either: the structure stays whole at small
-    # (owner, 2026-08-10 — thinner contents, never fewer sections), so an agent with nothing to say
-    # in a section it must still write will pad it. Naming overflow as EVIDENCE gives it somewhere
-    # to put that pressure other than filler, and hands the misjudgment back to the owner, who is
-    # the one who can act on it.
+    # Two boundaries rather than "be concise", which produces no change. The overflow clause
+    # matters most: the structure stays whole at small, so an agent with nothing to say in a
+    # section it must still write will pad it. Overflow gives that pressure somewhere to go.
     if kind_profiles.item_scale(item) == "small":
         lines.append(
             "\n**This item is scaled `small`.** Read narrow: this item's own folder, and the files "
@@ -519,19 +435,15 @@ def work_item_preamble(item_id: str, item: dict, item_dir, *, interactive: bool 
             "your report and name what you needed. That is evidence this item was misjudged as "
             "small, and it is the owner's call to make, not yours to absorb."
         )
-    # RESEARCH KIND (kind_profiles.RESEARCH_KINDS): which family of investigation this is. Stated
-    # for every phase of a research item, not just investigate — plan writes the method the family
-    # implies, and review reads the findings against that family's bar. A bare label is enough here
-    # on purpose: what each family owes lives in the phase skills, and repeating it per turn would
-    # be the same words in two carriers.
+    # Stated for EVERY phase, not just investigate: review reads findings against the family's
+    # bar. A bare label is enough — what each family owes lives in the phase skills.
     if (fam := kind_profiles.research_kind(item)):
         why = str(item.get("research_kind_reason") or "").strip()
         lines.append(f"\n**Investigation family: `{fam}`.**"
                      + (f" Triage's reason: {why}" if why else "")
                      + " Your phase's contract says what that family owes.")
-    # WHAT THE FILER PROPOSED (§4.1). Triage is the only reader — after this phase the kind is
-    # frozen, so nowhere later can act on it. Said here because the refusal that enforces it lands
-    # at a tool call, and an agent should meet a rule before it meets the wall.
+    # Triage is the only reader: the kind is frozen after this phase. Said here because an agent
+    # should meet a rule before it meets the wall that enforces it.
     if phase == "triage" and (proposed := str(item.get("proposed_kind") or "")):
         lines.append(
             f"\n**This item was filed as `{proposed}`.** Read the ask yourself and judge it — but "
@@ -539,11 +451,8 @@ def work_item_preamble(item_id: str, item: dict, item_dir, *, interactive: bool 
             "nothing about it. If you disagree, you may not simply record the other one: end your "
             "run with `report_completion(machine.outcome='needs_user')`, ask the owner which it "
             "is, and say what you saw that disagrees.")
-    # The owner's standing input, on EVERY turn of every phase. Each intake phase runs in its own
-    # session, so anything they said in an earlier one is gone from this thread; the durable copy
-    # lives in the artifacts, and until now reached a phase only if that phase's skill happened to
-    # tell it to look. Placed high on purpose — right after what this phase is for, before the
-    # boundaries — because it can change what the phase should do.
+    # Each intake phase runs in its own session, so anything the owner said in an earlier one is
+    # gone from this thread. Placed high, because it can change what the phase should do.
     if carried := artifacts.carry_owner_input(item_dir):
         lines.append(carried)
     # Edit boundary: worktree during build+ (S4 freeze), item folder otherwise. Vet is the
@@ -640,12 +549,9 @@ def work_item_preamble(item_id: str, item: dict, item_dir, *, interactive: bool 
     if compacted_checkpoint:
         lines.append(compaction_notice(compacted_checkpoint))
     if interactive and phase == "review":
-        # Here, not in review/SKILL.md (live-gate finding, 2026-07-28, extended §2.2 2026-07-29):
-        # the turn that hosts the review conversation is an interactive `chat` turn and it never
-        # invokes the phase skill — the trace shows it read plan.md, tried `revise_plan`, hunted
-        # down `report_completion`, and fired. The capability is reachable from the conversation,
-        # so the restraint on it must be too. review/SKILL.md is the ENTRY RUN's procedure and
-        # says nothing about the conversation; this block is the conversation's whole contract.
+        # Here, not in review/SKILL.md: the turn hosting the review conversation never invokes the
+        # phase skill. The capability is reachable from the conversation, so the restraint must be
+        # too. This block is the conversation's whole contract.
         lines.append(
             "\n**Routing:** `plan.md` is not yours to edit here — the only way it changes is by "
             "routing this item back. Ending a turn with "
@@ -663,23 +569,17 @@ def work_item_preamble(item_id: str, item: dict, item_dir, *, interactive: bool 
             "and you should not try."
         )
     if not interactive:
-        # The run protocol (~2 lines), folded in here from the retired "## Background run" block:
-        # the counterpart + the never-page rule + the tool ending. The payload contract itself
-        # lives in the report_completion tool's schema (run_tools.py), never restated as prose.
+        # The counterpart, the never-page rule, and the tool ending. The payload contract lives in
+        # the tool's own schema, never restated as prose.
         lines.append(
             "\n**Run protocol:** no reply from a person arrives mid-run, so never stop to page: a "
             "judgment call you can't make → a `## Assumptions` note in your phase's own record; a "
             "CONTRACT change you can't self-authorize → `request_authorization` (defers it to the "
             "review gate). Either way, finish what you can. End the run by calling "
             "`report_completion` — that call IS your closing statement, so say nothing after it.\n"
-            # Measured, not assumed (2026-08-10, item 3f3aa01a16e8): a background phase run costs
-            # roughly the SUM of its growing transcript, not the sum of its payloads — 4.89M
-            # cache-read tokens across one one-line fix. So a result of size S read at step i is
-            # re-sent (N−i) times, and the single largest cost in that item was plan reading a
-            # 46 KB test file WHOLE to add one test, after it had already grepped to the exact
-            # class. Breadth rules ("read narrow") don't catch this: the file WAS the right file.
-            # Depth is the missing half, it belongs to every run rather than to a scale or a
-            # phase, and the mechanism is stated so the rule generalizes past the tools named.
+            # A run costs the SUM of its growing transcript, not of its payloads: a result read at step i
+            # is re-sent (N−i) times. Breadth rules do not catch this — the file WAS the right file, read
+            # whole. The mechanism is stated so the rule generalizes past the tools named.
             "\n**Read the span, not the file.** What you read stays in this run's context and is "
             "re-sent on every step after it, so a big file read early is paid many times over. "
             "Once you have a line or a symbol — from a grep, a glob, or the plan — take that span "
@@ -716,15 +616,12 @@ def general_preamble() -> str:
 
 
 def onboarding_preamble(mode: str | None = None) -> str:
-    """Consumer: interactive dev turns while the project has no established memory (ws.py, gated
-    on project state) · per-turn. The general agent's ESTABLISH-MEMORY persona — more directive
-    than the advisor: its job is to stand the project's memory up.
+    """Interactive dev turns while the project has no established memory · per-turn. More
+    directive than the advisor: its job is to stand the project's memory up.
 
-    This IS the onboarding kickoff — it carries the skill directive, so nothing needs to be said in
-    the chat to start onboarding. The owner's first message is their project description and nothing
-    else; a visible "Run **retrofit**: …" prompt would only say out loud what this already says
-    privately. `mode` is the repo's connect-time choice (RepoConfig.onboarding): when it's known,
-    NAME the skill rather than making the agent re-derive greenfield-vs-existing from the code."""
+    This IS the kickoff — it carries the skill directive, so nothing need be said in chat to start.
+    `mode` is the connect-time choice: when known, NAME the skill rather than making the agent
+    re-derive greenfield-from-existing."""
     if mode == "project-init":
         skill = ("Run **project-init** — this was connected as a NEW/greenfield project.")
     elif mode == "retrofit":
@@ -750,12 +647,11 @@ def onboarding_preamble(mode: str | None = None) -> str:
 
 
 def diagnosis_preamble(run: dict | None, run_id: int) -> str:
-    """Consumer: every turn of a diagnosis session (ws.py) · per-turn. IDENTITY + read-only
-    behaviour contract — small and STABLE, so it rides the per-turn system prompt cheaply (it
-    caches). The subject run's large TRACE is NOT here: it's injected once at session birth via
-    `diagnosis_trace_block` into the transcript, so resumed turns read it from cache instead of
-    re-writing ~20k every turn (token-inefficiency-per-turn-append). `run` is the subject run row
-    (or None if it can't be loaded — the session still opens, just without the header facts)."""
+    """Every turn of a diagnosis session · per-turn. Identity plus the read-only contract, small
+    and STABLE so it caches.
+
+    The subject run's large TRACE is NOT here — injected once at session birth, so resumed turns read
+    it from cache instead of rewriting ~20k every turn."""
     run = run or {}
     feature = run.get("feature") or "chat"
     status = run.get("status") or "?"
@@ -782,9 +678,7 @@ def diagnosis_preamble(run: dict | None, run_id: int) -> str:
     )
 
 
-# The escalation band per strictness level (design §6 "Deputy strictness"). The dial moves ONLY
-# this discretionary band — the refusal floor in `deputy_preamble` holds at every level. Keyed by
-# the gate's `deputy_strictness` setting (strictness is set per gate); injected at dispatch.
+# The dial moves ONLY this discretionary band; the refusal floor holds at every level.
 _DEPUTY_STRICTNESS = {
     "low": "Maximum delegated autonomy. Approve on your own when vet's coverage is reasonable; "
            "handle gaps by sending back. Escalate ONLY for decisions the mandate reserves for the "
@@ -805,16 +699,12 @@ DEPUTY_STRICTNESS_DEFAULT = "medium"
 
 
 def deputy_preamble(strictness: str = DEPUTY_STRICTNESS_DEFAULT) -> str:
-    """Consumer: every deputy dispatch (autopilot gate judgment) · fires: `run_turn`'s system
-    layer (`system_append`), one-shot — the deputy is minted fresh per gate and dies when the gate
-    is decided, so there is no per-turn/durable split. IDENTITY + the refusal floor + the verdict
-    contract. The project mandate, decision-log digest, gate brief, pending authorizations, and (at
-    review) the verbatim success signal ride the PROMPT body (`deputy_brief_block`), never here.
+    """Every deputy dispatch · one-shot, since a deputy is minted per gate and dies with it.
+    Identity, the refusal floor, and the verdict contract.
 
-    `strictness` (this gate's `deputy_strictness` setting) tunes ONLY the escalation band — the floor
-    below is level-invariant. The load-bearing section is the refusal floor: the failure mode this
-    whole preamble exists to prevent is a deputy that approves everything while sounding thoughtful.
-    """
+    The mandate, decision log, gate brief and authorizations ride the PROMPT body, never here.
+    `strictness` tunes ONLY the escalation band; the floor is level-invariant, because the failure
+    this exists to prevent is a deputy that approves everything while sounding thoughtful."""
     if strictness not in _DEPUTY_STRICTNESS:   # defence in depth — the setting is validated too
         strictness = DEPUTY_STRICTNESS_DEFAULT
     band = _DEPUTY_STRICTNESS[strictness]
@@ -937,10 +827,8 @@ def deputy_preamble(strictness: str = DEPUTY_STRICTNESS_DEFAULT) -> str:
     )
 
 
-# =============================================================================================
 # assemblers (kernel speech built from durable state — moved whole, one file answers
 # "what does the kernel say")
-# =============================================================================================
 
 def _cap(text: str, cap: int) -> str:
     text = (text or "").strip()
@@ -949,17 +837,14 @@ def _cap(text: str, cap: int) -> str:
 
 _DEPUTY_MANDATE_CAP = 3_000
 _DEPUTY_LOG_CAP = 2_000
-# A RUNAWAY GUARD, not a summarizer. The phase reports are scaffold-capped by contract (§3.3: ≤1
-# screen, ≤1 page for the final) — that is the real limit, and a cap on top of a cap only ever
-# truncates mid-sentence. This exists so a malformed report can't blow the prompt, and should never
-# fire on a report written from its template.
+# A RUNAWAY GUARD, not a summarizer: reports are scaffold-capped by contract, and a cap on a
+# cap only truncates mid-sentence. Should never fire on a report written from its template.
 _DEPUTY_REPORT_CAP = 12_000
 
 
 def render_authorizations_block(pending: list[dict], delegated: list[str]) -> str:
-    """The review deputy's authorization surface (BV-A2.3): the pending requests + which you may
-    grant. For each, `[delegated]` means the scope is one the owner delegated to you — grant it
-    (`send_back` + `authorize: <id>`); `[owner-reserved]` means escalate for the owner to decide."""
+    """The review deputy's authorization surface: pending requests and which it may grant.
+    `[delegated]` means the owner delegated that scope; `[owner-reserved]` means escalate."""
     if not pending:
         return ""
     dset = set(delegated or [])
@@ -976,9 +861,8 @@ def render_authorizations_block(pending: list[dict], delegated: list[str]) -> st
 
 
 def _deputy_check_rows(state: dict) -> str:
-    """The gate's mechanical checks as the deputy reads them — the SAME rows the owner's drilldown
-    renders, off the same `gate_state` call. Blocking ones are marked, because which failures grey
-    the owner's Approve is a fact about the gate, not a judgment the deputy should re-derive."""
+    """The gate's mechanical checks as the deputy reads them — the SAME rows the drilldown
+    renders, off the same call. Which failures grey Approve is a fact, not a judgment to re-derive."""
     checks = state.get("checks") or []
     if not checks:
         return "_(this gate has no mechanical checks.)_"
@@ -994,11 +878,9 @@ def _deputy_check_rows(state: dict) -> str:
 
 
 def _deputy_verdict_table(rows: list[dict]) -> str:
-    """The vet's per-check verdicts, latest per check. Filling a real gap: the review deputy used to
-    be told to "read the evidence ledger embedded in the brief above", where the brief carried a
-    one-line entry COUNT and no verdicts — so the gate that decides the merge saw no check results
-    at all. The `vet_note` parameter that was supposed to carry them had no call site (found
-    2026-07-30)."""
+    """The vet's per-check verdicts, latest per check. The review deputy used to be told to read
+    an evidence ledger that carried a one-line COUNT and no verdicts, so the gate deciding the merge
+    saw no check results at all."""
     if not rows:
         return ("_(no check verdicts recorded. Either the approved plan declared `depth: none` — "
                 "verify that in `## Verification plan` — or the vet never ran, which is not "
@@ -1017,27 +899,16 @@ def deputy_brief_block(item_id: str, title: str, gate: str, *,
                        delta: str | None = None, success_signal: str | None = None,
                        verdicts: list[dict] | None = None,
                        authorizations: str | None = None) -> str:
-    """Consumer: a deputy dispatch's BIRTH prompt (the run's user-message body; the identity/floor
-    rides `system_append=deputy_preamble`) · one-shot.
+    """A deputy dispatch's BIRTH prompt · one-shot.
 
-    **The deputy reads what the owner reads, and never the owner's decision** (§2.1, rebuilt slice
-    6b). Fixed order: mandate → its decision log at this gate (continuity) → on a loop RE-ENTRY the
-    `delta` → **the phase's own `reports/report-<phase>.md`, verbatim** → the **typed gate state's**
-    mechanical check rows incl. the must-resolve set → **the PATH to the full agent-facing
-    contract**, which it opens with Read on demand. At review, additionally: the verbatim PRD
-    success signal, the vet's per-check verdicts, and any pending authorizations.
+    THE DEPUTY READS WHAT THE OWNER READS, AND NEVER THE OWNER'S DECISION. Fixed order: mandate →
+    its decision log at this gate → the loop delta on re-entry → the phase's own report, verbatim →
+    the typed gate state's check rows → the PATH to the full contract, opened on demand. At review,
+    also the PRD success signal, the vet verdicts, and pending authorizations.
 
-    What it deliberately no longer gets, and why:
-    - **The gate-brief markdown.** It embedded a TRUNCATED copy of the artifact (plan.md at 4k) and
-      then said "inspect the artifacts named above", naming no paths — a flattened copy competing
-      with its source, with no route to the source.
-    - **The owner's decision block** (recommendation · options · effort). That is for a human
-      choosing between buttons. A judge handed a verdict judges the verdict; it is told to form its
-      own view, so telling it the answer first is the anchoring that produces a rubber stamp.
-    - **Event-kind counts** ("since then: 3× run.report"). Nothing a judge can act on.
-
-    Pure over plain data — the daemon reads the files (`artifacts.report_text`,
-    `gate_briefs.gate_state`, `artifacts.verdict_rows`) and passes them in."""
+    What it deliberately no longer gets: the gate-brief markdown, which embedded a truncated copy of
+    the artifact and then named no path to the original; and the owner's decision block, because a
+    judge handed a verdict judges the verdict."""
     parts = [f"You are judging the **{gate}** gate of work-item `{item_id}` — \"{title}\".", ""]
     parts += ["### Mandate (this project's standing bar — binding)",
               _cap(mandate or "", _DEPUTY_MANDATE_CAP)
@@ -1077,14 +948,12 @@ def deputy_brief_block(item_id: str, title: str, gate: str, *,
     return "\n".join(parts)
 
 
-# --- handoff promotion into intake (build-vet-loop §1.4 / §9 step 6) ------------------------
-# intake NARRATES: at review it answers from the record, not from having done the work. The loop's
-# record (driver decisions + vet verdicts) is promoted into the intake thread ONCE, at the next
-# intake turn after new loop activity — never per-turn (token-inefficiency-per-turn-append), and
-# curated: handoffs and verdicts only, never loop-internal chatter. The watermark is the item's
-# `handoffs_promoted` frontmatter (count of attempts-ledger entries already promoted — the ledger
-# is append-only, so a count is a stable cursor); the caller advances it only after the turn that
-# carried the block actually lands (at-least-once — a failed turn re-injects).
+# intake NARRATES: at review it answers from the record, not from having done the work. The
+# loop's record is promoted into the intake thread ONCE, curated to handoffs and verdicts.
+#
+# The watermark counts ledger entries already promoted — the ledger is append-only, so a count
+# is a stable cursor. Advanced only after the turn carrying the block lands, so a failure
+# re-injects.
 
 _HANDOFF_TOTAL_CAP = 12_000   # the whole block (O10: bounded handoffs, always)
 _HANDOFF_REPORT_CAP = 8_000   # the LATEST new cycle's report, verbatim; older cycles = one line
@@ -1102,12 +971,11 @@ def _cycle_verdict_summary(item_dir: Path, cycle: int) -> str:
 
 
 def render_handoff_block(item: dict, item_dir: Path) -> tuple[str | None, int]:
-    """Consumer: the item's intake thread, first turn after new loop activity (ws.py) · durable
-    (promoted once). The kernel-assembled loop-record block → (text, new_mark), or (None, mark)
-    when nothing new happened since the watermark. Content, in time order: one line per NEW driver
-    decision (§Cycle outcome — evidence · decision · reason), then the newest new cycle's report
-    verbatim (capped) with older new cycles collapsed to verdict one-liners. Attribution is
-    explicit — intake did not do this work and must narrate from the record."""
+    """The item's intake thread, first turn after new loop activity · durable, promoted once.
+
+    One line per new driver decision, then the newest cycle's report verbatim with older ones
+    collapsed to verdicts. Attribution is explicit: intake did not do this work and must narrate
+    from the record."""
     item_dir = Path(item_dir)
     try:
         mark = int(str(item.get("handoffs_promoted") or 0).strip() or 0)
