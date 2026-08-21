@@ -47,8 +47,6 @@ venv/
 # The developer's own notes and drafts.
 TODO.md
 general_docs/
-superme-docs/
-Best-superme-context-practice-and-other-guidance/
 
 # scripts/ ships its suites and gate tooling; what stays local is machine-bound or spent.
 /scripts/__pycache__/
