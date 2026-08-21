@@ -1,13 +1,7 @@
 """Git layer — per-item worktree lifecycle and merge machinery.
 
-Trunk-based and item-level: one work-item ⇄ one branch `item/<id>-<slug>` ⇄ one worktree under
-`~/.superme/worktrees/`. Trees are never shared. Only the gated review decision merges into the
-anchor, always behind a `refs/backup/<item>-<ts>` guardrail. Blocking children branch from the
-parent's branch and merge back into it.
-
-Pure functions over a repo directory — no daemon imports, no item-yaml knowledge. Main-repo
-mutations run under a per-repo lock; a concurrent op raises GitBusy. Fail-loud, so a half-truth
-never reads as success.
+One work-item ⇄ one branch `item/<id>-<slug>` ⇄ one worktree under `~/.superme/worktrees/`.
+Only the gated review decision merges, always behind a `refs/backup/` guardrail. Fail-loud.
 """
 
 import json
@@ -52,16 +46,13 @@ def diff_numstat(worktree: Path, base: str) -> dict:
     return _parse_numstat(proc.stdout if proc.returncode == 0 else "")
 
 
-# Temporary instrumentation carries a tag so removal is a grep, not a memory. This is the
-# reader that checks, at the review gate, whether any survived.
+# Temporary instrumentation carries a tag so removal is a grep, not a memory.
 DEBUG_TAG = re.compile(r"\[DEBUG-[0-9a-fA-F]{4,}\]")
 
 
 def debug_tags(worktree: Path, base: str) -> list[dict]:
-    """Tagged debug instrumentation still present in the branch's ADDED lines.
-
-    Only `+` lines count: a tag already on the trunk is not this item's to clean up, and flagging it
-    would fire forever. Best-effort — git failing makes the row go quiet, not red."""
+    """Tagged debug instrumentation still in the branch's ADDED lines. A tag already on
+    trunk is not this item's."""
     proc = _git(worktree, "diff", f"{base}...HEAD", check=False)
     if proc.returncode != 0:
         return []
@@ -83,8 +74,8 @@ def debug_tags(worktree: Path, base: str) -> list[dict]:
 
 
 def _parse_numstat(text: str) -> dict:
-    """`git --numstat` output → {files, insertions, deletions, by_file}. Binary files report '-'
-    for both counts — read as 0 rather than dropped, so the file still appears in `by_file`."""
+    """`git --numstat` → {files, insertions, deletions, by_file}. Binary '-' counts
+    read as 0, never dropped."""
     by_file, ins, dels = [], 0, 0
     for line in text.splitlines():
         parts = line.split("\t")
@@ -126,17 +117,15 @@ DEFAULT_WORKTREES_HOME = Path.home() / ".superme" / "worktrees"
 
 
 def worktrees_home() -> Path:
-    """SuperMe's OWNED worktree home, outside both the repo and its parent.
-
-    In-repo was rejected: it would need ignoring on every branch before first use, `git clean -fdx`
-    would destroy in-flight work, and every linter would descend into N copies of the repo."""
+    """SuperMe's OWNED worktree home, outside both the repo and its parent. In-repo
+    would die to `git clean -fdx`."""
     env = os.environ.get("SUPERME_WORKTREES_HOME")
     return Path(env).expanduser() if env else DEFAULT_WORKTREES_HOME
 
 
 def worktrees_root(repo_id: str) -> Path:
-    """One repo's worktree home. Keyed by REPO ID (unique by construction in repos.yaml), not by
-    repo dir name — two connected repos may share a folder name."""
+    """One repo's worktree home, keyed by REPO ID — two connected repos may share a
+    folder name."""
     return worktrees_home() / repo_id
 
 
@@ -145,8 +134,7 @@ def worktree_dir(repo_id: str, item_id: str) -> Path:
 
 
 def default_branch(repo_dir: Path) -> str:
-    """The trunk: origin/HEAD's target when a remote exists, else main/master if present,
-    else whatever branch HEAD is on (single-branch scratch repos)."""
+    """The trunk: origin/HEAD's target, else main/master, else whatever branch HEAD is on."""
     p = _git(repo_dir, "symbolic-ref", "refs/remotes/origin/HEAD", check=False)
     if p.returncode == 0 and p.stdout.strip():
         return p.stdout.strip().rsplit("/", 1)[-1]
@@ -157,11 +145,8 @@ def default_branch(repo_dir: Path) -> str:
 
 
 def resolve_anchor(repo_dir: Path, configured: str | None = None) -> str:
-    """The ANCHOR: the branch every git site works against — branch-from base, sync source,
-    merge target. Absent setting → the repo's own default branch.
-
-    A configured branch that does not exist RAISES rather than falling back: the setting exists for
-    repos where landing on the default branch is forbidden."""
+    """The ANCHOR every git site works against. A configured branch that does not
+    exist RAISES rather than falling back."""
     if configured:
         if not branch_exists(repo_dir, configured):
             raise GitError(f"anchor branch '{configured}' does not exist in {repo_dir} — fix the "
@@ -175,11 +160,8 @@ def branch_exists(repo_dir: Path, branch: str) -> bool:
 
 
 def list_branches(repo_dir: Path) -> list[str]:
-    """Local branches, newest commit first — the anchor picker's options. Offering the real list
-    is what stops a typo becoming a merge-time failure.
-
-    SuperMe's own per-item branches are excluded; they are transient and would bury the trunk.
-    Never raises: a broken git returns [] and the caller shows no picker."""
+    """Local branches, newest commit first — the anchor picker's options. SuperMe's own
+    item branches are excluded."""
     p = _git(repo_dir, "for-each-ref", "--sort=-committerdate", "--format=%(refname:short)",
              "refs/heads/", check=False)
     if p.returncode != 0:
@@ -189,8 +171,8 @@ def list_branches(repo_dir: Path) -> list[str]:
 
 
 def commit_exists(repo_dir: Path, sha: str) -> bool:
-    """Is this sha a real commit here? A recorded `merge_commit` that no longer resolves must read
-    as NOT merged, or the item is stranded forever."""
+    """Is this sha a real commit here? A `merge_commit` that no longer resolves must
+    read as NOT merged."""
     if not sha:
         return False
     return _git(repo_dir, "rev-parse", "--verify", "--quiet", f"{sha}^{{commit}}",
@@ -198,11 +180,8 @@ def commit_exists(repo_dir: Path, sha: str) -> bool:
 
 
 def _is_merged(repo_dir: Path, branch: str, target: str, merge_commit: str | None) -> bool:
-    """Has this branch already landed on `target`?
-
-    The RECORDED merge commit is authoritative: a SQUASH commit is not an ancestor of the branch it
-    squashed, so ancestry alone reads every squash-merged item as unmerged. Ancestry survives only
-    as the legacy fallback — it can give a false NO, never a false YES."""
+    """Has this branch landed on `target`? The RECORDED merge commit is authoritative:
+    a squash is not an ancestor."""
     if commit_exists(repo_dir, merge_commit or ""):
         return True
     return _git(repo_dir, "merge-base", "--is-ancestor", branch, target,
@@ -284,11 +263,8 @@ class repo_lock:
 # Tells an install "mine to rewrite" from "someone else's hook". Bump when the script changes.
 COMMIT_HOOK_MARKER = "superme-commit-msg v1"
 
-# The mechanical half of the commit contract: a skill is a probability, and a walkthrough is
-# not recoverable from a commit that never carried its task.
-#
-# Deliberately ONE rule. Subject shape and wrapping stay prose — they degrade a reader's
-# experience, while a missing trailer destroys a whole surface.
+# The mechanical half of the commit contract. Deliberately ONE rule: a missing trailer destroys a
+# whole surface.
 _COMMIT_MSG_HOOK = """#!/bin/sh
 # """ + COMMIT_HOOK_MARKER + """ — written by SuperMe when this repo's item worktree was created.
 # Rejects a commit on an `item/*` branch that carries no task trailer. Delete this file to disable.
@@ -331,11 +307,8 @@ exit 1
 
 
 def install_commit_hook(repo_dir: Path) -> dict:
-    """Install or refresh the commit-msg gate. Returns {installed, reason[, detail]}.
-
-    REFUSES rather than breaking a project: a `foreign` hook would be clobbered, and a
-    `hooks_path_override` project never consults `.git/hooks`, so installing there would LOOK
-    enforced and do nothing. Worktrees share the main repo's hooks, so one install covers every item."""
+    """Install or refresh the commit-msg gate. REFUSES rather than clobbering a
+    foreign hook or a hooks-path override."""
     repo_dir = Path(repo_dir)
     if not is_git_repo(repo_dir):
         return {"installed": False, "reason": "not_a_repo"}
@@ -361,10 +334,8 @@ def install_commit_hook(repo_dir: Path) -> dict:
 
 def create_worktree(repo_dir: Path, repo_id: str, item_id: str, title: str = "", *,
                     base: str | None = None) -> dict:
-    """TRANSACTIONAL create on build entry: branch from `base` plus a worktree under the owned
-    home. Any failure undoes every step already taken — no half-created state.
-
-    Reattach: if OUR branch exists but the dir is gone, the worktree is re-added from it."""
+    """TRANSACTIONAL create on build entry: branch from `base` plus a worktree.
+    Any failure undoes every step."""
     repo_dir = Path(repo_dir)
     if not is_git_repo(repo_dir):
         raise GitError(f"not a git repository: {repo_dir}")
@@ -402,13 +373,10 @@ def create_worktree(repo_dir: Path, repo_id: str, item_id: str, title: str = "",
 
 def create_scratch_worktree(repo_dir: Path, repo_id: str, item_id: str, *,
                             base: str | None = None) -> dict:
-    """A DETACHED throwaway checkout for a read-only phase — no branch, nothing to merge.
+    """A DETACHED throwaway checkout for a read-only phase — the second wall
+    behind the permission classifier.
 
-    The OS sandbox makes a run's own cwd writable, so pointing research at the real repository left
-    the permission classifier as the only wall. This is the second one.
-
-    Detached on purpose: research merges nothing, so a branch would promise a landing that never
-    comes. The record carries `branch: None`, which is how readers tell the two apart."""
+    Detached on purpose: research merges nothing. The record carries `branch: None`."""
     repo_dir = Path(repo_dir)
     if not is_git_repo(repo_dir):
         raise GitError(f"not a git repository: {repo_dir}")
@@ -432,11 +400,8 @@ def create_scratch_worktree(repo_dir: Path, repo_id: str, item_id: str, *,
 
 
 def servers_in(wt: Path) -> list[int]:
-    """Every LISTENING process whose working directory is `wt` — the vet-env servers this worktree
-    owns, identified by the one fact that survives everything else.
-
-    Not by remembered pid: a worktree was seen accumulating two servers while the state file named
-    only the last. cwd is unforgeable and needs no bookkeeping to stay true."""
+    """Every LISTENING process whose cwd is `wt`. Not by remembered pid: cwd is
+    unforgeable and needs no bookkeeping."""
     try:
         out = subprocess.run(["lsof", "-nP", "-iTCP", "-sTCP:LISTEN", "-t"],
                              capture_output=True, text=True, timeout=15)
@@ -458,11 +423,8 @@ def servers_in(wt: Path) -> list[int]:
 
 
 def stop_vet_env(wt: Path) -> list[int]:
-    """Kill every vet-env server in this worktree. Returns the pids signalled.
-
-    Removing the dir takes the files but NOT the process, which keeps its port and an open fd on a
-    file with no name. Must run BEFORE the dir goes — afterwards cwd no longer resolves and the
-    servers are unfindable. Signals the process GROUP."""
+    """Kill every vet-env server here. Must run BEFORE the dir goes, or cwd no longer
+    resolves and they are unfindable."""
     pids = servers_in(wt)
     if not pids:
         try:
@@ -486,8 +448,8 @@ def stop_vet_env(wt: Path) -> list[int]:
 
 
 def remove_worktree(repo_dir: Path, repo_id: str, item_id: str) -> dict:
-    """Terminal cleanup: remove the worktree DIR, KEEP the branch ref. Force-removes, so stray
-    uncommitted junk cannot block closure. Verifies the dir is actually gone."""
+    """Terminal cleanup: remove the worktree DIR, KEEP the branch ref. Force-removes,
+    so stray junk cannot block closure."""
     repo_dir = Path(repo_dir)
     wt = worktree_dir(repo_id, item_id)
     removed = False
@@ -504,8 +466,8 @@ def remove_worktree(repo_dir: Path, repo_id: str, item_id: str) -> dict:
 
 
 def delete_branch(repo_dir: Path, branch: str) -> dict:
-    """Force-delete a branch ref. Unlike `remove_worktree` this DOES drop it — used only for a
-    throwaway probe, whose branch is disposable scaffolding rather than trace."""
+    """Force-delete a branch ref. Used only for a throwaway probe, whose branch is
+    scaffolding rather than trace."""
     repo_dir = Path(repo_dir)
     if not branch:
         return {"deleted": False}
@@ -544,10 +506,7 @@ def list_worktrees(repo_dir: Path) -> list[dict]:
 
 def worktree_health(repo_dir: Path, repo_id: str, item_id: str, branch: str | None = None,
                     *, trunk: str | None = None, merge_commit: str | None = None) -> dict:
-    """One item's git state: branch and dir existence, git's registration, dirtiness, distance
-    from trunk, merged.
-
-    `merge_commit` is the item's RECORDED merge sha — pass it, or `merged` is wrong for every
+    """One item's git state. Pass `merge_commit`, or `merged` is wrong for every
     squash-merged item."""
     repo_dir = Path(repo_dir)
     wt = worktree_dir(repo_id, item_id)
@@ -575,8 +534,8 @@ def worktree_health(repo_dir: Path, repo_id: str, item_id: str, branch: str | No
             behind, ahead = counts.stdout.split()
             health["ahead"] = int(ahead)    # branch commits not on trunk
             health["behind"] = int(behind)  # trunk commits not on branch (freshness debt)
-        # Read from GIT, never a doc: an agent-typed number on the owner's merge surface is whatever
-        # the agent typed. Three dots = merge base, the same range the merge will squash.
+        # Read from GIT, never a doc. Three dots = merge base, the same range the merge will
+        # squash.
         stat = _git(repo_dir, "diff", "--shortstat", f"{trunk}...{branch}", check=False)
         if stat.returncode == 0:
             line = stat.stdout.strip()
@@ -588,12 +547,8 @@ def worktree_health(repo_dir: Path, repo_id: str, item_id: str, branch: str | No
 
 
 def reconcile(repo_dir: Path, repo_id: str, records: dict[str, dict]) -> list[dict]:
-    """Startup reconciliation: recorded worktrees vs disk vs branches. Heals what it safely can,
-    reports the rest.
-
-      branch present, dir missing → re-add the worktree; the branch is the durable state
-      branch missing              → report broken; nothing to rebuild from, and we never guess
-      dir git no longer registers → prune the registration, report the orphan. Never deleted."""
+    """Startup reconciliation: recorded worktrees vs disk vs branches. Heals what it safely
+    can, reports the rest. Never deletes."""
     repo_dir = Path(repo_dir)
     actions: list[dict] = []
     if not is_git_repo(repo_dir):
@@ -603,8 +558,8 @@ def reconcile(repo_dir: Path, repo_id: str, records: dict[str, dict]) -> list[di
         registered = [e["path"] for e in list_worktrees(repo_dir)]
         for item_id, rec in records.items():
             wt = Path(rec.get("worktree") or worktree_dir(repo_id, item_id))
-            # A branchless record is a SCRATCH tree: nothing to rebuild from and nothing that needs it.
-            # The branch tests below would call every one of them broken.
+            # A branchless record is a SCRATCH tree: nothing to rebuild from and nothing that
+            # needs it.
             if not rec.get("branch"):
                 if wt.is_dir() and not any(_same_path(r, wt) for r in registered):
                     actions.append({"item_id": item_id, "action": "orphan-dir",
@@ -644,16 +599,11 @@ _STASH_PREFIX = "superme-automerge"
 
 
 def compose_commit(subject: str, body: str = "", trailers: dict | None = None) -> str:
-    """The ONE commit-message shape SuperMe writes, at every site that commits.
+    """The ONE commit-message shape SuperMe writes. The main message is for the
+    PROJECT, the trailer block for SuperMe.
 
-        <subject>
-
-        <body, wrapped at 72>
-
-        SuperMe-Item: 4f2a1b9c0d3e     ← the trailer block
-
-    The main message is for the PROJECT, the trailer block for SuperMe. Nothing SuperMe-shaped
-    belongs above the trailers: a reader of the project's history has never heard of this workspace."""
+    Nothing SuperMe-shaped belongs above the trailers: the project's history has never heard of
+    this workspace."""
     import textwrap
     blocks = [subject.strip()]
     body = (body or "").strip()
@@ -661,8 +611,8 @@ def compose_commit(subject: str, body: str = "", trailers: dict | None = None) -
         blocks.append("\n".join(
             "\n".join(textwrap.wrap(para, 72)) if para.strip() else ""
             for para in body.split("\n")))
-    # An absent fact is omitted, never written as "none". Git recognizes trailers only as one
-    # uninterrupted run at the very end.
+    # An absent fact is omitted, never written as "none". Git reads trailers as one uninterrupted
+    # run.
     tail = "\n".join(f"{k}: {v}" for k, v in (trailers or {}).items() if v)
     if tail:
         blocks.append(tail)
@@ -671,25 +621,22 @@ def compose_commit(subject: str, body: str = "", trailers: dict | None = None) -
 
 # --- reading a branch back (the PR walkthrough) ------------------------------------------
 
-# ASCII's own record and unit separators: a commit body may contain anything printable, so
-# only a separator that cannot appear in one is unbreakable.
+# ASCII record and unit separators: a commit body may hold anything printable, so only these are
+# unbreakable.
 _REC, _FLD = "\x1e", "\x1f"
 
 _TRAILER = re.compile(r"(?m)^([A-Za-z][A-Za-z0-9-]*):[ \t]*(.+?)[ \t]*$")
 
 
 def fork_point(repo_dir: Path, branch: str, base: str) -> str:
-    """Where `branch` left `base` — the walkthrough's floor. `merge-base`, not `base` itself: the
-    anchor keeps moving, and diffing against its head would show sibling work as this branch's."""
+    """Where `branch` left `base`. `merge-base`, not `base` itself: the anchor keeps moving."""
     proc = _git(repo_dir, "merge-base", base, branch, check=False)
     return proc.stdout.strip() if proc.returncode == 0 else ""
 
 
 def branch_commits(repo_dir: Path, branch: str, base: str) -> list[dict]:
-    """Every commit `branch` added over `base`, oldest first, with trailers and per-file churn.
-
-    `--no-merges` drops freshness syncs: a sync commit carries the anchor's work, and its numstat
-    would be attributed here. Best-effort — a walkthrough is a view, never a gate."""
+    """Every commit `branch` added over `base`, oldest first. `--no-merges` drops
+    syncs, whose churn is the anchor's."""
     point = fork_point(repo_dir, branch, base)
     if not point:
         return []
@@ -719,8 +666,8 @@ def branch_commits(repo_dir: Path, branch: str, base: str) -> list[dict]:
 
 
 def branch_stat(repo_dir: Path, branch: str, base: str) -> dict:
-    """What this branch actually LANDS — the net diff from the fork point, not the sum of its
-    commits' churn. Computed from the bare repo, so it answers after the worktree is gone."""
+    """What this branch actually LANDS — the net diff from the fork point, not the sum
+    of its commits."""
     point = fork_point(repo_dir, branch, base)
     if not point:
         return {"files": 0, "insertions": 0, "deletions": 0, "by_file": []}
@@ -729,8 +676,8 @@ def branch_stat(repo_dir: Path, branch: str, base: str) -> dict:
 
 
 def commit_trailers(body: str) -> dict:
-    """The `Key: value` block at the END of a commit body. Only the final uninterrupted run
-    counts — git's own rule, and what stops a mid-paragraph `Note:` reading as metadata."""
+    """The `Key: value` block at the END of a body. Only the final uninterrupted run
+    counts, per git."""
     lines = (body or "").rstrip().splitlines()
     block: list[str] = []
     for line in reversed(lines):
@@ -748,10 +695,8 @@ def commit_trailers(body: str) -> dict:
 
 
 def commit_patches(repo_dir: Path, shas: list[str], path: str, *, cap: int = 200_000) -> list[dict]:
-    """The patches `shas` applied to ONE file, in order — what a walkthrough row expands to.
-
-    Per-commit rather than one range diff: a task's commits are not guaranteed contiguous, and a
-    range would swallow whatever landed between them. `cap` truncation is REPORTED, never silent."""
+    """The patches `shas` applied to ONE file, in order. Per-commit, not a range —
+    a task's commits need not be contiguous."""
     out: list[dict] = []
     used = 0
     for sha in shas:
@@ -769,21 +714,16 @@ def commit_patches(repo_dir: Path, shas: list[str], path: str, *, cap: int = 200
 
 
 def _backup_ref(item_id: str) -> str:
-    """A UNIQUE pre-merge restore point. Microseconds, not seconds: two attempts inside one second
-    produced the same name, and the second overwrote the first backup with the post-merge head."""
+    """A UNIQUE pre-merge restore point. Microseconds, not seconds: two attempts in one
+    second collided."""
     return f"refs/backup/{item_id}-{datetime.now().strftime('%Y%m%d-%H%M%S-%f')}"
 
 
 def recut_branch(repo_dir: Path, item_id: str, branch: str, base: str) -> dict:
-    """Reset an item's branch back onto its BASE — the re-run's "start clean" in git.
+    """Reset an item's branch back onto its BASE — the re-run's "start clean". `base`
+    resolves to its CURRENT tip.
 
-    `base` resolves to that ref's CURRENT tip, not a sha recorded weeks ago: a re-run should start
-    where a brand-new item would.
-
-    NOTHING IS LOST — the old tip is written to a backup ref first, and the branch is moved, not
-    deleted. The worktree must already be gone, or that tree would lie about its own history.
-
-    Returns `recut: False` rather than raising when there is nothing to undo."""
+    NOTHING IS LOST: the old tip goes to a backup ref and the branch is moved, not deleted."""
     repo_dir = Path(repo_dir)
     if not branch:
         return {"recut": False, "reason": "this item has no branch"}
@@ -805,8 +745,8 @@ def recut_branch(repo_dir: Path, item_id: str, branch: str, base: str) -> dict:
 
 
 def overlap(repo_dir: Path, branch: str, target: str) -> list[str]:
-    """Pre-flight overlap detection: files dirty in the main tree AND touched by the branch —
-    an auto-stash would hide a collision, so the merge refuses early on any intersection."""
+    """Files dirty in the main tree AND touched by the branch. An auto-stash would hide the
+    collision."""
     dirty = set(_dirty_files(repo_dir))
     if not dirty:
         return []
@@ -816,17 +756,11 @@ def overlap(repo_dir: Path, branch: str, target: str) -> list[str]:
 
 def merge_freshness(repo_dir: Path, worktree: Path, branch: str, *,
                     target: str | None = None) -> dict:
-    """The merge act owns freshness, not review, which would guarantee it hours before use. One
-    comparison at the instant that matters: is the anchor already contained in this branch?
+    """The merge act owns freshness, not review — one comparison at the instant that
+    matters.
 
-        anchor unmoved                      → merge
-        moved, sync conflicts               → park
-        moved, clean, overlaps our paths    → revet
-        moved, clean, no overlap            → merge
-
-    Path overlap is the cheap middle between merging blind and re-vetting every open item after
-    every sibling merge. It knowingly misses action-at-a-distance. Conflicts are never
-    auto-resolved: the item parks and pages."""
+    Anchor unmoved → merge · sync conflicts → park · clean but overlapping our paths → revet ·
+    else merge. Conflicts are never auto-resolved."""
     repo_dir, worktree = Path(repo_dir), Path(worktree)
     target = resolve_anchor(repo_dir, target)
     if not worktree.is_dir():
@@ -834,8 +768,7 @@ def merge_freshness(repo_dir: Path, worktree: Path, branch: str, *,
         return {"action": "merge", "reason": "no live worktree to sync"}
     if _git(repo_dir, "merge-base", "--is-ancestor", target, branch, check=False).returncode == 0:
         return {"action": "merge"}
-    # Measured from the merge base BEFORE the sync: afterwards the branch contains the anchor's
-    # commits and the two sets are indistinguishable.
+    # Measured from the merge base BEFORE the sync: afterwards the two sets are indistinguishable.
     base = _out(repo_dir, "merge-base", target, branch)
     anchor_paths = set(_out(repo_dir, "diff", "--name-only", base, target).splitlines())
     item_paths = set(_out(repo_dir, "diff", "--name-only", base, branch).splitlines())
@@ -851,16 +784,10 @@ def merge_freshness(repo_dir: Path, worktree: Path, branch: str, *,
 def merge_to_main(repo_dir: Path, repo_id: str, item_id: str, branch: str, *,
                   target: str | None = None, merged_commit: str | None = None,
                   message: str | None = None) -> dict:
-    """The ONE heavy merge: item branch → the anchor, in the main repo, under the op lock.
+    """The ONE heavy merge: item branch → the anchor, under the op lock.
 
-    SQUASH: per-task commits collapse into one on the anchor. The branch is kept, so task
-    granularity survives as trace while the project log carries one commit per item.
-
-    Pre-flights: neither side mid-merge · never-merge-twice · overlap refusal · main's changes
-    auto-stashed and verify-popped · backup ref written BEFORE the merge.
-
-    A conflict fully unwinds to the backup — a squash leaves no MERGE_HEAD, so the reset IS the
-    unwind. Returns {merged, merge_commit, backup_ref} | {already_merged} | {conflicts}."""
+    SQUASH — the branch is kept, so task granularity survives as trace. A conflict fully unwinds
+    to the backup ref, written BEFORE the merge."""
     repo_dir = Path(repo_dir)
     with repo_lock(repo_dir):
         target = resolve_anchor(repo_dir, target)
@@ -903,13 +830,13 @@ def merge_to_main(repo_dir: Path, repo_id: str, item_id: str, branch: str, *,
             merge = _git(repo_dir, "merge", "--squash", branch, check=False)
             if merge.returncode != 0:
                 conflicts = _out(repo_dir, "diff", "--name-only", "--diff-filter=U").splitlines()
-                # A squash records no MERGE_HEAD, so `merge --abort` cannot unwind it. The backup ref plus a
-                # clean tree makes a hard reset the exact pre-merge state.
+                # A squash records no MERGE_HEAD, so `merge --abort` cannot unwind it. The backup
+                # ref can.
                 _git(repo_dir, "reset", "--hard", backup, check=False)
                 result = {"merged": False, "conflicts": conflicts, "backup_ref": backup}
             elif _git(repo_dir, "diff", "--cached", "--quiet", check=False).returncode == 0:
-                # Staging NOTHING means the content is already on the anchor — the crash-between-merge-and-
-                # record window, retried. Report the no-op and drop the backup: there is nothing to restore.
+                # Staging NOTHING means the content is already on the anchor. Report the no-op and
+                # drop the backup.
                 _git(repo_dir, "update-ref", "-d", backup, check=False)
                 result = {"already_merged": True, "merged": False}
             else:
@@ -923,8 +850,8 @@ def merge_to_main(repo_dir: Path, repo_id: str, item_id: str, branch: str, *,
                 _git(repo_dir, "checkout", prev_branch, check=False)
             stash_warning = None
             if stash_tag:
-                # Find OUR stash by its unique tag. A failed pop is surfaced loud — the changes are safe in
-                # the stash, never lost silently.
+                # Find OUR stash by its unique tag. A failed pop is surfaced loud — never lost
+                # silently.
                 entry = None
                 for line in _git(repo_dir, "stash", "list", check=False).stdout.splitlines():
                     if stash_tag in line:
@@ -942,9 +869,8 @@ def merge_to_main(repo_dir: Path, repo_id: str, item_id: str, branch: str, *,
 
 
 def revert_merge(repo_dir: Path, backup_ref: str, *, target: str | None = None) -> dict:
-    """Restore the anchor to its pre-merge state via the backup ref. SAFE-ONLY: refuses unless the
-    backup is the first parent of the current head and the tree is clean. Beyond that window,
-    un-merging needs a human."""
+    """Restore the anchor to its pre-merge state. SAFE-ONLY: refuses unless the backup
+    is head's first parent."""
     repo_dir = Path(repo_dir)
     with repo_lock(repo_dir):
         target = resolve_anchor(repo_dir, target)
@@ -969,10 +895,8 @@ def revert_merge(repo_dir: Path, backup_ref: str, *, target: str | None = None) 
 
 def merge_into_parent(repo_dir: Path, child_branch: str, parent_worktree: Path, *,
                       message: str | None = None) -> dict:
-    """The LIGHT path: a blocking child merges into its parent's branch, inside the parent's
-    worktree. No backup ref, no stash — no main risk, and the parent re-vets before its own merge.
-
-    Under the op lock: the merge commit mutates the shared object store."""
+    """The LIGHT path: a blocking child merges into its parent's branch, inside the
+    parent's worktree. No main risk."""
     parent_worktree = Path(parent_worktree)
     with repo_lock(repo_dir):
         state = check_git_state(parent_worktree)
@@ -980,13 +904,12 @@ def merge_into_parent(repo_dir: Path, child_branch: str, parent_worktree: Path, 
             raise GitError(f"parent worktree not mergeable: {state['reason']}")
         if state["dirty"]:
             raise GitError("parent worktree has uncommitted changes — commit them first")
-        # Ancestry is CORRECT here: the light path is a real `--no-ff` merge, not a squash. Only the
-        # anchor merge needed the recorded-sha migration.
+        # Ancestry is CORRECT here: the light path is a real `--no-ff` merge, not a squash.
         if _git(repo_dir, "merge-base", "--is-ancestor", child_branch, state["branch"],
                 check=False).returncode == 0:
             return {"already_merged": True, "merged": False}
-        # Same shape as the anchor's: clean subject, SuperMe facts in the trailers. It reaches the
-        # parent's branch, which a human reads.
+        # Same shape as the anchor's: clean subject, SuperMe facts in the trailers. A human reads
+        # this.
         merge = _git(parent_worktree, "merge", "--no-ff", child_branch,
                      "-m", message or compose_commit("Merge a completed sub-item"), check=False)
         if merge.returncode != 0:
@@ -999,11 +922,8 @@ def merge_into_parent(repo_dir: Path, child_branch: str, parent_worktree: Path, 
 
 def sync_from_main(repo_dir: Path, worktree: Path, *, target: str | None = None,
                    leave_conflicts: bool = False) -> dict:
-    """Merge the trunk INTO the item branch, inside the worktree. Run during long builds and
-    always at review — after it, the merge back is trivial.
-
-    `leave_conflicts=True` leaves the conflicted merge in the tree for Resolve-with-Agent; the
-    human never hand-edits markers. Finish with `finish_merge`."""
+    """Merge the trunk INTO the item branch, inside the worktree. `leave_conflicts=True`
+    leaves them for Resolve-with-Agent."""
     repo_dir = Path(repo_dir)
     worktree = Path(worktree)
     target = resolve_anchor(repo_dir, target)
@@ -1031,8 +951,8 @@ def conflicted_files(worktree: Path) -> list[str]:
 
 
 def finish_merge(worktree: Path) -> dict:
-    """Complete an in-tree conflicted merge after resolution. Ground-truth, not claims: refuses
-    while any file still carries conflict markers, since the index stays unmerged until add."""
+    """Complete an in-tree conflicted merge. Refuses while any file still carries conflict
+    markers."""
     worktree = Path(worktree)
     if not (Path(_out(worktree, "rev-parse", "--absolute-git-dir")) / "MERGE_HEAD").exists():
         raise GitError("no merge in progress to finish")

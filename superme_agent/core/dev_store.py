@@ -10,36 +10,30 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-# They differ in what the row can DO, which is the only reason a kind is worth storing. An
-# `item` becomes a work-item when pushed; a `note` is the owner's own, never pushed. Only an
-# owner can author a note — every agent path mints `item`.
+# An `item` becomes a work-item when pushed; a `note` is the owner's own. Every agent path mints
+# `item`.
 _KINDS = {"item", "note"}
 # open = awaiting push · pushed = promoted. Dropping is a HARD DELETE, so there is no
 # "dropped" state.
 _STATUSES = {"open", "pushed"}
-# A LIST: a row accrues origins over its life, starting with whoever created it. Stored as a
-# JSON array; legacy scalars are coerced on read.
+# A LIST: a row accrues origins over its life. Stored as JSON; legacy scalars are coerced on read.
 _ORIGINS = {"user", "agent"}
 # Branch-off relation vocabulary (workspace-workflow D3): blocking/parallel = children (auto-push,
 # gate the parent's completion) · spawn = provenance-only follow-up (owner-pushed).
 _SPAWN_RELATIONS = {"blocking", "parallel", "spawn"}
 
-# vet and deputy each resolve on their own chain, never the item's model, so each needs its
-# own pair rather than a flag on the existing one.
+# vet and deputy each resolve on their own chain, never the item's, so each needs its own pair.
 _ROLE_COLS = ("vet_model", "vet_effort", "deputy_model", "deputy_effort")
 
 
-# Every state change worth showing already funnels through `log_event`, so the daemon
-# registers ONE observer here rather than instrumenting 78 call sites.
-#
-# A plain synchronous callback list, not a queue: core must not know a WebSocket exists.
-# Best-effort — a broken notifier must never fail the write that triggered it.
+# ONE observer, not 78 instrumented call sites. A plain callback list — core must not know a
+# WebSocket exists.
 _event_observers: list = []
 
 
 def subscribe_events(fn) -> None:
-    """Register `fn(event: dict)` to be called after every `log_event` write. The daemon installs
-    exactly one of these at startup; nothing else should."""
+    """Register `fn(event)` to run after every `log_event` write. The daemon
+    installs exactly one."""
     _event_observers.append(fn)
 
 
@@ -53,8 +47,8 @@ def _notify_event(row: dict) -> None:
 
 
 def _norm_origins(value, *, default: str = "user") -> list[str]:
-    """Coerce a stored/incoming origin (JSON array, legacy scalar, list, or None) to a de-duplicated,
-    order-preserving list of valid origins. Empty/unknown falls back to [default]."""
+    """Coerce a stored origin (JSON array, legacy scalar, list, None) to a deduped
+    list. Unknown → [default]."""
     raw = value
     if isinstance(raw, str):
         s = raw.strip()
@@ -79,8 +73,8 @@ _MEM_SOURCES = {"agent", "user"}          # who captured (user-injected still ge
 # The operational form the agent GUESSES a candidate should become (advisory; distill decides).
 _MEM_FORM_HINTS = {"constitution", "skill", "agent"}
 _MEM_CAND_STATUSES = {"candidate", "processed", "promoted", "rejected", "dropped"}
-# distill's output, ratified at gate 1. `output_form` is WHICH artifact it becomes,
-# `target_scope` WHERE it lands. Both are guesses the owner can override.
+# `output_form` is WHICH artifact it becomes, `target_scope` WHERE it lands. Both are guesses the
+# owner overrides.
 _MEM_OUTPUT_FORMS = {"constitution", "skill", "agent"}
 _MEM_TARGET_SCOPES = {"repo_dev", "universal_dev", "core"}
 # proposed → writing → drafted → published. Terminal: rejected, dropped, superseded.
@@ -89,9 +83,8 @@ _MEM_PROP_STATUSES = {"proposed", "writing", "drafted", "published", "rejected",
 _LINE = re.compile(r"^- \[( |x)\]\s*(\d{4}-\d{2}-\d{2})?\s*(\w+)?:?\s*(.*)$")
 
 
-# The test each one passes: it is a fact about the PROJECT, not a step inside one item's run.
-# Steps belong in that item's drilldown; in the repo feed several items interleave them into
-# noise that pushes the dev-native rows out of the window.
+# The test: a fact about the PROJECT, not a step inside one item's run. Steps belong in the
+# drilldown.
 REPO_MILESTONE_KINDS = ("git.pr", "git.merge", "git.worktree", "inbox.push", "item.complete")
 
 
@@ -147,8 +140,8 @@ class DevStore:
             c.execute("CREATE INDEX IF NOT EXISTS idx_inbox_ctx ON inbox(context_id, status)")
             # Run telemetry lives in the spine now; drop the legacy table.
             c.execute("DROP TABLE IF EXISTS runs")
-            # The append-only activity firehose. DB-first, so "what happened yesterday?" is a WHERE,
-            # not a prose scan. `scope` plus `item_id` give the containment read.
+            # The append-only activity firehose. DB-first, so "what happened yesterday?" is a
+            # WHERE, not a prose scan.
             c.execute(
                 """CREATE TABLE IF NOT EXISTS events (
                        id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -165,14 +158,13 @@ class DevStore:
             )
             c.execute("CREATE INDEX IF NOT EXISTS idx_events_ctx ON events(context_id, created_at)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_events_item ON events(context_id, item_id)")
-            # The re-run soft delete: a re-run stamps rows instead of deleting them, so the item's own
-            # readers see the current attempt while the repo feed keeps the whole history.
+            # The re-run soft delete: item readers see the current attempt, the repo feed keeps
+            # the whole history.
             ev_cols = {r[1] for r in c.execute("PRAGMA table_info(events)").fetchall()}
             if "discarded_at" not in ev_cols:
                 c.execute("ALTER TABLE events ADD COLUMN discarded_at TEXT")
-            # The capture sweep files a rich row: `signal` is what to do, `rationale` why it matters,
-            # `evidence` a concrete instance, `form_hint` the agent's guess at the artifact.
-            # The bar: self-sufficient for a fresh-context distill.
+            # `signal` what to do · `rationale` why · `evidence` an instance · `form_hint` the
+            # guess.
             c.execute(
                 """CREATE TABLE IF NOT EXISTS memory_candidate (
                        id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -195,22 +187,13 @@ class DevStore:
             for col in ("form_hint", "rationale"):  # WI-8 richer candidate (idempotent on old DBs)
                 if col not in cand_cols:
                     c.execute(f"ALTER TABLE memory_candidate ADD COLUMN {col} TEXT")
-            # Drop the legacy `kind_hint` column — `form_hint` fully supersedes it (data-model audit
-            # 2026-07). Preserve any legacy hint into form_hint FIRST, then DROP (SQLite ≥ 3.35).
-            # Guarded on existence → idempotent (fresh DBs never had the column).
+            # `form_hint` supersedes the legacy `kind_hint`. Preserve it into form_hint FIRST,
+            # then DROP. Guarded, so idempotent.
             if "kind_hint" in cand_cols:
                 c.execute("UPDATE memory_candidate SET form_hint=COALESCE(form_hint, kind_hint)")
                 c.execute("ALTER TABLE memory_candidate DROP COLUMN kind_hint")
-            # Operational-learning PROPOSAL pool (WI-8) — distill consolidates candidates into
-            # these TYPED, classified rows; the owner ratifies at gate 1, the write phase stages
-            # the rendered artifact (+ eval report for skill/agent), the owner reviews at gate 2,
-            # publish writes it to disk. Columns: `summary` (purpose·usage·why-raised), `fields`
-            # (JSON of form-specific fields), `clarifications` (JSON batch Qs distill attaches),
-            # `clarification_answers` (JSON, filled at gate 1), `staged_artifact` + `staged_path`
-            # (the write phase's rendered final artifact + its publish home — DB-staged; disk holds
-            # only PUBLISHED content), `eval_report` (JSON metrics+verdict for skill/agent).
-            # `cluster` groups related-but-not-merged proposals (conservative dedup). `candidate_ids`
-            # is the JSON set of sources, marked 'processed' when the proposal is filed.
+            # The operational-learning PROPOSAL pool. Disk holds only PUBLISHED content, so the
+            # rendered artifact stages here.
             c.execute(
                 """CREATE TABLE IF NOT EXISTS memory_proposal (
                        id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -243,10 +226,8 @@ class DevStore:
                         "staged_artifact", "staged_path", "eval_report"):
                 if col not in prop_cols:
                     c.execute(f"ALTER TABLE memory_proposal ADD COLUMN {col} TEXT")
-            # Columns added after v1 (idempotent):
-            #   `title`  — a short headline (now entered manually on capture).
-            #   `origin` — who created the row: 'user' (manual capture) | 'agent' (a
-            #              branch-off proposal). The "user-made vs agent-made" label.
+            # `title` is a short headline. `origin` is who created the row — the user-made vs
+            # agent-made label.
             cols = {r[1] for r in c.execute("PRAGMA table_info(inbox)").fetchall()}
             if "title" not in cols:
                 c.execute("ALTER TABLE inbox ADD COLUMN title TEXT")
@@ -254,17 +235,15 @@ class DevStore:
                 c.execute("ALTER TABLE inbox ADD COLUMN origin TEXT NOT NULL DEFAULT 'user'")
             # One-time rename of legacy status value triaged -> pushed.
             c.execute("UPDATE inbox SET status='pushed' WHERE status='triaged'")
-            # One-time: migrate legacy SCALAR origins ('user'/'agent') to JSON arrays, so the column
-            # is uniformly a list going forward. Idempotent — rows already starting with '[' are left.
+            # One-time: legacy SCALAR origins become JSON arrays. Idempotent — rows already
+            # starting with `[` are left.
             for r in c.execute("SELECT id, origin FROM inbox").fetchall():
                 o = r["origin"]
                 if o is None or not str(o).strip().startswith("["):
                     c.execute("UPDATE inbox SET origin=? WHERE id=?",
                               (json.dumps(_norm_origins(o)), r["id"]))
-            # Drop the legacy `source` scalar — `origin` (the JSON list) fully supersedes it (data-model
-            # audit 2026-07): its only consumer (create_work_item) ignored it. DEFENSIVE first: fold a
-            # legacy source='agent' into origin so no provenance is lost, THEN DROP (SQLite ≥ 3.35).
-            # Guarded on existence → idempotent (fresh DBs never had the column).
+            # `origin` supersedes the legacy `source` scalar. Fold a legacy `source='agent'` in
+            # first, THEN drop.
             if "source" in cols:
                 for r in c.execute("SELECT id, origin FROM inbox WHERE source='agent'").fetchall():
                     origins = _norm_origins(r["origin"])
@@ -273,39 +252,29 @@ class DevStore:
                         c.execute("UPDATE inbox SET origin=? WHERE id=?",
                                   (json.dumps(origins), r["id"]))
                 c.execute("ALTER TABLE inbox DROP COLUMN source")
-            # Workspace-workflow D3 (S1): `spawned_from` = the provenance edge a branch-off inbox
-            # item already carries before push — JSON {item, relation: blocking|parallel|spawn,
-            # note?}; NULL for plain captures. Idempotent add.
+            # `spawned_from` is the provenance edge a branch-off carries before push. NULL for
+            # plain captures.
             if "spawned_from" not in cols:
                 c.execute("ALTER TABLE inbox ADD COLUMN spawned_from TEXT")
-            # F3 (config lock-in): model + effort chosen at CAPTURE, carried into the work-item at
-            # push (the push button locks them in — no per-work-item override after). NULL = inherit
-            # the repo/system default at run time (effective_model precedence). Idempotent adds.
+            # Model and effort are chosen at CAPTURE and locked in at push. NULL = inherit the
+            # repo/system default.
             if "model" not in cols:
                 c.execute("ALTER TABLE inbox ADD COLUMN model TEXT")
             if "effort" not in cols:
                 c.execute("ALTER TABLE inbox ADD COLUMN effort TEXT")
-            # `autopilot` joins model/effort as the third capture-time policy: the item drives its
-            # own gates after push. It belongs HERE and not only on the work-item because the
-            # work-item route accepts it pre-build only — deciding it at capture is the one moment
-            # that is always in time. Stored 0/1, ON by default; carried into the item by inbox_flow.
+            # Capture is the one moment always in time to decide autopilot; the work-item route
+            # accepts it pre-build only.
             if "autopilot" not in cols:
                 c.execute("ALTER TABLE inbox ADD COLUMN autopilot INTEGER NOT NULL DEFAULT 1")
-            # `work_kind` is the PROPOSED kind; NULL means nobody has judged. Not named `kind` — that
-            # column already means the ticket's flavour, and two `kind`s on one row is how wrong-field
-            # bugs start.
-            # `vet` and `deputy` run on their own tier. Picking one here is the item-scoped end of a
-            # chain that otherwise reads the repo or the system. NULL = use that chain.
+            # `work_kind` is the PROPOSED kind, NULL when nobody judged. Not named `kind` — that
+            # already means the ticket's flavour.
             for col in ("vet_model", "vet_effort", "deputy_model", "deputy_effort"):
                 if col not in cols:
                     c.execute(f"ALTER TABLE inbox ADD COLUMN {col} TEXT")
             if "work_kind" not in cols:
                 c.execute("ALTER TABLE inbox ADD COLUMN work_kind TEXT")
-            # All legacy flavours become `item`, the old "note" included: free notes did not exist
-            # before this migration, so no historical row can be one.
-            #
-            # Keyed off the PRESENCE of a legacy value, so once none remain the guard never fires again
-            # and a real owner-authored note is safe from a second pass.
+            # Keyed off the PRESENCE of a legacy flavour, so a real owner-authored note survives a
+            # second pass.
             if c.execute("SELECT 1 FROM inbox WHERE kind IN ('idea','todo','question') "
                          "LIMIT 1").fetchone():
                 c.execute("UPDATE inbox SET kind='item'")
@@ -319,14 +288,8 @@ class DevStore:
                   model: str | None = None, effort: str | None = None,
                   autopilot: bool = True, work_kind: str | None = None,
                   role_config: dict | None = None) -> dict:
-        """File one inbox row.
-
-        `spawned_from` is the provenance edge a branch-off carries from birth. `model`/`effort` are the
-        capture-time run config, locked onto the work-item at push. `autopilot` is on by default —
-        driving itself is the normal case.
-
-        `work_kind` is the PROPOSED kind. Validated LOUD rather than silently dropped: a typo that
-        vanished would read at triage as "nobody proposed one", and telling those apart is the point."""
+        """File one inbox row. `work_kind` is the PROPOSED kind, validated LOUD — a dropped
+        typo would read as "nobody proposed one"."""
         text = (text or "").strip()
         if not text:
             raise ValueError("empty inbox text")
@@ -360,8 +323,8 @@ class DevStore:
             return self._get(c, cur.lastrowid)
 
     def append_inbox(self, item_id: int, addition: str, *, origin_add: str = "agent") -> dict | None:
-        """APPEND to an existing row, never editing its text. Unions `origin_add` into the origin
-        list, so a user-made item the itemize skill augments reads ['user','agent']."""
+        """APPEND to a row, never editing its text. Unions `origin_add`, so an augmented
+        user item reads ['user','agent']."""
         addition = (addition or "").strip()
         if not addition:
             raise ValueError("empty append text")
@@ -412,10 +375,8 @@ class DevStore:
         if sets.get("status") not in _STATUSES:
             sets.pop("status", None)
         if "work_kind" in sets:
-            # The one field with a meaningful NULL, so an empty string clears it back to undecided.
-            #
-            # An invalid value RAISES rather than being dropped: this field's fallback is NULL, which is
-            # itself a state, so a dropped typo would read back exactly like a deliberate clear.
+            # An invalid value RAISES, never drops: NULL is a state, so a dropped typo reads as a
+            # clear.
             from .kind_profiles import KIND_PROFILES
             if not sets["work_kind"]:
                 sets["work_kind"] = None
@@ -423,8 +384,7 @@ class DevStore:
                 raise ValueError(f"work_kind must be one of {sorted(KIND_PROFILES)}")
         if "autopilot" in sets:
             sets["autopilot"] = int(bool(sets["autopilot"]))
-        # Stored as NULL, so "never set" and "set back to default" are one state rather than two
-        # every reader would have to know about.
+        # Stored as NULL, so "never set" and "set back to default" are one state, not two.
         for col in _ROLE_COLS:
             if sets.get(col) == "":
                 sets[col] = None
@@ -441,10 +401,8 @@ class DevStore:
         return {"ok": True, "id": item_id}
 
     def purge_context(self, context_id: str) -> int:
-        """Disconnect cleanup: drop a context's PIPELINE state — the inbox queue + learning
-        candidates/proposals. `events` (the dev-activity trace) are deliberately kept
-        (monitoring logs are never deleted); their orphaned context_id is harmless because no
-        surface lists a disconnected repo. Returns the number of rows deleted."""
+        """Disconnect cleanup: drop a context's inbox queue and learning pool. `events`
+        are deliberately kept."""
         n = 0
         with self._conn() as c:
             for table in ("inbox", "memory_candidate", "memory_proposal"):
@@ -462,8 +420,8 @@ class DevStore:
         return d
 
     def get_inbox(self, item_id: int) -> dict | None:
-        """Fetch a single inbox row by id alone (no context needed) — used to log an event
-        before a delete, where the caller only has the row id."""
+        """Fetch one inbox row by id alone — for logging an event before a delete, where only
+        the id is known."""
         with self._conn() as c:
             return self._get(c, item_id)
 
@@ -473,11 +431,8 @@ class DevStore:
     def log_event(self, context_id: str, kind: str, summary: str, *,
                   item_id: str | None = None, scope: str | None = None,
                   actor: str = "daemon", meta: dict | None = None) -> dict:
-        """Append one event. `scope` auto-derives: an event with an `item_id` is item-scoped, else
-        dev-native. Append-only, never edited.
-
-        Also notifies registered observers AFTER the commit — the single point the dashboard's live
-        push hangs off."""
+        """Append one event; `scope` auto-derives from `item_id`. Observers are notified AFTER
+        the commit."""
         scope = scope or ("item" if item_id else "dev")
         with self._conn() as c:
             cur = c.execute(
@@ -494,21 +449,10 @@ class DevStore:
                     until: str | None = None, scope: str | None = None,
                     item_id: str | None = None, limit: int = 200,
                     include_discarded: bool = False) -> list[dict]:
-        """Selective read — never a full dump. item view = WHERE item_id=X; dev view = all the
-        repo's rows (dev-native + every item's). `since`/`until` are ISO timestamps (lexical
-        compare is correct for ISO-UTC). Newest first.
+        """Selective read, never a full dump. `since`/`until` are ISO timestamps; newest first.
 
-        `scope="repo"` is the ACTIVITY view (owner, 2026-08-06): dev-native rows plus the handful
-        of item-scoped kinds that are facts about the PROJECT rather than steps inside one item —
-        `REPO_MILESTONE_KINDS`. The rest of an item's trail (every phase start/end, run report,
-        loop decision) belongs to that item's own drilldown; interleaved across several running
-        items it reads as noise, and it drowns the dev-native rows out of the window entirely.
-
-        `include_discarded` — rows a re-run soft-deleted (`discarded_at`) are HIDDEN by default,
-        because every item-scoped caller wants the current attempt: the drilldown's Timeline and
-        Deputy panes, `classify_hold` (why is this parked), `_page_reason`, and `close_retries`
-        (a re-run must not inherit a spent retry budget). The repo-wide activity feed opts in —
-        it is the history of the project, and the discarded attempt genuinely happened."""
+        `scope="repo"` is the ACTIVITY view: dev-native rows plus `REPO_MILESTONE_KINDS`. Soft-deleted
+        re-run rows are hidden unless `include_discarded`."""
         where = ["context_id=?"]
         args: list = [context_id]
         if not include_discarded:
@@ -536,12 +480,8 @@ class DevStore:
             return [self._row_event(r) for r in c.execute(sql, args).fetchall()]
 
     def discard_item_events(self, context_id: str, item_id: str, *, at: str) -> int:
-        """SOFT-delete this item's dev events — the re-run's "start clean" (owner, 2026-07-31).
-        Stamps, never deletes ([[never-delete-logs]]); returns the row count. Idempotent via
-        `discarded_at IS NULL`, so each attempt keeps its own stamp across repeated re-runs.
-
-        Call BEFORE logging `item.rerun`, so that event survives unstamped: the re-run stays on the
-        item's own trail even though everything it discarded is out of view."""
+        """SOFT-delete this item's dev events — the re-run's "start clean". Call
+        BEFORE logging `item.rerun`, so that event survives."""
         with self._conn() as c:
             n = c.execute(
                 "UPDATE events SET discarded_at=? WHERE context_id=? AND item_id=?"
@@ -551,10 +491,8 @@ class DevStore:
         return int(n or 0)
 
     def events_for_proposal(self, context_id: str, proposal_id: int, *, limit: int = 200) -> list[dict]:
-        """The lifecycle trail for one learning proposal — dev events whose `meta.proposal_id` matches
-        (approve → write.start/end → artifact_edited → published/rejected/dropped). Oldest first, so it
-        reads as a timeline. proposal_id lives in the JSON `meta`, so we filter in Python (the pool is
-        small + context-scoped)."""
+        """The lifecycle trail for one learning proposal, oldest first. `proposal_id`
+        lives in JSON `meta`, so filtering is in Python."""
         rows = self.list_events(context_id, scope="dev", limit=max(limit, 500))
         mine = [e for e in rows if isinstance(e.get("meta"), dict)
                 and e["meta"].get("proposal_id") == proposal_id]
@@ -579,12 +517,8 @@ class DevStore:
                              origin_item_id: str | None = None,
                              origin_session_id: str | None = None,
                              evidence=None) -> dict:
-        """File an operational-learning CANDIDATE (WI-8) — the capture end. Cheap and reversible:
-        it applies nothing, just queues a RICH operational observation distill consolidates and the
-        owner gates. `signal` = the operational statement; `rationale` = why it matters / the
-        trigger; `evidence` = concrete instance(s) + a pointer (never bulk content); `form_hint` =
-        the agent's {constitution|skill|agent} guess; `scope_hint` = {repo_dev|universal_dev|core}
-        (legacy 'dev'/'core' tolerated). Operational only — never reference knowledge."""
+        """File an operational-learning CANDIDATE — cheap and reversible, applying
+        nothing. Operational only, never reference knowledge."""
         signal = (signal or "").strip()
         if not signal:
             raise ValueError("empty memory signal")
@@ -606,8 +540,8 @@ class DevStore:
 
     def list_memory_candidates(self, context_id: str, *, status: str | None = None,
                                limit: int = 200) -> list[dict]:
-        """Read the candidate pool (newest first). The processor + a future Manage-Harness
-        view consume this; defaults to all statuses, filterable to 'candidate' (un-processed)."""
+        """Read the candidate pool, newest first. Defaults to all statuses,
+        filterable to 'candidate'."""
         where = ["context_id=?"]
         args: list = [context_id]
         if status is not None:
@@ -629,11 +563,8 @@ class DevStore:
             return self._row_candidate(row) if row else None
 
     def delete_memory_candidates(self, context_id: str, ids: list[int]) -> int:
-        """Hard-delete candidates from the pool (context-scoped for safety). Used by distill to
-        permanently drop what fails its gate — a rejected candidate is noise, not a log, so it's
-        removed outright rather than left to accrete in the pool (quality over quantity). Returns
-        the number of rows deleted. (Candidates are pre-ratification pool items, distinct from the
-        run/transcript telemetry that is never deleted.)"""
+        """Hard-delete candidates, context-scoped. A rejected candidate is noise,
+        not a log, so it never accretes in the pool."""
         ids = sorted({int(i) for i in (ids or [])})
         if not ids:
             return 0
@@ -666,15 +597,11 @@ class DevStore:
                             apply_target: str | None = None,
                             cluster: str | None = None, rationale: str | None = None,
                             confidence: str | None = None) -> dict:
-        """File a distill PROPOSAL and atomically mark its source candidates 'processed'.
+        """File a distill PROPOSAL and atomically mark its source candidates
+        'processed'. One transaction, so the two never drift.
 
-        One transaction so a proposal and the candidates it consumes never drift: a candidate is
-        'processed' iff a proposal references it. `candidate_ids` must belong to this context
-        (cross-context ids ignored on the status flip). `output_form` ∈ {constitution, skill, agent};
-        `summary` = purpose·usage·why-raised; `fields` = the form-specific structured fields (JSON);
-        `clarifications` = batch questions the owner answers at gate 1 (JSON list). Enums fall back
-        to a safe default — distill's guess is advisory; the owner re-classifies at ratify.
-        """
+        Enums fall back to a safe default: distill's guess is advisory, and the owner re-classifies
+        at ratify."""
         title, body = (title or "").strip(), (body or "").strip()
         if not title or not body:
             raise ValueError("proposal needs both title and body")
@@ -707,17 +634,10 @@ class DevStore:
                               body: str | None = None, summary: str | None = None,
                               fields: dict | None = None, confidence: str | None = None,
                               cluster: str | None = None) -> dict | None:
-        """Fold new candidate(s) into an EXISTING open proposal — CROSS-RUN consolidation. The same
-        learning captured again in a later session enriches the standing proposal instead of minting
-        a parallel one (the #90/#99 duplicate class). Unions candidate_ids, optionally rewrites the
-        consolidated content (distill supplies the enriched title/body/summary/fields), and marks the
-        new candidates 'processed'. If the target was already `drafted` (forged), it reverts to
-        `proposed` and clears the staged artifact + eval — the substance changed, so it must be
-        re-authored. One transaction so the proposal and its candidate set never drift.
+        """Fold new candidates into an EXISTING open proposal — CROSS-RUN
+        consolidation, so a re-captured learning enriches rather than duplicates.
 
-        Returns the updated proposal (with a transient `reforged` flag), None if there's no such
-        proposal in this context, and raises ValueError if the target isn't open to merge
-        (published/rejected/dropped/superseded) or is mid-forge (`writing`)."""
+        A `drafted` target reverts to `proposed` and drops its staged artifact: the substance changed."""
         add = sorted({int(i) for i in (add_candidate_ids or [])})
         with self._conn() as c:
             row = c.execute("SELECT * FROM memory_proposal WHERE id=? AND context_id=?",
@@ -768,8 +688,8 @@ class DevStore:
 
     def list_memory_proposals(self, context_id: str, *, status: str | None = None,
                               limit: int = 200) -> list[dict]:
-        """Read the proposal pool (newest first). The owner-review (sub-stage 3) consumes this;
-        defaults to all statuses, filterable to 'proposed' (awaiting the owner gate)."""
+        """Read the proposal pool, newest first. Defaults to all statuses,
+        filterable to 'proposed'."""
         where = ["context_id=?"]
         args: list = [context_id]
         if status is not None:
@@ -814,8 +734,8 @@ class DevStore:
     def stage_proposal_artifact(self, proposal_id: int, *, staged_artifact: str,
                                 staged_path: str | None = None, eval_report: dict | None = None,
                                 status: str = "drafted") -> dict | None:
-        """Write phase → DB-stage the rendered complete artifact (+ optional eval report) and move
-        the proposal to `drafted` (awaiting gate 2). Disk stays untouched until publish."""
+        """Write phase → DB-stage the rendered artifact and move to `drafted`.
+        Disk stays untouched until publish."""
         if status not in _MEM_PROP_STATUSES:
             raise ValueError(f"bad proposal status: {status}")
         er = json.dumps(eval_report) if eval_report is not None else None
@@ -828,8 +748,8 @@ class DevStore:
             return self._get_proposal(c, proposal_id)
 
     def update_staged_artifact(self, proposal_id: int, content: str) -> dict | None:
-        """Owner edits the staged artifact at gate 2 before publishing (refine-then-publish). Only
-        the staged content changes — status stays `drafted`; publish then writes whatever is here."""
+        """Owner edits the staged artifact before publishing. Status stays
+        `drafted`; publish writes whatever is here."""
         with self._conn() as c:
             c.execute("UPDATE memory_proposal SET staged_artifact=? WHERE id=?",
                       (content, proposal_id))
@@ -850,10 +770,8 @@ class DevStore:
     # --- one-time migration from a legacy inbox.md ------------------------------
 
     def migrate_inbox_md(self, context_id: str, md_path: Path) -> int:
-        """Import a legacy inbox.md once (its `###` section headers become `tag`s).
-
-        No-op if the context already has rows or the file is missing. Returns # imported.
-        """
+        """Import a legacy inbox.md once; `###` headers become tags. No-op if rows exist
+        or the file is missing."""
         md_path = Path(md_path)
         if not md_path.exists():
             return 0
