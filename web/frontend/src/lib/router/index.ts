@@ -60,6 +60,11 @@ export type ItemSub = (typeof ITEM_SUBS)[number]
 
 export type Route =
   | { name: 'nexus' }
+  /**
+   * The credential guide. A PATH, not a query: it replaces the cockpit rather than opening over
+   * it, and being an address is what makes Back return to it after "Look around first".
+   */
+  | { name: 'setup' }
   | { name: 'surface'; surface: Surface }
   /** The orbit node's inspector, open over the Nexus — a repo IS an address. */
   | { name: 'repo'; repoId: string }
@@ -79,6 +84,7 @@ const NEXUS: Route = { name: 'nexus' }
 export function parse(pathname: string): Route {
   const seg = pathname.split('/').filter(Boolean)
   if (seg.length === 0) return NEXUS
+  if (seg.length === 1 && seg[0] === 'setup') return { name: 'setup' }
   if (seg.length === 1 && (SURFACES as readonly string[]).includes(seg[0])) {
     return { name: 'surface', surface: seg[0] as Surface }
   }
@@ -108,6 +114,7 @@ export function parse(pathname: string): Route {
 export function build(r: Route): string {
   switch (r.name) {
     case 'nexus': return '/'
+    case 'setup': return '/setup'
     case 'surface': return `/${r.surface}`
     case 'repo': return `/repo/${encodeURIComponent(r.repoId)}`
     case 'core': return `/repo/${encodeURIComponent(r.repoId)}/core`
