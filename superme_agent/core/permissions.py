@@ -5,9 +5,10 @@ STRING that denies with a reason — because a bare False stood for three differ
 """
 
 import logging
+import os
 import re
 import shlex
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Awaitable, Callable
 
 from claude_agent_sdk import (
@@ -353,6 +354,20 @@ def _is_pseudo_device(token: str) -> bool:
     return any(token == p or token.startswith(p) for p in _PSEUDO_DEVICE_ROOTS)
 
 
+def _is_absolute_token(tok: str) -> bool:
+    """Absolute under either convention: a Windows command names `C:\\…`, a POSIX one `/…`."""
+    return tok.startswith("/") or PureWindowsPath(tok).is_absolute()
+
+
+def _outside_every(tok: str, roots: list[Path]) -> bool:
+    """True when an absolute token lands outside every root.
+
+    A token absolute under the OTHER platform's rules is outside by definition — no native root
+    can hold it, and resolving it would silently make it relative to the cwd."""
+    p = Path(tok)
+    return True if not p.is_absolute() else not _in_any(p, roots)
+
+
 def _scratch_in(roots: list[Path]) -> Path | None:
     """The first boundary root that already HAS a `scratch/` dir, or None. Read from disk,
     not derived."""
@@ -374,17 +389,20 @@ def _bash_escapes_boundary(command: str, roots: list[Path]) -> bool:
         tok = raw.strip("'\"")
         if tok.startswith("~"):
             tok = str(Path(tok).expanduser())
-        if not tok.startswith("/") or _is_pseudo_device(tok):
+        if not _is_absolute_token(tok) or _is_pseudo_device(tok):
             continue
-        if not _in_any(Path(tok), roots):
+        if _outside_every(tok, roots):
             return True
     return False
 
 
 def shlex_split_safe(command: str) -> list[str]:
-    """`shlex.split` that degrades to a whitespace split on unbalanced quotes."""
+    """`shlex.split` that degrades to a whitespace split on unbalanced quotes.
+
+    POSIX splitting reads a backslash as an escape, which eats every separator in a Windows
+    path and leaves a token no boundary check can recognise."""
     try:
-        return shlex.split(command)
+        return shlex.split(command, posix=os.name != "nt")
     except ValueError:
         return command.split()
 
@@ -444,9 +462,9 @@ def _bash_scoped_into_boundary(command: str, roots: list[Path]) -> bool:
             target = toks[i + 1].strip("'\"")
             if target.startswith("~"):
                 target = str(Path(target).expanduser())
-            if target.startswith("/"):
+            if _is_absolute_token(target):
                 try:
-                    if _in_any(Path(target), roots):
+                    if not _outside_every(target, roots):
                         return True
                 except (OSError, ValueError):
                     pass
@@ -455,11 +473,11 @@ def _bash_scoped_into_boundary(command: str, roots: list[Path]) -> bool:
         tok = raw.strip("'\"")
         if tok.startswith("~"):
             tok = str(Path(tok).expanduser())
-        if not tok.startswith("/") or _is_pseudo_device(tok):
+        if not _is_absolute_token(tok) or _is_pseudo_device(tok):
             continue
         named += 1
         try:
-            if not _in_any(Path(tok), roots):
+            if _outside_every(tok, roots):
                 return False
         except (OSError, ValueError):
             return False
