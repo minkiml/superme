@@ -2,9 +2,9 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Bell, GitMerge, ArrowUpRight, AlertTriangle, Inbox, MessageCircleQuestion } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { getSystemAttention, advanceWorkItem, type SystemHold, type SystemHoldKind, type SystemRepoAttention } from '@/lib/api'
-import { invalidate, useLive } from '@/lib/live'
-import { K, topicRepo } from '@/lib/live/keys'
+import { getSystemAttention, type SystemHold, type SystemHoldKind, type SystemRepoAttention } from '@/lib/api'
+import { useLive } from '@/lib/live'
+import { K } from '@/lib/live/keys'
 
 // One bell beside the brand, surfacing every hold across EVERY connected repo.
 //
@@ -23,12 +23,11 @@ const KIND: Record<SystemHoldKind, { icon: LucideIcon; dot: string; label: strin
 
 export default function AttentionCenter({ onGoto }: { onGoto: (repoId: string, hold: SystemHold) => void }) {
   const [open, setOpen] = useState(false)
-  const [busy, setBusy] = useState<string | null>(null) // itemId of a quick action in flight
   const ref = useRef<HTMLDivElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState({ top: 0, right: 0 })
 
-  const { data: feed = [], refresh } = useLive<SystemRepoAttention[]>(K.systemAttention, getSystemAttention)
+  const { data: feed = [] } = useLive<SystemRepoAttention[]>(K.systemAttention, getSystemAttention)
 
   const total = feed.reduce((n, r) => n + r.holds.length, 0)
 
@@ -53,23 +52,6 @@ export default function AttentionCenter({ onGoto }: { onGoto: (repoId: string, h
     window.addEventListener('resize', onScroll)
     return () => { document.removeEventListener('mousedown', onDoc); window.removeEventListener('resize', onScroll) }
   }, [open])
-
-  // The review gate's one-click action, running the same merge body the modal's button does. A
-  // conflict surfaces inline.
-  async function approveMerge(repoId: string, h: SystemHold) {
-    setBusy(h.id)
-    try {
-      await advanceWorkItem(h.id, repoId)
-      // The merge changed this repo's whole dev surface, so refresh every view of it at once.
-      refresh()
-      invalidate(topicRepo(repoId))
-    } catch (e) {
-      // Keep the popover open and show the daemon's own words (ApiError.toString = detail).
-      window.alert(String(e))
-    } finally {
-      setBusy(null)
-    }
-  }
 
   return (
     <div ref={ref} className="relative">
@@ -116,9 +98,7 @@ export default function AttentionCenter({ onGoto }: { onGoto: (repoId: string, h
                       <HoldRow
                         key={h.id}
                         h={h}
-                        busy={busy === h.id}
                         onOpen={() => { setOpen(false); onGoto(r.repo_id, h) }}
-                        onApprove={h.kind === 'review' ? () => approveMerge(r.repo_id, h) : undefined}
                       />
                     ))}
                   </div>
@@ -133,12 +113,10 @@ export default function AttentionCenter({ onGoto }: { onGoto: (repoId: string, h
 }
 
 function HoldRow({
-  h, busy, onOpen, onApprove,
+  h, onOpen,
 }: {
   h: SystemHold
-  busy: boolean
   onOpen: () => void
-  onApprove?: () => void
 }) {
   const k = KIND[h.kind] ?? KIND.gate
   const Icon = k.icon
@@ -180,16 +158,6 @@ function HoldRow({
             >
               <ArrowUpRight size={12} /> {h.kind === 'question' ? 'Open chat' : 'Open'}
             </button>
-            {onApprove && (
-              <button
-                type="button"
-                onClick={onApprove}
-                disabled={busy}
-                className="flex items-center gap-1 rounded-md bg-accent px-2 py-1 text-xs font-medium text-on-accent hover:opacity-90 disabled:opacity-50"
-              >
-                <GitMerge size={12} /> {busy ? 'Merging…' : 'Approve & merge'}
-              </button>
-            )}
           </div>
         </div>
       </div>

@@ -2,7 +2,6 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { Bot, Brain, FileText, Package, ScanSearch, ScrollText, Settings2, SlidersHorizontal, Sparkles, type LucideIcon } from 'lucide-react'
 import Modal from '@/ui/Modal'
 import Dropdown from '@/ui/Dropdown'
-import { RepoIcon } from '@/lib/repoIcons'
 import type { OrbitRepo } from '@/features/shell/useCommandStats'
 import { CONFIG_SECTIONS, useParam, setParam, type ConfigSection } from '@/lib/router'
 import { useContainerWidth } from '@/lib/layout'
@@ -167,9 +166,6 @@ export default function SystemConfig({ repos, initialRepoId, onClose }: {
                           >
                             {badges[r.id]}
                           </span>
-                        )}
-                        {g.project && repo && repo.id !== 'global' && repo.icon && (
-                          <RepoIcon name={repo.icon} size={12} color={repo.color} className="shrink-0 opacity-70" />
                         )}
                       </>
                     )}

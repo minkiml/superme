@@ -9,6 +9,7 @@ import Toggle from '@/ui/Toggle'
 import { useEditGate, EditActions } from '@/ui/EditGate'
 import { getInboxBrief, saveInboxBrief, type InboxEntry, type InboxKind, type InboxBrief } from '@/lib/api'
 import { fmtLocal, toModelKey } from '@/lib/format'
+import { navigate, useRoute } from '@/lib/router'
 import { KIND_OPTS } from './inbox'
 import { DEFAULT_RUN_EFFORT, DEFAULT_RUN_MODEL, InboxConfigPatch, RUN_EFFORTS, RUN_MODELS, RUN_ROLES, RoleDefaults, WORK_KIND_OPTS, optLabel, roleField } from './runConfig'
 
@@ -186,12 +187,12 @@ export function InboxItemModal({
                 <MetaRow label="Updated">{fmtLocal(e.updated_at)}</MetaRow>
                 {e.spawned_from && (
                   <MetaRow label="Branched from">
-                    <span className="font-mono">{e.spawned_from.item}</span>
+                    <ItemLink id={e.spawned_from.item} onLeave={onClose} />
                     <span className="ml-1.5 text-muted">({e.spawned_from.relation})</span>
                   </MetaRow>
                 )}
                 {e.routed_to && (
-                  <MetaRow label="Work-item"><span className="font-mono">{e.routed_to}</span></MetaRow>
+                  <MetaRow label="Work-item"><ItemLink id={e.routed_to} onLeave={onClose} /></MetaRow>
                 )}
               </dl>
             </section>
@@ -270,6 +271,26 @@ function ConfigRow({ label, hint, children }: { label: string; hint: string; chi
       </div>
       <div className="shrink-0 pt-0.5">{children}</div>
     </div>
+  )
+}
+
+// A work-item id is an address, so reading one here is one click from opening it.
+function ItemLink({ id, onLeave }: { id: string; onLeave: () => void }) {
+  const route = useRoute()
+  const repoId = 'repoId' in route ? route.repoId : null
+  if (!repoId) return <span className="font-mono">{id}</span>
+  return (
+    <button
+      type="button"
+      title="Open this work-item"
+      onClick={() => {
+        onLeave()
+        navigate({ name: 'item', repoId, itemId: id, tab: null, sub: null })
+      }}
+      className="font-mono text-accent underline-offset-2 hover:text-accent-text hover:underline"
+    >
+      {id}
+    </button>
   )
 }
 

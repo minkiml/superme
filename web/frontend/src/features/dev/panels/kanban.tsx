@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { CornerDownRight, GitBranch, Loader2 } from 'lucide-react'
 import { type WorkItem } from '@/lib/api'
 import { fmtTokens, fmtDuration, fmtModel } from '@/lib/format'
-import { PHASE_VERB, STATUS_COLOR, STATUS_LABEL, STATUS_STRIPE, primaryStatus, agoLabel, researchKindLabel } from '../common'
+import { PHASE_VERB, STATUS_COLOR, STATUS_LABEL, STATUS_STRIPE, primaryStatus, agoLabel, researchKindLabel, workKindLabel, kindChipClass } from '../common'
 import { useContainerWidth } from '@/lib/layout'
 
 // The board: every live work item as a card, grouped by what it is waiting on.
@@ -75,7 +75,15 @@ export function WorkspaceKanban({ items, onOpen, onResume, running, boundItemId,
   const [boardRef, boardW] = useContainerWidth<HTMLDivElement>()
   // No whole-board empty state: the columns are the pipeline's shape, and every one already renders
   // its own dash.
-  const inGroup = (phases: string[]) => visible.filter((it) => phases.includes(it.phase ?? 'triage'))
+  // Running first, then newest finish down: the top of a column is what moved last.
+  const inGroup = (phases: string[]) =>
+    visible
+      .filter((it) => phases.includes(it.phase ?? 'triage'))
+      .sort(
+        (a, b) =>
+          Number(running?.includes(b.id) ?? false) - Number(running?.includes(a.id) ?? false) ||
+          (b.last_run?.ended_at ?? 0) - (a.last_run?.ended_at ?? 0),
+      )
   // The lanes REFLOW: a lane past the edge is a stage the owner cannot see.
   const lanes = boardW === 0 || boardW >= 716 ? 4 : boardW >= 552 ? 2 : 1
   // The board knows how wide a lane came out, so it tells the card how much to say.
@@ -164,11 +172,10 @@ function WorkCard({
       {/* 1 · status (+ branch provenance) */}
       <div className="flex min-w-0 items-center gap-1.5">
         <StatusBadge it={it} running={running} bucket={bucket} />
-        {/* Research only: a card is centimetres wide, and the FAMILY is the half that carries
-            information. */}
-        {!tight && researchKindLabel(it.research_kind) && (
-          <span className="min-w-0 truncate rounded bg-kind-research/10 px-1 py-px text-[9.5px] font-medium uppercase tracking-wide text-kind-research">
-            {researchKindLabel(it.research_kind)}
+        {/* One chip, one slot: the research FAMILY where there is one, else the work kind. */}
+        {!tight && (researchKindLabel(it.research_kind) || workKindLabel(it.kind)) && (
+          <span className={`min-w-0 truncate rounded px-1 py-px text-[9.5px] font-medium uppercase tracking-wide ${kindChipClass(it.kind)}`}>
+            {researchKindLabel(it.research_kind) || workKindLabel(it.kind)}
           </span>
         )}
         <span className="ml-auto shrink-0 flex items-center gap-1.5"><BranchInfo it={it} /></span>
