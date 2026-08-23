@@ -66,10 +66,16 @@
   color-scheme: dark;
 }
 
-/* The iridescent brand gradient — logo, hub ring, primary/send. */
+/* The iridescent brand gradient — logo, hub ring, primary/send. The four stops are named
+   separately because SVG cannot read a gradient function, only colours. */
 :root,
 .dark {
-  --grad-iris: linear-gradient(105deg, #6ea8fe, #a78bfa 38%, #f472b6 68%, #34d399);
+  --c-iris-1: #6ea8fe;
+  --c-iris-2: #a78bfa;
+  --c-iris-3: #f472b6;
+  --c-iris-4: #34d399;
+  --grad-iris: linear-gradient(105deg, var(--c-iris-1), var(--c-iris-2) 38%,
+                                       var(--c-iris-3) 68%, var(--c-iris-4));
   --c-select: #c084fc; /* selection accent — node outline + connector (purple/lavender) */
 }
 

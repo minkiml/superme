@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import HubMark from '@/ui/HubMark'
 import { ArrowLeft, GitBranch, Map, Activity, ChevronsUpDown, Check, Loader2 } from 'lucide-react'
 import { colorFor } from '@/lib/palette'
 import { RepoIcon } from '@/lib/repoIcons'
@@ -110,9 +111,10 @@ export default function DevWorkspace({
           </button>
           <span
             className="grid h-6 w-6 shrink-0 place-items-center rounded-[5px]"
-            style={isHub ? { backgroundImage: 'var(--grad-iris)' } : { backgroundColor: repo.icon ? 'transparent' : c }}
+            style={isHub ? undefined : { backgroundColor: repo.icon ? 'transparent' : c }}
           >
-            {!isHub && repo.icon && <RepoIcon name={repo.icon} size={16} color={c} />}
+            {isHub ? <HubMark size={22} className="text-fg" />
+              : repo.icon ? <RepoIcon name={repo.icon} size={16} color={c} /> : null}
           </span>
           {/* A floor, not just `min-w-0`: without one the row never wraps, it just crushes the
               name to an initial */}
@@ -210,10 +212,11 @@ function RepoSwatch({ repo, size = 16 }: { repo: OrbitRepo; size?: number }) {
       style={{
         width: size,
         height: size,
-        ...(isHub ? { backgroundImage: 'var(--grad-iris)' } : { backgroundColor: repo.icon ? 'transparent' : c }),
+        ...(isHub ? {} : { backgroundColor: repo.icon ? 'transparent' : c }),
       }}
     >
-      {!isHub && repo.icon && <RepoIcon name={repo.icon} size={size - 2} color={c} />}
+      {isHub ? <HubMark size={size} className="text-fg" />
+        : repo.icon ? <RepoIcon name={repo.icon} size={size - 2} color={c} /> : null}
     </span>
   )
 }

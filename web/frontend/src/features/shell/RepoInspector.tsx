@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import HubMark from '@/ui/HubMark'
 import { X, ArrowRight, Pencil, Unplug, Loader2 } from 'lucide-react'
 import { disconnectRepo } from '@/lib/api'
 import { fmtTokens } from '@/lib/format'
@@ -69,9 +70,11 @@ export default function RepoInspector({
             onClick={() => setEditingTag(true)}
             title="Edit tag color & icon"
             className="group relative grid h-9 w-9 shrink-0 place-items-center rounded-lg text-[13px] font-semibold text-app"
-            style={isHub ? { backgroundImage: 'var(--grad-iris)' } : { backgroundColor: repo.color }}
+            style={isHub ? undefined : { backgroundColor: repo.color }}
           >
-            {repo.icon ? <RepoIcon name={repo.icon} size={18} className="text-app" /> : isHub ? '' : repo.label.slice(0, 2).toUpperCase()}
+            {isHub ? <HubMark size={30} className="text-fg" />
+              : repo.icon ? <RepoIcon name={repo.icon} size={18} className="text-app" />
+              : repo.label.slice(0, 2).toUpperCase()}
             <span className="absolute -bottom-1 -right-1 grid h-4 w-4 place-items-center rounded-full border border-line bg-surface opacity-0 transition group-hover:opacity-100">
               <Pencil size={9} className="text-muted" />
             </span>

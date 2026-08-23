@@ -1,4 +1,5 @@
 import { PanelRightClose } from 'lucide-react'
+import HubMark from '@/ui/HubMark'
 import Dropdown from '@/ui/Dropdown'
 import { RepoIcon } from '@/lib/repoIcons'
 import type { ContextRef } from '@/lib/contexts'
@@ -70,9 +71,10 @@ export default function ChatHeader({
           {tag && (
             <span
               className="grid h-5 w-5 shrink-0 place-items-center rounded-[5px]"
-              style={tag.isHub ? { backgroundImage: 'var(--grad-iris)' } : { backgroundColor: tag.icon ? 'transparent' : tag.color }}
+              style={tag.isHub ? undefined : { backgroundColor: tag.icon ? 'transparent' : tag.color }}
             >
-              {tag.icon && <RepoIcon name={tag.icon} size={14} color={tag.color} />}
+              {tag.isHub ? <HubMark size={20} className="text-fg" />
+                : tag.icon ? <RepoIcon name={tag.icon} size={14} color={tag.color} /> : null}
             </span>
           )}
           <span

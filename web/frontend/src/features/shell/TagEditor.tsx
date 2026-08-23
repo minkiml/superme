@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import HubMark from '@/ui/HubMark'
 import { X, Loader2, Check } from 'lucide-react'
 import Modal from '@/ui/Modal'
 import { PALETTE, colorFor } from '@/lib/palette'
@@ -43,9 +44,11 @@ export default function TagEditor({
         <div className="flex items-center gap-2.5 border-b border-line px-4 py-3">
           <span
             className="grid h-8 w-8 place-items-center rounded-lg text-[13px] font-semibold text-app"
-            style={isHub ? { backgroundImage: 'var(--grad-iris)' } : { backgroundColor: color }}
+            style={isHub ? undefined : { backgroundColor: color }}
           >
-            {icon ? <RepoIcon name={icon} size={16} className="text-app" /> : isHub ? '' : repo.label.slice(0, 2).toUpperCase()}
+            {isHub ? <HubMark size={22} className="text-fg" />
+              : icon ? <RepoIcon name={icon} size={16} className="text-app" />
+              : repo.label.slice(0, 2).toUpperCase()}
           </span>
           <span className="flex-1 truncate text-[14px] font-semibold text-fg">{isHub ? 'SuperMe Hub' : repo.label}</span>
           <button onClick={onClose} className="rounded-md p-1 text-muted hover:bg-hover hover:text-fg">
