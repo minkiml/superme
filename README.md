@@ -136,13 +136,6 @@ python setup_superme.py
   CLAUDE_CODE_OAUTH_TOKEN=...
   ```
 
-SuperMe runs on Claude plan auth only. `ANTHROPIC_API_KEY` is dropped from the process
-whether or not you set it, so a key in your shell can never quietly bill you instead.
-
-With neither, SuperMe still runs and the dashboard still opens — it says so in a banner across
-the top and greys out everything that would need an agent, so nothing starts a run that cannot
-finish. Sign in, then click **I signed in** in that banner.
-
 Re-run `python setup_superme.py --check` at any point to see what is still missing. It reports
 without writing anything.
 
