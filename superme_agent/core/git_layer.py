@@ -399,9 +399,42 @@ def create_scratch_worktree(repo_dir: Path, repo_id: str, item_id: str, *,
                 "created_at": datetime.now().isoformat(timespec="seconds"), "reused": False}
 
 
-def servers_in(wt: Path) -> list[int]:
-    """Every LISTENING process whose cwd is `wt`. Not by remembered pid: cwd is
-    unforgeable and needs no bookkeeping."""
+VET_STATE = ".vet-env.json"
+VET_LOG = ".vet-env.log"
+
+
+def pid_alive(pid: int) -> bool:
+    """Is `pid` a process we could signal?
+
+    `os.kill(pid, 0)` is the POSIX idiom and a trap on Windows, where every signal but the two
+    console events is TerminateProcess — asking whether it is alive would kill it.
+    """
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        import ctypes
+        synchronize, wait_timeout = 0x00100000, 0x00000102
+        k32 = ctypes.windll.kernel32          # type: ignore[attr-defined]
+        handle = k32.OpenProcess(synchronize, False, pid)
+        if not handle:
+            return False
+        try:
+            return k32.WaitForSingleObject(handle, 0) == wait_timeout
+        finally:
+            k32.CloseHandle(handle)
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False                          # gone, or not ours — either way we cannot stop it
+    return True
+
+
+def _cwd_scan(wt: Path, match: str) -> list[int]:
+    """Every LISTENING process whose cwd is `wt`, asked of the OS. `match` additionally requires
+    the substring in the command line, so a scan cannot return the caller's own process tree.
+
+    Needs `lsof`; empty when the host has none, which the caller must not read as "nothing runs".
+    """
     try:
         out = subprocess.run(["lsof", "-nP", "-iTCP", "-sTCP:LISTEN", "-t"],
                              capture_output=True, text=True, timeout=15, encoding="utf-8")
@@ -415,14 +448,38 @@ def servers_in(wt: Path) -> list[int]:
             r = subprocess.run(["lsof", "-a", "-p", str(pid), "-d", "cwd", "-Fn"],
                                capture_output=True, text=True, timeout=10, encoding="utf-8")
             cwds = [ln[1:] for ln in r.stdout.splitlines() if ln.startswith("n")]
-            if cwds and Path(cwds[-1]).resolve() == target:
-                here.append(pid)
+            if not cwds or Path(cwds[-1]).resolve() != target:
+                continue
+            if match:
+                ps = subprocess.run(["ps", "-o", "command=", "-p", str(pid)],
+                                    capture_output=True, text=True, timeout=10, encoding="utf-8")
+                if match not in ps.stdout:
+                    continue
+            here.append(pid)
         except Exception:  # noqa: BLE001 — the process died mid-scan, or is not ours to inspect
             continue
     return here
 
 
-def _terminate(pid: int) -> bool:
+def servers_in(wt: Path, match: str = "") -> list[int]:
+    """Every live vet-env process belonging to `wt`: the ones the OS reports running THERE, plus
+    the one the worktree's own state file names.
+
+    cwd leads — it is unforgeable, and the only answer that finds a SECOND server or one whose
+    state file was lost. It also needs `lsof`, which Windows has not got, so there the state file
+    is the whole answer and a lost one leaks a process rather than signalling the wrong one.
+    """
+    found = list(_cwd_scan(wt, match))
+    try:
+        recorded = int(json.loads((Path(wt) / VET_STATE).read_text(encoding="utf-8")).get("pid") or 0)
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        recorded = 0
+    if recorded > 0 and recorded not in found and pid_alive(recorded):
+        found.append(recorded)
+    return found
+
+
+def terminate(pid: int) -> bool:
     """Stop a vet-env server and whatever it spawned, reporting whether anything was signalled.
 
     The group is the target where the OS has groups: a server that forked a worker leaves the
@@ -446,16 +503,9 @@ def _terminate(pid: int) -> bool:
 def stop_vet_env(wt: Path) -> list[int]:
     """Kill every vet-env server here. Must run BEFORE the dir goes, or cwd no longer
     resolves and they are unfindable."""
-    pids = servers_in(wt)
-    if not pids:
-        try:
-            pid = int(json.loads((Path(wt) / ".vet-env.json").read_text(encoding="utf-8")).get("pid") or 0)
-            pids = [pid] if pid > 0 else []
-        except (OSError, ValueError, TypeError, json.JSONDecodeError):
-            return []
     stopped: list[int] = []
-    for pid in pids:
-        if _terminate(pid):
+    for pid in servers_in(wt):
+        if terminate(pid):
             stopped.append(pid)
     if stopped:
         log.info("stopped vet-env server(s) %s in %s", stopped, wt)

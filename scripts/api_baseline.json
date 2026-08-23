@@ -3524,6 +3524,12 @@
    "methods": [],
    "sig": "class"
   },
+  "VET_LOG": {
+   "sig": "value:str"
+  },
+  "VET_STATE": {
+   "sig": "value:str"
+  },
   "_COMMIT_MSG_HOOK": {
    "sig": "value:str"
   },
@@ -3553,6 +3559,10 @@
    "home": "superme_agent.core.git_layer",
    "sig": "def(cwd: pathlib.Path) -> str"
   },
+  "_cwd_scan": {
+   "home": "superme_agent.core.git_layer",
+   "sig": "def(wt: pathlib.Path, match: str) -> list[int]"
+  },
   "_dirty_files": {
    "home": "superme_agent.core.git_layer",
    "sig": "def(cwd: pathlib.Path) -> list[str]"
@@ -3580,10 +3590,6 @@
   "_same_path": {
    "home": "superme_agent.core.git_layer",
    "sig": "def(a, b) -> bool"
-  },
-  "_terminate": {
-   "home": "superme_agent.core.git_layer",
-   "sig": "def(pid: int) -> bool"
   },
   "branch_commits": {
    "home": "superme_agent.core.git_layer",
@@ -3692,6 +3698,10 @@
    "home": "superme_agent.core.git_layer",
    "sig": "def(repo_dir: pathlib.Path, branch: str, target: str) -> list[str]"
   },
+  "pid_alive": {
+   "home": "superme_agent.core.git_layer",
+   "sig": "def(pid: int) -> bool"
+  },
   "reconcile": {
    "home": "superme_agent.core.git_layer",
    "sig": "def(repo_dir: pathlib.Path, repo_id: str, records: dict[str, dict]) -> list[dict]"
@@ -3719,7 +3729,7 @@
   },
   "servers_in": {
    "home": "superme_agent.core.git_layer",
-   "sig": "def(wt: pathlib.Path) -> list[int]"
+   "sig": "def(wt: pathlib.Path, match: str = '') -> list[int]"
   },
   "slugify": {
    "home": "superme_agent.core.git_layer",
@@ -3732,6 +3742,10 @@
   "sync_from_main": {
    "home": "superme_agent.core.git_layer",
    "sig": "def(repo_dir: pathlib.Path, worktree: pathlib.Path, *, target: str | None = None, leave_conflicts: bool = False) -> dict"
+  },
+  "terminate": {
+   "home": "superme_agent.core.git_layer",
+   "sig": "def(pid: int) -> bool"
   },
   "worktree_dir": {
    "home": "superme_agent.core.git_layer",
@@ -5844,6 +5858,9 @@
   }
  },
  "superme_agent.core.spine.tokens": {
+  "TREND_DAYS": {
+   "sig": "value:int"
+  },
   "TokenOps": {
    "home": "superme_agent.core.spine.tokens",
    "methods": [
@@ -16665,6 +16682,9 @@
    "sig": "value:PosixPath"
   },
   "HARNESS_DIR": {
+   "sig": "value:PosixPath"
+  },
+  "HUB_KNOWLEDGE_SEED_DIR": {
    "sig": "value:PosixPath"
   },
   "KNOWLEDGE_REPO_DIR": {
