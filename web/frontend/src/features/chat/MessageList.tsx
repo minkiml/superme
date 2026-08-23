@@ -1,4 +1,5 @@
 import { ShieldCheck, TriangleAlert, User, Sparkles, type LucideIcon } from 'lucide-react'
+import { addressee } from '@/lib/contexts'
 import Markdown from '@/ui/Markdown'
 import ApprovalCard from './ApprovalCard'
 import { useStickyScroll } from './useStickyScroll'
@@ -97,7 +98,7 @@ export default function MessageList({
     <div ref={scrollRef} onScroll={onScroll} className="min-h-0 flex-1 space-y-3 overflow-auto p-4">
       {messages.length === 0 && !live && (
         <div className="text-sm text-muted">
-          Talk to {ctxLabel} SuperMe. It reads and writes this context's knowledge.
+          Talk to {addressee(ctxLabel)}. It reads and writes this context's knowledge.
         </div>
       )}
       {olderHidden > 0 && (

@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import { Send } from 'lucide-react'
+import { addressee } from '@/lib/contexts'
 import CommandPalette from './CommandPalette'
 import ModelPicker from './ModelPicker'
 
@@ -71,7 +72,7 @@ export default function Composer({
             ref={inputRef}
             className="max-h-48 min-h-[4.5rem] w-full resize-none overflow-y-auto bg-transparent px-3 pt-2.5 text-sm leading-relaxed text-fg outline-none placeholder:text-faint disabled:opacity-50"
             rows={3}
-            placeholder={locked ? locked.reason : ready ? `Message ${ctxLabel} SuperMe…` : 'connecting…'}
+            placeholder={locked ? locked.reason : ready ? `Message ${addressee(ctxLabel)}…` : 'connecting…'}
             value={value}
             disabled={!ready || !!locked}
             onChange={(e) => {

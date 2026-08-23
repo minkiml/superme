@@ -10,3 +10,8 @@ export type ContextRef = {
 }
 
 export const GLOBAL: ContextRef = { id: 'global', label: 'Me', layer: 'global' }
+
+// Who a chat is addressed to. A label that already names SuperMe must not have it appended —
+// the hub's is "SuperMe hub", and "Talk to SuperMe hub SuperMe" is the first sentence a fresh
+// install shows.
+export const addressee = (label: string) => (/superme/i.test(label) ? label : `${label} SuperMe`)
