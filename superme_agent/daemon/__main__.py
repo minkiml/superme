@@ -1,17 +1,19 @@
 """Run the SuperMe Core daemon.
 
-    python -m superme_agent.daemon      (from the repo root, in the my-agent env)
+    python -m superme_agent.daemon      (from the repo root, in your Python environment)
 
 Localhost only. Surfaces connect to ws://HOST:PORT/ws/agent.
 """
 
 import uvicorn
 
-from ..paths import DAEMON_HOST, DAEMON_PORT, log, check_auth
+from ..core.auth import auth_status
+from ..paths import DAEMON_HOST, DAEMON_PORT, log
 
 
 def main() -> None:
-    check_auth()
+    if not (auth := auth_status())["ready"]:
+        log.warning("no Anthropic credential — every agent turn will fail: %s", auth["detail"])
     log.info("Starting SuperMe Core daemon on http://%s:%s", DAEMON_HOST, DAEMON_PORT)
     uvicorn.run(
         "superme_agent.daemon.server:app",

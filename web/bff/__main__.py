@@ -1,6 +1,6 @@
 """Run the web BFF.
 
-    python -m web.bff            (from the repo root, in the my-agent env)
+    python -m web.bff            (from the repo root, in your Python environment)
 
 Serves /api on http://127.0.0.1:8000, forwarding to the Core daemon. The frontend
 (Vite dev server) proxies /api here.
