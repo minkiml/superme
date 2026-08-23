@@ -38,10 +38,18 @@ Comprehension map — core/: <entry points, modules, data flow> · daemon/: <…
 ```
 
 ## Step 4: Clarify intent with the owner
-**Read the owner's own prose before you ask anything.** The README, anything under `docs/`, a vision
-or pitch note at the repo root: intent lives in what was written for humans, not in the code. List
-what you found and what it settles. Asking for something already on the page spends the owner's turn
-on retrieval, and inferring past it invents a direction nobody chose.
+**Read the owner's own prose before you ask anything.** Intent lives in what was written for
+humans, not in the code. In order:
+
+1. `README.md` at your working directory — that is this repo's root, whichever repo you are in.
+2. Anything under `docs/`, and a vision, pitch or design note sitting beside the root README.
+
+A README deeper in the tree describes its own package to whoever edits it; it is not a statement of
+what the project is for. Read those as code, not as intent.
+
+List what you found and what it settles. If the root README is a stub or absent, say so — then the
+whole interview is yours to run. Asking for something already on the page spends the owner's turn on
+retrieval, and inferring past it invents a direction nobody chose.
 
 Then interview, one question at a time, on what that prose leaves open.
 

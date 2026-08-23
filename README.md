@@ -45,6 +45,8 @@ These are the questions that drive the design, and they are still open.
 - How do you come back cold? Two days away and the work is nearly fresh again. Restoring that
   context fast is a first-class problem here, not an afterthought.
 
+---
+
 ### What that discipline has produced so far.
 
 **Reports written for you, not logs.** What it did, what to push back on, how much to trust each
@@ -95,6 +97,8 @@ context fill. Nothing is a black box when it goes wrong.
   things is something you see instead of something you reconstruct.
 - **Integrations.** Notion, Slack and the other places your work already lives, so knowledge
   outside your repos joins the estate too.
+
+---
 
 ## Requirements
 
