@@ -1,4 +1,5 @@
-import { Sparkles } from 'lucide-react'
+import { Sparkles, KeyRound } from 'lucide-react'
+import { useAuthGate } from '@/lib/authGate'
 
 // A repo with no established memory shows THIS instead of the work tabs — a hard gate.
 //
@@ -29,6 +30,9 @@ export default function OnboardingLanding({
   repoLabel: string
   mode?: OnboardMode | null // the connect-time choice; drives the copy (and, silently, the skill)
 }) {
+  // This is the first screen of a fresh install, and its whole instruction is "use the chat".
+  // With no credential the chat is greyed, so saying it anyway sends a new owner into a wall.
+  const { reason: authReason } = useAuthGate()
   return (
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-xl px-6 py-14">
@@ -37,11 +41,31 @@ export default function OnboardingLanding({
           <span className="text-[11px] font-medium uppercase tracking-wider">Onboarding</span>
         </div>
         <h1 className="text-[20px] font-semibold text-fg">Set up {repoLabel}</h1>
-        <p className="mt-2.5 text-[13.5px] leading-relaxed text-muted">
-          SuperMe has no memory of this project yet. <span className="text-fg">Tell me briefly in the
-          chat what you're building</span>, and {mode ? WILL_DO[mode] : WILL_DO_DEFAULT}. The work
-          tabs unlock once they land.
-        </p>
+        {authReason ? (
+          <>
+            <p className="mt-2.5 text-[13.5px] leading-relaxed text-muted">
+              SuperMe has no memory of this project yet, and onboarding is a conversation — so it
+              needs a credential before it can start.
+            </p>
+            <div className="mt-4 flex items-start gap-2.5 rounded-lg border border-warn/40 bg-warn/10 px-3.5 py-3">
+              <KeyRound size={15} className="mt-0.5 shrink-0 text-warn" />
+              <div className="text-[13px] leading-relaxed text-fg">
+                <div className="font-medium">First, sign in</div>
+                <div className="mt-1 text-muted">{authReason}</div>
+                <div className="mt-2 text-muted">
+                  Then come back and <span className="text-fg">tell me briefly in the chat what
+                  you're building</span> — {mode ? WILL_DO[mode] : WILL_DO_DEFAULT}.
+                </div>
+              </div>
+            </div>
+          </>
+        ) : (
+          <p className="mt-2.5 text-[13.5px] leading-relaxed text-muted">
+            SuperMe has no memory of this project yet. <span className="text-fg">Tell me briefly in the
+            chat what you're building</span>, and {mode ? WILL_DO[mode] : WILL_DO_DEFAULT}. The work
+            tabs unlock once they land.
+          </p>
+        )}
         {mode && (
           <p className="mt-3 text-[12.5px] text-faint">Connected as {PATHS[mode]}.</p>
         )}
