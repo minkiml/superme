@@ -38,13 +38,12 @@ function Command({ text, icon: Icon = Terminal, wrap = false }: {
   )
 }
 
-function Step({ n, title, children }: { n: string; title: string; children: React.ReactNode }) {
+// No step numbers: installing the CLI is a prerequisite and the two credentials are alternatives,
+// so a running count would promise an order the page does not have.
+function Step({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="rounded-lg border border-line bg-surface p-4">
-      <div className="flex items-baseline gap-2">
-        <span className="font-mono text-[11px] text-faint">{n}</span>
-        <h2 className="text-[14px] font-medium text-fg">{title}</h2>
-      </div>
+      <h2 className="text-[14px] font-medium text-fg">{title}</h2>
       <div className="mt-1.5 text-[13px] leading-relaxed text-muted">{children}</div>
     </div>
   )
@@ -74,17 +73,16 @@ export default function CredentialSetup({ status, onSkip }: {
           <KeyRound size={14} />
           <span className="text-[11px] font-medium uppercase tracking-wider">Setup</span>
         </div>
-        <h1 className="text-[22px] font-semibold text-fg">Connect your Claude account</h1>
+        <h1 className="text-[22px] font-semibold text-fg">Connect Claude</h1>
         <p className="mt-2.5 text-[13.5px] leading-relaxed text-muted">
-          SuperMe runs its agents through Claude Code, on your own Claude plan (API key is not
-          supported). Get an OAuth token and set it in <code className="font-mono text-[12px] text-fg">.env</code>.
-          See the instructions below.
+          SuperMe runs every agent turn through Claude Code on your Claude plan. Set up either one
+          below.
         </p>
 
         <div className="mt-7 flex flex-col gap-3">
           {status && !status.cli_installed && (
-            <Step n="00" title="Install the Claude Code CLI">
-              SuperMe drives it for every turn, so this comes first.
+            <Step title="Install Claude Code first">
+              SuperMe needs it for every turn.
               <div className="mt-2">
                 <a
                   href="https://claude.com/claude-code"
@@ -98,10 +96,10 @@ export default function CredentialSetup({ status, onSkip }: {
             </Step>
           )}
 
-          <Step n="01" title="Get an OAuth token">
-            Print one:
+          <Step title="Add a token to .env">
+            Print a token.
             <Command text="claude setup-token" />
-            <div className="mt-3">then add it to this file, on its own line:</div>
+            <div className="mt-3">Add it to this file on its own line.</div>
             {status?.env_file && <Command text={status.env_file} icon={FileText} wrap />}
             <Command text="CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-…" icon={KeyRound} />
           </Step>
@@ -112,9 +110,9 @@ export default function CredentialSetup({ status, onSkip }: {
             <div className="h-px flex-1 bg-line" />
           </div>
 
-          <Step n="02" title="Sign in to the CLI instead">
-            Nothing to paste anywhere — SuperMe uses the same credential
-            <code className="font-mono text-[12px] text-fg"> claude </code> does.
+          <Step title="Sign in to the CLI">
+            Nothing to paste. SuperMe uses the same credential as
+            <code className="font-mono text-[12px] text-fg"> claude </code>.
             <Command text="claude auth login" />
           </Step>
         </div>
@@ -137,7 +135,7 @@ export default function CredentialSetup({ status, onSkip }: {
 
         {stillMissing && status && (
           <p className="mt-3 text-[12.5px] leading-relaxed text-warn">
-            Still nothing — {status.detail}
+            {status.detail}
           </p>
         )}
 

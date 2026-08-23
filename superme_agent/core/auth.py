@@ -42,14 +42,13 @@ def _resolve() -> dict:
                 "detail": "a plan token is set in .env"}
     if (probe := console.argv("claude", "auth", "status")) is None:
         return {**where, "ready": False, "method": None,
-                "detail": "the Claude CLI is not on PATH — install Claude Code, then either "
-                          "run `claude auth login` or put a `claude setup-token` token in .env"}
+                "detail": "Claude Code is not installed. Install it, then run `claude auth login` "
+                          "or add a token to .env"}
     if _cli_signed_in(probe):
         return {**where, "ready": True, "method": "cli",
                 "detail": "the Claude CLI on this machine is signed in"}
     return {**where, "ready": False, "method": None,
-            "detail": "the Claude CLI is not signed in — run `claude auth login`, or put a "
-                      "token from `claude setup-token` in .env as CLAUDE_CODE_OAUTH_TOKEN"}
+            "detail": "Claude is not signed in. Run `claude auth login` or add a token to .env"}
 
 
 def _cli_signed_in(probe: list[str]) -> bool:

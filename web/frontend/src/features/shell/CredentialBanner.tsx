@@ -12,8 +12,8 @@ export default function CredentialBanner({ onOpenSetup }: { onOpenSetup: () => v
     <div className="flex shrink-0 items-center gap-2 border-b border-warn/40 bg-warn/10 px-3 py-1.5 text-[11px] text-fg">
       <KeyRound size={13} className="shrink-0 text-warn" />
       <span className="min-w-0 flex-1 leading-relaxed">
-        <span className="font-medium">No Anthropic credential.</span> Agent turns, work-item
-        phases and distilling are switched off.
+        <span className="font-medium">No Claude credential.</span> Agent turns, work-item phases
+        and distilling are off.
       </span>
       <button
         onClick={onOpenSetup}
