@@ -66,7 +66,10 @@ function OverTime({ ts, tokens, full }: { ts: TokenTimeseries; tokens: TokenUsag
                   const v = (d[t.key as keyof typeof d] as number) ?? 0
                   return v ? <div key={t.key} style={{ height: heightOf(v, dayMax), backgroundColor: t.color }} /> : null
                 })
-              : <div className="rounded-t-sm bg-iris" style={{ height: heightOf(cum[i], cumMax) }} />}
+              : cum[i]
+                ? <div className="rounded-t-sm bg-iris" style={{ height: heightOf(cum[i], cumMax) }} />
+                : null}   {/* before the first run there is nothing to draw — the floor in
+                             `heightOf` would otherwise show a stub that reads as usage */}
             {/* over the hovered column: the day's breakdown and total, or the running total and
                 that day's share */}
             <div className={`pointer-events-none absolute top-1/2 z-20 hidden -translate-y-1/2 whitespace-nowrap rounded-md border border-line bg-surface px-2.5 py-1.5 text-[11px] shadow-lg group-hover:block ${anchorX}`}>
