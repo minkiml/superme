@@ -1,0 +1,153 @@
+import { useState } from 'react'
+import { KeyRound, Terminal, Check, Copy, RefreshCw, ArrowRight, Download, FileText } from 'lucide-react'
+import { getAuthStatus, type AuthStatus } from '@/lib/api'
+import { invalidate } from '@/lib/live'
+import { K } from '@/lib/live/keys'
+
+// The first screen of an install that cannot reach Anthropic yet.
+//
+// This replaces the dashboard rather than sitting on top of it: with no credential every agent
+// action is refused, so a working-looking cockpit is a lie a new owner has to discover by
+// clicking. The page's job is to be finishable — the two ways in, the exact commands, and a way
+// to say "done" without restarting anything.
+
+function Command({ text, icon: Icon = Terminal, wrap = false }: {
+  text: string
+  icon?: typeof Terminal
+  wrap?: boolean          // a file path is worth two lines; truncating one helps nobody
+}) {
+  const [copied, setCopied] = useState(false)
+  return (
+    <div className="mt-2 flex items-start gap-2 rounded-md border border-line bg-sunken px-3 py-2">
+      <Icon size={13} className="mt-0.5 shrink-0 text-faint" />
+      <code className={`min-w-0 flex-1 font-mono text-[12.5px] text-fg ${wrap ? 'break-all' : 'truncate'}`}>{text}</code>
+      <button
+        onClick={() => {
+          navigator.clipboard?.writeText(text).then(() => {
+            setCopied(true)
+            setTimeout(() => setCopied(false), 1500)
+          }).catch(() => {})
+        }}
+        title="Copy"
+        aria-label={`Copy: ${text}`}
+        className="-mt-0.5 shrink-0 rounded p-1 text-faint transition-colors hover:text-accent-text"
+      >
+        {copied ? <Check size={13} className="text-success" /> : <Copy size={13} />}
+      </button>
+    </div>
+  )
+}
+
+function Step({ n, title, children }: { n: string; title: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-lg border border-line bg-surface p-4">
+      <div className="flex items-baseline gap-2">
+        <span className="font-mono text-[11px] text-faint">{n}</span>
+        <h2 className="text-[14px] font-medium text-fg">{title}</h2>
+      </div>
+      <div className="mt-1.5 text-[13px] leading-relaxed text-muted">{children}</div>
+    </div>
+  )
+}
+
+export default function CredentialSetup({ status, onSkip }: {
+  status: AuthStatus | undefined
+  onSkip: () => void
+}) {
+  const [checking, setChecking] = useState(false)
+  const [stillMissing, setStillMissing] = useState(false)
+
+  function recheck() {
+    setChecking(true)
+    setStillMissing(false)
+    getAuthStatus(true)
+      .then((s) => { if (!s.ready) setStillMissing(true) })
+      .then(() => invalidate(K.authStatus))
+      .catch(() => {})
+      .finally(() => setChecking(false))
+  }
+
+  return (
+    <div className="h-full overflow-y-auto bg-app">
+      <div className="mx-auto max-w-2xl px-6 py-16">
+        <div className="mb-1.5 flex items-center gap-1.5 text-accent-text">
+          <KeyRound size={14} />
+          <span className="text-[11px] font-medium uppercase tracking-wider">Setup</span>
+        </div>
+        <h1 className="text-[22px] font-semibold text-fg">Connect your Claude account</h1>
+        <p className="mt-2.5 text-[13.5px] leading-relaxed text-muted">
+          SuperMe runs its agents through Claude Code, on your own Claude plan. Until it can reach
+          Anthropic, you can look around but nothing will run. Either way below works — most people
+          already have the first.
+        </p>
+
+        <div className="mt-7 flex flex-col gap-3">
+          {status && !status.cli_installed && (
+            <Step n="00" title="Install the Claude Code CLI">
+              SuperMe drives it for every turn, so this comes first.
+              <div className="mt-2">
+                <a
+                  href="https://claude.com/claude-code"
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="inline-flex items-center gap-1.5 text-[12.5px] text-accent-text hover:underline"
+                >
+                  <Download size={13} /> claude.com/claude-code
+                </a>
+              </div>
+            </Step>
+          )}
+
+          <Step n="01" title="Sign in to the CLI">
+            The simplest way, and it needs nothing pasted anywhere. SuperMe uses the same
+            credential <code className="font-mono text-[12px] text-fg">claude</code> does.
+            <Command text="claude auth login" />
+          </Step>
+
+          <div className="flex items-center gap-3 px-1">
+            <div className="h-px flex-1 bg-line" />
+            <span className="text-[11px] uppercase tracking-wider text-faint">or</span>
+            <div className="h-px flex-1 bg-line" />
+          </div>
+
+          <Step n="02" title="Use a long-lived token instead">
+            Better for a machine you will not sign in on interactively. Print a token:
+            <Command text="claude setup-token" />
+            <div className="mt-3">then add it to this file, on its own line:</div>
+            {status?.env_file && <Command text={status.env_file} icon={FileText} wrap />}
+            <Command text="CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-…" icon={KeyRound} />
+          </Step>
+        </div>
+
+        <div className="mt-7 flex flex-wrap items-center gap-3">
+          <button
+            onClick={recheck}
+            disabled={checking}
+            className="inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-[13px] font-medium text-on-accent transition hover:opacity-90 disabled:opacity-50"
+          >
+            <RefreshCw size={14} className={checking ? 'animate-spin' : ''} />
+            {checking ? 'Checking…' : "I've done that"}
+          </button>
+          <button
+            onClick={onSkip}
+            className="inline-flex items-center gap-1.5 text-[12.5px] text-muted transition-colors hover:text-fg"
+          >
+            Look around first <ArrowRight size={13} />
+          </button>
+        </div>
+
+        {stillMissing && status && (
+          <p className="mt-3 text-[12.5px] leading-relaxed text-warn">
+            Still nothing — {status.detail}
+          </p>
+        )}
+
+        <p className="mt-8 border-t border-line pt-4 text-[12px] leading-relaxed text-faint">
+          SuperMe accepts plan auth only. <code className="font-mono">ANTHROPIC_API_KEY</code> is
+          dropped from the process whether or not you set it, so a key in your shell can never
+          quietly bill you instead.
+        </p>
+      </div>
+    </div>
+  )
+}

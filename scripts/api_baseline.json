@@ -2284,6 +2284,9 @@
   }
  },
  "superme_agent.core.auth": {
+  "ENV_FILE": {
+   "sig": "value:PosixPath"
+  },
   "_CLI_TIMEOUT_S": {
    "sig": "value:int"
   },

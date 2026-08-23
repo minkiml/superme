@@ -5,9 +5,9 @@ import { invalidate } from '@/lib/live'
 import { K } from '@/lib/live/keys'
 import { useAuthGate } from '@/lib/authGate'
 
-// The one place that says SuperMe cannot reach Anthropic. Nothing else in the app explains it:
-// without this the owner meets a dashboard that looks operational and fails on first use.
-export default function CredentialBanner() {
+// The reminder for someone who chose "look around first" on the setup page — the guide is what
+// an install without a credential lands on, and this is what is left after dismissing it.
+export default function CredentialBanner({ onOpenSetup }: { onOpenSetup: () => void }) {
   const { ready, reason } = useAuthGate()
   const [checking, setChecking] = useState(false)
   if (ready || !reason) return null
@@ -28,8 +28,14 @@ export default function CredentialBanner() {
       {/* Wraps rather than truncates: the half that gets cut is the half that says what to run. */}
       <span className="min-w-0 flex-1 leading-relaxed">
         <span className="font-medium">No Anthropic credential.</span> Agent turns, work-item
-        phases and distilling are switched off — {reason}
+        phases and distilling are switched off.
       </span>
+      <button
+        onClick={onOpenSetup}
+        className="shrink-0 rounded border border-warn/50 px-1.5 py-0.5 text-[10px] font-medium text-fg transition-colors hover:bg-warn/20"
+      >
+        Set up
+      </button>
       <button
         onClick={recheck}
         disabled={checking}

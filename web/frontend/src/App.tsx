@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Radar, Activity, SlidersHorizontal, Boxes } from 'lucide-react'
 import TopBar from '@/features/shell/TopBar'
 import CredentialBanner from '@/features/shell/CredentialBanner'
+import CredentialSetup from '@/features/shell/CredentialSetup'
+import { useAuthGate, lookingAround, setLookingAround } from '@/lib/authGate'
 import NavColumn, { type NavRow } from '@/features/shell/NavColumn'
 import StatusBar from '@/features/shell/StatusBar'
 import Nexus from '@/features/shell/Nexus'
@@ -238,6 +240,22 @@ export default function App() {
   // A repo surface belongs to the Nexus branch — that is where you came from and where Back goes.
   const navActive = configSection ? 'config' : route.name === 'surface' ? route.surface : 'nexus'
 
+  // With no credential nothing runs, so the guide IS the app until there is one or the owner
+  // says they would rather look around. Rendered instead of the frame, not over it: a cockpit
+  // whose every control is refused is a lie you have to click to discover.
+  const auth = useAuthGate()
+  const [browsing, setBrowsing] = useState(lookingAround)
+  if (!auth.ready && !browsing) {
+    return (
+      <div className="flex h-full flex-col bg-app font-sans text-fg">
+        <CredentialSetup
+          status={auth.status}
+          onSkip={() => { setLookingAround(true); setBrowsing(true) }}
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="flex h-full flex-col bg-app font-sans text-fg">
       {/* In the QUERY rather than a path, because it is an overlay: it belongs over the surface
@@ -249,7 +267,7 @@ export default function App() {
                                              : setParam('stats', id))}
       />
 
-      <CredentialBanner />
+      <CredentialBanner onOpenSetup={() => { setLookingAround(false); setBrowsing(false) }} />
 
       <div className="flex min-h-0 flex-1">
         <NavColumn

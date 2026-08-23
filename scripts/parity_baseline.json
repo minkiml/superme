@@ -1032,8 +1032,16 @@
         "AuthStatusResponse": {
           "description": "Whether SuperMe holds a credential at all. `detail` is the sentence a surface shows.",
           "properties": {
+            "cli_installed": {
+              "title": "Cli Installed",
+              "type": "boolean"
+            },
             "detail": {
               "title": "Detail",
+              "type": "string"
+            },
+            "env_file": {
+              "title": "Env File",
               "type": "string"
             },
             "method": {
@@ -1058,7 +1066,9 @@
           },
           "required": [
             "ready",
-            "detail"
+            "detail",
+            "env_file",
+            "cli_installed"
           ],
           "title": "AuthStatusResponse",
           "type": "object"

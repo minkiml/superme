@@ -11,7 +11,7 @@ import os
 import subprocess
 import time
 
-from ..paths import log
+from ..paths import ENV_FILE, log
 from .vocab import console
 
 # `claude auth status` spawns a process, and `/system/auth` is polled. One answer per minute is
@@ -36,17 +36,18 @@ def auth_status(*, refresh: bool = False) -> dict:
 
 
 def _resolve() -> dict:
+    where = {"env_file": str(ENV_FILE), "cli_installed": console.argv("claude") is not None}
     if os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"):
-        return {"ready": True, "method": "token",
+        return {**where, "ready": True, "method": "token",
                 "detail": "a plan token is set in .env"}
     if (probe := console.argv("claude", "auth", "status")) is None:
-        return {"ready": False, "method": None,
+        return {**where, "ready": False, "method": None,
                 "detail": "the Claude CLI is not on PATH — install Claude Code, then either "
                           "run `claude auth login` or put a `claude setup-token` token in .env"}
     if _cli_signed_in(probe):
-        return {"ready": True, "method": "cli",
+        return {**where, "ready": True, "method": "cli",
                 "detail": "the Claude CLI on this machine is signed in"}
-    return {"ready": False, "method": None,
+    return {**where, "ready": False, "method": None,
             "detail": "the Claude CLI is not signed in — run `claude auth login`, or put a "
                       "token from `claude setup-token` in .env as CLAUDE_CODE_OAUTH_TOKEN"}
 

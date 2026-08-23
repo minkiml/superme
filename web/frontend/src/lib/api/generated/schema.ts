@@ -2751,6 +2751,10 @@ export interface components {
             method?: ("token" | "cli") | null;
             /** Detail */
             detail: string;
+            /** Env File */
+            env_file: string;
+            /** Cli Installed */
+            cli_installed: boolean;
         };
         /**
          * AuthorizationRequest

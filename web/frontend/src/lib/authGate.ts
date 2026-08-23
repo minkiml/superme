@@ -23,3 +23,23 @@ export function useAuthGate(): AuthGate {
   const ready = data?.ready ?? true
   return { ready, reason: ready ? null : data?.detail ?? null, status: data }
 }
+
+// "Look around first" on the setup page. Session-scoped on purpose: a new tab should meet the
+// guide again, and a reload is the cheapest way back to it.
+const DISMISSED = 'superme.auth.lookingAround'
+
+export function lookingAround(): boolean {
+  try {
+    return sessionStorage.getItem(DISMISSED) === '1'
+  } catch {
+    return false
+  }
+}
+
+export function setLookingAround(on: boolean): void {
+  try {
+    on ? sessionStorage.setItem(DISMISSED, '1') : sessionStorage.removeItem(DISMISSED)
+  } catch {
+    /* private mode — the guide simply shows again */
+  }
+}
