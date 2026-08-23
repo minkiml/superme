@@ -12,6 +12,9 @@ Code CLI, so they reach Anthropic exactly the way `claude` does and no further.
 - **Node.js** with npm
 - The **[Claude Code](https://claude.com/claude-code) CLI**, signed in to a Claude plan
 
+`requirements.txt` names exact versions — the ones this was tested against. Install into a
+virtual environment rather than your system Python, so the pins are SuperMe's alone.
+
 ## Setup
 
 **1 · Install dependencies** into your environment.
@@ -48,6 +51,15 @@ finish. Sign in, then click **I signed in** in that banner.
 
 Re-run `python setup_superme.py --check` at any point to see what is still missing. It reports
 without writing anything.
+
+**Optional — check the install itself.** Seconds, reads everything and changes nothing:
+
+```bash
+bash scripts/check_fast.sh
+```
+
+It proves the routes, the import surface, the layering, the file encodings and the frontend
+types all agree with the code on disk. Worth running after any dependency change.
 
 ## Run
 
