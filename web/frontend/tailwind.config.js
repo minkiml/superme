@@ -34,6 +34,7 @@ export default {
       fontFamily: {
         sans: ['Inter Variable', 'Hanken Grotesk Variable', 'system-ui', '-apple-system', 'sans-serif'],
         mono: ['IBM Plex Mono', 'ui-monospace', 'monospace'],
+        display: ['Hanken Grotesk Variable', 'Inter Variable', 'system-ui', 'sans-serif'],
       },
       backgroundImage: {
         iris: 'var(--grad-iris)', // the iridescent brand gradient

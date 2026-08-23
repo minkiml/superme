@@ -118,9 +118,8 @@ export default function TopBar({ stats, onDetails, onGoto }: {
 
   return (
     <header className="flex h-14 shrink-0 items-center gap-4 border-b border-line bg-sidebar px-4">
-      <div className="flex items-center gap-2.5">
-        <span className="h-7 w-7 rounded-lg bg-iris shadow-sm" />
-        <span className="text-[17px] font-semibold tracking-tight text-fg">superme</span>
+      <div className="flex items-center">
+        <span className="font-display text-[18px] font-semibold tracking-[.005em] text-fg">SuperMe</span>
       </div>
       <div className="ml-auto flex items-center">
         {CHIPS.map((c) => {
