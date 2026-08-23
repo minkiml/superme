@@ -111,33 +111,6 @@ These are the questions that drive the design, and they are still open.
 
 ---
 
-### What that discipline has produced so far.
-
-**Reports written for you, not logs.** What it did, what to push back on, how much to trust each
-claim, and where it leaves the project.
-
-![A gate report](docs/img/report.png)
-
-**Mechanical checks first.** Missing artifacts, stale evidence and unresolved authorizations are
-settled before you're asked, so your attention goes to judgment instead of bookkeeping.
-
-**Self-carrying work-items.** Brief, plan, decisions, checkpoints and history travel with the item,
-so returning to it is reading, not reconstructing.
-
-![A work-item](docs/img/work-item.png)
-
-**Interactive review.** Read the diff and leave feedback in the item. Feedback becomes a check, build
-implements it, vet re-runs.
-
-![PR preview and review](docs/img/review.png)
-
-**Full observability.** Every run keeps its trace. Prompts, tool calls, results, sub-agents, tokens,
-context fill. Nothing is a black box when it goes wrong.
-
-![Execution trace](docs/img/trace.png)
-
----
-
 ### Other features
 
 - **Git worktrees.** Every item builds in its own worktree, so parallel agent work never collides
