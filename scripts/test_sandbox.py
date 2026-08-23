@@ -1,8 +1,7 @@
 """The OS-level shell sandbox.
 
-Reading a command string cannot tell where it writes — `cd /elsewhere && rm -rf` is invisible.
-The kernel gets the same write roots the permission layer already holds, because two
-boundaries that can drift are worse than one.
+Reading a command string cannot tell where it writes: `cd /elsewhere && rm -rf` is invisible. The
+kernel gets the write roots the permission layer already holds, because two boundaries drift.
 
 Run: PYTHONPATH=. python -m scripts.test_sandbox
 """

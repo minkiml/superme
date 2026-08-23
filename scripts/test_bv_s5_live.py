@@ -1,7 +1,7 @@
 """The build-vet loop driving itself end to end. COSTS TOKENS.
 
-Approving the plan gate is the last human action. The cycle COUNT is deliberately not asserted,
-since a planted defect is one build often fixes first time.
+Approving the plan gate is the last human action. The cycle COUNT is not asserted, since build
+often fixes a planted defect first time.
 
 Needs a running daemon. Writes into `test-playground`, or SUPERME_TEST_CTX.
 """

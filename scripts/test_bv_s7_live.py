@@ -1,7 +1,7 @@
 """The review router closing the full circle. COSTS TOKENS.
 
 A real intake agent turns the owner's feedback into a vet-plan check, build implements it, and a
-fresh vet passes — with no human action after the feedback.
+fresh vet passes with no human action after the feedback.
 
 Needs a running daemon. Writes into `test-playground`, or SUPERME_TEST_CTX.
 """

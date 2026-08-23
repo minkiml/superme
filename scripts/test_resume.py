@@ -1,7 +1,7 @@
 """Resume: re-firing the background run of an item whose RUN stopped.
 
-Nothing is rewound, which is what makes it cheap enough to be a button. Not Continue: that
-finalizes a build that hit a wall, where the run succeeded and the work stopped.
+Nothing is rewound, which is what makes it cheap enough to be a button. Not Continue, which
+finalizes a build that hit a wall.
 
 Run: PYTHONPATH=. python -m scripts.test_resume
 """

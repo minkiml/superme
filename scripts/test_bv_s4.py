@@ -1,7 +1,7 @@
 """Vet session mechanics, and the refusals that make a verdict mean something.
 
 A verdict without evidence, or contradicting the ledger, is refused. Vet's file-writes are dead
-outright — even inside the freeze boundary — while its shell keeps autonomy to RUN checks.
+outright, while its shell keeps autonomy to RUN checks.
 
 Run: PYTHONPATH=. python -m scripts.test_bv_s4
 """

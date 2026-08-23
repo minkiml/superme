@@ -1,7 +1,7 @@
 """The one way back from review: `revise` to plan, and the revision grammar.
 
-There is no send-back button and no second router. Scope is per CHANGE, because one review
-carries several concerns and redesigning one part must not reset another part's progress.
+Scope is per CHANGE, because one review carries several concerns and redesigning one part must
+not reset another part's progress.
 
 Run: PYTHONPATH=. python -m scripts.test_bv_s7
 """

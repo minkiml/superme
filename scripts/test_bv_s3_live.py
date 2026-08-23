@@ -1,7 +1,7 @@
 """The phase-to-session map, driven by real turns. COSTS TOKENS — five tiny turns.
 
-Triage births intake, build births its own and RESUMES it, vet births its own, and review returns
-to intake. Abandon retires every role thread.
+Triage births intake, build births its own and RESUMES it, vet births its own, review returns to
+intake. Abandon retires every role thread.
 
 Needs a running daemon. Writes into `test-playground`, or SUPERME_TEST_CTX.
 Run: PYTHONPATH=. python -m scripts.test_bv_s3_live

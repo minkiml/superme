@@ -1,8 +1,7 @@
 """Kernel-executed verification checks.
 
 A check that is one command has no judgment in it, so the kernel runs it and writes the verdict
-itself — final, and re-run free each cycle. Real commands run here: a mocked subprocess would
-pin nothing.
+itself. Real commands run here, since a mocked subprocess would pin nothing.
 
 Run: PYTHONPATH=. python -m scripts.test_kernel_checks
 """
