@@ -29,17 +29,25 @@ def _app():
 def _ws_routes(app) -> list[str]:
     """The WebSocket paths the app actually declares — absent from OpenAPI, so measured here.
 
-    FastAPI has wrapped included routers before now, so anything carrying `routes` is walked."""
+    FastAPI keeps changing how an included router is stored: a plain list once, then objects
+    carrying `routes`, and now a wrapper whose only handle is `original_router`. Follow every
+    shape — missing one reports the routes as DELETED, on an app that still serves them."""
     from starlette.routing import WebSocketRoute
 
     found: list[str] = []
+    seen: set[int] = set()
 
     def walk(routes) -> None:
         for r in routes:
+            if id(r) in seen:
+                continue
+            seen.add(id(r))
             if isinstance(r, WebSocketRoute):
                 found.append(f"WS {r.path}")
-            elif hasattr(r, "routes"):
-                walk(r.routes)
+            elif (sub := getattr(r, "routes", None)) is not None:
+                walk(sub)
+            elif (inner := getattr(r, "original_router", None)) is not None:
+                walk(getattr(inner, "routes", []))
 
     walk(app.router.routes)
     return sorted(found)
