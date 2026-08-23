@@ -8,8 +8,7 @@ import sys
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 title, path = sys.argv[1], sys.argv[2]
 raw = open(path, encoding="utf-8", errors="replace").read()
-# A traceback lands near the start; the summary lands at the end. A long log hides one
-# or the other, so both ends are reported.
+# A traceback lands at the head and the summary at the tail; a long log hides one.
 text = raw if len(raw) <= 12000 else raw[:5000] + "\n[…]\n" + raw[-7000:]
 esc = text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
 print(f"::error title={title}::{esc}")

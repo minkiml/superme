@@ -23,8 +23,8 @@ SKIP_PARTS = ("plugins", "local-harness")
 # A default rendered as `<Foo object at 0x7f…>` differs every run; the address says nothing.
 _ADDRESS = re.compile(r" at 0x[0-9a-fA-F]+")
 
-# Some defaults are paths built from the install root, which differs per checkout. Windows
-# spells that root with backslashes and pathlib reprs it with forward ones, so both are held.
+# Defaults built from the install root differ per checkout, and Windows spells that root
+# two ways.
 _ROOT: tuple[str, ...] = ()
 
 # `home` already tracks where a class lives, so moving one must not read as a signature change.

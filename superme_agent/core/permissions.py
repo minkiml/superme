@@ -360,11 +360,8 @@ def _is_absolute_token(tok: str) -> bool:
 
 
 def _outside_every(tok: str, roots: list[Path]) -> bool:
-    """True when an absolute token lands outside every root.
-
-    A drive path on a POSIX host is outside by definition: no native root can hold it, and
-    resolving it would silently reinterpret it against the cwd. Anything else the platform can
-    resolve is compared the ordinary way, roots included."""
+    """A drive path on a POSIX host is outside by definition: resolving it would reinterpret
+    it against the cwd."""
     p = Path(tok)
     if not p.is_absolute() and PureWindowsPath(tok).is_absolute():
         return True
@@ -400,10 +397,8 @@ def _bash_escapes_boundary(command: str, roots: list[Path]) -> bool:
 
 
 def shlex_split_safe(command: str) -> list[str]:
-    """`shlex.split` that degrades to a whitespace split on unbalanced quotes.
-
-    POSIX splitting reads a backslash as an escape, which eats every separator in a Windows
-    path and leaves a token no boundary check can recognise."""
+    """`shlex.split` that whitespace-splits on unbalanced quotes and keeps a Windows path's
+    backslashes."""
     try:
         return shlex.split(command, posix=os.name != "nt")
     except ValueError:

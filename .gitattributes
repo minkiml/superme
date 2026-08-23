@@ -1,3 +1,2 @@
-# A Windows checkout converts to CRLF by default, and bash cannot run a script whose lines end
-# in a carriage return.
+# A Windows checkout converts to CRLF, and bash will not run a script with carriage returns.
 *.sh text eol=lf

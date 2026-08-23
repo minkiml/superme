@@ -120,10 +120,9 @@ class DevStore:
 
     @contextmanager
     def _conn(self) -> Iterator[sqlite3.Connection]:
-        """A connection for one call, committed and then CLOSED.
+        """A connection for one call, committed and then closed.
 
-        sqlite's own context manager ends the transaction and leaves the handle open, which
-        holds a lock on the file for as long as the process lives."""
+        sqlite's context manager ends the transaction and leaves the handle open."""
         c = sqlite3.connect(self.db_path)
         c.row_factory = sqlite3.Row
         try:

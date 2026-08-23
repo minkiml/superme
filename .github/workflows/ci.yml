@@ -5,8 +5,7 @@
 # it works.
 name: CI
 
-# Work lands on superme-dev and main is fast-forwarded onto the same commit, so testing both
-# runs every job twice. A check belongs to a commit, and main inherits it.
+# Both branches sit at one commit, and a check belongs to the commit, so main inherits it.
 on:
   push:
     branches: [superme-dev]
@@ -73,8 +72,8 @@ jobs:
       - name: Offline suites
         shell: bash
         env:
-          # Not a credential: `auth_status` takes a token at face value without calling anything,
-          # and these suites assert what the surface offers an owner who can authenticate.
+          # Not a credential. These suites assert what the surface offers an owner who can
+          # authenticate.
           CLAUDE_CODE_OAUTH_TOKEN: offline-suites-need-no-network
         run: |
           # `*_live` need a daemon and a credential; the reconcile suite needs a restart between
