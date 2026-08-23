@@ -15,11 +15,10 @@ from .vocab import kind_profiles, sandbox
 
 def intake_trigger(skill: str, item_id: str, title: str,
                    changed: list[str] | None = None) -> str:
-    """The background intake run's message · durable. The delta is WHICH skill for
-    WHICH item.
+    """The background intake run's message, durable. The delta is WHICH skill for WHICH item.
 
-    `changed` names the records rewritten since this phase's own last run — a resumed agent answers
-    "nothing changed" from memory."""
+    `changed` names records rewritten since this phase's last run, which a resumed agent cannot
+    recall."""
     base = f"Run superme-dev:{skill} for work-item `{item_id}` (\"{title}\")."
     if not changed:
         return base
@@ -95,8 +94,8 @@ def vet_trigger(item_id: str, title: str, deferred: list[str] | None = None,
                 vet_env: bool = False, kernel: bool = True) -> str:
     """The background vet run, durable since vet forgets each cycle.
 
-    `kernel` false means this host has no sandbox, said out loud because an empty `machine` list
-    otherwise reads as a plan with no runnable checks."""
+    `kernel` false means no sandbox here, said out loud because an empty `machine` list reads as a
+    plan with no checks."""
     base = f"Run superme-dev:vet for work-item `{item_id}` (\"{title}\")."
     if not kernel:
         base += ("\n\nThis host has no sandbox the kernel can run a check in, so NOTHING was run "
@@ -148,11 +147,9 @@ def build_first_trigger(item_id: str, title: str, vet_env: bool = False) -> str:
 def build_loop_trigger(item_id: str, title: str, cycle: int, report_text: str,
                        *, reload_skill: bool = False,
                        diagnoses: dict[str, dict] | None = None) -> str:
-    """The loop's failure-hop build run · durable. The failed cycle's report IS the
-    payload, injected once.
+    """The loop's failure-hop build run. The failed cycle's report IS the payload, injected once.
 
-    `reload_skill` after a compaction. `diagnoses` are vet's located causes, lifted above the report
-    — vet never names the fix."""
+    `diagnoses` are vet's located causes, lifted above the report. Vet never names the fix."""
     head = (
         "Your context was COMPACTED since the last cycle, so the build procedure may no longer be "
         "in it: invoke the `superme-dev:build` skill again before you start. Then fix"
@@ -321,10 +318,9 @@ def phase_contract(kind: str | None, phase: str) -> dict:
 
 
 def compaction_notice(checkpoint_path: str | None, *, has_artifacts: bool = True) -> str:
-    """The post-compaction continuity notice, owed until a real turn runs.
-    A POINTER, never contents.
+    """The post-compaction continuity notice, owed until a real turn runs. A pointer, never contents.
 
-    What was missing is a REASON to open it: a compacted agent does not know it just lost its memory."""
+    What was missing is a REASON to open it: a compacted agent does not know it lost its memory."""
     if not checkpoint_path:
         return ""
     # A general session has no item folder, so "trust the item's artifacts" would point at

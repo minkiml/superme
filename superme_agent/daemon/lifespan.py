@@ -48,8 +48,7 @@ def _backfill_session_stamps() -> None:
 def _reconcile_orphaned_sessions() -> None:
     """Retire sessions whose work-item no longer exists on disk.
 
-    No disposal path covers a folder that leaves out of band, leaving a composer over a vanished item.
-    A repo whose dev tree fails to read is skipped."""
+    No disposal path covers a folder that leaves out of band, leaving a composer over nothing."""
     try:
         for rid in app_state.spine.repos():
             ctx = contexts.resolve(rid, "dev")
@@ -79,10 +78,8 @@ def _reconcile_orphaned_sessions() -> None:
 def _reconcile_expired_transcripts() -> None:
     """Retire sessions whose TRANSCRIPT is gone.
 
-    The CLI garbage-collects transcripts on a retention clock, so every session meets this deadline and
-    the row becomes a counted-but-unopenable ghost.
-
-    Only ever acts on a MISSING file."""
+    The CLI collects transcripts on a retention clock, so every session eventually meets it. Only
+    ever acts on a missing file."""
     try:
         for rid in app_state.spine.repos():
             ctx = contexts.resolve(rid, "dev")
@@ -163,9 +160,7 @@ _MAX_AUTO_RESUME = 3
 def _reconcile_orphaned_items(orphans: list[dict]) -> None:
     """Heal the work-items whose run the spine just flipped to `aborted`.
 
-    Without this the item stays `active` with no run and nothing to start one.
-
-    Two acts: LABEL every orphan `error`, then RESUME those whose run was a phase's own."""
+    Two acts: label every orphan `error`, then resume those whose run was a phase's own."""
     # The WHOLE body is guarded: housekeeping must never be able to stop the daemon booting.
     from .services.resume import resume_item
     try:
@@ -232,8 +227,8 @@ def _reconcile_orphaned_items(orphans: list[dict]) -> None:
 def _reconcile_stranded_proposals() -> None:
     """Free the learning proposals a dead `write` run left mid-flight.
 
-    `writing` is TRANSIENT, so a daemon dying mid-write leaves the proposal there, invisible to every
-    queue. No run is re-fired; the honest reset is back to `proposed`."""
+    `writing` is transient, so one left there is invisible to every queue. The honest reset is back
+    to `proposed`."""
     try:
         freed = 0
         for rid in app_state.spine.repos():

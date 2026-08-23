@@ -29,11 +29,9 @@ class TokenOps:
 
     @staticmethod
     def _display_tokens(row) -> int:
-        """The per-run token amount for DISPLAY: input + cache_creation + output, EXCLUDING
-        cache_read.
+        """The per-run amount for DISPLAY: input plus cache_creation plus output.
 
-        Only a PRE-MIGRATION row falls back to the legacy scalar. A run that never returned a final usage
-        carries a live estimate, not a measurement."""
+        Only a pre-migration row falls back to the legacy scalar."""
         typed = ((row["tok_input"] or 0) + (row["tok_cache_creation"] or 0)
                  + (row["tok_output"] or 0))
         if typed > 0:
@@ -51,10 +49,9 @@ class TokenOps:
         return d
 
     def token_usage(self) -> dict:
-        """System-wide token aggregation. Every token is attributable along TWO axes that
-        reconcile by construction: `by_category` and `by_type`.
+        """System-wide aggregation along two axes that reconcile by construction.
 
-        A row with four zero columns contributes NOTHING — it never returned a final usage."""
+        A row with four zero columns contributes nothing: it never returned a final usage."""
         from ..vocab.token_taxonomy import (
             category_for, display_feature, CATEGORY_ORDER, CATEGORY_LABELS, COLLAPSED_CATEGORIES,
         )
@@ -198,8 +195,7 @@ class TokenOps:
                           phases: tuple[str, ...] = ("build", "vet")) -> int:
         """An item's 3-type spend over the given phases, live and finished.
 
-        Rows with no typed usage FALL BACK to `tokens`, unlike `_display_tokens`: an aborted run's tokens
-        were really spent. Discarded runs are excluded, so the breaker inherits no spent budget."""
+        Rows with no typed usage fall back to `tokens`, since an aborted run's tokens were really spent."""
         ph = ",".join("?" for _ in phases)
         with self._conn() as c:
             r = c.execute(

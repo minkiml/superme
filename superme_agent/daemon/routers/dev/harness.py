@@ -95,9 +95,10 @@ def _foundation_specs():
 
 @router.get("/dev/harness/foundation", response_model=FoundationResponse)
 async def dev_harness_foundation() -> dict:
-    """SuperMe's repo-agnostic identity + machinery — the Foundations surface. SELF.md is WHO
-    (all modes); the per-mode charters are WHAT-MODE (hand-authored, editable). Plus the LEARNED
-    universal constitution (always-on rules the learning loop published), per mode."""
+    """SuperMe's repo-agnostic identity and machinery.
+
+    SELF.md is WHO, the per-mode charters are WHAT-MODE, and the learned universal constitution is
+    what the learning loop published."""
     from ....core.operational import read_constitution_dir
     from ....paths import CONSTITUTION_DIR
     files = []
@@ -137,8 +138,9 @@ async def dev_harness_foundation_save(body: FoundationFileBody) -> dict:
 # connect, wiped on disconnect.
 @router.get("/dev/harness/deputy", response_model=DeputyMandateResponse)
 async def dev_harness_deputy(context_id: str = "global") -> dict:
-    """This repo's deputy mandate — the standing bar the deputy judges gates against while the owner
-    is away. Seeded from a template on first read, so there is always a mandate to show/edit."""
+    """This repo's deputy mandate, the bar it judges gates against while the owner is away.
+
+    Seeded from a template on first read, so there is always one to show."""
     from ....core import deputy as deputy_core
     root = deputy_core.deputy_root(contexts.resolve(context_id, "dev"))
     content = deputy_core.read_mandate(root)
@@ -170,9 +172,9 @@ _HIDE_CATEGORIES = {"learning"}
 
 @router.get("/dev/palette", response_model=PaletteResponse)
 async def dev_palette(context_id: str = "global", mode: str = "dev") -> dict:
-    """The chat "/" palette for a (context, mode): user-facing SuperMe skills for the active mode's
-    plugin set (category not in the hidden set), computed live from disk, merged with the context's
-    cached external/native commands."""
+    """The chat "/" palette for a (context, mode).
+
+    Computed live from disk for the active mode's plugins, merged with the cached external commands."""
     from ....core.operational import list_palette_skills
     from ....paths import plugins_for, LOCAL_HARNESS_DIR
     op_home = local_harness_root(context_id, mode) if context_id else None
@@ -215,9 +217,9 @@ async def dev_harness_published(context_id: str = "global",
                response_model_exclude_unset=True)
 async def dev_harness_published_toggle(proposal_id: int, body: PublishedToggleBody,
                                        dev_store: DevStore = Depends(get_dev_store)) -> dict:
-    """Enable/disable a published artifact at runtime (no delete). Constitution flips its frontmatter
-    flag; a skill/agent moves between the live plugin tree and its `.disabled/` shadow. Effective on
-    the next dev turn."""
+    """Enable or disable a published artifact at runtime. No delete.
+
+    A skill moves between the live plugin tree and its `.disabled/` shadow, effective next turn."""
     from ....core import operational as ops
     prop = dev_store.get_memory_proposal(proposal_id)
     if not prop or prop["context_id"] != body.context_id or prop["status"] != "published":
@@ -268,9 +270,9 @@ async def dev_harness_constitutions(context_id: str = "global") -> dict:
               response_model_exclude_unset=True)
 async def dev_harness_constitution_toggle(slug: str, body: ConstitutionToggleBody,
                                           dev_store: DevStore = Depends(get_dev_store)) -> dict:
-    """Enable/disable ANY constitution by (scope, slug) — no proposal needed. A disabled constitution
-    leaves the always-on catalog AND becomes unpullable (both filter on `enabled`), so it is fully
-    inert. Effective on the next dev turn."""
+    """Enable or disable any constitution by (scope, slug). No proposal needed.
+
+    A disabled one leaves the always-on catalog and becomes unpullable, so it is fully inert."""
     from ....core import operational as ops
     if body.scope not in ("universal_dev", "repo_dev"):
         raise HTTPException(status_code=400, detail=f"scope '{body.scope}' is not manageable")
@@ -300,9 +302,9 @@ async def dev_harness_constitution_toggle(slug: str, body: ConstitutionToggleBod
 
 # --- Constitution edit: raw-file GET/PUT (frontmatter intact) ---------------------------------
 def _resolve_constitution_file(scope: str, slug: str, context_id: str) -> Path:
-    """The on-disk `.md` for one constitution, by (scope, slug). Universal lives under
-    `constitution/<mode>/`; a host's local under `local-harness/<ctx>/<mode>/constitution/`. Matches
-    on the item's slug (frontmatter `name` or filename stem), not a bare `<slug>.md` guess."""
+    """The on-disk `.md` for one constitution, by (scope, slug).
+
+    Universal lives under `constitution/<mode>/`, a host's local under its own cell."""
     from ....core.operational import read_constitution_dir
     from ....paths import CONSTITUTION_DIR, LOCAL_HARNESS_DIR
     if scope.startswith("universal_"):
@@ -330,9 +332,9 @@ async def dev_harness_constitution_file(slug: str, scope: str, context_id: str =
 @router.put("/dev/harness/constitution-file", response_model=ConstitutionFileSaveResponse)
 async def dev_harness_constitution_file_save(body: ConstitutionFileBody,
                                              dev_store: DevStore = Depends(get_dev_store)) -> dict:
-    """Save edits to one constitution file (the popup's edit mode) — the full raw markdown, frontmatter
-    kept so `enabled`/`description` survive. Takes effect on the next dev turn (constitutions are read
-    per-turn); no daemon restart needed."""
+    """Save edits to one constitution file, frontmatter kept so `enabled` survives.
+
+    Constitutions are read per turn, so it takes effect on the next one."""
     p = _resolve_constitution_file(body.scope, body.slug, body.context_id)
     if not (body.content or "").strip():
         raise HTTPException(status_code=400, detail="content is empty")
@@ -348,9 +350,9 @@ async def dev_harness_constitution_file_save(body: ConstitutionFileBody,
 
 @router.get("/dev/harness/assets", response_model=AssetsResponse)
 async def dev_harness_assets(context_id: str = "global") -> dict:
-    """The shared asset pool (opt-in constitutional knowledge, e.g. `sql-expert`), each flagged with
-    whether THIS repo has ADOPTED and ENABLED it. The pool is shared; adoption is per-repo (no body
-    copy). Onboarding auto-adopts the confidently-relevant ones; the owner curates from here."""
+    """The shared asset pool, each flagged with whether THIS repo has adopted and enabled it.
+
+    The pool is shared and adoption is per-repo, so nothing copies a body."""
     from ....core.operational import read_asset_pool, repo_asset_states
     from ....paths import LOCAL_HARNESS_DIR
     states = repo_asset_states(local_harness_root(context_id) / "constitution")

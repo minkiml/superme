@@ -33,10 +33,9 @@ _BLOCKING: dict[str, tuple[str, ...] | str] = {
 
 
 def close_readiness(item: dict, item_dir: Path, all_items: list[dict]) -> dict:
-    """Evaluate the kind's close criteria → {ok, checks}. Every required artifact
-    EXISTS — not that it is good.
+    """Evaluate the kind's close criteria. Every required artifact EXISTS, not that it is good.
 
-    NOTHING HERE RE-JUDGES THE WORK: close can fix nothing, so readiness is asked at gates with
+    Nothing here re-judges the work: close can fix nothing, so readiness is asked where there is
     recourse."""
     profile = get_profile(item.get("kind"))
     item_dir = Path(item_dir)
@@ -60,10 +59,9 @@ def close_readiness(item: dict, item_dir: Path, all_items: list[dict]) -> dict:
 
 def fanout_check(family: str | None, subagents: int | None,
                  fanout: str = "expected") -> dict | None:
-    """The `fanned_out` row, or None when the question does not apply — no prescribed
-    fan-out, nobody counted, or a BOUNDED surface.
+    """The `fanned_out` row, or None when the question does not apply.
 
-    VISIBLE, NOT BLOCKING. What it removes is the SILENCE around a sweep that split nothing."""
+    Visible, not blocking. What it removes is the silence around a sweep that split nothing."""
     from .vocab.kind_profiles import FANOUT_FAMILIES, item_fanout
     if family not in FANOUT_FAMILIES or subagents is None:
         return None
@@ -91,10 +89,9 @@ BRIEF_FLOOR = 600
 
 def brief_check(sizes: list[int] | None) -> dict | None:
     """The `brief_carried` row: did the fan-out send its workers out with anything?
-    A subagent inherits nothing.
 
-    VISIBLE, NOT BLOCKING. Size proves a brief too short to carry a bar, never that a long one
-    carried the right one."""
+    Visible, not blocking. Size proves a brief too short to carry a bar, never that it carried the
+    right one."""
     if not sizes:
         return None
     thin = [n for n in sizes if n < BRIEF_FLOOR]
@@ -148,11 +145,10 @@ def instrumentation_check(tags: list[dict] | None) -> dict | None:
 
 
 def guide_check(family: str | None, reads: int | None) -> dict | None:
-    """The `method_read` row: did investigate open `references/<family>.md`? None when
-    there is no family, or nobody counted.
+    """The `method_read` row: did investigate open `references/<family>.md`?
 
-    BLOCKING, unlike its neighbours: the scaffolder stamps the shape regardless, so an unread
-    method is otherwise invisible."""
+    Blocking, unlike its neighbours: the scaffolder stamps the shape regardless, so an unread method
+    is otherwise invisible."""
     if not family or reads is None:
         return None
     return {
@@ -169,9 +165,8 @@ def guide_check(family: str | None, reads: int | None) -> dict | None:
 
 def judgment_current(item_dir: Path, kind: str | None) -> dict | None:
     """The `judgment_current` row: is `review.md` at least as new as what it judges?
-    None when either file is missing.
 
-    VISIBLE, NOT BLOCKING: an honest re-read that changed nothing writes no file, and would fail."""
+    Visible, not blocking: an honest re-read that changed nothing writes no file."""
     review = Path(item_dir) / "artifacts" / "review.md"
     if not review.is_file():
         return None

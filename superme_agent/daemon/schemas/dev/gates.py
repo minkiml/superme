@@ -11,10 +11,9 @@ from .general import DecisionEntry
 
 
 class GateCheck(BaseModel):
-    """One mechanical row of a gate's evaluation — computed from durable state, never a claim.
+    """One mechanical row of a gate's evaluation, computed from durable state rather than claimed.
 
-    `blocking` is the must-resolve marker: a failing blocking check greys Approve, and every other row
-    is a named, visible fact."""
+    `blocking` is the must-resolve marker: a failing one greys Approve."""
     criterion: str
     ok: bool
     detail: str
@@ -31,8 +30,9 @@ class GateNumbers(BaseModel):
 
 
 class PagedNotice(BaseModel):
-    """Why an item is parked for the owner when it is not a plain gate wait — an escalation, a build⟷vet
-    halt, or a blocked run. None means a normal gate."""
+    """Why an item is parked when it is not a plain gate wait.
+
+    An escalation, a build⟷vet halt, or a blocked run. None means a normal gate."""
     source: str          # deputy | loop | agent
     gate: str | None     # the gate the deputy escalated, when source == deputy
     headline: str        # one line: who paged and why
@@ -57,7 +57,7 @@ class DrilldownAction(BaseModel):
     """One control, with its activation decided SERVER-SIDE.
 
     `reason` is populated either way: greyed it says what would make it live, live it says what
-    clicking does. `home` places it. Never hide a control — an absent one explains nothing."""
+    clicking does."""
     id: str        # approve | drop | plan | vet | resume | rerun | continue | force | pr | merge
     label: str
     home: str      # actions | git
@@ -74,9 +74,9 @@ class AskQuestion(BaseModel):
 
 
 class BlockingChild(BaseModel):
-    """One open sub-item the parent is waiting on, resolved to something the owner can read and go to.
+    """One open sub-item the parent waits on, resolved to something the owner can read and go to.
 
-    `close_readiness` reports these as joined ids, which names a thing without saying what it is."""
+    A joined id names a thing without saying what it is."""
     id: str
     title: str
     phase: str
@@ -84,10 +84,9 @@ class BlockingChild(BaseModel):
 
 
 class AttentionCard(BaseModel):
-    """The what-you-need-to-do card, in three connected parts: WHY, DO (the exact act and the one
-    control that performs it), and BASIS.
+    """The what-you-need-to-do card in three parts: WHY, DO, and BASIS.
 
-    None when nothing needs the owner — the card is hidden entirely, never an empty shell."""
+    None when nothing needs the owner, so the card is hidden rather than empty."""
     kind: str              # question | escalation | paged | review | gate | awaiting_child
     why: str
     detail: str
@@ -101,10 +100,9 @@ class AttentionCard(BaseModel):
 
 
 class NowStrip(BaseModel):
-    """What is happening right now: the live phase and cycle, and what that phase concluded.
+    """The live phase and cycle, and what that phase concluded.
 
-    The phase name and the running dot already answer "where is this", so no event sentence rides
-    here."""
+    The phase name and the running dot already say where this is, so no event sentence rides here."""
     phase: str
     cycle: int
     running: bool
@@ -117,9 +115,9 @@ class NowStrip(BaseModel):
 
 
 class AboutRow(BaseModel):
-    """One row of `About this work-item` — what this item IS, in the owner's own framing.
+    """One row of `About this work-item`, in the owner's own framing.
 
-    A LIST, not an object: the order is the meaning, and an empty row is dropped server-side."""
+    A LIST, not an object: the order is the meaning. An empty row is dropped server-side."""
     label: str
     value: str
 
@@ -156,8 +154,7 @@ class LensRead(BaseModel):
 class ProofVerdict(BaseModel):
     """One check of the plan's exam: what it will prove, and where it stands.
 
-    `ran` False means the loop has not reached it, so an owner approving a plan sees the proof they
-    approve. `result` is verbatim."""
+    `ran` False means the loop has not reached it, so approving a plan shows the proof."""
     check: str
     # Empty only on a recorded check the current plan no longer declares, because a revision
     # dropped it.
@@ -191,8 +188,7 @@ class ProofVerdict(BaseModel):
 class ProofRow(BaseModel):
     """One row per BUILT THING, each carrying its own validation and verification.
 
-    The join key is the plan task id. `task: ""` is the item-wide row where untagged content lands, so
-    nothing is dropped and nothing is guessed at."""
+    `task: ""` is the item-wide row where untagged content lands, so nothing is dropped."""
     task: str
     #: the task's NAME — the plan's head line, what the Task tab shows at full contrast.
     text: str
@@ -208,8 +204,7 @@ class ProofRow(BaseModel):
 class DrilldownResponse(BaseModel):
     """Everything the work-item drilldown renders, computed once per poll.
 
-    One route instead of four, and one computation of the gate's checks — shared with the deputy, so
-    the owner can still check its call."""
+    One computation of the gate's checks, shared with the deputy, so the owner can check its call."""
     id: str
     phase: str
     gate: str            # triage-exit | pre-main | review | close
@@ -235,8 +230,7 @@ class DrilldownResponse(BaseModel):
 
 
 class PhaseReportResponse(BaseModel):
-    """One phase's user-facing report for the Reports tab: the markdown 1:1, plus the path to the full
-    agent-facing contract behind it.
+    """One phase's user-facing report, plus the path to the agent-facing contract behind it.
 
     The report is the compact read; the contract is one click away, never pasted in."""
     phase: str
@@ -260,10 +254,9 @@ class OwnerNote(BaseModel):
 
 
 class OwnerInputResponse(BaseModel):
-    """The one section of any report the OWNER writes, read back from disk after every save.
+    """The one section of any report the OWNER writes, re-read from disk after every save.
 
-    SLOTS, not prose: one reference and one note per entry, so each can be added and removed on its
-    own."""
+    SLOTS, not prose, so each entry can be added and removed on its own."""
     exists: bool
     references: list[OwnerReference]
     notes: list[OwnerNote]
@@ -294,8 +287,9 @@ class OwnerNoteBody(BaseModel):
 
 
 class OwnerInputBody(BaseModel):
-    """The owner's `## From you` section, whole. Add and delete are both a PUT of the full slot
-    lists, because the owner is its only writer and no concurrent edit needs protecting."""
+    """The owner's `## From you` section, whole.
+
+    Add and delete are both a PUT of the full lists, since the owner is its only writer."""
     context_id: str = "global"
     references: list[OwnerReferenceBody] = []
     notes: list[OwnerNoteBody] = []

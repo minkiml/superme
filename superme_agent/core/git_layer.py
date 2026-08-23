@@ -654,11 +654,10 @@ _STASH_PREFIX = "superme-automerge"
 
 
 def compose_commit(subject: str, body: str = "", trailers: dict | None = None) -> str:
-    """The ONE commit-message shape SuperMe writes. The main message is for the
-    PROJECT, the trailer block for SuperMe.
+    """The ONE commit-message shape SuperMe writes.
 
-    Nothing SuperMe-shaped belongs above the trailers: the project's history has never heard of
-    this workspace."""
+    The main message is for the PROJECT, the trailer block for SuperMe. The project's history has
+    never heard of this workspace."""
     import textwrap
     blocks = [subject.strip()]
     body = (body or "").strip()
@@ -775,10 +774,9 @@ def _backup_ref(item_id: str) -> str:
 
 
 def recut_branch(repo_dir: Path, item_id: str, branch: str, base: str) -> dict:
-    """Reset an item's branch back onto its BASE — the re-run's "start clean". `base`
-    resolves to its CURRENT tip.
+    """Reset an item's branch back onto its BASE, the re-run's start-clean.
 
-    NOTHING IS LOST: the old tip goes to a backup ref and the branch is moved, not deleted."""
+    Nothing is lost: the old tip goes to a backup ref and the branch is moved, not deleted."""
     repo_dir = Path(repo_dir)
     if not branch:
         return {"recut": False, "reason": "this item has no branch"}
@@ -811,11 +809,10 @@ def overlap(repo_dir: Path, branch: str, target: str) -> list[str]:
 
 def merge_freshness(repo_dir: Path, worktree: Path, branch: str, *,
                     target: str | None = None) -> dict:
-    """The merge act owns freshness, not review — one comparison at the instant that
-    matters.
+    """The merge act owns freshness, not review: one comparison at the instant that matters.
 
-    Anchor unmoved → merge · sync conflicts → park · clean but overlapping our paths → revet ·
-    else merge. Conflicts are never auto-resolved."""
+    Anchor unmoved merges, a sync conflict parks, overlapping paths re-vet. Conflicts are never
+    auto-resolved."""
     repo_dir, worktree = Path(repo_dir), Path(worktree)
     target = resolve_anchor(repo_dir, target)
     if not worktree.is_dir():
@@ -839,10 +836,9 @@ def merge_freshness(repo_dir: Path, worktree: Path, branch: str, *,
 def merge_to_main(repo_dir: Path, repo_id: str, item_id: str, branch: str, *,
                   target: str | None = None, merged_commit: str | None = None,
                   message: str | None = None) -> dict:
-    """The ONE heavy merge: item branch → the anchor, under the op lock.
+    """The ONE heavy merge: item branch to the anchor, under the op lock.
 
-    SQUASH — the branch is kept, so task granularity survives as trace. A conflict fully unwinds
-    to the backup ref, written BEFORE the merge."""
+    SQUASH, keeping the branch so task granularity survives. A conflict unwinds to the backup ref."""
     repo_dir = Path(repo_dir)
     with repo_lock(repo_dir):
         target = resolve_anchor(repo_dir, target)

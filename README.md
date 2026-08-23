@@ -1,8 +1,7 @@
 # SuperMe
 
 **SuperMe** is a local-only, dashboard-driven personal agent, hosted onto every repository and body
-of knowledge you own, slowly evolving into a digital twin of you. Engineered for a single owner
-rather than a team.
+of knowledge you own, slowly evolving into a digital twin of you. Engineered for a single owner.
 
 ---
 
@@ -141,7 +140,7 @@ at, and what proved it. Feedback you leave becomes a check, build implements it,
 
 ![The pull-request page: the review report on the left, per-task commits and changed files on the right](assets/pr-preview.png)
 
-**Full observability.** Every run keeps its trace. Prompts, tool calls, results, sub-agents, tokens,
+**Full observability.** Every run keeps its trace that is fully reachable. Prompts, tool calls, results, sub-agents, tokens,
 context fill. Nothing is a black box when it goes wrong.
 
 ![The trace tab: every tool call in a run, numbered and timestamped, grouped by run](assets/gate-trace.png)
@@ -176,3 +175,9 @@ context fill. Nothing is a black box when it goes wrong.
 - **Integrations.** Notion, Slack and the other places your work already lives, so knowledge
   outside your repos joins the estate too.
 
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE). Copyright (c) 2026 Minjung Kim.

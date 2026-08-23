@@ -30,10 +30,9 @@ class FieldOps:
         return True
 
     def set_work_item_title(self, dev_root: Path, item_id: str, title: str) -> bool:
-        """Rename a work-item — triage's naming act. Safe by construction: the folder
-        name is the id, so nothing keys on the title.
+        """Rename a work-item, triage's naming act.
 
-        Raises ValueError on a title that fails `check_title`, so a bad rename never lands."""
+        Safe by construction: the folder name is the id, so nothing keys on the title."""
         if (bad := check_title(title)):
             raise ValueError(bad)
         title = normalize_title(title)

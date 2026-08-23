@@ -58,9 +58,7 @@ def _mirror_source_ignored(repo: Path, worktree: Path, paths: list[str]) -> tupl
     """Copy the owner-named gitignored source paths into a fresh scratch worktree.
 
     A worktree holds tracked files only, so a completeness claim cannot be proven in it. Copies are
-    mode 0o444: edits here would be invisible.
-
-    Returns `(files_copied, skipped_reasons)`; never raises."""
+    read-only, since edits here would be invisible."""
     copied, skipped = 0, []
     for rel in paths:
         src, dst = repo / rel, worktree / rel
@@ -104,11 +102,9 @@ def _mirror_source_ignored(repo: Path, worktree: Path, paths: list[str]) -> tupl
 
 
 def ensure_scratch_worktree(ctx, context_id: str, item: dict, *, dev, dev_store, spine) -> Path:
-    """The isolated tree a READ-ONLY kind reads from, created on demand. Falls back to `ctx.cwd` on any
-    failure.
+    """The isolated tree a READ-ONLY kind reads from, created on demand.
 
-    LAZY rather than gate-driven: a sweep-launched item is minted straight at `investigate` and never
-    passes `advance_item`. Idempotent."""
+    Lazy rather than gate-driven, because a sweep-launched item never passes `advance_item`."""
     kind = str(item.get("kind") or "")
     if not kind_profiles.get_profile(kind).scratch_worktree:
         return ctx.cwd
@@ -154,18 +150,16 @@ def pr_open(item: dict) -> bool:
 
 
 def close_pr(dev, dev_root, item_id: str) -> None:
-    """Leaving `review` WITHOUT merging closes the PR, because the approval is spent: the work it
-    described is no longer the work.
+    """Leaving `review` without merging closes the PR, because the approval is spent.
 
-    Both ways back call this. Without it the stamp outlives the diff it approved."""
+    Without it the stamp outlives the diff it approved."""
     dev.set_work_item_git(dev_root, item_id, git_pr_opened_at=None)
 
 
 def open_pr(ctx, context_id: str, item_id: str, *, dev, dev_store) -> dict:
-    """`strict`'s second gate opening: record that the diff is now the owner's to merge, and page them.
+    """Record that the diff is now the owner's to merge, and page them.
 
-    Idempotent within one stay at review, so re-judging the same diff does not move the timestamp.
-    Not a merge, and not an advance."""
+    Idempotent within one stay at review, so re-judging the same diff does not move the timestamp."""
     dev_root = ctx.internal_root / "dev"
     item = dev.read_work_item(dev_root, item_id) or {}
     first = not item.get("git_pr_opened_at")
@@ -185,11 +179,10 @@ _DEFAULT_COMMIT_TYPE = "feat"
 
 
 def _delivered_line(item_dir: Path) -> str:
-    """The **Delivered** field of `artifacts/review.md` — what shipped, and the right body for the
-    landing commit.
+    """The **Delivered** field of `artifacts/review.md`, and the body for the landing commit.
 
-    It reads the AGENT-facing record, not the owner's report: a field a machine parses belongs in the
-    doc written for machines."""
+    It reads the agent-facing record: a field a machine parses belongs in the doc written for
+    machines."""
     return artifacts.delivered_line(item_dir)
 
 
@@ -219,10 +212,9 @@ def declared_commit(dev_store, context_id: str, item_id: str) -> dict | None:
 
 
 def squash_message(item: dict, item_id: str, item_dir: Path, declared: dict | None = None) -> str:
-    """The landing commit's message, assembled by the KERNEL from a DECLARED spec.
+    """The landing commit's message, assembled by the kernel from a declared spec.
 
-    `declared` is `machine.commit` from the review run's payload: review is the last phase that knows
-    what shipped. Absent, it falls back to the item title."""
+    Review is the last phase that knows what shipped. Absent, it falls back to the item title."""
     if declared and declared.get("type") and declared.get("subject"):
         subject = f"{declared['type']}: {declared['subject']}"
     else:
@@ -232,11 +224,10 @@ def squash_message(item: dict, item_id: str, item_dir: Path, declared: dict | No
 
 
 def build_downstream_digest(item_dir: Path, *, char_cap: int = 2400) -> str | None:
-    """The downstream context a review→plan re-plan needs: what landed, what it settled, and the latest
-    cycle findings.
+    """What a review→plan re-plan needs: what landed, what it settled, and the latest findings.
 
-    It reads the AGENT-facing record, because a re-plan needs the settled decisions it may not
-    silently re-open. None when there is nothing."""
+    It reads the agent-facing record, because a re-plan must not silently re-open settled
+    decisions."""
     parts: list[str] = []
     try:
         review_record = item_dir / "artifacts" / artifacts.artifact_file("review")

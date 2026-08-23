@@ -53,8 +53,9 @@ def _s(session_id: str) -> _SessState:
 
 
 def note_turn_start(session_id: str | None) -> None:
-    """A real turn ran, so release the defer latch — without this a seam re-entering after an
-    ineffective compaction fires again. It also counts the turn, which is the runway measure."""
+    """A real turn ran, so release the defer latch and count the turn.
+
+    Without it a seam re-entering after an ineffective compaction fires again."""
     if session_id and session_id in _state:
         st = _state[session_id]
         st.defer = False
@@ -100,10 +101,9 @@ def _summary_text(entry: dict) -> str:
 
 def _compact_metadata(session_id: str, *, after_iso: str | None = None
                       ) -> tuple[dict | None, str]:
-    """The NEWEST compaction's evidence from the session transcript, as (meta, summary_text).
+    """The newest compaction's evidence from the transcript, as (meta, summary_text).
 
-    The numbers say how much was shed; the text says WHAT survived. `after_iso` keeps a re-compact
-    from being judged by a stale boundary."""
+    The numbers say how much was shed, the text says what survived."""
     hits = list(Path.home().glob(f".claude/projects/*/{session_id}.jsonl"))
     if not hits:
         return None, ""
@@ -131,9 +131,8 @@ _FALLBACK_GAIN_PCT = 30   # flat threshold when auto has no floor measurement to
 
 def judge_effectiveness(meta: dict | None, min_gain_pct: int | str,
                         *, floor_tokens: int | None = None) -> dict:
-    """The pure verdict from the boundary's real pre/post prompt tokens.
+    """The pure verdict from the boundary's real pre and post prompt tokens.
 
-    `min_gain_pct` is "auto" (normalized against the measured floor) or a flat int percent.
     `preTokens` includes the floor and `postTokens` does not, so post is restated onto the pre
     basis."""
     if not meta or not meta.get("preTokens"):
@@ -175,8 +174,7 @@ async def run_handoff_turn(ctx: Context, context_id: str, item_id: str | None, s
                            *, model: str | None) -> bool:
     """Ask the thread to bank its own checkpoint, as a TURN, before `/compact`.
 
-    The reply becomes the LAST thing in the transcript, which the summarizer weights most. A
-    work-item thread calls `write_checkpoint`; a general session writes `session-memory/<sid>.md`."""
+    The reply becomes the last thing in the transcript, which the summarizer weights most."""
     from .runs import dev_mcp, capture_prompt
     if item_id:
         prompt = kernel_speech.checkpoint_trigger(item_id)
@@ -206,10 +204,9 @@ async def run_handoff_turn(ctx: Context, context_id: str, item_id: str | None, s
 
 async def run_compaction(ctx: Context, context_id: str, item_id: str | None, session_id: str,
                          *, model: str | None, pre_pct: int | None, manual: bool = False) -> dict:
-    """Execute one full compaction sequence on a session and return the verdict record.
+    """Execute one full compaction sequence on a session and return the verdict.
 
-    The caller holds NO run — this opens its own, which is why every caller must be at a run
-    boundary. `item_id=None` is a general session."""
+    The caller holds no run: this opens its own, so every caller must be at a run boundary."""
     from .runs import begin_run, end_run, capture_prompt
     st = _s(session_id)
     # A compaction is a MAINTENANCE run and must not move the item's workflow state.
@@ -359,10 +356,10 @@ def due(session_id: str | None, kind: str | None, *, force: bool = False) -> int
 async def compact_before_run(ctx: Context, context_id: str, item_id: str | None,
                              session_id: str | None, *, kind: str | None,
                              model: str | None, force: bool = False) -> dict | None:
-    """The run-START gate: if this session is over its trigger, compact now and return the verdict.
+    """The run-START gate: if this session is over its trigger, compact now.
 
-    AWAITED, not fire-and-forget: `run_compaction` takes the item's run-lock, and a prompt sent
-    mid-compaction is what "never mid-task" forbids."""
+    Awaited, because `run_compaction` takes the run-lock and a prompt sent mid-compaction is what
+    "never mid-task" forbids."""
     pre = due(session_id, kind, force=force)
     if pre is None:
         return None

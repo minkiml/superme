@@ -48,10 +48,9 @@ def _success_signal(dev_root: Path, item: dict) -> str | None:
 
 
 def _build_delta(item_dir: Path, gate: str, numbers: dict) -> str | None:
-    """The "since your last call at this gate" delta, assembled ONLY on a loop re-entry.
+    """The "since your last call at this gate" delta, assembled only on a loop re-entry.
 
-    Lean and structured: what the deputy asked, the agent's latest checkpoint, and the gate brief's
-    movement counts. A POINTER, not the source."""
+    A POINTER, not the source: what the deputy asked, the latest checkpoint, and movement counts."""
     prior = [r for r in deputy_core.gate_decisions(item_dir, gate) if r.get("decision") == "send_back"]
     if not prior:
         return None
@@ -83,8 +82,7 @@ def _build_delta(item_dir: Path, gate: str, numbers: dict) -> str | None:
 
 
 def _in_review_loop(item_dir: Path) -> bool:
-    """True once the review deputy has sent this item back at least once, so we are inside the macro-loop
-    the single persistent review deputy owns.
+    """True once the review deputy has sent this item back at least once.
 
     That send-back is the only route back to the plan gate."""
     return deputy_core.count_send_backs(item_dir, "review") > 0
@@ -93,8 +91,7 @@ def _in_review_loop(item_dir: Path) -> bool:
 async def run_deputy_gate(context_id: str, item_id: str) -> None:
     """Dispatch the deputy at the item's current gate, then execute its verdict.
 
-    Best-effort: any failure leaves the item resting at `awaiting_human`, because a gate the deputy
-    could not judge falls to a human, never to a silent auto-advance."""
+    Best-effort: any failure rests the item at `awaiting_human`, never a silent auto-advance."""
     from ..app_state import get_spine
     from ...gateway import contexts
     try:
@@ -158,8 +155,7 @@ async def _judge(ctx, context_id: str, item_id: str, item: dict, gate: str, dev_
                  model: str, effort: str) -> tuple[dict | None, int | None, dict | None]:
     """Run one background deputy turn and return (verdict|None, tokens, usage).
 
-    The verdict is None when the run never made a valid `deputy_verdict` call, which the caller treats
-    as "could not judge", never a pass."""
+    None when the run made no valid `deputy_verdict` call, which the caller reads as could-not-judge."""
     item_dir = dev_root / "work-items" / item_id
     strictness = _spine.get_deputy_strictness(gate)
     # The context the deputy judges from — assembled from durable state, nothing inherited.
@@ -252,10 +248,9 @@ _MD_MARK = re.compile(r"[*`_]")
 
 
 def _plain(text: str, cap: int = 200) -> str:
-    """The escalation's first line as PLAIN prose, for the event log.
+    """The escalation's first line as plain prose, for the event log.
 
-    Every surface that reads an event summary renders it as text, so markdown emphasis shows through
-    as asterisks. The card keeps its markup; the log sentence drops it."""
+    Surfaces render an event summary as text, so markdown emphasis would show through as asterisks."""
     return _headline(_MD_MARK.sub("", _MD_LABEL.sub("", (text or "").strip())), cap)
 
 
@@ -297,8 +292,7 @@ def _act_on_verdict(ctx, context_id: str, item_id: str, gate: str, verdict: dict
 def _do_grant(ctx, context_id: str, item_id: str, gate: str, verdict: dict) -> None:
     """Grant a DELEGATED authorization the deputy judged ready.
 
-    THE FLOOR IS MECHANICAL: the daemon grants only if the request's scope is in the owner's delegated
-    set, and otherwise escalates. A grant records the decision and routes nothing."""
+    The floor is mechanical: only a scope in the owner's delegated set, otherwise escalate."""
     from ...core import artifacts as _arts
     from . import loop as _loop
     dev_root = ctx.internal_root / "dev"
@@ -362,10 +356,9 @@ def _do_approve(ctx, context_id: str, item_id: str, gate: str, verdict: dict) ->
 
 
 def _do_send_back(ctx, context_id: str, item_id: str, gate: str, verdict: dict) -> None:
-    """Negotiate the deputy's change by firing a REAL turn at the work-item agent: the phase that owns
-    the fix re-runs, ends at its gate, and the deputy re-judges.
+    """Negotiate the deputy's change by firing a real turn at the work-item agent.
 
-    Past the cap a send-back becomes an escalation."""
+    The phase that owns the fix re-runs and the deputy re-judges. Past the cap it escalates."""
     dev_root = ctx.internal_root / "dev"
     change = verdict.get("change") or verdict.get("because") or ""
     # The cap is per-gate: a review loop gets its own tries, uncapped by earlier plan send-backs.

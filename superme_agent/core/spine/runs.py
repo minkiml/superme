@@ -141,10 +141,9 @@ class RunOps:
             return [self._run_dict(r) for r in rows]
 
     def subagent_count(self, repo_id: str, item_id: str, *, phase: str) -> int:
-        """How many SUBAGENTS this item's runs at `phase` spawned — the unfakeable answer to
-        "did it fan out".
+        """How many SUBAGENTS this item's runs at `phase` spawned.
 
-        Counts kernel-written `run_event` rows across EVERY run at that phase, discarded runs excluded."""
+        Counts kernel-written `run_event` rows, so a fan-out cannot be claimed without one."""
         with self._conn() as c:
             row = c.execute(
                 "SELECT COUNT(*) AS n FROM run_event e JOIN run r ON r.id = e.run_id"
@@ -157,8 +156,7 @@ class RunOps:
     def brief_sizes(self, repo_id: str, item_id: str, *, phase: str) -> list[int]:
         """How big each subagent BRIEF was, per spawn at `phase`.
 
-        Size is a PROXY: it proves a brief too short to carry a bar, never that a long one carried the
-        right one."""
+        A proxy: it proves a brief too short to carry a bar, never that a long one carried the right one."""
         with self._conn() as c:
             rows = c.execute(
                 "SELECT e.description AS d, LENGTH(e.payload) AS n"
@@ -183,11 +181,9 @@ class RunOps:
 
     def subagent_briefs(self, repo_id: str, item_id: str, *,
                         phase: str) -> list[dict]:
-        """Every subagent BRIEF this item's runs sent at `phase`, in spawn order, with its
-        text.
+        """Every subagent BRIEF this item's runs sent at `phase`, in spawn order.
 
-        The brief is the whole channel to a spawned worker. Spawns from before briefs were stored are
-        absent, not present-and-empty."""
+        The brief is the whole channel to a spawned worker. Spawns predating storage are absent."""
         with self._conn() as c:
             rows = c.execute(
                 "SELECT e.run_id, e.created_at, e.description, e.payload"
@@ -202,10 +198,9 @@ class RunOps:
                  "label": r["description"], "text": r["payload"]} for r in rows]
 
     def read_hits(self, repo_id: str, item_id: str, *, phase: str, needle: str) -> int:
-        """How many times this item's runs at `phase` READ a path containing `needle` — the
-        receipt for a directed read.
+        """How many times this item's runs at `phase` read a path containing `needle`.
 
-        Counts the ACT, not the tool: `cat <guide>` is a read. Commands that only NAME a path are not."""
+        Counts the ACT, not the tool: `cat <guide>` is a read, naming a path is not."""
         with self._conn() as c:
             rows = c.execute(
                 "SELECT e.name, e.description FROM run_event e JOIN run r ON r.id = e.run_id"
@@ -218,10 +213,9 @@ class RunOps:
                    or _opens_a_file(r["description"] or ""))
 
     def last_phase_run_end(self, repo_id: str, item_id: str, *, phase: str) -> str | None:
-        """When this item's most recent FINISHED run at `phase` ended, or None.
+        """When this item's most recent FINISHED run at `phase` ended.
 
-        The cutoff for "what changed since this thread last ran" — the phase's own last run, not the
-        item's. `ended_at IS NOT NULL` excludes the asking run."""
+        The cutoff for what changed since this thread last ran, and it excludes the asking run."""
         with self._conn() as c:
             row = c.execute(
                 "SELECT MAX(ended_at) AS t FROM run"
@@ -281,10 +275,9 @@ class RunOps:
                         fallback_tokens: int | None = None,
                         usage: dict | None = None, ctx_pct: int | None = None,
                         outcome: str | None = None, session_id: str | None = None) -> int | None:
-        """Close the item's running row, keeping the accumulated live token sum. `ctx_pct` is
-        the AUTHORITATIVE end-of-turn fill and overwrites the last estimate.
+        """Close the item's running row, keeping the accumulated live token sum.
 
-        `session_id` joins item runs to the `session_fate` labeling path. Returns the run id, or None."""
+        `ctx_pct` is the authoritative end-of-turn fill and overwrites the last estimate."""
         run_status = run_status if run_status in _RUN_STATUSES else "done"
         with self._conn() as c:
             row = c.execute(
@@ -381,10 +374,9 @@ class RunOps:
         return {"runs": int(runs or 0), "events": int(events or 0)}
 
     def release_item_runs(self, repo_id: str, item_id: str) -> int:
-        """Close out an item's in-flight run rows, KEEPING every row.
+        """Close out an item's in-flight run rows, keeping every row.
 
-        THE ROW HALF ONLY. This says the run is over; it does not make it be over. Anything DISPOSING of
-        an item wants `daemon.services.runs.stop_item_work`, which cancels the task first."""
+        THE ROW HALF ONLY. Disposing of an item wants `stop_item_work`, which cancels the task first."""
         with self._conn() as c:
             cur = c.execute(
                 "UPDATE run SET status='aborted', ended_at=? WHERE repo_id=? AND item_id=? AND status='running'",

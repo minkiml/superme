@@ -18,10 +18,9 @@ DEFAULT_RUN_MODEL = MODEL_TIERS["sonnet"]
 
 
 def stop_item_work(context_id: str, item_id: str, *, expect_live: bool = False) -> tuple[int, bool]:
-    """End an item's work for real — cancel the TASK, then close its run ROWS.
+    """End an item's work for real: cancel the TASK, then close its run ROWS.
 
-    Cancel first: releasing rows alone leaves the coroutine writing into a doomed folder. Rows
-    close unconditionally, since cancellation lands only at a suspension point."""
+    Cancel first, or releasing rows leaves the coroutine writing into a doomed folder."""
     cancelled = run_tasks.cancel(context_id, item_id, expect_live=expect_live)
     freed = _spine.release_item_runs(context_id, item_id)
     if cancelled:
@@ -31,10 +30,9 @@ def stop_item_work(context_id: str, item_id: str, *, expect_live: bool = False) 
 
 
 def mark_item_error(ctx, context_id: str, item_id: str, reason: str, *, phase: str = "") -> bool:
-    """Stop an item at `error` — the one writer of that status.
+    """Stop an item at `error`, the one writer of that status.
 
-    The item stays where it died rather than claiming a decision is wanted or that work is running.
-    Never terminal: `error` is what Resume and re-run read."""
+    The item stays where it died. Never terminal: `error` is what Resume and re-run read."""
     if not (item_id and getattr(ctx, "internal_root", None)):
         return False
     try:
@@ -70,10 +68,9 @@ def retry_notice(context_id: str, item_id: str, phase: str):
 
 
 def _set_status(ctx, item_id: str, status: str) -> None:
-    """Set a work-item's run-state status (orchestrator-owned). Best-effort; logs on failure.
+    """Set a work-item's run-state status. Best-effort, logs on failure.
 
-    Never overwrites a typed pause: resting an `awaiting_child` item back to `active` at turn end
-    would silently un-pause it. Only the status router may resume a paused parent."""
+    Never overwrites a typed pause, since resting an `awaiting_child` item would un-pause it."""
     if not (item_id and ctx.internal_root):
         return
     try:
@@ -89,10 +86,9 @@ def _set_status(ctx, item_id: str, status: str) -> None:
 
 def begin_run(ctx, context_id: str, item_id: str, kind: str = "plan",
                model: str | None = None, phase: str | None = None) -> int | None:
-    """Open a run row only if the item isn't already running, then rest it `active` and log.
+    """Open a run row only if the item is not already running, then rest it `active`.
 
-    That row is both the live state and the per-item run-lock, so a check-then-start race cannot
-    lose it."""
+    The row is both the live state and the run-lock, so a start race cannot lose it."""
     run_id = _spine.start_item_run(context_id, mode=ctx.mode, feature=kind,
                                    item_id=item_id, model=model, phase=phase)
     if run_id is None:
@@ -106,10 +102,10 @@ def begin_run(ctx, context_id: str, item_id: str, kind: str = "plan",
 
 
 class LiveTokens:
-    """Per-run token tally, deduped by `message_id` — the run's authoritative total.
+    """Per-run token tally, deduped by `message_id`.
 
-    The SDK emits one Usage step per content block, so summing steps over-counts; latest-per-id
-    leaves one entry per API call. `Result.usage` is parent-only and misses every subagent call."""
+    The SDK emits one Usage step per content block, so summing steps over-counts. `Result.usage` is
+    parent-only and misses every subagent call."""
 
     _KEYS = ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens",
              "output_tokens")
@@ -136,8 +132,9 @@ class LiveTokens:
 
     @staticmethod
     def _num(value) -> int:
-        """A usage field as an int, or 0 for anything else. The SDK's usage dict is external data and this
-        runs on every step, so an unexpected value must never stop the work."""
+        """A usage field as an int, or 0 for anything else.
+
+        External data on every step, so an unexpected value must never stop the work."""
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             if value not in (None, ""):
                 log.warning("unusable token value in SDK usage (%r) — counted as 0", value)
@@ -145,10 +142,9 @@ class LiveTokens:
         return int(value)
 
     def usage(self, final: dict | None = None) -> dict | None:
-        """The whole turn's usage — parent and subagents — or None if none arrived.
+        """The whole turn's usage, parent and subagents, or None if none arrived.
 
-        `final` is `Result.usage`, read for one field: output_tokens, which per-message usage only
-        reports as a placeholder. Subagent output stays uncounted, deliberately."""
+        `final` is read for output_tokens alone, which per-message usage only reports as a placeholder."""
         steps = list(self._by_msg.values()) + self._legacy
         if not steps:
             return None
@@ -171,9 +167,7 @@ def end_run(ctx, context_id: str, item_id: str, tokens: int | None,
              session_id: str | None = None, summary: str = "") -> None:
     """Finalize a run's spine row and rest the work-item.
 
-    Interactive turns rest `active`; a background run ending at a human gate passes
-    `awaiting_human`, the only status that pages the owner. `ctx_pct` is the authoritative
-    end-of-turn fill."""
+    A background run ending at a human gate passes `awaiting_human`, the only status that pages."""
     info = _spine.live_run(context_id, item_id)
     kind = (info or {}).get("feature", "plan")
     # The run's PHASE, not its feature — route on this, label the surface with `kind`.
@@ -217,9 +211,8 @@ def end_run(ctx, context_id: str, item_id: str, tokens: int | None,
 
 
 def dev_mcp(ctx, repo_dir: Path, item_id: str, *, scope: str) -> dict:
-    """The dev MCP server for a background intake/resolve run.
+    """The dev MCP server for a background intake or resolve run.
 
-    `repo_dir` is where evidence fingerprints — the worktree when one exists, else the repo root.
     `scope` names which tools this run sees, so a close run cannot hold plan's pens."""
     from .phases import fire_auto_triage      # local: phases fires the runs this server serves
     return {"dev": make_dev_mcp_server(

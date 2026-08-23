@@ -25,8 +25,7 @@ from .background import run_background_item_skill, _run_background_triage
 def fire_review_entry(context_id: str, item_id: str, spine) -> bool:
     """Fire the review-entry run for an item that just landed at review.
 
-    Shared by `advance_item`'s auto-fire and the loop's vet→review hop. Flips the item `active`
-    while it runs, because `active` with no run is an idle stall."""
+    Flips the item `active` while it runs, because `active` with no run is an idle stall."""
     from ....gateway import contexts   # lazy: avoid an import cycle at module load
     try:
         ctx = contexts.resolve(context_id, "dev")
@@ -57,10 +56,9 @@ def fire_review_entry(context_id: str, item_id: str, spine) -> bool:
 
 
 def fire_first_investigate(context_id: str, item_id: str, spine) -> bool:
-    """Kick a BUTTON-LAUNCHED sweep into its first investigate run.
+    """Kick a button-launched sweep into its first investigate run.
 
-    The sibling of `fire_auto_triage`: an item created by pressing a button should not wait for a
-    second click. A standing sweep enters already classified, so triage never runs."""
+    An item created by pressing a button should not wait for a second click."""
     from ....gateway import contexts   # lazy: avoid an import cycle at module load
     try:
         ctx = contexts.resolve(context_id, "dev")
@@ -85,10 +83,9 @@ def fire_first_investigate(context_id: str, item_id: str, spine) -> bool:
 
 
 def fire_auto_triage(context_id: str, item_id: str, spine) -> bool:
-    """Kick a freshly-active item into its first triage run — the autopilot chain's shared first push.
+    """Kick a freshly-active item into its first triage run.
 
-    Fires only for an item `active` at `triage` with no run in flight. A failure leaves the item
-    resting there for a chat-driven pass."""
+    Only for an item `active` at `triage` with no run in flight; a failure leaves it resting there."""
     from ....gateway import contexts   # lazy: avoid an import cycle at module load
     try:
         ctx = contexts.resolve(context_id, "dev")
@@ -135,11 +132,9 @@ def _send_back_phase(item: dict) -> str:
 
 def fire_phase_feedback(context_id: str, item_id: str, *, phase: str, feedback: str,
                         digest: str | None = None, by: str = "deputy") -> bool:
-    """Deliver gate feedback as a REAL turn on the item's own session, so the agent re-runs the phase
-    in-thread.
+    """Deliver gate feedback as a real turn on the item's own session, so the phase re-runs in-thread.
 
-    `by` sets attribution only; routing is identical whoever gives it. Fires only at that gate,
-    with no run in flight."""
+    `by` sets attribution only. Routing is identical whoever gives it."""
     from ....gateway import contexts   # lazy: avoid an import cycle at module load
     try:
         ctx = contexts.resolve(context_id, "dev")

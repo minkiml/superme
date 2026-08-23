@@ -19,10 +19,9 @@ _ALIVE: set[asyncio.Task] = set()
 
 
 def track(task: asyncio.Task) -> asyncio.Task:
-    """Hold a strong reference to a fire-and-forget task until it completes, and return it.
+    """Hold a strong reference to a fire-and-forget task until it completes.
 
-    NEVER raises: this wraps the call that STARTS a run. Anything that is not a Task passes through
-    untracked."""
+    Never raises: this wraps the call that STARTS a run."""
     try:
         _ALIVE.add(task)
         task.add_done_callback(_reap)
@@ -33,10 +32,9 @@ def track(task: asyncio.Task) -> asyncio.Task:
 
 
 def _reap(task: asyncio.Task) -> None:
-    """Release the reference and — the point of this — SHOUT if the task died of an exception.
+    """Release the reference and SHOUT if the task died of an exception.
 
-    A fire-and-forget task's exception surfaces only when someone retrieves it, and nobody was. This
-    makes the death itself the event."""
+    A fire-and-forget exception surfaces only when someone retrieves it, and nobody was."""
     _ALIVE.discard(task)
     try:
         if task.cancelled():
@@ -50,8 +48,9 @@ def _reap(task: asyncio.Task) -> None:
 
 
 def register(repo_id: str, item_id: str | None) -> tuple[str, str] | None:
-    """Bind the CURRENT task to (repo, item). Returns the key to `release`, or None when there is
-    nothing to bind (no item — a chat turn, which has a human watching it — or no running task)."""
+    """Bind the CURRENT task to (repo, item), returning the key to `release`.
+
+    None when there is nothing to bind: a chat turn has a human watching it."""
     if not item_id:
         return None
     try:
@@ -87,8 +86,7 @@ def release(key: tuple[str, str] | None) -> None:
 def cancel(repo_id: str, item_id: str, *, expect_live: bool = True) -> bool:
     """Cancel the task holding this item's run. True if one was found and asked to stop.
 
-    Asked, not made to: cancellation lands at the next suspension point, so the caller closes the row
-    itself."""
+    Asked, not made to: cancellation lands at the next suspension point."""
     key = (str(repo_id), str(item_id))
     task = _TASKS.get(key)
     if task is None or task.done():

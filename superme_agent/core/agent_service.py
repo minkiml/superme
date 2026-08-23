@@ -95,10 +95,9 @@ def _window_from_model_usage(model_usage: dict | None, model: str | None) -> int
 
 def _context_usage(usage: dict | None, model_usage: dict | None, model: str | None,
                    window_hint: int | None = None):
-    """Approximate context-window fill, or None. `usage` MUST be a SINGLE call's —
-    an aggregate inflates it 2–3×.
+    """Approximate context-window fill, or None. `usage` MUST be a single call's.
 
-    There is deliberately NO fallback window: a percentage against the wrong one is worse than none."""
+    No fallback window: a percentage against the wrong one is worse than none."""
     if not usage:
         return None
     used = (
@@ -142,10 +141,9 @@ class AgentService:
 
     async def measure_context_floor(self, ctx: Context, model: str | None = None
                                     ) -> tuple[int, int] | None:
-        """The session's incompressible FLOOR — (tokens, window).
+        """The session's incompressible FLOOR: what every turn re-sends and no summary can shed.
 
-        Read before any turn: what every turn re-sends and no summary can shed — system prompt + tools
-        + skills + agent defs. Cached per (context, model); None if the read fails."""
+        System prompt, tools, skills and agent defs. Cached per (context, model)."""
         key = f"{ctx.id or '-'}::{ctx.mode}::{model or '-'}"
         if key in self._floor_by_key:
             return self._floor_by_key[key]
@@ -169,10 +167,9 @@ class AgentService:
         return self._floor_by_key[key]
 
     def _context_preamble(self, ctx: Context, *, item_bound: bool = False) -> str:
-        """Where this turn is operating: host, cwd, knowledge roots, and (unbound
-        sessions only) the orientation digest.
+        """Where this turn is operating: host, cwd, knowledge roots, and the orientation digest.
 
-        A lookup table, not prose — every line rides EVERY turn, and the reader needs a path."""
+        A lookup table, not prose: every line rides every turn and the reader needs a path."""
         where = ("the **SuperMe hub** (the owner's home host: their cross-domain self, and "
                  "SuperMe's own codebase)" if ctx.layer == "global" else f"project host `{ctx.id}`")
         text = (
@@ -227,11 +224,10 @@ class AgentService:
     def _fragment_parts(self, ctx: Context, *, op_home, const_universal, const_repo,
                         activated_assets, system_append: str | None = None,
                         item_bound: bool = False) -> list[dict]:
-        """The layer-2 system append as ORDERED fragments: persona · mode charter ·
-        local charter · constitution catalog · operating context · persona_append · session-kind block.
+        """The layer-2 system append as ORDERED fragments.
 
-        THE single source of truth. Each fragment carries `sep`, so `''.join(sep+text)` reproduces the
-        append byte-for-byte."""
+        The single source of truth. Each carries `sep`, so joining them reproduces the append
+        byte-for-byte."""
         frags: list[dict] = []
 
         def add(name: str, location: str, text: str, *, sep: str) -> None:
@@ -396,10 +392,9 @@ class AgentService:
         sandbox_writes: list[Path] | None = None,
         item_bound: bool = False,
     ) -> AsyncIterator[TurnEvent]:
-        """Run one turn against `ctx`, yielding TurnEvents. Raises on a hard SDK failure —
-        the surface decides whether to retry.
+        """Run one turn against `ctx`, yielding TurnEvents. Raises on a hard SDK failure.
 
-        Uses ClaudeSDKClient, not query(): `can_use_tool` needs the control channel held open all turn."""
+        ClaudeSDKClient rather than query(), because `can_use_tool` needs the control channel held open."""
         options = self._build_options(
             ctx, resume=resume, model=model, approve=approve,
             extra_mcp_servers=extra_mcp_servers, enforce_silent=enforce_silent, effort=effort,

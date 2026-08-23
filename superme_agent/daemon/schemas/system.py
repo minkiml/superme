@@ -174,9 +174,9 @@ class RunsResponse(BaseModel):
 
 
 class RunEventRow(BaseModel):
-    """One entry of a run's event trail: a prompt, a reply block, a call, or that call's result.
+    """One entry of a run's event trail: a prompt, a reply block, a call, or its result.
 
-    `tool_id` pairs a result back to its call; `parent_tool_id` names the spawn a row happened inside."""
+    `tool_id` pairs a result to its call, `parent_tool_id` names the spawn it happened inside."""
     id: int
     seq: int
     kind: str
@@ -292,8 +292,8 @@ class DeputyConfigResponse(BaseModel):
 class RepoGitResponse(BaseModel):
     """The repo's two git knobs after a write.
 
-    `resolved_anchor` is what `anchor_branch` points at now; `error` when the configured branch does
-    not exist, which every git site refuses rather than falling back."""
+    `error` when the configured branch does not exist, which every git site refuses rather than
+    falling back."""
     ok: bool
     repo_id: str
     review_mode: str
@@ -303,8 +303,7 @@ class RepoGitResponse(BaseModel):
 
 
 class RepoBranchesResponse(BaseModel):
-    """The anchor picker's option set: this repo's local branches, newest-committed first, work-item
-    branches excluded.
+    """This repo's local branches, newest first, work-item branches excluded.
 
     `anchor` is what the anchor resolves to now, so the picker can show the branch in USE."""
     repo_id: str
@@ -331,9 +330,9 @@ class TokenTypeSplit(BaseModel):
 
 
 class CategoryNode(BaseModel):
-    """One node of the semantic tree: a category total, its per-feature amounts, and how it should READ.
+    """One node of the semantic tree: a category total, its per-feature amounts, and how it reads.
 
-    `label` and `collapsed` are taxonomy decisions carried here, so no renderer has to re-make them."""
+    `label` and `collapsed` are taxonomy decisions, so no renderer re-makes them."""
     total: int = 0
     features: dict[str, int] = {}
     label: str = ""

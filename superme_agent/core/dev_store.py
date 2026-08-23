@@ -597,11 +597,9 @@ class DevStore:
                             apply_target: str | None = None,
                             cluster: str | None = None, rationale: str | None = None,
                             confidence: str | None = None) -> dict:
-        """File a distill PROPOSAL and atomically mark its source candidates
-        'processed'. One transaction, so the two never drift.
+        """File a distill PROPOSAL and mark its source candidates processed, in one transaction.
 
-        Enums fall back to a safe default: distill's guess is advisory, and the owner re-classifies
-        at ratify."""
+        Enums fall back to a safe default: distill's guess is advisory until the owner ratifies."""
         title, body = (title or "").strip(), (body or "").strip()
         if not title or not body:
             raise ValueError("proposal needs both title and body")
@@ -634,10 +632,10 @@ class DevStore:
                               body: str | None = None, summary: str | None = None,
                               fields: dict | None = None, confidence: str | None = None,
                               cluster: str | None = None) -> dict | None:
-        """Fold new candidates into an EXISTING open proposal — CROSS-RUN
-        consolidation, so a re-captured learning enriches rather than duplicates.
+        """Fold new candidates into an existing open proposal, so a re-capture enriches rather than
+        duplicates.
 
-        A `drafted` target reverts to `proposed` and drops its staged artifact: the substance changed."""
+        A `drafted` target reverts to `proposed` and drops its staged artifact."""
         add = sorted({int(i) for i in (add_candidate_ids or [])})
         with self._conn() as c:
             row = c.execute("SELECT * FROM memory_proposal WHERE id=? AND context_id=?",

@@ -98,10 +98,9 @@ class ReportCompletionArgs(TypedDict, total=False):
 
 
 def _open_questions(raw) -> tuple[list[dict], str]:
-    """Normalize `user.questions` to the four-field shape, or return the retry-shaped complaint.
+    """Normalize `user.questions` to the four-field shape, or return the retry complaint.
 
-    A bare string is refused rather than wrapped: a question that arrived as prose is one the agent has
-    not separated from its own reasoning."""
+    A bare string is refused: prose is a question the agent has not separated from its reasoning."""
     out: list[dict] = []
     for i, q in enumerate(raw or [], 1):
         if not isinstance(q, dict):
@@ -122,10 +121,10 @@ SUBJECT_MAX = 50
 
 
 def _commit_spec(raw) -> tuple[dict | None, str]:
-    """Normalize `machine.commit`, or return the retry-shaped complaint.
+    """Normalize `machine.commit`, or return the retry complaint.
 
-    The MECHANICAL commit-message rules are checked here rather than asked for in prose, because a
-    subject that is too long is wrong forever. Imperative mood is left to the agent."""
+    The mechanical rules are checked rather than asked for, because a too-long subject is wrong
+    forever. Imperative mood is left to the agent."""
     if raw in (None, {}):
         return None, ""
     if not isinstance(raw, dict):
@@ -153,9 +152,9 @@ def _commit_spec(raw) -> tuple[dict | None, str]:
 
 
 def _report_completion(*, completion_sink: dict | None = None, **_):
-    """Validate + deliver one run's completion payload into the runner's per-run sink. The stored
-    shape keeps top-level outcome/summary/next (what every existing consumer of the run.report
-    event reads) alongside the full two-group payload."""
+    """Validate and deliver one run's completion payload into the runner's per-run sink.
+
+    The stored shape keeps top-level outcome, summary and next beside the full payload."""
     async def report_completion(args: dict) -> dict:
         machine = args.get("machine") or {}
         user = args.get("user") or {}
@@ -210,8 +209,7 @@ class VerdictMachine(TypedDict, total=False):
 def _lines(raw) -> list[str]:
     """A list field to its non-empty lines, one point each.
 
-    A single string is read as one point rather than refused: the shape is the contract, but one line
-    instead of a one-item list has still said the thing."""
+    A single string is read as one point: one line instead of a one-item list has still said it."""
     if isinstance(raw, str):
         return [raw.strip()] if raw.strip() else []
     if not isinstance(raw, (list, tuple)):
@@ -222,8 +220,7 @@ def _lines(raw) -> list[str]:
 def _escalation_md(esc: dict) -> str:
     """The page card, assembled HERE so every escalation reads the same.
 
-    The deputy supplies the parts; the kernel supplies the shape. Bold labels and bullets, because the
-    surfaces that render this already colour markdown."""
+    The deputy supplies the parts and the kernel the shape."""
     out = [f"**Issue summary:** {' '.join(str(esc.get('summary') or '').split())}"]
     for label, key in (("Concern", "concerns"), ("What to do", "what_to_do")):
         if (points := _lines(esc.get(key))):
@@ -232,9 +229,9 @@ def _escalation_md(esc: dict) -> str:
 
 
 class VerdictEscalation(TypedDict, total=False):
-    """The owner's page card. THREE PARTS, and the middle two are LISTS — one point per entry.
+    """The owner's page card. Three parts, the middle two LISTS, one point per entry.
 
-    A paged owner reads this cold. The kernel renders the markdown, so the shape cannot drift."""
+    A paged owner reads this cold, and the kernel renders it so the shape cannot drift."""
     summary: Required[Annotated[str, "ONE line, plain and concrete: what is going on. No preamble, "
                                      "no restating the item title"]]
     concerns: Required[Annotated[list[str], "why this genuinely needs the owner — one short, plain "
@@ -265,9 +262,10 @@ class DeputyVerdictArgs(TypedDict, total=False):
 
 
 def _deputy_verdict(*, verdict_sink: dict | None = None, **_):
-    """Validate + deliver the deputy's verdict into the dispatch's per-run sink, flattened to the
-    shape the verdict executor acts on. Cross-field floor: `change` iff send_back (optional on a
-    grant) · `escalation` iff escalate · `authorize` only with send_back."""
+    """Validate and deliver the deputy's verdict, flattened to what the executor acts on.
+
+    Cross-field floor: `change` iff send_back, `escalation` iff escalate, `authorize` only with
+    send_back."""
     async def deputy_verdict(args: dict) -> dict:
         machine = args.get("machine") or {}
         user = args.get("user") or {}

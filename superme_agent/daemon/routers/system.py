@@ -38,10 +38,9 @@ _EFFORT_LEVELS = ("low", "medium", "high")
 
 
 def _norm_model(m: str | None) -> str | None:
-    """Validate a model — tier alias or concrete id — and store it as its TIER ALIAS.
+    """Validate a model, alias or concrete id, and store it as its TIER ALIAS.
 
-    The concrete latest is resolved at consumption, so a saved pick tracks a tier bump instead of
-    pinning an old id."""
+    The concrete latest resolves at consumption, so a saved pick tracks a tier bump."""
     if not m or m.strip().lower() in ("reset", "default", "inherit"):
         return None
     if not is_valid_model(m):
@@ -93,8 +92,7 @@ def _slug(s: str) -> str:
 async def connect_repo(body: RepoConnectBody, spine: SystemSpine = Depends(get_spine)) -> dict:
     """Connect a domain: register a new repo into the spine and seed its knowledge home.
 
-    `kind` selects its onboarding front door. New dirs are created and must be empty; existing dirs
-    must already be a directory."""
+    `kind` selects its onboarding front door. A new dir is created and must be empty."""
     kind = (body.kind or "").strip()
     if kind not in ("new", "existing"):
         raise HTTPException(status_code=422, detail="kind must be 'new' or 'existing'")
@@ -134,11 +132,10 @@ async def connect_repo(body: RepoConnectBody, spine: SystemSpine = Depends(get_s
 @router.delete("/repos/{repo_id}", response_model=RepoDisconnectResponse)
 async def disconnect_repo(repo_id: str, confirm: str = "",
                           spine: SystemSpine = Depends(get_spine)) -> dict:
-    """Disconnect a domain — forget the project from SuperMe entirely. IRREVERSIBLE.
+    """Disconnect a domain, forgetting the project entirely. IRREVERSIBLE.
 
-    Deletes the registration, knowledge home, harness cell, pipeline state and every session. The
-    project FOLDER is never touched. Run rows and dev events are preserved and stamped
-    `session_fate='disconnected'`."""
+    Deletes the registration, knowledge home, harness cell, pipeline state and sessions. The project
+    FOLDER is never touched, and run rows are preserved."""
     import shutil
 
     rc = spine.repo(repo_id)
@@ -241,11 +238,9 @@ async def repos_overview(spine: SystemSpine = Depends(get_spine)) -> list[dict]:
 
 @router.get("/system/auth", response_model=AuthStatusResponse)
 async def system_auth(refresh: bool = False) -> dict:
-    """Can SuperMe reach Anthropic? Surfaces gate every agent action on this.
+    """Can SuperMe reach Anthropic? Every surface gates its agent actions on this.
 
-    Cached for a minute, because asking the Claude CLI spawns a process — `refresh=true` is
-    what a person clicks after signing in.
-    """
+    Cached for a minute, since asking the CLI spawns a process. `refresh=true` is the click."""
     return auth_status(refresh=refresh)
 
 
@@ -327,11 +322,9 @@ async def set_system_learning(body: LearningBody, spine: SystemSpine = Depends(g
 
 @router.post("/system/deputy", response_model=DeputyConfigResponse)
 async def set_system_deputy(body: DeputyConfigBody, spine: SystemSpine = Depends(get_spine)) -> dict:
-    """The global deputy dial: whether a deputy judges autopilot gates, and how readily it escalates PER
-    GATE.
+    """Whether a deputy judges autopilot gates, and how readily it escalates PER GATE.
 
-    Partial — omitted fields stay put. Rejects an unknown gate or level rather than silently
-    defaulting."""
+    Partial: omitted fields stay put. An unknown gate or level is rejected, never defaulted."""
     if body.enabled is not None:
         spine.set_deputy_enabled(body.enabled)
     if body.strictness is not None:
@@ -446,8 +439,7 @@ async def set_repo_autopilot(repo_id: str, body: AutopilotConcurrencyBody,
 def _anchor_state(rc) -> dict:
     """What this repo's anchor resolves to right now, or why it does not.
 
-    Read at request time, because a branch can be deleted between two settings loads and the owner
-    should see that here rather than at a merge."""
+    Read at request time, since a branch can be deleted between two settings loads."""
     try:
         if not git_layer.is_git_repo(rc.cwd):
             return {"resolved_anchor": None, "anchor_error": None}
@@ -460,10 +452,9 @@ def _anchor_state(rc) -> dict:
 @router.post("/repos/{repo_id}/git", response_model=RepoGitResponse)
 async def set_repo_git(repo_id: str, body: RepoGitBody,
                        spine: SystemSpine = Depends(get_spine)) -> dict:
-    """Set this repo's review mode and/or anchor branch.
+    """Set this repo's review mode and anchor branch, both read live at every decision point.
 
-    Both are read LIVE at every decision point. An anchor naming a branch that does not exist is
-    accepted and reported back as an `error`."""
+    An anchor naming a branch that does not exist is accepted and reported back as an `error`."""
     patch = {k: v for k, v in body.model_dump().items() if v is not None}
     try:
         rc = spine.update_repo(repo_id, **patch) if patch else spine.repo(repo_id)
@@ -477,10 +468,9 @@ async def set_repo_git(repo_id: str, body: RepoGitBody,
 
 @router.get("/repos/{repo_id}/branches", response_model=RepoBranchesResponse)
 async def get_repo_branches(repo_id: str, spine: SystemSpine = Depends(get_spine)) -> dict:
-    """This repo's local branches — the anchor picker's option set.
+    """This repo's local branches, the anchor picker's option set.
 
-    Read live off git: the anchor REFUSES on a branch that does not exist, so a stale list would offer
-    a setting that fails at the next merge."""
+    Read live off git, because a stale list would offer a setting that fails at the next merge."""
     rc = spine.repo(repo_id)
     if rc is None:
         raise HTTPException(status_code=404, detail=f"unknown repo '{repo_id}'")
@@ -493,8 +483,9 @@ async def get_repo_branches(repo_id: str, spine: SystemSpine = Depends(get_spine
 
 @router.post("/repos/{repo_id}/meta", response_model=RepoMetaResponse)
 async def set_repo_meta(repo_id: str, body: RepoMetaBody, spine: SystemSpine = Depends(get_spine)) -> dict:
-    """Set a repo's VISUAL tag: display color and/or icon (emoji). A field omitted (None) is left
-    unchanged; an empty string clears it (falls back to the hashed-palette default / no icon)."""
+    """Set a repo's VISUAL tag: display colour and icon.
+
+    None leaves a field unchanged; an empty string clears it back to the default."""
     if repo_id not in spine.repos():
         raise HTTPException(status_code=404, detail=f"unknown repo '{repo_id}'")
     meta = spine.set_repo_meta(repo_id, color=body.color, icon=body.icon)

@@ -43,11 +43,9 @@ def decide_after_vet(item: dict, *, evidence: dict, fingerprint: str, attempts: 
                      spent: int, budget: int, turn_error: bool = False,
                      faults: int = 0, fault_reason: str = "", lens_gaps: list[dict] | None = None,
                      audit_gaps: list[dict] | None = None) -> dict:
-    """The driver's decision function — PURE, so every branch is unit-testable. Returns
-    {action, status, reason, record[, exit]}.
+    """The driver's decision function, PURE so every branch is unit-testable.
 
-    An item never rests inside build⟷vet, which has no decision surface. `error` is not resting:
-    it stays where the run died."""
+    An item never rests inside build⟷vet, which has no decision surface. `error` is not resting."""
     # The driver continues ONLY an active item; a human-set stop never auto-resumes.
     status = str(item.get("status") or "")
     if item.get("done_at") or status != "active":
@@ -130,8 +128,7 @@ def decide_after_vet(item: dict, *, evidence: dict, fingerprint: str, attempts: 
 
 
 def decide_after_build(item: dict, *, outcome: str | None, turn_error: bool) -> dict:
-    """The build-cycle exit decision — PURE. A build NEVER pages mid-loop: a wall becomes an
-    assumption or a deferred authorization.
+    """The build-cycle exit decision, PURE. A build never pages mid-loop.
 
     `needs_user` is the exception, because riding to review rests on the work being ON THE BRANCH."""
     moved_away = (bool(item.get("done_at")) or str(item.get("status")) != "active"
@@ -178,19 +175,18 @@ def _resolve_run_params(context_id: str, item: dict) -> tuple[str, str]:
 
 
 def _resolve_vet_params(context_id: str, item: dict) -> tuple[str, str]:
-    """(model, effort) for a VET run — its own chain, NOT the item's or the project's.
+    """(model, effort) for a VET run: its own chain, not the item's or the project's.
 
-    Inheriting build's tier made the check move with the thing it checks, so a cheap-builder,
-    expensive-judge pairing was unreachable."""
+    Inheriting build's tier would move the check with the thing it checks."""
     return (_spine.role_model(context_id, "vet", item_model=item.get("vet_model")),
             _spine.role_effort(context_id, "vet", item_effort=item.get("vet_effort")))
 
 
 def dev_mcp(ctx, wt: Path, main_repo_dir: Path, item_id: str, *, scope: str) -> dict:
-    """The dev MCP server for a background loop run: pens scoped to this item, `repo_dir` at the
-    worktree so evidence fingerprints the vetted tree.
+    """The dev MCP server for a background loop run, `repo_dir` at the worktree so evidence
+    fingerprints the vetted tree.
 
-    `scope` is the phase this run IS — build carries its own recorder and never vet's."""
+    `scope` is the phase this run IS: build carries its own recorder."""
     return {"dev": make_dev_mcp_server(
         _dev_store, ctx.id, spine=_spine, scope=scope,
         dev_root=ctx.internal_root / "dev",
@@ -211,10 +207,9 @@ def _log_decision(context_id: str, item_id: str, cycle: int, d: dict) -> None:
 
 
 def _tree_moved_since_evidence(item_dir: Path, wt) -> bool:
-    """Has the worktree changed since the last evidence entry? True when there is no evidence yet — the
-    opening cycle must always be vetted.
+    """Has the worktree changed since the last evidence entry?
 
-    Same fingerprint the ledger stamps: one primitive, two readers."""
+    True when there is no evidence yet, so the opening cycle is always vetted."""
     entries = _arts.evidence_entries(item_dir)
     last = next((str(e.get("fingerprint") or "") for e in reversed(entries) if e.get("fingerprint")), "")
     if not last or last == "no-git":
@@ -225,8 +220,8 @@ def _tree_moved_since_evidence(item_dir: Path, wt) -> bool:
 def _plan_moved_since_evidence(item_dir: Path) -> bool:
     """Has the plan been REVISED since the last verdict?
 
-    Vet grades the tree AGAINST the plan, so the verdict has two inputs and the fingerprint sees
-    one. A revision changing how verification happens is a reason to verify."""
+    Vet grades the tree against the plan, so the verdict has two inputs where the fingerprint sees
+    one."""
     entries = _arts.evidence_entries(item_dir)
     if not entries:
         return True
@@ -277,10 +272,9 @@ def _fault_retries(context_id: str, item_id: str, cycle: int) -> int:
 # --------------------------------------------------------------------------- vet runs
 
 def start_vet_run(ctx, context_id: str, item_id: str) -> tuple[bool, str]:
-    """Start one background vet run — the loop's DECISION hop. Guards: live worktree, runnable at
-    `vet`, no run in flight.
+    """Start one background vet run, the loop's DECISION hop.
 
-    Retires any previous vet thread first: vet FORGETS, fresh eyes every cycle."""
+    Retires any previous vet thread first: vet forgets, fresh eyes every cycle."""
     dev_root = ctx.internal_root / "dev"
     item = _dev.read_work_item(dev_root, item_id) or {}
     if not item:
@@ -496,11 +490,9 @@ async def _run_background_vet(ctx, context_id: str, item_id: str,
 # --------------------------------------------------------------------------- build cycles
 
 def start_first_build(ctx, context_id: str, item_id: str) -> tuple[bool, str]:
-    """Start the loop's OPENING build cycle: nothing is implemented yet, so the work order is the
-    PLAN, not a vet report.
+    """Start the loop's OPENING build cycle, where the work order is the plan, not a vet report.
 
-    Guards mirror `start_build_cycle` except the vet-report requirement — a vet against an empty
-    tree is wasted."""
+    Nothing is implemented yet, so vetting an empty tree would be wasted."""
     dev_root = ctx.internal_root / "dev"
     item = _dev.read_work_item(dev_root, item_id) or {}
     if not item:
@@ -548,10 +540,9 @@ def start_build_cycle(ctx, context_id: str, item_id: str) -> tuple[bool, str]:
 
 async def _run_background_build(ctx, context_id: str, item_id: str,
                               model: str, effort: str, *, trigger: str | None = None) -> None:
-    """Drive one background build turn in the item's worktree, then flip the item into vet and fire
-    the next vet run. RESUMES the item's build thread — build REMEMBERS.
+    """Drive one background build turn in the worktree, then flip to vet and fire its run.
 
-    The work order is injected once into this cycle's trigger."""
+    RESUMES the item's build thread, because build remembers."""
     dev_root = ctx.internal_root / "dev"
     item = _dev.read_work_item(dev_root, item_id) or {}
     lc = _loop_ctx(ctx, item)
@@ -716,11 +707,9 @@ async def _run_background_build(ctx, context_id: str, item_id: str,
 
 def grant_authorization(ctx, context_id: str, item_id: str, auth_id: str, *,
                         by: str) -> tuple[bool, str]:
-    """Record a GRANT on a pending authorization. It ROUTES NOTHING: the item stays at review until
-    one exit fires.
+    """Record a GRANT on a pending authorization. It routes nothing.
 
-    Shared by the owner's authorize action and the deputy's delegated grant; the deputy path
-    enforces delegation before calling this."""
+    Shared by the owner's action and the deputy's delegated grant, which enforces delegation first."""
     dev_root = ctx.internal_root / "dev"
     item_dir = dev_root / "work-items" / item_id
     auth = _arts.resolve_authorization(item_dir, auth_id, decision="granted", by=by)

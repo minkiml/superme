@@ -47,11 +47,9 @@ def _require_worktree(item: dict) -> str:
 async def dev_work_item_git(item_id: str, context_id: str = "global",
                             dev: DevKnowledgeService = Depends(get_dev),
                             spine: SystemSpine = Depends(get_spine)) -> dict:
-    """The item's live git state, derived at read time: branch and dir existence, dirty files, ahead and
-    behind versus the anchor, merged.
+    """The item's live git state, derived at read time.
 
-    Also echoes the repo's `review_mode`, read live, so a mode flip applies to items already at
-    review."""
+    `review_mode` is echoed live, so a mode flip applies to items already at review."""
     ctx, _root, item = _load(context_id, item_id, dev)
     mode = {"review_mode": git_ops.repo_review_mode(ctx, spine)}
     if not item.get("git_branch") and not item.get("git_worktree"):
@@ -67,10 +65,9 @@ async def dev_work_item_git_merge(item_id: str, body: GitBody,
                                   dev: DevKnowledgeService = Depends(get_dev),
                                   dev_store: DevStore = Depends(get_dev_store),
                                   spine: SystemSpine = Depends(get_spine)) -> dict:
-    """The review-gate merge as a raw route — a thin wrapper over the SAME body `advance_item` runs.
+    """The review-gate merge as a raw route, over the same body `advance_item` runs.
 
-    Routes by topology: a blocking child merges into its parent's branch, everything else to the
-    trunk."""
+    Routes by topology: a blocking child merges into its parent's branch, everything else to trunk."""
     ctx, _root, _item = _load(body.context_id, item_id, dev)
     return git_ops.review_merge(ctx, body.context_id, item_id,
                                 dev=dev, dev_store=dev_store, spine=spine)
@@ -91,8 +88,9 @@ async def dev_work_item_pr_diff(item_id: str, path: str, task: str | None = None
                                 context_id: str = "global",
                                 dev: DevKnowledgeService = Depends(get_dev),
                                 spine: SystemSpine = Depends(get_spine)) -> dict:
-    """One file's patches under one task group, fetched when the reader expands the row — a
-    branch's whole diff is the one thing a review page must not make them wait for."""
+    """One file's patches under one task group, fetched when the reader expands the row.
+
+    A branch's whole diff is the one thing a review page must not make them wait for."""
     ctx = contexts.resolve(context_id, "dev")
     return pr_view.pr_file_diff(ctx, context_id, item_id, path=path, task=task,
                                 dev=dev, spine=spine)
@@ -126,11 +124,9 @@ async def dev_work_item_git_revert(item_id: str, body: GitBody,
 async def dev_work_item_git_resolve(item_id: str, body: GitBody,
                                     dev: DevKnowledgeService = Depends(get_dev),
                                     spine: SystemSpine = Depends(get_spine)) -> dict:
-    """Resolve-with-agent: the human decides WHETHER, the agent resolves, and nobody hand-edits conflict
-    markers.
+    """The human decides WHETHER, the agent resolves, and nobody hand-edits conflict markers.
 
-    Re-runs the sync leaving conflicts in the worktree, then fires a background resolution run. The
-    daemon completes the merge mechanically."""
+    Re-runs the sync leaving conflicts in the worktree, then fires a resolution run."""
     ctx, _root, item = _load(body.context_id, item_id, dev)
     wt = Path(_require_worktree(item))
     if spine.is_item_running(body.context_id, item_id):

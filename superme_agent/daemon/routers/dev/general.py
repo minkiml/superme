@@ -30,9 +30,9 @@ def dev_general_docs(context_id: str = "global", dev: DevKnowledgeService = Depe
 @router.get("/dev/project-status", response_model=ProjectStatusResponse)
 def dev_project_status(context_id: str = "global", dev: DevKnowledgeService = Depends(get_dev),
                        spine: SystemSpine = Depends(get_spine)) -> dict:
-    """Whether this project's memory is established (its PRD defines ≥1 deliverable) + the doc-set
-    presence flags + the connect-time onboarding choice. The dev workspace gates on `established`:
-    false ⇒ show the onboarding front door, launching `onboard_mode` when it's set."""
+    """Whether this project's memory is established, with the doc-set flags and onboarding choice.
+
+    The workspace gates on `established`: false shows the onboarding front door."""
     root = _dev_root(context_id)
     rc = spine.repo(context_id)
     return {
@@ -62,9 +62,9 @@ def dev_general_doc_save(name: str, body: GeneralDocSaveBody,
 
 @router.get("/dev/verification", response_model=VerificationLibraryResponse)
 def dev_verification_library(context_id: str = "global") -> dict:
-    """This repo's verification library: the standing entries every
-    implementation plan inherits, and the available ones a plan cites by id. A repo with no library
-    reads as two empty lists — the correct starting state, never an error."""
+    """This repo's standing entries and the available ones a plan cites by id.
+
+    A repo with no library reads as two empty lists, the correct starting state."""
     return _vl.read_library(_dev_root(context_id))
 
 
@@ -79,9 +79,9 @@ def dev_decisions(context_id: str = "global") -> dict:
 
 @router.patch("/dev/verification/{entry_id}", response_model=GeneralDocSaveResponse)
 def dev_verification_move(entry_id: str, body: LibraryEntryBody) -> dict:
-    """Promote an entry to standing, or demote it back to available. The OWNER'S call and nobody
-    else's: a standing entry taxes every future item in this repo, which is a spending decision and
-    the one brake on the library accreting."""
+    """Promote an entry to standing, or demote it back to available. The OWNER'S call.
+
+    A standing entry taxes every future item here, which is the one brake on the library accreting."""
     try:
         moved = _vl.move_entry(_dev_root(body.context_id), entry_id, body.tier)
     except ValueError as e:
@@ -109,13 +109,15 @@ def dev_roadmap(context_id: str = "global", dev: DevKnowledgeService = Depends(g
 
 @router.get("/dev/portrait", response_model=PortraitResponse)
 def dev_portrait(context_id: str = "global", dev: DevKnowledgeService = Depends(get_dev)) -> dict:
-    """The project PORTRAIT — what this project is, in six bands, one per anchor doc. Read-only and
-    derived on every call: the docs are the store, this is just the shape the view needs."""
+    """What this project is, in six bands, one per anchor doc.
+
+    Read-only and derived per call: the docs are the store, this is the shape the view needs."""
     return dev.read_portrait(_dev_root(context_id))
 
 
 @router.get("/dev/lint", response_model=LintResponse)
 def dev_lint(context_id: str = "global", dev: DevKnowledgeService = Depends(get_dev)) -> dict:
-    """Health of this project's general knowledge, as findings the owner can act on — not a document
-    to read. Derived fresh on every call, so the lint itself can never be stale."""
+    """Health of this project's general knowledge, as findings the owner can act on.
+
+    Derived fresh on every call, so the lint itself can never be stale."""
     return dev.lint_general(_dev_root(context_id))

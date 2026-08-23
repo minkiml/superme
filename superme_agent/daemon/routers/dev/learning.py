@@ -98,9 +98,9 @@ async def dev_memory_stats(context_id: str = "global",
 @router.get("/dev/memory/rollup", response_model=LearningRollupResponse)
 async def dev_memory_rollup(dev_store: DevStore = Depends(get_dev_store),
                             spine: SystemSpine = Depends(get_spine)) -> dict:
-    """The Learning tile drill-in: per-repo counts of captured candidates + published/learned
-    artifacts, each split dev/core. Learned is counted the SAME way `/dev/memory/stats` does
-    (published proposals reconciled with on-disk presence) so the numbers reconcile across surfaces."""
+    """Per-repo counts of captured candidates and published artifacts, each split dev and core.
+
+    Learned is counted the same way `/dev/memory/stats` does, so the surfaces reconcile."""
     from ....core import operational as ops
 
     def _blank() -> dict[str, int]:
@@ -151,8 +151,7 @@ async def dev_memory_distill(context_id: str = "global",
                              spine: SystemSpine = Depends(get_spine)) -> dict:
     """Fire a background distill pass over the candidate pool.
 
-    One pass per repo and scope at a time, guarded by a spine query rather than a shadow set. Returns
-    immediately; poll the stats for completion."""
+    One pass per repo and scope, guarded by a spine query rather than a shadow set."""
     if spine.is_running(context_id, mode="dev", feature="distill"):
         return {"status": "already_running", "context_id": context_id}
     ctx = contexts.resolve(context_id, "dev")
@@ -170,11 +169,9 @@ async def dev_memory_distill(context_id: str = "global",
 
 @router.post("/dev/sweep", response_model=SweepResponse, response_model_exclude_unset=True)
 async def dev_sweep(session_id: str, context_id: str = "global", focus: str | None = None) -> dict:
-    """Ops hook: force a capture sweep over ONE named session, run to completion so the caller gets the
-    result.
+    """Force a capture sweep over ONE named session, run to completion.
 
-    The everyday triggers are automatic; this is the by-id escape hatch, and the only caller that
-    supplies `focus`."""
+    The everyday triggers are automatic; this is the by-id escape hatch."""
     ctx = contexts.resolve(context_id, "dev")
     if not ctx.internal_root:
         raise HTTPException(status_code=400, detail="context has no dev-knowledge root")
@@ -214,9 +211,9 @@ async def memory_proposals(context_id: str = "global", status: str | None = None
 @router.get("/dev/memory/proposals/{proposal_id}/execution", response_model=ProposalExecutionResponse, response_model_exclude_unset=True)
 async def memory_proposal_execution(proposal_id: int, context_id: str = "global",
                                     dev_store: DevStore = Depends(get_dev_store)) -> dict:
-    """The proposal's execution trace — its lifecycle timeline, reused from the `events` table
-    (`meta.proposal_id`): approve → write.start/end (the forge run) → artifact edits → publish. A
-    synthetic head marks where distill filed it. Oldest-first; the gate-2 modal's Execution tab."""
+    """The proposal's lifecycle timeline, reused from the `events` table.
+
+    Approve, the forge run, artifact edits, publish. A synthetic head marks where distill filed it."""
     prop = dev_store.get_memory_proposal(proposal_id)
     if not prop or prop["context_id"] != context_id:
         raise HTTPException(status_code=404, detail="proposal not found")
@@ -235,10 +232,9 @@ async def memory_proposal_execution(proposal_id: int, context_id: str = "global"
 async def memory_proposal_approve(proposal_id: int, body: ApproveBody,
                                   dev_store: DevStore = Depends(get_dev_store),
                                   spine: SystemSpine = Depends(get_spine)) -> dict:
-    """GATE 1 — the owner approves the proposal's INTENT and answers distill's questions.
+    """GATE 1: the owner approves the proposal's INTENT and answers distill's questions.
 
-    Validates the form and scope, records the answers, and fires a background WRITE run that authors
-    the artifact and stages it for gate 2."""
+    Fires a background write run that authors the artifact and stages it for gate 2."""
     prop = dev_store.get_memory_proposal(proposal_id)
     if not prop or prop["context_id"] != body.context_id:
         raise HTTPException(status_code=404, detail="proposal not found")
@@ -340,10 +336,9 @@ async def memory_proposal_publish(proposal_id: int, body: ProposalActionBody,
 @router.post("/dev/memory/proposals/{proposal_id}/reject", response_model=ProposalActionResponse, response_model_exclude_unset=True)
 async def memory_proposal_reject(proposal_id: int, body: ProposalActionBody,
                                  dev_store: DevStore = Depends(get_dev_store)) -> dict:
-    """The owner REJECTS a proposal: this framing is wrong, but the observation may still matter.
+    """The owner REJECTS a proposal: this framing is wrong, the observation may still matter.
 
-    Marks it `rejected` and re-queues its source candidates, so a later distill pass can reframe them.
-    To stop re-suggestion, use DROP."""
+    Re-queues its source candidates so a later pass can reframe them. To stop re-suggestion, drop."""
     prop = dev_store.get_memory_proposal(proposal_id)
     if not prop or prop["context_id"] != body.context_id:
         raise HTTPException(status_code=404, detail="proposal not found")
@@ -363,10 +358,9 @@ async def memory_proposal_reject(proposal_id: int, body: ProposalActionBody,
 @router.post("/dev/memory/proposals/{proposal_id}/drop", response_model=ProposalActionResponse, response_model_exclude_unset=True)
 async def memory_proposal_drop(proposal_id: int, body: ProposalActionBody,
                                dev_store: DevStore = Depends(get_dev_store)) -> dict:
-    """Owner DROPS a proposal — this is noise, stop suggesting it.
+    """The owner DROPS a proposal: this is noise, stop suggesting it.
 
-    Marks the proposal and its source candidates `dropped`, the negative signal the learning
-    loop reads. Unlike reject, dropped candidates are never re-queued."""
+    Unlike reject, dropped candidates are never re-queued."""
     prop = dev_store.get_memory_proposal(proposal_id)
     if not prop or prop["context_id"] != body.context_id:
         raise HTTPException(status_code=404, detail="proposal not found")

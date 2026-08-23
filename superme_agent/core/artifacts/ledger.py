@@ -48,11 +48,9 @@ _LENS_GATES_AT = {"intent": SEVERITIES, "safety": SEVERITIES, "robustness": ("hi
 # --------------------------------------------------------------------------- evidence ledger
 
 def repo_fingerprint(repo_dir: Path | None) -> str:
-    """A cheap fingerprint of the repo's CODE STATE: HEAD sha plus `git diff HEAD` content.
-    Any commit or tracked edit moves it.
+    """A cheap fingerprint of the repo's CODE STATE: HEAD sha plus `git diff HEAD`.
 
-    UNTRACKED files are excluded: test runs drop coverage files and logs, which staled green evidence.
-    Non-git → 'no-git'."""
+    Untracked files are excluded, since a test run drops logs and stales green evidence."""
     if not repo_dir or not Path(repo_dir).is_dir():
         return "no-git"
     try:
@@ -71,10 +69,9 @@ _EVIDENCE_HEAD = re.compile(r"^### (?P<ts>\S+) — (?P<check>.*)$")
 
 
 def _resolve_evidence_check(check: str, valid_ids: list[str]) -> str:
-    """The ledger's check field IS its join key, so a glued key is a DIFFERENT key
-    whose stale `failed` never gets superseded.
+    """The check field IS the join key, so a glued key never supersedes its own stale `failed`.
 
-    Returns the exact id, or raises with a targeted hint. Empty `valid_ids` means record verbatim."""
+    Returns the exact id, or raises with a hint. Empty `valid_ids` records verbatim."""
     c = check.strip()
     if c in valid_ids:
         return c
@@ -95,11 +92,9 @@ def _resolve_evidence_check(check: str, valid_ids: list[str]) -> str:
 
 def record_validation(item_dir: Path, repo_dir: Path | None, *, command: str, result: str,
                       passed: bool, task: str = "") -> dict:
-    """Append one BUILD validation run to the cycle report's `## Validation` ```runs
-    fence.
+    """Append one BUILD validation run to the cycle report's `## Validation` fence.
 
-    A self-check written as prose cannot be checked: build is both runner and only witness. Recording
-    the run as DATA is what lets vet audit the claim."""
+    Build is both runner and only witness, so the run is recorded as DATA vet can audit."""
     result = " ".join((result or "").split())
     raw = (command or "").strip()
     if not raw:
@@ -157,11 +152,9 @@ def validation_runs(item_dir: Path, *, cycle: int | None = None) -> list[dict]:
 
 def record_validation_audit(item_dir: Path, repo_dir: Path | None, *, command: str,
                             claimed: bool, actual: bool, result: str) -> dict:
-    """Record the kernel's AUDIT of one build validation claim — what build said, and
-    what the command does now.
+    """Record the kernel's AUDIT of one build validation claim.
 
-    It lands in `## Verification` as `kind: audit`, so `evidence_entries` filters it out and it never
-    counts as a check."""
+    Lands as `kind: audit`, which `evidence_entries` filters out, so it never counts as a check."""
     def _one(s: str) -> str:
         return " ".join((s or "").split())
     command = _one(command)
@@ -329,8 +322,7 @@ def record_diagnosis(item_dir: Path, *, check: str, where: str, why: str,
                      unknown: str = "") -> dict:
     """Append vet's DIAGNOSIS of a failed check: where it broke and why. Never the fix.
 
-    Refused unless the check's latest verdict is an actual failure. `unknown` is load-bearing: a
-    confident guess sends build somewhere nobody looked."""
+    `unknown` is load-bearing: a confident guess sends build somewhere nobody looked."""
     item_dir = Path(item_dir)
 
     def _one_line(s: str) -> str:
@@ -364,8 +356,7 @@ def record_diagnosis(item_dir: Path, *, check: str, where: str, why: str,
 
 def record_lens(item_dir: Path, *, probed: list[str] | str, lens: str,
                 findings: list[dict] | None = None) -> dict:
-    """Record one standing lens's read of this cycle: what was PROBED, and what it found.
-    No findings is a complete record.
+    """Record one standing lens's read of this cycle. No findings is a complete record.
 
     `probed` is a LIST, one probe per entry. No quotas: a quota manufactures findings."""
     item_dir = Path(item_dir)
@@ -406,11 +397,9 @@ def record_lens(item_dir: Path, *, probed: list[str] | str, lens: str,
 
 
 def record_nomination(item_dir: Path, *, check: str, general: str) -> dict:
-    """Nominate one of this item's checks for the repo's VERIFICATION LIBRARY. `general`
-    says what property of THIS REPO it defends.
+    """Nominate one of this item's checks for the repo's verification library.
 
-    Vet nominates; CLOSE writes. Refused unless the check has PASSED here — untested hypotheses cost
-    the next item a cycle."""
+    Vet nominates, close writes, and only a check that PASSED here qualifies."""
     item_dir = Path(item_dir)
 
     def _one_line(s: str) -> str:
@@ -494,11 +483,9 @@ def undiagnosed_failures(item_dir: Path) -> list[str]:
 
 
 def evidence_entries(item_dir: Path) -> list[dict]:
-    """Every recorded VERDICT, in cycle order — one derived view, so no caller needs to know
-    where an entry lives.
+    """Every recorded VERDICT, in cycle order.
 
-    Diagnosis entries share the fence but are filtered out: one leaking in would read as a second,
-    failing entry."""
+    Diagnoses share the fence and are filtered out: one leaking in reads as a second failure."""
     return [e for e in _ledger(item_dir) if e.get("kind", KIND_VERDICT) == KIND_VERDICT]
 
 
@@ -514,10 +501,10 @@ def _ledger(item_dir: Path) -> list[dict]:
 
 
 def diagnoses(item_dir: Path) -> dict[str, dict]:
-    """The latest diagnosis per check → {check: {where, why, unknown, cycle}}.
+    """The latest diagnosis per check.
 
-    A diagnosis is a separate act from the verdict: for a kernel-run check they even have different
-    authors, so merging them would let an agent rewrite a machine verdict."""
+    A diagnosis is a separate act from the verdict, so merging them would let an agent rewrite a
+    machine verdict."""
     out: dict[str, dict] = {}
     for e in _ledger(item_dir):
         if e.get("kind") == KIND_DIAGNOSIS:
@@ -566,10 +553,9 @@ def _tagged_bullets(body: str) -> tuple[dict[str, list[str]], list[str]]:
 
 
 def proof_rows(item_dir: Path) -> list[dict]:
-    """The Proof view's rows: the plan's tasks in order, then one item-wide row for the rest.
+    """The plan's tasks in order, then one item-wide row for the rest.
 
-    `verified` are the PLANNED checks. A check the loop has not reached is still a row — the exam
-    is decided at plan."""
+    A check the loop has not reached is still a row: the exam is decided at plan."""
     item_dir = Path(item_dir)
     plan_path = item_dir / "artifacts" / artifact_file("plan")
     plan = plan_path.read_text(encoding="utf-8") if plan_path.is_file() else ""
@@ -649,10 +635,9 @@ def proof_rows(item_dir: Path) -> list[dict]:
 
 
 def verdict_rows(item_dir: Path) -> list[dict]:
-    """The LATEST verdict per check, in first-seen order — the vet's actual findings.
+    """The LATEST verdict per check, in first-seen order.
 
-    Latest-per-check, not every entry: a check that failed in c1 and passed in c3 IS passing, and two
-    rows invite averaging contradictory facts."""
+    A check that failed in c1 and passed in c3 IS passing, and two rows invite averaging."""
     latest: dict[str, dict] = {}
     for e in evidence_entries(item_dir):
         latest[e["check"]] = e
@@ -675,10 +660,9 @@ _NO_VET_LINE = "**Nothing to verify.**"
 
 
 def note_no_verification(item_dir: Path) -> str | None:
-    """Write the `depth: none` cycle's `## Verification` content, CODE-WRITTEN and quoting
-    the plan's own `reason`.
+    """Write the `depth: none` cycle's `## Verification`, code-written and quoting the plan's reason.
 
-    Derived, so an empty `## Verification` can never be mistaken for a vet that gave up. Idempotent."""
+    Derived, so an empty fence cannot read as a vet that gave up. Idempotent."""
     item_dir = Path(item_dir)
     reports = cycle_reports(item_dir)
     if not reports:
@@ -699,8 +683,7 @@ def note_no_verification(item_dir: Path) -> str | None:
 def evidence_status(item_dir: Path, repo_dir: Path | None, *, scope_to_plan: bool = True) -> dict:
     """The derived verdict over the ledger: `unverified` · `failed` · `stale` · `passed`.
 
-    Scoped to the CURRENT plan's checks, so a renamed check's ORPHAN cannot pin the loop red.
-    `deferred` sits between the two; the authorization ledger is the AUTHORITY."""
+    Scoped to the CURRENT plan's checks, so a renamed check's orphan cannot pin the loop red."""
     entries = evidence_entries(item_dir)
     ids = _plan_check_ids(item_dir) if scope_to_plan else None
     auths = authorization_entries(item_dir)

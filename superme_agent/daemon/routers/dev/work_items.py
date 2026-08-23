@@ -40,10 +40,9 @@ router = APIRouter()
 async def dev_work_item_run(item_id: str, body: PlanBody,
                             dev: DevKnowledgeService = Depends(get_dev),
                             spine: SystemSpine = Depends(get_spine)) -> dict:
-    """The owner's manual RUN — fire the current phase's own background run.
+    """The owner's manual RUN: fire the current phase's own background run.
 
-    The manual driver for a repo not on autopilot; on autopilot every phase fires itself. Refusals
-    follow the same rule the drilldown's button reads."""
+    For a repo not on autopilot, where every phase would otherwise fire itself."""
     from ...services.resume import run_phase
     ctx = contexts.resolve(body.context_id, "dev")
     if not ctx.internal_root:
@@ -69,10 +68,9 @@ async def dev_work_item_run(item_id: str, body: PlanBody,
 async def dev_work_item_resume(item_id: str, body: PlanBody,
                                dev: DevKnowledgeService = Depends(get_dev),
                                spine: SystemSpine = Depends(get_spine)) -> dict:
-    """RESUME a work-item whose run STOPPED: re-fire the phase's own background run.
+    """RESUME a work-item whose run stopped: re-fire the phase's background run.
 
-    Nothing is rewound — the branch, worktree and artifacts stand, only the run is new. Distinct from
-    Re-run, which throws the work away."""
+    Nothing is rewound. Distinct from Re-run, which throws the work away."""
     from ...services.resume import resume_item
     ctx = contexts.resolve(body.context_id, "dev")
     if not ctx.internal_root:
@@ -99,8 +97,7 @@ async def dev_work_item_rerun(item_id: str, body: PlanBody,
                               spine: SystemSpine = Depends(get_spine)) -> dict:
     """RE-RUN: throw this item's work away and start it over in place. Destructive.
 
-    Artifacts, reports, checkpoints and sessions are deleted and the worktree removed; the id, branch,
-    run rows and graph relations survive."""
+    Artifacts, reports and sessions go; the id, branch, run rows and relations survive."""
     from ...services.rerun import rerun_item
     ctx = contexts.resolve(body.context_id, "dev")
     if not ctx.internal_root:
@@ -124,8 +121,7 @@ async def dev_work_item_authorize(item_id: str, body: AuthorizeBody,
                                   spine: SystemSpine = Depends(get_spine)) -> dict:
     """The owner's grant or deny on a deferred authorization at review.
 
-    Both RECORD and route nothing: the item stays at review so every request can be resolved in any
-    order. `denied` also waives the blocked check. The owner grants unconditionally."""
+    Records and routes nothing, so requests can be resolved in any order. `denied` waives the check."""
     from ...services.loop import grant_authorization, deny_authorization
     ctx = contexts.resolve(body.context_id, "dev")
     if not ctx.internal_root:
@@ -151,10 +147,9 @@ async def dev_work_item_authorize(item_id: str, body: AuthorizeBody,
 async def dev_work_item_compact(item_id: str, body: PlanBody,
                                 dev: DevKnowledgeService = Depends(get_dev),
                                 spine: SystemSpine = Depends(get_spine)) -> dict:
-    """Compact NOW: run the full compaction sequence on this item's bound session — checkpoint first,
-    then `/compact`, then the verdict.
+    """Compact NOW: checkpoint, then `/compact`, then the verdict.
 
-    409 without a session or while a run is in flight, since the sequence takes the run-lock itself."""
+    409 without a session or with a run in flight, since the sequence takes the run-lock itself."""
     from ...services.compaction import run_compaction
     ctx = contexts.resolve(body.context_id, "dev")
     if not ctx.internal_root:
@@ -243,10 +238,9 @@ async def dev_work_item_seen(item_id: str, context_id: str = "global",
 @router.get("/dev/work-items/{item_id}/artifacts", response_model=WorkItemArtifactsResponse)
 async def dev_work_item_artifacts(item_id: str, context_id: str = "global",
                                   spine: SystemSpine = Depends(get_spine)) -> dict:
-    """The call-trail: every tool, sub-agent and skill this item's runs invoked, grouped by run.
+    """Every tool, sub-agent and skill this item's runs invoked, grouped by run.
 
-    `runs` rides along so each group can say WHAT that run was — otherwise a header reads "Run #653"
-    and the owner has to guess."""
+    `runs` rides along so a group can say what its run WAS, not just "Run #653"."""
     return {"artifacts": spine.events_for_item(context_id, item_id),
             "runs": spine.runs_for_item(context_id, item_id)}
 
@@ -261,8 +255,9 @@ async def dev_work_item_timeline(item_id: str, context_id: str = "global") -> di
 @router.get("/dev/work-items/{item_id}/runs/{run_id}/input.html", response_class=HTMLResponse)
 async def dev_work_item_run_input(item_id: str, run_id: int,
                                   context_id: str = "global") -> HTMLResponse:
-    """The ACTUAL input a past run sent — the exact system prompt and body captured at send time — as a
-    standalone HTML page. A friendly page renders when a run has no capture."""
+    """The exact system prompt and body a past run sent, captured at send time, as an HTML page.
+
+    A friendly page renders when a run has no capture."""
     from ...services.input_preview import (build_captured_input, render_input_page,
                                            render_missing_input_page)
     data = build_captured_input(context_id, item_id, run_id)
@@ -297,10 +292,9 @@ async def dev_work_item_doc_edit(item_id: str, body: DocEditBody,
                                  dev: DevKnowledgeService = Depends(get_dev),
                                  dev_store: DevStore = Depends(get_dev_store),
                                  spine: SystemSpine = Depends(get_spine)) -> dict:
-    """The owner hand-edits `brief.md` or `plan.md` — the item's two statements of INTENT.
+    """The owner hand-edits `brief.md` or `plan.md`, the item's two statements of INTENT.
 
-    Refused on a LIVE run, a TERMINAL item, or text failing the artifact's self-check. A save stamps
-    `edited_by_owner`."""
+    Refused on a live run, a terminal item, or text failing the artifact's self-check."""
     dev_root = _dev_root(body.context_id)
     item = dev.read_work_item(dev_root, item_id)
     if item is None:
@@ -337,10 +331,10 @@ async def dev_work_item_doc_edit(item_id: str, body: DocEditBody,
 @router.post("/dev/prompt-extraction/run", response_model=PromptExtractionStatusResponse,
              dependencies=[Depends(needs_credential)])
 async def dev_prompt_extraction_run(context_id: str = "global") -> dict:
-    """Fire a THROWAWAY prompt-extraction probe: a disposable work-item that runs the real lifecycle
+    """Fire a throwaway prompt-extraction probe: a disposable item that runs the real lifecycle
     unattended to capture each phase's input, then tears itself down.
 
-    One at a time per repo. Returns the current probe state."""
+    One at a time per repo."""
     from ...services import prompt_extraction as px
     return px.launch(context_id)
 
@@ -371,10 +365,9 @@ async def dev_work_item_advance(item_id: str, context_id: str = "global",
                                 dev: DevKnowledgeService = Depends(get_dev),
                                 dev_store: DevStore = Depends(get_dev_store),
                                 spine: SystemSpine = Depends(get_spine)) -> dict:
-    """Approve → advance a work-item to its kind's next phase.
+    """Approve, and advance a work-item to its kind's next phase.
 
-    Refuses at the final phase, on a terminal item, or with a run in flight. The advance also rests
-    the item `active`. The autopilot driver uses the same core."""
+    Refuses at the final phase, on a terminal item, or with a run in flight. Autopilot shares the core."""
     ctx = contexts.resolve(context_id, "dev")
     return gates.advance_item(ctx, context_id, item_id, dev=dev, dev_store=dev_store,
                               spine=spine, actor="owner")
@@ -384,10 +377,9 @@ async def dev_work_item_advance(item_id: str, context_id: str = "global",
 async def dev_work_item_autopilot(item_id: str, body: AutopilotBody, context_id: str = "global",
                                   dev: DevKnowledgeService = Depends(get_dev),
                                   dev_store: DevStore = Depends(get_dev_store)) -> dict:
-    """Enrol or un-enrol a work-item in autopilot — the per-item policy that drives its gates without a
-    click.
+    """Enrol or un-enrol a work-item in autopilot, the policy that drives its gates without a click.
 
-    Allowed only PRE-BUILD: the last moment before code exists that flipping it is cheap."""
+    Allowed only PRE-BUILD, the last moment when flipping it is cheap."""
     dev_root = _dev_root(context_id)
     item = dev.read_work_item(dev_root, item_id)
     if item is None:

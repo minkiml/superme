@@ -19,10 +19,10 @@ log = logging.getLogger("superme-agent")
 
 
 def _compact_then_readvance(ctx, context_id: str, item_id: str, item: dict) -> bool:
-    """The background chain's run-start compaction check. True means a compaction was scheduled and the
-    caller must return; the same seam re-enters once it finishes.
+    """The background chain's run-start compaction check.
 
-    Only the INTAKE session is checked: it is the one that accumulates across the chain."""
+    True means one was scheduled and the caller must return. Only the intake session is checked, as
+    it is the one that accumulates."""
     from . import compaction
     session_id = (item.get("sessions") or {}).get("intake") or item.get("session_id")
     if compaction.due(session_id, item.get("kind")) is None:
@@ -51,8 +51,8 @@ def _compact_then_readvance(ctx, context_id: str, item_id: str, item: dict) -> b
 def maybe_autopilot_advance(context_id: str, item_id: str) -> None:
     """Called after a background phase run rests an item at its gate.
 
-    Autopilot removes the WAITING; the JUDGMENT is the deputy's. Without a deputy, the non-review
-    gates advance directly and review is left for the owner."""
+    Autopilot removes the waiting; the judgment is the deputy's. Without one, review is left for the
+    owner."""
     from .. import app_state
     from ..app_state import get_spine
     from ...gateway import contexts
@@ -118,10 +118,9 @@ def maybe_autopilot_advance(context_id: str, item_id: str) -> None:
 
 
 async def enter_build_loop(context_id: str, item_id: str) -> None:
-    """An item just entered `build` — launch the autonomous build⟷vet loop it now owes.
+    """An item just entered `build`, so launch the autonomous build⟷vet loop it now owes.
 
-    Fires for EVERY item, because approving the plan gate is the instruction to build. The loop opens
-    with an implementation cycle."""
+    Fires for every item, because approving the plan gate is the instruction to build."""
     from .. import app_state
     from ...gateway import contexts
     from . import loop as loop_svc
@@ -144,8 +143,7 @@ async def enter_build_loop(context_id: str, item_id: str) -> None:
 def autopilot_advance(ctx, context_id: str, item_id: str, *, actor: str):
     """Cap-aware phase advance for an autopilot or deputy transition.
 
-    Parks the item at `awaiting_slot` when the next phase is `build` and the repo's concurrency cap is
-    full; the pump releases it when a slot frees."""
+    Parks at `awaiting_slot` when the next phase is `build` and the repo's cap is full."""
     from .. import app_state
     from ..app_state import get_spine
     dev = app_state.dev
@@ -216,8 +214,8 @@ def advance_item(ctx, context_id: str, item_id: str, *, dev, dev_store, spine,
                  actor: str) -> dict:
     """Advance a work-item to its kind's next phase.
 
-    Raises HTTPException on the refusals the route always enforced: terminal, run in flight, no next
-    phase, un-gate-ready plan, worktree failure. `actor` labels the phase.advance event."""
+    Raises on the refusals the route always enforced: terminal, run in flight, no next phase, an
+    un-gate-ready plan."""
     if not ctx.internal_root:
         raise HTTPException(status_code=400, detail="context has no internal root")
     dev_root = ctx.internal_root / "dev"

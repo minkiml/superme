@@ -142,8 +142,8 @@ def _credential_gate(actions: list[dict]) -> list[dict]:
 def _blocking_children(item: dict, all_items: list[dict]) -> list[dict]:
     """The open children this item is waiting on, as ROWS the owner can act on.
 
-    `close_readiness` reports them as joined ids, which is right for a mechanical check and useless as
-    an answer."""
+    `close_readiness` reports them as joined ids, which is right for a check and useless as an
+    answer."""
     _ok, open_ids = status_router.children_terminal(all_items, item.get("id"))
     by_id = {str(i.get("id")): i for i in all_items}
     rows = []
@@ -158,10 +158,9 @@ def _blocking_children(item: dict, all_items: list[dict]) -> list[dict]:
 def _attention_card(item: dict, state: dict, hold: dict | None, paged: dict | None,
                     actions: list[dict], proof: list[dict],
                     all_items: list[dict] | None = None) -> dict | None:
-    """The what-you-need-to-do card: WHY, DO (the exact act and its one click), and BASIS.
+    """The what-you-need-to-do card: WHY, DO, and BASIS.
 
-    None when nothing needs the owner, which is the common case — the card is hidden rather than
-    rendered empty. Composed from `classify_hold` and `_page_reason`."""
+    None when nothing needs the owner, so the card is hidden rather than rendered empty."""
     status = str(item.get("status"))
     if state.get("terminal"):
         return None
@@ -230,10 +229,10 @@ _PHASE_ENTRY = ("phase.advance", "review.route", "revise.route")
 
 
 def _live_summary(item_dir: Path, phase: str, events: list[dict]) -> str:
-    """This phase's summary line, but ONLY when it describes the pass you are looking at.
+    """This phase's summary line, but only when it describes the pass you are looking at.
 
-    Several reports are overwritten in place, so the test is whether one was written after the item
-    last entered this phase."""
+    Reports are overwritten in place, so the test is whether one was written since the item entered
+    this phase."""
     path = Path(item_dir) / "reports" / f"report-{phase}.md"
     if not phase or not path.is_file():
         return ""
@@ -259,8 +258,8 @@ def _standing_summary(item: dict, item_dir: Path, phase: str,
                       events: list[dict]) -> tuple[str, str]:
     """The summary the card shows, and WHICH phase concluded it.
 
-    Prefer this phase's own; while it is still working, hold the last completed phase's conclusion
-    rather than going blank. Handing back the phase is what makes holding it honest."""
+    While this phase works, hold the last completed one rather than going blank. Naming the phase is
+    what makes holding it honest."""
     if (own := _live_summary(item_dir, phase, events)):
         return own, phase
     from ...core.vocab.kind_profiles import get_profile
@@ -311,9 +310,9 @@ def _about(item: dict, item_dir: Path, inbox_origin: str = "") -> list[dict]:
 
 def gate_counters(spine, context_id: str, item: dict, dev_root: Path,
                   anchor: str | None) -> dict:
-    """Every gate check the item folder cannot answer, read once → the kwargs `gate_state` wants.
+    """Every gate check the item folder cannot answer, read once.
 
-    ONE READER, TWO CALLERS: the drilldown and the deputy. `None` means nobody could look, never zero."""
+    One reader, two callers: the drilldown and the deputy. `None` means nobody could look, not zero."""
     from ...core import git_layer as _git
     is_research = str(item.get("kind")) == "research"
     fam = kind_profiles.research_kind(item) if is_research else None
@@ -355,10 +354,9 @@ def build_payload(item: dict, item_dir: Path, dev_root: Path, main_repo_dir: Pat
                   brief_sizes: list[int] | None = None,
                   debug_tags: list[dict] | None = None,
                   standards_reads: int | None = None) -> dict:
-    """The whole drilldown, server-side. One read of the item folder feeds every tab, so the surface
-    polls one route instead of four.
+    """The whole drilldown, server-side, so the surface polls one route instead of four.
 
-    The spine-counted values arrive as parameters, so this function stays pure and testable."""
+    The spine-counted values arrive as parameters, which keeps this pure and testable."""
     item_dir = Path(item_dir)
     state = gate_briefs.gate_state(item, item_dir, dev_root, main_repo_dir,
                                    all_items=all_items, events=events, subagents=subagents,

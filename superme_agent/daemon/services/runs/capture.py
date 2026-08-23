@@ -32,8 +32,9 @@ def _int_or_none(value) -> int | None:
 
 
 def _artifact_payload(tool_name: str, ti: dict) -> str | None:
-    """The row's full text, for rows where the TEXT is audited — only a sub-agent's brief today,
-    because a spawned worker inherits nothing. `None` elsewhere: a row's description is its content."""
+    """The row's full text, for rows where the TEXT is audited.
+
+    Only a sub-agent's brief today, because a spawned worker inherits nothing."""
     if tool_name in ("Task", "Agent"):
         return str(ti.get("prompt") or "") or None
     return None
@@ -126,10 +127,9 @@ def turn_surface(*, model: str | None = None, effort: str | None = None,
                  mcp: list[str] | None = None, write_boundary: list | None = None,
                  sandbox_writes: list | None = None, read_only: bool = False,
                  approve: str = "denied", resumes: bool = False) -> dict:
-    """What the turn is ALLOWED to do — a run's input that isn't prose.
+    """What the turn is ALLOWED to do: a run's input that is not prose.
 
-    Two runs can carry the same words and behave differently because one could run a shell. Nothing
-    here is read back."""
+    Two runs can carry the same words and behave differently because one could run a shell."""
     return {"model": model or "", "effort": effort or "",
             "mcp": sorted(mcp or []),
             "write_boundary": [str(p) for p in (write_boundary or [])],
@@ -140,8 +140,7 @@ def turn_surface(*, model: str | None = None, effort: str | None = None,
 def surface_from_turn(turn_kwargs: dict, *, mcp: list[str] | None = None) -> dict:
     """`turn_surface` read off the kwargs a turn is actually sent with.
 
-    A restatement can be wrong: an intake run recorded a `write_boundary` the stream below it never
-    passed, so every shell command was refused and the capture said otherwise."""
+    A restatement can be wrong: one run recorded a boundary the stream below it never passed."""
     return turn_surface(
         model=turn_kwargs.get("model"),
         effort=turn_kwargs.get("effort"),
@@ -154,11 +153,9 @@ def surface_from_turn(turn_kwargs: dict, *, mcp: list[str] | None = None) -> dic
 
 
 def _authored_extras(ctx, item: dict, phase: str | None, mcp: list[str]) -> dict:
-    """The prompt text SuperMe authors OUTSIDE the system append: the phase SKILL.md and the mounted
-    MCP tool docs.
+    """The prompt text SuperMe authors outside the system append: the phase SKILL.md and tool docs.
 
-    Both ride in every request, so they belong on the same page as the prose. A missing one drops
-    only its fragment."""
+    Both ride in every request, so they belong on the same page as the prose."""
     from ....harness.tools.base_tools import BASE_TOOLS
     from ....harness.tools.dev_tools import dev_tool_specs
     from ....harness.tools.registry import describe_specs
@@ -196,11 +193,9 @@ def _authored_extras(ctx, item: dict, phase: str | None, mcp: list[str]) -> dict
 def capture_run_input(context_id: str, item_id: str, *, ctx, system_append: str | None,
                       prompt: str, background: bool, phase: str | None,
                       surface: dict | None = None) -> None:
-    """Persist the ACTUAL input a run is about to send: the assembled system prompt plus the prompt
-    body, keyed to the live run.
+    """Persist the ACTUAL input a run is about to send, keyed to the live run.
 
-    Called only for throwaway prompt-extraction items, so `run_input` stops growing per-run.
-    Best-effort — never breaks a turn."""
+    Called only for throwaway prompt-extraction items, so `run_input` stops growing per-run."""
     try:
         info = _spine.live_run(context_id, item_id)
         rid = (info or {}).get("id")
@@ -240,8 +235,7 @@ def capture_run_input(context_id: str, item_id: str, *, ctx, system_append: str 
 
 def capture_event(repo_id: str, ev, *, run_id: int | None = None, item_id: str | None = None,
                   publish_live: bool = True) -> None:
-    """Record one turn event onto a run's trail and publish it to any panel watching the item.
-    `publish_live=False` for the ws turn, which streams itself.
+    """Record one turn event onto a run's trail and publish it to any watching panel.
 
     NEVER RAISES: this runs inside the run's own task, so anything escaping kills the WORK."""
     try:

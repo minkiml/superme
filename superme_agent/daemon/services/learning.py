@@ -32,8 +32,7 @@ FORGE_KIT = HARNESS_DIR / "forge_kit"   # the forge agent's lint + behavioural-e
 async def run_background_distill(ctx, context_id: str, run_id: int) -> None:
     """Drive one background distill pass over the un-processed candidate pool.
 
-    A DISPOSABLE spine run with NO session — `ev.session_id` is deliberately unrecorded, so it cannot
-    pollute the resumable picker. Nothing is applied; the owner still gates every proposal."""
+    Disposable and sessionless, so it cannot pollute the resumable picker. Nothing is applied."""
     # Thin trigger: name the agent + the job, nothing else. The steps live in the distill agent;
     prompt = kernel_speech.distill_trigger()
     # These transcripts are disposed, so the trail's first entry is the only record of the ask.
@@ -144,11 +143,9 @@ def _existing_rules_file(prop: dict, repo_id: str | None, workspace: Path) -> st
 
 
 async def run_background_write(ctx, context_id: str, proposal_id: int, run_id: int) -> None:
-    """Drive one background WRITE pass for a single approved proposal — one proposal per run, no context
-    mixing.
+    """Drive one background WRITE pass for a single approved proposal, so no context mixes.
 
-    Disposable and sessionless. On a clean finish the proposal is `drafted`; if the agent never staged,
-    it reverts to `proposed` for re-approval."""
+    A clean finish leaves it `drafted`; if the agent never staged, it reverts to `proposed`."""
     prop = _dev_store.get_memory_proposal(proposal_id)
     repo_id = context_id if prop["target_scope"] == "repo_dev" else None
     staged_path = _intended_path(prop, repo_id)
@@ -233,8 +230,7 @@ def _render_slice(messages: list[dict]) -> str:
 async def run_sweep(ctx, session_id: str, focus: str | None = None) -> dict:
     """Run ONE capture sweep over a session's un-swept conversation tail.
 
-    Reads the slice `watermark → head` and advances the watermark only on a clean pass, so an abort
-    leaves the slice to be re-swept."""
+    The watermark advances only on a clean pass, so an abort leaves the slice to be re-swept."""
     context_id = ctx.id
     if session_id in _sweeping:
         return {"status": "already_running", "session_id": session_id}
@@ -331,8 +327,7 @@ def _fire_sweep_bg(ctx, session_id: str | None, *, focus: str | None = None,
                    then_delete: str | None = None) -> None:
     """Fire-and-forget a sweep so the triggering request returns immediately.
 
-    `then_delete` chains a full session delete AFTER the sweep, for the case where the transcript is
-    reclaimed but must be read first."""
+    `then_delete` chains a session delete after it, when a transcript must be read before it goes."""
     if not session_id:
         return
 
