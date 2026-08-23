@@ -12,6 +12,7 @@ from . import _env  # noqa: F401  (loads the repo-root .env before reading os.en
 
 import httpx
 import websockets
+from websockets.exceptions import ConnectionClosed
 from fastapi import FastAPI, Request, Response, WebSocket, WebSocketDisconnect
 
 log = logging.getLogger("superme-web-bff")
@@ -25,6 +26,10 @@ _DROP_REQUEST_HEADERS = {"host", "content-length", "connection", "accept-encodin
 _DROP_RESPONSE_HEADERS = {
     "content-length", "content-encoding", "transfer-encoding", "connection",
 }
+
+# Either side hanging up is how a relay ends. The browser leg raises WebSocketDisconnect and the
+# daemon leg raises ConnectionClosed, and neither is a fault worth a traceback.
+_HANGUP = (WebSocketDisconnect, ConnectionClosed)
 
 app = FastAPI(title="SuperMe web BFF")
 
@@ -47,18 +52,27 @@ async def ws_relay(name: str, browser: WebSocket) -> None:
                 try:
                     while True:
                         await daemon.send(await browser.receive_text())
-                except WebSocketDisconnect:
+                except _HANGUP:
                     pass
 
             async def daemon_to_browser() -> None:
-                async for msg in daemon:
-                    await browser.send_text(msg)
+                try:
+                    async for msg in daemon:
+                        await browser.send_text(msg)
+                except _HANGUP:
+                    pass
 
             t1 = asyncio.create_task(browser_to_daemon())
             t2 = asyncio.create_task(daemon_to_browser())
-            _, pending = await asyncio.wait({t1, t2}, return_when=asyncio.FIRST_COMPLETED)
+            done, pending = await asyncio.wait({t1, t2}, return_when=asyncio.FIRST_COMPLETED)
             for t in pending:
                 t.cancel()
+            # asyncio logs an unread exception as an ERROR with a traceback when the task is
+            # collected, long after the leg it belonged to ended.
+            for t in done:
+                t.exception()
+    except _HANGUP:
+        pass
     except Exception as e:
         log.warning("ws relay error: %s", e)
     finally:
