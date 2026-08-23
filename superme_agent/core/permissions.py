@@ -218,7 +218,7 @@ def path_in_scope(target: str, cwd: Path, roots: list[Path]) -> bool:
     defense-in-depth, not the primary boundary."""
     try:
         p = Path(target)
-        if not p.is_absolute():
+        if not _is_absolute_token(target):
             p = cwd / p
         p = p.resolve()
     except (OSError, ValueError):

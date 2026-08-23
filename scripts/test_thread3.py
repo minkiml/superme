@@ -326,7 +326,7 @@ def test_lint() -> None:
     print("lint — no kernel speech outside kernel_speech.py")
     hits = []
     for p in (ROOT / "superme_agent").rglob("*.py"):
-        rel = str(p.relative_to(ROOT))
+        rel = p.relative_to(ROOT).as_posix()
         if rel in LINT_ALLOWED:
             continue
         text = p.read_text(encoding="utf-8")

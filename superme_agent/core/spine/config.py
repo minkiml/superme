@@ -1,7 +1,7 @@
 """Static config: the git-tracked YAML describing the system and every repo."""
 
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 import yaml
 
@@ -67,9 +67,10 @@ class RepoConfig:
         # nobody can find.
         clean: list[str] = []
         for raw in (self.source_ignored or []):
-            # Absoluteness is tested on the RAW value: stripping the slash first would make
-            # `/etc/passwd` look relative.
-            absolute = Path(str(raw).strip()).is_absolute()
+            # Tested on the RAW value under BOTH conventions: stripping the slash first would
+            # make `/etc/passwd` look relative, and Windows calls it drive-relative anyway.
+            entry = str(raw).strip()
+            absolute = PurePosixPath(entry).is_absolute() or PureWindowsPath(entry).is_absolute()
             rel = str(raw).strip().strip("/")
             if not rel or absolute or ".." in Path(rel).parts:
                 log.warning("repo %r: source_ignored entry %r is not a repo-relative path; "
