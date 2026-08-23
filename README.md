@@ -180,4 +180,4 @@ context fill. Nothing is a black box when it goes wrong.
 
 ## License
 
-MIT — see [LICENSE](LICENSE). Copyright (c) 2026 Minjung Kim.
+MIT — see [LICENSE](LICENSE).
