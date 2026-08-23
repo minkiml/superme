@@ -98,10 +98,12 @@ export default function CredentialSetup({ status, onSkip }: {
             </Step>
           )}
 
-          <Step n="01" title="Sign in to the CLI">
-            The simplest way, and it needs nothing pasted anywhere. SuperMe uses the same
-            credential <code className="font-mono text-[12px] text-fg">claude</code> does.
-            <Command text="claude auth login" />
+          <Step n="01" title="Get an OAuth token">
+            Print one:
+            <Command text="claude setup-token" />
+            <div className="mt-3">then add it to this file, on its own line:</div>
+            {status?.env_file && <Command text={status.env_file} icon={FileText} wrap />}
+            <Command text="CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-…" icon={KeyRound} />
           </Step>
 
           <div className="flex items-center gap-3 px-1">
@@ -110,12 +112,10 @@ export default function CredentialSetup({ status, onSkip }: {
             <div className="h-px flex-1 bg-line" />
           </div>
 
-          <Step n="02" title="Use a long-lived token instead">
-            Better for a machine you will not sign in on interactively. Print a token:
-            <Command text="claude setup-token" />
-            <div className="mt-3">then add it to this file, on its own line:</div>
-            {status?.env_file && <Command text={status.env_file} icon={FileText} wrap />}
-            <Command text="CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-…" icon={KeyRound} />
+          <Step n="02" title="Sign in to the CLI instead">
+            Nothing to paste anywhere — SuperMe uses the same credential
+            <code className="font-mono text-[12px] text-fg"> claude </code> does.
+            <Command text="claude auth login" />
           </Step>
         </div>
 
