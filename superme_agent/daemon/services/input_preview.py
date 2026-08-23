@@ -157,10 +157,11 @@ def _frag_card(text: str, *, name: str, location: str, gate: bool = False) -> st
     """One fragment sub-card: the prompt-text box at full reading width, plus a right-side info gutter in
     the page's added space, so the text is never narrowed."""
     body = (text or "").strip("\n")
+    pre = ' class="gate"' if gate else ''
     meta = "" if gate else f'<div class="fmeta">{len(body):,} chars · ~{_approx_tokens(body):,} tok</div>'
     return (
         '<div class="frag">'
-        f'<div class="body"><pre{" class=\"gate\"" if gate else ""}>{html.escape(body)}</pre></div>'
+        f'<div class="body"><pre{pre}>{html.escape(body)}</pre></div>'
         '<aside class="side">'
         f'<div class="fname">{html.escape(name)}</div>'
         f'<div class="floc">{html.escape(location)}</div>'

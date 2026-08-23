@@ -63,7 +63,7 @@ def validate_ops(ops: list, dev_root: Path, repo_dir: Path | None) -> list[str]:
             issues.append(f"{tag}: missing section")
         elif section not in _sections(p.read_text(encoding="utf-8")):
             issues.append(f"{tag}: {doc} has no section '## {section}' — existing: "
-                          f"{', '.join(_sections(p.read_text(encoding="utf-8"))) or '(none)'}")
+                          f"{', '.join(_sections(p.read_text(encoding='utf-8'))) or '(none)'}")
         if not content.strip():
             issues.append(f"{tag}: empty content")
         if FILL.search(content):

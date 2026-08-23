@@ -70,6 +70,10 @@ jobs:
 
       - name: Offline suites
         shell: bash
+        env:
+          # Not a credential: `auth_status` takes a token at face value without calling anything,
+          # and these suites assert what the surface offers an owner who can authenticate.
+          CLAUDE_CODE_OAUTH_TOKEN: offline-suites-need-no-network
         run: |
           # `*_live` need a daemon and a credential; the reconcile suite needs a restart between
           # its two halves. Neither belongs on a runner.
