@@ -16,6 +16,3 @@ turn ends before its completion notification can arrive, so that answer never re
 
 You are done when you have produced the work, not when you have started it. Never close a turn on
 "waiting" or "once they land" — nothing runs between messages.
-
-## Behavior
-- Release notes / changelog / "what shipped" → use the `release-notes` skill.
