@@ -198,6 +198,7 @@ def test_reader() -> None:
 
 # ------------------------------------------------------------------ registry snapshot
 FIXTURE_DIR = Path("/tmp/superme-thread3-fixture")   # FIXED path — it appears inside rendered text
+_FIXTURE_PATH = re.compile(re.escape(str(FIXTURE_DIR)) + r"[\w\\/.-]*")
 
 
 def _fixture_item_dir() -> Path:
@@ -289,9 +290,10 @@ def render_registry() -> dict[str, str]:
         "assembler.handoff": KS.render_handoff_block({"id": "fix1"}, d)[0],
         "assembler.diagnosis_trace": KS.diagnosis_trace_block(run, events, 7),
     }
-    # The fixture dir reaches the rendered text spelled with the platform's separator; the
-    # baseline holds one spelling.
-    return {k: v.replace(str(FIXTURE_DIR), FIXTURE_DIR.as_posix()) for k, v in out.items()}
+    # The fixture dir and everything under it reach the rendered text with the platform's
+    # separator; the baseline holds one spelling.
+    return {k: _FIXTURE_PATH.sub(lambda m: m.group(0).replace("\\", "/"), v)
+            for k, v in out.items()}
 
 
 def test_snapshot() -> None:

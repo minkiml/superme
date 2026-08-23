@@ -8,8 +8,9 @@ import sys
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 title, path = sys.argv[1], sys.argv[2]
 raw = open(path, encoding="utf-8", errors="replace").read()
-# A traceback lands at the head and the summary at the tail; a long log hides one.
-text = raw if len(raw) <= 12000 else raw[:5000] + "\n[…]\n" + raw[-7000:]
+# Buffering can bury a traceback mid-log, so report from it rather than from either end.
+cut = raw.rfind("Traceback (most recent call last)")
+text = raw[cut:cut + 6000] + "\n[…]\n" + raw[-2000:] if cut >= 0 else raw[-8000:]
 esc = text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
 print(f"::error title={title}::{esc}")
 PY
