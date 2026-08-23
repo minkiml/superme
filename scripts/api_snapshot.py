@@ -12,7 +12,7 @@ import json
 import pkgutil
 import re
 import sys
-from pathlib import Path
+from pathlib import Path, PurePath
 
 PKG = "superme_agent"
 BASELINE = Path(__file__).resolve().parent / "api_baseline.json"
@@ -23,8 +23,9 @@ SKIP_PARTS = ("plugins", "local-harness")
 # A default rendered as `<Foo object at 0x7f…>` differs every run; the address says nothing.
 _ADDRESS = re.compile(r" at 0x[0-9a-fA-F]+")
 
-# Some defaults are paths built from the install root, which differs per checkout.
-_ROOT = ""
+# Some defaults are paths built from the install root, which differs per checkout. Windows
+# spells that root with backslashes and pathlib reprs it with forward ones, so both are held.
+_ROOT: tuple[str, ...] = ()
 
 # `home` already tracks where a class lives, so moving one must not read as a signature change.
 _QUALNAME = re.compile(r"superme_agent[\w.]*\.(\w+)")
@@ -36,7 +37,9 @@ _PRIVATE_STDLIB = re.compile(r"\bpathlib\._local\.")
 # The same stdlib object, spelled differently per interpreter. A baseline unreadable elsewhere
 # gates nothing.
 _STDLIB_ALIASES = {"<built-in function allocate_lock>": "threading.Lock",
-                   "_thread.lock": "threading.Lock"}
+                   "_thread.lock": "threading.Lock",
+                   "PosixPath(": "Path(",
+                   "WindowsPath(": "Path("}
 
 
 def _ours(obj) -> bool:
@@ -51,7 +54,14 @@ def _signature(obj) -> str:
     text = _PRIVATE_STDLIB.sub("pathlib.", _QUALNAME.sub(r"\1", text))
     for spelling, name in _STDLIB_ALIASES.items():
         text = text.replace(spelling, name)
-    return text.replace(_ROOT, "<root>") if _ROOT else text
+    for spelling in _ROOT:
+        text = text.replace(spelling, "<root>")
+    return text
+
+
+def _typename(val) -> str:
+    """A value's type, with the platform's path class spelled the way the code writes it."""
+    return "Path" if isinstance(val, PurePath) else type(val).__name__
 
 
 def _class_methods(cls) -> list[str]:
@@ -91,7 +101,7 @@ def _module_surface(mod) -> dict:
         elif getattr(type(val), "__module__", "") != "typing":
             # A re-exported `typing` construct is not this module's surface, and its internal
             # class name changes between interpreters.
-            syms[key] = {"sig": f"value:{type(val).__name__}"}
+            syms[key] = {"sig": f"value:{_typename(val)}"}
     return syms
 
 
@@ -100,7 +110,8 @@ def collect() -> dict:
     import superme_agent
 
     global _ROOT
-    _ROOT = str(Path(superme_agent.__file__).resolve().parent.parent)
+    root = Path(superme_agent.__file__).resolve().parent.parent
+    _ROOT = tuple(dict.fromkeys((str(root), root.as_posix())))
 
     out: dict[str, dict] = {}
     for info in pkgutil.walk_packages(superme_agent.__path__, "superme_agent."):

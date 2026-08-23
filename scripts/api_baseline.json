@@ -229,7 +229,7 @@
    "sig": "value:dict"
   },
   "CONSTITUTION_DIR": {
-   "sig": "value:PosixPath"
+   "sig": "value:Path"
   },
   "Context": {
    "home": "superme_agent.core.vocab.context",
@@ -289,7 +289,7 @@
    "sig": "class"
   },
   "HARNESS_DIR": {
-   "sig": "value:PosixPath"
+   "sig": "value:Path"
   },
   "Init": {
    "home": "superme_agent.core.vocab.events",
@@ -297,7 +297,7 @@
    "sig": "class"
   },
   "LOCAL_HARNESS_DIR": {
-   "sig": "value:PosixPath"
+   "sig": "value:Path"
   },
   "Result": {
    "home": "superme_agent.core.vocab.events",
@@ -305,7 +305,7 @@
    "sig": "class"
   },
   "SELF_FILE": {
-   "sig": "value:PosixPath"
+   "sig": "value:Path"
   },
   "Status": {
    "home": "superme_agent.core.vocab.events",
@@ -2276,7 +2276,7 @@
  },
  "superme_agent.core.auth": {
   "ENV_FILE": {
-   "sig": "value:PosixPath"
+   "sig": "value:Path"
   },
   "_CLI_TIMEOUT_S": {
    "sig": "value:int"
@@ -2580,7 +2580,7 @@
    "sig": "value:tuple"
   },
   "LOCAL_HARNESS_DIR": {
-   "sig": "value:PosixPath"
+   "sig": "value:Path"
   },
   "MANDATE_TEMPLATE": {
    "sig": "value:str"
@@ -3505,7 +3505,7 @@
    "sig": "value:Pattern"
   },
   "DEFAULT_WORKTREES_HOME": {
-   "sig": "value:PosixPath"
+   "sig": "value:Path"
   },
   "GitBusy": {
    "home": "superme_agent.core.git_layer",
@@ -4714,7 +4714,7 @@
  },
  "superme_agent.core.sessions": {
   "CLAUDE_PROJECTS_DIR": {
-   "sig": "value:PosixPath"
+   "sig": "value:Path"
   },
   "Context": {
    "home": "superme_agent.core.vocab.context",
@@ -5138,11 +5138,11 @@
   },
   "load_repos": {
    "home": "superme_agent.core.spine.config",
-   "sig": "def(path: pathlib.Path = PosixPath('<root>/superme_agent/config/repos.yaml')) -> dict[str, RepoConfig]"
+   "sig": "def(path: pathlib.Path = Path('<root>/superme_agent/config/repos.yaml')) -> dict[str, RepoConfig]"
   },
   "load_system_config": {
    "home": "superme_agent.core.spine.config",
-   "sig": "def(path: pathlib.Path = PosixPath('<root>/superme_agent/config/system.yaml')) -> SystemConfig"
+   "sig": "def(path: pathlib.Path = Path('<root>/superme_agent/config/system.yaml')) -> SystemConfig"
   },
   "log": {
    "sig": "value:Logger"
@@ -5165,19 +5165,19 @@
    "sig": "value:int"
   },
   "REPOS_BACKUP_DIR": {
-   "sig": "value:PosixPath"
+   "sig": "value:Path"
   },
   "REPOS_CONFIG_FILE": {
-   "sig": "value:PosixPath"
+   "sig": "value:Path"
   },
   "REPOS_SEED_FILE": {
-   "sig": "value:PosixPath"
+   "sig": "value:Path"
   },
   "SYSTEM_CONFIG_FILE": {
-   "sig": "value:PosixPath"
+   "sig": "value:Path"
   },
   "SYSTEM_DB_FILE": {
-   "sig": "value:PosixPath"
+   "sig": "value:Path"
   },
   "log": {
    "sig": "value:Logger"
@@ -5224,13 +5224,13 @@
  },
  "superme_agent.core.spine.config": {
   "KNOWLEDGE_REPO_DIR": {
-   "sig": "value:PosixPath"
+   "sig": "value:Path"
   },
   "LOCAL_HARNESS_DIR": {
-   "sig": "value:PosixPath"
+   "sig": "value:Path"
   },
   "REPOS_CONFIG_FILE": {
-   "sig": "value:PosixPath"
+   "sig": "value:Path"
   },
   "REVIEW_MODES": {
    "sig": "value:tuple"
@@ -5239,7 +5239,7 @@
    "sig": "value:str"
   },
   "ROOT_DIR": {
-   "sig": "value:PosixPath"
+   "sig": "value:Path"
   },
   "RepoConfig": {
    "home": "superme_agent.core.spine.config",
@@ -5253,7 +5253,7 @@
    "sig": "class"
   },
   "SYSTEM_CONFIG_FILE": {
-   "sig": "value:PosixPath"
+   "sig": "value:Path"
   },
   "SystemConfig": {
    "home": "superme_agent.core.spine.config",
@@ -5262,11 +5262,11 @@
   },
   "load_repos": {
    "home": "superme_agent.core.spine.config",
-   "sig": "def(path: pathlib.Path = PosixPath('<root>/superme_agent/config/repos.yaml')) -> dict[str, RepoConfig]"
+   "sig": "def(path: pathlib.Path = Path('<root>/superme_agent/config/repos.yaml')) -> dict[str, RepoConfig]"
   },
   "load_system_config": {
    "home": "superme_agent.core.spine.config",
-   "sig": "def(path: pathlib.Path = PosixPath('<root>/superme_agent/config/system.yaml')) -> SystemConfig"
+   "sig": "def(path: pathlib.Path = Path('<root>/superme_agent/config/system.yaml')) -> SystemConfig"
   },
   "log": {
    "sig": "value:Logger"
@@ -5394,11 +5394,11 @@
   },
   "load_repos": {
    "home": "superme_agent.core.spine.config",
-   "sig": "def(path: pathlib.Path = PosixPath('<root>/superme_agent/config/repos.yaml')) -> dict[str, RepoConfig]"
+   "sig": "def(path: pathlib.Path = Path('<root>/superme_agent/config/repos.yaml')) -> dict[str, RepoConfig]"
   },
   "load_system_config": {
    "home": "superme_agent.core.spine.config",
-   "sig": "def(path: pathlib.Path = PosixPath('<root>/superme_agent/config/system.yaml')) -> SystemConfig"
+   "sig": "def(path: pathlib.Path = Path('<root>/superme_agent/config/system.yaml')) -> SystemConfig"
   },
   "log": {
    "sig": "value:Logger"
@@ -6424,7 +6424,7 @@
    "sig": "class"
   },
   "DEV_DB_FILE": {
-   "sig": "value:PosixPath"
+   "sig": "value:Path"
   },
   "DevKnowledgeService": {
    "home": "superme_agent.core.dev_knowledge.store",
@@ -6737,10 +6737,10 @@
  },
  "superme_agent.daemon.deps": {
   "LOCAL_HARNESS_DIR": {
-   "sig": "value:PosixPath"
+   "sig": "value:Path"
   },
   "SLASH_COMMANDS_FILE": {
-   "sig": "value:PosixPath"
+   "sig": "value:Path"
   },
   "auth_status": {
    "home": "superme_agent.core.auth",
@@ -9973,7 +9973,7 @@
    "sig": "class"
   },
   "_HOME": {
-   "sig": "value:PosixPath"
+   "sig": "value:Path"
   },
   "_dir_flags": {
    "home": "superme_agent.daemon.routers.fs",
@@ -13200,13 +13200,13 @@
  },
  "superme_agent.daemon.services.learning": {
   "CONSTITUTION_DIR": {
-   "sig": "value:PosixPath"
+   "sig": "value:Path"
   },
   "FORGE_KIT": {
-   "sig": "value:PosixPath"
+   "sig": "value:Path"
   },
   "HARNESS_DIR": {
-   "sig": "value:PosixPath"
+   "sig": "value:Path"
   },
   "Init": {
    "home": "superme_agent.core.vocab.events",
@@ -16485,25 +16485,25 @@
  },
  "superme_agent.paths": {
   "APP_DIR": {
-   "sig": "value:PosixPath"
+   "sig": "value:Path"
   },
   "ASSET_DIR": {
-   "sig": "value:PosixPath"
+   "sig": "value:Path"
   },
   "CHARTER_FILES": {
    "sig": "value:dict"
   },
   "CLAUDE_PROJECTS_DIR": {
-   "sig": "value:PosixPath"
+   "sig": "value:Path"
   },
   "CONFIG_DIR": {
-   "sig": "value:PosixPath"
+   "sig": "value:Path"
   },
   "CONSTITUTION_DIR": {
-   "sig": "value:PosixPath"
+   "sig": "value:Path"
   },
   "CORE_PLUGIN_DIR": {
-   "sig": "value:PosixPath"
+   "sig": "value:Path"
   },
   "DAEMON_APPROVAL_TIMEOUT": {
    "sig": "value:int"
@@ -16515,55 +16515,55 @@
    "sig": "value:int"
   },
   "DEV_DB_FILE": {
-   "sig": "value:PosixPath"
+   "sig": "value:Path"
   },
   "DEV_PLUGIN_DIR": {
-   "sig": "value:PosixPath"
+   "sig": "value:Path"
   },
   "ENV_FILE": {
-   "sig": "value:PosixPath"
+   "sig": "value:Path"
   },
   "HARNESS_DIR": {
-   "sig": "value:PosixPath"
+   "sig": "value:Path"
   },
   "HUB_KNOWLEDGE_SEED_DIR": {
-   "sig": "value:PosixPath"
+   "sig": "value:Path"
   },
   "KNOWLEDGE_REPO_DIR": {
-   "sig": "value:PosixPath"
+   "sig": "value:Path"
   },
   "LOCAL_HARNESS_DIR": {
-   "sig": "value:PosixPath"
+   "sig": "value:Path"
   },
   "PLUGINS_DIR": {
-   "sig": "value:PosixPath"
+   "sig": "value:Path"
   },
   "REPOS_BACKUP_DIR": {
-   "sig": "value:PosixPath"
+   "sig": "value:Path"
   },
   "REPOS_CONFIG_FILE": {
-   "sig": "value:PosixPath"
+   "sig": "value:Path"
   },
   "REPOS_SEED_FILE": {
-   "sig": "value:PosixPath"
+   "sig": "value:Path"
   },
   "ROOT_DIR": {
-   "sig": "value:PosixPath"
+   "sig": "value:Path"
   },
   "SELF_FILE": {
-   "sig": "value:PosixPath"
+   "sig": "value:Path"
   },
   "SHARED_PLUGIN_DIR": {
-   "sig": "value:PosixPath"
+   "sig": "value:Path"
   },
   "SLASH_COMMANDS_FILE": {
-   "sig": "value:PosixPath"
+   "sig": "value:Path"
   },
   "SYSTEM_CONFIG_FILE": {
-   "sig": "value:PosixPath"
+   "sig": "value:Path"
   },
   "SYSTEM_DB_FILE": {
-   "sig": "value:PosixPath"
+   "sig": "value:Path"
   },
   "log": {
    "sig": "value:Logger"
@@ -16571,6 +16571,16 @@
   "plugins_for": {
    "home": "superme_agent.paths",
    "sig": "def(mode: str, op_home: pathlib.Path | None = None) -> list[str]"
+  },
+  "utf8_streams": {
+   "home": "superme_agent.stdio",
+   "sig": "def() -> None"
+  }
+ },
+ "superme_agent.stdio": {
+  "utf8_streams": {
+   "home": "superme_agent.stdio",
+   "sig": "def() -> None"
   }
  }
 }
