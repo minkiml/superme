@@ -140,13 +140,9 @@ class RepoOps:
                     for r in c.execute("SELECT * FROM archived_repo").fetchall()}
 
     def orphaned_repos(self) -> list[dict]:
-        """Repos with work on disk but no registry entry, and no tombstone saying they were
-        disconnected.
+        """Repos with work on disk, no registry entry, and no tombstone explaining the absence.
 
-        The registry is the only record that is a single editable file, so it is the only one
-        that can be lost while the knowledge home and the worktrees survive. A repo in that
-        state is invisible: its items still exist and nothing reaches them.
-        """
+        Their items still exist and nothing can reach them."""
         from ...paths import KNOWLEDGE_REPO_DIR
         from ..git_layer import worktrees_home
 

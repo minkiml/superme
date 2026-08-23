@@ -1,7 +1,6 @@
 """The registry is the one record with no history, so losing it loses every connected repo.
 
-A snapshot before each write and once per boot, and a check that names a repo whose work is on
-disk while its entry is not.
+A snapshot before each write and once per boot, and a check for work on disk with no entry.
 
 Run: PYTHONPATH=. python -m scripts.test_registry_safety
 """
@@ -55,8 +54,7 @@ def test_snapshots(tmp: Path) -> None:
     ok("an unchanged registry is not copied again", len(backups(bdir)) == 1,
        "restarts would otherwise evict the older copies that hold what a boot copy cannot")
 
-    # What protects the owner is that the state BEFORE a write is still on disk, not that each
-    # write adds a file. A write whose predecessor is already copied needs no second copy.
+    # The pre-write state being on disk is the property, not a file per write.
     s.add_repo(RepoConfig(id="alpha", label="alpha", cwd=str(tmp / "alpha")))
     ok("after add_repo, the registry without it is still recoverable",
        any("alpha" not in b.read_text(encoding="utf-8") for b in backups(bdir)))

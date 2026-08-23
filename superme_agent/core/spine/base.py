@@ -37,9 +37,7 @@ class Base:
     def snapshot_registry(self, reason: str) -> Path | None:
         """Copy the registry aside before it changes, and once per boot.
 
-        It is gitignored local state, so a bad write or an overwrite from outside is otherwise
-        unrecoverable. The boot copy is what survives the second kind, which no writer sees.
-        """
+        The boot copy is the one that survives an overwrite from outside, which no writer sees."""
         src = self._repos_config_path
         if not src.is_file():
             return None
@@ -47,13 +45,10 @@ class Base:
             text = src.read_text(encoding="utf-8")
             REPOS_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
             kept = sorted(REPOS_BACKUP_DIR.glob("repos-*.yaml"))
-            # An unchanged registry needs no second copy; restarts would otherwise evict the
-            # older ones that hold the state a boot copy cannot.
+            # Restarts would otherwise evict older copies that hold more than a boot copy can.
             if kept and kept[-1].read_text(encoding="utf-8") == text:
                 return None
-            # Microseconds, because the reason follows the stamp in the name: two copies in one
-            # second would otherwise sort by reason, and both the prune and the check above read
-            # the newest by name.
+            # The reason follows the stamp, so same-second copies would sort by reason, not time.
             stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%f")
             dest = REPOS_BACKUP_DIR / f"repos-{stamp}-{reason}.yaml"
             dest.write_text(text, encoding="utf-8")

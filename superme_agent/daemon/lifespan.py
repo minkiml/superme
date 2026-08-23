@@ -102,9 +102,7 @@ def _reconcile_expired_transcripts() -> None:
 def _report_orphaned_repos() -> None:
     """Say out loud when a repo's work is on disk but its registry entry is not.
 
-    Nothing else notices: the dashboard draws the repos it is given, so a lost entry looks
-    exactly like a repo that was never connected.
-    """
+    A lost entry looks exactly like a repo nobody connected."""
     try:
         for row in app_state.spine.orphaned_repos():
             log.warning("registry: '%s' has work on disk but no entry in repos.yaml — %s. "
@@ -325,8 +323,7 @@ async def lifespan(app: FastAPI):
     # The third way a row outlives its subject: the retention clock expired the transcript out
     # from under it.
     _reconcile_expired_transcripts()
-    # Reads the registry rather than healing it: which repo a lost entry belonged to is the
-    # owner's answer, not ours to guess.
+    # Reports rather than heals: which repo a lost entry belonged to is the owner's answer.
     _report_orphaned_repos()
     # heal recorded-worktree drift before any run reads a tree that is not there
     _reconcile_worktrees()

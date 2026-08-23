@@ -73,8 +73,7 @@ class SystemResponse(BaseModel):
     live_runs: list[RunRow]
     running: int
     repos: list[str]
-    # Repos with work on disk and no registry entry. A lost entry otherwise looks exactly like a
-    # repo that was never connected.
+    # A lost entry looks exactly like a repo nobody connected.
     orphaned_repos: list[OrphanedRepo] = Field(default_factory=list)
 
 
