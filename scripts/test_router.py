@@ -8,7 +8,7 @@ Run: PYTHONPATH=. python -m scripts.test_router
 
 import re
 
-from sources import src
+from scripts.sources import src
 
 PASS = 0
 

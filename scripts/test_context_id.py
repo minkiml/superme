@@ -15,7 +15,7 @@ from fastapi.testclient import TestClient                              # noqa: E
 
 from superme_agent.gateway import contexts                             # noqa: E402
 from superme_agent.paths import LOCAL_HARNESS_DIR                      # noqa: E402
-from sources import src                                                # noqa: E402
+from scripts.sources import src                                                # noqa: E402
 
 PASS = FAIL = 0
 

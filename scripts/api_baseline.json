@@ -17,9 +17,6 @@
    ],
    "sig": "class"
   },
-  "ApproveFn": {
-   "sig": "value:_CallableGenericAlias"
-  },
   "CommandLayer": {
    "home": "superme_agent.core.commands",
    "methods": [
@@ -227,12 +224,6 @@
     "run_turn(self, ctx: Context, prompt: str, *, resume: str | None = None, model: str | None = None, effort: str | None = None, approve: Callable[[str, dict], Awaitable[bool | str]], extra_mcp_servers: dict | None = None, enforce_silent: bool = False, scope_reads: bool = False, system_append: str | None = None, gate_general_mutations: bool = False, general_write_root: pathlib.Path | None = None, write_boundary: list[pathlib.Path] | None = None, shell_roots: list[pathlib.Path] | None = None, hooks: dict | None = None, block_categories: set[str] | None = None, deny_write_tools: str | None = None, protected_paths: list[pathlib.Path] | None = None, protected_nudge: str | None = None, sandbox_writes: list[pathlib.Path] | None = None, item_bound: bool = False) -> AsyncIterator[Init | TextDelta | Status | ToolResult | Usage | Result]"
    ],
    "sig": "class"
-  },
-  "ApproveFn": {
-   "sig": "value:_CallableGenericAlias"
-  },
-  "AsyncIterator": {
-   "sig": "value:_SpecialGenericAlias"
   },
   "CHARTER_FILES": {
    "sig": "value:dict"
@@ -3579,7 +3570,7 @@
   },
   "_lock_for": {
    "home": "superme_agent.core.git_layer",
-   "sig": "def(repo_dir: pathlib.Path) -> <built-in function allocate_lock>"
+   "sig": "def(repo_dir: pathlib.Path) -> threading.Lock"
   },
   "_out": {
    "home": "superme_agent.core.git_layer",
@@ -4327,15 +4318,6 @@
  "superme_agent.core.permissions": {
   "APPROVAL_UNANSWERED": {
    "sig": "value:str"
-  },
-  "ApproveFn": {
-   "sig": "value:_CallableGenericAlias"
-  },
-  "Awaitable": {
-   "sig": "value:_SpecialGenericAlias"
-  },
-  "Callable": {
-   "sig": "value:_CallableType"
   },
   "MAX_SUBAGENTS": {
    "sig": "value:int"
@@ -10999,62 +10981,7 @@
   }
  },
  "superme_agent.daemon.schemas": {},
- "superme_agent.daemon.schemas.common": {
-  "ArtifactKind": {
-   "sig": "value:_LiteralGenericAlias"
-  },
-  "EventActor": {
-   "sig": "value:_LiteralGenericAlias"
-  },
-  "EventScope": {
-   "sig": "value:_LiteralGenericAlias"
-  },
-  "InboxKind": {
-   "sig": "value:_LiteralGenericAlias"
-  },
-  "InboxOrigin": {
-   "sig": "value:_LiteralGenericAlias"
-  },
-  "InboxStatus": {
-   "sig": "value:_LiteralGenericAlias"
-  },
-  "Literal": {
-   "sig": "value:_LiteralSpecialForm"
-  },
-  "OutputForm": {
-   "sig": "value:_LiteralGenericAlias"
-  },
-  "ProposalStatus": {
-   "sig": "value:_LiteralGenericAlias"
-  },
-  "RunMode": {
-   "sig": "value:_LiteralGenericAlias"
-  },
-  "RunOutcome": {
-   "sig": "value:_LiteralGenericAlias"
-  },
-  "RunStatus": {
-   "sig": "value:_LiteralGenericAlias"
-  },
-  "SpawnRelation": {
-   "sig": "value:_LiteralGenericAlias"
-  },
-  "TargetScope": {
-   "sig": "value:_LiteralGenericAlias"
-  },
-  "WorkKind": {
-   "sig": "value:_LiteralGenericAlias"
-  },
-  "WorkOutcome": {
-   "sig": "value:_LiteralGenericAlias"
-  },
-  "WorkPhase": {
-   "sig": "value:_LiteralGenericAlias"
-  },
-  "WorkStatus": {
-   "sig": "value:_LiteralGenericAlias"
-  }
- },
+ "superme_agent.daemon.schemas.common": {},
  "superme_agent.daemon.schemas.dev": {},
  "superme_agent.daemon.schemas.dev.gates": {
   "AbandonBody": {
@@ -11326,12 +11253,6 @@
    "home": "superme_agent.daemon.schemas.dev.general",
    "methods": [],
    "sig": "class"
-  },
-  "WorkPhase": {
-   "sig": "value:_LiteralGenericAlias"
-  },
-  "WorkStatus": {
-   "sig": "value:_LiteralGenericAlias"
   },
   "annotations": {
    "sig": "value:_Feature"
@@ -11610,12 +11531,6 @@
    "methods": [],
    "sig": "class"
   },
-  "InboxKind": {
-   "sig": "value:_LiteralGenericAlias"
-  },
-  "InboxOrigin": {
-   "sig": "value:_LiteralGenericAlias"
-  },
   "InboxPatch": {
    "home": "superme_agent.daemon.schemas.dev.inbox",
    "methods": [],
@@ -11636,9 +11551,6 @@
    "methods": [],
    "sig": "class"
   },
-  "InboxStatus": {
-   "sig": "value:_LiteralGenericAlias"
-  },
   "SpawnedFrom": {
    "home": "superme_agent.daemon.schemas.dev.work_items",
    "methods": [],
@@ -11648,9 +11560,6 @@
    "home": "superme_agent.daemon.schemas.dev.work_items",
    "methods": [],
    "sig": "class"
-  },
-  "WorkKind": {
-   "sig": "value:_LiteralGenericAlias"
   }
  },
  "superme_agent.daemon.schemas.dev.learning": {
@@ -11729,9 +11638,6 @@
    "methods": [],
    "sig": "class"
   },
-  "OutputForm": {
-   "sig": "value:_LiteralGenericAlias"
-  },
   "Proposal": {
    "home": "superme_agent.daemon.schemas.dev.learning",
    "methods": [],
@@ -11757,9 +11663,6 @@
    "methods": [],
    "sig": "class"
   },
-  "ProposalStatus": {
-   "sig": "value:_LiteralGenericAlias"
-  },
   "ProposalsResponse": {
    "home": "superme_agent.daemon.schemas.dev.learning",
    "methods": [],
@@ -11784,9 +11687,6 @@
    "home": "superme_agent.daemon.schemas.dev.learning",
    "methods": [],
    "sig": "class"
-  },
-  "TargetScope": {
-   "sig": "value:_LiteralGenericAlias"
   }
  },
  "superme_agent.daemon.schemas.dev.meta": {
@@ -11819,12 +11719,6 @@
    "home": "superme_agent.daemon.schemas.dev.meta",
    "methods": [],
    "sig": "class"
-  },
-  "EventActor": {
-   "sig": "value:_LiteralGenericAlias"
-  },
-  "EventScope": {
-   "sig": "value:_LiteralGenericAlias"
   },
   "Glance": {
    "home": "superme_agent.daemon.schemas.dev.meta",
@@ -11895,9 +11789,6 @@
    "methods": [],
    "sig": "class"
   },
-  "ArtifactKind": {
-   "sig": "value:_LiteralGenericAlias"
-  },
   "ArtifactRef": {
    "home": "superme_agent.daemon.schemas.dev.work_items",
    "methods": [],
@@ -11957,9 +11848,6 @@
    "home": "superme_agent.daemon.schemas.dev.work_items",
    "methods": [],
    "sig": "class"
-  },
-  "SpawnRelation": {
-   "sig": "value:_LiteralGenericAlias"
   },
   "SpawnedFrom": {
    "home": "superme_agent.daemon.schemas.dev.work_items",
@@ -12040,18 +11928,6 @@
    "home": "superme_agent.daemon.schemas.dev.work_items",
    "methods": [],
    "sig": "class"
-  },
-  "WorkKind": {
-   "sig": "value:_LiteralGenericAlias"
-  },
-  "WorkOutcome": {
-   "sig": "value:_LiteralGenericAlias"
-  },
-  "WorkPhase": {
-   "sig": "value:_LiteralGenericAlias"
-  },
-  "WorkStatus": {
-   "sig": "value:_LiteralGenericAlias"
   },
   "annotations": {
    "sig": "value:_Feature"
@@ -12259,9 +12135,6 @@
    "methods": [],
    "sig": "class"
   },
-  "Literal": {
-   "sig": "value:_LiteralSpecialForm"
-  },
   "OrphanedRepo": {
    "home": "superme_agent.daemon.schemas.system",
    "methods": [],
@@ -12362,16 +12235,10 @@
    "methods": [],
    "sig": "class"
   },
-  "RunMode": {
-   "sig": "value:_LiteralGenericAlias"
-  },
   "RunRow": {
    "home": "superme_agent.daemon.schemas.system",
    "methods": [],
    "sig": "class"
-  },
-  "RunStatus": {
-   "sig": "value:_LiteralGenericAlias"
   },
   "RunTraceResponse": {
    "home": "superme_agent.daemon.schemas.system",
@@ -12445,9 +12312,6 @@
    "methods": [],
    "sig": "class"
   },
-  "InboundFrame": {
-   "sig": "value:_AnnotatedAlias"
-  },
   "InitFrame": {
    "home": "superme_agent.daemon.schemas.ws",
    "methods": [],
@@ -12457,12 +12321,6 @@
    "home": "superme_agent.daemon.schemas.ws",
    "methods": [],
    "sig": "class"
-  },
-  "Literal": {
-   "sig": "value:_LiteralSpecialForm"
-  },
-  "OutboundFrame": {
-   "sig": "value:_AnnotatedAlias"
   },
   "ResultFrame": {
    "home": "superme_agent.daemon.schemas.ws",
@@ -12488,9 +12346,6 @@
    "home": "superme_agent.daemon.schemas.ws",
    "methods": [],
    "sig": "class"
-  },
-  "Union": {
-   "sig": "value:_SpecialForm"
   },
   "UsageFrame": {
    "home": "superme_agent.daemon.schemas.ws",
@@ -15028,9 +14883,6 @@
    "methods": [],
    "sig": "class"
   },
-  "Required": {
-   "sig": "value:_SpecialForm"
-  },
   "SuggestAssetsArgs": {
    "home": "superme_agent.harness.tools.base_tools",
    "methods": [],
@@ -15559,16 +15411,10 @@
    "methods": [],
    "sig": "class"
   },
-  "Literal": {
-   "sig": "value:_LiteralSpecialForm"
-  },
   "PushInboxItemArgs": {
    "home": "superme_agent.harness.tools.dev_tools.inbox",
    "methods": [],
    "sig": "class"
-  },
-  "Required": {
-   "sig": "value:_SpecialForm"
   },
   "_BRIEF_FIELDS": {
    "sig": "value:tuple"
@@ -15623,12 +15469,6 @@
   }
  },
  "superme_agent.harness.tools.dev_tools.items": {
-  "Literal": {
-   "sig": "value:_LiteralSpecialForm"
-  },
-  "Required": {
-   "sig": "value:_SpecialForm"
-  },
   "ScaffoldArtifactArgs": {
    "home": "superme_agent.harness.tools.dev_tools.items",
    "methods": [],
@@ -15702,9 +15542,6 @@
    "methods": [],
    "sig": "class"
   },
-  "Literal": {
-   "sig": "value:_LiteralSpecialForm"
-  },
   "MergeProposalArgs": {
    "home": "superme_agent.harness.tools.dev_tools.learning",
    "methods": [],
@@ -15719,9 +15556,6 @@
    "home": "superme_agent.harness.tools.dev_tools.learning",
    "methods": [],
    "sig": "class"
-  },
-  "Required": {
-   "sig": "value:_SpecialForm"
   },
   "ReviewCandidatesArgs": {
    "home": "superme_agent.harness.tools.dev_tools.learning",
@@ -15823,9 +15657,6 @@
   }
  },
  "superme_agent.harness.tools.dev_tools.records": {
-  "Literal": {
-   "sig": "value:_LiteralSpecialForm"
-  },
   "ReadDecisionsArgs": {
    "home": "superme_agent.harness.tools.dev_tools.records",
    "methods": [],
@@ -15840,9 +15671,6 @@
    "home": "superme_agent.harness.tools.dev_tools.records",
    "methods": [],
    "sig": "class"
-  },
-  "Required": {
-   "sig": "value:_SpecialForm"
   },
   "_bound_err": {
    "home": "superme_agent.harness.tools.dev_tools.items",
@@ -15952,9 +15780,6 @@
    "methods": [],
    "sig": "class"
   },
-  "Required": {
-   "sig": "value:_SpecialForm"
-  },
   "_bound_err": {
    "home": "superme_agent.harness.tools.dev_tools.items",
    "sig": "def(item_id, bound_item_id) -> str | None"
@@ -16019,9 +15844,6 @@
    "methods": [],
    "sig": "class"
   },
-  "Literal": {
-   "sig": "value:_LiteralSpecialForm"
-  },
   "PlanChangeArg": {
    "home": "superme_agent.harness.tools.dev_tools.revisions",
    "methods": [],
@@ -16031,9 +15853,6 @@
    "home": "superme_agent.harness.tools.dev_tools.revisions",
    "methods": [],
    "sig": "class"
-  },
-  "Required": {
-   "sig": "value:_SpecialForm"
   },
   "RevisePlanArgs": {
    "home": "superme_agent.harness.tools.dev_tools.revisions",
@@ -16469,9 +16288,6 @@
    "methods": [],
    "sig": "class"
   },
-  "Required": {
-   "sig": "value:_SpecialForm"
-  },
   "_bound_err": {
    "home": "superme_agent.harness.tools.dev_tools.items",
    "sig": "def(item_id, bound_item_id) -> str | None"
@@ -16522,25 +16338,10 @@
   }
  },
  "superme_agent.harness.tools.registry": {
-  "Awaitable": {
-   "sig": "value:_SpecialGenericAlias"
-  },
-  "Callable": {
-   "sig": "value:_CallableType"
-  },
-  "Handler": {
-   "sig": "value:_CallableGenericAlias"
-  },
-  "Literal": {
-   "sig": "value:_LiteralSpecialForm"
-  },
   "ToolSpec": {
    "home": "superme_agent.harness.tools.registry",
    "methods": [],
    "sig": "class"
-  },
-  "Union": {
-   "sig": "value:_SpecialForm"
   },
   "_render_schema": {
    "home": "superme_agent.harness.tools.registry",
@@ -16595,9 +16396,6 @@
    "methods": [],
    "sig": "class"
   },
-  "Literal": {
-   "sig": "value:_LiteralSpecialForm"
-  },
   "OpenQuestion": {
    "home": "superme_agent.harness.tools.run_tools",
    "methods": [],
@@ -16613,9 +16411,6 @@
    "home": "superme_agent.harness.tools.run_tools",
    "methods": [],
    "sig": "class"
-  },
-  "Required": {
-   "sig": "value:_SpecialForm"
   },
   "SUBJECT_MAX": {
    "sig": "value:int"

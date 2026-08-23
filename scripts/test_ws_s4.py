@@ -9,6 +9,7 @@ Run: PYTHONPATH=. python -m scripts.test_ws_s4
 
 import asyncio
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -312,9 +313,10 @@ def test_locks_and_guards(repo: Path) -> None:
 
 
 def _spawn_sleeper() -> subprocess.Popen:
-    """A stand-in for a vet-env daemon: its own session (so it is a process-group leader, exactly
-    what `vet_env.sh` spawns) and long enough to still be alive when we go to kill it."""
-    return subprocess.Popen(["sleep", "60"], start_new_session=True,
+    """A stand-in for a vet-env daemon, long enough to still be alive when we go to kill it.
+
+    The interpreter rather than `sleep`, which Windows has not got."""
+    return subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"],
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
@@ -471,6 +473,10 @@ def test_vet_env(repo: Path, tmp: Path) -> None:
     (wt / ".vet-env.json").write_text(f'{{"pid": {live.pid}, "port": 8800}}', encoding="utf-8")
     ok("state-file fallback signals the recorded pid", G.stop_vet_env(wt) == [live.pid])
     ok("state-file fallback actually kills it", _reaped(live))
+
+    if not shutil.which("lsof"):
+        print("  ~~  cwd-scan checks skipped: no `lsof`, where the state file IS the whole answer")
+        return
 
     # Found by CWD with no state file at all — the case the state file cannot cover.
     srv = _spawn_listener(wt)

@@ -29,6 +29,15 @@ _ROOT = ""
 # `home` already tracks where a class lives, so moving one must not read as a signature change.
 _QUALNAME = re.compile(r"superme_agent[\w.]*\.(\w+)")
 
+# Python 3.13 moved pathlib's concrete classes into a private submodule, so one annotation
+# renders two ways depending on the interpreter. The public name is the one the code writes.
+_PRIVATE_STDLIB = re.compile(r"\bpathlib\._local\.")
+
+# The same stdlib object, spelled differently by different interpreters. A baseline that cannot
+# be read on another Python gates nothing there.
+_STDLIB_ALIASES = {"<built-in function allocate_lock>": "threading.Lock",
+                   "_thread.lock": "threading.Lock"}
+
 
 def _ours(obj) -> bool:
     return str(getattr(obj, "__module__", "")).startswith(PKG)
@@ -39,7 +48,9 @@ def _signature(obj) -> str:
         text = _ADDRESS.sub("", str(inspect.signature(obj)))
     except (TypeError, ValueError):
         return "(?)"
-    text = _QUALNAME.sub(r"\1", text)
+    text = _PRIVATE_STDLIB.sub("pathlib.", _QUALNAME.sub(r"\1", text))
+    for spelling, name in _STDLIB_ALIASES.items():
+        text = text.replace(spelling, name)
     return text.replace(_ROOT, "<root>") if _ROOT else text
 
 
@@ -77,7 +88,9 @@ def _module_surface(mod) -> dict:
             if _ours(val):
                 syms[key] = {"sig": "class", "home": val.__module__,
                              "methods": _class_methods(val)}
-        else:
+        elif getattr(type(val), "__module__", "") != "typing":
+            # A re-exported `typing` construct is not this module's surface, and its internal
+            # class name changes between interpreters.
             syms[key] = {"sig": f"value:{type(val).__name__}"}
     return syms
 

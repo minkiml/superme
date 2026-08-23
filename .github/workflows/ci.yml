@@ -1,0 +1,80 @@
+# Installs SuperMe the way a guest does, then runs the gates it ships with.
+#
+# Windows is the point: a good deal of this repo's path, encoding and process handling was
+# written for an OS the author cannot run. A runner is the only thing that can answer whether
+# it works.
+name: CI
+
+on:
+  push:
+    branches: [main, superme-dev]
+  pull_request:
+  workflow_dispatch:
+
+# A newer push makes an older run's answer worthless.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: ${{ matrix.os }} · python ${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # Every cell reports. One platform failing must not hide the others.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        # The floor the README promises, and a current release.
+        python: ['3.11', '3.13']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/frontend/package-lock.json
+
+      # The three commands the README gives a new owner, in order.
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Install frontend dependencies
+        run: npm ci --prefix web/frontend
+
+      - name: Configure the install
+        shell: bash
+        run: |
+          # A runner has no Claude credential, so setup reports NOT READY and exits 1. Every
+          # other thing it does must still have happened.
+          python setup_superme.py || true
+          for f in .env superme_agent/config/repos.yaml superme_agent/.system.db superme_agent/.dev.db; do
+            test -f "$f" || { echo "setup did not create $f"; exit 1; }
+          done
+
+      - name: Gate
+        shell: bash
+        run: bash scripts/check_fast.sh
+
+      - name: Offline suites
+        shell: bash
+        run: |
+          # `*_live` need a daemon and a credential; the reconcile suite needs a restart between
+          # its two halves. Neither belongs on a runner.
+          failed=""
+          for f in scripts/test_*.py; do
+            case "$f" in *_live.py|*_reconcile.py) continue ;; esac
+            name=$(basename "$f" .py)
+            echo "──────── $name"
+            python -m "scripts.$name" || failed="$failed $name"
+          done
+          if [ -n "$failed" ]; then
+            echo "FAILED:$failed"
+            exit 1
+          fi
