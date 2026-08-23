@@ -39,7 +39,7 @@ def test_plan_phase_guard(tmp: Path) -> None:
     items: dict[str, dict] = {}
     internal = tmp / "pg-internal"
     (internal / "dev" / "work-items" / "i1").mkdir(parents=True, exist_ok=True)
-    (internal / "dev" / "work-items" / "i1" / "item.md").write_text("---\nid: i1\n---\n")
+    (internal / "dev" / "work-items" / "i1" / "item.md").write_text("---\nid: i1\n---\n", encoding="utf-8")
     ctx = SimpleNamespace(internal_root=internal, cwd=tmp / "pg-repo", id="t", mode="dev")
     stub_dev = SimpleNamespace(read_work_item=lambda _root, iid: items.get(iid),
                                set_work_item_model=lambda *a, **k: None,

@@ -165,7 +165,7 @@ async def turn(prompt: str, *, work_item_id: str) -> dict:
 
 def git(cwd: Path, *args: str) -> str:
     return subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", *args],
-                          cwd=cwd, capture_output=True, text=True, check=True).stdout.strip()
+                          cwd=cwd, capture_output=True, text=True, check=True, encoding="utf-8").stdout.strip()
 
 
 def cleanup(trunk_sha0: str, iid: str | None) -> None:
@@ -184,7 +184,7 @@ def cleanup(trunk_sha0: str, iid: str | None) -> None:
             subprocess.run(["git", "worktree", "prune"], cwd=REPO, check=False)
             for br in subprocess.run(["git", "branch", "--list", f"item/{iid}*",
                                       "--format=%(refname:short)"],
-                                     cwd=REPO, capture_output=True, text=True).stdout.split():
+                                     cwd=REPO, capture_output=True, text=True, encoding="utf-8").stdout.split():
                 subprocess.run(["git", "branch", "-Dq", br], cwd=REPO, check=False)
         if iid:
             shutil.rmtree(KHOME / "work-items" / iid, ignore_errors=True)
@@ -226,7 +226,7 @@ def main() -> None:
         # The plan RUN fires on entering plan and writes its own plan.md. Wait it out, then write
         # ours — otherwise the run clobbers the planted checks and the suite proves nothing.
         settle(iid)
-        (item_dir / "artifacts" / "plan.md").write_text(PLAN)
+        (item_dir / "artifacts" / "plan.md").write_text(PLAN, encoding="utf-8")
         # plan → build. `enter_build_loop` fires on entry, so a real build agent writes the
         # probe and the loop vets it — this suite never touches the worktree.
         adv = retry_409("POST", f"/dev/work-items/{iid}/advance?context_id={CTX}", {})
@@ -270,7 +270,7 @@ def main() -> None:
         ok("the loop carried the routed requirement back to review by itself",
            phase == "review" and status == "awaiting_human", f"phase={phase} status={status}")
         out = subprocess.run(["python", "-c", "import probe_s7; print(probe_s7.extra())"],
-                             cwd=wt, capture_output=True, text=True)
+                             cwd=wt, capture_output=True, text=True, encoding="utf-8")
         ok("build cycle implemented the routed requirement (extra() → s7-extra)",
            out.stdout.strip() == "s7-extra", out.stdout + out.stderr)
         ok("the fix was committed on the item branch",
@@ -278,7 +278,7 @@ def main() -> None:
         cycles = sorted((item_dir / "artifacts").glob("build-vet-*.md"))
         ok("the routing opened a SECOND cycle (cycle-1 pass, then the routed check)",
            len(cycles) >= 2, str([c.name for c in cycles]))
-        final = cycles[-1].read_text()
+        final = cycles[-1].read_text(encoding="utf-8")
         # The plan named the new check itself, so assert the REQUIREMENT is covered, not an id
         # this suite guessed.
         ok("the final cycle carries the original check", "probe-value" in final, final[:400])

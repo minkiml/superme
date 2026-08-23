@@ -134,7 +134,7 @@ def header_count(sid: str) -> int:
     paths = glob.glob(str(Path.home() / ".claude" / "projects" / "*" / f"{sid}.jsonl"))
     assert paths, f"no transcript found for {sid}"
     n = 0
-    for line in Path(paths[0]).read_text().splitlines():
+    for line in Path(paths[0]).read_text(encoding="utf-8").splitlines():
         try:
             d = json.loads(line)
         except json.JSONDecodeError:
@@ -149,7 +149,7 @@ def user_messages(sid: str) -> str:
     """All user-message content concatenated (for content assertions on what actually rode in)."""
     paths = glob.glob(str(Path.home() / ".claude" / "projects" / "*" / f"{sid}.jsonl"))
     out = []
-    for line in Path(paths[0]).read_text().splitlines():
+    for line in Path(paths[0]).read_text(encoding="utf-8").splitlines():
         try:
             d = json.loads(line)
         except json.JSONDecodeError:
@@ -162,7 +162,7 @@ def user_messages(sid: str) -> str:
 def seed_record(item_dir: Path) -> None:
     """A two-cycle loop history: cycle 1 FAIL → build hop, cycle 2 PASS → review exit."""
     (item_dir / "artifacts").mkdir(parents=True, exist_ok=True)
-    (item_dir / "artifacts" / "plan.md").write_text(PLAN)
+    (item_dir / "artifacts" / "plan.md").write_text(PLAN, encoding="utf-8")
     A.record_verification(item_dir, REPO, check="probe-value", how="ran the probe",
                       result="printed WRONG, expected s6", passed=False)
     # A red check owes a diagnosis and every standing lens owes a read, or the report is refused.

@@ -46,7 +46,7 @@ def _scaffold_artifact(*, store, context_id, dev_root=None, bound_item_id=None, 
             return _err(f"No work-item {item_id!r} here.")
         from pathlib import Path
         from ....core import verification_library as _vl
-        meta, _body = parse_md((d / "item.md").read_text())
+        meta, _body = parse_md((d / "item.md").read_text(encoding="utf-8"))
         try:
             r = _arts.scaffold(d, _s(args, "artifact"), title=str(meta.get("title") or item_id),
                                item_kind=meta.get("kind"), item_id=item_id,
@@ -291,7 +291,7 @@ def _sync_from_main(*, store, context_id, dev_root=None, main_repo_dir=None, bou
         d = _item_dir(dev_root, item_id)
         if d is None:
             return _err(f"No work-item {item_id!r} here.")
-        meta, _body = parse_md((d / "item.md").read_text())
+        meta, _body = parse_md((d / "item.md").read_text(encoding="utf-8"))
         wt = meta.get("git_worktree")
         if not wt or not Path(str(wt)).is_dir():
             return _err("This item has no live worktree — sync applies only during build "

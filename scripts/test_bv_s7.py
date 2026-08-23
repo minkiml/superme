@@ -81,8 +81,8 @@ def make_dev_root(tmp: Path, name: str, *, phase: str = "review") -> Path:
     dev_root = tmp / name
     d = dev_root / "work-items" / "it7"
     (d / "artifacts").mkdir(parents=True)
-    (d / "item.md").write_text(ITEM_MD.replace("phase: review", f"phase: {phase}"))
-    (d / "artifacts" / "plan.md").write_text(PLAN)
+    (d / "item.md").write_text(ITEM_MD.replace("phase: review", f"phase: {phase}"), encoding="utf-8")
+    (d / "artifacts" / "plan.md").write_text(PLAN, encoding="utf-8")
     return dev_root
 
 
@@ -103,7 +103,7 @@ def _tasks_of(body: str) -> str:
 def test_plan_revision(tmp: Path) -> None:
     print("core.plan_revision — the revision grammar (§3-bis)")
     d = make_dev_root(tmp, "root-rev") / "work-items" / "it7"
-    text = PR.plan_path(d).read_text()
+    text = PR.plan_path(d).read_text(encoding="utf-8")
 
     def one(scope, ops=None, **extra):
         return [{"area": "the empty-ledger case", "scope": scope, "note": "n",
@@ -155,7 +155,7 @@ def test_plan_revision(tmp: Path) -> None:
        any("no task" in i for i in
            PR.validate(text, one("targeted", [{"op": "edit_task", "task": "t9",
                                                "content": "x"}]))))
-    ok("nothing was written by any refusal", PR.plan_path(d).read_text() == text)
+    ok("nothing was written by any refusal", PR.plan_path(d).read_text(encoding="utf-8") == text)
 
     # ONE revision, THREE scopes: redesigning one part must not reset the progress another part
     # earned.
@@ -169,7 +169,7 @@ def test_plan_revision(tmp: Path) -> None:
                   "content": "print the total, 0 when the ledger is empty"},
                  {"op": "add_task", "content": "cover the empty-ledger case in the checks"}]},
     ])
-    body = PR.plan_path(d).read_text()
+    body = PR.plan_path(d).read_text(encoding="utf-8")
     ok("revision id assigned", res["revision"] == "r1")
     ok("t1 keeps its `- [x]` — build's progress survived the revision", "- [x] t1 —" in body)
     ok("t2's text changed, its state didn't", "- [ ] t2 — print the total, 0 when" in body)
@@ -205,7 +205,7 @@ def test_plan_revision(tmp: Path) -> None:
     # A task is a BLOCK: a line-wise remove would glue continuation lines onto the task above.
     PR.revise(d, feedback="drop the dead task", directive="ignore t3", still_in_force="r1 holds",
               changes=one("targeted", [{"op": "remove_task", "task": "t3"}]))
-    body = PR.plan_path(d).read_text()
+    body = PR.plan_path(d).read_text(encoding="utf-8")
     tasks = _tasks_of(body)
     ok("remove_task takes the whole wrapped block, leaving no orphan lines",
        "t3" not in tasks and "minimal fix in" not in tasks and "cycle report" not in tasks,
@@ -223,7 +223,7 @@ def test_plan_revision(tmp: Path) -> None:
                                  "content": "Stream the ledger instead."},
                                 {"op": "remove_task", "task": "t1"},
                                 {"op": "add_task", "content": "emit the running total"}]}])
-    body = PR.plan_path(d).read_text()
+    body = PR.plan_path(d).read_text(encoding="utf-8")
     ok("redesign replaced the design body", "Stream the ledger instead." in body
        and "Read the ledger, sum the amounts" not in body)
     ok("a redesign voids only what it NAMES — the ticked t1 is gone, the rest kept its state",
@@ -239,7 +239,7 @@ def test_plan_revision(tmp: Path) -> None:
     # the live list.
     PR.revise(d, feedback="one more task", directive="add the flag test", still_in_force="r3 holds",
               changes=one("targeted", [{"op": "add_task", "content": "the follow-up"}]))
-    body = PR.plan_path(d).read_text()
+    body = PR.plan_path(d).read_text(encoding="utf-8")
     ok("...and the mark counts up across revisions, never back into a retired id",
        "- [ ] t6 — the follow-up" in _tasks_of(body)
        and PR.task_high_water(body) == 6)
@@ -255,9 +255,9 @@ def test_pre_grammar_plan_migrates(tmp: Path) -> None:
     d = make_dev_root(tmp, "root-legacy", phase="plan") / "work-items" / "it7"
     # The earlier shape: `## Tasks` mid-document, and ONE `## Revisions` section holding `### r1`.
     p = PR.plan_path(d)
-    p.write_text(p.read_text().rstrip() + "\n\n## Revisions\n### r1 — 2026-07-29T19:21:02 — targeted\n"
-                 "- feedback: the first round's words\n- Design (append): a point\n")
-    before = p.read_text()
+    p.write_text(p.read_text(encoding="utf-8").rstrip() + "\n\n## Revisions\n### r1 — 2026-07-29T19:21:02 — targeted\n"
+                 "- feedback: the first round's words\n- Design (append): a point\n", encoding="utf-8")
+    before = p.read_text(encoding="utf-8")
     ok("the legacy log still counts as a recorded revision (no retroactive red gate)",
        PR.revisions(d) == ["r1"] and PR.current_revision(d) == "r1")
     ok("a legacy block carries no spend reading, so the item meters from birth as it always did",
@@ -267,7 +267,7 @@ def test_pre_grammar_plan_migrates(tmp: Path) -> None:
               concerns=["vet_failure"], spend=133742,
               changes=[{"area": "filter", "scope": "targeted", "note": "sum filtered rows",
                         "ops": [{"op": "append", "section": "Design", "content": "Filtered rows only."}]}])
-    after = p.read_text()
+    after = p.read_text(encoding="utf-8")
     ok("the new block does NOT reuse the legacy number — r1's history stays r1's",
        PR.revisions(d) == ["r1", "r2"] and "## Revision r2 —" in after
        and "## Revision r1 —" not in after)
@@ -364,7 +364,7 @@ def test_tool(tmp: Path) -> None:
            and kw["meta"]["scopes"] == ["targeted"]
            and kw["meta"]["concerns"] == ["owner_judgment"] for k, _, kw in store.events))
     ok("the spend boundary is read from the spine, never from the agent",
-       "- spend_at: 90210" in PR.plan_path(dev_root / "work-items" / "it7").read_text())
+       "- spend_at: 90210" in PR.plan_path(dev_root / "work-items" / "it7").read_text(encoding="utf-8"))
 
     out = asyncio.run(tool(_args(changes=[{"area": "a", "scope": "targeted", "note": "n",
                                            "ops": [{"op": "update", "section": "Tasks",
@@ -711,7 +711,7 @@ def test_hold_and_compaction_hooks() -> None:
        and "banked = by_agent or (bool(item_id) and bank_precompaction_checkpoint(" in comp)
     skill = Path("superme_agent/harness/plugins/superme-dev/skills/checkpoint/SKILL.md")
     ok("the checkpoint skill exists and says what NOT to write", skill.exists()
-       and "## What NOT to write" in (s := skill.read_text()) and "never copy" in s)
+       and "## What NOT to write" in (s := skill.read_text(encoding="utf-8")) and "never copy" in s)
     ok("...and asks for exactly the five things no artifact holds",
        all(k in s for k in ("in their own words", "cancelled or superseded", "Dead ends",
                             "now stale", "Answered questions")))
@@ -823,7 +823,7 @@ def test_plan_readonly_at_review(tmp: Path) -> None:
     item_dir = tmp / "wi" / "it7"
     (item_dir / "artifacts").mkdir(parents=True, exist_ok=True)
     plan = item_dir / "artifacts" / "plan.md"
-    plan.write_text("# plan\n")
+    plan.write_text("# plan\n", encoding="utf-8")
     asked: list[str] = []
 
     async def approve(tool_name, tool_input):     # stands in for the human surface
@@ -1029,7 +1029,7 @@ def test_review_entry_run() -> None:
        and not Path("superme_agent/harness/plugins/superme-dev/skills/"
                     "research-report").exists())
     # Four QUESTIONS, not a field sheet: what a machine parses lives in the agent-facing record.
-    owner = (tmpl / "report-review-template.md").read_text()
+    owner = (tmpl / "report-review-template.md").read_text(encoding="utf-8")
     ok("the owner's report asks the four questions, and opens with the Summary line",
        "**Summary:**" in owner
        and all(f"## {s}" in owner for s in ("What you're approving", "What to push back on",
@@ -1040,7 +1040,7 @@ def test_review_entry_run() -> None:
                                     "## Changed since", "Recommendation:")))
     ok("...a re-review answers the objection FIRST instead of appending a delta",
        "## What you asked for" in owner)
-    rec = (tmpl / "review-template.md").read_text()
+    rec = (tmpl / "review-template.md").read_text(encoding="utf-8")
     ok("the RECORD carries what the machines parse",
        "**Delivered:**" in rec and "## Revision rounds" in rec)
     ok("...and its slots are real fill slots the report check can see",
@@ -1075,14 +1075,14 @@ def test_repo_knobs(tmp: Path) -> None:
     cfg.write_text("# a header comment that must survive\n\nrepos:\n"
                    "  alpha:\n    label: Alpha\n    cwd: \".\"   # trailing comment\n"
                    "    layer: local\n"
-                   "  beta:\n    label: Beta\n    cwd: /tmp\n    layer: local\n")
-    before = cfg.read_text()
+                   "  beta:\n    label: Beta\n    cwd: /tmp\n    layer: local\n", encoding="utf-8")
+    before = cfg.read_text(encoding="utf-8")
     spine = SystemSpine.__new__(SystemSpine)
     spine._repos_config_path = cfg
     got = spine.update_repo("alpha", review_mode="strict", anchor_branch="develop")
     ok("update_repo returns the reloaded repo",
        got.review_mode == "strict" and got.anchor_branch == "develop")
-    after = cfg.read_text()
+    after = cfg.read_text(encoding="utf-8")
     ok("the header comment survives", "# a header comment that must survive" in after)
     ok("an inline comment on an untouched line survives", "# trailing comment" in after)
     ok("the OTHER entry is untouched", "  beta:\n    label: Beta" in after)
@@ -1091,7 +1091,7 @@ def test_repo_knobs(tmp: Path) -> None:
        == ["    review_mode: strict", "    anchor_branch: develop"])
     spine.update_repo("alpha", review_mode="fast", anchor_branch="")
     ok("setting both back to their defaults restores the file byte-for-byte",
-       cfg.read_text() == before)
+       cfg.read_text(encoding="utf-8") == before)
     ok("a second repo's knobs don't leak", load_repos(cfg)["beta"].review_mode == "fast")
     for bad, why in ((dict(review_mode="yolo"), "an invalid mode"),
                      (dict(cwd="/elsewhere"), "a non-editable field"),
@@ -1105,10 +1105,10 @@ def test_repo_knobs(tmp: Path) -> None:
     # --- resolve_anchor: the refusal, not a fallback ---------------------------------
     repo = tmp / "anchored"
     repo.mkdir()
-    run = lambda *a: subprocess.run(["git", *a], cwd=repo, capture_output=True, text=True)
+    run = lambda *a: subprocess.run(["git", *a], cwd=repo, capture_output=True, text=True, encoding="utf-8")
     run("init", "-b", "main")
     run("config", "user.email", "t@t"); run("config", "user.name", "t")
-    (repo / "f.txt").write_text("x")
+    (repo / "f.txt").write_text("x", encoding="utf-8")
     run("add", "."); run("commit", "-m", "init")
     ok("no override → the repo's own default branch", G.resolve_anchor(repo) == "main")
     run("branch", "develop")
@@ -1308,11 +1308,11 @@ def test_branch_list(tmp: Path) -> None:
     repo.mkdir()
 
     def g(*a):
-        return subprocess.run(["git", *a], cwd=repo, capture_output=True, text=True)
+        return subprocess.run(["git", *a], cwd=repo, capture_output=True, text=True, encoding="utf-8")
 
     ok("a non-repo answers with an empty list, never a raise", G.list_branches(repo) == [])
     g("init", "-b", "main"); g("config", "user.email", "t@t"); g("config", "user.name", "t")
-    (repo / "a.txt").write_text("1")
+    (repo / "a.txt").write_text("1", encoding="utf-8")
     g("add", "."); g("commit", "-m", "init")
     g("branch", "develop")
     G.create_worktree(repo, "rid", "itm001", "Some work")
@@ -1340,16 +1340,16 @@ def test_merge_act(tmp: Path) -> None:
     repo.mkdir()
 
     def g(*a, cwd=repo):
-        return subprocess.run(["git", *a], cwd=cwd, capture_output=True, text=True)
+        return subprocess.run(["git", *a], cwd=cwd, capture_output=True, text=True, encoding="utf-8")
 
     g("init", "-b", "main"); g("config", "user.email", "t@t"); g("config", "user.name", "t")
-    (repo / "a.txt").write_text("1")
+    (repo / "a.txt").write_text("1", encoding="utf-8")
     g("add", "."); g("commit", "-m", "init")
 
     rec = G.create_worktree(repo, "rid", "itm", "Tally by category")
     wt = Path(rec["worktree"])
     for i in (1, 2, 3):                       # three per-task commits, the shape review reads
-        (wt / f"f{i}.txt").write_text(str(i))
+        (wt / f"f{i}.txt").write_text(str(i), encoding="utf-8")
         g("add", ".", cwd=wt)
         # Task id in the TRAILER, never the subject; the gate a fresh worktree installs rejects
         # the old way.
@@ -1400,14 +1400,14 @@ def test_merge_act(tmp: Path) -> None:
     (idir / "artifacts").mkdir(parents=True)
     (idir / "artifacts" / "review.md").write_text(
         "# Review Agent-facing Report\n\n**Delivered:** a --category filter\n\n"
-        "## Change inventory\n| surface | change | tasks |\n")
+        "## Change inventory\n| surface | change | tasks |\n", encoding="utf-8")
     msg = squash_message({"title": "Tally by category"}, "itm", idir)
     ok("the subject is `<type>: <item title>` when review declared nothing",
        msg.splitlines()[0] == "feat: Tally by category")
     ok("the body is the review RECORD's Delivered line", "a --category filter" in msg)
     (idir / "reports").mkdir(parents=True)
     (idir / "reports" / "report-review.md").write_text(
-        "# Review User-facing Report\n\n**Delivered:** the owner's report is not the source\n")
+        "# Review User-facing Report\n\n**Delivered:** the owner's report is not the source\n", encoding="utf-8")
     ok("...and the owner's report is never the source, even when it carries the field",
        "the owner's report is not the source"
        not in squash_message({"title": "Tally by category"}, "itm", idir))
@@ -1423,7 +1423,7 @@ def test_merge_act(tmp: Path) -> None:
     (wrapped / "artifacts" / "review.md").write_text(
         "# Review Agent-facing Report\n\n**Delivered:** `tally list` now defaults to the 20 most recent\n"
         "entries, accepts `--all` to print every one, and keeps `--limit N` as an override.\n\n"
-        "**Change inventory:** not a field, just the next bold thing\n")
+        "**Change inventory:** not a field, just the next bold thing\n", encoding="utf-8")
     wmsg = squash_message({"title": "x"}, "itm", wrapped)
     ok("the WHOLE Delivered paragraph rides the commit, not just its first line",
        "as an override." in wmsg and "20 most recent entries, accepts" in wmsg)
@@ -1437,41 +1437,41 @@ def test_merge_act(tmp: Path) -> None:
     r2.mkdir()
 
     def g2(*a, cwd=r2):
-        return subprocess.run(["git", *a], cwd=cwd, capture_output=True, text=True)
+        return subprocess.run(["git", *a], cwd=cwd, capture_output=True, text=True, encoding="utf-8")
 
     g2("init", "-b", "main"); g2("config", "user.email", "t@t"); g2("config", "user.name", "t")
     # Long enough that edits at each end merge CLEANLY: git is happy, the behaviour may not be.
     lines = "\n".join(f"line {i}" for i in range(1, 21)) + "\n"
-    (r2 / "mine.txt").write_text(lines)
-    (r2 / "theirs.txt").write_text("base\n")
-    (r2 / "shared.txt").write_text("base\n")
+    (r2 / "mine.txt").write_text(lines, encoding="utf-8")
+    (r2 / "theirs.txt").write_text("base\n", encoding="utf-8")
+    (r2 / "shared.txt").write_text("base\n", encoding="utf-8")
     g2("add", "."); g2("commit", "-m", "init")
     rec2 = G.create_worktree(r2, "rid2", "itm2", "freshness")
     wt2 = Path(rec2["worktree"])
-    (wt2 / "mine.txt").write_text(lines.replace("line 20", "line 20 — changed by the item"))
+    (wt2 / "mine.txt").write_text(lines.replace("line 20", "line 20 — changed by the item"), encoding="utf-8")
     g2("add", ".", cwd=wt2)
     g2("commit", "-m", "Add mine\n\nSuperMe-Task: t1", cwd=wt2)
 
     ok("anchor unmoved → merge, no sync attempted",
        G.merge_freshness(r2, wt2, rec2["branch"]) == {"action": "merge"})
 
-    (r2 / "theirs.txt").write_text("theirs\n")   # a sibling lands somewhere this item never touched
+    (r2 / "theirs.txt").write_text("theirs\n", encoding="utf-8")   # a sibling lands somewhere this item never touched
     g2("add", "."); g2("commit", "-m", "sibling: theirs")
     out = G.merge_freshness(r2, wt2, rec2["branch"])
     ok("anchor moved with NO path overlap → merge (the cohort converges)", out["action"] == "merge")
     ok("...and the anchor was actually synced in", bool(out.get("synced")))
 
     (r2 / "mine.txt").write_text(
-        lines.replace("line 1\n", "line 1 — changed by a sibling\n", 1))
+        lines.replace("line 1\n", "line 1 — changed by a sibling\n", 1), encoding="utf-8")
     g2("add", "."); g2("commit", "-m", "sibling: also mine")
     out = G.merge_freshness(r2, wt2, rec2["branch"])
     ok("anchor moved OVER a file this item changed, CLEANLY → one vet cycle, not a blind merge",
        out["action"] == "revet" and out["paths"] == ["mine.txt"], str(out))
     ok("...and the sync happened, so the re-vet runs against the merged tree", bool(out["synced"]))
 
-    (r2 / "shared.txt").write_text("anchor version\n")
+    (r2 / "shared.txt").write_text("anchor version\n", encoding="utf-8")
     g2("add", "."); g2("commit", "-m", "sibling: shared")
-    (wt2 / "shared.txt").write_text("item version\n")
+    (wt2 / "shared.txt").write_text("item version\n", encoding="utf-8")
     g2("add", ".", cwd=wt2)
     g2("commit", "-m", "Touch the shared file\n\nSuperMe-Task: t2", cwd=wt2)
     out = G.merge_freshness(r2, wt2, rec2["branch"])
@@ -1554,14 +1554,14 @@ def test_commit_contract(tmp: Path) -> None:
     repo.mkdir()
     subprocess.run(["git", "init", "-b", "main"], cwd=repo, capture_output=True)
     got = subprocess.run(["git", "interpret-trailers", "--parse"], cwd=repo, input=msg,
-                         capture_output=True, text=True)
+                         capture_output=True, text=True, encoding="utf-8")
     ok("git interpret-trailers reads them back", got.stdout.strip() == "SuperMe-Item: 4f2a1b9c0d3e")
 
     # --- the kernel assembles from the DECLARATION ------------------------------------
     idir = tmp / "commit-item"
     (idir / "artifacts").mkdir(parents=True)
     (idir / "artifacts" / "review.md").write_text(
-        "**Delivered:** an --category filter on the tally command\n")
+        "**Delivered:** an --category filter on the tally command\n", encoding="utf-8")
     out = squash_message({"title": "Tally by category"}, "abc123abc123", idir, good)
     ok("the declared type + subject win over the item title",
        out.splitlines()[0] == "fix: Reject empty category names")
@@ -1588,7 +1588,7 @@ def test_commit_contract(tmp: Path) -> None:
 
     # --- the branch commits follow the same split -------------------------------------
     style = Path("superme_agent/harness/plugins/superme-dev/skills/build/references/"
-                 "commit-style.md").read_text()
+                 "commit-style.md").read_text(encoding="utf-8")
     ok("per-task commits carry the task id as a TRAILER", "SuperMe-Task: t<n>" in style)
     ok("...not as a subject prefix", "`t<n>: <what changed>`" not in style)
     ok("a check-fix names its check below the line too", "SuperMe-Check: c4" in style)
@@ -1744,16 +1744,16 @@ def test_pr_gate_and_page(tmp: Path) -> None:
     repo.mkdir()
 
     def g(*a, cwd=repo):
-        return subprocess.run(["git", *a], cwd=cwd, capture_output=True, text=True)
+        return subprocess.run(["git", *a], cwd=cwd, capture_output=True, text=True, encoding="utf-8")
 
     g("init", "-b", "main"); g("config", "user.email", "t@t"); g("config", "user.name", "t")
-    (repo / "tally.py").write_text("\n".join(f"line {i}" for i in range(20)) + "\n")
+    (repo / "tally.py").write_text("\n".join(f"line {i}" for i in range(20)) + "\n", encoding="utf-8")
     g("add", "."); g("commit", "-m", "init")
     g("checkout", "-b", "wi/pr")
 
     def commit(subject, trailers, files):
         for path, body in files.items():
-            (repo / path).write_text(body)
+            (repo / path).write_text(body, encoding="utf-8")
         g("add", ".", cwd=repo)
         g("commit", "-m", G.compose_commit(subject, "", trailers), cwd=repo)
 
@@ -1765,7 +1765,7 @@ def test_pr_gate_and_page(tmp: Path) -> None:
            {"guard.py": "guard\n"})
     commit("Tidy the imports", {}, {"parser.py": "split\nmore\nlines\nimport os\n"})
     # An anchor commit merged in mid-build — the sync the walkthrough must NOT attribute here.
-    g("checkout", "main"); (repo / "elsewhere.py").write_text("someone else\n")
+    g("checkout", "main"); (repo / "elsewhere.py").write_text("someone else\n", encoding="utf-8")
     g("add", "."); g("commit", "-m", "Someone else's work")
     g("checkout", "wi/pr"); g("merge", "main", "-m", "sync")
 
@@ -1828,21 +1828,21 @@ def test_commit_gate(tmp: Path) -> None:
     repo.mkdir()
 
     def g(*a, cwd=repo):
-        return subprocess.run(["git", *a], cwd=cwd, capture_output=True, text=True)
+        return subprocess.run(["git", *a], cwd=cwd, capture_output=True, text=True, encoding="utf-8")
 
     g("init", "-b", "main"); g("config", "user.email", "t@t"); g("config", "user.name", "t")
-    (repo / "a.txt").write_text("x"); g("add", "-A"); g("commit", "-m", "seed")
+    (repo / "a.txt").write_text("x", encoding="utf-8"); g("add", "-A"); g("commit", "-m", "seed")
     ok("the commit gate installs into the repo's shared hooks dir",
        GL.install_commit_hook(repo)["installed"] is True
        and (repo / ".git" / "hooks" / "commit-msg").exists())
 
     # The owner's own branch is not the agent's, and this hook has no business there.
-    (repo / "a.txt").write_text("y"); g("add", "-A")
+    (repo / "a.txt").write_text("y", encoding="utf-8"); g("add", "-A")
     ok("...and leaves every branch that isn't an item branch alone",
        g("commit", "-m", "a plain message with no trailer").returncode == 0)
 
     g("checkout", "-b", "item/abc123-probe")
-    (repo / "a.txt").write_text("z"); g("add", "-A")
+    (repo / "a.txt").write_text("z", encoding="utf-8"); g("add", "-A")
     refused = g("commit", "-m", "Add a thing")
     ok("a commit on an item branch with no task trailer is REFUSED", refused.returncode == 1)
     ok("...and the refusal says the exact line to add, not just that it is wrong",
@@ -1855,7 +1855,7 @@ def test_commit_gate(tmp: Path) -> None:
        g("commit", "--allow-empty", "-m", "Checkpoint\n\nSuperMe-Task: t2 (wip)").returncode == 0)
 
     # The kernel's own commits are merges, and belong to no task.
-    g("checkout", "main"); (repo / "b.txt").write_text("m"); g("add", "-A"); g("commit", "-m", "trunk")
+    g("checkout", "main"); (repo / "b.txt").write_text("m", encoding="utf-8"); g("add", "-A"); g("commit", "-m", "trunk")
     g("checkout", "item/abc123-probe")
     ok("...and a MERGE on the item branch still passes (it is the kernel's, and task-less)",
        g("merge", "main", "-m", "Sync main into item/abc123-probe").returncode == 0)
@@ -1866,11 +1866,11 @@ def test_commit_gate(tmp: Path) -> None:
     g("init", "-b", "main", cwd=foreign)
     hooks = foreign / ".git" / "hooks"
     hooks.mkdir(parents=True, exist_ok=True)
-    (hooks / "commit-msg").write_text("#!/bin/sh\n# somebody else's gate\nexit 0\n")
+    (hooks / "commit-msg").write_text("#!/bin/sh\n# somebody else's gate\nexit 0\n", encoding="utf-8")
     out = GL.install_commit_hook(foreign)
     ok("a commit-msg hook the project already owns is NOT overwritten",
        out["installed"] is False and out["reason"] == "foreign"
-       and "somebody else's gate" in (hooks / "commit-msg").read_text())
+       and "somebody else's gate" in (hooks / "commit-msg").read_text(encoding="utf-8"))
 
     routed = tmp / "husky-repo"
     routed.mkdir()
@@ -1978,7 +1978,7 @@ def test_proof_rows(tmp: Path) -> None:
         "- expect: all pass\n\n"
         # Planned but never run — the case the Task tab exists to show at the plan gate.
         "### alias-routes\n- traces: d-reporting\n- covers: t2\n- mode: command\n"
-        "- scenario: curl /sum\n- expect: 302 to /stats\n")
+        "- scenario: curl /sum\n- expect: 302 to /stats\n", encoding="utf-8")
     # The id is BOLDED because real reports write it that way; a tolerant parser hid the bug.
     (d / "artifacts" / "build-vet-1.md").write_text(
         "# Build⟷vet 1 — p\n\n## Built\n- **t1** (`web/stats.py`): added the CSV writer\n"
@@ -1988,13 +1988,13 @@ def test_proof_rows(tmp: Path) -> None:
         "### 2026-07-30T10:00:00 — csv-downloads\n- how: curl -s /stats.csv\n"
         "- result: 200 text/csv\n- passed: false\n- fingerprint: a\n"
         "### 2026-07-30T10:01:00 — suite-green\n- how: pytest\n- result: 42 passed\n"
-        "- passed: true\n- fingerprint: a\n```\n\n## Cycle outcome\n- exit: build\n")
+        "- passed: true\n- fingerprint: a\n```\n\n## Cycle outcome\n- exit: build\n", encoding="utf-8")
     (d / "artifacts" / "build-vet-2.md").write_text(
         "# Build⟷vet 2 — p\n\n## Built\n- t1 — fixed the content type\n\n"
         "## Validation\n- t1 — 13 unit tests pass\n\n## Verification\n```\n"
         "### 2026-07-30T11:00:00 — csv-downloads\n- how: curl -s /stats.csv\n"
         "- result: 200 text/csv\n- passed: true\n- fingerprint: b\n```\n\n"
-        "## Cycle outcome\n- exit: converged\n")
+        "## Cycle outcome\n- exit: converged\n", encoding="utf-8")
 
     rows = A.proof_rows(d)
     by = {r["task"]: r for r in rows}
@@ -2035,14 +2035,14 @@ def test_proof_rows(tmp: Path) -> None:
 
     # The tags are TAUGHT, never required: a hard issue would retroactively fail every in-flight
     # plan.
-    vp = A.parse_vet_plan((d / "artifacts" / "plan.md").read_text())
+    vp = A.parse_vet_plan((d / "artifacts" / "plan.md").read_text(encoding="utf-8"))
     ok("a check with no `covers:` is still structurally valid",
        not any("covers" in i for i in A.vet_plan_hard_issues(vp)))
     plan_tmpl = Path("superme_agent/harness/plugins/superme-dev/skills/plan/templates/"
-                     "plan-template.md").read_text()
+                     "plan-template.md").read_text(encoding="utf-8")
     ok("the plan template teaches `covers:`", "- covers:" in plan_tmpl)
     cyc_tmpl = Path("superme_agent/harness/plugins/superme-dev/skills/build/templates/"
-                    "build-vet-template.md").read_text()
+                    "build-vet-template.md").read_text(encoding="utf-8")
     ok("the cycle template teaches the leading task id in BOTH sections",
        cyc_tmpl.count("LEADING with its task id") + cyc_tmpl.count("LEAD with the task id") >= 2)
 
@@ -2062,16 +2062,16 @@ def test_drilldown_payload(tmp: Path) -> None:
     def _artifact(kind: str, **sections: str) -> None:
         _A.scaffold(item_dir, kind, title="S6", item_kind="implementation")
         f = item_dir / "artifacts" / _A.artifact_file(kind)
-        text = re.sub(r"<fill:[^>]*>", "filled", f.read_text())
+        text = re.sub(r"<fill:[^>]*>", "filled", f.read_text(encoding="utf-8"))
         for sec, body in sections.items():
             text = re.sub(rf"(?ms)(^##\s+{re.escape(sec)}\s*\n).*?(?=^##\s|\Z)",
                           rf"\g<1>{body}\n\n", text)
-        f.write_text(text)
+        f.write_text(text, encoding="utf-8")
 
     _artifact("plan", Tasks="- [x] t1 — a thing",
               **{"Verification plan": "depth: none\nreason: nothing observable\nenv: none"})
     _artifact("review")
-    (item_dir / "reports" / "report-review.md").write_text("# Review\nlanded.\n")
+    (item_dir / "reports" / "report-review.md").write_text("# Review\nlanded.\n", encoding="utf-8")
     item = {"id": "it7", "title": "S6", "kind": "implementation", "phase": "review",
             "status": "awaiting_human", "git_branch": "wi/it7"}
 
@@ -2169,7 +2169,7 @@ def test_drilldown_payload(tmp: Path) -> None:
     # The card renders the phase's summary line alone, and says nothing when there is none.
     ok("a phase with no report yet reports no summary", payload()["now"]["summary"] == "")
     (item_dir / "reports" / "report-review.md").write_text(
-        "# Review User-facing Report\n\n**Summary:** it holds, and the flag is consistent now.\n")
+        "# Review User-facing Report\n\n**Summary:** it holds, and the flag is consistent now.\n", encoding="utf-8")
     ok("...and once the report exists the card gets its one line",
        payload()["now"]["summary"] == "it holds, and the flag is consistent now.")
     # The FE must not re-decide this. Comments STRIPPED: the header names the field it replaced.

@@ -105,14 +105,14 @@ PROSE: list[str] = []
 def main() -> int:
     show_all = "--all" in sys.argv
     files = modules()
-    text = {p: p.read_text() for p in files}
+    text = {p: p.read_text(encoding="utf-8") for p in files}
     trees = {p: ast.parse(t) for p, t in text.items()}
 
     prose = PROSE
     for rel in PROSE_ROOTS:
         for p in (ROOT / rel).rglob("*"):
             if p.is_file() and p.suffix in (".md", ".ts", ".tsx", ".py", ".json", ".yaml", ".sh"):
-                prose.append(p.read_text(errors="ignore"))
+                prose.append(p.read_text(errors="ignore", encoding="utf-8"))
 
     if "--imports" in sys.argv:
         return unused_imports(files, text, trees)

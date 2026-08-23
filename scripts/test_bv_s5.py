@@ -34,7 +34,7 @@ def make_repo(tmp: Path) -> Path:
     repo = tmp / "repo" if tmp.name != "fps" else tmp
     repo.mkdir(parents=True)
     subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
-    (repo / "a.py").write_text("x = 1\n")
+    (repo / "a.py").write_text("x = 1\n", encoding="utf-8")
     subprocess.run(["git", "add", "."], cwd=repo, check=True)
     subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t",
                     "commit", "-qm", "init"], cwd=repo, check=True)
@@ -122,14 +122,14 @@ def test_fingerprint_scope(tmp: Path) -> None:
     repo = make_repo(tmp / "fps")
     fp0 = A.repo_fingerprint(repo)
     # A vet run's own litter is untracked, and counting it made vet stale its own evidence.
-    (repo / ".coverage").write_text("junk")
-    (repo / "tmp.log").write_text("noise")
+    (repo / ".coverage").write_text("junk", encoding="utf-8")
+    (repo / "tmp.log").write_text("noise", encoding="utf-8")
     ok("untracked litter does NOT move the fingerprint", A.repo_fingerprint(repo) == fp0)
     # A tracked edit — build's actual implementation — still does. That is what stale-on-edit is for.
-    (repo / "a.py").write_text("x = 2\n")
+    (repo / "a.py").write_text("x = 2\n", encoding="utf-8")
     fp1 = A.repo_fingerprint(repo)
     ok("a tracked edit DOES move it", fp1 != fp0)
-    (repo / "a.py").write_text("x = 3\n")
+    (repo / "a.py").write_text("x = 3\n", encoding="utf-8")
     ok("...and keeps moving as the same dirty file changes (content, not a status summary)",
        A.repo_fingerprint(repo) not in (fp0, fp1))
     subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
@@ -147,20 +147,20 @@ def test_no_progress_guard(tmp: Path, repo: Path) -> None:
     A.record_verification(d, repo, check="a", how="pytest", result="ok", passed=True)
     ok("straight after recording, the tree has not moved",
        L._tree_moved_since_evidence(d, repo) is False)
-    (repo / "untracked-litter.txt").write_text("from the test run")
+    (repo / "untracked-litter.txt").write_text("from the test run", encoding="utf-8")
     ok("...and a test's own litter does not count as movement",
        L._tree_moved_since_evidence(d, repo) is False)
     (repo / "untracked-litter.txt").unlink()
-    (repo / "a.py").write_text("x = 99\n")
+    (repo / "a.py").write_text("x = 99\n", encoding="utf-8")
     ok("a real build edit counts as movement", L._tree_moved_since_evidence(d, repo) is True)
-    (repo / "a.py").write_text("x = 1\n")
+    (repo / "a.py").write_text("x = 1\n", encoding="utf-8")
 
     # Vet grades the tree AGAINST the plan, which is not in the worktree, so a revision fixing a
     # broken check must be vetted.
     print("no-progress guard — a revision since the last verdict always re-vets")
     ok("an unrevised plan reads as not-moved", L._plan_moved_since_evidence(d) is False)
     (d / "artifacts" / "plan.md").write_text(
-        "# Plan\n\n## Revision r1 — 2026-08-07T10:00:00\n- scope: targeted\n\n## Tasks\n")
+        "# Plan\n\n## Revision r1 — 2026-08-07T10:00:00\n- scope: targeted\n\n## Tasks\n", encoding="utf-8")
     ok("a revision recorded after the last verdict forces a vet",
        L._plan_moved_since_evidence(d) is True)
     # ...and once a cycle has run under that revision the guard goes quiet: verify the new plan
@@ -179,7 +179,7 @@ def test_evidence_check_guard(tmp: Path, repo: Path) -> None:
     plan.write_text(
         "# Plan\n\n## Vet plan\ndepth: behavior\nreason: r\nenv: n/a\n\n"
         "### stats-top-n-ranked\n- traces: t\n- mode: command\n- scenario: s\n- expect: e\n"
-        "### sum-csv-flag\n- traces: t\n- mode: command\n- scenario: s\n- expect: e\n")
+        "### sum-csv-flag\n- traces: t\n- mode: command\n- scenario: s\n- expect: e\n", encoding="utf-8")
     # Exact id → records; and the ledger key is exactly that id.
     A.record_verification(d, repo, check="stats-top-n-ranked", how="pytest", result="ok", passed=True)
     ok("exact vet-plan id records", A.evidence_entries(d)[-1]["check"] == "stats-top-n-ranked")
@@ -214,7 +214,7 @@ def test_depth_none(tmp: Path, repo: Path) -> None:
     d = make_item_dir(tmp, "item-nodepth")
     (d / "artifacts" / A.artifact_file("plan")).write_text(
         "# Plan\n\n## Tasks\n- [x] t1 — rename the constant\n\n## Verification plan\n"
-        "depth: none\nreason: renames a constant, nothing observable changes\nenv: none\n")
+        "depth: none\nreason: renames a constant, nothing observable changes\nenv: none\n", encoding="utf-8")
     ok("the plan's depth is readable from one place", A.plan_vet_depth(d) == "none")
 
     # An empty ledger reading as failure made the escape hatch the plan gate advertises a dead
@@ -238,7 +238,7 @@ def test_depth_none(tmp: Path, repo: Path) -> None:
     # up.
     A.scaffold_cycle(d, title="t")
     p = A.note_no_verification(d)
-    body = Path(p).read_text()
+    body = Path(p).read_text(encoding="utf-8")
     ok("the cycle report records the nothing-to-verify fact, quoting the plan's reason",
        "Nothing to verify" in body and "renames a constant" in body)
     ok("...and it is idempotent (a re-vet of the same cycle adds nothing)",
@@ -248,7 +248,7 @@ def test_depth_none(tmp: Path, repo: Path) -> None:
     # And the user-facing vet report renders instead of refusing.
     _lenses(d)
     r = A.write_vet_user_report(d, repo)
-    rep = Path(r["path"]).read_text()
+    rep = Path(r["path"]).read_text(encoding="utf-8")
     ok("report-vet.md renders the no-checks-owed verdict",
        "no checks were owed" in rep and "depth: none" in rep)
 
@@ -256,7 +256,7 @@ def test_depth_none(tmp: Path, repo: Path) -> None:
     d2 = make_item_dir(tmp, "item-haschecks")
     (d2 / "artifacts" / A.artifact_file("plan")).write_text(
         "# Plan\n\n## Verification plan\ndepth: checks\nreason: r\nenv: none\n\n"
-        "### a-check\n- traces: t\n- mode: command\n- scenario: s\n- expect: e\n")
+        "### a-check\n- traces: t\n- mode: command\n- scenario: s\n- expect: e\n", encoding="utf-8")
     ok("depth:checks with an empty ledger is still UNVERIFIED",
        A.evidence_status(d2, repo)["status"] == "unverified")
 
@@ -268,13 +268,13 @@ def test_evidence_orphan_scope(tmp: Path, repo: Path) -> None:
     two = ("# Plan\n\n## Vet plan\ndepth: checks\nreason: r\nenv: none\n\n"
            "### old-check\n- traces: t\n- mode: command\n- scenario: s\n- expect: e\n"
            "### keep-check\n- traces: t\n- mode: command\n- scenario: s\n- expect: e\n")
-    plan.write_text(two)
+    plan.write_text(two, encoding="utf-8")
     A.record_verification(d, repo, check="old-check", how="run", result="bad", passed=False)
     A.record_verification(d, repo, check="keep-check", how="run", result="ok", passed=True)
     ok("both checks on the plan → failed on old-check", A.evidence_status(d, repo)["status"] == "failed")
     # A re-plan (or a build re-pointing its checks) drops old-check; its FAIL is now an ORPHAN.
     plan.write_text("# Plan\n\n## Vet plan\ndepth: checks\nreason: r\nenv: none\n\n"
-                    "### keep-check\n- traces: t\n- mode: command\n- scenario: s\n- expect: e\n")
+                    "### keep-check\n- traces: t\n- mode: command\n- scenario: s\n- expect: e\n", encoding="utf-8")
     ev = A.evidence_status(d, repo)
     ok("orphaned check no longer pins the verdict red (scoped to the current plan)",
        ev["status"] in ("passed", "stale") and ev.get("orphaned") == ["old-check"])
@@ -282,7 +282,7 @@ def test_evidence_orphan_scope(tmp: Path, repo: Path) -> None:
        A.evidence_status(d, repo, scope_to_plan=False)["status"] == "failed")
     # A plan whose checks have NO recorded evidence → unverified, never a false pass.
     plan.write_text("# Plan\n\n## Vet plan\ndepth: checks\nreason: r\nenv: none\n\n"
-                    "### brand-new\n- traces: t\n- mode: command\n- scenario: s\n- expect: e\n")
+                    "### brand-new\n- traces: t\n- mode: command\n- scenario: s\n- expect: e\n", encoding="utf-8")
     ok("no current check has evidence → unverified (not a false pass)",
        A.evidence_status(d, repo)["status"] == "unverified")
 
@@ -294,7 +294,7 @@ def test_deferred_authorization(tmp: Path, repo: Path) -> None:
     plan = d / "artifacts" / A.artifact_file("plan")
     plan.write_text("# P\n\n## Vet plan\ndepth: checks\nreason: r\nenv: none\n\n"
                     "### reserved-edit\n- traces: t\n- mode: command\n- scenario: s\n- expect: e\n"
-                    "### normal\n- traces: t\n- mode: command\n- scenario: s\n- expect: e\n")
+                    "### normal\n- traces: t\n- mode: command\n- scenario: s\n- expect: e\n", encoding="utf-8")
     A.record_verification(d, repo, check="normal", how="run", result="ok", passed=True)
     A.record_verification(d, repo, check="reserved-edit", how="run", result="cant", passed=False)
     ok("without a request the wall is a plain FAIL", A.evidence_status(d, repo)["status"] == "failed")
@@ -330,7 +330,7 @@ def test_deferred_authorization(tmp: Path, repo: Path) -> None:
     plan2 = d2 / "artifacts" / A.artifact_file("plan")
     plan2.write_text("# P\n\n## Vet plan\ndepth: checks\nreason: r\nenv: none\n\n"
                      "### walled\n- traces: t\n- mode: command\n- scenario: s\n- expect: e\n"
-                     "### fine\n- traces: t\n- mode: command\n- scenario: s\n- expect: e\n")
+                     "### fine\n- traces: t\n- mode: command\n- scenario: s\n- expect: e\n", encoding="utf-8")
     A.record_verification(d2, repo, check="fine", how="run", result="ok", passed=True)
     A.record_verification(d2, repo, check="walled", how="run", result="cant", passed=False)
     au2 = A.record_authorization(d2, what="rescope a deliverable", why="reserved", doc="roadmap",
@@ -520,7 +520,7 @@ def _write_item(dev_root: Path, iid: str, phase: str = "vet", status: str = "act
     wt = f"git_worktree: {worktree}\n" if worktree else ""
     (d / "item.md").write_text(
         f"---\nid: {iid}\ntitle: t\nkind: implementation\nphase: {phase}\nstatus: {status}\n"
-        f"{wt}created_at: {date.today().isoformat()}\nupdated_at: {date.today().isoformat()}\n---\n")
+        f"{wt}created_at: {date.today().isoformat()}\nupdated_at: {date.today().isoformat()}\n---\n", encoding="utf-8")
     return d
 
 
@@ -688,8 +688,8 @@ def test_registration() -> None:
     ok("vet runs classify as work-item spend", category_for("vet") == "workitem")
     base = Path("superme_agent/harness/plugins/superme-dev/skills")
     # Whitespace-normalized: prose wraps at ~100 cols, phrase assertions must not care.
-    vet = " ".join((base / "vet" / "SKILL.md").read_text().split())
-    build = " ".join((base / "build" / "SKILL.md").read_text().split())
+    vet = " ".join((base / "vet" / "SKILL.md").read_text(encoding="utf-8").split())
+    build = " ".join((base / "build" / "SKILL.md").read_text(encoding="utf-8").split())
     ok("vet skill: execution-first, record-per-check, never fix",
        "record_verification" in vet and "FAIL" in vet
        and "Fixes belong to the build session" in vet)

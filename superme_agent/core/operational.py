@@ -30,10 +30,10 @@ def parse_frontmatter(text: str) -> tuple[dict, str]:
 def set_frontmatter_field(path: Path, key: str, value: str) -> None:
     """Update or insert one scalar frontmatter field, preserving every other
     line and the body."""
-    text = path.read_text()
+    text = path.read_text(encoding="utf-8")
     m = _FM.match(text)
     if not m:  # no frontmatter yet — prepend a minimal block
-        path.write_text(f"---\n{key}: {value}\n---\n\n{text}")
+        path.write_text(f"---\n{key}: {value}\n---\n\n{text}", encoding="utf-8")
         return
     lines = m.group(1).splitlines()
     for i, line in enumerate(lines):
@@ -42,7 +42,7 @@ def set_frontmatter_field(path: Path, key: str, value: str) -> None:
             break
     else:
         lines.append(f"{key}: {value}")
-    path.write_text(f"---\n{chr(10).join(lines)}\n---\n{m.group(2)}")
+    path.write_text(f"---\n{chr(10).join(lines)}\n---\n{m.group(2)}", encoding="utf-8")
 
 
 def with_frontmatter_default(text: str, key: str, value: str) -> str:
@@ -65,7 +65,7 @@ def read_plugin(plugin_dir: Path) -> dict:
     sk = plugin_dir / "skills"
     if sk.is_dir():
         for p in sorted(sk.glob("*/SKILL.md")):
-            meta, _ = parse_frontmatter(p.read_text())
+            meta, _ = parse_frontmatter(p.read_text(encoding="utf-8"))
             skills.append({"kind": "skill", "name": meta.get("name") or p.parent.name,
                            "description": meta.get("description") or "",
                            "category": meta.get("category") or None,
@@ -75,7 +75,7 @@ def read_plugin(plugin_dir: Path) -> dict:
         for p in sorted(ag.glob("*.md")):
             if p.name.upper() == "README.MD":
                 continue
-            meta, _ = parse_frontmatter(p.read_text())
+            meta, _ = parse_frontmatter(p.read_text(encoding="utf-8"))
             agents.append({"kind": "agent", "name": meta.get("name") or p.stem,
                            "description": meta.get("description") or "",
                            "category": meta.get("category") or None,
@@ -110,7 +110,7 @@ def _plugin_namespace(plugin_dir: Path) -> str:
     if mf.is_file():
         try:
             import json
-            return json.loads(mf.read_text()).get("name") or Path(plugin_dir).name
+            return json.loads(mf.read_text(encoding="utf-8")).get("name") or Path(plugin_dir).name
         except Exception:
             return Path(plugin_dir).name
     return Path(plugin_dir).name
@@ -210,7 +210,7 @@ def read_constitution_dir(directory: Path, *, origin: str) -> list[dict]:
     for p in sorted(d.glob("*.md")):
         if p.name.upper() in ("README.MD",):
             continue
-        meta, body = parse_frontmatter(p.read_text())
+        meta, body = parse_frontmatter(p.read_text(encoding="utf-8"))
         if not body.strip():
             continue
         slug = meta.get("name") or p.stem
@@ -254,7 +254,7 @@ def repo_asset_states(repo_dir: Path | None) -> dict[str, bool]:
     if not f.is_file():
         return {}
     states: dict[str, bool] = {}
-    for ln in f.read_text().splitlines():
+    for ln in f.read_text(encoding="utf-8").splitlines():
         s = ln.strip()
         if not s:
             continue
@@ -269,7 +269,7 @@ def _write_asset_states(repo_dir: Path, states: dict[str, bool]) -> None:
     f = _repo_asset_file(repo_dir)
     f.parent.mkdir(parents=True, exist_ok=True)
     lines = [slug if en else f"{slug}  # off" for slug, en in sorted(states.items())]
-    f.write_text(("\n".join(lines) + "\n") if lines else "")
+    f.write_text(("\n".join(lines) + "\n") if lines else "", encoding="utf-8")
 
 
 def list_repo_assets(repo_dir: Path | None) -> set[str]:
@@ -457,7 +457,7 @@ def ensure_plugin_manifest(root: Path, name: str) -> None:
     import json
     manifest.write_text(json.dumps(
         {"name": name, "description": f"Per-repo operational plugin ({name})", "version": "0.0.1"},
-        indent=2) + "\n")
+        indent=2) + "\n", encoding="utf-8")
 
 
 def publish_artifact(output_form: str, target_scope: str, repo_id: str | None, *,
@@ -482,7 +482,7 @@ def publish_artifact(output_form: str, target_scope: str, repo_id: str | None, *
             content = with_frontmatter_default(content, "updated", created)
         content = with_frontmatter_default(content, "category", "learned")
         path = home / f"{slug}.md"
-        path.write_text(content if content.endswith("\n") else content + "\n")
+        path.write_text(content if content.endswith("\n") else content + "\n", encoding="utf-8")
         return str(path)
     if output_form in ("skill", "agent"):
         root = plugin_root(target_scope, repo_id)
@@ -497,7 +497,7 @@ def publish_artifact(output_form: str, target_scope: str, repo_id: str | None, *
             # A background runner reads this field. Injected only if forge did not set one.
             content = with_frontmatter_default(content, "effort", "medium")
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(content if content.endswith("\n") else content + "\n")
+        path.write_text(content if content.endswith("\n") else content + "\n", encoding="utf-8")
         return str(path)
     raise ValueError(f"unknown output_form: {output_form}")
 
@@ -536,7 +536,7 @@ def published_state(form: str, scope: str, repo_id: str | None, slug: str) -> di
         f = p["file"]
         if not f.is_file():
             return {"present": False, "enabled": False}
-        meta, _ = parse_frontmatter(f.read_text())
+        meta, _ = parse_frontmatter(f.read_text(encoding="utf-8"))
         return {"present": True, "enabled": _is_enabled(meta)}
     if p["live"].is_file():
         return {"present": True, "enabled": True}
@@ -547,18 +547,18 @@ def published_state(form: str, scope: str, repo_id: str | None, slug: str) -> di
 
 def _flip_constitution(path: Path, enabled: bool) -> None:
     """Rewrite a constitution file's `enabled` frontmatter flag in place (insert it if absent)."""
-    text = path.read_text()
+    text = path.read_text(encoding="utf-8")
     val = "true" if enabled else "false"
     m = _FM.match(text)
     if not m:  # no frontmatter — wrap minimally so the flag has a home
-        path.write_text(f"---\nenabled: {val}\n---\n{text.strip()}\n")
+        path.write_text(f"---\nenabled: {val}\n---\n{text.strip()}\n", encoding="utf-8")
         return
     fm, body = m.group(1), m.group(2)
     if re.search(r"(?m)^enabled:.*$", fm):
         fm = re.sub(r"(?m)^enabled:.*$", f"enabled: {val}", fm)
     else:
         fm = fm.rstrip("\n") + f"\nenabled: {val}"
-    path.write_text(f"---\n{fm}\n---\n{body}")
+    path.write_text(f"---\n{fm}\n---\n{body}", encoding="utf-8")
 
 
 def set_published_enabled(form: str, scope: str, repo_id: str | None, slug: str,

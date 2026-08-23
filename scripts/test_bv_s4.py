@@ -61,8 +61,8 @@ def ok(name: str, cond: bool, detail: str = "") -> None:
 def make_item(tmp: Path, name: str) -> Path:
     d = tmp / name
     (d / "artifacts").mkdir(parents=True)
-    (d / "item.md").write_text("---\nid: x\n---\n")
-    (d / "artifacts" / "plan.md").write_text(PLAN)
+    (d / "item.md").write_text("---\nid: x\n---\n", encoding="utf-8")
+    (d / "artifacts" / "plan.md").write_text(PLAN, encoding="utf-8")
     return d
 
 
@@ -70,7 +70,7 @@ def make_repo(tmp: Path) -> Path:
     repo = tmp / "repo"
     repo.mkdir()
     subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
-    (repo / "a.py").write_text("x = 1\n")
+    (repo / "a.py").write_text("x = 1\n", encoding="utf-8")
     subprocess.run(["git", "add", "."], cwd=repo, check=True)
     subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t",
                     "commit", "-qm", "init"], cwd=repo, check=True)
@@ -113,7 +113,7 @@ def test_report_machinery(tmp: Path, repo: Path) -> None:
                                result="3 passed", passed=True)
     ok("first record scaffolds cycle 1 and lands in its fence",
        e1["cycle"] == 1 and (d / "artifacts" / "build-vet-1.md").exists()
-       and "```checks" in (d / "artifacts" / "build-vet-1.md").read_text())
+       and "```checks" in (d / "artifacts" / "build-vet-1.md").read_text(encoding="utf-8"))
     try:
         A.write_vet_user_report(d, repo)
         ok("report still refused while a plan check is unrecorded", False)
@@ -130,7 +130,7 @@ def test_report_machinery(tmp: Path, repo: Path) -> None:
     _lenses(d)
     r1 = A.write_vet_user_report(d, repo, summary="beta is still wrong",
                                  confirms="- alpha holds", looked_at="- read the diff")
-    text = Path(r1["path"]).read_text()
+    text = Path(r1["path"]).read_text(encoding="utf-8")
     ok("the verdict is derived from the fence, never asserted by vet",
        r1["verdict"] == "failed" and r1["failed"] == ["beta-check"])
     ok("…and the failing check is MACHINE-authored into the report, whatever vet wrote",
@@ -150,7 +150,7 @@ def test_report_machinery(tmp: Path, repo: Path) -> None:
                           result="beta() returns 'beta'", passed=True)
     _lenses(d)
     r2 = A.write_vet_user_report(d, repo, summary="all green now")
-    text2 = Path(r2["path"]).read_text()
+    text2 = Path(r2["path"]).read_text(encoding="utf-8")
     ok("the re-written report drops the didn't-hold block once nothing is red",
        r2["failed"] == [] and "What didn't hold" not in text2, text2[:400])
     ok("…and the ✗→✓ history survives where the Task tab reads it",
@@ -203,8 +203,8 @@ def test_tool(tmp: Path, repo: Path) -> None:
     dev_root = tmp / "devroot"
     d = dev_root / "work-items" / "it1"
     (d / "artifacts").mkdir(parents=True)
-    (d / "item.md").write_text("---\nid: it1\n---\n")
-    (d / "artifacts" / "plan.md").write_text(PLAN)
+    (d / "item.md").write_text("---\nid: it1\n---\n", encoding="utf-8")
+    (d / "artifacts" / "plan.md").write_text(PLAN, encoding="utf-8")
     A.record_verification(d, repo, check="alpha-check", how="pytest -q",
                           result="3 passed", passed=True)
 

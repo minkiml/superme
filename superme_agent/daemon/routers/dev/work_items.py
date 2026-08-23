@@ -288,7 +288,7 @@ async def dev_work_item_doc(item_id: str, path: str, context_id: str = "global",
     item = dev.read_work_item(_dev_root(context_id), item_id) or {}
     editable = (editable_artifact(item_dir, path) is not None
                 and not status_router.is_terminal(item))
-    return HTMLResponse(render_doc_page(item_id, path, target.read_text(),
+    return HTMLResponse(render_doc_page(item_id, path, target.read_text(encoding="utf-8"),
                                         context_id=context_id, editable=editable))
 
 
@@ -324,7 +324,7 @@ async def dev_work_item_doc_edit(item_id: str, body: DocEditBody,
     issues = artifacts.owner_edit(item_dir, artifact, body.text, item_kind=item.get("kind"))
     if issues:
         return {"ok": True, "id": item_id, "path": body.path, "saved": False, "issues": issues}
-    text = (item_dir / "artifacts" / artifacts.artifact_file(artifact)).read_text()
+    text = (item_dir / "artifacts" / artifacts.artifact_file(artifact)).read_text(encoding="utf-8")
     dev_store.log_event(body.context_id, "artifact.owner_edit",
                         f"You edited {artifacts.artifact_file(artifact)} by hand",
                         item_id=item_id, actor="owner",

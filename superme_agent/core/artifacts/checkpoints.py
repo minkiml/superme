@@ -65,9 +65,9 @@ def write_checkpoint(item_dir: Path, repo_dir: Path | None, *, working_on: str, 
     if repo_dir and Path(repo_dir).is_dir():
         try:
             r = subprocess.run(["git", "log", "-1", "--format=%h %s", "HEAD"], cwd=repo_dir,
-                               capture_output=True, text=True, timeout=10)
+                               capture_output=True, text=True, timeout=10, encoding="utf-8")
             b = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=repo_dir,
-                               capture_output=True, text=True, timeout=10)
+                               capture_output=True, text=True, timeout=10, encoding="utf-8")
             if r.returncode == 0:
                 git_line = f"{b.stdout.strip()} @ {r.stdout.strip()}"
         except (OSError, subprocess.SubprocessError):
@@ -91,7 +91,7 @@ def checkpoint_feed(item_dir: Path, *, limit: int = 30) -> list[dict]:
         return []
     out: list[dict] = []
     for p in sorted(cdir.glob("*.md"), key=lambda p: p.stem, reverse=True)[:limit]:
-        text = p.read_text()
+        text = p.read_text(encoding="utf-8")
         git = None
         m = re.search(r"(?m)^git: (.+)$", text)
         if m:
@@ -125,11 +125,11 @@ def latest_checkpoint(item_dir: Path, *, char_cap: int = 6000,
         if role in INTAKE_PHASES:
             wants.append(f"\nrole: {LEGACY_INTAKE_SLOT}\n")
         files = [p for p in files
-                 if (t := p.read_text())
+                 if (t := p.read_text(encoding="utf-8"))
                  and (any(w in t for w in wants) or "\nrole: " not in t)]
         if not files:
             return None
-    text = files[-1].read_text()
+    text = files[-1].read_text(encoding="utf-8")
     return {"path": str(files[-1]), "text": text[:char_cap],
             "truncated": len(text) > char_cap}
 
@@ -150,5 +150,5 @@ def read_session_memory(root_dir: Path, session_id: str, *,
     path = session_memory_path(root_dir, session_id)
     if not path.is_file():
         return None
-    text = path.read_text()
+    text = path.read_text(encoding="utf-8")
     return {"path": str(path), "text": text[:char_cap], "truncated": len(text) > char_cap}

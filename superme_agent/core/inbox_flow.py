@@ -120,7 +120,7 @@ def read_brief(dev_root: Path, row: dict) -> tuple[str | None, bool]:
     """This row's brief as raw markdown (frontmatter kept — the agent sees it too), plus whether
     it is writable."""
     path, editable = brief_location(dev_root, row)
-    return (path.read_text() if path.is_file() else None), editable
+    return (path.read_text(encoding="utf-8") if path.is_file() else None), editable
 
 
 def write_brief(dev_root: Path, row: dict, content: str) -> Path:

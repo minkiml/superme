@@ -30,7 +30,7 @@ def cycle_reports(item_dir: Path) -> list[dict]:
     for p in adir.iterdir():
         m = _CYCLE_FILE.match(p.name)
         if m:
-            rev = _CYCLE_REVISION.search(p.read_text()[:400])
+            rev = _CYCLE_REVISION.search(p.read_text(encoding="utf-8")[:400])
             out.append({"cycle": int(m.group(1)), "path": str(p),
                         "revision": rev.group(1) if rev else ""})
     return sorted(out, key=lambda r: r["cycle"])
@@ -43,7 +43,7 @@ def latest_cycle_report(item_dir: Path, *, char_cap: int = 8000) -> dict | None:
     if not reports:
         return None
     r = reports[-1]
-    text = Path(r["path"]).read_text()
+    text = Path(r["path"]).read_text(encoding="utf-8")
     return {**r, "text": text[:char_cap], "truncated": len(text) > char_cap}
 
 
@@ -59,7 +59,7 @@ def scaffold_cycle(item_dir: Path, *, title: str = "") -> dict:
     cycle = 1
     if reports:
         last = reports[-1]
-        cycle = last["cycle"] if not _cycle_closed(Path(last["path"]).read_text()) \
+        cycle = last["cycle"] if not _cycle_closed(Path(last["path"]).read_text(encoding="utf-8")) \
             else last["cycle"] + 1
     adir = Path(item_dir) / "artifacts"
     path = adir / f"build-vet-{cycle}.md"
@@ -85,7 +85,7 @@ def _append_to_section(path: Path, heading: str, entry: str, *, fence: str = "")
     ```<fence>. Raises when the heading is absent — a mangled file must fail loud.
 
     The fence is NAMED, so one appender and one parser serve both lanes."""
-    lines = path.read_text().splitlines()
+    lines = path.read_text(encoding="utf-8").splitlines()
     start = next((i for i, ln in enumerate(lines)
                   if re.match(rf"^##\s+{re.escape(heading)}\s*$", ln)), None)
     if start is None:
@@ -159,7 +159,7 @@ def read_cycle_outcomes(item_dir: Path, *, revision: str | None = None) -> list[
     for r in cycle_reports(item_dir):
         if revision is not None and r["revision"] != revision:
             continue
-        body = split_sections(Path(r["path"]).read_text()).get("Cycle outcome", "")
+        body = split_sections(Path(r["path"]).read_text(encoding="utf-8")).get("Cycle outcome", "")
         cur: dict | None = None
         for line in body.splitlines():
             m = re.match(r"^### (?P<ts>\S+) — (?P<decision>\S+)$", line)

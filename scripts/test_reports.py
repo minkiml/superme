@@ -56,12 +56,12 @@ def ok(msg: str, cond: bool = True) -> None:
 def _item(plan: str = PLAN) -> Path:
     item = Path(tempfile.mkdtemp(prefix="rep-")) / "item"
     (item / "artifacts").mkdir(parents=True)
-    (item / "artifacts" / _arts.artifact_file("plan")).write_text(plan)
+    (item / "artifacts" / _arts.artifact_file("plan")).write_text(plan, encoding="utf-8")
     return item
 
 
 def _report(item: Path, **kw) -> str:
-    return Path(_arts.write_plan_user_report(item, **{"summary": "s", **kw})["path"]).read_text()
+    return Path(_arts.write_plan_user_report(item, **{"summary": "s", **kw})["path"]).read_text(encoding="utf-8")
 
 
 def _lenses(d: Path) -> None:
@@ -140,14 +140,14 @@ def test_nothing_factual_is_the_agent_s_to_assert():
     # Doing as told crashed the writer.
     omitted = Path(_arts.write_plan_user_report(
         _item(), summary="s", approach=None, confirm=None,
-        decisions=None, assumptions=None)["path"]).read_text()
+        decisions=None, assumptions=None)["path"]).read_text(encoding="utf-8")
     ok("an omitted optional slot writes the report instead of raising", "**Stats:**" in omitted)
     ok("…and leaves no empty block behind it",
        "**Decisions:**" not in omitted and "**Assumptions:**" not in omitted)
     # The template owns the headings: an author who repeats one is being tidy, and it renders
     # twice.
     echoed = Path(_arts.write_plan_user_report(
-        _item(), summary="s", approach="## Approach\n- the real body")["path"]).read_text()
+        _item(), summary="s", approach="## Approach\n- the real body")["path"]).read_text(encoding="utf-8")
     ok("a slot that echoes its own heading renders it once",
        echoed.count("## Approach") == 1 and "- the real body" in echoed)
 
@@ -158,7 +158,7 @@ def test_a_research_item_gets_the_other_shape():
     res = _item("# Plan\n\n## Tasks\n- [ ] t1 — time it at four sizes\n")
     text = Path(_arts.write_plan_user_report(
         res, summary="Measure where the time goes.", approach="- where the time goes",
-        confirm="Real runs at four sizes.", item_kind="research")["path"]).read_text()
+        confirm="Real runs at four sizes.", item_kind="research")["path"]).read_text(encoding="utf-8")
     ok("it asks what we're trying to find out, not what will be built",
        "## What we're trying to find out" in text and "## Approach" not in text)
     ok("the confirmation table is gone with the verification plan it was rendered from",
@@ -270,7 +270,7 @@ def test_a_duplicated_section_never_swallows_recorded_evidence():
     _arts.record_verification(item, None, check="suite-green", how="ran it", result="exit 0",
                               passed=True)
     path = next(Path(r["path"]) for r in _arts.cycle_reports(item))
-    path.write_text(path.read_text() + "\n## Verification\n\n## Cycle outcome\n")
+    path.write_text(path.read_text(encoding="utf-8") + "\n## Verification\n\n## Cycle outcome\n", encoding="utf-8")
     ok("a second empty section does not erase the first one's entries",
        len(_arts.evidence_entries(item)) == 1)
     ok("…and the verdict still reaches the check table",
@@ -294,7 +294,7 @@ def test_a_check_that_changed_across_cycles_reads_as_a_trail():
     _arts.record_diagnosis(item, check="suite-green", where="tally/dates.py:12",
                            why="the parser still returns today")
     _lenses(item)
-    text = Path(_arts.write_vet_user_report(item, None)["path"]).read_text()
+    text = Path(_arts.write_vet_user_report(item, None)["path"]).read_text(encoding="utf-8")
     hist = {v["check"]: [h["passed"] for h in v["history"]]
             for r in _arts.proof_rows(item) for v in r["verified"]}
     ok("a check that was fixed shows the loop's story, not just the latest mark",
@@ -323,7 +323,7 @@ def test_the_vet_report_is_hybrid_and_the_split_is_load_bearing():
     # Vet writes an all-clear. The ledger says otherwise, and the ledger wins.
     text = Path(_arts.write_vet_user_report(
         item, None, summary="Everything holds.", confirms="- it all works",
-        looked_at="- read the diff")["path"]).read_text()
+        looked_at="- read the diff")["path"]).read_text(encoding="utf-8")
     ok("vet's own words are carried verbatim — this is its report",
        "**Summary:** Everything holds." in text and "- it all works" in text)
     ok("…but the failure lands anyway, in a section vet does not write",
@@ -337,7 +337,7 @@ def test_the_vet_report_is_hybrid_and_the_split_is_load_bearing():
     echoed = Path(_arts.write_vet_user_report(
         item, None, summary="s", confirms="## What this confirms\n- it works",
         looked_at="## What else was looked at\n- the diff",
-        unknown="## What I can't tell you\n- nothing")["path"]).read_text()
+        unknown="## What I can't tell you\n- nothing")["path"]).read_text(encoding="utf-8")
     for h in ("## What this confirms", "## What else was looked at", "## What I can't tell you"):
         ok(f"`{h}` is written once, not echoed", echoed.count(h) == 1)
     ok("…and the body under the echoed heading survives",
@@ -347,7 +347,7 @@ def test_the_vet_report_is_hybrid_and_the_split_is_load_bearing():
     lensed = Path(_arts.write_vet_user_report(
         item, None, summary="s", confirms="- c",
         looked_at="- Intent: does it solve it?\n- **Safety:** already bold\n"
-                  "- Something else: not a lens")["path"]).read_text()
+                  "- Something else: not a lens")["path"]).read_text(encoding="utf-8")
     ok("a lens name opening a bullet is bolded", "- **Intent:** does it solve it?" in lensed)
     ok("…without double-bolding one that already is", "- **Safety:** already bold" in lensed)
     ok("…and a bullet that is not a lens is left alone",
@@ -368,7 +368,7 @@ def test_a_template_s_authoring_notes_never_become_the_document():
     # review.
     item = _item()
     r = _arts.scaffold_cycle(item)
-    text = Path(r["path"]).read_text()
+    text = Path(r["path"]).read_text(encoding="utf-8")
     ok("the scaffolded cycle report carries no authoring note", "<!--" not in text)
     # The guidance already rides the tool result, so an in-file copy shipped twice and only the
     # in-file one could leak.
@@ -382,7 +382,7 @@ def test_a_template_s_authoring_notes_never_become_the_document():
     for s in ("review", "build", "close", "investigate", "triage"):
         d = ROOT / f"superme_agent/harness/plugins/superme-dev/skills/{s}/templates"
         for tpl in sorted(d.glob("*.md")) if d.is_dir() else []:
-            ok(f"{s}/{tpl.name} ships no authoring comment to copy", "<!--" not in tpl.read_text())
+            ok(f"{s}/{tpl.name} ships no authoring comment to copy", "<!--" not in tpl.read_text(encoding="utf-8"))
     ok("…and the shared authoring contract states it once, for every kind",
        "neither survives into the file you write"
        in src("superme_agent/harness/plugins/superme-dev/references/artifacts.md"))
@@ -397,7 +397,7 @@ def test_a_cycle_outcome_names_the_cycle_it_closed():
                               passed=True)
     _arts.append_cycle_outcome(item, evidence="passed", decision="review", reason="green",
                                tokens=157844, budget=500000)
-    text = Path(next(r["path"] for r in _arts.cycle_reports(item))).read_text()
+    text = Path(next(r["path"] for r in _arts.cycle_reports(item))).read_text(encoding="utf-8")
     # The reader had the cycle and returned it; it never reached the page, so the owner counted
     # headings by hand.
     ok("the decision says which cycle it ended", "- cycle: 1" in text)
@@ -432,7 +432,7 @@ BRIEF = """# Triage User-facing Brief
 def _brief(text: str = BRIEF) -> Path:
     item = Path(tempfile.mkdtemp(prefix="fromyou-")) / "item"
     (item / "reports").mkdir(parents=True)
-    (item / "reports" / "report-triage.md").write_text(text)
+    (item / "reports" / "report-triage.md").write_text(text, encoding="utf-8")
     return item
 
 
@@ -461,7 +461,7 @@ def test_the_owner_s_own_section_survives_the_round_trip():
     ok("…and a bolded run of their own is content, not a section break",
        back["references"][1] == refs[1])
 
-    text = (item / "reports" / "report-triage.md").read_text()
+    text = (item / "reports" / "report-triage.md").read_text(encoding="utf-8")
     ok("the rest of the brief is untouched", "| accept an explicit date | back-fill" in text
        and text.count("**Summary:**") == 1)
     ok("…and the section is still the two labels the surface renders",
@@ -478,7 +478,7 @@ def test_the_owner_s_own_section_survives_the_round_trip():
     ok("clearing it clears it — no residue from the previous save",
        _arts.owner_input(item) == {"exists": True, "references": [], "notes": []})
     ok("…and the labels stay, because they are how the owner knows the section is theirs",
-       "**Verification notes:**" in (item / "reports" / "report-triage.md").read_text())
+       "**Verification notes:**" in (item / "reports" / "report-triage.md").read_text(encoding="utf-8"))
 
 
 def test_a_slot_is_one_bullet_however_it_was_typed():
@@ -498,7 +498,7 @@ def test_a_slot_is_one_bullet_however_it_was_typed():
     ok("a slot with nothing in it is dropped, not written as a bare bullet",
        [n["description"] for n in back["notes"]] == ["prove the spacing collapses"])
     ok("…so the file carries exactly one bullet under each label",
-       (item / "reports" / "report-triage.md").read_text().count("\n- ") == 2)
+       (item / "reports" / "report-triage.md").read_text(encoding="utf-8").count("\n- ") == 2)
 
 
 def test_the_owner_s_words_reach_the_page_with_the_labels_that_name_them():
@@ -521,7 +521,7 @@ def test_the_owner_s_words_reach_the_page_with_the_labels_that_name_them():
     ok("an unwritten section is not printed as a bare heading",
        "## From you" not in _arts.report_text(empty, "triage")["text"])
     ok("…while the file still carries it, because the editor writes into the file",
-       "## From you" in (empty / "reports" / "report-triage.md").read_text())
+       "## From you" in (empty / "reports" / "report-triage.md").read_text(encoding="utf-8"))
 
 
 def test_the_editor_never_authors_a_report_no_phase_wrote():
@@ -597,7 +597,7 @@ def test_a_phase_card_never_shows_the_previous_pass():
     item = Path(tempfile.mkdtemp(prefix="live-")) / "item"
     (item / "reports").mkdir(parents=True)
     (item / "reports" / "report-build.md").write_text(
-        "# Build User-facing Report\n\n**Summary:** done, after one round.\n")
+        "# Build User-facing Report\n\n**Summary:** done, after one round.\n", encoding="utf-8")
     entered_before = [{"kind": "phase.advance", "created_at": "2020-01-01T00:00:00+00:00"}]
     entered_after = [{"kind": "phase.advance", "created_at": "2099-01-01T00:00:00+00:00"}]
     ok("a report written since the item entered this phase is the current one",
@@ -614,7 +614,7 @@ def test_a_phase_card_never_shows_the_previous_pass():
     # A re-entered phase logs no advance, so a reader that knows only advances calls a stale
     # report current.
     (item / "reports" / "report-plan.md").write_text(
-        "# Plan User-facing Report\n\n**Summary:** the plan from the first pass.\n")
+        "# Plan User-facing Report\n\n**Summary:** the plan from the first pass.\n", encoding="utf-8")
     for route in ("review.route", "revise.route"):
         back = [{"kind": route, "created_at": "2099-01-01T00:00:00+00:00"},
                 {"kind": "phase.advance", "created_at": "2020-01-01T00:00:00+00:00"}]
@@ -631,18 +631,18 @@ def test_every_report_can_reach_the_record_behind_it():
     (item / "reports").mkdir(parents=True)
     (item / "artifacts").mkdir(parents=True)
     for phase in ("triage", "plan", "review"):
-        (item / "reports" / f"report-{phase}.md").write_text(f"# {phase}\n\n**Summary:** x\n")
+        (item / "reports" / f"report-{phase}.md").write_text(f"# {phase}\n\n**Summary:** x\n", encoding="utf-8")
     ok("a report whose record is not on disk links to nothing rather than to a 404",
        _arts.report_text(item, "review")["contract"] is None)
 
-    (item / "artifacts" / "review.md").write_text("# Review record\n")
-    (item / "artifacts" / "brief.md").write_text("# Brief\n")
+    (item / "artifacts" / "review.md").write_text("# Review record\n", encoding="utf-8")
+    (item / "artifacts" / "brief.md").write_text("# Brief\n", encoding="utf-8")
     ok("the review report reaches its own agent-facing record",
        _arts.report_text(item, "review")["contract"] == "artifacts/review.md")
     ok("…and triage still reaches the brief", _arts.report_text(item, "triage")["contract"]
        == "artifacts/brief.md")
     # Close is the deliberate None: its report IS the record, so a link would point at itself.
-    (item / "reports" / "report-close.md").write_text("# close\n\n**Summary:** x\n")
+    (item / "reports" / "report-close.md").write_text("# close\n\n**Summary:** x\n", encoding="utf-8")
     ok("close links to nothing, because its report is the record",
        _arts.report_text(item, "close")["contract"] is None)
 

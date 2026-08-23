@@ -24,7 +24,7 @@ class Base:
             return
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(REPOS_SEED_FILE.read_text())
+            path.write_text(REPOS_SEED_FILE.read_text(encoding="utf-8"), encoding="utf-8")
             log.info("seeded %s from %s", path.name, REPOS_SEED_FILE.name)
         except OSError as e:
             log.warning("could not seed %s (%s); starting with no repos", path.name, e)

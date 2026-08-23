@@ -132,7 +132,7 @@ def test_auto_checkpoint(tmp: Path) -> None:
     root = internal / "dev"
     iid = dev.create_work_item(root, "checkpointed", kind="implementation")["id"]
     item_dir = root / "work-items" / iid
-    (item_dir / "artifacts" / "plan.md").write_text("## Tasks\n- [x] done one\n- [ ] open one\n")
+    (item_dir / "artifacts" / "plan.md").write_text("## Tasks\n- [x] done one\n- [ ] open one\n", encoding="utf-8")
     ctx = SimpleNamespace(internal_root=internal, cwd=tmp, id="t")
     session_start = time.time() - 5
     ok("banks a fallback checkpoint", bank_auto_checkpoint(ctx, iid, since=session_start) is True)

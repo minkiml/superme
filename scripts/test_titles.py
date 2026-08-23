@@ -149,7 +149,7 @@ def test_a_rename_touches_nothing_but_the_title():
         for field in ("id", "root_id", "parent_id", "kind", "phase", "status", "created_at"):
             ok(before.get(field) == after.get(field), f"{field} is untouched by a rename")
         ok((root / "work-items" / wi["id"]).is_dir(), "the folder is still the id")
-        ok("the body" in (root / "work-items" / wi["id"] / "item.md").read_text(),
+        ok("the body" in (root / "work-items" / wi["id"] / "item.md").read_text(encoding="utf-8"),
            "and the description survives")
     finally:
         shutil.rmtree(root, ignore_errors=True)

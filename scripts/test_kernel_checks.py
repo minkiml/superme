@@ -69,7 +69,7 @@ def _item() -> tuple[Path, Path]:
     item, wt = root / "item", root / "wt"
     (item / "artifacts").mkdir(parents=True)
     wt.mkdir()
-    (item / "artifacts" / _arts.artifact_file("plan")).write_text(PLAN)
+    (item / "artifacts" / _arts.artifact_file("plan")).write_text(PLAN, encoding="utf-8")
     _arts.scaffold_cycle(item, title="probe")
     return item, wt
 
@@ -108,7 +108,7 @@ def test_kernel_sandbox_holds():
 
     def run(cmd: str) -> int:
         return subprocess.run(kernel_command(cmd, [inside]), cwd=str(inside),
-                              capture_output=True, text=True, timeout=60).returncode
+                              capture_output=True, text=True, timeout=60, encoding="utf-8").returncode
 
     ok("a write inside the declared root succeeds", run(f"echo hi > {inside}/a.txt") == 0)
     ok("a write outside it is refused by the kernel", run(f"echo hi > {outside}/a.txt") != 0)
@@ -127,7 +127,7 @@ def test_exit_code_decides_and_the_kernel_records():
         print("  ..  skipped (no sandbox on this host)")
         return
     item, wt = _item()
-    (wt / "built.txt").write_text("built\n")          # makes suite-green pass, tally-adds still exits 3
+    (wt / "built.txt").write_text("built\n", encoding="utf-8")          # makes suite-green pass, tally-adds still exits 3
     rows = _checks.execute(item, wt, title="probe")
     by = {r["check"]: r for r in rows}
     ok("both runnable checks ran", set(by) == {"suite-green", "tally-adds"})
@@ -197,7 +197,7 @@ def test_the_loop_runs_them_before_the_session():
     ok("the plan skill teaches when to write a run block, and when not to",
        "run:" in plan_skill and "judge it" in plan_skill)
     tmpl = (ROOT / "superme_agent/harness/plugins/superme-dev/skills/plan/templates/"
-                   "plan-template.md").read_text()
+                   "plan-template.md").read_text(encoding="utf-8")
     ok("the template offers the field as optional", "- run: <fill:optional" in tmpl)
 
 

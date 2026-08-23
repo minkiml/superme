@@ -53,7 +53,7 @@ def _task_ids(text: str) -> list[str]:
 
 def _read(item_dir: Path) -> str:
     p = plan_path(item_dir)
-    return p.read_text() if p.is_file() else ""
+    return p.read_text(encoding="utf-8") if p.is_file() else ""
 
 
 def revision_ids(text: str) -> list[str]:
@@ -363,7 +363,7 @@ def revise(item_dir: Path, *, changes: list, feedback: str, directive: str = "",
     """Apply one revision atomically: the named edits, then the block explaining them, above the
     pinned live zone. Trusts validated input."""
     path = plan_path(item_dir)
-    text = _pin_live_zone(path.read_text())
+    text = _pin_live_zone(path.read_text(encoding="utf-8"))
     applied: list[dict] = []
     n_ops = 0
     hwm = task_high_water(text)

@@ -30,7 +30,7 @@ def ok(name: str, cond: bool, detail: str = "") -> None:
 
 
 def sh(cwd: Path, *args: str) -> str:
-    return subprocess.run(args, cwd=str(cwd), capture_output=True, text=True, check=True).stdout
+    return subprocess.run(args, cwd=str(cwd), capture_output=True, text=True, check=True, encoding="utf-8").stdout
 
 
 def make_repo(tmp: Path) -> Path:
@@ -39,8 +39,8 @@ def make_repo(tmp: Path) -> Path:
     sh(repo, "git", "init", "-b", "main")
     sh(repo, "git", "config", "user.email", "t@t")
     sh(repo, "git", "config", "user.name", "t")
-    (repo / "app.py").write_text("line1\nline2\nline3\n")
-    (repo / "README.md").write_text("readme\n")
+    (repo / "app.py").write_text("line1\nline2\nline3\n", encoding="utf-8")
+    (repo / "README.md").write_text("readme\n", encoding="utf-8")
     sh(repo, "git", "add", "-A")
     sh(repo, "git", "commit", "-m", "init")
     return repo
@@ -73,7 +73,7 @@ def test_lifecycle(repo: Path) -> None:
     except G.GitError:
         ok("duplicate create refused", True)
     # Commits in the worktree land on the item branch only.
-    (wt / "feature.py").write_text("new\n")
+    (wt / "feature.py").write_text("new\n", encoding="utf-8")
     commit_all(wt, "feat")
     ok("worktree commit on branch, not main",
        "feature.py" in sh(repo, "git", "ls-tree", "--name-only", rec["branch"])
@@ -99,17 +99,17 @@ def test_merge_flow(repo: Path) -> None:
     print("merge machinery (heavy path)")
     rec = G.create_worktree(repo, RID, "bbb222", "merge me")
     wt = Path(rec["worktree"])
-    (wt / "merged.py").write_text("payload\n")
+    (wt / "merged.py").write_text("payload\n", encoding="utf-8")
     commit_all(wt, "work")
     # Freshness: land an unrelated commit on main, then sync it INTO the branch.
-    (repo / "other.txt").write_text("trunk moved\n")
+    (repo / "other.txt").write_text("trunk moved\n", encoding="utf-8")
     commit_all(repo, "trunk work")
     res = G.sync_from_main(repo, wt)
     ok("freshness merge brings trunk in",
        res["merged"] and (wt / "other.txt").exists(), str(res))
     ok("second sync is up-to-date noop", G.sync_from_main(repo, wt).get("up_to_date") is True)
     # Merge to main with an UNRELATED dirty file in main → auto-stash + verified pop.
-    (repo / "scratchpad.txt").write_text("uncommitted note\n")
+    (repo / "scratchpad.txt").write_text("uncommitted note\n", encoding="utf-8")
     res = G.merge_to_main(repo, RID, "bbb222", rec["branch"])
     ok("merged to main with backup ref",
        res["merged"] and res["backup_ref"].startswith("refs/backup/bbb222-"), str(res))
@@ -125,7 +125,7 @@ def test_merge_flow(repo: Path) -> None:
        rev["reverted"] and sh(repo, "git", "rev-parse", "main").strip() == pre)
     # …re-merge, land a commit ON TOP → revert must refuse (safe-only window).
     res2 = G.merge_to_main(repo, RID, "bbb222", rec["branch"])
-    (repo / "later.txt").write_text("landed after\n")
+    (repo / "later.txt").write_text("landed after\n", encoding="utf-8")
     commit_all(repo, "after merge")
     try:
         G.revert_merge(repo, res2["backup_ref"])
@@ -135,9 +135,9 @@ def test_merge_flow(repo: Path) -> None:
     # Overlap refusal: dirty file in main that the NEXT branch also touches.
     rec2 = G.create_worktree(repo, RID, "ccc333", "overlap")
     wt2 = Path(rec2["worktree"])
-    (wt2 / "app.py").write_text("line1\nbranch change\nline3\n")
+    (wt2 / "app.py").write_text("line1\nbranch change\nline3\n", encoding="utf-8")
     commit_all(wt2, "branch touches app.py")
-    (repo / "app.py").write_text("line1\nline2\nline3\ndirty main edit\n")
+    (repo / "app.py").write_text("line1\nline2\nline3\ndirty main edit\n", encoding="utf-8")
     try:
         G.merge_to_main(repo, RID, "ccc333", rec2["branch"])
         ok("overlap detected → merge refused", False)
@@ -151,9 +151,9 @@ def test_conflict_resolution(repo: Path) -> None:
     print("conflict → in-tree resolution (the Resolve-with-Agent mechanical path)")
     rec = G.create_worktree(repo, RID, "ddd444", "conflict")
     wt = Path(rec["worktree"])
-    (wt / "app.py").write_text("line1\nBRANCH version\nline3\n")
+    (wt / "app.py").write_text("line1\nBRANCH version\nline3\n", encoding="utf-8")
     commit_all(wt, "branch side")
-    (repo / "app.py").write_text("line1\nMAIN version\nline3\n")
+    (repo / "app.py").write_text("line1\nMAIN version\nline3\n", encoding="utf-8")
     commit_all(repo, "main side")
     # Default: conflict aborts + reports, tree left clean.
     res = G.sync_from_main(repo, wt)
@@ -168,7 +168,7 @@ def test_conflict_resolution(repo: Path) -> None:
         ok("finish refused while markers remain", False)
     except G.GitError as e:
         ok("finish refused while markers remain", "app.py" in str(e), str(e))
-    (wt / "app.py").write_text("line1\nMERGED version\nline3\n")   # the agent's resolution
+    (wt / "app.py").write_text("line1\nMERGED version\nline3\n", encoding="utf-8")   # the agent's resolution
     fin = G.finish_merge(wt)
     ok("finish completed the merge", fin["merged"] and not G.check_git_state(wt)["in_merge"])
     # Freshness rule payoff: the merge back to main is now trivial.
@@ -181,13 +181,13 @@ def test_family(repo: Path) -> None:
     print("blocking-child family (light path)")
     prec = G.create_worktree(repo, RID, "eee555", "parent")
     pwt = Path(prec["worktree"])
-    (pwt / "parent.py").write_text("parent work\n")
+    (pwt / "parent.py").write_text("parent work\n", encoding="utf-8")
     commit_all(pwt, "parent work")
     # Blocking child branches FROM the parent's branch → it sees parent's unmerged work.
     crec = G.create_worktree(repo, RID, "fff666", "child", base=prec["branch"])
     cwt = Path(crec["worktree"])
     ok("child based on parent branch", (cwt / "parent.py").exists() and crec["base"] == prec["branch"])
-    (cwt / "child.py").write_text("child work\n")
+    (cwt / "child.py").write_text("child work\n", encoding="utf-8")
     commit_all(cwt, "child work")
     # Light merge into the parent's branch — main untouched, no backup ceremony.
     res = G.merge_into_parent(repo, crec["branch"], pwt)
@@ -456,20 +456,20 @@ def test_vet_env(repo: Path, tmp: Path) -> None:
     wt.mkdir()
     ok("empty dir → no servers found", G.servers_in(wt) == [])
     ok("no state file → nothing signalled", G.stop_vet_env(wt) == [])
-    (wt / ".vet-env.json").write_text("{not json")
+    (wt / ".vet-env.json").write_text("{not json", encoding="utf-8")
     ok("unreadable state → nothing signalled", G.stop_vet_env(wt) == [])
-    (wt / ".vet-env.json").write_text('{"port": 8800}')
+    (wt / ".vet-env.json").write_text('{"port": 8800}', encoding="utf-8")
     ok("state without a pid → nothing signalled", G.stop_vet_env(wt) == [])
-    (wt / ".vet-env.json").write_text('{"pid": 0, "port": 8800}')
+    (wt / ".vet-env.json").write_text('{"pid": 0, "port": 8800}', encoding="utf-8")
     ok("pid 0 → nothing signalled", G.stop_vet_env(wt) == [])
 
     dead = _spawn_sleeper()
     dead.kill(); dead.wait()
-    (wt / ".vet-env.json").write_text(f'{{"pid": {dead.pid}, "port": 8800}}')
+    (wt / ".vet-env.json").write_text(f'{{"pid": {dead.pid}, "port": 8800}}', encoding="utf-8")
     ok("already-dead pid → nothing signalled", G.stop_vet_env(wt) == [])
 
     live = _spawn_sleeper()
-    (wt / ".vet-env.json").write_text(f'{{"pid": {live.pid}, "port": 8800}}')
+    (wt / ".vet-env.json").write_text(f'{{"pid": {live.pid}, "port": 8800}}', encoding="utf-8")
     ok("state-file fallback signals the recorded pid", G.stop_vet_env(wt) == [live.pid])
     ok("state-file fallback actually kills it", _reaped(live))
 
@@ -483,7 +483,7 @@ def test_vet_env(repo: Path, tmp: Path) -> None:
 
     # TWO servers in one worktree — the live failure. The state file can only ever name one.
     a, b = _spawn_listener(wt), _spawn_listener(wt)
-    (wt / ".vet-env.json").write_text(f'{{"pid": {a.pid}, "port": 8800}}')
+    (wt / ".vet-env.json").write_text(f'{{"pid": {a.pid}, "port": 8800}}', encoding="utf-8")
     found = _settle(lambda: G.servers_in(wt), want=2)
     ok("both servers found", sorted(found) == sorted([a.pid, b.pid]), str(found))
     ok("both signalled", sorted(G.stop_vet_env(wt)) == sorted([a.pid, b.pid]))

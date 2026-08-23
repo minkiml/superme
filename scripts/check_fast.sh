@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Fast, read-only gate to run between edits. Seconds, and it mutates nothing.
 #
-#   bash scripts/check_fast.sh                 # route surface + import surface + layers + FE tsc
+#   bash scripts/check_fast.sh                 # route + import surface + layers + encodings + tsc
 #   STRICT=1 bash scripts/check_fast.sh        # also fail on ANY OpenAPI shape drift
 #
 # Every check reads the code on disk, never a running daemon: one serving older code would
@@ -34,12 +34,15 @@ PYTHONPATH=. "$PY" -m scripts.api_snapshot check; API=$?
 echo "▸ import layering"
 PYTHONPATH=. "$PY" -m scripts.layers; LAYERS=$?
 
+echo "▸ declared encodings"
+PYTHONPATH=. "$PY" -m scripts.encoding_gate; ENC=$?
+
 echo "▸ frontend typecheck"
 ( cd web/frontend && npx -y tsc --noEmit ); TSC=$?
 
 echo "————"
-if [ $IMPORT -eq 0 ] && [ $PARITY -eq 0 ] && [ $API -eq 0 ] && [ $LAYERS -eq 0 ] && [ $TSC -eq 0 ]; then
+if [ $IMPORT -eq 0 ] && [ $PARITY -eq 0 ] && [ $API -eq 0 ] && [ $LAYERS -eq 0 ] && [ $ENC -eq 0 ] && [ $TSC -eq 0 ]; then
   echo "✓ FAST GATE GREEN"; exit 0
 else
-  echo "✗ FAST GATE RED  (import=$IMPORT parity=$PARITY api=$API layers=$LAYERS tsc=$TSC)"; exit 1
+  echo "✗ FAST GATE RED  (import=$IMPORT parity=$PARITY api=$API layers=$LAYERS enc=$ENC tsc=$TSC)"; exit 1
 fi

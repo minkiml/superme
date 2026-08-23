@@ -29,7 +29,7 @@ class GitBusy(RuntimeError):
 
 def _git(cwd: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess:
     """Run one git command in `cwd`. check=True raises GitError on nonzero exit."""
-    proc = subprocess.run(["git", *args], cwd=str(cwd), capture_output=True, text=True)
+    proc = subprocess.run(["git", *args], cwd=str(cwd), capture_output=True, text=True, encoding="utf-8")
     if check and proc.returncode != 0:
         raise GitError(f"git {' '.join(args)} failed in {cwd}: {proc.stderr.strip() or proc.stdout.strip()}")
     return proc
@@ -319,10 +319,10 @@ def install_commit_hook(repo_dir: Path) -> dict:
     hooks = (repo_dir / common) / "hooks"   # absolute `common` wins; relative resolves in-repo
     hook = hooks / "commit-msg"
     try:
-        if hook.exists() and COMMIT_HOOK_MARKER not in hook.read_text():
+        if hook.exists() and COMMIT_HOOK_MARKER not in hook.read_text(encoding="utf-8"):
             return {"installed": False, "reason": "foreign", "detail": str(hook)}
         hooks.mkdir(parents=True, exist_ok=True)
-        hook.write_text(_COMMIT_MSG_HOOK)
+        hook.write_text(_COMMIT_MSG_HOOK, encoding="utf-8")
         hook.chmod(0o755)
     except OSError as e:
         log.warning("commit hook not installed in %s: %s", repo_dir, e)
@@ -404,7 +404,7 @@ def servers_in(wt: Path) -> list[int]:
     unforgeable and needs no bookkeeping."""
     try:
         out = subprocess.run(["lsof", "-nP", "-iTCP", "-sTCP:LISTEN", "-t"],
-                             capture_output=True, text=True, timeout=15)
+                             capture_output=True, text=True, timeout=15, encoding="utf-8")
         pids = sorted({int(x) for x in out.stdout.split() if x.isdigit()})
     except Exception:  # noqa: BLE001 — no lsof, or it failed; the caller falls back
         return []
@@ -413,7 +413,7 @@ def servers_in(wt: Path) -> list[int]:
     for pid in pids:
         try:
             r = subprocess.run(["lsof", "-a", "-p", str(pid), "-d", "cwd", "-Fn"],
-                               capture_output=True, text=True, timeout=10)
+                               capture_output=True, text=True, timeout=10, encoding="utf-8")
             cwds = [ln[1:] for ln in r.stdout.splitlines() if ln.startswith("n")]
             if cwds and Path(cwds[-1]).resolve() == target:
                 here.append(pid)
@@ -422,26 +422,41 @@ def servers_in(wt: Path) -> list[int]:
     return here
 
 
+def _terminate(pid: int) -> bool:
+    """Stop a vet-env server and whatever it spawned, reporting whether anything was signalled.
+
+    The group is the target where the OS has groups: a server that forked a worker leaves the
+    worker holding the port. Windows has no `killpg` at all — an AttributeError, which is not an
+    OSError, so it has to be caught by name or it escapes every handler around it.
+    """
+    killpg = getattr(os, "killpg", None)
+    if killpg is not None:
+        try:
+            killpg(pid, signal.SIGTERM)
+            return True
+        except OSError:
+            pass                      # not a group leader, or already gone — try the process
+    try:
+        os.kill(pid, signal.SIGTERM)
+        return True
+    except OSError:
+        return False
+
+
 def stop_vet_env(wt: Path) -> list[int]:
     """Kill every vet-env server here. Must run BEFORE the dir goes, or cwd no longer
     resolves and they are unfindable."""
     pids = servers_in(wt)
     if not pids:
         try:
-            pid = int(json.loads((Path(wt) / ".vet-env.json").read_text()).get("pid") or 0)
+            pid = int(json.loads((Path(wt) / ".vet-env.json").read_text(encoding="utf-8")).get("pid") or 0)
             pids = [pid] if pid > 0 else []
         except (OSError, ValueError, TypeError, json.JSONDecodeError):
             return []
     stopped: list[int] = []
     for pid in pids:
-        try:
-            os.killpg(pid, signal.SIGTERM)
-        except OSError:
-            try:
-                os.kill(pid, signal.SIGTERM)
-            except OSError:
-                continue
-        stopped.append(pid)
+        if _terminate(pid):
+            stopped.append(pid)
     if stopped:
         log.info("stopped vet-env server(s) %s in %s", stopped, wt)
     return stopped

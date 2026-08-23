@@ -36,7 +36,7 @@ def skill_template(name: str) -> str:
         from ...paths import DEV_PLUGIN_DIR
         skill, fname = _TEMPLATE_HOMES[name]
         _template_cache[name] = (
-            DEV_PLUGIN_DIR / "skills" / skill / "templates" / fname).read_text()
+            DEV_PLUGIN_DIR / "skills" / skill / "templates" / fname).read_text(encoding="utf-8")
     return _template_cache[name]
 
 

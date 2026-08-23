@@ -76,9 +76,9 @@ def test_the_machine_lane_and_the_prose_coexist() -> None:
     d = item()
     A.record_validation(d, None, command="pytest -q", result="12 passed", passed=True)
     path = Path(A.cycle_reports(d)[-1]["path"])
-    path.write_text(path.read_text().replace(
-        "## Validation", "## Validation\n- t1 — 12 unit tests pass\n- the suite is green", 1))
-    body = A.split_sections(path.read_text())["Validation"]
+    path.write_text(path.read_text(encoding="utf-8").replace(
+        "## Validation", "## Validation\n- t1 — 12 unit tests pass\n- the suite is green", 1), encoding="utf-8")
+    body = A.split_sections(path.read_text(encoding="utf-8"))["Validation"]
     by_task, loose = A._tagged_bullets(body)
     ok("the per-task bullet still reaches the Task tab", by_task == {"t1": ["12 unit tests pass"]})
     ok("…and the fence's own lines never leak into the prose",
@@ -95,7 +95,7 @@ def test_an_entry_stands_apart_from_the_one_before_it() -> None:
         A.record_validation(d, None, command=f"pytest -q tests/t{n}.py", result="exit 0",
                             passed=True)
     body = A.split_sections((d / "artifacts" / A.cycle_reports(d)[-1]["path"].split("/")[-1]
-                              ).read_text())["Validation"]
+                              ).read_text(encoding="utf-8"))["Validation"]
     fence = A._fenced_blocks(body, lang=A.VALIDATION_FENCE)[0].strip("\n").splitlines()
     heads = [i for i, ln in enumerate(fence) if ln.startswith("### ")]
     ok("every entry after the first opens on a blank line",
@@ -199,7 +199,7 @@ def test_the_contract_is_stated_where_build_reads_it() -> None:
        "verbatim and re-runnable" in skill or "verbatim" in skill and "re-execut" in skill)
     ok("…and that recording is not a gate on build's autonomy", "not a gate on you" in skill)
     tmpl = (ROOT / "superme_agent/harness/plugins/superme-dev/skills/build/templates/"
-            "build-vet-template.md").read_text()
+            "build-vet-template.md").read_text(encoding="utf-8")
     ok("the cycle report template marks the fence as machine-owned",
        "```runs" in tmpl and "never hand-edit" in tmpl)
 
@@ -269,7 +269,7 @@ def test_the_report_carries_it_whatever_vet_writes() -> None:
     plan = d / "artifacts" / "plan.md"
     plan.write_text("# Plan\n\n## Tasks\n- [ ] t1 — do it\n\n## Verification plan\n"
                     "depth: checks\nreason: r\nenv: none\n\n### c1\n- proves: the thing is true.\n"
-                    "- traces: t\n- covers: t1\n- mode: command\n- scenario: s\n- expect: e\n")
+                    "- traces: t\n- covers: t1\n- mode: command\n- scenario: s\n- expect: e\n", encoding="utf-8")
     A.record_verification(d, None, check="c1", how="ran", result="exit 0", passed=True)
     for ln in A.STANDING_LENSES:
         A.record_lens(d, lens=ln, probed="read the diff")
@@ -278,7 +278,7 @@ def test_the_report_carries_it_whatever_vet_writes() -> None:
                               result="exit 1 · 2 failed")
     text = Path(A.write_vet_user_report(
         d, None, summary="Everything holds.", confirms="- it all works",
-        looked_at="- read the diff")["path"]).read_text()
+        looked_at="- read the diff")["path"]).read_text(encoding="utf-8")
     ok("vet's all-clear does not suppress it", "## What didn't hold" in text)
     ok("…and the line says whose claim it was and what re-running got",
        "The build reported `pytest -q` as passing" in text and "does not" in text)

@@ -168,8 +168,8 @@ async def dev_work_item_abandon(item_id: str, body: AbandonBody,
     head = "" if report.is_file() else (
         f"# Close — {item.get('title') or item_id}\n\n"
         f"**What landed:** nothing — the item was {outcome} at the `{item.get('phase')}` phase.\n")
-    if "## Abandon note" not in (report.read_text() if report.is_file() else ""):
-        atomic_write(report, (head + (report.read_text() if report.is_file() else "")).rstrip()
+    if "## Abandon note" not in (report.read_text(encoding="utf-8") if report.is_file() else ""):
+        atomic_write(report, (head + (report.read_text(encoding="utf-8") if report.is_file() else "")).rstrip()
                       + "\n" + note)
     # 4. terminal — a status change, never a delete (folder, artifacts, branch, trace remain).
     try:

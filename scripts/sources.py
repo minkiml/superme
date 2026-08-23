@@ -12,10 +12,10 @@ def src(rel: str) -> str:
     """The whole source at `rel` — the file, or every module in the package it turned into."""
     path = ROOT / rel
     if path.is_file():
-        return path.read_text()
+        return path.read_text(encoding="utf-8")
     package = path.with_suffix("")
     if package.is_dir():
-        parts = [p.read_text() for p in sorted(package.rglob(f"*{path.suffix}"))]
+        parts = [p.read_text(encoding="utf-8") for p in sorted(package.rglob(f"*{path.suffix}"))]
         if not parts:
             raise FileNotFoundError(f"{package} holds no {path.suffix} — is the extension right?")
         return "".join(parts)

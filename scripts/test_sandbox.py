@@ -148,7 +148,7 @@ def test_a_run_has_somewhere_to_put_a_temp_file():
     ok("an unused one is swept at run end, so being OFFERED the path costs the owner nothing",
        prune_scratch(item) and not scratch.exists())
     ensure_scratch(item)
-    (scratch / "inventory.txt").write_text("x\n")
+    (scratch / "inventory.txt").write_text("x\n", encoding="utf-8")
     ok("…but a run that left files keeps them: a phase can be resumed, and rebuilding an "
        "inventory costs what building it cost",
        not prune_scratch(item) and (scratch / "inventory.txt").exists())

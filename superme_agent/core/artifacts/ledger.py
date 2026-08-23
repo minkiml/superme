@@ -57,11 +57,11 @@ def repo_fingerprint(repo_dir: Path | None) -> str:
         return "no-git"
     try:
         head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo_dir, capture_output=True,
-                              text=True, timeout=10)
+                              text=True, timeout=10, encoding="utf-8")
         if head.returncode != 0:
             return "no-git"
         diff = subprocess.run(["git", "diff", "HEAD"], cwd=repo_dir,
-                              capture_output=True, text=True, timeout=15)
+                              capture_output=True, text=True, timeout=15, encoding="utf-8")
         return hashlib.sha1((head.stdout.strip() + "\n" + diff.stdout).encode()).hexdigest()[:16]
     except (OSError, subprocess.SubprocessError):
         return "no-git"
@@ -145,7 +145,7 @@ def validation_runs(item_dir: Path, *, cycle: int | None = None) -> list[dict]:
     for r in cycle_reports(item_dir):
         if cycle is not None and r["cycle"] != cycle:
             continue
-        body = split_sections(Path(r["path"]).read_text()).get("Validation", "")
+        body = split_sections(Path(r["path"]).read_text(encoding="utf-8")).get("Validation", "")
         for block in _fenced_blocks(body, lang=VALIDATION_FENCE):
             for e in _parse_ledger_entries(block):
                 out.append({"ts": e.get("ts", ""), "command": e.get("check", ""),
@@ -264,7 +264,7 @@ def record_verification(item_dir: Path, repo_dir: Path | None, *, check: str, ho
         raise ValueError("evidence needs non-empty check, how, and result")
     # Single source of truth for check state: the ledger key MUST be a plan check id (when one exists).
     plan_path = Path(item_dir) / "artifacts" / artifact_file("plan")
-    valid_ids = [c["id"] for c in parse_vet_plan(plan_path.read_text()).get("checks", [])] \
+    valid_ids = [c["id"] for c in parse_vet_plan(plan_path.read_text(encoding="utf-8")).get("checks", [])] \
         if plan_path.is_file() else []
     # `depth: none` has no key space, so an entry here could only be one vet invented. Refuse and
     # redirect.
@@ -278,7 +278,7 @@ def record_verification(item_dir: Path, repo_dir: Path | None, *, check: str, ho
         check = _resolve_evidence_check(check, valid_ids)
     met = [_one_line(t) for t in (met or []) if str(t).strip()]
     missed = [_one_line(t) for t in (missed or []) if str(t).strip()]
-    rubric = next((c.get("rubric") or [] for c in parse_vet_plan(plan_path.read_text())["checks"]
+    rubric = next((c.get("rubric") or [] for c in parse_vet_plan(plan_path.read_text(encoding="utf-8"))["checks"]
                    if c["id"] == check), []) if plan_path.is_file() else []
     if rubric and not deferred:
         if len(met) + len(missed) != len(rubric):
@@ -506,7 +506,7 @@ def _ledger(item_dir: Path) -> list[dict]:
     """Every entry in the §Verification fences, verdicts and diagnoses alike, in record order."""
     entries: list[dict] = []
     for r in cycle_reports(item_dir):
-        body = split_sections(Path(r["path"]).read_text()).get("Verification", "")
+        body = split_sections(Path(r["path"]).read_text(encoding="utf-8")).get("Verification", "")
         for block in _fenced_blocks(body):
             for e in _parse_ledger_entries(block):
                 entries.append({**e, "cycle": r["cycle"]})
@@ -572,7 +572,7 @@ def proof_rows(item_dir: Path) -> list[dict]:
     is decided at plan."""
     item_dir = Path(item_dir)
     plan_path = item_dir / "artifacts" / artifact_file("plan")
-    plan = plan_path.read_text() if plan_path.is_file() else ""
+    plan = plan_path.read_text(encoding="utf-8") if plan_path.is_file() else ""
     tasks = parse_tasks(plan)
     checks = parse_vet_plan(plan).get("checks", [])
     # check id → the task ids it defends, straight off the approved plan.
@@ -582,7 +582,7 @@ def proof_rows(item_dir: Path) -> list[dict]:
     built_loose: list[str] = []
     valid_loose: list[str] = []
     for r in cycle_reports(item_dir):
-        sections = split_sections(Path(r["path"]).read_text())
+        sections = split_sections(Path(r["path"]).read_text(encoding="utf-8"))
         b, bl = _tagged_bullets(sections.get("Built", ""))
         v, vl = _tagged_bullets(sections.get("Validation", ""))
         for src, dst in ((b, built), (v, validated)):
@@ -684,10 +684,10 @@ def note_no_verification(item_dir: Path) -> str | None:
     if not reports:
         return None
     path = Path(reports[-1]["path"])
-    if _NO_VET_LINE in path.read_text():
+    if _NO_VET_LINE in path.read_text(encoding="utf-8"):
         return None
     plan = item_dir / "artifacts" / artifact_file("plan")
-    reason = " ".join(str(parse_vet_plan(plan.read_text()).get("reason") or "").split()) \
+    reason = " ".join(str(parse_vet_plan(plan.read_text(encoding="utf-8")).get("reason") or "").split()) \
         if plan.is_file() else ""
     _append_to_section(path, "Verification",
                        f"{_NO_VET_LINE} The approved plan declares `depth: none`"

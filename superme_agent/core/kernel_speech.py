@@ -92,10 +92,18 @@ def vet_env_note(script: str) -> str:
 
 def vet_trigger(item_id: str, title: str, deferred: list[str] | None = None,
                 machine: list[dict] | None = None, audit: list[dict] | None = None,
-                vet_env: bool = False) -> str:
+                vet_env: bool = False, kernel: bool = True) -> str:
     """The background vet run · durable, since vet forgets each cycle. `deferred` are
-    build's intentional skips; `machine` are checks the kernel already ran."""
+    build's intentional skips; `machine` are checks the kernel already ran.
+
+    `kernel` false means this host has no sandbox to run them in — said out loud, because an
+    empty `machine` list otherwise reads as a plan that carried no runnable checks."""
     base = f"Run superme-dev:vet for work-item `{item_id}` (\"{title}\")."
+    if not kernel:
+        base += ("\n\nThis host has no sandbox the kernel can run a check in, so NOTHING was run "
+                 "for you and the build's own validation went un-audited. Every `run:` block in the "
+                 "plan is yours to perform and attest. Say so in your report: on this host a machine "
+                 "entry is your word for what you saw, not the kernel's.")
     if machine:
         lines = "\n".join(f"- `{m['check']}` — {'PASS' if m.get('passed') else 'FAIL'} "
                           f"({str(m.get('result') or '').strip()[:200]})" for m in machine)
@@ -914,7 +922,7 @@ def render_handoff_block(item: dict, item_dir: Path) -> tuple[str | None, int]:
             continue
         lines.append(f"- build-vet-{c}.md checks: {_cycle_verdict_summary(item_dir, c)}")
     if latest_cycle:
-        text = _cap(Path(reports[latest_cycle]["path"]).read_text(), _HANDOFF_REPORT_CAP)
+        text = _cap(Path(reports[latest_cycle]["path"]).read_text(encoding="utf-8"), _HANDOFF_REPORT_CAP)
         lines += ["", f"#### Latest cycle report (build-vet-{latest_cycle}.md, verbatim)", text]
     return _cap("\n".join(lines), _HANDOFF_TOTAL_CAP), len(attempts)
 

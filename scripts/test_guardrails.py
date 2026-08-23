@@ -234,7 +234,7 @@ def test_the_tree_is_detached_and_disposable():
         for cmd in (["init", "-b", "main"], ["config", "user.email", "t@t"],
                     ["config", "user.name", "t"]):
             subprocess.run(["git", *cmd], cwd=repo, check=True, capture_output=True)
-        (repo / "a.txt").write_text("one\n")
+        (repo / "a.txt").write_text("one\n", encoding="utf-8")
         subprocess.run(["git", "add", "-A"], cwd=repo, check=True, capture_output=True)
         subprocess.run(["git", "commit", "-m", "c1"], cwd=repo, check=True, capture_output=True)
 
@@ -244,7 +244,7 @@ def test_the_tree_is_detached_and_disposable():
             ok("a tree is made", wt.is_dir() and (wt / "a.txt").is_file())
             ok("it carries NO branch — nothing to merge, nothing to name", rec["branch"] is None)
             head = subprocess.run(["git", "symbolic-ref", "-q", "HEAD"], cwd=wt,
-                                  capture_output=True, text=True)
+                                  capture_output=True, text=True, encoding="utf-8")
             ok("…because HEAD is detached", head.returncode != 0)
             branches = git_layer.list_branches(repo)
             ok("the repo gains no branch for it", branches == ["main"])

@@ -49,7 +49,7 @@ def pr_task_notes(item_dir: Path) -> dict:
     notes: dict[str, dict] = {}
     for r in cycle_reports(item_dir):
         try:
-            section = split_sections(Path(r["path"]).read_text()).get("For the reviewer", "")
+            section = split_sections(Path(r["path"]).read_text(encoding="utf-8")).get("For the reviewer", "")
         except OSError:
             continue
         for b in _bullets(section):
@@ -73,7 +73,7 @@ def pr_task_guide(item_dir: Path) -> dict:
     # true" poorly.
     breadth: dict[str, int] = {}
     if plan_path.is_file():
-        for c in parse_vet_plan(plan_path.read_text()).get("checks", []):
+        for c in parse_vet_plan(plan_path.read_text(encoding="utf-8")).get("checks", []):
             breadth[c["id"]] = len(set(re.findall(r"t\d+", str(c.get("covers") or "")))) or 99
     for row in proof_rows(item_dir):
         if not row["task"]:

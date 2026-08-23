@@ -342,7 +342,7 @@ def test_autopilot_field(dev: DevKnowledgeService, root: Path) -> None:
     ok("toggle off", dev.set_work_item_autopilot(root, plain, False))
     ok("now off + line gone", dev.read_work_item(root, plain)["autopilot"] is False)
     ok("frontmatter carries no dead false",
-       "autopilot:" not in (root / "work-items" / plain / "item.md").read_text())
+       "autopilot:" not in (root / "work-items" / plain / "item.md").read_text(encoding="utf-8"))
     # Status must survive the autopilot rewrite (the regex threads around the status line).
     dev.set_work_item_autopilot(root, plain, True)
     ok("status intact after toggle", dev.read_work_item(root, plain)["status"] == "active")
@@ -563,8 +563,8 @@ def test_deputy(tmp: Path) -> None:
     ok("empty item → no digest", GO.build_downstream_digest(idir) is None)
     # The digest reads review's AGENT-facing record: a re-plan needs the change inventory the
     # owner's prose never carries.
-    (idir / "artifacts" / "review.md").write_text("## Change inventory\nbuilt the thing\n")
-    (idir / "artifacts" / "build-vet-1.md").write_text("## Verification\nedge case X fails\n")
+    (idir / "artifacts" / "review.md").write_text("## Change inventory\nbuilt the thing\n", encoding="utf-8")
+    (idir / "artifacts" / "build-vet-1.md").write_text("## Verification\nedge case X fails\n", encoding="utf-8")
     dig = GO.build_downstream_digest(idir)
     ok("digest carries the review RECORD + cycle report",
        dig and "built the thing" in dig and "edge case X fails" in dig and "build-vet-1.md" in dig)
@@ -707,7 +707,7 @@ def test_item_scale(dev: DevKnowledgeService, tmp: Path) -> None:
     # An item minted before the field existed has no `scale:` line to rewrite.
     legacy = dev.create_work_item(root, "Older item", kind="implementation")["id"]
     p = root / "work-items" / legacy / "item.md"
-    p.write_text(re.sub(r"(?m)^scale.*\n", "", p.read_text()))
+    p.write_text(re.sub(r"(?m)^scale.*\n", "", p.read_text(encoding="utf-8")), encoding="utf-8")
     ok("legacy item reads standard", kp.item_scale(dev.read_work_item(root, legacy)) == "standard")
     dev.set_work_item_scale(root, legacy, "small", "inserted, not rewritten")
     ok("...and can still be judged (insert path)",

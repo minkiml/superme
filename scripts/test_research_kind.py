@@ -46,7 +46,7 @@ def _seed(root: Path, item_id: str, kind: str = "research") -> Path:
         f"---\nid: {item_id}\ntitle: \"probe\"\nkind: {kind}\n"
         "scale: standard\nscale_reason: null\n"
         "research_kind: null\nresearch_kind_reason: null\n"
-        "phase: triage\nstatus: active\ncreated_at: 2026-08-13\nupdated_at: 2026-08-13\n---\n")
+        "phase: triage\nstatus: active\ncreated_at: 2026-08-13\nupdated_at: 2026-08-13\n---\n", encoding="utf-8")
     return d
 
 
@@ -103,7 +103,7 @@ with tempfile.TemporaryDirectory() as td:
     legacy.mkdir(parents=True)
     (legacy / "item.md").write_text(
         "---\nid: ccc333\ntitle: \"old\"\nkind: research\nphase: plan\nstatus: active\n"
-        "updated_at: 2026-01-01\n---\n")
+        "updated_at: 2026-01-01\n---\n", encoding="utf-8")
     ok("a pre-field item takes the insert",
        dev.set_work_item_research_kind(root, "ccc333", "deep-diagnosis",
                                        "we are chasing a mechanism"))
@@ -125,7 +125,7 @@ ok("no two families share a shape",
    len({tuple(h for h, _ in _arts.section_spec("investigation", "research", f))
         for f in _kp.RESEARCH_KINDS}) == len(_kp.RESEARCH_KINDS))
 ok("every family has a guide at references/<slug>.md",
-   all((_GUIDES / f"{f}.md").read_text().strip() for f in _kp.RESEARCH_KINDS))
+   all((_GUIDES / f"{f}.md").read_text(encoding="utf-8").strip() for f in _kp.RESEARCH_KINDS))
 ok("every template home resolves to a file that exists",
    all(_arts.skill_template(name) for name in _arts._TEMPLATE_HOMES))
 
@@ -142,7 +142,7 @@ with tempfile.TemporaryDirectory() as td:
     d = Path(td)
     r = _arts.scaffold(d, "investigation", title="probe", item_kind="research",
                        item_id="aaa111", research_kind="study")
-    text = (d / "artifacts" / "investigation.md").read_text()
+    text = (d / "artifacts" / "investigation.md").read_text(encoding="utf-8")
     ok("the study scaffold stamps the shape it was authored under",
        "research_kind: study" in text)
     ok("and it IS the study body", "## What transfers" in text)
@@ -155,14 +155,14 @@ with tempfile.TemporaryDirectory() as td:
     for sec in [h for h, _ in _arts.section_spec("investigation", "research", "study")]:
         filled = filled.replace(f"## {sec}\n", f"## {sec}\nreal content here\n")
     filled = "\n".join(ln for ln in filled.splitlines() if not ln.startswith("<fill:")) + "\n"
-    (d / "artifacts" / "investigation.md").write_text(filled)
+    (d / "artifacts" / "investigation.md").write_text(filled, encoding="utf-8")
     ok("a filled study passes its own check",
        _arts.self_check(d, "investigation", item_kind="research") == [])
 
 with tempfile.TemporaryDirectory() as td:
     d = Path(td)
     _arts.scaffold(d, "investigation", title="probe", item_kind="research", item_id="bbb222")
-    text = (d / "artifacts" / "investigation.md").read_text()
+    text = (d / "artifacts" / "investigation.md").read_text(encoding="utf-8")
     ok("an unjudged item scaffolds the base shape, unstamped",
        "research_kind:" not in text and "## Evidence" in text)
     ok("an unknown family is forgiven at scaffold, not raised",
@@ -175,17 +175,17 @@ with tempfile.TemporaryDirectory() as td:
     _arts.scaffold(d, "investigation", title="probe", item_kind="research",
                    item_id="ccc333", research_kind="study")
     p = d / "artifacts" / "investigation.md"
-    body = p.read_text()
+    body = p.read_text(encoding="utf-8")
     for sec in [h for h, _ in _arts.section_spec("investigation", "research", "study")]:
         body = body.replace(f"## {sec}\n", f"## {sec}\nreal content here\n")
     body = "\n".join(ln for ln in body.splitlines() if not ln.startswith("<fill:")) + "\n"
-    p.write_text(body)
+    p.write_text(body, encoding="utf-8")
     # Re-classifying after the record was written must not go red: the owner's correction is not a
     # defect in work already done.
     ok("a complete study record stays green after the item is re-classified",
        _arts.self_check(d, "investigation", item_kind="research") == [])
     ok("because the shape is read from the FILE, not the item",
-       "research_kind: study" in p.read_text())
+       "research_kind: study" in p.read_text(encoding="utf-8"))
 
 # --- fan-out is ENFORCED, not asked -------------------------------- Prose with no check is prose
 # at zero compliance.
@@ -218,8 +218,8 @@ ok("the count is read from the spine's own subagent rows — unfakeable by the a
 # boundary but NOT the briefing, so its empty result reads clean.
 print("\n— a spawned reader is told where it may write —")
 _INV = Path("superme_agent/harness/plugins/superme-dev/skills/investigate")
-_skill = (_INV / "SKILL.md").read_text()
-_reader = (_INV / "agents/investigator-agent.md").read_text()
+_skill = (_INV / "SKILL.md").read_text(encoding="utf-8")
+_reader = (_INV / "agents/investigator-agent.md").read_text(encoding="utf-8")
 
 ok("the brief recipe carries a write location, not only a question",
    "scratch" in _skill.split("Each brief carries")[1].split("## 4")[0])
@@ -240,7 +240,7 @@ with tempfile.TemporaryDirectory() as td:
     (d / "artifacts").mkdir()
     rv, inv = d / "artifacts/review.md", d / "artifacts/investigation.md"
     for p in (rv, inv):
-        p.write_text("x\n")
+        p.write_text("x\n", encoding="utf-8")
     os.utime(rv, (1_000_000, 1_000_000))
     os.utime(inv, (1_000_180, 1_000_180))   # investigate rewrote 3 minutes after the verdict
     bad = judgment_current(d, "research")
@@ -252,7 +252,7 @@ with tempfile.TemporaryDirectory() as td:
     # An implementation item has a subject too: its newest build⟷vet cycle.
     for n, t in ((1, 1_000_050), (2, 1_000_400)):
         c = d / f"artifacts/build-vet-{n}.md"
-        c.write_text("x\n")
+        c.write_text("x\n", encoding="utf-8")
         os.utime(c, (t, t))
     impl = judgment_current(d, "implementation")
     ok("an implementation verdict is judged against its NEWEST cycle, not its first",
@@ -305,7 +305,7 @@ ok("NAMING the guide is not reading it — ls, find, stat, wc open nothing",
        "echo /a/b/references/audit.md")))
 ok("method_read BLOCKS, unlike its neighbours — no item is too small for its family's method",
    "method_read" in _gb.split('"review": (')[1].split(")")[0])
-_sk = (Path("superme_agent/harness/plugins/superme-dev/skills/investigate/SKILL.md")).read_text()
+_sk = (Path("superme_agent/harness/plugins/superme-dev/skills/investigate/SKILL.md")).read_text(encoding="utf-8")
 ok("the skill names each family's guide file literally, not as a placeholder",
    all(f"`references/{f}.md`" in _sk for f in _kp.RESEARCH_KINDS))
 ok("…and the guide is the skill's FIRST numbered step, ahead of the questions and the code",
@@ -315,7 +315,7 @@ ok("fan-out defaults to splitting instead of asking the agent to feel out indepe
    "change HOW you read for question A" in _sk)
 # Named, not described: an agent type resolves by string, so a paraphrase falls back to a generic
 # subagent.
-_ag = (Path("superme_agent/harness/plugins/superme-dev/skills/investigate/agents/investigator-agent.md")).read_text()
+_ag = (Path("superme_agent/harness/plugins/superme-dev/skills/investigate/agents/investigator-agent.md")).read_text(encoding="utf-8")
 ok("the skill spawns the investigator BY NAME, and that agent exists to be spawned",
    "subagent_type: superme-dev:investigator" in _sk and "name: investigator" in _ag)
 ok("…and it cannot write — the tool allowlist is the enforcement the brief used to only ask for",
@@ -330,7 +330,7 @@ ok("the agent asks for coverage as NUMBERS, which a reader cannot fake by assert
    "as numbers" in _ag.lower() and "cannot be checked" in _ag)
 ok("housekeeping starts from a mechanical inventory, not from reading",
    "## Start mechanical" in (Path("superme_agent/harness/plugins/superme-dev/skills/investigate/"
-                                 "references/housekeeping.md")).read_text())
+                                 "references/housekeeping.md")).read_text(encoding="utf-8"))
 # The checklist is what the agent copies into its reply, so it — not the prose — orders the run.
 _boxes = [ln for ln in _sk.splitlines() if ln.strip().startswith("- [ ]")]
 ok("the skill and its checklist agree on what comes FIRST — the family guide, not the questions",
@@ -345,7 +345,7 @@ ok("the agent owes a receipt for 'I found nothing', not just for findings",
 ok("…and the parent refuses to record a clean area that arrived without numbers",
    "UNSWEPT" in _sk and "Open threads" in _sk)
 _hk = (Path("superme_agent/harness/plugins/superme-dev/skills/investigate/"
-            "references/housekeeping.md")).read_text()
+            "references/housekeeping.md")).read_text(encoding="utf-8")
 # Structure, not wording: a name pass cannot see a group whose members only reference each other.
 _MECH = _hk.split("## Start mechanical")[1].split("\n## ")[0]
 ok("housekeeping sweeps files as well as names — a group is invisible to a name count",
@@ -449,7 +449,7 @@ ok("…and preflights the subject before paying for a split",
    "confirm the subject is there" in _split_step
    and _split_step.index("confirm the subject") < _split_step.index("subagent_type"))
 ok("every family guide says what travels in the brief",
-   all("brief" in (_GUIDES / f"{f}.md").read_text() for f in _kp.RESEARCH_KINDS))
+   all("brief" in (_GUIDES / f"{f}.md").read_text(encoding="utf-8") for f in _kp.RESEARCH_KINDS))
 
 # One gate, one row set: NEITHER side reads a counter of its own, so adding one cannot reach the
 # owner and miss the deputy.
@@ -514,7 +514,7 @@ ok("…and so does the deputy, so one gate can never show two row sets",
 print("\n— the shared glossary —")
 _gl_doc = Path("superme_agent/harness/plugins/superme-dev/references/glossary.md")
 ok("the glossary exists where every skill can reach it", _gl_doc.is_file())
-_g = _gl_doc.read_text()
+_g = _gl_doc.read_text(encoding="utf-8")
 ok("…and carries Rejected framings — what a word will NOT mean", "## Rejected framings" in _g)
 ok("…and Flagged ambiguities, including the pair that cost weeks",
    "## Flagged ambiguities" in _g and "`feature` vs `phase`" in _g)
@@ -523,7 +523,7 @@ ok("…and an Avoid line on the terms that drift",
 ok("the charter points at it (one line — the charter is always loaded)",
    "glossary.md" in src("superme_agent/harness/dev-charter.md"))
 ok("every authoring standard points at it too",
-   all("glossary.md" in (Path("superme_agent/harness/plugins/superme-dev/skills") / r).read_text()
+   all("glossary.md" in (Path("superme_agent/harness/plugins/superme-dev/skills") / r).read_text(encoding="utf-8")
        for r in ("forge-skill/references/writing-skills.md",
                  "forge-agent/references/writing-agents.md",
                  "forge-constitution/references/writing-constitutions.md")))
@@ -534,29 +534,29 @@ ok("every authoring standard points at it too",
 print("\n— standing sweeps fork their enumeration, and say which they got —")
 _STANDING = ("audit", "refactoring", "housekeeping", "security")
 ok("the breadth fork lives in exactly the four standing guides",
-   all("whole repo" in (_GUIDES / f"{f}.md").read_text() for f in _STANDING))
+   all("whole repo" in (_GUIDES / f"{f}.md").read_text(encoding="utf-8") for f in _STANDING))
 ok("…and each names both breadths as a branch table, not a paragraph",
-   all((_GUIDES / f"{f}.md").read_text().count("| **whole repo**") == 1
-       and "**one area**" in (_GUIDES / f"{f}.md").read_text() for f in _STANDING))
+   all((_GUIDES / f"{f}.md").read_text(encoding="utf-8").count("| **whole repo**") == 1
+       and "**one area**" in (_GUIDES / f"{f}.md").read_text(encoding="utf-8") for f in _STANDING))
 ok("refactoring's whole-repo enumeration is the GIT HISTORY, not the file tree",
-   "GIT HISTORY, not the file tree" in flat((_GUIDES / "refactoring.md").read_text()))
+   "GIT HISTORY, not the file tree" in flat((_GUIDES / "refactoring.md").read_text(encoding="utf-8")))
 ok("…because deepening pays off in future changes, so the churn is the signal",
-   "finished" in (_GUIDES / "refactoring.md").read_text().split("| **whole repo**")[1].split("|")[0]
-   or "changed most" in (_GUIDES / "refactoring.md").read_text())
+   "finished" in (_GUIDES / "refactoring.md").read_text(encoding="utf-8").split("| **whole repo**")[1].split("|")[0]
+   or "changed most" in (_GUIDES / "refactoring.md").read_text(encoding="utf-8"))
 ok("security enumerates by BOUNDARY — directories cut a path in half",
-   "Trust boundaries are the unit; directories are not" in flat((_GUIDES / "security.md").read_text()))
+   "Trust boundaries are the unit; directories are not" in flat((_GUIDES / "security.md").read_text(encoding="utf-8")))
 ok("housekeeping sweeps by KIND across the tree, not directory by directory",
-   "by KIND" in (_GUIDES / "housekeeping.md").read_text())
+   "by KIND" in (_GUIDES / "housekeeping.md").read_text(encoding="utf-8"))
 _TPL = _GUIDES.parent / "templates"
 ok("every standing template demands the breadth in its surface slot",
-   all("OPEN WITH THE BREADTH" in (_TPL / f"investigation-{f}-template.md").read_text()
+   all("OPEN WITH THE BREADTH" in (_TPL / f"investigation-{f}-template.md").read_text(encoding="utf-8")
        for f in _STANDING))
 ok("the commissioned families get no breadth fork — they follow one thread",
-   not any("| **whole repo**" in (_GUIDES / f"{f}.md").read_text()
+   not any("| **whole repo**" in (_GUIDES / f"{f}.md").read_text(encoding="utf-8")
            for f in ("study", "deep-diagnosis")))
 
 print("\n— deep-diagnosis gates on a tight loop that goes red —")
-_dd = (_GUIDES / "deep-diagnosis.md").read_text()
+_dd = (_GUIDES / "deep-diagnosis.md").read_text(encoding="utf-8")
 ok("the loop is the gate, stated as a refusal", "no red command, no hypothesis" in _dd)
 ok("…and 'tight' is defined, not left to taste",
    all(q in _dd for q in ("**Red-capable**", "**Deterministic**", "**Fast**", "**Yours to run**")))
@@ -572,27 +572,27 @@ ok("3-5 ranked falsifiable hypotheses, written before any is tested",
 ok("…put to the owner as a non-blocking checkpoint, not a stall",
    "proceed on your own ranking" in flat(_dd))
 ok("…and the record has a slot for them, so a post-hoc story cannot pass as method",
-   "## Hypotheses, ranked" in (_TPL / "investigation-deep-diagnosis-template.md").read_text())
+   "## Hypotheses, ranked" in (_TPL / "investigation-deep-diagnosis-template.md").read_text(encoding="utf-8"))
 
 print("\n— the remaining step-6 edits —")
 ok("refactoring carries the deletion test as a named test",
-   "deletion test" in (_GUIDES / "refactoring.md").read_text())
+   "deletion test" in (_GUIDES / "refactoring.md").read_text(encoding="utf-8"))
 # The rejection section must exist AND route away what only a later sweep needs, or it becomes a
 # stale judgment the next run inherits.
-_STAY = flat((_GUIDES / "housekeeping.md").read_text())
+_STAY = flat((_GUIDES / "housekeeping.md").read_text(encoding="utf-8"))
 ok("housekeeping's `What must stay` is a named destination for rejected candidates",
    "## What must stay" in _STAY and "What looks dead and isn't" in _STAY)
 ok("…and save-it-for-later material is routed to Open threads instead",
    "## Open threads" in _STAY and "next sweep" in _STAY)
 # The positive-target pilot: ONE guide first, measured on the next live sweep before rolling out.
 ok("audit states its three failure modes as moves to make, not bans",
-   "## Three things to do instead" in (_GUIDES / "audit.md").read_text())
+   "## Three things to do instead" in (_GUIDES / "audit.md").read_text(encoding="utf-8"))
 ok("…and audit alone dropped the prohibition HEADING, so the pilot has five controls",
    [f for f in _kp.RESEARCH_KINDS
-    if "does NOT do\n" in (_GUIDES / f"{f}.md").read_text().replace("## ", "\n## ")
+    if "does NOT do\n" in (_GUIDES / f"{f}.md").read_text(encoding="utf-8").replace("## ", "\n## ")
     .split("\n## ", 1)[-1]] == [f for f in _kp.RESEARCH_KINDS if f != "audit"])
 ok("…and audit's contents moved with its section — no heading it no longer has",
-   "does NOT do" not in (_GUIDES / "audit.md").read_text())
+   "does NOT do" not in (_GUIDES / "audit.md").read_text(encoding="utf-8"))
 
 
 # ── the family registry ────────────────────────────────────────── One row per family; what
@@ -640,7 +640,7 @@ ok("the registry names both mirrors, so the next person knows where to look",
 # ── a button-born sweep, and the plan phase that no longer exists ────────────
 print("\n— investigate no longer reads a plan a research item does not have —")
 _SK = Path("superme_agent/harness/plugins/superme-dev/skills/investigate")
-_isk = (_SK / "SKILL.md").read_text()
+_isk = (_SK / "SKILL.md").read_text(encoding="utf-8")
 # The ORDER is pinned, not the explanation: guide, then questions, then code. Numbered steps
 # cannot contradict each other the way prose did.
 ok("the questions, the walls and Done are written before any code is read",
@@ -650,13 +650,13 @@ ok("…and the guide precedes even them, by step number",
 ok("…with a completion criterion a reader can check",
    "from your questions alone" in flat(_isk))
 ok("nothing in the skill, the guides or the templates still points at plan.md",
-   not any("plan.md" in p.read_text() for p in
+   not any("plan.md" in p.read_text(encoding="utf-8") for p in
            [_SK / "SKILL.md", *(_SK / "references").glob("*.md"), *(_SK / "templates").glob("*.md")]))
 ok("every investigation template demands the walls in its first section",
-   all("WRITTEN FIRST, before any code" in (_SK / "templates" / f"investigation-{f}-template.md").read_text()
+   all("WRITTEN FIRST, before any code" in (_SK / "templates" / f"investigation-{f}-template.md").read_text(encoding="utf-8")
        for f in _kp.RESEARCH_KINDS))
 ok("…and the open-threads slot parks against the walls the run SET, not a plan's",
-   "outside the walls you set above" in (_SK / "templates" / "investigation-template.md").read_text())
+   "outside the walls you set above" in (_SK / "templates" / "investigation-template.md").read_text(encoding="utf-8"))
 
 print("\n— a standing sweep is born classified, at investigate —")
 with tempfile.TemporaryDirectory() as td:
@@ -704,7 +704,7 @@ print(f"\n✓ ALL {PASS} CHECKS PASS")
 # The trigger sequence is what a reader acts on first, and a long reference must show its full
 # scope on a partial read.
 _AG = Path("superme_agent/harness/plugins/superme-dev/skills/investigate/agents/"
-           "investigator-agent.md").read_text()
+           "investigator-agent.md").read_text(encoding="utf-8")
 ok("the agent leads with its trigger sequence, not with rationale",
    "When invoked:" in _AG and _AG.index("When invoked:") < len(_AG) // 4)
 ok("…and stays near the length the official examples hold to",
@@ -714,7 +714,7 @@ ok("the multi-step investigate workflow ships a checklist the agent can tick",
 # A reference file arrives whole in one context, so nothing scrolls: the headings ARE the map.
 _HARNESS = Path("superme_agent/harness")
 _toc = [str(f.relative_to(_HARNESS.parent)) for f in _HARNESS.rglob("references/*.md")
-        if "## Contents" in f.read_text()]
+        if "## Contents" in f.read_text(encoding="utf-8")]
 ok(f"no reference file duplicates its own headings as a Contents block — found: {_toc}", not _toc)
 
 # ── no prompt surface logs an incident ──────────────────────────── The rule an incident produced
@@ -726,15 +726,15 @@ _DATE = _re.compile(r"\b20\d\d-\d\d-\d\d\b")
 _ALLOW = ("created_at", "updated_at", "date read", "URL + date", "<date>", "YYYY", "2026-01-01")
 _logged = []
 for _f in _PROMPTS.rglob("*.md"):
-    for _n, _line in enumerate(_f.read_text(errors="ignore").splitlines(), 1):
+    for _n, _line in enumerate(_f.read_text(errors="ignore", encoding="utf-8").splitlines(), 1):
         if _DATE.search(_line) and not any(a in _line for a in _ALLOW):
             _logged.append(f"{_f.relative_to(_PROMPTS.parent)}:{_n}")
 ok(f"no dated incident record in any harness prompt — found {_logged}", not _logged)
 
 # The body of a skill IS the prompt: a markdown comment is tokens the reader cannot act on.
 _commented = [str(f.relative_to(_HARNESS.parent)) for f in _HARNESS.rglob("*.md")
-              if "/templates/" not in str(f) and "<!--" in f.read_text(errors="ignore")
-              and "`<!--" not in f.read_text(errors="ignore")]
+              if "/templates/" not in str(f) and "<!--" in f.read_text(errors="ignore", encoding="utf-8")
+              and "`<!--" not in f.read_text(errors="ignore", encoding="utf-8")]
 ok(f"no markdown comment in any instruction surface — found {_commented}", not _commented)
 
 
@@ -818,16 +818,16 @@ ok("the triage-exit gate says out loud when a proposal was overruled",
 _SKILL_HOME = Path("superme_agent/harness/plugins/superme-dev/skills")
 _TRI = _SKILL_HOME / "triage" / "SKILL.md"
 ok("…and the triage skill names the one legal move on a disagreement",
-   "machine.outcome='needs_user'" in _TRI.read_text()
-   and "Already filed under a kind" in _TRI.read_text())
+   "machine.outcome='needs_user'" in _TRI.read_text(encoding="utf-8")
+   and "Already filed under a kind" in _TRI.read_text(encoding="utf-8"))
 ok("itemize carries the report's own typing instead of discarding it",
    "Carry the proposal's own typing into `work_kind`"
-   in (_SKILL_HOME / "itemize" / "SKILL.md").read_text())
+   in (_SKILL_HOME / "itemize" / "SKILL.md").read_text(encoding="utf-8"))
 
 # ── the handoff brief's contract ───────────────────────────────── The BAR is what a slot owes
 # when the filer has a source to carry it from.
 print("\n— the handoff brief owes a bar, not a template —")
-_ITZ = (_SKILL_HOME / "itemize" / "SKILL.md").read_text()
+_ITZ = (_SKILL_HOME / "itemize" / "SKILL.md").read_text(encoding="utf-8")
 ok("the shape stays ONE skeleton — no per-caller brief template file was added",
    not list((_SKILL_HOME / "itemize").glob("templates/*")))
 ok("itemize states what each of the four brief fields owes",
@@ -839,7 +839,7 @@ ok("…and the commit, so a finding reads as STALE rather than as wrong",
 ok("…and that an empty slot is only honest where the report was",
    'Write "none" only where the report wrote none' in _ITZ)
 ok("triage is told preliminary/ is read-only, so a thin brief is reported not invented",
-   "`preliminary/` is read-only" in (_SKILL_HOME / "triage" / "SKILL.md").read_text())
+   "`preliminary/` is read-only" in (_SKILL_HOME / "triage" / "SKILL.md").read_text(encoding="utf-8"))
 
 _dt = src("superme_agent/harness/tools/dev_tools.py")
 from superme_agent.harness.tools.dev_tools import _brief_nudge, _BRIEF_FIELDS
@@ -928,19 +928,19 @@ with tempfile.TemporaryDirectory() as td:
     repo, wt = Path(td) / "repo", Path(td) / "wt"
     (repo / "scripts" / "__pycache__").mkdir(parents=True)
     (wt / "scripts").mkdir(parents=True)
-    (repo / "scripts" / "test_a.py").write_text("calls descendants()")
+    (repo / "scripts" / "test_a.py").write_text("calls descendants()", encoding="utf-8")
     (repo / "scripts" / "stale.pyc").write_bytes(b"junk")
     (repo / "scripts" / "__pycache__" / "x.pyc").write_bytes(b"junk")
-    (repo / "scripts" / ".env.local").write_text("SECRET=1")
-    (repo / "scripts" / "parity.py").write_text("REPO")
-    (wt / "scripts" / "parity.py").write_text("CHECKOUT")
-    (repo / ".env").write_text("SECRET=1")
+    (repo / "scripts" / ".env.local").write_text("SECRET=1", encoding="utf-8")
+    (repo / "scripts" / "parity.py").write_text("REPO", encoding="utf-8")
+    (wt / "scripts" / "parity.py").write_text("CHECKOUT", encoding="utf-8")
+    (repo / ".env").write_text("SECRET=1", encoding="utf-8")
     n, skips = _mirror_source_ignored(repo, wt, ["scripts", "nope", ".env"])
     here = {p.relative_to(wt).as_posix() for p in wt.rglob("*") if p.is_file()}
     ok("the ignored suite lands in the tree the run reads", "scripts/test_a.py" in here)
     ok("a PARTLY-tracked directory is merged, not skipped — the case the defect lived in", n == 1)
     ok("the checkout's own copy of a tracked file wins",
-       (wt / "scripts" / "parity.py").read_text() == "CHECKOUT")
+       (wt / "scripts" / "parity.py").read_text(encoding="utf-8") == "CHECKOUT")
     ok("caches and build junk stay out",
        not any(x.endswith(".pyc") or "__pycache__" in x for x in here))
     ok("a secret INSIDE an allowed path is dropped silently",
@@ -1008,7 +1008,7 @@ print("\n— the typed proposal block: what a research item may DECIDE vs must A
 # A research item finds things out; it does not choose. Exactly one shape may withhold work: a
 # question the owner has not answered.
 _PROP_TEMPLATE = Path("superme_agent/harness/plugins/superme-dev/skills/review/templates/"
-                      "review-research-template.md").read_text()
+                      "review-research-template.md").read_text(encoding="utf-8")
 for _field in ("**Title:**", "**Kind:**", "**Why now:**", "**Delivers:**", "**Default applied:**",
                "**Question:**", "**Reserved because:**", "**Suggested:**", "**Answer:**",
                "**Rule:**"):
@@ -1043,7 +1043,7 @@ def _review(body: str) -> Path:
     d = Path(tempfile.mkdtemp())
     (d / "artifacts").mkdir()
     (d / "artifacts" / _arts.artifact_file("review")).write_text(
-        "# Review\n\n## Proposed work\n" + body + "\n\n## Revision rounds\n_None._\n")
+        "# Review\n\n## Proposed work\n" + body + "\n\n## Revision rounds\n_None._\n", encoding="utf-8")
     return d
 
 
@@ -1164,14 +1164,14 @@ with tempfile.TemporaryDirectory() as _td:
     _r = Path(_td)
     _i = _r / "work-items" / "aaaabbbbcccc"
     (_i / "artifacts").mkdir(parents=True)
-    (_i / "item.md").write_text("---\nid: aaaabbbbcccc\nkind: research\n---\n")
+    (_i / "item.md").write_text("---\nid: aaaabbbbcccc\nkind: research\n---\n", encoding="utf-8")
     (_i / "artifacts" / _arts.artifact_file("review")).write_text(
         "# R\n\n## Proposed work\n"
         "**Title:** Files fine\n**Kind:** implementation\n**Why now:** rot\n**Delivers:** a thing\n"
         "**Default applied:** removed it; one revert restores\n\n"
         "**Title:** Owner must rule\n**Kind:** implementation\n**Why now:** unclear\n"
         "**Delivers:** a removed public method\n**Question:** keep or delete?\n"
-        "**Reserved because:** expensive_to_reverse\n**Suggested:** keep\n\n## Revision rounds\n")
+        "**Reserved because:** expensive_to_reverse\n**Suggested:** keep\n\n## Revision rounds\n", encoding="utf-8")
     _fn = _dt._read_research_proposals(store=None, context_id="global", dev_root=_r,
                                        bound_item_id="aaaabbbbcccc")
     _out = asyncio.run(_fn({"item_id": "aaaabbbbcccc"}))["content"][0]["text"]
@@ -1305,9 +1305,9 @@ with tempfile.TemporaryDirectory() as _td:
     _item = _root / "work-items" / "aaaabbbbcccc"
     (_item / "artifacts").mkdir(parents=True)
     (_item / "artifacts" / _arts.artifact_file("review")).write_text(
-        "# R\n\n## Proposed work\n" + _RULED + "\n\n## Revision rounds\n")
+        "# R\n\n## Proposed work\n" + _RULED + "\n\n## Revision rounds\n", encoding="utf-8")
     _ids = _dl.record_rulings(_root, _item, "aaaabbbbcccc", date="2026-08-17", project="Probe")
-    _led = (_root / "general" / "decisions.md").read_text()
+    _led = (_root / "general" / "decisions.md").read_text(encoding="utf-8")
     ok("a ruling that establishes a RULE becomes a ledger entry", _ids == ["D-001"])
     ok("…and only that one. The answered question with no `Rule` records NOTHING — an instruction "
        "is spent when its work is done, so a ledger holding it teaches a later reader nothing",
@@ -1337,7 +1337,7 @@ with tempfile.TemporaryDirectory() as _td:
     ok("firing again records nothing — idempotent on (item, question)",
        _dl.record_rulings(_root, _item, "aaaabbbbcccc", date="2026-08-18") == [])
     ok("…and the file is untouched by the second call",
-       (_root / "general" / "decisions.md").read_text() == _led)
+       (_root / "general" / "decisions.md").read_text(encoding="utf-8") == _led)
 
     # A rule from a DIFFERENT question appends, and the id never reuses a number.
     (_item / "artifacts" / _arts.artifact_file("review")).write_text(
@@ -1346,7 +1346,7 @@ with tempfile.TemporaryDirectory() as _td:
         "**Delivers:** the files moved\n**Question:** remove or relocate?\n"
         "**Reserved because:** destructive\n**Suggested:** remove\n"
         "**Answer:** relocate them out of the served tree\n"
-        "**Rule:** build output is never served from the source tree\n\n## Revision rounds\n")
+        "**Rule:** build output is never served from the source tree\n\n## Revision rounds\n", encoding="utf-8")
     ok("a rule from a different question appends",
        _dl.record_rulings(_root, _item, "aaaabbbbcccc", date="2026-08-18") == ["D-002"])
     ok("ids are monotonic and never reused — the id is the grep anchor and supersession target",

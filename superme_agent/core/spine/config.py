@@ -124,7 +124,7 @@ class RepoConfig:
 def load_system_config(path: Path = SYSTEM_CONFIG_FILE) -> SystemConfig:
     """Load config/system.yaml → SystemConfig (defaults if the file is absent/empty)."""
     try:
-        raw = yaml.safe_load(Path(path).read_text()) or {}
+        raw = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
     except (FileNotFoundError, yaml.YAMLError) as e:
         log.warning("system.yaml unavailable (%s); using defaults.", e)
         raw = {}
@@ -142,7 +142,7 @@ def load_repos(path: Path = REPOS_CONFIG_FILE) -> dict[str, RepoConfig]:
     """Load config/repos.yaml → {id: RepoConfig}. Relative cwds resolve against ROOT_DIR;
     an absent file gives {}."""
     try:
-        raw = yaml.safe_load(Path(path).read_text()) or {}
+        raw = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
     except (FileNotFoundError, yaml.YAMLError) as e:
         log.warning("repos.yaml unavailable (%s); no repos loaded.", e)
         return {}

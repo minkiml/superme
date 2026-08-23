@@ -73,7 +73,7 @@ def _stocked(tier: str = "available") -> Path:
 def _item() -> Path:
     item = Path(tempfile.mkdtemp(prefix="lib-item-")) / "item"
     (item / "artifacts").mkdir(parents=True)
-    (item / "artifacts" / _arts.artifact_file("plan")).write_text(PLAN)
+    (item / "artifacts" / _arts.artifact_file("plan")).write_text(PLAN, encoding="utf-8")
     _arts.scaffold_cycle(item, title="probe")
     return item
 
@@ -186,7 +186,7 @@ def test_standing_entries_are_attached_by_the_kernel():
     r = _arts.scaffold(d, "plan", title="T", item_kind="implementation", item_id="abc",
                        standing=blocks)
     ok("the scaffold reports what it attached", r["inherited"] == 1)
-    vp = _arts.parse_vet_plan((d / "artifacts" / "plan.md").read_text())
+    vp = _arts.parse_vet_plan((d / "artifacts" / "plan.md").read_text(encoding="utf-8"))
     got = next(c for c in vp["checks"] if c["id"] == "older-ledgers-read")
     ok("the check is in the item's OWN plan — one plan, one exam", got["run"] == "python -m pytest -q tests/test_compat.py::test_reads_v1_ledger")
     ok("…and reads as inherited", got["source"] == "standing")
@@ -204,7 +204,7 @@ def test_an_inherited_check_still_has_to_clear_the_plan_gate():
     d.mkdir(parents=True)
     _arts.scaffold(d, "plan", title="T", item_kind="implementation", item_id="abc",
                    standing=_vl.standing_blocks(root))
-    text = (d / "artifacts" / "plan.md").read_text()
+    text = (d / "artifacts" / "plan.md").read_text(encoding="utf-8")
     # Only the inherited check — the template's own example slot is a separate, unfilled concern.
     vp = _arts.parse_vet_plan(text)
     vp["checks"] = [c for c in vp["checks"] if c["id"] == "older-ledgers-read"]

@@ -61,9 +61,9 @@ def validate_ops(ops: list, dev_root: Path, repo_dir: Path | None) -> list[str]:
             continue
         if not section:
             issues.append(f"{tag}: missing section")
-        elif section not in _sections(p.read_text()):
+        elif section not in _sections(p.read_text(encoding="utf-8")):
             issues.append(f"{tag}: {doc} has no section '## {section}' — existing: "
-                          f"{', '.join(_sections(p.read_text())) or '(none)'}")
+                          f"{', '.join(_sections(p.read_text(encoding="utf-8"))) or '(none)'}")
         if not content.strip():
             issues.append(f"{tag}: empty content")
         if FILL.search(content):
@@ -98,7 +98,7 @@ def apply_ops(dev_root: Path, ops: list) -> dict:
     for op in ops:
         doc = str(op["doc"])
         p = _doc_path(dev_root, doc)
-        text = texts.get(doc) if doc in texts else p.read_text()
+        text = texts.get(doc) if doc in texts else p.read_text(encoding="utf-8")
         section, content = str(op["section"]), str(op["content"]).rstrip()
         m = re.search(rf"(?ms)^(##\s+{re.escape(section)}\s*\n)(.*?)(?=^##\s|\Z)", text)
         if not m:
@@ -150,7 +150,7 @@ def append_change_log(dev_root: Path, item_id: str, title: str, ops: list,
     entry = (f"\n## [{stamp}] {title or item_id}\n\n"
              "| doc · section | op | what changed | source item |\n"
              "|---|---|---|---|\n" + rows + "\n")
-    atomic_write(path, (head + (path.read_text() if path.exists() else "")).rstrip() + "\n" + entry)
+    atomic_write(path, (head + (path.read_text(encoding="utf-8") if path.exists() else "")).rstrip() + "\n" + entry)
     return str(path)
 
 
@@ -163,7 +163,7 @@ def freshness_lint(dev_root: Path, repo_dir: Path | None) -> list[str]:
         p = _doc_path(dev_root, doc)
         if not p or not p.exists():
             continue
-        for ref in _PATH_REF.findall(p.read_text()):
+        for ref in _PATH_REF.findall(p.read_text(encoding="utf-8")):
             if repo_dir and not os.path.isabs(ref) and not (Path(repo_dir) / ref).exists():
                 warnings.append(f"{doc}: referenced file no longer exists: `{ref}`")
     try:

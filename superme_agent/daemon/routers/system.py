@@ -174,7 +174,7 @@ async def disconnect_repo(repo_id: str, confirm: str = "",
         try:
             import subprocess
             subprocess.run(["git", "worktree", "prune"], cwd=str(rc.cwd),
-                           capture_output=True, text=True, timeout=15)
+                           capture_output=True, text=True, timeout=15, encoding="utf-8")
         except OSError as e:
             log.warning("worktree prune skipped for %s: %s", repo_id, e)
     kb = rc._knowledge_base()

@@ -61,7 +61,7 @@ def write_plan_user_report(item_dir: Path, *, summary: str, approach: str = "",
     decisions, assumptions = decisions or "", assumptions or ""
     item_dir = Path(item_dir)
     plan_path = item_dir / "artifacts" / artifact_file("plan")
-    plan = plan_path.read_text() if plan_path.is_file() else ""
+    plan = plan_path.read_text(encoding="utf-8") if plan_path.is_file() else ""
     vp = parse_vet_plan(plan)
     tasks = parse_tasks(plan)
     research = get_profile(item_kind).kind == "research"
@@ -117,7 +117,7 @@ def write_vet_user_report(item_dir: Path, repo_dir: Path | None, *, summary: str
     lens a read, or a failure a diagnosis."""
     item_dir = Path(item_dir)
     plan_path = item_dir / "artifacts" / artifact_file("plan")
-    plan_ids = [c["id"] for c in parse_vet_plan(plan_path.read_text()).get("checks", [])] \
+    plan_ids = [c["id"] for c in parse_vet_plan(plan_path.read_text(encoding="utf-8")).get("checks", [])] \
         if plan_path.is_file() else []
     entries = evidence_entries(item_dir)
     by_check: dict[str, list[dict]] = {}
@@ -151,7 +151,7 @@ def write_vet_user_report(item_dir: Path, repo_dir: Path | None, *, summary: str
     # Each check's `proves:`, so a red row says what STOPPED being true instead of naming an id
     # nobody remembers.
     proves_of = {c["id"]: str(c.get("proves") or "")
-                 for c in (parse_vet_plan(plan_path.read_text()).get("checks", [])
+                 for c in (parse_vet_plan(plan_path.read_text(encoding="utf-8")).get("checks", [])
                            if plan_path.is_file() else [])}
     failed = [c for c in checks
               if (h := by_check.get(c)) and not h[-1].get("passed") and not h[-1].get("deferred")]

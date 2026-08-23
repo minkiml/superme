@@ -56,7 +56,7 @@ def _fetch_openapi() -> dict:
 def _source(live: bool) -> tuple[dict, list[str], str]:
     """The OpenAPI document, the WS routes, and where they came from."""
     if live:
-        base = json.loads(BASELINE.read_text()) if BASELINE.exists() else {"inventory": []}
+        base = json.loads(BASELINE.read_text(encoding="utf-8")) if BASELINE.exists() else {"inventory": []}
         ws = [r for r in base["inventory"] if r.startswith("WS ")]
         return _fetch_openapi(), ws, DAEMON
     app = _app()
@@ -89,7 +89,7 @@ def _ws_ok(path: str) -> bool:
 def snapshot(live: bool) -> None:
     openapi, ws, where = _source(live)
     inv = _inventory(openapi, ws)
-    BASELINE.write_text(json.dumps({"inventory": inv, "openapi": openapi}, indent=2, sort_keys=True))
+    BASELINE.write_text(json.dumps({"inventory": inv, "openapi": openapi}, indent=2, sort_keys=True), encoding="utf-8")
     print(f"✓ baseline written from {where}: {len(inv)} routes "
           f"({len(inv) - len(ws)} HTTP + {len(ws)} WS)")
     print(f"  → {BASELINE}")
@@ -98,7 +98,7 @@ def snapshot(live: bool) -> None:
 def check(*, strict_shapes: bool, live: bool) -> int:
     if not BASELINE.exists():
         sys.exit(f"✗ no baseline at {BASELINE} — run `python -m scripts.parity snapshot` first")
-    base = json.loads(BASELINE.read_text())
+    base = json.loads(BASELINE.read_text(encoding="utf-8"))
     openapi, ws, where = _source(live)
     inv = _inventory(openapi, ws)
 

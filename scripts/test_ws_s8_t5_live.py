@@ -110,7 +110,7 @@ def main() -> None:
     print("3 · what the thread banked")
     ok("session-memory/<sid>.md exists — the general session's only disk copy",
        memfile.exists(), str(memfile))
-    text = memfile.read_text()
+    text = memfile.read_text(encoding="utf-8")
     # The field NAMES are the contract, not their order: nothing parses this file, and its reader
     # is the next agent on the thread.
     low = text.lower().replace("_", " ")

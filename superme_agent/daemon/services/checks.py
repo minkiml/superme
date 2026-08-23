@@ -29,7 +29,7 @@ def _run(cmd: str, worktree: Path) -> tuple[int, str] | None:
         return None
     try:
         p = subprocess.run(argv, cwd=str(worktree), capture_output=True, text=True,
-                           timeout=CHECK_TIMEOUT_S)
+                           timeout=CHECK_TIMEOUT_S, encoding="utf-8")
         code, out = p.returncode, ((p.stdout or "") + (p.stderr or ""))
     except subprocess.TimeoutExpired:
         code, out = 124, f"timed out after {CHECK_TIMEOUT_S}s"
@@ -92,7 +92,7 @@ def runnable_checks(item_dir: Path, *, skip: list[str] | None = None) -> list[di
     blocked = set(skip or ())
     # A check carrying a RUBRIC is never ours: its verdict includes a judgment, and a machine
     # entry is final.
-    return [c for c in _arts.parse_vet_plan(plan.read_text()).get("checks", [])
+    return [c for c in _arts.parse_vet_plan(plan.read_text(encoding="utf-8")).get("checks", [])
             if c.get("run") and c.get("id") and c["id"] not in blocked and not c.get("rubric")]
 
 
@@ -114,7 +114,7 @@ def execute(item_dir: Path, worktree: Path, *, skip: list[str] | None = None,
             return []          # all-or-nothing: a half-executed exam is the worst of both
         try:
             p = subprocess.run(argv, cwd=str(worktree), capture_output=True, text=True,
-                               timeout=CHECK_TIMEOUT_S)
+                               timeout=CHECK_TIMEOUT_S, encoding="utf-8")
             code, out = p.returncode, ((p.stdout or "") + (p.stderr or ""))
         except subprocess.TimeoutExpired:
             code, out = 124, f"timed out after {CHECK_TIMEOUT_S}s"

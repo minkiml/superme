@@ -173,7 +173,7 @@ def _authored_extras(ctx, item: dict, phase: str | None, mcp: list[str]) -> dict
         if path.is_file():
             skills.append({"name": f"superme-dev:{name} — SKILL.md",
                            "location": f"plugins/superme-dev/skills/{name}/SKILL.md",
-                           "text": path.read_text()})
+                           "text": path.read_text(encoding="utf-8")})
     # `superme` is always mounted; the rest come from the run's own `extra_mcp_servers`. An
     # unrecognised one drops the fragment.
     try:

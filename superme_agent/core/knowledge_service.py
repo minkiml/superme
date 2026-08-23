@@ -45,12 +45,12 @@ class KnowledgeService:
         return {"name": root.name, "type": "dir", "path": "", "children": children}
 
     def read(self, root: Path, relpath: str) -> str:
-        return self._safe(root, relpath).read_text()
+        return self._safe(root, relpath).read_text(encoding="utf-8")
 
     def write(self, root: Path, relpath: str, content: str) -> None:
         p = self._safe(root, relpath)
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(content)
+        p.write_text(content, encoding="utf-8")
 
     def inject(self, root: Path, title: str, content: str, folder: str = "knowledge") -> str:
         """Create a new note and link it in index.md. Returns its relative path."""
@@ -63,10 +63,10 @@ class KnowledgeService:
             p = self._safe(root, rel)
             i += 1
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(f"# {title}\n\n{content}\n")
+        p.write_text(f"# {title}\n\n{content}\n", encoding="utf-8")
 
         index = Path(root) / "index.md"
         if index.exists():
-            with index.open("a") as f:
+            with index.open("a", encoding="utf-8") as f:
                 f.write(f"\n- [{title}]({rel})")
         return rel

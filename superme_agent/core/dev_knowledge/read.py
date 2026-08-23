@@ -91,7 +91,7 @@ class ReadOps:
         p = Path(dev_root) / "work-items" / item_id / "item.md"
         if not p.exists():
             return None
-        meta, body = parse_md(p.read_text())
+        meta, body = parse_md(p.read_text(encoding="utf-8"))
         it = dict(meta)
         it["id"] = str(meta.get("id") or item_id)
         # An all-decimal 12-hex id parses from YAML as an int. Coerce.
@@ -114,12 +114,12 @@ class ReadOps:
         adir = Path(dev_root) / "work-items" / item_id / "artifacts"
         plan = adir / "plan.md"
         if plan.exists():
-            body = _section(plan.read_text(), "Tasks")
+            body = _section(plan.read_text(encoding="utf-8"), "Tasks")
             if body.strip():
                 return body.splitlines()
         legacy = adir / "tasks.md"
         if legacy.exists():
-            return legacy.read_text().splitlines()
+            return legacy.read_text(encoding="utf-8").splitlines()
         return []
 
     def task_progress(self, dev_root: Path, item_id: str) -> dict | None:
@@ -154,7 +154,7 @@ class ReadOps:
         p = Path(dev_root) / "work-items" / item_id / "artifacts" / name
         if not p.exists():
             return None
-        _meta, body = parse_md(p.read_text())
+        _meta, body = parse_md(p.read_text(encoding="utf-8"))
         return body.strip() or None
 
     def work_item_session_ids(self, item: dict) -> list[str]:
@@ -177,7 +177,7 @@ class ReadOps:
             rel = item_md.parent.relative_to(base)
             if any(part.startswith((".", "_")) for part in rel.parts):
                 continue
-            meta, body = parse_md(item_md.read_text())
+            meta, body = parse_md(item_md.read_text(encoding="utf-8"))
             it = dict(meta)
             it["id"] = str(meta.get("id") or item_md.parent.name)
             it["root_id"] = rel.parts[0]

@@ -106,7 +106,7 @@ def test_failed_resume_restores(dev_root: Path) -> None:
     d = dev_root / "work-items" / "r1"
     d.mkdir(parents=True)
     (d / "item.md").write_text(
-        "---\nid: r1\ntitle: Fixture\nphase: build\nstatus: active\nupdated_at: 2026-01-01\n---\n\nb\n")
+        "---\nid: r1\ntitle: Fixture\nphase: build\nstatus: active\nupdated_at: 2026-01-01\n---\n\nb\n", encoding="utf-8")
     dev.set_work_item_error(dev_root, "r1", "the build run stopped — upstream was unavailable")
 
     body = src("superme_agent/daemon/services/resume.py")

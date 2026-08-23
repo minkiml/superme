@@ -8,11 +8,11 @@ fails.
 
 import json
 import os
-import shutil
 import subprocess
 import time
 
 from ..paths import log
+from .vocab import console
 
 # `claude auth status` spawns a process, and `/system/auth` is polled. One answer per minute is
 # plenty for a credential that changes when a person runs a command.
@@ -39,11 +39,11 @@ def _resolve() -> dict:
     if os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"):
         return {"ready": True, "method": "token",
                 "detail": "a plan token is set in .env"}
-    if not shutil.which("claude"):
+    if (probe := console.argv("claude", "auth", "status")) is None:
         return {"ready": False, "method": None,
                 "detail": "the Claude CLI is not on PATH — install Claude Code, then either "
                           "run `claude auth login` or put a `claude setup-token` token in .env"}
-    if _cli_signed_in():
+    if _cli_signed_in(probe):
         return {"ready": True, "method": "cli",
                 "detail": "the Claude CLI on this machine is signed in"}
     return {"ready": False, "method": None,
@@ -51,15 +51,15 @@ def _resolve() -> dict:
                       "token from `claude setup-token` in .env as CLAUDE_CODE_OAUTH_TOKEN"}
 
 
-def _cli_signed_in() -> bool:
+def _cli_signed_in(probe: list[str]) -> bool:
     """Ask the CLI itself, so the answer holds on every platform it runs on.
 
     Its JSON also carries the account's email and organisation. Only `loggedIn` is read, and
     nothing from this reply is logged or returned.
     """
     try:
-        p = subprocess.run(["claude", "auth", "status"], capture_output=True, text=True,
-                           timeout=_CLI_TIMEOUT_S)
+        p = subprocess.run(probe, capture_output=True, text=True,
+                           timeout=_CLI_TIMEOUT_S, encoding="utf-8")
     except (OSError, subprocess.SubprocessError) as e:
         log.warning("could not ask the Claude CLI for auth status: %s", e)
         return False

@@ -139,7 +139,7 @@ def _existing_rules_file(prop: dict, repo_id: str | None, workspace: Path) -> st
     if not bodies:
         return None
     path = workspace / "_existing_rules.md"
-    path.write_text("\n\n".join(bodies) + "\n")
+    path.write_text("\n\n".join(bodies) + "\n", encoding="utf-8")
     return str(path)
 
 

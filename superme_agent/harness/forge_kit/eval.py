@@ -14,6 +14,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from ...core.vocab import console
 
 TIMEOUT_S = 180
 # Read-only tools and a turn cap, so an unvetted artifact can neither mutate the machine nor run
@@ -146,7 +147,9 @@ def _run_claude(prompt, model, *, extra_args=None, timeout=TIMEOUT_S):
 
     Hermetic means a throwaway cwd, so the operated repo's settings and memory cannot leak into the
     judgment, and its native transcript is purged after."""
-    cmd = ["claude", "-p", "--strict-mcp-config", "--output-format", "json"]
+    cmd = console.argv("claude", "-p", "--strict-mcp-config", "--output-format", "json")
+    if cmd is None:
+        raise RuntimeError("the Claude CLI is not on PATH")
     if extra_args:
         cmd += extra_args
     if model:
@@ -156,8 +159,7 @@ def _run_claude(prompt, model, *, extra_args=None, timeout=TIMEOUT_S):
         try:
             out = subprocess.run(
                 cmd, input=prompt, capture_output=True, text=True,
-                timeout=timeout, cwd=td, env=env,
-            )
+                timeout=timeout, cwd=td, env=env, encoding="utf-8")
         finally:
             _purge_native_transcript(td)
     # `claude -p` exits non-zero on a soft outcome like a turn cap, yet still emits a complete
@@ -251,10 +253,10 @@ def main():
     if not path.is_file():
         print(json.dumps({"verdict": "skipped", "summary": f"file not found: {path}"}))
         sys.exit(0)
-    artifact = path.read_text()
+    artifact = path.read_text(encoding="utf-8")
     existing = ""
     if args.existing and Path(args.existing).is_file():
-        existing = Path(args.existing).read_text()
+        existing = Path(args.existing).read_text(encoding="utf-8")
 
     prompt = _build_prompt(args.form, artifact, args.intent, existing)
     eval_overhead = {}

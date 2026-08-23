@@ -148,7 +148,7 @@ def spine_session(sid: str) -> dict | None:
 
 def item_meta(iid: str) -> dict:
     import yaml
-    text = (KHOME / "work-items" / iid / "item.md").read_text()
+    text = (KHOME / "work-items" / iid / "item.md").read_text(encoding="utf-8")
     return yaml.safe_load(text.split("---")[1])
 
 
@@ -158,12 +158,12 @@ def transcript_exists(sid: str) -> bool:
 
 def git(cwd: Path, *args: str) -> str:
     return subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", *args],
-                          cwd=cwd, capture_output=True, text=True, check=True).stdout.strip()
+                          cwd=cwd, capture_output=True, text=True, check=True, encoding="utf-8").stdout.strip()
 
 
 def write_artifact(item_dir: Path, name: str, text: str) -> None:
     (item_dir / "artifacts").mkdir(parents=True, exist_ok=True)
-    (item_dir / "artifacts" / name).write_text(text)
+    (item_dir / "artifacts" / name).write_text(text, encoding="utf-8")
 
 
 def cleanup(trunk_sha0: str, iid: str | None) -> None:
@@ -176,7 +176,7 @@ def cleanup(trunk_sha0: str, iid: str | None) -> None:
             subprocess.run(["git", "worktree", "prune"], cwd=REPO, check=False)
             for br in subprocess.run(["git", "branch", "--list", f"item/{iid}*",
                                       "--format=%(refname:short)"],
-                                     cwd=REPO, capture_output=True, text=True).stdout.split():
+                                     cwd=REPO, capture_output=True, text=True, encoding="utf-8").stdout.split():
                 subprocess.run(["git", "branch", "-Dq", br], cwd=REPO, check=False)
         if iid:
             shutil.rmtree(KHOME / "work-items" / iid, ignore_errors=True)

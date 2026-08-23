@@ -51,18 +51,18 @@ def setup() -> None:
     exec_md = KHOME / "work-items" / iid / "artifacts" / "execution.md"
     assert Path(wt).is_dir() and not exec_md.exists()
     STATE.write_text(json.dumps({"item": iid, "worktree": wt, "branch": adv["git"]["branch"],
-                                 "run_id": run_id, "inbox_id": row["id"]}))
+                                 "run_id": run_id, "inbox_id": row["id"]}), encoding="utf-8")
     print(f"setup done — item {iid} is terminal with a live worktree, no snapshot, and run "
           f"#{run_id} stuck 'running'. Restart the daemon, then run `verify`.")
 
 
 def verify() -> None:
     import sqlite3
-    st = json.loads(STATE.read_text())
+    st = json.loads(STATE.read_text(encoding="utf-8"))
     iid, wt = st["item"], Path(st["worktree"])
     exec_md = KHOME / "work-items" / iid / "artifacts" / "execution.md"
     branches = subprocess.run(["git", "branch", "--list", st["branch"]], cwd=REPO,
-                              capture_output=True, text=True).stdout
+                              capture_output=True, text=True, encoding="utf-8").stdout
     con = sqlite3.connect(Path("superme_agent") / ".system.db")
     status = con.execute("SELECT status FROM run WHERE id=?", (st["run_id"],)).fetchone()[0]
     con.close()

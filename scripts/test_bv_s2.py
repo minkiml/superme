@@ -77,7 +77,7 @@ def test_template() -> None:
     with tempfile.TemporaryDirectory() as td:
         d = Path(td)
         p = Path(A.scaffold(d, "plan", title="T", item_kind="implementation")["path"])
-        text = p.read_text()
+        text = p.read_text(encoding="utf-8")
         ok("impl plan scaffolds Design + Verification plan",
            "## Design" in text and "## Verification plan" in text)
         ok("the 'where possible' slot is gone", "Validation criteria" not in text)
@@ -86,7 +86,7 @@ def test_template() -> None:
            >= {"Design", "Verification plan"})
         r = Path(A.scaffold(d / "r", "plan", title="T", item_kind="research")["path"])
         ok("research plan untouched (no verification plan — O6)",
-           "Verification plan" not in r.read_text() and "Done criteria" in r.read_text())
+           "Verification plan" not in r.read_text(encoding="utf-8") and "Done criteria" in r.read_text(encoding="utf-8"))
 
 
 def test_parser() -> None:
@@ -224,7 +224,7 @@ def test_proves_is_the_human_field() -> None:
     with tempfile.TemporaryDirectory() as td:
         d = Path(td)
         (d / "artifacts").mkdir()
-        (d / "artifacts" / "plan.md").write_text(GOOD_PLAN)
+        (d / "artifacts" / "plan.md").write_text(GOOD_PLAN, encoding="utf-8")
         row = next(r for r in A.proof_rows(d) if r["task"] == "")
         ok("proof rows carry `proves` from the plan, unaltered",
            any(v["proves"].startswith("an expense you add shows up")
@@ -247,7 +247,7 @@ def test_self_check_gate() -> None:
 
         def write_plan(text: str) -> None:
             (d / "artifacts").mkdir(exist_ok=True)
-            (d / "artifacts" / "plan.md").write_text("---\nartifact: plan\n---\n" + text)
+            (d / "artifacts" / "plan.md").write_text("---\nartifact: plan\n---\n" + text, encoding="utf-8")
 
         write_plan(GOOD_PLAN)
         ok("the §3.2 example is gate-ready",
@@ -305,7 +305,7 @@ def test_gate_state_surface() -> None:
         (item_dir / "artifacts").mkdir(parents=True)
         vague = GOOD_PLAN.replace("total prints 0.30 exactly (not 0.30000000000000004); exit 0",
                                   "the totals work correctly across all the usual cases")
-        (item_dir / "artifacts" / "plan.md").write_text("---\nartifact: plan\n---\n" + vague)
+        (item_dir / "artifacts" / "plan.md").write_text("---\nartifact: plan\n---\n" + vague, encoding="utf-8")
         item = {"id": "abc123def456", "title": "t", "kind": "implementation", "phase": "plan",
                 "status": "awaiting_human"}
         s = GB.gate_state(item, item_dir, d / "root", None, all_items=[item], events=[])
@@ -320,7 +320,7 @@ def test_gate_state_surface() -> None:
         none_plan = ("# Plan — t\n\n## Approach\nx\n\n## Tasks\n- [ ] t\n\n"
                      "## Inner checks\n- `pytest -q`\n\n## Vet plan\n"
                      "depth: none\nreason: comment-only change, nothing observable\nenv: none\n")
-        (item_dir / "artifacts" / "plan.md").write_text("---\nartifact: plan\n---\n" + none_plan)
+        (item_dir / "artifacts" / "plan.md").write_text("---\nartifact: plan\n---\n" + none_plan, encoding="utf-8")
         s = GB.gate_state(item, item_dir, d / "root", None, all_items=[item], events=[])
         sharp = next(c for c in s["checks"] if c["criterion"] == "vet_plan_sharp")
         # The vet pass RUNS and confirms there is nothing to check; promising no run halted the

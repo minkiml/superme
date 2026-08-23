@@ -780,7 +780,7 @@ class DevStore:
                 return 0
         tag, n, now = None, 0, _now()
         with self._conn() as c:
-            for raw in md_path.read_text().splitlines():
+            for raw in md_path.read_text(encoding="utf-8").splitlines():
                 s = raw.strip()
                 if s.startswith("### "):
                     head = s[4:].split("(")[0].split("—")[0].lower()

@@ -75,7 +75,7 @@ class ModelOps:
         if not path or not path.is_file():
             return None
         try:
-            meta, _ = parse_frontmatter(path.read_text())
+            meta, _ = parse_frontmatter(path.read_text(encoding="utf-8"))
         except Exception:
             return None
         return meta.get("model") or None
@@ -107,7 +107,7 @@ class ModelOps:
         if not path or not path.is_file():
             return None
         try:
-            meta, _ = parse_frontmatter(path.read_text())
+            meta, _ = parse_frontmatter(path.read_text(encoding="utf-8"))
         except Exception:
             return None
         return meta.get("effort") or None

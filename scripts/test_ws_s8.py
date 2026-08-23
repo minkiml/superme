@@ -106,7 +106,7 @@ def test_role_scoped_checkpoints(tmp: Path) -> None:
     (d / "checkpoints").mkdir(parents=True)
     # An UNSTAMPED file first (pre-stamp era) — it must stay visible to every role.
     (d / "checkpoints" / "20260101-000000.md").write_text(
-        "---\ncheckpoint: legacy\n---\n## Working on\nold\n")
+        "---\ncheckpoint: legacy\n---\n## Working on\nold\n", encoding="utf-8")
     ok("unstamped is visible to a role read",
        (A.latest_checkpoint(d, role="intake") or {}).get("path", "").endswith("000000.md"))
     A.write_checkpoint(d, None, working_on="intake w", decisions="", remaining="r",
@@ -119,7 +119,7 @@ def test_role_scoped_checkpoints(tmp: Path) -> None:
        "intake w" in (A.latest_checkpoint(d, role="intake") or {})["text"])
     ok("role='build' gets its own", "build w" in (A.latest_checkpoint(d, role="build") or {})["text"])
     ok("the stamp is in the frontmatter",
-       "\nrole: build\n" in Path((A.latest_checkpoint(d, role="build") or {})["path"]).read_text())
+       "\nrole: build\n" in Path((A.latest_checkpoint(d, role="build") or {})["path"]).read_text(encoding="utf-8"))
     ok("a role with nothing of its own and no legacy file reads None",
        A.latest_checkpoint(tmp / "empty", role="vet") is None)
 
@@ -157,7 +157,7 @@ def test_session_memory(tmp: Path) -> None:
     # The AGENT writes this file: a general session has no item tools, so there is no kernel
     # writer.
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text("## Working on\nw1\n\n## Decisions\n—\n\n## Remaining\nr1\n\n## Notes\n—\n")
+    p.write_text("## Working on\nw1\n\n## Decisions\n—\n\n## Remaining\nr1\n\n## Notes\n—\n", encoding="utf-8")
     got = A.read_session_memory(root, "sess-1")
     ok("...and the read finds it", got and got["path"] == str(p) and "w1" in got["text"])
     ok("another session's memory is a different file",
@@ -165,7 +165,7 @@ def test_session_memory(tmp: Path) -> None:
     ok("nothing in the kernel writes it — a derived fallback cannot exist for a general session",
        not hasattr(A, "write_session_memory"))
     long = "x" * 9000
-    p.write_text(long)
+    p.write_text(long, encoding="utf-8")
     ok("the read is char-capped like every other artifact read",
        len(A.read_session_memory(root, "sess-1", char_cap=100)["text"]) == 100
        and A.read_session_memory(root, "sess-1", char_cap=100)["truncated"])

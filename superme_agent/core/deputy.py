@@ -63,11 +63,11 @@ def read_mandate(dev_root: Path, *, seed: bool = True) -> str:
     """The project mandate. Seeds the template on first read so a deputy always has a bar. Best-effort."""
     p = mandate_path(dev_root)
     if p.exists():
-        return p.read_text()
+        return p.read_text(encoding="utf-8")
     if seed:
         try:
             p.parent.mkdir(parents=True, exist_ok=True)
-            p.write_text(MANDATE_TEMPLATE)
+            p.write_text(MANDATE_TEMPLATE, encoding="utf-8")
         except OSError:
             pass
     return MANDATE_TEMPLATE
@@ -80,7 +80,7 @@ def _log_entries(item_dir: Path) -> list[dict]:
     if not p.exists():
         return []
     rows: list[dict] = []
-    for line in p.read_text().splitlines():
+    for line in p.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if not line:
             continue
@@ -114,7 +114,7 @@ def append_decision(item_dir: Path, gate: str, decision: str, because: str, *,
         entry["authorize"] = authorize
     p = log_path(item_dir)
     p.parent.mkdir(parents=True, exist_ok=True)
-    with p.open("a") as f:
+    with p.open("a", encoding="utf-8") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
 

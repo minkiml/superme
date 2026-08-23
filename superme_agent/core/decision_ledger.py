@@ -34,7 +34,7 @@ def read_entries(dev_root: Path) -> list[dict]:
     p = _path(dev_root)
     if not p.is_file():
         return []
-    text = p.read_text()
+    text = p.read_text(encoding="utf-8")
     out: list[dict] = []
     marks = list(_HEADING.finditer(text))
     for i, m in enumerate(marks):
@@ -90,7 +90,7 @@ def record_rulings(dev_root: Path, item_dir: Path, item_id: str, *, date: str,
     if not answered:
         return []
     p = _path(dev_root)
-    text = p.read_text() if p.is_file() else _SKELETON.format(project=project)
+    text = p.read_text(encoding="utf-8") if p.is_file() else _SKELETON.format(project=project)
     entries = read_entries(dev_root)
     written: list[str] = []
     for prop in answered:
@@ -102,7 +102,7 @@ def record_rulings(dev_root: Path, item_dir: Path, item_id: str, *, date: str,
         written.append(entry_id)
     if written:
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(text)
+        p.write_text(text, encoding="utf-8")
     return written
 
 

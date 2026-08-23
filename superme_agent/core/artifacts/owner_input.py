@@ -58,7 +58,7 @@ def owner_input(item_dir: Path) -> dict:
     path = Path(item_dir) / "reports" / "report-triage.md"
     if not path.is_file():
         return {"exists": False, "references": [], "notes": []}
-    blocks = _owner_blocks(split_sections(path.read_text()).get(FROM_YOU, ""))
+    blocks = _owner_blocks(split_sections(path.read_text(encoding="utf-8")).get(FROM_YOU, ""))
     return {"exists": True,
             "references": _owner_slots(blocks["references"], sourced=True),
             "notes": _owner_slots(blocks["notes"], sourced=False)}
@@ -88,7 +88,7 @@ def carry_owner_input(item_dir: Path, *, cap: int = _CARRY_CAP) -> str | None:
     try:
         plan = Path(item_dir) / "artifacts" / artifact_file("plan")
         if plan.is_file():
-            body = split_sections(plan.read_text()).get(_DECISIONS, "")
+            body = split_sections(plan.read_text(encoding="utf-8")).get(_DECISIONS, "")
             # Comment-only bodies are the SCAFFOLD, not an answer — the template ships its
             # instructions inside `<!-- -->`.
             body = re.sub(r"<!--.*?-->", "", body, flags=re.DOTALL)
@@ -136,7 +136,7 @@ def write_owner_input(item_dir: Path, *, references: list[dict],
     path = Path(item_dir) / "reports" / "report-triage.md"
     if not path.is_file():
         raise FileNotFoundError("reports/report-triage.md does not exist — triage writes it first")
-    text = path.read_text()
+    text = path.read_text(encoding="utf-8")
     section = _render_from_you(references, notes)
     pattern = re.compile(rf"^##[^\S\n]+{re.escape(FROM_YOU)}[^\S\n]*$.*?(?=^##[^\S\n]|\Z)",
                          re.M | re.S)

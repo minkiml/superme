@@ -41,7 +41,7 @@ def ok(msg: str, cond: bool = True) -> None:
 
 def skill_text(phase: str) -> str:
     p = SKILLS / phase / "SKILL.md"
-    return p.read_text() if p.is_file() else ""
+    return p.read_text(encoding="utf-8") if p.is_file() else ""
 
 
 def tools_named_by(phase: str) -> set[str]:

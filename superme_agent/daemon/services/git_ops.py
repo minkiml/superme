@@ -241,7 +241,7 @@ def build_downstream_digest(item_dir: Path, *, char_cap: int = 2400) -> str | No
     try:
         review_record = item_dir / "artifacts" / artifacts.artifact_file("review")
         if review_record.is_file():
-            body = review_record.read_text().strip()
+            body = review_record.read_text(encoding="utf-8").strip()
             if body:
                 head = body[:char_cap]
                 parts.append("Review's record of the last pass (artifacts/review.md):\n" + head)

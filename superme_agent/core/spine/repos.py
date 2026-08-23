@@ -34,12 +34,12 @@ class RepoOps:
         spec = {k: v for k, v in rc.to_dict().items() if k != "id"}
         block = textwrap.indent(yaml.safe_dump({rc.id: spec}, sort_keys=False), "  ")
         path = Path(self._repos_config_path)
-        text = path.read_text() if path.exists() else ""
+        text = path.read_text(encoding="utf-8") if path.exists() else ""
         if "repos:" not in text:                       # fresh/empty file → start the mapping
             text = (text.rstrip() + "\n\nrepos:\n") if text.strip() else "repos:\n"
         elif not text.endswith("\n"):
             text += "\n"
-        path.write_text(text + block)
+        path.write_text(text + block, encoding="utf-8")
         return rc
 
     def update_repo(self, repo_id: str, **fields) -> RepoConfig:
@@ -65,7 +65,7 @@ class RepoOps:
             return "    " + yaml.safe_dump({key: val}, sort_keys=False).strip() + "\n"
 
         path = Path(self._repos_config_path)
-        text = path.read_text()
+        text = path.read_text(encoding="utf-8")
         if text and not text.endswith("\n"):   # else an appended key joins the last line
             text += "\n"
         lines = text.splitlines(keepends=True)
@@ -90,7 +90,7 @@ class RepoOps:
             for key, val in patch.items():
                 if key not in seen and val is not None:
                     out.append(_line(key, val))
-        path.write_text("".join(out))
+        path.write_text("".join(out), encoding="utf-8")
         updated = self.repos().get(repo_id)
         if updated is None:
             raise ValueError(f"repos.yaml update dropped '{repo_id}' — file left as written; "
@@ -107,7 +107,7 @@ class RepoOps:
             raise ValueError(f"unknown repo id '{repo_id}'")
         path = Path(self._repos_config_path)
         out, dropping = [], False
-        for ln in path.read_text().splitlines(keepends=True):
+        for ln in path.read_text(encoding="utf-8").splitlines(keepends=True):
             if not dropping and ln.rstrip().startswith(f"  {repo_id}:") and not ln.startswith("   "):
                 dropping = True
                 continue
@@ -116,7 +116,7 @@ class RepoOps:
                     continue
                 dropping = False            # anything shallower ends the block
             out.append(ln)
-        path.write_text("".join(out))
+        path.write_text("".join(out), encoding="utf-8")
         with self._conn() as c:
             for table in ("model_override", "effort_override", "repo_learning", "repo_meta"):
                 c.execute(f"DELETE FROM {table} WHERE repo_id=?", (repo_id,))

@@ -168,7 +168,7 @@ def test_skills() -> None:
         "triage": ("set_triage_classification", "brief"),
     }
     for name, needles in deltas.items():
-        text = (SKILLS / name / "SKILL.md").read_text()
+        text = (SKILLS / name / "SKILL.md").read_text(encoding="utf-8")
         assert "headless" not in text.lower(), f"FAIL: {name} still says headless"
         section = text
         _clean(f"{name} skill", text)
@@ -210,18 +210,18 @@ def _fixture_item_dir() -> Path:
     (d / "artifacts").mkdir(parents=True)
     (d / "checkpoints").mkdir()
     (d / "preliminary").mkdir()
-    (d / "artifacts" / "plan.md").write_text("# Plan\n\n## Tasks\n- [x] a\n- [ ] b\n")
-    (d / "checkpoints" / "20260101T000000.md").write_text("checkpoint body\n")
+    (d / "artifacts" / "plan.md").write_text("# Plan\n\n## Tasks\n- [x] a\n- [ ] b\n", encoding="utf-8")
+    (d / "checkpoints" / "20260101T000000.md").write_text("checkpoint body\n", encoding="utf-8")
     (d / "artifacts" / "build-vet-1.md").write_text(
         "# Build⟷vet 1 — Fixture\n\n## Built\nb1\n\n## Validation\nv1\n\n## Verification\n"
         "```checks\n### 2026-01-01T00:00:00 — c1\n- how: run\n- result: bad\n- passed: false\n"
         "- fingerprint: f\n```\n\n## Cycle outcome\n"
-        "\n### 2026-01-01T00:00:30 — build\n- evidence: failed\n- reason: r1\n")
+        "\n### 2026-01-01T00:00:30 — build\n- evidence: failed\n- reason: r1\n", encoding="utf-8")
     (d / "artifacts" / "build-vet-2.md").write_text(
         "# Build⟷vet 2 — Fixture\n\n## Built\nb2\n\n## Validation\nv2\n\n## Verification\n"
         "```checks\n### 2026-01-01T00:01:00 — c1\n- how: run\n- result: ok\n- passed: true\n"
         "- fingerprint: f\n```\n\n## Cycle outcome\n"
-        "\n### 2026-01-01T00:01:30 — review\n- evidence: passed\n- reason: r2\n")
+        "\n### 2026-01-01T00:01:30 — review\n- evidence: passed\n- reason: r2\n", encoding="utf-8")
     return d
 
 
@@ -303,10 +303,10 @@ def test_snapshot() -> None:
     ok("every entry renders non-empty", all(v and v.strip() for v in rendered.values()),
        str([k for k, v in rendered.items() if not v]))
     if not BASELINE.exists():
-        BASELINE.write_text(json.dumps(rendered, indent=2, ensure_ascii=False) + "\n")
+        BASELINE.write_text(json.dumps(rendered, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         ok("baseline written (first run) — commit scripts/prompt_baseline.json", True)
         return
-    base = json.loads(BASELINE.read_text())
+    base = json.loads(BASELINE.read_text(encoding="utf-8"))
     ok("no entries added/removed vs baseline", set(base) == set(rendered),
        f"only-in-baseline={sorted(set(base) - set(rendered))} "
        f"only-in-code={sorted(set(rendered) - set(base))}")
@@ -330,7 +330,7 @@ def test_lint() -> None:
         rel = str(p.relative_to(ROOT))
         if rel in LINT_ALLOWED:
             continue
-        text = p.read_text()
+        text = p.read_text(encoding="utf-8")
         for m in LINT_MARKERS:
             if m in text:
                 hits.append(f"{rel}: {m!r}")

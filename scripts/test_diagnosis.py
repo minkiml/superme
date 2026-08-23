@@ -50,7 +50,7 @@ def ok(msg: str, cond: bool = True) -> None:
 def _item() -> Path:
     item = Path(tempfile.mkdtemp(prefix="diag-")) / "item"
     (item / "artifacts").mkdir(parents=True)
-    (item / "artifacts" / _arts.artifact_file("plan")).write_text(PLAN)
+    (item / "artifacts" / _arts.artifact_file("plan")).write_text(PLAN, encoding="utf-8")
     _arts.scaffold_cycle(item)
     return item
 
@@ -147,7 +147,7 @@ def test_the_report_refuses_an_undiagnosed_failure():
     _arts.record_diagnosis(item, check="date-flag", where="tally/cli.py:42",
                            why="the flag is parsed but never passed to the writer")
     r = _arts.write_vet_user_report(item, None)
-    text = Path(r["path"]).read_text()
+    text = Path(r["path"]).read_text(encoding="utf-8")
     ok("…and once diagnosed it writes", "## What didn't hold" in text)
     # MACHINE-authored off the ledger: a red result arrives regardless of what vet chose to say.
     ok("the failure leads with what STOPPED being true, not with a check id",
@@ -161,7 +161,7 @@ def test_the_report_refuses_an_undiagnosed_failure():
         _arts.record_verification(item2, None, check=c, how="ran it", result="exit 0", passed=True)
     _lenses(item2)
     ok("a passing cycle prints no didn't-hold block at all",
-       "What didn't hold" not in Path(_arts.write_vet_user_report(item2, None)["path"]).read_text())
+       "What didn't hold" not in Path(_arts.write_vet_user_report(item2, None)["path"]).read_text(encoding="utf-8"))
 
 
 def test_the_cause_leads_the_next_work_order():

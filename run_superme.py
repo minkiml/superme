@@ -47,6 +47,21 @@ def wait_for(url: str, proc: subprocess.Popen, seconds: int = 40) -> bool:
     return False
 
 
+def npm_argv() -> list[str] | None:
+    """How to launch npm here, or None when it is not installed.
+
+    On Windows npm is a `.cmd`, which CreateProcess cannot execute — it has to go through the
+    command interpreter. This launcher imports nothing from the package on purpose, so it carries
+    its own copy of the rule rather than depending on an install that may not be configured yet.
+    """
+    exe = which("npm")
+    if not exe:
+        return None
+    if os.name == "nt" and os.path.splitext(exe)[1].lower() in (".cmd", ".bat"):
+        return [os.environ.get("COMSPEC", "cmd.exe"), "/c", exe]
+    return [exe]
+
+
 def _interrupt(*_args) -> None:
     raise KeyboardInterrupt
 
@@ -67,7 +82,7 @@ def main() -> int:
     bff_port = os.environ.get("SUPERME_BFF_PORT", "8000")
     fe_port = os.environ.get("VITE_PORT", "5173")
 
-    npm = which("npm")
+    npm = npm_argv()
     if not npm:
         print("npm is not on PATH — install Node.js, then npm install --prefix web/frontend")
         return 1
@@ -77,9 +92,13 @@ def main() -> int:
 
     children: list[tuple[str, subprocess.Popen]] = []
 
+    # Windows decodes files and pipes as cp1252 unless told otherwise, and every artifact this
+    # system writes is UTF-8. Set for the children, not this process — it is already running.
+    env = dict(os.environ, PYTHONUTF8="1")
+
     def start(label: str, argv: list[str], cwd: Path) -> subprocess.Popen:
         print(f"> {label}")
-        proc = subprocess.Popen(argv, cwd=str(cwd))
+        proc = subprocess.Popen(argv, cwd=str(cwd), env=env)
         children.append((label, proc))
         return proc
 
@@ -91,7 +110,7 @@ def main() -> int:
             return 1
 
         start(f"web BFF (:{bff_port})", [sys.executable, "-m", "web.bff"], ROOT)
-        start(f"frontend (:{fe_port})", [npm, "run", "dev"], FRONTEND)
+        start(f"frontend (:{fe_port})", [*npm, "run", "dev"], FRONTEND)
         print(f"\nSuperMe is at http://localhost:{fe_port}   (Ctrl-C stops everything)\n")
 
         while True:

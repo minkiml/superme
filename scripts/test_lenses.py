@@ -34,7 +34,7 @@ def ok(msg: str, cond: bool = True) -> None:
 def _item(plan: str = NONE_PLAN) -> Path:
     item = Path(tempfile.mkdtemp(prefix="lens-")) / "item"
     (item / "artifacts").mkdir(parents=True)
-    (item / "artifacts" / _arts.artifact_file("plan")).write_text(plan)
+    (item / "artifacts" / _arts.artifact_file("plan")).write_text(plan, encoding="utf-8")
     _arts.scaffold_cycle(item)
     return item
 
@@ -145,7 +145,7 @@ def test_depth_none_still_owes_its_lenses():
         ok("a depth:none cycle cannot report with no lens read", "has no read this cycle" in str(e))
         ok("…and the refusal says a clean read is a fine answer", "no findings is a fine answer" in str(e))
     _clean(item, robustness=[{"severity": "high", "text": "cli.py:31 — a None date crashes"}])
-    text = Path(_arts.write_vet_user_report(item, None)["path"]).read_text()
+    text = Path(_arts.write_vet_user_report(item, None)["path"]).read_text(encoding="utf-8")
     # The report keeps vet's prose plus, machine-authored, any finding that GATES: what sends the
     # item back cannot depend on prose.
     ok("a gating finding is machine-authored into the report",
@@ -157,7 +157,7 @@ def test_depth_none_still_owes_its_lenses():
     _clean(clean)
     ok("a cycle with no gating finding prints no didn't-hold block",
        "What didn't hold" not in Path(
-           _arts.write_vet_user_report(clean, None)["path"]).read_text())
+           _arts.write_vet_user_report(clean, None)["path"]).read_text(encoding="utf-8"))
 
 
 # ── wiring ──────────────────────────────────────────────────────────────────────────────────────

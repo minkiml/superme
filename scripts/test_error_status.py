@@ -30,7 +30,7 @@ def _item(dev_root: Path, item_id: str = "e1", status: str = "active") -> Path:
     d.mkdir(parents=True)
     (d / "item.md").write_text(
         f"---\nid: {item_id}\ntitle: Fixture\nphase: build\nstatus: {status}\n"
-        f"updated_at: 2026-01-01\n---\n\nbody\n")
+        f"updated_at: 2026-01-01\n---\n\nbody\n", encoding="utf-8")
     return d
 
 
@@ -79,7 +79,7 @@ def test_reason_is_stored_and_cleared(dev_root: Path) -> None:
     d2 = _item(dev_root, "e2")
     (d2 / "item.md").write_text(
         "---\nid: e2\ntitle: Done\nphase: close\nstatus: done\ndone_at: 2026-01-01\n"
-        "updated_at: 2026-01-01\n---\n\nbody\n")
+        "updated_at: 2026-01-01\n---\n\nbody\n", encoding="utf-8")
     ok("a terminal item cannot be dragged back into error",
        not dev.set_work_item_error(dev_root, "e2", "too late"))
 

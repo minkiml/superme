@@ -30,7 +30,7 @@ def main() -> None:
     _strip_field_titles(schema)
     schema["title"] = "WsFrames"
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text(json.dumps(schema, indent=2) + "\n")
+    OUT.write_text(json.dumps(schema, indent=2) + "\n", encoding="utf-8")
     print(f"wrote {OUT} ({len(schema.get('$defs', {}))} frame defs)")
 
 

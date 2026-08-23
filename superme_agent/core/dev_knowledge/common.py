@@ -21,7 +21,7 @@ def _ensure_knowledge_ignore(dev_root: Path) -> None:
         root = Path(dev_root).parent.parent
         marker = root / ".gitignore"
         if root.is_dir() and not marker.exists():
-            marker.write_text(_KNOWLEDGE_IGNORE)
+            marker.write_text(_KNOWLEDGE_IGNORE, encoding="utf-8")
     except OSError:
         pass
 

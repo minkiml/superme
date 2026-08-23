@@ -128,7 +128,7 @@ class LifecycleOps:
             f"created_at: {today}\nupdated_at: {today}\n---\n"
         )
         body = (description or "").strip()
-        (folder / "item.md").write_text(fm + (body + "\n" if body else ""))
+        (folder / "item.md").write_text(fm + (body + "\n" if body else ""), encoding="utf-8")
         return {"id": wid, "folder": wid}
 
     def itemize_launch(self, dev_root: Path, items: list[dict], *,
@@ -222,7 +222,7 @@ class LifecycleOps:
         item_md = folder / "item.md"
         if not item_md.exists():
             return None
-        meta, body = parse_md(item_md.read_text())
+        meta, body = parse_md(item_md.read_text(encoding="utf-8"))
         if not meta:
             return None
         kept = {k: meta[k] for k in self._RERUN_KEEP if k in meta}
@@ -250,7 +250,7 @@ class LifecycleOps:
         # the soft delete ended that.
         lines += [f"phase: {phase}", f"status: {status}", "done_at: null", "artifacts: []",
                   "session_id: null", f"updated_at: {today}"]
-        item_md.write_text("---\n" + "\n".join(lines) + "\n---\n" + body.lstrip("\n"))
+        item_md.write_text("---\n" + "\n".join(lines) + "\n---\n" + body.lstrip("\n"), encoding="utf-8")
 
         removed = []
         # `scratch/` goes too: last attempt's half-built inventories are exactly the stale input a

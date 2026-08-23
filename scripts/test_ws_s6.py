@@ -38,18 +38,18 @@ def _seed_anchor_docs(dev_root: Path) -> None:
     g = dev_root / "general"
     g.mkdir(parents=True, exist_ok=True)
     (g / "project-prd.md").write_text(
-        "# PRD\n\n## Problem\nstuff\n\n## Deliverables\n- **d-alpha** — the alpha thing\n")
+        "# PRD\n\n## Problem\nstuff\n\n## Deliverables\n- **d-alpha** — the alpha thing\n", encoding="utf-8")
     (g / "architecture.md").write_text(
-        "# Architecture\n\n## Stack\npython\n\n## Components\nOld component text.\n\n## Flows\nflow text\n")
-    (g / "roadmap.md").write_text("# Roadmap\n\n## d-alpha\n- **w1** — first wave 🟢\n")
-    (g / "capabilities.md").write_text("# Capabilities\n\n## Capabilities\n- **alpha** — ships\n")
+        "# Architecture\n\n## Stack\npython\n\n## Components\nOld component text.\n\n## Flows\nflow text\n", encoding="utf-8")
+    (g / "roadmap.md").write_text("# Roadmap\n\n## d-alpha\n- **w1** — first wave 🟢\n", encoding="utf-8")
+    (g / "capabilities.md").write_text("# Capabilities\n\n## Capabilities\n- **alpha** — ships\n", encoding="utf-8")
 
 
 def _git_repo(tmp: Path, name: str) -> Path:
     repo = tmp / name
     repo.mkdir()
     subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
-    (repo / "real.py").write_text("x = 1\n")
+    (repo / "real.py").write_text("x = 1\n", encoding="utf-8")
     subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
     subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t",
                     "commit", "-qm", "init"], cwd=repo, check=True)
@@ -102,7 +102,7 @@ def test_delta_apply(tmp: Path) -> None:
         {"doc": "architecture", "section": "Components", "op": "update", "content": "NEW BODY."},
         {"doc": "architecture", "section": "Flows", "op": "append", "content": "APPENDED LINE."},
     ])
-    arch = (dev_root / "general" / "architecture.md").read_text()
+    arch = (dev_root / "general" / "architecture.md").read_text(encoding="utf-8")
     ok("update REPLACED the section body",
        "NEW BODY." in arch and "Old component text" not in arch)
     ok("append KEPT + extended the section",
@@ -114,7 +114,7 @@ def test_delta_apply(tmp: Path) -> None:
     # `rename_section` rewrites the `## heading` LINE, leaving the body intact.
     KD.apply_ops(dev_root, [{"doc": "architecture", "section": "Flows", "op": "rename_section",
                              "content": "Data flows"}])
-    arch2 = (dev_root / "general" / "architecture.md").read_text()
+    arch2 = (dev_root / "general" / "architecture.md").read_text(encoding="utf-8")
     ok("rename_section rewrote the heading line, kept the body",
        "## Data flows" in arch2 and "## Flows\n" not in arch2 and "flow text" in arch2)
 
@@ -128,7 +128,7 @@ def test_delta_apply(tmp: Path) -> None:
     log = KD.append_change_log(dev_root, "abc123def456", "Add the month filter",
                                [{"doc": "architecture", "section": "Components",
                                  "op": "update", "content": "NEW BODY."}])
-    body = Path(log).read_text()
+    body = Path(log).read_text(encoding="utf-8")
     ok("the change log names the item, the doc·section, the op and the source",
        "Add the month filter" in body and "`architecture` · Components" in body
        and "| update |" in body and "`abc123def456`" in body)
@@ -139,7 +139,7 @@ def test_delta_apply(tmp: Path) -> None:
     KD.append_change_log(dev_root, "999888777666", "A second item",
                          [{"doc": "architecture", "section": "Stack", "op": "append",
                            "content": "more"}])
-    body2 = Path(log).read_text()
+    body2 = Path(log).read_text(encoding="utf-8")
     ok("a second entry APPENDS — the log is history, never rewritten",
        "Add the month filter" in body2 and "A second item" in body2
        and body2.count("# Change log") == 1)
@@ -152,7 +152,7 @@ def test_freshness_lint(tmp: Path) -> None:
     repo = _git_repo(tmp, "fl-repo")
     ok("clean docs lint clean", KD.freshness_lint(dev_root, repo) == [])
     arch = dev_root / "general" / "architecture.md"
-    arch.write_text(arch.read_text() + "\nsee `gone/away.py` for details\n")
+    arch.write_text(arch.read_text(encoding="utf-8") + "\nsee `gone/away.py` for details\n", encoding="utf-8")
     warns = KD.freshness_lint(dev_root, repo)
     ok("dead anchor-doc file ref detected", any("gone/away.py" in w for w in warns), str(warns))
 
@@ -182,7 +182,7 @@ def _fill(item_dir: Path, artifact: str, sections: dict[str, str], *, kind: str 
         sections = {"Verification plan": _VET_OK, **sections}
     A.scaffold(item_dir, artifact, title="t", item_kind=kind)
     p = item_dir / "artifacts" / A.artifact_file(artifact)
-    text = p.read_text()
+    text = p.read_text(encoding="utf-8")
     import re as _re
     for sec, content in sections.items():
         text = _re.sub(rf"(?ms)(^##\s+{_re.escape(sec)}\s*\n).*?(?=^##\s|\Z)",
@@ -190,7 +190,7 @@ def _fill(item_dir: Path, artifact: str, sections: dict[str, str], *, kind: str 
     text = _re.sub(r"<fill:[^>]*>", "filled", text)
     if facts is not None:
         text = _re.sub(r"(?ms)```yaml\n.*?```", f"```yaml\n{facts}\n```", text)
-    p.write_text(text)
+    p.write_text(text, encoding="utf-8")
 
 
 def test_close_readiness(tmp: Path) -> None:
@@ -213,7 +213,7 @@ def test_close_readiness(tmp: Path) -> None:
     _fill(item_dir, "review", {})
     A.record_verification(item_dir, repo, check="smoke-check", how="pytest", result="ok", passed=True)
     sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo, capture_output=True,
-                         text=True).stdout.strip()
+                         text=True, encoding="utf-8").stdout.strip()
     dev.set_work_item_git(dev_root, iid, git_merge_commit=sha)
     item = dev.read_work_item(dev_root, iid)
     cr = GB.close_readiness(item, item_dir, [item])
@@ -235,7 +235,7 @@ def test_close_readiness(tmp: Path) -> None:
 
     # CLOSE RE-ADJUDICATES NOTHING: review's exit locks code and git, so a criterion reading
     # either can only refuse paperwork for a settled decision.
-    (repo / "real.py").write_text("x = 2\n")   # repo edit → the ledger IS stale...
+    (repo / "real.py").write_text("x = 2\n", encoding="utf-8")   # repo edit → the ledger IS stale...
     cr = GB.close_readiness(item, item_dir, [item])
     crits = {c["criterion"] for c in cr["checks"]}
     ok("stale evidence no longer refuses close", cr["ok"] and "evidence_fresh" not in crits,
@@ -248,7 +248,7 @@ def test_close_readiness(tmp: Path) -> None:
     ok("...so close reads neither the repo nor dev_root — the parameters are gone too",
        "main_repo_dir" not in _inspect.signature(GB.close_readiness).parameters
        and "dev_root" not in _inspect.signature(GB.close_readiness).parameters)
-    (repo / "real.py").write_text("x = 1\n")
+    (repo / "real.py").write_text("x = 1\n", encoding="utf-8")
 
     # Both are judged at the REVIEW gate: they read review-phase output, and asking at close would
     # refuse a locked item.
@@ -266,10 +266,10 @@ def test_close_readiness(tmp: Path) -> None:
     reports.mkdir(parents=True, exist_ok=True)
     # The owner's report is the deliverable; the DECISION line lives in the record.
     (reports / "report-review.md").write_text(
-        "# Review User-facing Report\n\n**Summary:** it holds.\n")
+        "# Review User-facing Report\n\n**Summary:** it holds.\n", encoding="utf-8")
     rec = r_dir / "artifacts" / A.artifact_file("review")
     rec.write_text(_re_sub(r"(?ms)^## Proposed work\n.*?(?=^## |\Z)", "## Proposed work\n\n",
-                           rec.read_text()))
+                           rec.read_text(encoding="utf-8")), encoding="utf-8")
     # Templates no longer carry authoring comments; the invariant is the READ, not the marker.
     ok("a freshly scaffolded record reads as no itemization yet", A.owner_decision(r_dir) == "")
     # It asks whether the report STATES its proposed work: filing happens on approve, so no first
@@ -278,7 +278,7 @@ def test_close_readiness(tmp: Path) -> None:
        _research("findings_delivered")["ok"] and not _research("spawns_exist")["ok"])
     rec.write_text(_re_sub(r"(?ms)^## Proposed work\n.*?(?=^## |\Z)",
                            "## Proposed work\nNone — the findings imply no work.\n\n",
-                           rec.read_text()))
+                           rec.read_text(encoding="utf-8")), encoding="utf-8")
     ok("research all-green passes", all(c["ok"] for c in GB.research_readiness(r_dir)),
        str([c for c in GB.research_readiness(r_dir) if not c["ok"]]))
     # And they BLOCK where they are asked — a check nobody has to answer is not a gate.
@@ -436,18 +436,18 @@ def test_tools(tmp: Path) -> None:
        r.get("is_error") and "written at CLOSE" in json.dumps(r))
     dev.set_work_item_phase(dev_root, iid, "close")
     r = asyncio.run(apply_kd({"item_id": iid, "ops": good}))
-    arch = (dev_root / "general" / "architecture.md").read_text()
+    arch = (dev_root / "general" / "architecture.md").read_text(encoding="utf-8")
     ok("at close it WRITES straight through — no staging step",
        not r.get("is_error") and "see `real.py`" in arch)
     ok("...and the same call records the week's change-log entry",
        KD.change_log_path(dev_root).is_file()
-       and "`architecture` · Stack" in KD.change_log_path(dev_root).read_text())
+       and "`architecture` · Stack" in KD.change_log_path(dev_root).read_text(encoding="utf-8"))
     before = arch
     r = asyncio.run(apply_kd({"item_id": iid, "ops": json.dumps(
         [{"doc": "architecture", "section": "Ghost", "op": "append", "content": "x"}])}))
     ok("an invalid op is refused itemized and writes NOTHING",
        r.get("is_error") and "NOTHING was written" in json.dumps(r)
-       and (dev_root / "general" / "architecture.md").read_text() == before)
+       and (dev_root / "general" / "architecture.md").read_text(encoding="utf-8") == before)
     rid, _r_dir = _mk_item(dev, dev_root, "res", kind="research")
     dev.set_work_item_phase(dev_root, rid, "close")
     apply_r = _apply_knowledge_delta(store=store, context_id="t", dev_root=dev_root,

@@ -98,13 +98,13 @@ def test_brief(tmp: Path) -> None:
     print("handoff brief")
     folder = tmp / "inbox" / "1"
     p = Path(A.write_handoff_brief(folder, "T", background="the why", direction="option A vs B"))
-    text = p.read_text()
+    text = p.read_text(encoding="utf-8")
     ok("provided sections filled", "the why" in text and "option A vs B" in text)
     ok("missing sections keep slots", "<fill:discussion>" in text and "<fill:constraints>" in text)
     issues = A.self_check(folder, "handoff-brief", path=p)
     ok("partial brief passes triage check (sections optional)", issues == [], str(issues))
     A.write_handoff_brief(folder, "T", discussion="round two")
-    text = p.read_text()
+    text = p.read_text(encoding="utf-8")
     ok("append never rewrites", "the why" in text and "round two" in text and "---" in text)
     empty = tmp / "inbox" / "2"
     p2 = Path(A.write_handoff_brief(empty, "E"))
@@ -128,7 +128,7 @@ def test_push_flow(tmp: Path) -> None:
     ok("item carries provenance + inbox_id",
        item["spawned_from"]["relation"] == "blocking" and item["inbox_id"] == row["id"])
     prelim = root / "work-items" / wi["id"] / "preliminary" / "handoff-brief.md"
-    ok("brief moved to preliminary/", prelim.exists() and "ctx" in prelim.read_text())
+    ok("brief moved to preliminary/", prelim.exists() and "ctx" in prelim.read_text(encoding="utf-8"))
     ok("inbox folder cleared", not inbox_flow.inbox_content_dir(root, row["id"]).exists())
     fresh = store.get_inbox(row["id"])
     ok("row survives as trace", fresh["status"] == "pushed" and fresh["routed_to"] == wi["id"])
@@ -177,11 +177,11 @@ def test_tool_autopush(tmp: Path) -> None:
     # instructions.
     from pathlib import Path as _P
     _callers = [f for f in _P("superme_agent/harness/plugins").rglob("SKILL.md")
-                if "create_inbox_item" in f.read_text()]
+                if "create_inbox_item" in f.read_text(encoding="utf-8")]
     ok("every skill that files an inbox item is found, so this check cannot pass by finding none",
        len(_callers) >= 5, f"found {len(_callers)}")
     for _f in _callers:
-        _t = _f.read_text()
+        _t = _f.read_text(encoding="utf-8")
         ok(f"…{_f.parent.name} does not tell its agent to omit `work_kind`",
            "omit it" not in _t and "leaves the call to triage" not in _t
            and "left it for triage" not in _t)
@@ -199,7 +199,7 @@ def test_tool_autopush(tmp: Path) -> None:
     items = dev.read_all(root)["work_items"]
     child = next(it for it in items if it.get("spawned_from"))
     prelim = root / "work-items" / child["id"] / "preliminary" / "handoff-brief.md"
-    ok("brief landed in child preliminary/", prelim.exists() and "hit a wall" in prelim.read_text())
+    ok("brief landed in child preliminary/", prelim.exists() and "hit a wall" in prelim.read_text(encoding="utf-8"))
     ok("parent awaiting_child", dev.read_work_item(root, parent)["status"] == "awaiting_child")
     ok("auto-pushed child gets the triage first-kick",
        kicked == [child["id"]] and "Triage is running on it." in txt, f"{kicked} / {txt[:120]}")

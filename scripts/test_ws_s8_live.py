@@ -194,7 +194,7 @@ def main() -> None:
            str(meta))
         tp = transcript_path(sid)
         ok("full pre-compaction transcript retained + boundary recorded",
-           tp is not None and "compact_boundary" in tp.read_text())
+           tp is not None and "compact_boundary" in tp.read_text(encoding="utf-8"))
 
         # -- two ineffective compactions → back-off + attention row -------------------
         print("back-off: min_gain forced absurd → two strikes")

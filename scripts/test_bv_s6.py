@@ -61,7 +61,7 @@ def make_repo(tmp: Path) -> Path:
     repo = tmp / "repo"
     repo.mkdir()
     subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
-    (repo / "a.py").write_text("x = 1\n")
+    (repo / "a.py").write_text("x = 1\n", encoding="utf-8")
     subprocess.run(["git", "add", "."], cwd=repo, check=True)
     subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t",
                     "commit", "-qm", "init"], cwd=repo, check=True)
@@ -90,7 +90,7 @@ def test_render(tmp: Path, repo: Path) -> None:
     print("render_handoff_block")
     d = tmp / "item-r"
     (d / "artifacts").mkdir(parents=True)
-    (d / "artifacts" / "plan.md").write_text(PLAN)
+    (d / "artifacts" / "plan.md").write_text(PLAN, encoding="utf-8")
 
     text, mark = SC.render_handoff_block({"id": "i"}, d)
     ok("no loop activity → nothing to promote", text is None and mark == 0)
@@ -131,12 +131,12 @@ def test_render(tmp: Path, repo: Path) -> None:
     # Caps: a huge findings body must not blow the block.
     d3 = tmp / "item-cap"
     (d3 / "artifacts").mkdir(parents=True)
-    (d3 / "artifacts" / "plan.md").write_text(PLAN)
+    (d3 / "artifacts" / "plan.md").write_text(PLAN, encoding="utf-8")
     cy = A.scaffold_cycle(d3, title="t")
     # Target the HEADING, not the slot's prose: a fixture keyed to wording stops testing anything
     # the moment that wording changes.
-    Path(cy["path"]).write_text(Path(cy["path"]).read_text().replace(
-        "## Built\n", "## Built\n" + "very long build detail " * 800 + "\n"))
+    Path(cy["path"]).write_text(Path(cy["path"]).read_text(encoding="utf-8").replace(
+        "## Built\n", "## Built\n" + "very long build detail " * 800 + "\n"), encoding="utf-8")
     A.record_verification(d3, repo, check="alpha-check", how="pytest", result="ok", passed=True)
     A.record_verification(d3, repo, check="beta-check", how="read", result="broken", passed=False)
     A.append_cycle_outcome(d3, evidence="failed", decision="build", reason="r")
@@ -152,19 +152,19 @@ def test_watermark(tmp: Path) -> None:
     today = date.today().isoformat()
     (d / "item.md").write_text(
         f"---\nid: w1\ntitle: t\nkind: implementation\nphase: review\nstatus: active\n"
-        f"created_at: {today}\nupdated_at: {today}\n---\nbody\n")
+        f"created_at: {today}\nupdated_at: {today}\n---\nbody\n", encoding="utf-8")
     ok("mark write inserts the field", DEV.set_work_item_handoff_mark(dev_root, "w1", 2) is True)
     it = DEV.read_work_item(dev_root, "w1")
     ok("read-back through read_work_item", int(it.get("handoffs_promoted")) == 2)
     ok("same mark is an idempotent skip", DEV.set_work_item_handoff_mark(dev_root, "w1", 2) is False)
     ok("rewrite updates in place (no duplicate key)",
        DEV.set_work_item_handoff_mark(dev_root, "w1", 5) is True
-       and (d / "item.md").read_text().count("handoffs_promoted:") == 1
+       and (d / "item.md").read_text(encoding="utf-8").count("handoffs_promoted:") == 1
        and int(DEV.read_work_item(dev_root, "w1")["handoffs_promoted"]) == 5)
     ok("missing item refuses", DEV.set_work_item_handoff_mark(dev_root, "nope", 1) is False)
     ok("frontmatter shape survives (field sits before created_at)",
-       (d / "item.md").read_text().index("handoffs_promoted:")
-       < (d / "item.md").read_text().index("created_at:"))
+       (d / "item.md").read_text(encoding="utf-8").index("handoffs_promoted:")
+       < (d / "item.md").read_text(encoding="utf-8").index("created_at:"))
 
 
 def main() -> None:

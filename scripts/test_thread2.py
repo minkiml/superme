@@ -87,7 +87,7 @@ def test_fire_auto_triage() -> None:
         d.mkdir(parents=True)
 
         def write(status="active", phase="triage"):
-            (d / "item.md").write_text(ITEM.format(status=status, phase=phase))
+            (d / "item.md").write_text(ITEM.format(status=status, phase=phase), encoding="utf-8")
 
         try:
             RN.begin_run = _stub_begin

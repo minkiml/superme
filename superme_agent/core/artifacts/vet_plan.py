@@ -258,7 +258,7 @@ def _plan_check_ids(item_dir: Path) -> set[str] | None:
     plan = Path(item_dir) / "artifacts" / artifact_file("plan")
     if not plan.is_file():
         return None
-    ids = {c.get("id") for c in parse_vet_plan(plan.read_text()).get("checks", []) if c.get("id")}
+    ids = {c.get("id") for c in parse_vet_plan(plan.read_text(encoding="utf-8")).get("checks", []) if c.get("id")}
     return ids or None
 
 
@@ -270,5 +270,5 @@ def plan_vet_depth(item_dir: Path) -> str:
     plan = Path(item_dir) / "artifacts" / artifact_file("plan")
     if not plan.is_file():
         return ""
-    vp = parse_vet_plan(plan.read_text())
+    vp = parse_vet_plan(plan.read_text(encoding="utf-8"))
     return str(vp.get("depth") or "") if vp.get("present") else ""

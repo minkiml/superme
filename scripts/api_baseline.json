@@ -2298,7 +2298,7 @@
   },
   "_cli_signed_in": {
    "home": "superme_agent.core.auth",
-   "sig": "def() -> bool"
+   "sig": "def(probe: list[str]) -> bool"
   },
   "_resolve": {
    "home": "superme_agent.core.auth",
@@ -3578,6 +3578,10 @@
    "home": "superme_agent.core.git_layer",
    "sig": "def(a, b) -> bool"
   },
+  "_terminate": {
+   "home": "superme_agent.core.git_layer",
+   "sig": "def(pid: int) -> bool"
+  },
   "branch_commits": {
    "home": "superme_agent.core.git_layer",
    "sig": "def(repo_dir: pathlib.Path, branch: str, base: str) -> list[dict]"
@@ -3972,7 +3976,7 @@
   },
   "vet_trigger": {
    "home": "superme_agent.core.kernel_speech",
-   "sig": "def(item_id: str, title: str, deferred: list[str] | None = None, machine: list[dict] | None = None, audit: list[dict] | None = None, vet_env: bool = False) -> str"
+   "sig": "def(item_id: str, title: str, deferred: list[str] | None = None, machine: list[dict] | None = None, audit: list[dict] | None = None, vet_env: bool = False, kernel: bool = True) -> str"
   },
   "work_item_preamble": {
    "home": "superme_agent.core.kernel_speech",
@@ -5966,6 +5970,12 @@
   }
  },
  "superme_agent.core.vocab": {},
+ "superme_agent.core.vocab.console": {
+  "argv": {
+   "home": "superme_agent.core.vocab.console",
+   "sig": "def(tool: str, *args: str) -> list[str] | None"
+  }
+ },
  "superme_agent.core.vocab.context": {
   "Context": {
    "home": "superme_agent.core.vocab.context",
@@ -6198,6 +6208,10 @@
   "ensure_scratch": {
    "home": "superme_agent.core.vocab.sandbox",
    "sig": "def(item_dir: pathlib.Path) -> pathlib.Path"
+  },
+  "kernel_available": {
+   "home": "superme_agent.core.vocab.sandbox",
+   "sig": "def() -> bool"
   },
   "kernel_command": {
    "home": "superme_agent.core.vocab.sandbox",
@@ -6706,6 +6720,10 @@
   "SLASH_COMMANDS_FILE": {
    "sig": "value:PosixPath"
   },
+  "auth_status": {
+   "home": "superme_agent.core.auth",
+   "sig": "def(*, refresh: bool = False) -> dict"
+  },
   "cache_slash": {
    "home": "superme_agent.daemon.deps",
    "sig": "def(context_id: str, slash_commands: list) -> None"
@@ -6728,6 +6746,10 @@
   },
   "log": {
    "sig": "value:Logger"
+  },
+  "needs_credential": {
+   "home": "superme_agent.daemon.deps",
+   "sig": "def() -> None"
   },
   "proposal_slug": {
    "home": "superme_agent.daemon.deps",
@@ -8517,6 +8539,10 @@
   "log": {
    "sig": "value:Logger"
   },
+  "needs_credential": {
+   "home": "superme_agent.daemon.deps",
+   "sig": "def() -> None"
+  },
   "router": {
    "sig": "value:APIRouter"
   }
@@ -8850,6 +8876,10 @@
   "memory_proposals": {
    "home": "superme_agent.daemon.routers.dev.learning",
    "sig": "def(context_id: str = 'global', status: str | None = None, dev_store: DevStore = Depends(dependency=<function get_dev_store>, use_cache=True, scope=None)) -> dict"
+  },
+  "needs_credential": {
+   "home": "superme_agent.daemon.deps",
+   "sig": "def() -> None"
   },
   "router": {
    "sig": "value:APIRouter"
@@ -9877,6 +9907,10 @@
   "log": {
    "sig": "value:Logger"
   },
+  "needs_credential": {
+   "home": "superme_agent.daemon.deps",
+   "sig": "def() -> None"
+  },
   "router": {
    "sig": "value:APIRouter"
   },
@@ -10786,6 +10820,10 @@
   "approval_signature": {
    "home": "superme_agent.core.permissions",
    "sig": "def(tool_name: str, tool_input: dict) -> str"
+  },
+  "auth_status": {
+   "home": "superme_agent.core.auth",
+   "sig": "def(*, refresh: bool = False) -> dict"
   },
   "bank_auto_checkpoint": {
    "home": "superme_agent.daemon.services.runs.checkpoints",
@@ -12941,6 +12979,9 @@
   "RUNNABLE_PHASES": {
    "sig": "value:set"
   },
+  "_NEEDS_CREDENTIAL": {
+   "sig": "value:set"
+  },
   "_PHASE_ENTRY": {
    "sig": "value:tuple"
   },
@@ -12964,6 +13005,10 @@
    "home": "superme_agent.daemon.services.drilldown",
    "sig": "def(item: 'dict', all_items: 'list[dict]') -> 'list[dict]'"
   },
+  "_credential_gate": {
+   "home": "superme_agent.daemon.services.drilldown",
+   "sig": "def(actions: 'list[dict]') -> 'list[dict]'"
+  },
   "_label": {
    "home": "superme_agent.daemon.services.drilldown",
    "sig": "def(phase: 'str | None') -> 'str'"
@@ -12986,6 +13031,10 @@
   },
   "annotations": {
    "sig": "value:_Feature"
+  },
+  "auth_status": {
+   "home": "superme_agent.core.auth",
+   "sig": "def(*, refresh: bool = False) -> dict"
   },
   "build_payload": {
    "home": "superme_agent.daemon.services.drilldown",
@@ -13545,6 +13594,10 @@
   "grant_authorization": {
    "home": "superme_agent.daemon.services.loop",
    "sig": "def(ctx, context_id: str, item_id: str, auth_id: str, *, by: str) -> tuple[bool, str]"
+  },
+  "kernel_available": {
+   "home": "superme_agent.core.vocab.sandbox",
+   "sig": "def() -> bool"
   },
   "log": {
    "sig": "value:Logger"

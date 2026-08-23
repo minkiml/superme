@@ -233,7 +233,7 @@ def _read_verification_library(*, store, context_id, dev_root=None, bound_item_i
         if d is not None and not _bound_err(item_id, bound_item_id):
             noms = _arts.nominations(d)
             checks = {c["id"]: c for c in _arts.parse_vet_plan(
-                (d / "artifacts" / _arts.artifact_file("plan")).read_text()).get("checks", [])}
+                (d / "artifacts" / _arts.artifact_file("plan")).read_text(encoding="utf-8")).get("checks", [])}
             blocks = [_vl.render_entry(checks[cid]) for cid in noms if cid in checks]
             if blocks:
                 out.append("\n## nominated by this item — write each as an `append` op on "

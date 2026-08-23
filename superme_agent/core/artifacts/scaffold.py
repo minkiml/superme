@@ -102,7 +102,7 @@ def write_handoff_brief(folder: Path, title: str, *, background: str = "", discu
     if path.exists():
         add = "\n".join(f"**{h}:** {provided[k]}" for h, k in _BRIEF_SECTIONS if provided[k])
         if add:
-            atomic_write(path, path.read_text().rstrip() + "\n\n---\n"
+            atomic_write(path, path.read_text(encoding="utf-8").rstrip() + "\n\n---\n"
                           f"*(appended {date.today().isoformat()})*\n\n" + add + "\n")
         return str(path)
     fm = (f"---\nartifact: handoff-brief\ntitle: {title!r}\nreader: agent\n"

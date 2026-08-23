@@ -248,7 +248,7 @@ def _strip_fm(text: str) -> str:
 
 def _artifact_text(item_dir: Path, kind: str) -> str | None:
     p = Path(item_dir) / "artifacts" / A.artifact_file(kind)
-    return p.read_text() if p.exists() else None
+    return p.read_text(encoding="utf-8") if p.exists() else None
 
 
 def _task_ratio(item_dir: Path) -> tuple[int, int]:

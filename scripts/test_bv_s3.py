@@ -122,7 +122,7 @@ def test_legacy(tmp: Path) -> None:
     root = tmp / "devroot-legacy"
     wid = dev.create_work_item(root, "legacy item", kind="implementation")["id"]
     md = root / "work-items" / wid / "item.md"
-    md.write_text(md.read_text().replace("session_id: null", 'session_id: "sid-legacy"'))
+    md.write_text(md.read_text(encoding="utf-8").replace("session_id: null", 'session_id: "sid-legacy"'), encoding="utf-8")
 
     it = dev.read_work_item(root, wid)
     ok("legacy sid feeds the computed session_id",
@@ -135,7 +135,7 @@ def test_legacy(tmp: Path) -> None:
     dev.set_work_item_session(root, wid, "sid-build", slot="build")
     it = dev.read_work_item(root, wid)
     ok("slot write NULLs the legacy key",
-       "session_id: null" in md.read_text() and it["session_id"] == "sid-build")
+       "session_id: null" in md.read_text(encoding="utf-8") and it["session_id"] == "sid-build")
     dev.set_work_item_phase(root, wid, "review")
     ok("no stale legacy shadow at review (fresh mint)",
        dev.read_work_item(root, wid)["session_id"] is None)
@@ -145,8 +145,8 @@ def test_legacy(tmp: Path) -> None:
     root2 = tmp / "devroot-preslit"
     wid2 = dev.create_work_item(root2, "pre-split item", kind="implementation")["id"]
     md2 = root2 / "work-items" / wid2 / "item.md"
-    md2.write_text(md2.read_text().replace(
-        "created_at:", 'session_intake: "sid-shared"\ncreated_at:', 1))
+    md2.write_text(md2.read_text(encoding="utf-8").replace(
+        "created_at:", 'session_intake: "sid-shared"\ncreated_at:', 1), encoding="utf-8")
     for ph in ("triage", "plan", "review", "close"):
         dev.set_work_item_phase(root2, wid2, ph)
         ok(f"pre-split item keeps its thread at {ph}",
@@ -158,7 +158,7 @@ def test_legacy(tmp: Path) -> None:
     dev.set_work_item_phase(root2, wid2, "review")
     dev.set_work_item_session(root2, wid2, "sid-review", slot="review")
     ok("writing a real slot retires the shared one, so the adoption happens once",
-       "session_intake: null" in md2.read_text()
+       "session_intake: null" in md2.read_text(encoding="utf-8")
        and dev.read_work_item(root2, wid2)["session_id"] == "sid-review")
 
 
@@ -241,7 +241,7 @@ def test_reentry_delta(tmp: Path) -> None:
     for rel, delta in (("artifacts/investigation.md", +60), ("reports/report-investigate.md", +30),
                        ("artifacts/brief.md", -600), ("checkpoints/20260813-000000.md", +60)):
         p = item / rel
-        p.write_text("x\n")
+        p.write_text("x\n", encoding="utf-8")
         os.utime(p, (stamp + delta, stamp + delta))
     got = _arts.changed_since(item, cut.isoformat(timespec="seconds"))
     ok("only records written AFTER the cutoff are named",

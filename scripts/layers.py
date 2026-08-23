@@ -63,7 +63,7 @@ def graph() -> tuple[dict[str, set[str]], set[str]]:
     edges: dict[str, set[str]] = defaultdict(set)
     for p in files:
         me, is_pkg = _modname(p), p.name == "__init__.py"
-        for node in ast.parse(p.read_text()).body:
+        for node in ast.parse(p.read_text(encoding="utf-8")).body:
             targets: list[str] = []
             if isinstance(node, ast.ImportFrom):
                 base = _resolve(me, is_pkg, node.level, node.module) if node.level else (node.module or "")

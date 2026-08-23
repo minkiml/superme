@@ -129,7 +129,7 @@ def report_text(item_dir: Path, phase: str) -> dict | None:
     except OSError:
         return None
     return {"phase": phase, "name": f"report-{phase}",
-            "text": _drop_dead_blocks(_space_labels(path.read_text())),
+            "text": _drop_dead_blocks(_space_labels(path.read_text(encoding="utf-8"))),
             "path": str(path), "mtime": st.st_mtime, "contract": contract}
 
 
@@ -152,7 +152,7 @@ def report_summary(item_dir: Path, phase: str) -> str:
     """A phase report's `**Summary:**` line — one sentence, what that phase concluded.
     The Quick View card renders it alone."""
     path = Path(item_dir) / "reports" / f"report-{phase}.md"
-    return label_values(path.read_text()).get("summary", "") if path.is_file() else ""
+    return label_values(path.read_text(encoding="utf-8")).get("summary", "") if path.is_file() else ""
 
 
 def triage_facts(item_dir: Path) -> dict:
@@ -161,7 +161,7 @@ def triage_facts(item_dir: Path) -> dict:
     path = Path(item_dir) / "reports" / "report-triage.md"
     if not path.is_file():
         return {"category": "", "background": "", "problem": ""}
-    v = label_values(path.read_text())
+    v = label_values(path.read_text(encoding="utf-8"))
     return {"category": v.get("category", ""), "background": v.get("background", ""),
             "problem": v.get("problem") or v.get("goal", "")}
 
@@ -172,7 +172,7 @@ def report_issues(item_dir: Path, name: str) -> list[str]:
     path = Path(item_dir) / "reports" / f"{name}.md"
     if not path.is_file():
         return [f"reports/{name}.md does not exist — write it from its template"]
-    text = re.sub(r"<!--.*?-->", "", path.read_text(), flags=re.DOTALL)
+    text = re.sub(r"<!--.*?-->", "", path.read_text(encoding="utf-8"), flags=re.DOTALL)
     left = sorted(set(FILL.findall(text)))
     if left:
         return [f"reports/{name}.md has unfilled slot(s): " + ", ".join(left[:6])]
@@ -190,7 +190,7 @@ def owner_decision(item_dir: Path) -> str:
     path = Path(item_dir) / "artifacts" / artifact_file("review")
     if not path.is_file():
         return ""
-    text = re.sub(r"<!--.*?-->", "", path.read_text(), flags=re.DOTALL)
+    text = re.sub(r"<!--.*?-->", "", path.read_text(encoding="utf-8"), flags=re.DOTALL)
     m = _OWNER_DECISION.search(text)
     if not m:
         return ""
@@ -204,7 +204,7 @@ def proposed_work(item_dir: Path) -> str:
     path = Path(item_dir) / "artifacts" / artifact_file("review")
     if not path.is_file():
         return ""
-    text = re.sub(r"<!--.*?-->", "", path.read_text(), flags=re.DOTALL)
+    text = re.sub(r"<!--.*?-->", "", path.read_text(encoding="utf-8"), flags=re.DOTALL)
     body = split_sections(text).get("Proposed work", "")
     if FILL.search(body) or not _live_body(body.splitlines()):
         return ""
@@ -224,7 +224,7 @@ def delivered_line(item_dir: Path) -> str:
         if not path.is_file():
             return ""
         parts: list[str] = []
-        for line in path.read_text().splitlines():
+        for line in path.read_text(encoding="utf-8").splitlines():
             if not parts:
                 if line.strip().startswith("**Delivered:**"):
                     parts.append(line.split("**Delivered:**", 1)[1].strip())

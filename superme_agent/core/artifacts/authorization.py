@@ -94,7 +94,7 @@ def record_authorization(item_dir: Path, *, what: str, why: str, doc: str, scope
              f"- cycle: {cycle if cycle is not None else ''}\n"
              f"- status: pending\n"
              f"- by: \n")
-    atomic_write(path, (path.read_text() if path.exists() else head) + entry)
+    atomic_write(path, (path.read_text(encoding="utf-8") if path.exists() else head) + entry)
     return {"id": ts, "what": what, "scope": scope, "check": check, "status": "pending"}
 
 
@@ -105,7 +105,7 @@ def authorization_entries(item_dir: Path) -> list[dict]:
         return []
     entries: list[dict] = []
     cur: dict | None = None
-    for line in path.read_text().splitlines():
+    for line in path.read_text(encoding="utf-8").splitlines():
         m = _AUTHORIZATION_HEAD.match(line)
         if m:
             cur = {"id": m.group("id"), "what": m.group("what"), "status": "pending"}
@@ -133,7 +133,7 @@ def resolve_authorization(item_dir: Path, auth_id: str, *, decision: str, by: st
     out: list[str] = []
     in_block = False
     changed = False
-    for line in path.read_text().splitlines(keepends=True):
+    for line in path.read_text(encoding="utf-8").splitlines(keepends=True):
         m = _AUTHORIZATION_HEAD.match(line.rstrip("\n"))
         if m:
             in_block = (m.group("id") == auth_id)

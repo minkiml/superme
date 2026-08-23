@@ -69,13 +69,13 @@ def _seed(dev_root: Path, item_id: str = "aa11bb22cc33") -> Path:
     (d / "reports").mkdir()
     (d / "checkpoints").mkdir()
     (d / "preliminary").mkdir()
-    (d / "item.md").write_text(LIVED.replace("aa11bb22cc33", item_id))
-    (d / "artifacts" / "plan.md").write_text("# Plan\n")
-    (d / "artifacts" / "build-vet-1.md").write_text("# Cycle 1\n")
-    (d / "reports" / "report-build.md").write_text("# Build\n")
-    (d / "checkpoints" / "20260731-000000.md").write_text("checkpoint\n")
-    (d / "deputy-log.jsonl").write_text('{"verdict": "approve"}\n')
-    (d / "preliminary" / "handoff-brief.md").write_text("the original hand-off\n")
+    (d / "item.md").write_text(LIVED.replace("aa11bb22cc33", item_id), encoding="utf-8")
+    (d / "artifacts" / "plan.md").write_text("# Plan\n", encoding="utf-8")
+    (d / "artifacts" / "build-vet-1.md").write_text("# Cycle 1\n", encoding="utf-8")
+    (d / "reports" / "report-build.md").write_text("# Build\n", encoding="utf-8")
+    (d / "checkpoints" / "20260731-000000.md").write_text("checkpoint\n", encoding="utf-8")
+    (d / "deputy-log.jsonl").write_text('{"verdict": "approve"}\n', encoding="utf-8")
+    (d / "preliminary" / "handoff-brief.md").write_text("the original hand-off\n", encoding="utf-8")
     return d
 
 
@@ -133,7 +133,7 @@ def test_entry_and_no_counter(dev_root: Path) -> None:
     # The counter is GONE: the soft delete ended the mismatch it explained, and a number nobody
     # needs goes stale.
     dev.reset_work_item(dev_root, "bb22cc33dd44")
-    disk = (dev_root / "work-items" / "bb22cc33dd44" / "item.md").read_text()
+    disk = (dev_root / "work-items" / "bb22cc33dd44" / "item.md").read_text(encoding="utf-8")
     ok("a re-run writes NO generation field", "generation:" not in disk)
     ok("…and the read path exposes none", "generation" not in (
         dev.read_work_item(dev_root, "bb22cc33dd44") or {}))

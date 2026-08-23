@@ -108,7 +108,7 @@ def _compact_metadata(session_id: str, *, after_iso: str | None = None
     if not hits:
         return None, ""
     meta, summary = None, ""
-    for line in hits[0].read_text().splitlines():
+    for line in hits[0].read_text(encoding="utf-8").splitlines():
         if '"compact_boundary"' not in line and '"isCompactSummary"' not in line:
             continue
         try:

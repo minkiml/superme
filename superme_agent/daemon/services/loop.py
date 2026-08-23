@@ -18,6 +18,7 @@ from ...core import autopilot as _autopilot
 from ...core import kernel_speech
 from ...core import plan_revision as _plan_revision
 from . import checks as _checks, run_tasks
+from ...core.vocab.sandbox import kernel_available
 from .turns import ResilientTurn
 from ...harness.tools.run_tools import make_run_report_server
 from ...core.permissions import VET_READONLY_NUDGE
@@ -337,7 +338,7 @@ async def _run_background_vet(ctx, context_id: str, item_id: str,
     has_vet_env = bool(getattr(_spine.repos().get(context_id), "vet_env", None))
     trigger = kernel_speech.vet_trigger(item_id, title, deferred=deferred or None,
                                         machine=machine or None, audit=audit or None,
-                                        vet_env=has_vet_env)
+                                        vet_env=has_vet_env, kernel=kernel_available())
     prompt = trigger  # orientation is on-demand, through the skill's directed reads
     capture_prompt(context_id, trigger, item_id=item_id)
     # Throwaway probes only; normal items skip capture.

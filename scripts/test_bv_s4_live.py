@@ -150,7 +150,7 @@ def spine_session(sid: str) -> dict | None:
 
 def git(cwd: Path, *args: str) -> str:
     return subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", *args],
-                          cwd=cwd, capture_output=True, text=True, check=True).stdout.strip()
+                          cwd=cwd, capture_output=True, text=True, check=True, encoding="utf-8").stdout.strip()
 
 
 def cleanup(trunk_sha0: str, iid: str | None) -> None:
@@ -163,7 +163,7 @@ def cleanup(trunk_sha0: str, iid: str | None) -> None:
             subprocess.run(["git", "worktree", "prune"], cwd=REPO, check=False)
             for br in subprocess.run(["git", "branch", "--list", f"item/{iid}*",
                                       "--format=%(refname:short)"],
-                                     cwd=REPO, capture_output=True, text=True).stdout.split():
+                                     cwd=REPO, capture_output=True, text=True, encoding="utf-8").stdout.split():
                 subprocess.run(["git", "branch", "-Dq", br], cwd=REPO, check=False)
         if iid:
             shutil.rmtree(KHOME / "work-items" / iid, ignore_errors=True)
@@ -177,7 +177,7 @@ def cleanup(trunk_sha0: str, iid: str | None) -> None:
 
 def item_meta(iid: str) -> dict:
     import yaml
-    return yaml.safe_load((KHOME / "work-items" / iid / "item.md").read_text().split("---")[1])
+    return yaml.safe_load((KHOME / "work-items" / iid / "item.md").read_text(encoding="utf-8").split("---")[1])
 
 
 def wait_phase(iid: str, phase: str, secs: int = 1800) -> bool:
@@ -219,9 +219,9 @@ def main() -> None:
         # The plan RUN fires on entering plan and writes its own plan.md. Wait it out, then write
         # ours — otherwise the run clobbers the planted checks and the suite proves nothing.
         settle(iid)
-        (item_dir / "artifacts" / "plan.md").write_text(PLAN)
+        (item_dir / "artifacts" / "plan.md").write_text(PLAN, encoding="utf-8")
         ok("the planted checks are the ones on disk (the plan run did not clobber them)",
-           "write-denied" in (item_dir / "artifacts" / "plan.md").read_text())
+           "write-denied" in (item_dir / "artifacts" / "plan.md").read_text(encoding="utf-8"))
         adv = advance(iid)  # plan → build; entering build starts the loop
         wt = Path(adv["git"]["worktree"])
         ok("build entry created the worktree", wt.is_dir())
@@ -244,7 +244,7 @@ def main() -> None:
         cyc = item_dir / "artifacts" / "build-vet-1.md"
         ok("cycle report build-vet-1.md landed", cyc.exists(), str(sorted(
             p.name for p in (item_dir / "artifacts").glob("*.md"))))
-        body = cyc.read_text() if cyc.exists() else ""
+        body = cyc.read_text(encoding="utf-8") if cyc.exists() else ""
         ok("the deliverable check is recorded", "probe-content" in body)
         ok("the write attempt is recorded as its own check", "write-denied" in body)
         log_rows = http("GET", f"/dev/log?context_id={CTX}&limit=30").get("events", [])

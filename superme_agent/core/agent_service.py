@@ -129,10 +129,10 @@ class AgentService:
 
     def __init__(self, persona: str | None = None):
         # The portable SELF (WHO), loaded once from the in-code harness.
-        self._persona = persona if persona is not None else SELF_FILE.read_text()
+        self._persona = persona if persona is not None else SELF_FILE.read_text(encoding="utf-8")
         # Per-mode charters (WHAT MODE), loaded once. Selected by Context.mode per turn.
         self._charters = {
-            mode: path.read_text() for mode, path in CHARTER_FILES.items() if path.exists()
+            mode: path.read_text(encoding="utf-8") for mode, path in CHARTER_FILES.items() if path.exists()
         }
         # Real contextWindow per model, so per-step frames divide by the same window the Result
         # does. Warms after the first turn.
@@ -251,7 +251,7 @@ class AgentService:
             if local_charter.is_file():
                 add_joined("Local charter — repo overlay",
                            f"local-harness/{ctx.id}/{ctx.mode}/charter.local.md",
-                           local_charter.read_text())
+                           local_charter.read_text(encoding="utf-8"))
         # Frontmatter only, for ENABLED in-scope items. Bodies are pulled on demand.
         catalog = constitution_catalog(ctx.mode, const_universal, const_repo,
                                        activated=activated_assets)

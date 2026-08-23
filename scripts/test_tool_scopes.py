@@ -132,7 +132,7 @@ def test_skills_name_only_visible_tools() -> None:
         path = SKILLS / scope / "SKILL.md"
         if not path.is_file():
             continue
-        text = path.read_text()
+        text = path.read_text(encoding="utf-8")
         named = {t for t in ALL_TOOLS if re.search(rf"`{t}\b|\b{t}\(", text)}
         missing = named - names(scope) - OTHER_SERVERS
         ok(f"{scope}/SKILL.md names {len(named)} dev tool(s), all visible", not missing,
@@ -184,7 +184,7 @@ def test_call_sites() -> None:
     print("call sites — every mount passes a scope the table knows")
     sites: list[tuple[str, str]] = []
     for p in (ROOT / "superme_agent").rglob("*.py"):
-        text = p.read_text()
+        text = p.read_text(encoding="utf-8")
         rel = str(p.relative_to(ROOT))
         if rel.endswith("harness/tools/dev_tools.py"):
             continue

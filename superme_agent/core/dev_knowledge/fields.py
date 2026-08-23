@@ -17,7 +17,7 @@ class FieldOps:
         item = Path(dev_root) / "work-items" / item_id / "item.md"
         if not item.exists():
             return False
-        text = item.read_text()
+        text = item.read_text(encoding="utf-8")
         meta, body = parse_md(text)
         if str(meta.get("phase")) == str(phase):
             return False
@@ -26,7 +26,7 @@ class FieldOps:
             return False
         fm = re.sub(r"(?m)^phase:.*$", f"phase: {phase}", m.group(1))
         fm = re.sub(r"(?m)^updated_at:.*$", f"updated_at: {date.today().isoformat()}", fm)
-        item.write_text(f"---\n{fm}\n---\n{body}")
+        item.write_text(f"---\n{fm}\n---\n{body}", encoding="utf-8")
         return True
 
     def set_work_item_title(self, dev_root: Path, item_id: str, title: str) -> bool:
@@ -40,7 +40,7 @@ class FieldOps:
         item = Path(dev_root) / "work-items" / item_id / "item.md"
         if not item.exists():
             return False
-        text = item.read_text()
+        text = item.read_text(encoding="utf-8")
         meta, body = parse_md(text)
         if str(meta.get("title") or "") == title:
             return False
@@ -51,7 +51,7 @@ class FieldOps:
         # `json.dumps` emits `\uXXXX`.
         fm = re.sub(r"(?m)^title:.*$", lambda _m: f"title: {json.dumps(title)}", m.group(1))
         fm = re.sub(r"(?m)^updated_at:.*$", f"updated_at: {date.today().isoformat()}", fm)
-        item.write_text(f"---\n{fm}\n---\n{body}")
+        item.write_text(f"---\n{fm}\n---\n{body}", encoding="utf-8")
         return True
 
     def set_work_item_kind(self, dev_root: Path, item_id: str, kind: str) -> bool:
@@ -62,7 +62,7 @@ class FieldOps:
         item = Path(dev_root) / "work-items" / item_id / "item.md"
         if not item.exists():
             return False
-        text = item.read_text()
+        text = item.read_text(encoding="utf-8")
         meta, body = parse_md(text)
         if str(meta.get("kind")) == str(kind):
             return False
@@ -71,7 +71,7 @@ class FieldOps:
             return False
         fm = re.sub(r"(?m)^kind:.*$", f"kind: {kind}", m.group(1))
         fm = re.sub(r"(?m)^updated_at:.*$", f"updated_at: {date.today().isoformat()}", fm)
-        item.write_text(f"---\n{fm}\n---\n{body}")
+        item.write_text(f"---\n{fm}\n---\n{body}", encoding="utf-8")
         return True
 
     def set_work_item_scale(self, dev_root: Path, item_id: str, scale: str,
@@ -87,7 +87,7 @@ class FieldOps:
         item = Path(dev_root) / "work-items" / item_id / "item.md"
         if not item.exists():
             return False
-        text = item.read_text()
+        text = item.read_text(encoding="utf-8")
         m = _FRONTMATTER.match(text)
         if not m:
             return False
@@ -106,7 +106,7 @@ class FieldOps:
         else:
             fm = re.sub(r"(?m)^kind:(.*)$", lambda mm: f"kind:{mm.group(1)}\n{pair}", fm, count=1)
         fm = re.sub(r"(?m)^updated_at:.*$", f"updated_at: {date.today().isoformat()}", fm)
-        item.write_text(f"---\n{fm}\n---\n{body}")
+        item.write_text(f"---\n{fm}\n---\n{body}", encoding="utf-8")
         return True
 
     def set_work_item_fanout(self, dev_root: Path, item_id: str, fanout: str) -> bool:
@@ -118,7 +118,7 @@ class FieldOps:
         item = Path(dev_root) / "work-items" / item_id / "item.md"
         if not item.exists():
             return False
-        text = item.read_text()
+        text = item.read_text(encoding="utf-8")
         m = _FRONTMATTER.match(text)
         if not m:
             return False
@@ -133,7 +133,7 @@ class FieldOps:
         else:
             fm = re.sub(r"(?m)^kind:(.*)$", lambda mm: f"kind:{mm.group(1)}\n{line}", fm, count=1)
         fm = re.sub(r"(?m)^updated_at:.*$", f"updated_at: {date.today().isoformat()}", fm)
-        item.write_text(f"---\n{fm}\n---\n{body}")
+        item.write_text(f"---\n{fm}\n---\n{body}", encoding="utf-8")
         return True
 
     def set_work_item_research_kind(self, dev_root: Path, item_id: str, research_kind: str,
@@ -154,7 +154,7 @@ class FieldOps:
         item = Path(dev_root) / "work-items" / item_id / "item.md"
         if not item.exists():
             return False
-        text = item.read_text()
+        text = item.read_text(encoding="utf-8")
         m = _FRONTMATTER.match(text)
         if not m:
             return False
@@ -181,7 +181,7 @@ class FieldOps:
         else:
             fm = re.sub(r"(?m)^kind:(.*)$", lambda mm: f"kind:{mm.group(1)}\n{pair}", fm, count=1)
         fm = re.sub(r"(?m)^updated_at:.*$", f"updated_at: {date.today().isoformat()}", fm)
-        item.write_text(f"---\n{fm}\n---\n{body}")
+        item.write_text(f"---\n{fm}\n---\n{body}", encoding="utf-8")
         return True
 
     def set_work_item_triaged(self, dev_root: Path, item_id: str) -> bool:
@@ -190,7 +190,7 @@ class FieldOps:
         item = Path(dev_root) / "work-items" / item_id / "item.md"
         if not item.exists():
             return False
-        text = item.read_text()
+        text = item.read_text(encoding="utf-8")
         meta, body = parse_md(text)
         if meta.get("triaged_at"):
             return False
@@ -204,7 +204,7 @@ class FieldOps:
         else:
             fm = re.sub(r"(?m)^created_at:", f"triaged_at: {stamp}\ncreated_at:", fm, count=1)
         fm = re.sub(r"(?m)^updated_at:.*$", f"updated_at: {stamp}", fm)
-        item.write_text(f"---\n{fm}\n---\n{body}")
+        item.write_text(f"---\n{fm}\n---\n{body}", encoding="utf-8")
         return True
 
     def set_work_item_terminal(self, dev_root: Path, item_id: str, outcome: str = "completed",
@@ -218,7 +218,7 @@ class FieldOps:
         item = Path(dev_root) / "work-items" / item_id / "item.md"
         if not item.exists():
             return False
-        text = item.read_text()
+        text = item.read_text(encoding="utf-8")
         meta, body = parse_md(text)
         if meta.get("done_at") or str(meta.get("status")) == "done":
             return False
@@ -239,7 +239,7 @@ class FieldOps:
         if superseded_by:
             fm = _upsert("superseded_by", superseded_by, fm)
         fm = re.sub(r"(?m)^updated_at:.*$", f"updated_at: {today}", fm)
-        item.write_text(f"---\n{fm}\n---\n{body}")
+        item.write_text(f"---\n{fm}\n---\n{body}", encoding="utf-8")
         # Terminal is where working space stops being anyone's. This is the only line that removes
         # scratch.
         sandbox.prune_scratch(item.parent, only_if_empty=False)
@@ -253,7 +253,7 @@ class FieldOps:
             return False
         adir = folder / "artifacts"
         adir.mkdir(exist_ok=True)
-        (adir / name).write_text(text)
+        (adir / name).write_text(text, encoding="utf-8")
         return True
 
     def _set_item_field(self, dev_root: Path, item_id: str, key: str, value: str,
@@ -266,7 +266,7 @@ class FieldOps:
         item = Path(dev_root) / "work-items" / item_id / "item.md"
         if not item.exists():
             return False
-        text = item.read_text()
+        text = item.read_text(encoding="utf-8")
         meta, body = parse_md(text)
         if str(meta.get(key)) == str(value):
             return False
@@ -283,7 +283,7 @@ class FieldOps:
             else:
                 fm = fm.rstrip() + f"\n{key}: {value}"
         fm = re.sub(r"(?m)^updated_at:.*$", f"updated_at: {date.today().isoformat()}", fm)
-        item.write_text(f"---\n{fm}\n---\n{body}")
+        item.write_text(f"---\n{fm}\n---\n{body}", encoding="utf-8")
         return True
 
     def set_work_item_model(self, dev_root: Path, item_id: str, model: str) -> bool:
@@ -330,7 +330,7 @@ class FieldOps:
         item = Path(dev_root) / "work-items" / item_id / "item.md"
         if not item.exists():
             return False
-        text = item.read_text()
+        text = item.read_text(encoding="utf-8")
         meta, body = parse_md(text)
         key = f"session_{slot}"
         if str(meta.get(key)) == str(session_id) and not meta.get("session_id"):
@@ -349,7 +349,7 @@ class FieldOps:
         if key != "session_intake":
             fm = re.sub(r"(?m)^session_intake:.*$", "session_intake: null", fm)
         fm = re.sub(r"(?m)^updated_at:.*$", f"updated_at: {today}", fm)
-        item.write_text(f"---\n{fm}\n---\n{body}")
+        item.write_text(f"---\n{fm}\n---\n{body}", encoding="utf-8")
         return True
 
     def set_work_item_handoff_mark(self, dev_root: Path, item_id: str, mark: int) -> bool:
@@ -358,7 +358,7 @@ class FieldOps:
         item = Path(dev_root) / "work-items" / item_id / "item.md"
         if not item.exists():
             return False
-        text = item.read_text()
+        text = item.read_text(encoding="utf-8")
         meta, body = parse_md(text)
         try:
             cur = int(str(meta.get("handoffs_promoted") or 0).strip() or 0)
@@ -376,7 +376,7 @@ class FieldOps:
             fm = re.sub(r"(?m)^created_at:", f"handoffs_promoted: {int(mark)}\ncreated_at:",
                         fm, count=1)
         fm = re.sub(r"(?m)^updated_at:.*$", f"updated_at: {date.today().isoformat()}", fm)
-        item.write_text(f"---\n{fm}\n---\n{body}")
+        item.write_text(f"---\n{fm}\n---\n{body}", encoding="utf-8")
         return True
 
     def set_work_item_status(self, dev_root: Path, item_id: str, status: str) -> bool:
@@ -385,7 +385,7 @@ class FieldOps:
         item = Path(dev_root) / "work-items" / item_id / "item.md"
         if not item.exists():
             return False
-        text = item.read_text()
+        text = item.read_text(encoding="utf-8")
         meta, body = parse_md(text)
         if str(meta.get("status")) == str(status):
             return False
@@ -402,7 +402,7 @@ class FieldOps:
         if status != "error":
             fm = re.sub(r"(?m)^error_reason:.*\n?", "", fm)
         fm = re.sub(r"(?m)^updated_at:.*$", f"updated_at: {date.today().isoformat()}", fm)
-        item.write_text(f"---\n{fm}\n---\n{body}")
+        item.write_text(f"---\n{fm}\n---\n{body}", encoding="utf-8")
         return True
 
     def set_work_item_error(self, dev_root: Path, item_id: str, reason: str) -> bool:
@@ -411,7 +411,7 @@ class FieldOps:
         item = Path(dev_root) / "work-items" / item_id / "item.md"
         if not item.exists():
             return False
-        text = item.read_text()
+        text = item.read_text(encoding="utf-8")
         meta, body = parse_md(text)
         if meta.get("done_at") or str(meta.get("status")) == "done":
             return False
@@ -427,7 +427,7 @@ class FieldOps:
         else:
             fm = fm.rstrip() + f'\nerror_reason: "{clean}"'
         fm = re.sub(r"(?m)^updated_at:.*$", f"updated_at: {date.today().isoformat()}", fm)
-        item.write_text(f"---\n{fm}\n---\n{body}")
+        item.write_text(f"---\n{fm}\n---\n{body}", encoding="utf-8")
         return True
 
     def set_work_item_autopilot(self, dev_root: Path, item_id: str, on: bool) -> bool:
@@ -436,7 +436,7 @@ class FieldOps:
         item = Path(dev_root) / "work-items" / item_id / "item.md"
         if not item.exists():
             return False
-        text = item.read_text()
+        text = item.read_text(encoding="utf-8")
         meta, body = parse_md(text)
         if bool(meta.get("autopilot")) == bool(on):
             return False
@@ -449,7 +449,7 @@ class FieldOps:
         else:
             fm = re.sub(r"(?m)^autopilot:.*\n?", "", fm)
         fm = re.sub(r"(?m)^updated_at:.*$", f"updated_at: {date.today().isoformat()}", fm)
-        item.write_text(f"---\n{fm}\n---\n{body}")
+        item.write_text(f"---\n{fm}\n---\n{body}", encoding="utf-8")
         return True
 
     def set_work_item_seen(self, dev_root: Path, item_id: str) -> bool:
@@ -458,7 +458,7 @@ class FieldOps:
         item = Path(dev_root) / "work-items" / item_id / "item.md"
         if not item.exists():
             return False
-        text = item.read_text()
+        text = item.read_text(encoding="utf-8")
         m = _FRONTMATTER.match(text)
         if not m:
             return False
@@ -471,7 +471,7 @@ class FieldOps:
         else:
             fm = fm.rstrip() + f"\nseen_at: {stamp}"
         _meta, body = parse_md(text)
-        item.write_text(f"---\n{fm}\n---\n{body}")
+        item.write_text(f"---\n{fm}\n---\n{body}", encoding="utf-8")
         return True
 
     def set_work_item_scaffold(
@@ -482,7 +482,7 @@ class FieldOps:
         item = Path(dev_root) / "work-items" / item_id / "item.md"
         if not item.exists():
             return False
-        text = item.read_text()
+        text = item.read_text(encoding="utf-8")
         m = _FRONTMATTER.match(text)
         if not m:
             return False
@@ -499,7 +499,7 @@ class FieldOps:
         fm = _set(fm, "wave", wave or "null")
         fm = _set(fm, "deliverable", deliverable or "null")
         fm = re.sub(r"(?m)^updated_at:.*$", f"updated_at: {date.today().isoformat()}", fm)
-        item.write_text(f"---\n{fm}\n---\n{body}")
+        item.write_text(f"---\n{fm}\n---\n{body}", encoding="utf-8")
         return True
 
     # Written by the git layer's callers, read by health checks and the FE. A terminal item KEEPS
@@ -521,7 +521,7 @@ class FieldOps:
         item = Path(dev_root) / "work-items" / item_id / "item.md"
         if not item.exists() or not fields:
             return False
-        text = item.read_text()
+        text = item.read_text(encoding="utf-8")
         m = _FRONTMATTER.match(text)
         if not m:
             return False
@@ -537,5 +537,5 @@ class FieldOps:
         for key, val in fields.items():
             fm = _upsert(fm, key, val)
         fm = re.sub(r"(?m)^updated_at:.*$", f"updated_at: {date.today().isoformat()}", fm)
-        item.write_text(f"---\n{fm}\n---\n{body}")
+        item.write_text(f"---\n{fm}\n---\n{body}", encoding="utf-8")
         return True

@@ -36,7 +36,7 @@ def research_proposals(item_dir: Path) -> list[dict]:
     path = Path(item_dir) / "artifacts" / artifact_file("review")
     if not path.is_file():
         return []
-    text = re.sub(r"<!--.*?-->", "", path.read_text(), flags=re.DOTALL)
+    text = re.sub(r"<!--.*?-->", "", path.read_text(encoding="utf-8"), flags=re.DOTALL)
     body = split_sections(text).get("Proposed work", "")
     out: list[dict] = []
     cur: dict | None = None

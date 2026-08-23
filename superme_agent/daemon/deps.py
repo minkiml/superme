@@ -61,7 +61,7 @@ def dev_root(context_id: str):
 
 def load_slash_cache() -> dict:
     try:
-        return json.loads(SLASH_COMMANDS_FILE.read_text())
+        return json.loads(SLASH_COMMANDS_FILE.read_text(encoding="utf-8"))
     except (FileNotFoundError, ValueError):
         return {}
 
@@ -74,7 +74,7 @@ def cache_slash(context_id: str, slash_commands: list) -> None:
     if cache.get(context_id) != slash_commands:
         cache[context_id] = slash_commands
         try:
-            SLASH_COMMANDS_FILE.write_text(json.dumps(cache, indent=2))
+            SLASH_COMMANDS_FILE.write_text(json.dumps(cache, indent=2), encoding="utf-8")
         except OSError as e:
             log.warning("could not persist slash cache: %s", e)
 

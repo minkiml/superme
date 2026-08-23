@@ -38,7 +38,7 @@ def _file_plan_report(*, store, context_id, dev_root=None, bound_item_id=None, *
         kind = None
         try:
             from ....core.dev_knowledge import parse_md
-            meta, _b = parse_md((d / "item.md").read_text())
+            meta, _b = parse_md((d / "item.md").read_text(encoding="utf-8"))
             kind = meta.get("kind")
         except Exception:
             pass
@@ -89,7 +89,7 @@ def _phase_report_pen(phase: str):
             path = d / "reports" / f"{stem}.md"
             try:
                 path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text(body if body.endswith("\n") else body + "\n")
+                path.write_text(body if body.endswith("\n") else body + "\n", encoding="utf-8")
             except OSError as e:
                 return _err(str(e))
             if issues := _arts.report_issues(d, stem):
@@ -123,7 +123,7 @@ def _file_investigate_report(*, store, context_id, dev_root=None, bound_item_id=
         path = d / "reports" / "report-investigate.md"
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(body if body.endswith("\n") else body + "\n")
+            path.write_text(body if body.endswith("\n") else body + "\n", encoding="utf-8")
         except OSError as e:
             return _err(str(e))
         if issues := _arts.report_issues(d, "report-investigate"):

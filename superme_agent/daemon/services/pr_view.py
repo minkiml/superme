@@ -23,7 +23,7 @@ UNLABELLED = "unlabelled"
 
 def _read(path: Path) -> str:
     try:
-        return path.read_text() if path.is_file() else ""
+        return path.read_text(encoding="utf-8") if path.is_file() else ""
     except OSError:
         log.warning("pr view: could not read %s", path)
         return ""

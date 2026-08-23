@@ -91,10 +91,15 @@ _SEATBELT = """(version 1)
 # boundary.
 
 
+def kernel_available() -> bool:
+    """Whether this host can isolate a shell command. macOS seatbelt only, today."""
+    return sys.platform == "darwin" and bool(shutil.which("sandbox-exec"))
+
+
 def kernel_command(command: str, writable: list[Path]) -> list[str] | None:
     """Wrap `command` so the kernel isolates it. `None` means no supported sandbox — never fall back
     to bare."""
-    if sys.platform != "darwin" or not shutil.which("sandbox-exec"):
+    if not kernel_available():
         return None
     roots = "".join(f'\n  (subpath "{r}")' for r in _roots(writable))
     return ["sandbox-exec", "-p", _SEATBELT.format(writable=roots), "/bin/sh", "-c", command]

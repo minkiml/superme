@@ -157,7 +157,7 @@ def _revise_plan(*, store, context_id, dev_root=None, bound_item_id=None, spine=
         # plan.md belongs to the plan phase; review is read-only on it, which is exactly why
         # review has `revise`.
         from ....core.dev_knowledge import parse_md
-        phase = str((parse_md((d / "item.md").read_text())[0] or {}).get("phase") or "")
+        phase = str((parse_md((d / "item.md").read_text(encoding="utf-8"))[0] or {}).get("phase") or "")
         if phase != "plan":
             return _err(
                 f"plan.md is the PLAN phase's to write — this item is at `{phase}`. "
@@ -185,7 +185,7 @@ def _revise_plan(*, store, context_id, dev_root=None, bound_item_id=None, spine=
                 changes = json.loads(changes) if changes.strip() else None
             except (ValueError, TypeError) as e:
                 return _err(f"`changes` must be a JSON array of changes: {e}")
-        issues = _pr.validate(path.read_text(), changes)
+        issues = _pr.validate(path.read_text(encoding="utf-8"), changes)
         if issues:
             return _err("Revision rejected — plan.md is unchanged. Fix and re-send:\n- "
                         + "\n- ".join(issues))

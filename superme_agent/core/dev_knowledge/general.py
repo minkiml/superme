@@ -170,7 +170,7 @@ class GeneralOps:
     def read_general_doc(self, dev_root: Path, name: str) -> str | None:
         """Raw text of one anchor doc, or None (unknown name or missing file)."""
         p = self._general_path(dev_root, name)
-        return p.read_text() if (p and p.exists()) else None
+        return p.read_text(encoding="utf-8") if (p and p.exists()) else None
 
     def deliverable_success_signal(self, dev_root: Path, deliverable_id: str) -> str | None:
         """The PRD success-signal lines citing `deliverable_id`, verbatim — the
@@ -197,7 +197,7 @@ class GeneralOps:
         if not p:
             return False
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(text)
+        p.write_text(text, encoding="utf-8")
         return True
 
     # The general/ lint: mechanical checks reported as ACTIONABLE FINDINGS. Everything is derived,

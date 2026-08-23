@@ -148,7 +148,7 @@ def main():
     if not path.is_file():
         print(f"FAIL: file not found: {path}")
         sys.exit(2)
-    text = path.read_text()
+    text = path.read_text(encoding="utf-8")
 
     errors, warnings = [], []
     if args.form == "constitution":

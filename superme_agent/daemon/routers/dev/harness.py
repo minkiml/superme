@@ -68,7 +68,7 @@ async def dev_harness_plugin_file(scope: str, kind: str, name: str, context_id: 
     """The raw markdown of one SuperMe skill/agent — the popup's preview + edit source. `scope='local'`
     reads this host's own `local-harness/<context_id>/dev` tree."""
     p = _resolve_plugin_file(scope, kind, name, context_id)
-    return {"scope": scope, "kind": kind, "name": name, "path": str(p), "content": p.read_text()}
+    return {"scope": scope, "kind": kind, "name": name, "path": str(p), "content": p.read_text(encoding="utf-8")}
 
 
 @router.put("/dev/harness/plugin-file", response_model=PluginFileSaveResponse)
@@ -78,7 +78,7 @@ async def dev_harness_plugin_file_save(body: PluginFileBody) -> dict:
     p = _resolve_plugin_file(body.scope, body.kind, body.name, body.context_id)
     if not (body.content or "").strip():
         raise HTTPException(status_code=400, detail="content is empty")
-    p.write_text(body.content)
+    p.write_text(body.content, encoding="utf-8")
     log.info("saved harness %s '%s' (%s)", body.kind, body.name, body.scope)
     return {"ok": True, "scope": body.scope, "kind": body.kind, "name": body.name}
 
@@ -105,7 +105,7 @@ async def dev_harness_foundation() -> dict:
         present = path.is_file()
         files.append({
             "key": key, "label": label, "scope": scope, "path": str(path),
-            "present": present, "body": path.read_text() if present else "",
+            "present": present, "body": path.read_text(encoding="utf-8") if present else "",
         })
     constitutions = []
     for mode in ("dev", "core"):
@@ -128,7 +128,7 @@ async def dev_harness_foundation_save(body: FoundationFileBody) -> dict:
         raise HTTPException(status_code=404, detail=f"unknown foundation file '{body.key}'")
     if not (body.content or "").strip():
         raise HTTPException(status_code=400, detail="content is empty")
-    path.write_text(body.content)
+    path.write_text(body.content, encoding="utf-8")
     log.info("saved foundation file '%s'", body.key)
     return {"ok": True, "key": body.key}
 
@@ -155,7 +155,7 @@ async def dev_harness_deputy_save(body: DeputyMandateBody,
         raise HTTPException(status_code=400, detail="content is empty")
     p = deputy_core.mandate_path(deputy_core.deputy_root(contexts.resolve(body.context_id, "dev")))
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(body.content)
+    p.write_text(body.content, encoding="utf-8")
     log.info("saved deputy mandate for '%s'", body.context_id)
     dev_store.log_event(
         body.context_id, "harness.edited", "Edited the deputy mandate",
@@ -279,7 +279,7 @@ async def dev_harness_constitution_toggle(slug: str, body: ConstitutionToggleBod
     if not body.enabled:
         p = _resolve_constitution_file(body.scope, slug, body.context_id)
         from ....core.operational import parse_frontmatter, is_foundational
-        if is_foundational(parse_frontmatter(p.read_text())[0]):
+        if is_foundational(parse_frontmatter(p.read_text(encoding="utf-8"))[0]):
             raise HTTPException(
                 status_code=409,
                 detail=f"'{slug}' is foundational (a charter consults it by name) — it can't be disabled.")
@@ -324,7 +324,7 @@ async def dev_harness_constitution_file(slug: str, scope: str, context_id: str =
     """The raw markdown (frontmatter intact) of one constitution — the popup's edit source. The
     catalog GET returns only the stripped body + description, so editing pulls the full file here."""
     p = _resolve_constitution_file(scope, slug, context_id)
-    return {"slug": slug, "scope": scope, "path": str(p), "content": p.read_text()}
+    return {"slug": slug, "scope": scope, "path": str(p), "content": p.read_text(encoding="utf-8")}
 
 
 @router.put("/dev/harness/constitution-file", response_model=ConstitutionFileSaveResponse)
@@ -336,7 +336,7 @@ async def dev_harness_constitution_file_save(body: ConstitutionFileBody,
     p = _resolve_constitution_file(body.scope, body.slug, body.context_id)
     if not (body.content or "").strip():
         raise HTTPException(status_code=400, detail="content is empty")
-    p.write_text(body.content)
+    p.write_text(body.content, encoding="utf-8")
     log.info("saved constitution '%s' (%s)", body.slug, body.scope)
     dev_store.log_event(
         body.context_id, "harness.edited", f"Edited constitution '{body.slug}'",
@@ -430,7 +430,7 @@ async def dev_harness_published_file(proposal_id: int, context_id: str = "global
     """The raw markdown source of a published artifact — for the Published-tab preview/edit."""
     _, form, scope, slug, path = _published_prop(proposal_id, context_id, dev_store)
     return {"proposal_id": proposal_id, "form": form, "scope": scope, "slug": slug,
-            "path": str(path), "content": path.read_text()}
+            "path": str(path), "content": path.read_text(encoding="utf-8")}
 
 
 @router.put("/dev/harness/published/{proposal_id}/file", response_model=PublishedFileSaveResponse)
@@ -440,7 +440,7 @@ async def dev_harness_published_file_save(proposal_id: int, body: PublishedFileB
     if not (body.content or "").strip():
         raise HTTPException(status_code=400, detail="content is empty")
     prop, form, _, _, path = _published_prop(proposal_id, body.context_id, dev_store)
-    path.write_text(body.content)
+    path.write_text(body.content, encoding="utf-8")
     dev_store.log_event(
         body.context_id, "harness.edited", f"Edited {form} '{prop['title']}'",
         scope="dev", actor="owner", meta={"proposal_id": proposal_id, "form": form})

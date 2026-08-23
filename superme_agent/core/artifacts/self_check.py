@@ -24,7 +24,7 @@ def self_check(item_dir: Path, artifact: str, *, item_kind: str | None = None,
     path = Path(path) if path else Path(item_dir) / "artifacts" / artifact_file(artifact)
     if not path.exists():
         return [f"{artifact_file(artifact)} does not exist — scaffold it first"]
-    text = path.read_text()
+    text = path.read_text(encoding="utf-8")
     issues: list[str] = []
     fills = FILL.findall(text)
     # A leftover slot in a handoff-brief marks an unfilled optional section; every other kind must
@@ -109,14 +109,14 @@ def owner_edit(item_dir: Path, artifact: str, text: str, *,
     else:
         # An edit that dropped the frontmatter gets it back: downstream readers key on `artifact:`
         # and `item_kind:`.
-        head = _FM_BLOCK.match(path.read_text())
+        head = _FM_BLOCK.match(path.read_text(encoding="utf-8"))
         keep = _EDITED_LINE.sub("", head.group(1)).rstrip() if head else f"artifact: {artifact}"
         body = f"---\n{keep}\nedited_by_owner: {stamp}\n---\n" + body.lstrip("\n")
     # Judge the CANDIDATE, never the file: validating after the write leaves a rejected version
     # readable meanwhile.
     probe = Path(tempfile.mkdtemp(prefix="superme-edit-")) / path.name
     try:
-        probe.write_text(body)
+        probe.write_text(body, encoding="utf-8")
         if (issues := self_check(item_dir, artifact, item_kind=item_kind, path=probe)):
             return issues
     finally:

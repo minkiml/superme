@@ -198,7 +198,7 @@ class SessionStore:
         title = None
         first_user = None
         messages: list[dict] = []
-        for line in path.read_text().splitlines():
+        for line in path.read_text(encoding="utf-8").splitlines():
             line = line.strip()
             if not line:
                 continue

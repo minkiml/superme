@@ -56,13 +56,13 @@ def ok(msg: str, cond: bool = True) -> None:
 def _item(plan: str = PLAN) -> Path:
     item = Path(tempfile.mkdtemp(prefix="rub-")) / "item"
     (item / "artifacts").mkdir(parents=True)
-    (item / "artifacts" / _arts.artifact_file("plan")).write_text(plan)
+    (item / "artifacts" / _arts.artifact_file("plan")).write_text(plan, encoding="utf-8")
     _arts.scaffold_cycle(item)
     return item
 
 
 def _rubric(item: Path) -> list[str]:
-    plan = (item / "artifacts" / _arts.artifact_file("plan")).read_text()
+    plan = (item / "artifacts" / _arts.artifact_file("plan")).read_text(encoding="utf-8")
     return next(c["rubric"] for c in _arts.parse_vet_plan(plan)["checks"] if c["id"] == "err-msg")
 
 
@@ -169,7 +169,7 @@ def test_the_reader_sees_which_criterion_missed():
                            why="the error path returns before the exit code is set")
     _arts.record_verification(item, None, check="suite", how="ran", result="exit 0", passed=True)
     _lenses(item)
-    text = Path(_arts.write_vet_user_report(item, None)["path"]).read_text()
+    text = Path(_arts.write_vet_user_report(item, None)["path"]).read_text(encoding="utf-8")
     # The score rides the Proof row, criterion by criterion. What the REPORT owes is that the
     # check came back red at all, machine-authored.
     ok("a missed rubric reaches the owner's report as a failure",
