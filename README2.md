@@ -1,12 +1,7 @@
 # SuperMe
 
-SuperMe is a personal agent system that runs entirely on your own machine, with a local dashboard.
-One AI identity works across every repository you own. It is built for one person rather than a
-team. The goal is that everything you build and run with AI collects into a single body of
-knowledge that represents you, and that you stay in charge of it without becoming the thing that
-slows it down.
-
-![The Nexus, every connected repo](docs/img/nexus.png)
+SuperMe is a personal agent system that runs on your own machine, with a local dashboard.
+It is built for one person rather than a team. The goal is that everything you build and run with AI collects into a single body of knowledge that represents you, and that you stay in charge of it without becoming the thing that slows it down.
 
 ---
 
@@ -16,8 +11,8 @@ Your work is not one repo. It is not one project, one workspace, one session, on
 It is a body of knowledge that represents you. Your projects, your side work, your business, and
 the tooling that runs all of it.
 
-Right now that knowledge is scattered. One thread per session. One context per tool. One memory per
-project. None of them know about each other, and none of them survive the session. You are the only
+Right now that knowledge is scattered. One thread per session. One set of knowledge and memory per
+project. None of them know about each other, and none of them are connected. You are the only
 thing connecting them, and you are doing it from memory.
 
 SuperMe is that connection. One identity works across every repo you own, including its own code.

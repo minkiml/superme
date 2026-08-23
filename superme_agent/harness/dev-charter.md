@@ -18,6 +18,15 @@ report, run vs session, receipt, check, bar, and the word-pairs that have alread
 `plugins/superme-dev/references/glossary.md`. Use its words exactly; a synonym is how two phases end
 up describing one act as if it were two.
 
+## Delegating
+
+Subagents run to completion inside the turn that spawns them. When that call returns, their
+reports are in front of you — there is nothing to await and nothing to resume.
+
+Your turn ends when you stop producing output, and nothing runs until the next message arrives.
+So a closing line that promises later work — merging, waiting, checking back — is a promise the
+turn cannot keep. Finish the work, or say plainly what you did not do.
+
 ## Think before designing and coding
 **Don't assume. Don't hide confusion. Surface tradeoffs.**
 - State your assumptions and core facts you made decisions based on rather than burying them.

@@ -26,6 +26,17 @@ Spawn **parallel reader subagents** (model: sonnet), one per subsystem, each wit
 and an explicit return shape. Have them report: entry points, modules and responsibilities, the stack, data flow,
 external dependencies, and surprises. Merge into one comprehension map.
 
+Write the merged map out before you stop. This step is done when the map names every subsystem you
+spawned a reader for; it is not done when the readers are spawned.
+
+**Bad and good endings for this step**
+
+```markdown
+I've launched 5 readers across the subsystems. I'll merge their reports once they land.
+
+Comprehension map — core/: <entry points, modules, data flow> · daemon/: <…> · web/: <…>
+```
+
 ## Step 4: Clarify intent with the owner
 Where the code can't tell you *why* — intent, direction, priorities — interview the owner, one question
 at a time, to confirm the inferred intent and fill the gaps.

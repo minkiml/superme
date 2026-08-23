@@ -33,6 +33,9 @@ anchors them to your guess instead of surfacing theirs.
 Then **report before you question** — a short "here's what I found · here's what I still need from you."
 Cheap, and it lets the owner correct a wrong premise before it drives twenty questions.
 
+Write that report before you stop. This step is done when the findings are on the page; it is not
+done when the researchers are spawned.
+
 ## Step 4: Grill the owner
 Relentlessly interview the owner one question at a time, resolving dependencies as you go.
 Cover the PRD's sections (see its guide): what it is · who it's for · **why it exists** (the real
