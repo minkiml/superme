@@ -111,8 +111,49 @@ These are the questions that drive the design, and they are still open.
 
 ---
 
+### Quick features
+
+Every bullet here is a screenshot. Anything the interface does not show yet is in *Other features*
+below.
+
+**Reports written for you, not logs.** What it did, what to push back on, how much to trust each
+claim, and where it leaves the project.
+
+![The plan report at a gate: a summary, the approach, and a table pairing what must be true with how you will know](assets/gate-report.png)
+
+**Every task tied to the check that defends it.** The confirmation is derived rather than written,
+so a task nothing proves is named at the gate instead of three cycles later.
+
+![Tasks and verification in one view, each task listing the named tests that cover it and each check how it was run](assets/gate-task.png)
+
+**One board for the whole pipeline.** Inbox, workspace and every item's phase, with what each one
+cost and how long it has been waiting printed on the card.
+
+![The kanban board, cards showing model, context fill, tokens and age across triage, work, review and close](assets/work-items.png)
+
+**A deputy can hold the routine gates, and shows its work.** It approves only what it can justify,
+and every judgment records what it read to get there.
+
+![The deputy log: each gate approved, the reasoning behind it, and the files it checked](assets/deputy.png)
+
+**The diff, read beside what it was for.** Each task carries what it had to make true, what to look
+at, and what proved it. Feedback you leave becomes a check, build implements it, vet re-runs.
+
+![The pull-request page: the review report on the left, per-task commits and changed files on the right](assets/pr-preview.png)
+
+**Full observability.** Every run keeps its trace. Prompts, tool calls, results, sub-agents, tokens,
+context fill. Nothing is a black box when it goes wrong.
+
+![The trace tab: every tool call in a run, numbered and timestamped, grouped by run](assets/gate-trace.png)
+
+---
+
 ### Other features
 
+- **Mechanical checks first.** Missing artifacts, stale evidence and unresolved authorizations are
+  settled before you are asked, so your attention goes to judgment instead of bookkeeping.
+- **Self-carrying work-items.** Brief, plan, decisions, checkpoints and history travel with the
+  item, so returning to it is reading rather than reconstructing.
 - **Git worktrees.** Every item builds in its own worktree, so parallel agent work never collides
   and nothing lands until you approve it.
 - **Auto task-breaking.** A brief too large for one pass fans out into children, parallel where they
