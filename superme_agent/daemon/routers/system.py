@@ -150,7 +150,7 @@ async def disconnect_repo(repo_id: str, confirm: str = "",
         raise HTTPException(status_code=409,
                             detail=f"{running} run(s) still executing — stop them first")
 
-    from ...core.git_layer import worktrees_root
+    from ...core.git_layer import remove_tree, worktrees_root
     from ...gateway import contexts
     from ..app_state import sessions as session_store, dev_store
 
@@ -167,7 +167,7 @@ async def disconnect_repo(repo_id: str, confirm: str = "",
     # metadata.
     wt = worktrees_root(repo_id)
     worktrees_removed = wt.is_dir()
-    shutil.rmtree(wt, ignore_errors=True)
+    remove_tree(wt, ignore_errors=True)
     if worktrees_removed:
         try:
             import subprocess

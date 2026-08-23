@@ -3703,6 +3703,10 @@
    "home": "superme_agent.core.git_layer",
    "sig": "def(repo_dir: pathlib.Path, item_id: str, branch: str, base: str) -> dict"
   },
+  "remove_tree": {
+   "home": "superme_agent.core.git_layer",
+   "sig": "def(path: pathlib.Path, *, ignore_errors: bool = False) -> None"
+  },
   "remove_worktree": {
    "home": "superme_agent.core.git_layer",
    "sig": "def(repo_dir: pathlib.Path, repo_id: str, item_id: str) -> dict"

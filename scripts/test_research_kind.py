@@ -931,14 +931,15 @@ with tempfile.TemporaryDirectory() as td:
        any("not present in the repo" in s for s in skips))
     ok("mirrored files are read-only, so a copy can never read as a place to edit",
        (wt / "scripts" / "test_a.py").stat().st_mode & 0o222 == 0)
-    # …but the DIRECTORIES stay writable: unlinking depends on the dir's write bit, so read-only
-    # dirs leave an undeletable worktree behind.
+    # …but the DIRECTORIES stay writable: POSIX unlinking depends on the dir's write bit, so
+    # read-only dirs leave an undeletable worktree behind.
     ok("the mirrored directory stays writable, so the tree can still be swept at close",
        (wt / "scripts").stat().st_mode & 0o200 != 0)
     import shutil as _sh
+    from superme_agent.core.git_layer import remove_tree as _rm
     _probe = Path(td) / "removable"
     _sh.copytree(wt, _probe)
-    _sh.rmtree(_probe)                # raises if a mode blocks disposal
+    _rm(_probe)                       # raises if a mode blocks disposal
     ok("…proven by removing a copy of the mirrored tree outright", True)
 
 ok("the mirror runs only on a FRESH tree — a reused one already has it, read-only",

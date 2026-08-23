@@ -8,8 +8,11 @@ import json
 import logging
 import os
 import re
+import shutil
 import signal
+import stat
 import subprocess
+import sys
 import threading
 from datetime import datetime
 from pathlib import Path
@@ -127,6 +130,20 @@ def worktrees_root(repo_id: str) -> Path:
     """One repo's worktree home, keyed by REPO ID — two connected repos may share a
     folder name."""
     return worktrees_home() / repo_id
+
+
+def remove_tree(path: Path, *, ignore_errors: bool = False) -> None:
+    """Delete a tree that may hold read-only files. Windows refuses to unlink one."""
+    def clear(func, target, _exc):
+        os.chmod(target, os.stat(target).st_mode | stat.S_IWRITE)
+        func(target)
+
+    kw = {"onexc": clear} if sys.version_info >= (3, 12) else {"onerror": clear}
+    try:
+        shutil.rmtree(path, **kw)
+    except OSError:
+        if not ignore_errors:
+            raise
 
 
 def worktree_dir(repo_id: str, item_id: str) -> Path:
@@ -512,6 +529,8 @@ def remove_worktree(repo_dir: Path, repo_id: str, item_id: str) -> dict:
         if wt.exists():
             stop_vet_env(wt)          # the dir takes the files; only this takes the process
             _git(repo_dir, "worktree", "remove", "--force", str(wt))
+            if wt.exists():
+                remove_tree(wt, ignore_errors=True)
             removed = True
         _git(repo_dir, "worktree", "prune", check=False)
     verified = not wt.exists()
