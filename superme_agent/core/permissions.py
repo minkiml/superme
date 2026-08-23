@@ -362,10 +362,13 @@ def _is_absolute_token(tok: str) -> bool:
 def _outside_every(tok: str, roots: list[Path]) -> bool:
     """True when an absolute token lands outside every root.
 
-    A token absolute under the OTHER platform's rules is outside by definition — no native root
-    can hold it, and resolving it would silently make it relative to the cwd."""
+    A drive path on a POSIX host is outside by definition: no native root can hold it, and
+    resolving it would silently reinterpret it against the cwd. Anything else the platform can
+    resolve is compared the ordinary way, roots included."""
     p = Path(tok)
-    return True if not p.is_absolute() else not _in_any(p, roots)
+    if not p.is_absolute() and PureWindowsPath(tok).is_absolute():
+        return True
+    return not _in_any(p, roots)
 
 
 def _scratch_in(roots: list[Path]) -> Path | None:
