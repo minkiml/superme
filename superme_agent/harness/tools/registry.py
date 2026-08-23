@@ -95,8 +95,7 @@ class ToolSpec:
 def describe_specs(specs: list[ToolSpec]) -> str:
     """The authored tool surface as readable text, in mount order.
 
-    This is PROMPT TEXT — it rides in every request the turn makes, so a bloated description is visible
-    as the cost it is."""
+    This is PROMPT TEXT, riding in every request, so a bloated description is visible as a cost."""
     blocks: list[str] = []
     for s in specs:
         schema = _render_schema(s.schema)

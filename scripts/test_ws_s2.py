@@ -353,8 +353,7 @@ def test_owner_edit(tmp: Path) -> None:
 def test_carry_owner_input(tmp: Path) -> None:
     """The owner's words reach every phase MECHANICALLY.
 
-    Each intake phase runs in its own session, so anything said earlier is gone from the thread.
-    This block carries the durable copy, and must never invent one."""
+    Each intake phase runs in its own session, so this block carries the durable copy."""
     print("owner input carried into every phase")
     dev = DevKnowledgeService()
     root = tmp / "carry-root"
@@ -391,8 +390,8 @@ def test_carry_owner_input(tmp: Path) -> None:
 def test_report_read_hygiene(tmp: Path) -> None:
     """A report's READ path drops what the author should have deleted.
 
-    Every template says to remove a block it has nothing to put under, and the first report the
-    owner read carried two that survived. Structure only."""
+    The first report the owner read carried two blocks that survived their own template's
+    instruction."""
     print("report read hygiene")
     item = tmp / "hygiene"
     (item / "reports").mkdir(parents=True)
@@ -446,8 +445,8 @@ def test_tool_registration() -> None:
 def test_review_record(tmp: Path) -> None:
     """Review's own agent-facing record.
 
-    Review was the one phase with no agent doc, so its OWNER report had accumulated fields only
-    machines read. Each moves here, and what the owner reads becomes prose again."""
+    It was the one phase with no agent doc, so its OWNER report accumulated fields only machines
+    read."""
     print("review record — the phase's agent-facing doc")
     from superme_agent.core.vocab import kind_profiles as _kp
     from superme_agent.daemon.services import git_ops as _go

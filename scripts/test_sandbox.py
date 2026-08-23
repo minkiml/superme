@@ -122,8 +122,7 @@ def test_the_stale_claim_is_gone():
 def test_a_run_has_somewhere_to_put_a_temp_file():
     """A boundary saying only where you may NOT write is half a rule.
 
-    The system temp dir is outside every root SuperMe grants, so an item folder carries
-    `scratch/`. Transient by contract."""
+    The system temp dir is outside every granted root, so an item carries `scratch/`."""
     import asyncio
     import tempfile
 
@@ -230,7 +229,7 @@ def test_the_shell_may_name_what_the_write_tools_may_not():
 def test_a_search_pattern_is_not_a_place():
     """The boundary reads a command's `/…` tokens as paths, and a regex is spelled like one.
 
-    A sweep whose files were all in bounds was refused for its own grep pattern."""
+    A sweep whose files were in bounds was refused for its own grep pattern."""
     import asyncio
     import tempfile
 
@@ -267,8 +266,9 @@ def test_a_search_pattern_is_not_a_place():
 
 
 def test_research_cannot_reach_the_codebase():
-    """The guarantee a research sweep rests on: it reads a throwaway checkout and writes only its
-    own folder. Every way out is closed at the callback, and the kernel holds the same two roots."""
+    """A research sweep reads a throwaway checkout and writes only its own folder.
+
+    Every way out is closed at the callback, and the kernel holds the same two roots."""
     import asyncio
     import tempfile
 
@@ -311,10 +311,10 @@ def test_research_cannot_reach_the_codebase():
 
 
 def test_the_kernel_counts_what_it_refused():
-    """A report cannot honestly claim no tool was unavailable when calls were refused.
+    """A report cannot claim no tool was unavailable when calls were refused.
 
-    Each refusal is read once, hundreds of calls earlier, so the count is the part the agent
-    cannot reconstruct."""
+    Each refusal is read once, hundreds of calls earlier, so the count is what the agent cannot
+    reconstruct."""
     import asyncio
     import re
 

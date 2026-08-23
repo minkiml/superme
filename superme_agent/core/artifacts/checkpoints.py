@@ -26,11 +26,9 @@ def _normalize_signature(s: str) -> str:
 
 
 def convergence_fingerprint(item_dir: Path, *, extra: list[str] | None = None) -> str:
-    """The cycle's failure fingerprint: sha1 over the sorted (check, normalized
-    result) pairs. Empty when nothing is failing.
+    """The cycle's failure fingerprint over the sorted (check, result) pairs.
 
-    `extra` carries failure signatures that are not ledger checks — a wall the loop keeps hitting
-    should exit `not_converging`."""
+    `extra` carries signatures that are not ledger checks, so a wall the loop keeps hitting exits."""
     latest: dict[str, dict] = {}
     for e in evidence_entries(item_dir):
         latest[e["check"]] = e
@@ -46,11 +44,10 @@ def convergence_fingerprint(item_dir: Path, *, extra: list[str] | None = None) -
 
 def write_checkpoint(item_dir: Path, repo_dir: Path | None, *, working_on: str, decisions: str,
                      remaining: str, notes: str = "", role: str | None = None) -> str:
-    """Bank one continuity checkpoint. APPEND-ONLY and atomic; the filename IS the order.
-    Reference artifacts BY PATH.
+    """Bank one continuity checkpoint. Append-only and atomic; the filename IS the order.
 
-    `role` is the SESSION ROLE that banked it: unstamped, a compacted intake thread gets the build
-    thread's checkpoint and reads it as its own."""
+    `role` is the session role that banked it, or a compacted intake thread reads build's as its
+    own."""
     if not (working_on.strip() and remaining.strip()):
         raise ValueError("a checkpoint needs at least working_on and remaining")
     cdir = Path(item_dir) / "checkpoints"
@@ -105,10 +102,10 @@ def checkpoint_feed(item_dir: Path, *, limit: int = 30) -> list[dict]:
 
 def latest_checkpoint(item_dir: Path, *, char_cap: int = 6000,
                       role: str | None = None) -> dict | None:
-    """The newest checkpoint by filename, char-capped. None when none exist.
+    """The newest checkpoint by filename, char-capped.
 
-    `role=None` answers "what is this ITEM's latest state"; a named role answers "what was THIS
-    THREAD doing", and also takes unstamped checkpoints, which are role-agnostic."""
+    `role=None` asks what this ITEM's latest state is; a named role asks what that THREAD was
+    doing."""
     cdir = Path(item_dir) / "checkpoints"
     if not cdir.is_dir():
         return None

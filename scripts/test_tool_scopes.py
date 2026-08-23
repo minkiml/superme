@@ -149,8 +149,7 @@ COMPUTED = ("scope=scope",          # the two dev_mcp helpers, forwarding their 
 def _call_at(text: str, start: int) -> str:
     """The whole call expression starting at `start`, paren-matched.
 
-    A regex misses the sites whose scope is itself a call, and a site this test cannot SEE is a
-    site it cannot check."""
+    A regex misses sites whose scope is itself a call, and an unseen site cannot be checked."""
     depth, i = 0, text.index("(", start)
     for j in range(i, len(text)):
         if text[j] == "(":
@@ -163,8 +162,9 @@ def _call_at(text: str, start: int) -> str:
 
 
 def _arg_after(call: str, key: str) -> str:
-    """The argument value following `key`, ending at the first top-level comma — so a scope that is
-    itself a call keeps its parens and a trailing comment never joins the value."""
+    """The argument value following `key`, ending at the first top-level comma.
+
+    A scope that is itself a call keeps its parens, and a trailing comment never joins the value."""
     rest = call[call.index(key) + len(key):]
     depth = 0
     for i, ch in enumerate(rest):
@@ -219,8 +219,7 @@ if __name__ == "__main__":
 def test_a_scoped_tool_is_not_refused_by_policy() -> None:
     """A tool can be registered, scoped to a phase, and still refused at the callback.
 
-    Nothing joins the two lists, so a background run reaches the step that needs it and is denied
-    with nobody to ask."""
+    Nothing joins the two lists, so a background run is denied with nobody to ask."""
     from superme_agent.harness.policy import is_safe
     from superme_agent.harness.tools.dev_tools import TOOL_SCOPES
 

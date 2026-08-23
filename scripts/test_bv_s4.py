@@ -262,9 +262,10 @@ def test_preamble_and_registration() -> None:
 
 
 def test_scope_vs_ops() -> None:
-    """The declared authorization scope is checked against the STAGED OPS. The
-    reserved/delegable split is declared by the agent it constrains, so on its own it is an honour
-    system; this is the code that makes the obvious lie refusable."""
+    """The declared authorization scope is checked against the STAGED OPS.
+
+    The split is declared by the agent it constrains, so this is what makes the obvious lie
+    refusable."""
     print("authorization scope vs staged ops")
     from superme_agent.core import artifacts as A
     intent = [{"doc": "project-prd", "section": "Deliverables", "op": "update", "content": "x"},

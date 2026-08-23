@@ -19,11 +19,9 @@ async def dev_read(context_id: str = "global",
                    dev: DevKnowledgeService = Depends(get_dev),
                    dev_store: DevStore = Depends(get_dev_store),
                    spine: SystemSpine = Depends(get_spine)) -> dict:
-    """A context's parsed dev knowledge (files) + inbox queue (DB) + the glance view.
+    """A context's parsed dev knowledge, inbox queue and glance view.
 
-    `running` lists work-item ids with a background /plan turn in flight, so the cards can
-    show a live "planning…" state while a background agent works.
-    """
+    `running` lists items with a background plan turn in flight, so a card can show planning."""
     root = dev_root(context_id)
     inbox = dev_store.list_inbox(context_id)
     data = dev.read_all(root, inbox=inbox)
@@ -40,7 +38,7 @@ async def dev_read(context_id: str = "global",
 async def dev_attention(context_id: str = "global",
                         dev: DevKnowledgeService = Depends(get_dev),
                         spine: SystemSpine = Depends(get_spine)) -> dict:
-    """Every item in at most one bucket, by strict priority, derived from durable state at read time.
+    """Every item in at most one bucket, by strict priority, derived at read time.
 
     `badge` is the top non-empty tier's colour and count, or null when nothing claims attention."""
     root = dev_root(context_id)
@@ -70,11 +68,9 @@ async def dev_attention(context_id: str = "global",
 async def dev_workgraph(context_id: str = "global",
                         dev: DevKnowledgeService = Depends(get_dev),
                         dev_store: DevStore = Depends(get_dev_store)) -> dict:
-    """The DERIVED work-graph projection: repo root, deliverables, work-items and unpushed inbox rows,
-    with their edges.
+    """The derived work-graph: repo root, deliverables, work-items, unpushed rows and their edges.
 
-    Assembled on demand from the authoritative feeds — nothing stored. A cycle is REPORTED as data,
-    never a 500."""
+    Assembled on demand, nothing stored. A cycle is reported as data, never a 500."""
     root = dev_root(context_id)
     items = dev.read_all(root)["work_items"]
     g = workgraph.build(
@@ -93,10 +89,9 @@ async def dev_log(context_id: str = "global", since: str | None = None,
                   until: str | None = None, scope: str | None = None,
                   item_id: str | None = None, limit: int = 200,
                   dev_store: DevStore = Depends(get_dev_store)) -> dict:
-    """The activity log — a SELECTIVE read over the events table, never a dump.
+    """The activity log, a SELECTIVE read over the events table rather than a dump.
 
-    `scope` takes a stored scope or `repo`, which adds the item-scoped kinds that are milestones of the
-    PROJECT rather than steps inside one item."""
+    `scope` takes a stored scope or `repo`, which adds the PROJECT's milestones."""
     events = dev_store.list_events(
         context_id, since=since, until=until, scope=scope, item_id=item_id, limit=limit,
         include_discarded=item_id is None,

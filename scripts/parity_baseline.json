@@ -214,7 +214,7 @@
           "type": "object"
         },
         "AboutRow": {
-          "description": "One row of `About this work-item` \u2014 what this item IS, in the owner's own framing.\n\nA LIST, not an object: the order is the meaning, and an empty row is dropped server-side.",
+          "description": "One row of `About this work-item`, in the owner's own framing.\n\nA LIST, not an object: the order is the meaning. An empty row is dropped server-side.",
           "properties": {
             "label": {
               "title": "Label",
@@ -771,7 +771,7 @@
           "type": "object"
         },
         "AttentionCard": {
-          "description": "The what-you-need-to-do card, in three connected parts: WHY, DO (the exact act and the one\ncontrol that performs it), and BASIS.\n\nNone when nothing needs the owner \u2014 the card is hidden entirely, never an empty shell.",
+          "description": "The what-you-need-to-do card in three parts: WHY, DO, and BASIS.\n\nNone when nothing needs the owner, so the card is hidden rather than empty.",
           "properties": {
             "basis": {
               "items": {
@@ -1162,7 +1162,7 @@
           "type": "object"
         },
         "BlockingChild": {
-          "description": "One open sub-item the parent is waiting on, resolved to something the owner can read and go to.\n\n`close_readiness` reports these as joined ids, which names a thing without saying what it is.",
+          "description": "One open sub-item the parent waits on, resolved to something the owner can read and go to.\n\nA joined id names a thing without saying what it is.",
           "properties": {
             "id": {
               "title": "Id",
@@ -1482,7 +1482,7 @@
           "type": "object"
         },
         "CategoryNode": {
-          "description": "One node of the semantic tree: a category total, its per-feature amounts, and how it should READ.\n\n`label` and `collapsed` are taxonomy decisions carried here, so no renderer has to re-make them.",
+          "description": "One node of the semantic tree: a category total, its per-feature amounts, and how it reads.\n\n`label` and `collapsed` are taxonomy decisions, so no renderer re-makes them.",
           "properties": {
             "collapsed": {
               "default": false,
@@ -2399,7 +2399,7 @@
           "type": "object"
         },
         "DrilldownAction": {
-          "description": "One control, with its activation decided SERVER-SIDE.\n\n`reason` is populated either way: greyed it says what would make it live, live it says what\nclicking does. `home` places it. Never hide a control \u2014 an absent one explains nothing.",
+          "description": "One control, with its activation decided SERVER-SIDE.\n\n`reason` is populated either way: greyed it says what would make it live, live it says what\nclicking does.",
           "properties": {
             "active": {
               "title": "Active",
@@ -2433,7 +2433,7 @@
           "type": "object"
         },
         "DrilldownResponse": {
-          "description": "Everything the work-item drilldown renders, computed once per poll.\n\nOne route instead of four, and one computation of the gate's checks \u2014 shared with the deputy, so\nthe owner can still check its call.",
+          "description": "Everything the work-item drilldown renders, computed once per poll.\n\nOne computation of the gate's checks, shared with the deputy, so the owner can check its call.",
           "properties": {
             "about": {
               "items": {
@@ -2575,7 +2575,7 @@
         },
         "EvalMetrics": {
           "additionalProperties": true,
-          "description": "The artifact's own run cost on a synthetic task (forge_kit/eval.py). kind 'run' = skill/agent\nmeasured once; kind 'overhead' = constitution's always-on per-turn cost. Tolerant of pre-metrics\nand error rows (everything optional, extra='allow' for forward-compat).",
+          "description": "The artifact's own run cost on a synthetic task.\n\n`run` measures a skill once; `overhead` is a constitution's always-on per-turn cost. Every field\nis optional.",
           "properties": {
             "capped": {
               "anyOf": [
@@ -2693,7 +2693,7 @@
         },
         "EvalReport": {
           "additionalProperties": true,
-          "description": "A proposal's gate-2 eval report, stored on the row.\n\nVersioned via `schema_version`, and tolerant of legacy reports: every field is optional, so an older\nor richer one never 500s a read.",
+          "description": "A proposal's gate-2 eval report, stored on the row.\n\nEvery field is optional, so an older or richer report never 500s a read.",
           "properties": {
             "checks": {
               "anyOf": [
@@ -3031,7 +3031,7 @@
           "type": "object"
         },
         "GateCheck": {
-          "description": "One mechanical row of a gate's evaluation \u2014 computed from durable state, never a claim.\n\n`blocking` is the must-resolve marker: a failing blocking check greys Approve, and every other row\nis a named, visible fact.",
+          "description": "One mechanical row of a gate's evaluation, computed from durable state rather than claimed.\n\n`blocking` is the must-resolve marker: a failing one greys Approve.",
           "properties": {
             "blocking": {
               "default": false,
@@ -3905,7 +3905,7 @@
           "type": "object"
         },
         "InboxBriefResponse": {
-          "description": "One row's handoff brief \u2014 the cold-start context the item it becomes reads first.\n\n`content` is null when none was filed, which is legal. `editable` is false once pushed: the brief\nhas become provenance.",
+          "description": "One row's handoff brief, the cold-start context the item it becomes reads first.\n\n`editable` is false once pushed: the brief has become provenance.",
           "properties": {
             "content": {
               "anyOf": [
@@ -4735,7 +4735,7 @@
           "type": "object"
         },
         "LibraryEntry": {
-          "description": "One proven check the repo keeps. `standing` entries are attached to every implementation\nitem's plan; `available` ones are cited by id. Same fields as a plan's check, because a plan\ninherits the entry verbatim.",
+          "description": "One proven check the repo keeps.\n\n`standing` attaches to every implementation plan, `available` is cited by id. A plan inherits it\nverbatim.",
           "properties": {
             "expect": {
               "default": "",
@@ -5018,7 +5018,7 @@
           "type": "object"
         },
         "NowStrip": {
-          "description": "What is happening right now: the live phase and cycle, and what that phase concluded.\n\nThe phase name and the running dot already answer \"where is this\", so no event sentence rides\nhere.",
+          "description": "The live phase and cycle, and what that phase concluded.\n\nThe phase name and the running dot already say where this is, so no event sentence rides here.",
           "properties": {
             "cycle": {
               "title": "Cycle",
@@ -5124,7 +5124,7 @@
           "type": "object"
         },
         "OwnerInputBody": {
-          "description": "The owner's `## From you` section, whole. Add and delete are both a PUT of the full slot\nlists, because the owner is its only writer and no concurrent edit needs protecting.",
+          "description": "The owner's `## From you` section, whole.\n\nAdd and delete are both a PUT of the full lists, since the owner is its only writer.",
           "properties": {
             "context_id": {
               "default": "global",
@@ -5152,7 +5152,7 @@
           "type": "object"
         },
         "OwnerInputResponse": {
-          "description": "The one section of any report the OWNER writes, read back from disk after every save.\n\nSLOTS, not prose: one reference and one note per entry, so each can be added and removed on its\nown.",
+          "description": "The one section of any report the OWNER writes, re-read from disk after every save.\n\nSLOTS, not prose, so each entry can be added and removed on its own.",
           "properties": {
             "exists": {
               "title": "Exists",
@@ -5242,7 +5242,7 @@
           "type": "object"
         },
         "PagedNotice": {
-          "description": "Why an item is parked for the owner when it is not a plain gate wait \u2014 an escalation, a build\u27f7vet\nhalt, or a blocked run. None means a normal gate.",
+          "description": "Why an item is parked when it is not a plain gate wait.\n\nAn escalation, a build\u27f7vet halt, or a blocked run. None means a normal gate.",
           "properties": {
             "detail": {
               "title": "Detail",
@@ -5316,7 +5316,7 @@
           "type": "object"
         },
         "PhaseReportResponse": {
-          "description": "One phase's user-facing report for the Reports tab: the markdown 1:1, plus the path to the full\nagent-facing contract behind it.\n\nThe report is the compact read; the contract is one click away, never pasted in.",
+          "description": "One phase's user-facing report, plus the path to the agent-facing contract behind it.\n\nThe report is the compact read; the contract is one click away, never pasted in.",
           "properties": {
             "contract": {
               "anyOf": [
@@ -5735,7 +5735,7 @@
           "type": "object"
         },
         "PortraitGoals": {
-          "description": "project-prd. `now` must be specific; `direction` is allowed to be directional \u2014 the horizon\nsplit dissolves the vision-vs-concreteness argument instead of losing it. Non-goals carry equal\nweight: what a project refuses is as defining as what it pursues.",
+          "description": "The PRD's goals. `now` must be specific; `direction` may be directional.\n\nNon-goals carry equal weight: what a project refuses is as defining as what it pursues.",
           "properties": {
             "direction": {
               "default": [],
@@ -5891,7 +5891,7 @@
           "type": "object"
         },
         "PrCommit": {
-          "description": "One commit as the walkthrough shows it. `body` has the SuperMe trailer block stripped \u2014\nthat block is what put the commit in this group, so repeating it inside would be noise.",
+          "description": "One commit as the walkthrough shows it.\n\n`body` has the SuperMe trailer stripped: that block is what put the commit in this group.",
           "properties": {
             "body": {
               "anyOf": [
@@ -5969,7 +5969,7 @@
           "type": "object"
         },
         "PrFile": {
-          "description": "One file inside a task group, with the churn that group put on it (summed over the group's\ncommits, which is what ranks it \u2014 the biggest change is where the risk is).",
+          "description": "One file inside a task group, with the churn that group put on it.\n\nSummed over the group's commits, because the biggest change is where the risk is.",
           "properties": {
             "minus": {
               "title": "Minus",
@@ -5993,7 +5993,7 @@
           "type": "object"
         },
         "PrGroup": {
-          "description": "One task's slice of the branch. `task` is null for commits with no trailer; they are shown last.\n\nThe four fields below the diff are the REVIEW NOTES, per TASK rather than per file.",
+          "description": "One task's slice of the branch. `task` is null for commits with no trailer.\n\nThe four fields below the diff are the REVIEW NOTES, per task rather than per file.",
           "properties": {
             "checks": {
               "default": [],
@@ -6113,7 +6113,7 @@
           "type": "object"
         },
         "PrStat": {
-          "description": "Header numbers: commit COUNT over the fork point, and the NET diff that actually lands\n(not the sum of per-commit churn \u2014 a line written in t1 and rewritten in t3 lands once).",
+          "description": "Header numbers: commit count over the fork point, and the NET diff that lands.\n\nNot the sum of per-commit churn: a line written and rewritten lands once.",
           "properties": {
             "commits": {
               "title": "Commits",
@@ -6275,7 +6275,7 @@
           "type": "object"
         },
         "ProjectStatusResponse": {
-          "description": "Whether this project's memory is established.\n\nThe dev workspace gates on it: an un-established repo shows the onboarding front door instead of the\nwork tabs. A null `onboard_mode` means the landing offers both paths.",
+          "description": "Whether this project's memory is established.\n\nAn un-established repo shows the onboarding front door instead of the work tabs.",
           "properties": {
             "docs": {
               "items": {
@@ -6415,7 +6415,7 @@
           "type": "object"
         },
         "ProofRow": {
-          "description": "One row per BUILT THING, each carrying its own validation and verification.\n\nThe join key is the plan task id. `task: \"\"` is the item-wide row where untagged content lands, so\nnothing is dropped and nothing is guessed at.",
+          "description": "One row per BUILT THING, each carrying its own validation and verification.\n\n`task: \"\"` is the item-wide row where untagged content lands, so nothing is dropped.",
           "properties": {
             "built": {
               "items": {
@@ -6468,7 +6468,7 @@
           "type": "object"
         },
         "ProofVerdict": {
-          "description": "One check of the plan's exam: what it will prove, and where it stands.\n\n`ran` False means the loop has not reached it, so an owner approving a plan sees the proof they\napprove. `result` is verbatim.",
+          "description": "One check of the plan's exam: what it will prove, and where it stands.\n\n`ran` False means the loop has not reached it, so approving a plan shows the proof.",
           "properties": {
             "by": {
               "default": "agent",
@@ -6584,7 +6584,7 @@
         },
         "Proposal": {
           "additionalProperties": true,
-          "description": "A memory proposal \u2014 a rich DB row with JSON columns.\n\nThe declared fields document the stable shape; `extra='allow'` carries the rest. The enums are\nlocked, because their producer coerces to exactly those sets.",
+          "description": "A memory proposal, a rich DB row with JSON columns.\n\nThe declared fields document the stable shape. The enums are locked, since the producer coerces\nto them.",
           "properties": {
             "apply_target": {
               "anyOf": [
@@ -7359,7 +7359,7 @@
           "type": "object"
         },
         "RepoBranchesResponse": {
-          "description": "The anchor picker's option set: this repo's local branches, newest-committed first, work-item\nbranches excluded.\n\n`anchor` is what the anchor resolves to now, so the picker can show the branch in USE.",
+          "description": "This repo's local branches, newest first, work-item branches excluded.\n\n`anchor` is what the anchor resolves to now, so the picker can show the branch in USE.",
           "properties": {
             "anchor": {
               "anyOf": [
@@ -7600,7 +7600,7 @@
           "type": "object"
         },
         "RepoGitResponse": {
-          "description": "The repo's two git knobs after a write.\n\n`resolved_anchor` is what `anchor_branch` points at now; `error` when the configured branch does\nnot exist, which every git site refuses rather than falling back.",
+          "description": "The repo's two git knobs after a write.\n\n`error` when the configured branch does not exist, which every git site refuses rather than\nfalling back.",
           "properties": {
             "anchor_branch": {
               "anyOf": [
@@ -8127,7 +8127,7 @@
           "type": "object"
         },
         "RunEventRow": {
-          "description": "One entry of a run's event trail: a prompt, a reply block, a call, or that call's result.\n\n`tool_id` pairs a result back to its call; `parent_tool_id` names the spawn a row happened inside.",
+          "description": "One entry of a run's event trail: a prompt, a reply, a call, or its result.\n\n`tool_id` pairs a result to its call, `parent_tool_id` names the spawn it sat inside.",
           "properties": {
             "created_at": {
               "title": "Created At",
@@ -8730,7 +8730,7 @@
           "type": "object"
         },
         "SpawnedFrom": {
-          "description": "The provenance edge, child-side: which item this one branched off and how.\n\n`blocking` and `parallel` are real children that gate the parent's completion; `spawn` is\nprovenance only. Exactly one origin edge per item.",
+          "description": "The provenance edge, child-side: which item this one branched off and how.\n\n`blocking` and `parallel` gate the parent's completion; `spawn` is provenance only.",
           "properties": {
             "item": {
               "title": "Item",
@@ -10929,7 +10929,7 @@
       },
       "/dev": {
         "get": {
-          "description": "A context's parsed dev knowledge (files) + inbox queue (DB) + the glance view.\n\n`running` lists work-item ids with a background /plan turn in flight, so the cards can\nshow a live \"planning\u2026\" state while a background agent works.",
+          "description": "A context's parsed dev knowledge, inbox queue and glance view.\n\n`running` lists items with a background plan turn in flight, so a card can show planning.",
           "operationId": "dev_read_dev_get",
           "parameters": [
             {
@@ -10970,7 +10970,7 @@
       },
       "/dev/attention": {
         "get": {
-          "description": "Every item in at most one bucket, by strict priority, derived from durable state at read time.\n\n`badge` is the top non-empty tier's colour and count, or null when nothing claims attention.",
+          "description": "Every item in at most one bucket, by strict priority, derived at read time.\n\n`badge` is the top non-empty tier's colour and count, or null when nothing claims attention.",
           "operationId": "dev_attention_dev_attention_get",
           "parameters": [
             {
@@ -11191,7 +11191,7 @@
       },
       "/dev/harness/assets": {
         "get": {
-          "description": "The shared asset pool (opt-in constitutional knowledge, e.g. `sql-expert`), each flagged with\nwhether THIS repo has ADOPTED and ENABLED it. The pool is shared; adoption is per-repo (no body\ncopy). Onboarding auto-adopts the confidently-relevant ones; the owner curates from here.",
+          "description": "The shared asset pool, each flagged with whether THIS repo has adopted and enabled it.\n\nThe pool is shared and adoption is per-repo, so nothing copies a body.",
           "operationId": "dev_harness_assets_dev_harness_assets_get",
           "parameters": [
             {
@@ -11339,7 +11339,7 @@
           "summary": "Dev Harness Constitution File"
         },
         "put": {
-          "description": "Save edits to one constitution file (the popup's edit mode) \u2014 the full raw markdown, frontmatter\nkept so `enabled`/`description` survive. Takes effect on the next dev turn (constitutions are read\nper-turn); no daemon restart needed.",
+          "description": "Save edits to one constitution file, frontmatter kept so `enabled` survives.\n\nConstitutions are read per turn, so it takes effect on the next one.",
           "operationId": "dev_harness_constitution_file_save_dev_harness_constitution_file_put",
           "requestBody": {
             "content": {
@@ -11419,7 +11419,7 @@
       },
       "/dev/harness/constitutions/{slug}": {
         "patch": {
-          "description": "Enable/disable ANY constitution by (scope, slug) \u2014 no proposal needed. A disabled constitution\nleaves the always-on catalog AND becomes unpullable (both filter on `enabled`), so it is fully\ninert. Effective on the next dev turn.",
+          "description": "Enable or disable any constitution by (scope, slug). No proposal needed.\n\nA disabled one leaves the always-on catalog and becomes unpullable, so it is fully inert.",
           "operationId": "dev_harness_constitution_toggle_dev_harness_constitutions__slug__patch",
           "parameters": [
             {
@@ -11469,7 +11469,7 @@
       },
       "/dev/harness/deputy": {
         "get": {
-          "description": "This repo's deputy mandate \u2014 the standing bar the deputy judges gates against while the owner\nis away. Seeded from a template on first read, so there is always a mandate to show/edit.",
+          "description": "This repo's deputy mandate, the bar it judges gates against while the owner is away.\n\nSeeded from a template on first read, so there is always one to show.",
           "operationId": "dev_harness_deputy_dev_harness_deputy_get",
           "parameters": [
             {
@@ -11547,7 +11547,7 @@
       },
       "/dev/harness/foundation": {
         "get": {
-          "description": "SuperMe's repo-agnostic identity + machinery \u2014 the Foundations surface. SELF.md is WHO\n(all modes); the per-mode charters are WHAT-MODE (hand-authored, editable). Plus the LEARNED\nuniversal constitution (always-on rules the learning loop published), per mode.",
+          "description": "SuperMe's repo-agnostic identity and machinery.\n\nSELF.md is WHO, the per-mode charters are WHAT-MODE, and the learned universal constitution is\nwhat the learning loop published.",
           "operationId": "dev_harness_foundation_dev_harness_foundation_get",
           "responses": {
             "200": {
@@ -11857,7 +11857,7 @@
           "summary": "Dev Harness Published Delete"
         },
         "patch": {
-          "description": "Enable/disable a published artifact at runtime (no delete). Constitution flips its frontmatter\nflag; a skill/agent moves between the live plugin tree and its `.disabled/` shadow. Effective on\nthe next dev turn.",
+          "description": "Enable or disable a published artifact at runtime. No delete.\n\nA skill moves between the live plugin tree and its `.disabled/` shadow, effective next turn.",
           "operationId": "dev_harness_published_toggle_dev_harness_published__proposal_id__patch",
           "parameters": [
             {
@@ -12082,7 +12082,7 @@
           "summary": "Dev Inbox Delete"
         },
         "patch": {
-          "description": "Edit an inbox item: status, kind, tag, text or title.\n\nA PUSHED row is immutable trace, since its content already moved into the work-item \u2014 flipping it\nback to `open` would let a second push mint a duplicate.",
+          "description": "Edit an inbox item: status, kind, tag, text or title.\n\nA PUSHED row is immutable trace: flipping it back to `open` would let a second push duplicate\nit.",
           "operationId": "dev_inbox_update_dev_inbox__item_id__patch",
           "parameters": [
             {
@@ -12132,7 +12132,7 @@
       },
       "/dev/inbox/{item_id}/brief": {
         "get": {
-          "description": "One row's handoff brief. Agent-filed rows carry one from birth; a bare capture has\nnone, and `content: null` says so rather than 404-ing \u2014 an absent brief is the state the\nowner can still fill, not a missing resource.",
+          "description": "One row's handoff brief. Agent-filed rows carry one from birth.\n\n`content: null` rather than a 404: an absent brief is a state the owner can still fill.",
           "operationId": "dev_inbox_brief_dev_inbox__item_id__brief_get",
           "parameters": [
             {
@@ -12170,7 +12170,7 @@
           "summary": "Dev Inbox Brief"
         },
         "put": {
-          "description": "Overwrite one open row's handoff brief, creating it when the row never had one. 409 once\nthe row is pushed \u2014 the brief is the item's provenance from the moment it lands there.",
+          "description": "Overwrite one open row's handoff brief, creating it when the row never had one.\n\n409 once pushed: from that moment the brief is the item's provenance.",
           "operationId": "dev_inbox_brief_save_dev_inbox__item_id__brief_put",
           "parameters": [
             {
@@ -12220,7 +12220,7 @@
       },
       "/dev/inbox/{item_id}/push": {
         "post": {
-          "description": "Push an inbox item to the workspace \u2014 the owner's push.\n\nOne shared transaction: create the work-item at triage, MOVE the inbox content into it as\n`preliminary/` while the row stays as trace, then fire the auto-triage run.",
+          "description": "Push an inbox item to the workspace, the owner's push.\n\nOne transaction: create the item at triage, move the content in as `preliminary/`, fire\nauto-triage.",
           "operationId": "dev_inbox_push_dev_inbox__item_id__push_post",
           "parameters": [
             {
@@ -12270,7 +12270,7 @@
       },
       "/dev/lint": {
         "get": {
-          "description": "Health of this project's general knowledge, as findings the owner can act on \u2014 not a document\nto read. Derived fresh on every call, so the lint itself can never be stale.",
+          "description": "Health of this project's general knowledge, as findings the owner can act on.\n\nDerived fresh on every call, so the lint itself can never be stale.",
           "operationId": "dev_lint_dev_lint_get",
           "parameters": [
             {
@@ -12311,7 +12311,7 @@
       },
       "/dev/log": {
         "get": {
-          "description": "The activity log \u2014 a SELECTIVE read over the events table, never a dump.\n\n`scope` takes a stored scope or `repo`, which adds the item-scoped kinds that are milestones of the\nPROJECT rather than steps inside one item.",
+          "description": "The activity log, a SELECTIVE read over the events table rather than a dump.\n\n`scope` takes a stored scope or `repo`, which adds the PROJECT's milestones.",
           "operationId": "dev_log_dev_log_get",
           "parameters": [
             {
@@ -12426,7 +12426,7 @@
       },
       "/dev/memory/distill": {
         "post": {
-          "description": "Fire a background distill pass over the candidate pool.\n\nOne pass per repo and scope at a time, guarded by a spine query rather than a shadow set. Returns\nimmediately; poll the stats for completion.",
+          "description": "Fire a background distill pass over the candidate pool.\n\nOne pass per repo and scope, guarded by a spine query rather than a shadow set.",
           "operationId": "dev_memory_distill_dev_memory_distill_post",
           "parameters": [
             {
@@ -12524,7 +12524,7 @@
       },
       "/dev/memory/proposals/{proposal_id}/approve": {
         "post": {
-          "description": "GATE 1 \u2014 the owner approves the proposal's INTENT and answers distill's questions.\n\nValidates the form and scope, records the answers, and fires a background WRITE run that authors\nthe artifact and stages it for gate 2.",
+          "description": "GATE 1: the owner approves the proposal's INTENT and answers distill's questions.\n\nFires a background write run that authors the artifact and stages it for gate 2.",
           "operationId": "memory_proposal_approve_dev_memory_proposals__proposal_id__approve_post",
           "parameters": [
             {
@@ -12624,7 +12624,7 @@
       },
       "/dev/memory/proposals/{proposal_id}/drop": {
         "post": {
-          "description": "Owner DROPS a proposal \u2014 this is noise, stop suggesting it.\n\nMarks the proposal and its source candidates `dropped`, the negative signal the learning\nloop reads. Unlike reject, dropped candidates are never re-queued.",
+          "description": "The owner DROPS a proposal: this is noise, stop suggesting it.\n\nUnlike reject, dropped candidates are never re-queued.",
           "operationId": "memory_proposal_drop_dev_memory_proposals__proposal_id__drop_post",
           "parameters": [
             {
@@ -12674,7 +12674,7 @@
       },
       "/dev/memory/proposals/{proposal_id}/execution": {
         "get": {
-          "description": "The proposal's execution trace \u2014 its lifecycle timeline, reused from the `events` table\n(`meta.proposal_id`): approve \u2192 write.start/end (the forge run) \u2192 artifact edits \u2192 publish. A\nsynthetic head marks where distill filed it. Oldest-first; the gate-2 modal's Execution tab.",
+          "description": "The proposal's lifecycle timeline, reused from the `events` table.\n\nApprove, the forge run, artifact edits, publish. A synthetic head marks where distill filed it.",
           "operationId": "memory_proposal_execution_dev_memory_proposals__proposal_id__execution_get",
           "parameters": [
             {
@@ -12774,7 +12774,7 @@
       },
       "/dev/memory/proposals/{proposal_id}/reject": {
         "post": {
-          "description": "The owner REJECTS a proposal: this framing is wrong, but the observation may still matter.\n\nMarks it `rejected` and re-queues its source candidates, so a later distill pass can reframe them.\nTo stop re-suggestion, use DROP.",
+          "description": "The owner REJECTS a proposal: this framing is wrong, the observation may still matter.\n\nRe-queues its source candidates so a later pass can reframe them. To stop re-suggestion, drop.",
           "operationId": "memory_proposal_reject_dev_memory_proposals__proposal_id__reject_post",
           "parameters": [
             {
@@ -12824,7 +12824,7 @@
       },
       "/dev/memory/rollup": {
         "get": {
-          "description": "The Learning tile drill-in: per-repo counts of captured candidates + published/learned\nartifacts, each split dev/core. Learned is counted the SAME way `/dev/memory/stats` does\n(published proposals reconciled with on-disk presence) so the numbers reconcile across surfaces.",
+          "description": "Per-repo counts of captured candidates and published artifacts, each split dev and core.\n\nLearned is counted the same way `/dev/memory/stats` does, so the surfaces reconcile.",
           "operationId": "dev_memory_rollup_dev_memory_rollup_get",
           "responses": {
             "200": {
@@ -12884,7 +12884,7 @@
       },
       "/dev/palette": {
         "get": {
-          "description": "The chat \"/\" palette for a (context, mode): user-facing SuperMe skills for the active mode's\nplugin set (category not in the hidden set), computed live from disk, merged with the context's\ncached external/native commands.",
+          "description": "The chat \"/\" palette for a (context, mode).\n\nComputed live from disk for the active mode's plugins, merged with the cached external commands.",
           "operationId": "dev_palette_dev_palette_get",
           "parameters": [
             {
@@ -12935,7 +12935,7 @@
       },
       "/dev/portrait": {
         "get": {
-          "description": "The project PORTRAIT \u2014 what this project is, in six bands, one per anchor doc. Read-only and\nderived on every call: the docs are the store, this is just the shape the view needs.",
+          "description": "What this project is, in six bands, one per anchor doc.\n\nRead-only and derived per call: the docs are the store, this is the shape the view needs.",
           "operationId": "dev_portrait_dev_portrait_get",
           "parameters": [
             {
@@ -12976,7 +12976,7 @@
       },
       "/dev/project-status": {
         "get": {
-          "description": "Whether this project's memory is established (its PRD defines \u22651 deliverable) + the doc-set\npresence flags + the connect-time onboarding choice. The dev workspace gates on `established`:\nfalse \u21d2 show the onboarding front door, launching `onboard_mode` when it's set.",
+          "description": "Whether this project's memory is established, with the doc-set flags and onboarding choice.\n\nThe workspace gates on `established`: false shows the onboarding front door.",
           "operationId": "dev_project_status_dev_project_status_get",
           "parameters": [
             {
@@ -13017,7 +13017,7 @@
       },
       "/dev/prompt-extraction/run": {
         "post": {
-          "description": "Fire a THROWAWAY prompt-extraction probe: a disposable work-item that runs the real lifecycle\nunattended to capture each phase's input, then tears itself down.\n\nOne at a time per repo. Returns the current probe state.",
+          "description": "Fire a throwaway prompt-extraction probe: a disposable item that runs the real lifecycle\nunattended to capture each phase's input, then tears itself down.\n\nOne at a time per repo.",
           "operationId": "dev_prompt_extraction_run_dev_prompt_extraction_run_post",
           "parameters": [
             {
@@ -13099,7 +13099,7 @@
       },
       "/dev/research/sweeps": {
         "post": {
-          "description": "Launch a standing sweep: mint the item at `investigate`, then fire its first run.\n\nAn unknown family, or one that is not standing, is a 400 rather than a research item with no button\nbehind it.",
+          "description": "Launch a standing sweep: mint the item at `investigate`, then fire its first run.\n\nAn unknown family is a 400, never a research item with no button behind it.",
           "operationId": "dev_sweep_launch_dev_research_sweeps_post",
           "requestBody": {
             "content": {
@@ -13138,7 +13138,7 @@
       },
       "/dev/research/sweeps/families": {
         "get": {
-          "description": "The launch bar's buttons \u2014 a projection of the research-families registry.\n\nRead-only and repo-independent: which sweeps exist is a property of this harness. Adding a family\nis a row in that registry.",
+          "description": "The launch bar's buttons, a projection of the research-families registry.\n\nRepo-independent: which sweeps exist is a property of this harness.",
           "operationId": "dev_sweep_families_dev_research_sweeps_families_get",
           "responses": {
             "200": {
@@ -13198,7 +13198,7 @@
       },
       "/dev/sweep": {
         "post": {
-          "description": "Ops hook: force a capture sweep over ONE named session, run to completion so the caller gets the\nresult.\n\nThe everyday triggers are automatic; this is the by-id escape hatch, and the only caller that\nsupplies `focus`.",
+          "description": "Force a capture sweep over ONE named session, run to completion.\n\nThe everyday triggers are automatic; this is the by-id escape hatch.",
           "operationId": "dev_sweep_dev_sweep_post",
           "parameters": [
             {
@@ -13305,7 +13305,7 @@
       },
       "/dev/verification": {
         "get": {
-          "description": "This repo's verification library: the standing entries every\nimplementation plan inherits, and the available ones a plan cites by id. A repo with no library\nreads as two empty lists \u2014 the correct starting state, never an error.",
+          "description": "This repo's standing entries and the available ones a plan cites by id.\n\nA repo with no library reads as two empty lists, the correct starting state.",
           "operationId": "dev_verification_library_dev_verification_get",
           "parameters": [
             {
@@ -13394,7 +13394,7 @@
           "summary": "Dev Verification Drop"
         },
         "patch": {
-          "description": "Promote an entry to standing, or demote it back to available. The OWNER'S call and nobody\nelse's: a standing entry taxes every future item in this repo, which is a spending decision and\nthe one brake on the library accreting.",
+          "description": "Promote an entry to standing, or demote it back. The OWNER'S call.\n\nA standing entry taxes every future item, which is the one brake on the library accreting.",
           "operationId": "dev_verification_move_dev_verification__entry_id__patch",
           "parameters": [
             {
@@ -13444,7 +13444,7 @@
       },
       "/dev/work-items/{item_id}/abandon": {
         "post": {
-          "description": "Abandon a work-item \u2014 HUMAN-ONLY, legal from any non-terminal phase.\n\nOrdered and each step idempotent: end live runs, remove the worktree, write the abandon note, set\nthe terminal status, resume a paused parent.",
+          "description": "Abandon a work-item. Human-only, legal from any non-terminal phase.\n\nOrdered and each step idempotent, ending with resuming a paused parent.",
           "operationId": "dev_work_item_abandon_dev_work_items__item_id__abandon_post",
           "parameters": [
             {
@@ -13494,7 +13494,7 @@
       },
       "/dev/work-items/{item_id}/advance": {
         "post": {
-          "description": "Approve \u2192 advance a work-item to its kind's next phase.\n\nRefuses at the final phase, on a terminal item, or with a run in flight. The advance also rests\nthe item `active`. The autopilot driver uses the same core.",
+          "description": "Approve, and advance a work-item to its kind's next phase.\n\nRefuses at the final phase, on a terminal item, or with a run in flight. Autopilot shares the core.",
           "operationId": "dev_work_item_advance_dev_work_items__item_id__advance_post",
           "parameters": [
             {
@@ -13544,7 +13544,7 @@
       },
       "/dev/work-items/{item_id}/artifacts": {
         "get": {
-          "description": "The call-trail: every tool, sub-agent and skill this item's runs invoked, grouped by run.\n\n`runs` rides along so each group can say WHAT that run was \u2014 otherwise a header reads \"Run #653\"\nand the owner has to guess.",
+          "description": "Every tool, sub-agent and skill this item's runs invoked, grouped by run.\n\n`runs` rides along so a group can say what its run WAS, not just \"Run #653\".",
           "operationId": "dev_work_item_artifacts_dev_work_items__item_id__artifacts_get",
           "parameters": [
             {
@@ -13594,7 +13594,7 @@
       },
       "/dev/work-items/{item_id}/authorize": {
         "post": {
-          "description": "The owner's grant or deny on a deferred authorization at review.\n\nBoth RECORD and route nothing: the item stays at review so every request can be resolved in any\norder. `denied` also waives the blocked check. The owner grants unconditionally.",
+          "description": "The owner's grant or deny on a deferred authorization at review.\n\nRecords and routes nothing, so requests can be resolved in any order. `denied` waives the check.",
           "operationId": "dev_work_item_authorize_dev_work_items__item_id__authorize_post",
           "parameters": [
             {
@@ -13644,7 +13644,7 @@
       },
       "/dev/work-items/{item_id}/autopilot": {
         "post": {
-          "description": "Enrol or un-enrol a work-item in autopilot \u2014 the per-item policy that drives its gates without a\nclick.\n\nAllowed only PRE-BUILD: the last moment before code exists that flipping it is cheap.",
+          "description": "Enrol or un-enrol a work-item in autopilot, the policy that drives its gates without a click.\n\nAllowed only PRE-BUILD, the last moment when flipping it is cheap.",
           "operationId": "dev_work_item_autopilot_dev_work_items__item_id__autopilot_post",
           "parameters": [
             {
@@ -13704,7 +13704,7 @@
       },
       "/dev/work-items/{item_id}/compact": {
         "post": {
-          "description": "Compact NOW: run the full compaction sequence on this item's bound session \u2014 checkpoint first,\nthen `/compact`, then the verdict.\n\n409 without a session or while a run is in flight, since the sequence takes the run-lock itself.",
+          "description": "Compact NOW: checkpoint, then `/compact`, then the verdict.\n\n409 without a session or with a run in flight, since the sequence takes the run-lock itself.",
           "operationId": "dev_work_item_compact_dev_work_items__item_id__compact_post",
           "parameters": [
             {
@@ -13804,7 +13804,7 @@
       },
       "/dev/work-items/{item_id}/doc": {
         "put": {
-          "description": "The owner hand-edits `brief.md` or `plan.md` \u2014 the item's two statements of INTENT.\n\nRefused on a LIVE run, a TERMINAL item, or text failing the artifact's self-check. A save stamps\n`edited_by_owner`.",
+          "description": "The owner hand-edits `brief.md` or `plan.md`, the item's two statements of INTENT.\n\nRefused on a live run, a terminal item, or text failing the artifact's self-check.",
           "operationId": "dev_work_item_doc_edit_dev_work_items__item_id__doc_put",
           "parameters": [
             {
@@ -13963,7 +13963,7 @@
       },
       "/dev/work-items/{item_id}/from-you": {
         "get": {
-          "description": "What the owner has written into the one section of the item that is theirs.\n\nNever 404s on a missing brief: `exists: false` tells the editor triage has not written one yet,\nwhich is not a broken read.",
+          "description": "What the owner has written into the one section of the item that is theirs.\n\nNever 404s: `exists: false` says triage has not written a brief yet.",
           "operationId": "dev_work_item_owner_input_dev_work_items__item_id__from_you_get",
           "parameters": [
             {
@@ -14011,7 +14011,7 @@
           "summary": "Dev Work Item Owner Input"
         },
         "put": {
-          "description": "Save the owner's own section, replacing it whole and leaving the rest untouched.\n\nHUMAN-ONLY: there is no agent tool behind it, because the value of the section is that an agent did\nnot write it.",
+          "description": "Save the owner's own section, replacing it whole and leaving the rest untouched.\n\nHUMAN-ONLY: the value of the section is that an agent did not write it.",
           "operationId": "dev_work_item_set_owner_input_dev_work_items__item_id__from_you_put",
           "parameters": [
             {
@@ -14061,7 +14061,7 @@
       },
       "/dev/work-items/{item_id}/git": {
         "get": {
-          "description": "The item's live git state, derived at read time: branch and dir existence, dirty files, ahead and\nbehind versus the anchor, merged.\n\nAlso echoes the repo's `review_mode`, read live, so a mode flip applies to items already at\nreview.",
+          "description": "The item's live git state, derived at read time.\n\n`review_mode` is echoed live, so a mode flip applies to items already at review.",
           "operationId": "dev_work_item_git_dev_work_items__item_id__git_get",
           "parameters": [
             {
@@ -14111,7 +14111,7 @@
       },
       "/dev/work-items/{item_id}/git/merge": {
         "post": {
-          "description": "The review-gate merge as a raw route \u2014 a thin wrapper over the SAME body `advance_item` runs.\n\nRoutes by topology: a blocking child merges into its parent's branch, everything else to the\ntrunk.",
+          "description": "The review-gate merge as a raw route, over the same body `advance_item` runs.\n\nRoutes by topology: a blocking child merges into its parent's branch, everything else to trunk.",
           "operationId": "dev_work_item_git_merge_dev_work_items__item_id__git_merge_post",
           "parameters": [
             {
@@ -14161,7 +14161,7 @@
       },
       "/dev/work-items/{item_id}/git/resolve": {
         "post": {
-          "description": "Resolve-with-agent: the human decides WHETHER, the agent resolves, and nobody hand-edits conflict\nmarkers.\n\nRe-runs the sync leaving conflicts in the worktree, then fires a background resolution run. The\ndaemon completes the merge mechanically.",
+          "description": "The human decides WHETHER, the agent resolves, and nobody hand-edits conflict markers.\n\nRe-runs the sync leaving conflicts in the worktree, then fires a resolution run.",
           "operationId": "dev_work_item_git_resolve_dev_work_items__item_id__git_resolve_post",
           "parameters": [
             {
@@ -14311,7 +14311,7 @@
       },
       "/dev/work-items/{item_id}/pr/diff": {
         "get": {
-          "description": "One file's patches under one task group, fetched when the reader expands the row \u2014 a\nbranch's whole diff is the one thing a review page must not make them wait for.",
+          "description": "One file's patches under one task group, fetched when the reader expands the row.\n\nA branch's whole diff is what a review page must not make them wait for.",
           "operationId": "dev_work_item_pr_diff_dev_work_items__item_id__pr_diff_get",
           "parameters": [
             {
@@ -14386,7 +14386,7 @@
       },
       "/dev/work-items/{item_id}/report/{phase}": {
         "get": {
-          "description": "One phase's user-facing report for the Reports tab: the markdown 1:1, plus the path\nto the agent-facing contract behind it. 404 when that phase wrote none \u2014 the tab greys\nitself from the drilldown rather than probing.",
+          "description": "One phase's user-facing report, plus the path to the contract behind it.\n\n404 when that phase wrote none, so the tab greys itself rather than probing.",
           "operationId": "dev_work_item_report_dev_work_items__item_id__report__phase__get",
           "parameters": [
             {
@@ -14445,7 +14445,7 @@
       },
       "/dev/work-items/{item_id}/rerun": {
         "post": {
-          "description": "RE-RUN: throw this item's work away and start it over in place. Destructive.\n\nArtifacts, reports, checkpoints and sessions are deleted and the worktree removed; the id, branch,\nrun rows and graph relations survive.",
+          "description": "RE-RUN: throw this item's work away and start it over in place. Destructive.\n\nArtifacts, reports and sessions go; the id, branch, run rows and relations survive.",
           "operationId": "dev_work_item_rerun_dev_work_items__item_id__rerun_post",
           "parameters": [
             {
@@ -14495,7 +14495,7 @@
       },
       "/dev/work-items/{item_id}/resume": {
         "post": {
-          "description": "RESUME a work-item whose run STOPPED: re-fire the phase's own background run.\n\nNothing is rewound \u2014 the branch, worktree and artifacts stand, only the run is new. Distinct from\nRe-run, which throws the work away.",
+          "description": "RESUME a work-item whose run stopped: re-fire the phase's background run.\n\nNothing is rewound. Distinct from Re-run, which throws the work away.",
           "operationId": "dev_work_item_resume_dev_work_items__item_id__resume_post",
           "parameters": [
             {
@@ -14545,7 +14545,7 @@
       },
       "/dev/work-items/{item_id}/run": {
         "post": {
-          "description": "The owner's manual RUN \u2014 fire the current phase's own background run.\n\nThe manual driver for a repo not on autopilot; on autopilot every phase fires itself. Refusals\nfollow the same rule the drilldown's button reads.",
+          "description": "The owner's manual RUN: fire the current phase's own background run.\n\nFor a repo not on autopilot, where every phase would otherwise fire itself.",
           "operationId": "dev_work_item_run_dev_work_items__item_id__run_post",
           "parameters": [
             {
@@ -14595,7 +14595,7 @@
       },
       "/dev/work-items/{item_id}/runs/{run_id}/input.html": {
         "get": {
-          "description": "The ACTUAL input a past run sent \u2014 the exact system prompt and body captured at send time \u2014 as a\nstandalone HTML page. A friendly page renders when a run has no capture.",
+          "description": "The exact system prompt and body a past run sent, captured at send time, as an HTML page.\n\nA friendly page renders when a run has no capture.",
           "operationId": "dev_work_item_run_input_dev_work_items__item_id__runs__run_id__input_html_get",
           "parameters": [
             {
@@ -14804,7 +14804,7 @@
       },
       "/dev/workgraph": {
         "get": {
-          "description": "The DERIVED work-graph projection: repo root, deliverables, work-items and unpushed inbox rows,\nwith their edges.\n\nAssembled on demand from the authoritative feeds \u2014 nothing stored. A cycle is REPORTED as data,\nnever a 500.",
+          "description": "The derived work-graph: repo root, deliverables, work-items, unpushed rows and their edges.\n\nAssembled on demand, nothing stored. A cycle is reported as data, never a 500.",
           "operationId": "dev_workgraph_dev_workgraph_get",
           "parameters": [
             {
@@ -15092,7 +15092,7 @@
           "summary": "Repos Overview"
         },
         "post": {
-          "description": "Connect a domain: register a new repo into the spine and seed its knowledge home.\n\n`kind` selects its onboarding front door. New dirs are created and must be empty; existing dirs\nmust already be a directory.",
+          "description": "Connect a domain: register a new repo into the spine and seed its knowledge home.\n\n`kind` selects its onboarding front door. A new dir is created and must be empty.",
           "operationId": "connect_repo_repos_post",
           "requestBody": {
             "content": {
@@ -15131,7 +15131,7 @@
       },
       "/repos/{repo_id}": {
         "delete": {
-          "description": "Disconnect a domain \u2014 forget the project from SuperMe entirely. IRREVERSIBLE.\n\nDeletes the registration, knowledge home, harness cell, pipeline state and every session. The\nproject FOLDER is never touched. Run rows and dev events are preserved and stamped\n`session_fate='disconnected'`.",
+          "description": "Disconnect a domain, forgetting the project entirely. IRREVERSIBLE.\n\nDeletes the registration, knowledge home, harness cell, pipeline state and sessions. The project\nFOLDER is never touched, and run rows are preserved.",
           "operationId": "disconnect_repo_repos__repo_id__delete",
           "parameters": [
             {
@@ -15231,7 +15231,7 @@
       },
       "/repos/{repo_id}/branches": {
         "get": {
-          "description": "This repo's local branches \u2014 the anchor picker's option set.\n\nRead live off git: the anchor REFUSES on a branch that does not exist, so a stale list would offer\na setting that fails at the next merge.",
+          "description": "This repo's local branches, the anchor picker's option set.\n\nRead live off git, because a stale list would offer a setting that fails at the next merge.",
           "operationId": "get_repo_branches_repos__repo_id__branches_get",
           "parameters": [
             {
@@ -15321,7 +15321,7 @@
       },
       "/repos/{repo_id}/git": {
         "post": {
-          "description": "Set this repo's review mode and/or anchor branch.\n\nBoth are read LIVE at every decision point. An anchor naming a branch that does not exist is\naccepted and reported back as an `error`.",
+          "description": "Set this repo's review mode and anchor branch, both read live at every decision point.\n\nAn anchor naming a missing branch is accepted and reported back as an `error`.",
           "operationId": "set_repo_git_repos__repo_id__git_post",
           "parameters": [
             {
@@ -15421,7 +15421,7 @@
       },
       "/repos/{repo_id}/meta": {
         "post": {
-          "description": "Set a repo's VISUAL tag: display color and/or icon (emoji). A field omitted (None) is left\nunchanged; an empty string clears it (falls back to the hashed-palette default / no icon).",
+          "description": "Set a repo's VISUAL tag: display colour and icon.\n\nNone leaves a field unchanged; an empty string clears it back to the default.",
           "operationId": "set_repo_meta_repos__repo_id__meta_post",
           "parameters": [
             {
@@ -15618,7 +15618,7 @@
       },
       "/sessions": {
         "get": {
-          "description": "SuperMe's own past CHANNELS for a context, newest first.\n\nONE ROW PER WORK-ITEM, not per session: the owner addresses the ITEM, and the phase decides which\nagent answers. A channel's `id` is an ADDRESS.",
+          "description": "SuperMe's own past CHANNELS for a context, newest first.\n\nONE ROW PER WORK-ITEM: the owner addresses the ITEM and the phase decides who answers.",
           "operationId": "sessions_list_sessions_get",
           "parameters": [
             {
@@ -15679,7 +15679,7 @@
       },
       "/sessions/{session_id}": {
         "delete": {
-          "description": "Delete a CHANNEL \u2014 the row as the owner sees it, so a work-item drops all its phase threads.\n\nOne tier only: a hard delete of the resumable material. Runs and token trace are PRESERVED.",
+          "description": "Delete a CHANNEL, so a work-item drops all its phase threads.\n\nOne tier only: a hard delete of the resumable material. Runs and token trace are preserved.",
           "operationId": "session_delete_sessions__session_id__delete",
           "parameters": [
             {
@@ -15946,7 +15946,7 @@
       },
       "/system/auth": {
         "get": {
-          "description": "Can SuperMe reach Anthropic? Surfaces gate every agent action on this.\n\nCached for a minute, because asking the Claude CLI spawns a process \u2014 `refresh=true` is\nwhat a person clicks after signing in.",
+          "description": "Can SuperMe reach Anthropic? Every surface gates its agent actions on this.\n\nCached for a minute, since asking the CLI spawns a process. `refresh=true` is the click.",
           "operationId": "system_auth_system_auth_get",
           "parameters": [
             {
@@ -16043,7 +16043,7 @@
       },
       "/system/deputy": {
         "post": {
-          "description": "The global deputy dial: whether a deputy judges autopilot gates, and how readily it escalates PER\nGATE.\n\nPartial \u2014 omitted fields stay put. Rejects an unknown gate or level rather than silently\ndefaulting.",
+          "description": "Whether a deputy judges autopilot gates, and how readily it escalates PER GATE.\n\nPartial: omitted fields stay put. An unknown gate or level is rejected, never defaulted.",
           "operationId": "set_system_deputy_system_deputy_post",
           "requestBody": {
             "content": {

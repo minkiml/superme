@@ -81,10 +81,9 @@ def scaffold_cycle(item_dir: Path, *, title: str = "") -> dict:
 
 
 def _append_to_section(path: Path, heading: str, entry: str, *, fence: str = "") -> None:
-    """Append `entry` inside a cycle report's `## {heading}` section, or inside its named
-    ```<fence>. Raises when the heading is absent — a mangled file must fail loud.
+    """Append `entry` inside a cycle report's section, or inside its named fence.
 
-    The fence is NAMED, so one appender and one parser serve both lanes."""
+    Raises when the heading is absent: a mangled file must fail loud."""
     lines = path.read_text(encoding="utf-8").splitlines()
     start = next((i for i, ln in enumerate(lines)
                   if re.match(rf"^##\s+{re.escape(heading)}\s*$", ln)), None)
@@ -122,10 +121,9 @@ def append_cycle_outcome(item_dir: Path, *, evidence: str, decision: str, reason
                          fingerprint: str = "", failed: list[str] | tuple = (),
                          tokens: int | None = None, budget: int | None = None,
                          loop_exit: str = "") -> dict | None:
-    """Append one driver decision to the LATEST cycle report's `## Cycle outcome`, closing
-    the cycle. `loop_exit` is the TYPED exit a revision reads its `concerns` off.
+    """Append one driver decision to the latest cycle report, closing the cycle.
 
-    Returns None when no cycle report exists — the DB `loop.decision` event still carries it."""
+    None when no report exists: the `loop.decision` event still carries it."""
     def _one_line(s: str) -> str:
         return " ".join((s or "").split())
     reports = cycle_reports(item_dir)
@@ -153,8 +151,8 @@ def append_cycle_outcome(item_dir: Path, *, evidence: str, decision: str, reason
 def read_cycle_outcomes(item_dir: Path, *, revision: str | None = None) -> list[dict]:
     """Every driver decision across the cycle reports, in order.
 
-    `revision` scopes the read to ONE generation, so failures recorded before a redesign no longer
-    trip the recurrence guard after it. `None` reads the item's whole life."""
+    `revision` scopes the read to ONE generation, so failures before a redesign stop tripping the
+    guard."""
     out: list[dict] = []
     for r in cycle_reports(item_dir):
         if revision is not None and r["revision"] != revision:

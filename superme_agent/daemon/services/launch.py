@@ -16,10 +16,9 @@ log = logging.getLogger("superme-agent")
 
 
 def launch_cohort(context_id: str, items: list[dict], *, actor: str = "agent") -> dict:
-    """Create the cohort, log the launch, and fire the first triage run for every item that starts
-    `active`.
+    """Create the cohort, log the launch, and fire the first triage run for every active item.
 
-    `launched` counts the items whose triage actually started this call; the rest wait on upstreams."""
+    `launched` counts the items whose triage actually started; the rest wait on upstreams."""
     from ...gateway import contexts
     ctx = contexts.resolve(context_id, "dev")
     if not ctx.internal_root:
@@ -46,9 +45,9 @@ def launch_cohort(context_id: str, items: list[dict], *, actor: str = "agent") -
 
 
 def cohort_spend(context_id: str, dev_root: Path, cohort: str) -> dict:
-    """Aggregate build+vet token spend across one launch cohort — observability, not a breaker.
-    Sums each cohort item's `item_phase_tokens` (3-type: input + cache-write + output, EXCLUDING
-    cache-read; see spine._display_tokens). Returns `{cohort, items, spent}`."""
+    """Aggregate build and vet token spend across one launch cohort. Observability, not a breaker.
+
+    Sums each item's `item_phase_tokens`, so cache reads are excluded."""
     members = [it for it in _dev.read_all(dev_root)["work_items"]
                if it.get("cohort") == cohort]
     spent = sum(_spine.item_phase_tokens(context_id, str(it["id"])) for it in members)

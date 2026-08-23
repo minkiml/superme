@@ -128,9 +128,9 @@ def item_row(iid: str) -> dict:
 
 
 def header_count(sid: str) -> int:
-    """How many REAL user messages in the CLI transcript carry the promotion header. The raw file
-    can't be grepped: the CLI also records a `queue-operation` bookkeeping copy of each prompt,
-    so only `type == "user"` entries count as injected messages."""
+    """How many REAL user messages in the CLI transcript carry the promotion header.
+
+    The CLI also records a bookkeeping copy of each prompt, so only `type == "user"` counts."""
     paths = glob.glob(str(Path.home() / ".claude" / "projects" / "*" / f"{sid}.jsonl"))
     assert paths, f"no transcript found for {sid}"
     n = 0

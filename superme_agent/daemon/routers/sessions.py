@@ -18,8 +18,7 @@ async def sessions_list(context_id: str = "global", mode: str | None = None,
                         dev: DevKnowledgeService = Depends(get_dev)) -> list[dict]:
     """SuperMe's own past CHANNELS for a context, newest first.
 
-    ONE ROW PER WORK-ITEM, not per session: the owner addresses the ITEM, and the phase decides which
-    agent answers. A channel's `id` is an ADDRESS."""
+    ONE ROW PER WORK-ITEM: the owner addresses the ITEM and the phase decides who answers."""
     ctx = contexts.resolve(context_id, mode or "core")
     rows = sessions.list(ctx, mode=mode)
     if not ctx.internal_root:
@@ -89,9 +88,9 @@ async def session_rename(session_id: str, body: SessionRenameBody,
 @router.delete("/sessions/{session_id}", response_model=SessionDeleteResponse)
 async def session_delete(session_id: str, context_id: str = "global",
                          sessions: SessionStore = Depends(get_sessions)) -> dict:
-    """Delete a CHANNEL — the row as the owner sees it, so a work-item drops all its phase threads.
+    """Delete a CHANNEL, so a work-item drops all its phase threads.
 
-    One tier only: a hard delete of the resumable material. Runs and token trace are PRESERVED."""
+    One tier only: a hard delete of the resumable material. Runs and token trace are preserved."""
     ctx = contexts.resolve(context_id)
     removed = sessions.delete_channel(ctx, session_id, cause="deleted")
     return {"ok": True, "id": session_id, "purged": bool(removed)}

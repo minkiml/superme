@@ -38,10 +38,9 @@ def knowledge_root(context_id: str):
 
 
 def local_harness_root(context_id: str | None, mode: str = "dev"):
-    """A context's own operational cell: `local-harness/<id>/<mode>`.
+    """A context's own operational cell.
 
-    RESOLVES THE ID THROUGH THE REGISTRY rather than joining the caller's string onto a path — a
-    containment test is only worth the root it is given."""
+    Resolves the id THROUGH THE REGISTRY: a containment test is only worth the root it is given."""
     return LOCAL_HARNESS_DIR / contexts.resolve(context_id).id / mode
 
 

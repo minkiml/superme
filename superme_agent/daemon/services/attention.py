@@ -34,8 +34,7 @@ def _ask_card(raw) -> list[dict]:
 def classify_hold(item: dict, events: list[dict], *, rulings: list[dict] | None = None) -> dict:
     """Why is this `awaiting_human` item parked?
 
-    Reads its events newest-first and takes the first that names a parking cause, falling back to the
-    phase. Returns `{kind, reason, actor}` — pure, no IO."""
+    Reads its events newest-first and takes the first that names a cause, falling back to the phase."""
     report_seen = False
     for e in events:
         kind = str(e.get("kind") or "")
@@ -82,9 +81,9 @@ def classify_hold(item: dict, events: list[dict], *, rulings: list[dict] | None 
 
 
 def _pending_rulings(dev_root, item: dict) -> list[dict]:
-    """This item's proposals that ask the owner something and carry no answer, as ask-card fields.
+    """This item's proposals that ask the owner something and carry no answer.
 
-    Only at REVIEW: before it the review record does not exist, and after it the item is terminal."""
+    Only at REVIEW: before it the record does not exist, after it the item is terminal."""
     if str(item.get("phase")) != "review" or str(item.get("kind")) != "research":
         return []
     try:
@@ -125,7 +124,7 @@ def holds_for_repo(context_id: str, *, dev, dev_store, dev_root) -> list[dict]:
 
 
 def system_attention() -> list[dict]:
-    """Fan out over every connected repo and collect its holds, returning only repos with at least one.
+    """Fan out over every connected repo and collect its holds.
 
     Best-effort per repo: one that will not resolve is skipped, never failing the whole feed."""
     from .. import app_state

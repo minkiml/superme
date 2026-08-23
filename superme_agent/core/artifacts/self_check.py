@@ -91,8 +91,8 @@ def owner_edited_at(text: str) -> str | None:
 
 def owner_edit(item_dir: Path, artifact: str, text: str, *,
                item_kind: str | None = None) -> list[str]:
-    """Replace an owner-editable artifact, stamping `edited_by_owner`. WRITES NOTHING when the
-    text breaks the contract — the same validator the gate runs.
+    """Replace an owner-editable artifact, stamping `edited_by_owner`. Writes nothing on a broken
+    contract.
 
     The stamp is the point: an agent re-reading this plan is reading the OWNER's words."""
     if artifact not in OWNER_EDITABLE:

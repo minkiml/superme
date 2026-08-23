@@ -183,10 +183,9 @@ def _resolve_vet_params(context_id: str, item: dict) -> tuple[str, str]:
 
 
 def dev_mcp(ctx, wt: Path, main_repo_dir: Path, item_id: str, *, scope: str) -> dict:
-    """The dev MCP server for a background loop run, `repo_dir` at the worktree so evidence
-    fingerprints the vetted tree.
+    """The dev MCP server for a background loop run, `repo_dir` at the worktree.
 
-    `scope` is the phase this run IS: build carries its own recorder."""
+    So evidence fingerprints the vetted tree, and `scope` is the phase this run IS."""
     return {"dev": make_dev_mcp_server(
         _dev_store, ctx.id, spine=_spine, scope=scope,
         dev_root=ctx.internal_root / "dev",

@@ -137,11 +137,10 @@ class FieldOps:
 
     def set_work_item_research_kind(self, dev_root: Path, item_id: str, research_kind: str,
                                     reason: str) -> bool:
-        """Set a research item's investigation family plus the one line behind
-        it. The label decides which guide investigate reads.
+        """Set a research item's investigation family and the one line behind it.
 
-        LOUD where scale's writer is forgiving: writing a family onto an implementation item is a field
-        nobody would ever read."""
+        Loud where scale's writer is forgiving: a family on an implementation item is a field nobody
+        reads."""
         from ..vocab.kind_profiles import RESEARCH_KINDS
         if research_kind not in RESEARCH_KINDS:
             raise ValueError(
@@ -257,11 +256,9 @@ class FieldOps:
 
     def _set_item_field(self, dev_root: Path, item_id: str, key: str, value: str,
                         after: tuple[str, ...] = ()) -> bool:
-        """Write ONE frontmatter field in place, inserted after the first `after` key
-        present. Line-based, so shape and comments survive.
+        """Write ONE frontmatter field in place, line-based so shape and comments survive.
 
-        The run-config setters below are this with a different key; written out per key, two of them
-        drifted."""
+        The run-config setters are this with a different key; written out per key, two of them drifted."""
         item = Path(dev_root) / "work-items" / item_id / "item.md"
         if not item.exists():
             return False
@@ -318,11 +315,9 @@ class FieldOps:
 
     def set_work_item_session(self, dev_root: Path, item_id: str, session_id: str | None,
                               slot: str = "triage") -> bool:
-        """Persist a session id onto a work-item's SLOT — one per phase, plus `build`
-        and `vet`.
+        """Persist a session id onto a work-item's SLOT, one per phase plus build and vet.
 
-        Writing any slot NULLs the legacy `session_id`, so a stale value cannot shadow the others.
-        A retired slot can be read but never written."""
+        Writing any slot NULLs the legacy `session_id`, so a stale value cannot shadow the others."""
         from ..vocab.kind_profiles import SESSION_SLOTS
         if slot not in SESSION_SLOTS:
             raise ValueError(f"unknown session slot {slot!r} — known: {SESSION_SLOTS}")

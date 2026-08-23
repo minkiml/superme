@@ -39,8 +39,8 @@ def main() -> int:
             "SELECT COALESCE(SUM(tok_input),0) i, COALESCE(SUM(tok_cache_creation),0) cc,"
             " COALESCE(SUM(tok_cache_read),0) cr, COALESCE(SUM(tok_output),0) o, COUNT(*) n FROM run"
         ).fetchone()
-        # Rows the day axis cannot place carry no tokens, so the money reconciles — but the
-        # trend's run count is short by this many.
+        # Rows the day axis cannot place carry no tokens, so the money reconciles and the run
+        # count does not.
         odd = c.execute(
             "SELECT id, feature, status, started_at,"
             " tok_input+tok_cache_creation+tok_cache_read+tok_output AS tok"

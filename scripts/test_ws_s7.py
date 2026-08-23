@@ -74,8 +74,7 @@ def test_attention() -> None:
 def test_orphan_reconcile(tmp: Path) -> None:
     """The startup reconciler healed the RUN row and left the ITEM.
 
-    The log stayed honest while the item kept `active` with no run and nothing to start one.
-    `reconcile()` now reports what it orphaned."""
+    The log stayed honest while the item kept `active` with no run and nothing to start one."""
     print("orphan reconcile (D3 — heal the item, not just the run)")
     from superme_agent.core.spine import SystemSpine
     sp = SystemSpine(db_path=tmp / "s.db", system_config=tmp / "sys.yaml",
@@ -100,8 +99,8 @@ def test_orphan_reconcile(tmp: Path) -> None:
     ok("lifespan captures the orphans and parks them",
        "_orphans = app_state.spine.reconcile()" in ls
        and "_reconcile_orphaned_items(_orphans)" in ls)
-    # Parking claims a DECISION is wanted, so a restart-stopped build looked like one waiting on
-    # the owner. Orphans are LABELLED `error` and re-fired.
+    # Parking claims a DECISION is wanted, so a restart-stopped build looked like one. Orphans are
+    # labelled `error`.
     ok("...to `error`, carrying what stopped them",
        'set_work_item_error(' in ls and "a daemon restart stopped the" in ls)
     ok("...and the phase ones are auto-resumed through the shared service",

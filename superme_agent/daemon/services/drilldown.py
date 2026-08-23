@@ -142,8 +142,7 @@ def _credential_gate(actions: list[dict]) -> list[dict]:
 def _blocking_children(item: dict, all_items: list[dict]) -> list[dict]:
     """The open children this item is waiting on, as ROWS the owner can act on.
 
-    `close_readiness` reports them as joined ids, which is right for a check and useless as an
-    answer."""
+    A joined id is right for a check and useless as an answer."""
     _ok, open_ids = status_router.children_terminal(all_items, item.get("id"))
     by_id = {str(i.get("id")): i for i in all_items}
     rows = []
@@ -229,10 +228,9 @@ _PHASE_ENTRY = ("phase.advance", "review.route", "revise.route")
 
 
 def _live_summary(item_dir: Path, phase: str, events: list[dict]) -> str:
-    """This phase's summary line, but only when it describes the pass you are looking at.
+    """This phase's summary, but only when it describes the pass you are looking at.
 
-    Reports are overwritten in place, so the test is whether one was written since the item entered
-    this phase."""
+    Reports overwrite in place, so the test is whether one was written since the phase began."""
     path = Path(item_dir) / "reports" / f"report-{phase}.md"
     if not phase or not path.is_file():
         return ""
@@ -258,8 +256,7 @@ def _standing_summary(item: dict, item_dir: Path, phase: str,
                       events: list[dict]) -> tuple[str, str]:
     """The summary the card shows, and WHICH phase concluded it.
 
-    While this phase works, hold the last completed one rather than going blank. Naming the phase is
-    what makes holding it honest."""
+    Naming the phase is what makes holding a completed one honest."""
     if (own := _live_summary(item_dir, phase, events)):
         return own, phase
     from ...core.vocab.kind_profiles import get_profile

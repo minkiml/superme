@@ -79,9 +79,9 @@ def dev_decisions(context_id: str = "global") -> dict:
 
 @router.patch("/dev/verification/{entry_id}", response_model=GeneralDocSaveResponse)
 def dev_verification_move(entry_id: str, body: LibraryEntryBody) -> dict:
-    """Promote an entry to standing, or demote it back to available. The OWNER'S call.
+    """Promote an entry to standing, or demote it back. The OWNER'S call.
 
-    A standing entry taxes every future item here, which is the one brake on the library accreting."""
+    A standing entry taxes every future item, which is the one brake on the library accreting."""
     try:
         moved = _vl.move_entry(_dev_root(body.context_id), entry_id, body.tier)
     except ValueError as e:

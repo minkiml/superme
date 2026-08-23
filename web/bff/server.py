@@ -27,8 +27,7 @@ _DROP_RESPONSE_HEADERS = {
     "content-length", "content-encoding", "transfer-encoding", "connection",
 }
 
-# Either side hanging up is how a relay ends. The browser leg raises WebSocketDisconnect and the
-# daemon leg raises ConnectionClosed, and neither is a fault worth a traceback.
+# Either side hanging up is how a relay ends, and neither leg's exception is worth a traceback.
 _HANGUP = (WebSocketDisconnect, ConnectionClosed)
 
 app = FastAPI(title="SuperMe web BFF")
@@ -67,8 +66,8 @@ async def ws_relay(name: str, browser: WebSocket) -> None:
             done, pending = await asyncio.wait({t1, t2}, return_when=asyncio.FIRST_COMPLETED)
             for t in pending:
                 t.cancel()
-            # asyncio logs an unread exception as an ERROR with a traceback when the task is
-            # collected, long after the leg it belonged to ended.
+            # asyncio logs an unread exception as an ERROR with a traceback, long after the leg
+            # ended.
             for t in done:
                 t.exception()
     except _HANGUP:

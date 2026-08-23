@@ -30,10 +30,9 @@ def _bullets(body: str) -> list[str]:
 
 
 def _note_fields(body: str) -> dict:
-    """`look: … · deviated: …` → its labelled parts. Split on the separator FIRST, so a `·`
-    in prose cannot start a phantom field.
+    """A note's labelled parts, split on the separator FIRST so a `·` in prose cannot start a field.
 
-    A value whose FIRST SENTENCE is `none` is nothing, however much follows."""
+    A value whose first sentence is `none` is nothing."""
     out: dict = {}
     for part in re.split(r"\s+·\s+", body):
         if m := re.match(r"^(look|deviated)\s*:\s*(.*)$", part.strip(), re.I):

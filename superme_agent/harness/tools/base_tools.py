@@ -29,8 +29,9 @@ class PullConstitutionArgs(TypedDict, total=False):
 
 def _pull_constitution(*, mode: str, universal_dir: Path, repo_dir: Path | None,
                        activated: set | None = None, **_):
-    """Resolve a catalog name → the item's full body. Scope is enforced by the dirs + active-set bound
-    here (universal + repo + this repo's activated ASSET items), so an out-of-scope name misses."""
+    """Resolve a catalog name to the item's full body.
+
+    Scope is the dirs and active-set bound here, so an out-of-scope name simply misses."""
     async def pull_constitution(args: dict) -> dict:
         name = str(args.get("name") or "").strip()
         if not name:
@@ -109,8 +110,8 @@ BASE_TOOLS: list[ToolSpec] = [
 
 def make_base_mcp_server(mode: str, universal_dir: Path, repo_dir: Path | None,
                          activated: set | None = None):
-    """Build the `superme` MCP server (base tools, every mode), bound to this host's constitution
-    homes + this repo's activated asset-slug set (`activated`), so `pull_constitution`/`suggest_assets`
-    only ever serve in-scope + activated items. The asset pool location is fixed (config.ASSET_DIR)."""
+    """Build the `superme` MCP server, bound to this host's constitution homes and activated assets.
+
+    So `pull_constitution` and `suggest_assets` only ever serve in-scope items."""
     return build_mcp_server("superme", BASE_TOOLS, mode=mode,
                             universal_dir=universal_dir, repo_dir=repo_dir, activated=activated)

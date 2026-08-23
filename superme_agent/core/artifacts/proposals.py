@@ -70,19 +70,16 @@ def filed_and_withheld(props: list[dict]) -> tuple[list[dict], list[dict]]:
 
 
 def proposal_promotable(prop: dict) -> bool:
-    """Does this ruling establish something a LATER reader can use? The test is `Rule`,
-    not `Reserved because`.
+    """Does this ruling establish something a LATER reader can use?
 
-    Those answer different questions: a one-off destructive act produces a one-off answer. The common
-    case is EMPTY."""
+    The test is `Rule`, not `Reserved because`: a one-off act produces a one-off answer."""
     return bool(str(prop.get("rule") or "").strip()) and bool(str(prop.get("answer") or "").strip())
 
 
 def proposal_becomes_work(prop: dict) -> bool:
-    """Does this proposal still describe WORK once the owner ruled on it? A ruling that
-    emptied it leaves nothing to plan.
+    """Does this proposal still describe WORK once the owner ruled on it?
 
-    Absent reads as YES: the ordinary proposal is work, and only an emptied one declares otherwise."""
+    Absent reads as YES: the ordinary proposal is work, and only an emptied one says otherwise."""
     return str(prop.get("becomes_work") or "yes").strip().lower() != "no"
 
 

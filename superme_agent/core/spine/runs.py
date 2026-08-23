@@ -156,7 +156,7 @@ class RunOps:
     def brief_sizes(self, repo_id: str, item_id: str, *, phase: str) -> list[int]:
         """How big each subagent BRIEF was, per spawn at `phase`.
 
-        A proxy: it proves a brief too short to carry a bar, never that a long one carried the right one."""
+        A proxy: it proves a brief too short to carry a bar, never that a long one was right."""
         with self._conn() as c:
             rows = c.execute(
                 "SELECT e.description AS d, LENGTH(e.payload) AS n"

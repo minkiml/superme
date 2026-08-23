@@ -52,8 +52,7 @@ def stalled_runs(stall_seconds: int = STALL_SECONDS) -> list[dict]:
 def stop_stalled_run(run: dict) -> bool:
     """Stop ONE stalled run: cancel, close the row, label the item, leave the trail.
 
-    Best-effort throughout — a watchdog that raises takes the poll loop with it, which is worse than
-    the stall."""
+    Best-effort throughout: a watchdog that raises takes the poll loop with it."""
     repo_id, item_id = str(run.get("repo_id") or ""), str(run.get("item_id") or "")
     phase = str(run.get("phase") or run.get("feature") or "")
     quiet = int(run.get("quiet_seconds", 0))

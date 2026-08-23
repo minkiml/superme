@@ -40,9 +40,9 @@ def _load(context_id: str, item_id: str, dev: DevKnowledgeService):
 @router.get("/dev/work-items/{item_id}/report/{phase}", response_model=PhaseReportResponse)
 async def dev_work_item_report(item_id: str, phase: str, context_id: str = "global",
                                dev: DevKnowledgeService = Depends(get_dev)) -> dict:
-    """One phase's user-facing report for the Reports tab: the markdown 1:1, plus the path
-    to the agent-facing contract behind it. 404 when that phase wrote none — the tab greys
-    itself from the drilldown rather than probing."""
+    """One phase's user-facing report, plus the path to the contract behind it.
+
+    404 when that phase wrote none, so the tab greys itself rather than probing."""
     _ctx, dev_root, _item = _load(context_id, item_id, dev)
     report = artifacts.report_text(dev_root / "work-items" / item_id, phase)
     if report is None:
@@ -55,8 +55,7 @@ async def dev_work_item_owner_input(item_id: str, context_id: str = "global",
                                     dev: DevKnowledgeService = Depends(get_dev)) -> dict:
     """What the owner has written into the one section of the item that is theirs.
 
-    Never 404s on a missing brief: `exists: false` tells the editor triage has not written one yet,
-    which is not a broken read."""
+    Never 404s: `exists: false` says triage has not written a brief yet."""
     _ctx, dev_root, _item = _load(context_id, item_id, dev)
     return artifacts.owner_input(dev_root / "work-items" / item_id)
 
@@ -66,8 +65,7 @@ async def dev_work_item_set_owner_input(item_id: str, body: OwnerInputBody,
                                         dev: DevKnowledgeService = Depends(get_dev)) -> dict:
     """Save the owner's own section, replacing it whole and leaving the rest untouched.
 
-    HUMAN-ONLY: there is no agent tool behind it, because the value of the section is that an agent did
-    not write it."""
+    HUMAN-ONLY: the value of the section is that an agent did not write it."""
     _ctx, dev_root, _item = _load(body.context_id, item_id, dev)
     try:
         return artifacts.write_owner_input(
@@ -124,10 +122,9 @@ async def dev_work_item_abandon(item_id: str, body: AbandonBody,
                                 dev_store: DevStore = Depends(get_dev_store),
                                 sessions: SessionStore = Depends(get_sessions),
                                 spine: SystemSpine = Depends(get_spine)) -> dict:
-    """Abandon a work-item — HUMAN-ONLY, legal from any non-terminal phase.
+    """Abandon a work-item. Human-only, legal from any non-terminal phase.
 
-    Ordered and each step idempotent: end live runs, remove the worktree, write the abandon note, set
-    the terminal status, resume a paused parent."""
+    Ordered and each step idempotent, ending with resuming a paused parent."""
     ctx, dev_root, item = _load(body.context_id, item_id, dev)
     if item.get("done_at") or str(item.get("status")) == "done":
         raise HTTPException(status_code=409, detail="item is already terminal")

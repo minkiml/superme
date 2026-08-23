@@ -33,10 +33,9 @@ _BLOCKING: dict[str, tuple[str, ...] | str] = {
 
 
 def close_readiness(item: dict, item_dir: Path, all_items: list[dict]) -> dict:
-    """Evaluate the kind's close criteria. Every required artifact EXISTS, not that it is good.
+    """Evaluate the kind's close criteria: every required artifact EXISTS, not that it is good.
 
-    Nothing here re-judges the work: close can fix nothing, so readiness is asked where there is
-    recourse."""
+    Close can fix nothing, so readiness is asked where there is recourse."""
     profile = get_profile(item.get("kind"))
     item_dir = Path(item_dir)
     checks: list[dict] = []
@@ -90,8 +89,7 @@ BRIEF_FLOOR = 600
 def brief_check(sizes: list[int] | None) -> dict | None:
     """The `brief_carried` row: did the fan-out send its workers out with anything?
 
-    Visible, not blocking. Size proves a brief too short to carry a bar, never that it carried the
-    right one."""
+    Visible, not blocking. Size proves a brief too short, never that it carried the right thing."""
     if not sizes:
         return None
     thin = [n for n in sizes if n < BRIEF_FLOOR]

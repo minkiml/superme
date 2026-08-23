@@ -240,10 +240,9 @@ async def deny_all(tool_name: str, tool_input: dict) -> bool | str:
 
 def scoped_writes_approve(allowed_dir: Path, fallback: ApproveFn) -> ApproveFn:
     """Auto-allow writes INSIDE `allowed_dir`, defer the rest to `fallback`.
-    With `deny_all` that is a hard sandbox.
 
-    `Bash` gets the same scope: these sessions run at the REPO cwd, so only a command that
-    explicitly scopes itself in auto-allows."""
+    `Bash` gets the same scope: these sessions run at the repo cwd, so only a self-scoping command
+    auto-allows."""
     allowed = allowed_dir.resolve()
 
     async def approve(tool_name: str, tool_input: dict) -> bool | str:
@@ -436,8 +435,7 @@ def _path_tokens(command: str) -> list[str]:
 
 
 def _bash_scoped_into_boundary(command: str, roots: list[Path]) -> bool:
-    """True if the command EXPLICITLY scopes itself into a root — `cd <root>`,
-    `git -C <root>`, or every absolute path inside one.
+    """True if the command EXPLICITLY scopes itself into a root.
 
     A command naming no absolute path stays unmatched: it resolves against a cwd this cannot see."""
     toks = shlex_split_safe(command)
@@ -613,11 +611,10 @@ def build_can_use_tool(approve: ApproveFn, *, blocked_skills: dict[str, str] | N
                        protected_paths: list[Path] | None = None,
                        protected_nudge: str | None = None,
                        subagent_cap: int | None = MAX_SUBAGENTS):
-    """Wrap a surface's ApproveFn into the SDK's `can_use_tool`. Safe tools auto-allow; everything
-    else defers to `approve`.
+    """Wrap a surface's ApproveFn into the SDK's `can_use_tool`.
 
-    `write_boundary` is accident-prevention, not security — a run passing `sandbox_writes` hands the
-    same roots to `core.vocab.sandbox`, where an escape fails as a syscall."""
+    `write_boundary` prevents accidents. `sandbox_writes` hands the same roots to
+    `core.vocab.sandbox`, where an escape fails as a syscall."""
     spawned = 0
 
     async def can_use_tool(

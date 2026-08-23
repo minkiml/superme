@@ -114,10 +114,9 @@ def _from_text(text: str, *, source: str) -> Fault:
 
 def classify(*, exc: BaseException | None = None, reply: str | None = None,
              did_work: bool = False) -> Fault:
-    """The single entry point: an exception and/or the turn's last assistant reply.
+    """The single entry point: an exception and the turn's last assistant reply.
 
-    The SDK returns some upstream errors as assistant TEXT, so a reply can itself be a failure.
-    `did_work` True stops the reply being read as one."""
+    The SDK returns some upstream errors as assistant TEXT, so a reply can itself be a failure."""
     if exc is not None:
         # A cancellation is the daemon shutting down, not a failure of the work.
         if isinstance(exc, asyncio.CancelledError):

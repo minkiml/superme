@@ -90,10 +90,9 @@ _BRIEF_FIELDS = ("background", "discussion", "direction", "constraints")
 
 
 def _brief_nudge(args: dict, *, spawned: bool, repairable: bool) -> str:
-    """Name the brief slots this call left empty — the four fields ARE the cold-start context, thrown
-    away at the only moment they were free.
+    """Name the brief slots this call left empty.
 
-    A branch-off is held to EACH field, since its parent holds the answers."""
+    The four fields ARE the cold-start context, thrown away at the only moment they were free."""
     missing = [f for f in _BRIEF_FIELDS if not _s(args, f)]
     if not missing or (not spawned and len(missing) < len(_BRIEF_FIELDS)):
         return ""

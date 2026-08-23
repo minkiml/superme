@@ -50,10 +50,9 @@ def task_of(commit: dict) -> str:
 
 
 def _group_commits(commits: list[dict], tasks: list[dict]) -> list[dict]:
-    """Commits to task groups, in PLAN order rather than commit order: the owner reads the branch against
-    the plan they approved.
+    """Commits to task groups, in PLAN order rather than commit order.
 
-    Tasks with no commits are dropped — an unbuilt task is the cycle reports' story, not the diff's."""
+    The owner reads the branch against the plan they approved. A task with no commits is dropped."""
     titles = {t["id"]: t for t in tasks}
     buckets: dict[str, list[dict]] = {}
     for c in commits:
@@ -87,8 +86,9 @@ def _group_commits(commits: list[dict], tasks: list[dict]) -> list[dict]:
 
 
 def _body_without_trailers(commit: dict) -> str:
-    """The commit body as the project reads it. The trailer block is SuperMe's own routing data —
-    it is what BUILT this group, so repeating it inside the group is noise."""
+    """The commit body as the project reads it.
+
+    The trailer block is what BUILT this group, so repeating it inside the group is noise."""
     body = commit.get("body") or ""
     if not commit.get("trailers"):
         return body.strip()
@@ -149,8 +149,7 @@ def pr_file_diff(ctx, context_id: str, item_id: str, *, path: str, task: str | N
                  dev, spine) -> dict:
     """One file's patches inside one task group, fetched when the reader opens the row.
 
-    The commit shas are resolved HERE from the branch: the page asks for this file under this task, and
-    the server decides which commits that is."""
+    The page asks for a file under a task; the server decides which commits that is."""
     item, _dir = _load(ctx, item_id, dev)
     branch = str(item["git_branch"])
     commits = git_layer.branch_commits(ctx.cwd, branch, _base_of(item, ctx, spine))

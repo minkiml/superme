@@ -1,7 +1,6 @@
 """The router shell: the path grammar, and the state it replaced.
 
-`parse` and `build` are each other's inverse for every real address. One writer per row is a
-property of the SOURCE — a reintroduced `useState` would work perfectly while restoring the bug.
+`parse` and `build` are each other's inverse. One writer per row is a property of the SOURCE.
 
 Run: PYTHONPATH=. python -m scripts.test_router
 """
@@ -24,15 +23,14 @@ def ok(msg: str, cond: bool = True) -> None:
 DEV_TABS = ["pipeline", "workspace", "project", "activity"]
 STATS_TILES = ["tokens", "ops", "learning"]  # `?stats=` — a QUERY overlay, not a path (see below)
 SURFACES = ["activity", "internals"]
-# A QUERY overlay, because the popup opens OVER the surface you were on. Two of these were PAGES
-# until it absorbed them.
+# A QUERY overlay, because the popup opens OVER the surface you were on.
 CONFIG_SECTIONS = ["general", "learning", "identity", "constitution", "skills", "agents",
                    "psettings", "plearning", "partifacts", "pxray"]
 LEGACY_SECTION = {"/config": "general", "/foundations": "identity"}
 LEGACY_DEV_TAB = {"learning": "plearning", "artifacts": "partifacts", "promptxray": "pxray"}
 PHASES = ["triage", "plan", "build", "vet", "investigate", "review", "close"]
 # The drilldown's segments are `tab/sub`: the stepper is not clickable, so the address names the
-# TAB. A phase appears as the Reports tab's sub.
+# TAB.
 ITEM_TABS = ["quick", "reports", "trace", "git"]
 ITEM_SUBS = ["now", "deputy", "proof", "auth", "runs", "timeline"] + PHASES
 
@@ -156,8 +154,8 @@ def test_slice5_grammar() -> None:
     """Slice 5. Two shapes that look unlike each other but are the same idea: something that used to
     be an overlay flag now has an address."""
     print("stats tiles + the Pipeline tab's second pane")
-    # The tiles live in the QUERY, not a path segment: a path displaced the surface underneath,
-    # and an overlay belongs over where you are.
+    # The tiles live in the QUERY: a path displaced the surface underneath, and an overlay belongs
+    # over it.
     ok("no tile is a PATH — a drill-in must not replace the surface it opens over",
        all(build(parse(f"/stats/{t}")) == "/" for t in STATS_TILES))
     app_src = src("web/frontend/src/App.tsx")
@@ -182,8 +180,9 @@ def test_slice5_grammar() -> None:
 
 
 def test_config_overlay() -> None:
-    """The System config popup. Five surfaces became one popup, addressed the same way the stats
-    tiles are: a QUERY over whatever you were looking at, never a path that displaces it."""
+    """The System config popup.
+
+    Five surfaces became one, addressed like the stats tiles: a QUERY over what you were looking at."""
     print("System config — a query overlay, and the addresses it inherited")
     ok("no section is a PATH — the popup must not replace the surface it opens over",
        all(build(parse(f"/config/{c}")) == "/" for c in CONFIG_SECTIONS))
@@ -208,9 +207,9 @@ def test_config_overlay() -> None:
 
 
 def test_port_matches_source() -> None:
-    """The port above is only meaningful if it still mirrors the real matcher. Pin the two lists and
-    the canonical-form rule against the source, so a change there fails HERE rather than silently
-    leaving this suite testing a fiction."""
+    """The port above means something only while it mirrors the real matcher.
+
+    Pin the lists against the source, so a change there fails HERE rather than testing a fiction."""
     print("the port mirrors the source (else this suite tests a fiction)")
     router_src = src("web/frontend/src/lib/router/index.ts")
     item_tabs_src = re.search(r"export const ITEM_TABS = \[(.*?)\] as const", router_src, re.S).group(1)
@@ -269,8 +268,7 @@ def test_old_state_is_gone() -> None:
     ok("the dev tab is a prop from the route, not local state",
        "const [tab, setTab]" not in ws and "onTabChange" in ws)
 
-    # Asserted ABSENT: reintroducing either would work perfectly while restoring the two-writers
-    # defect. Matched on the DECLARATION, since a comment still names it.
+    # Asserted ABSENT: either would work perfectly while restoring the two-writers defect.
     ok("`focusItem` is gone — the drilldown is an address, not a handed-over request",
        "const [focusItem," not in app and "focusItemId=" not in app)
     ok("gotoItem navigates straight to the item's address",

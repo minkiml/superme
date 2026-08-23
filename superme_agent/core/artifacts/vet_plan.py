@@ -125,8 +125,7 @@ def is_whole_suite_run(cmd: str) -> bool:
 def vet_plan_hard_issues(vp: dict) -> list[str]:
     """The gate-blocking structural rules, every one mechanically decidable.
 
-    `proves` is HARD where `covers` is not: a missing `covers` costs a join, a missing `proves` means
-    nobody can say what a green MEANS."""
+    A missing `covers` costs a join; a missing `proves` means nobody can say what a green MEANS."""
     if not vp.get("present"):
         return ["missing required section '## Verification plan'"]
     issues: list[str] = []
@@ -265,8 +264,7 @@ def _plan_check_ids(item_dir: Path) -> set[str] | None:
 def plan_vet_depth(item_dir: Path) -> str:
     """The plan's declared vet depth, or `""` when there is no plan to read.
 
-    `none` is the OWNER-APPROVED judgment that nothing here is observable — never vet's call, and
-    everything downstream reads it from HERE."""
+    `none` is the owner-approved judgment that nothing here is observable, never vet's call."""
     plan = Path(item_dir) / "artifacts" / artifact_file("plan")
     if not plan.is_file():
         return ""

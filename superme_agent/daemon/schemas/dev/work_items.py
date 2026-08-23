@@ -16,8 +16,7 @@ from ..common import WorkKind, WorkPhase, WorkStatus, WorkOutcome, SpawnRelation
 class SpawnedFrom(BaseModel):
     """The provenance edge, child-side: which item this one branched off and how.
 
-    `blocking` and `parallel` are real children that gate the parent's completion; `spawn` is
-    provenance only. Exactly one origin edge per item."""
+    `blocking` and `parallel` gate the parent's completion; `spawn` is provenance only."""
     item: str
     relation: SpawnRelation
     note: str | None = None

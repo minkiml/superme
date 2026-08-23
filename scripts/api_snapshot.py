@@ -29,12 +29,12 @@ _ROOT = ""
 # `home` already tracks where a class lives, so moving one must not read as a signature change.
 _QUALNAME = re.compile(r"superme_agent[\w.]*\.(\w+)")
 
-# Python 3.13 moved pathlib's concrete classes into a private submodule, so one annotation
-# renders two ways depending on the interpreter. The public name is the one the code writes.
+# Python 3.13 moved pathlib's concrete classes into a private submodule. The public name is the
+# one the code writes.
 _PRIVATE_STDLIB = re.compile(r"\bpathlib\._local\.")
 
-# The same stdlib object, spelled differently by different interpreters. A baseline that cannot
-# be read on another Python gates nothing there.
+# The same stdlib object, spelled differently per interpreter. A baseline unreadable elsewhere
+# gates nothing.
 _STDLIB_ALIASES = {"<built-in function allocate_lock>": "threading.Lock",
                    "_thread.lock": "threading.Lock"}
 
@@ -57,8 +57,8 @@ def _signature(obj) -> str:
 def _class_methods(cls) -> list[str]:
     """Every method this project defines on the class, base classes included.
 
-    Walking the MRO is what makes a mixin split read as identical: the methods change file,
-    the assembled class keeps every one of them."""
+    Walking the MRO makes a mixin split read as identical: the methods change file, the class keeps
+    them."""
     out: dict[str, str] = {}
     for base in reversed(inspect.getmro(cls)):
         if base is object or not _ours(base):

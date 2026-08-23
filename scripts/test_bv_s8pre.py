@@ -1,7 +1,7 @@
-"""Four fixes that a live walk-through surfaced, all checkable offline.
+"""Four fixes a live walk-through surfaced, all checkable offline.
 
-A resume naming an unknown session mints a fresh one; `triage_ran` reads a stamp rather than a
-tautology an inbox push already satisfied; merge is phase-gated; background runs mount dev tools.
+A resume naming an unknown session mints one, `triage_ran` reads a stamp, merge is phase-gated,
+and background runs mount dev tools.
 
 Run: PYTHONPATH=. python -m scripts.test_bv_s8pre
 """
@@ -84,8 +84,8 @@ def test_f1_triaged_stamp(tmp: Path) -> None:
                                           bound_item_id=iid)
 
     wid3 = dev.create_work_item(root, "f1 tool probe", kind="implementation")["id"]
-    # Triage names, classifies and scales in ONE call — one judgment, one recording surface — so a
-    # classification without scale is refused, never defaulted.
+    # Triage names, classifies and scales in ONE call, so a classification without scale is
+    # refused.
     r = asyncio.run(tool_for(wid3)({"item_id": wid3, "title": "Probe the triage stamp",
                                     "kind": "implementation", "scale": "standard",
                                     "scale_reason": "touches the run path in two places"}))
@@ -152,8 +152,7 @@ def test_f2_merge_gate(tmp: Path) -> None:
        "review_mode !== 'strict'" not in fe and "prOpen" not in fe)
     ok("...and one control performs the gate's act, not two",
        "a.id === 'merge'" not in fe and "merge: () => advanceWorkItem" not in fe)
-    # A relevant control is still never hidden — it renders disabled with the server's reason,
-    # because an absent button reads as a missing feature.
+    # A relevant control is never hidden: an absent button reads as a missing feature.
     ok("...while the git controls that remain carry the server's reason as their tooltip",
        "disabled={!pr.active}" in fe and "title={pr.reason}" in fe)
     # There is NO owner-facing freshness sync: it happens at the three moments that matter.

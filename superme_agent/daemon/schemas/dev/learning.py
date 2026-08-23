@@ -122,9 +122,10 @@ class ProposalCandidate(BaseModel):
 
 
 class EvalMetrics(BaseModel):
-    """The artifact's own run cost on a synthetic task (forge_kit/eval.py). kind 'run' = skill/agent
-    measured once; kind 'overhead' = constitution's always-on per-turn cost. Tolerant of pre-metrics
-    and error rows (everything optional, extra='allow' for forward-compat)."""
+    """The artifact's own run cost on a synthetic task.
+
+    `run` measures a skill once; `overhead` is a constitution's always-on per-turn cost. Every field
+    is optional."""
     model_config = ConfigDict(extra="allow")
     kind: str | None = None
     context_tokens: int | None = None
@@ -141,8 +142,7 @@ class EvalMetrics(BaseModel):
 class EvalReport(BaseModel):
     """A proposal's gate-2 eval report, stored on the row.
 
-    Versioned via `schema_version`, and tolerant of legacy reports: every field is optional, so an older
-    or richer one never 500s a read."""
+    Every field is optional, so an older or richer report never 500s a read."""
     model_config = ConfigDict(extra="allow")
     schema_version: int | None = None
     form: str | None = None
@@ -155,10 +155,10 @@ class EvalReport(BaseModel):
 
 
 class Proposal(BaseModel):
-    """A memory proposal — a rich DB row with JSON columns.
+    """A memory proposal, a rich DB row with JSON columns.
 
-    The declared fields document the stable shape; `extra='allow'` carries the rest. The enums are
-    locked, because their producer coerces to exactly those sets."""
+    The declared fields document the stable shape. The enums are locked, since the producer coerces
+    to them."""
     model_config = ConfigDict(extra="allow")
     id: int
     context_id: str | None = None

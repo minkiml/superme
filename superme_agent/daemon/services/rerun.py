@@ -21,10 +21,9 @@ def _now() -> str:
 
 
 def rerun_reason(item: dict, *, running: bool) -> tuple[bool, str]:
-    """Can this item be re-run, and the one line saying why or why not. PURE, so the drilldown's action
-    list and the route share it.
+    """Can this item be re-run, and the one line saying why or why not. PURE.
 
-    Deliberately NOT conditioned on `error`: the point of re-run is that it is always there."""
+    Deliberately not conditioned on `error`: the point of re-run is that it is always there."""
     if item.get("done_at") or str(item.get("status")) == "done":
         return False, ("this item is finished — its branch is landed and its trace is closed. "
                        "Follow-up work is a new item, not a second life for this one")
@@ -39,8 +38,7 @@ def rerun_reason(item: dict, *, running: bool) -> tuple[bool, str]:
 def rerun_item(context_id: str, item_id: str) -> tuple[bool, str]:
     """Reset a work-item and re-fire its entry phase.
 
-    Order matters: everything destructive happens BEFORE the fire. Teardown steps are individually
-    best-effort, but the file reset is not — if `item.md` cannot be rewritten, nothing is fired."""
+    Everything destructive happens BEFORE the fire, and a failed file reset fires nothing."""
     try:
         ctx = contexts.resolve(context_id, "dev")
         if not ctx.internal_root:

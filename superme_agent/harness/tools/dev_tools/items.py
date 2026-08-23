@@ -15,8 +15,9 @@ def _item_dir(dev_root, item_id: str):
 
 
 def _bound_err(item_id, bound_item_id) -> str | None:
-    """A work-item session operates ONLY its own item; one with no bound item has no item write-tools
-    at all. Returns the refusal text, or None when the call is in scope."""
+    """A work-item session operates ONLY its own item.
+
+    Returns the refusal text, or None when the call is in scope."""
     if bound_item_id is None:
         return ("Work-item tools operate only inside a work-item session. This session has no "
                 "bound item — if this work is real, itemize it (create_inbox_item) and do it in "
@@ -133,10 +134,9 @@ class SetTriageClassificationArgs(TypedDict, total=False):
 
 def _set_triage_classification(*, store, context_id, dev_root=None, bound_item_id=None, **_):
     async def set_triage_classification(args: dict) -> dict:
-        """Triage's RECORDING surface: write the item's name, proposed kind and deliverable onto the item,
-        so the exit gate confirms durable fields rather than chat prose.
+        """Triage's RECORDING surface: name, proposed kind and deliverable, written onto the item.
 
-        Naming rides with classifying — triage has read the whole ask."""
+        The exit gate confirms durable fields rather than chat prose."""
         from pathlib import Path
         from ....core.dev_knowledge import DevKnowledgeService, parse_deliverables
         item_id = _s(args, "item_id")

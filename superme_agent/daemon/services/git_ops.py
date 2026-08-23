@@ -57,8 +57,7 @@ def _is_secret(name: str) -> bool:
 def _mirror_source_ignored(repo: Path, worktree: Path, paths: list[str]) -> tuple[int, list[str]]:
     """Copy the owner-named gitignored source paths into a fresh scratch worktree.
 
-    A worktree holds tracked files only, so a completeness claim cannot be proven in it. Copies are
-    read-only, since edits here would be invisible."""
+    A worktree holds tracked files only, so a completeness claim cannot be proven in it."""
     copied, skipped = 0, []
     for rel in paths:
         src, dst = repo / rel, worktree / rel

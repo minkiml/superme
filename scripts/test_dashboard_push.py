@@ -44,8 +44,8 @@ async def test_frame_carries_topics_only() -> None:
         frame = await asyncio.wait_for(q.get(), timeout=2)
         ok("frame type is `invalidate`", frame["type"] == "invalidate")
         ok("it carries the topics", sorted(frame["topics"]) == ["dev:r1:", "sys:"])
-        # THE assertion: shipping values down this socket gives the browser a second source for
-        # what it also fetches, and the two can disagree.
+        # Shipping values down this socket gives the browser a second source for what it also
+        # fetches.
         ok("it carries NOTHING else — no rows, no counts, no item payload",
            set(frame.keys()) == {"type", "topics"})
     finally:

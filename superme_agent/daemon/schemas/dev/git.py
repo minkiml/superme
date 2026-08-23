@@ -51,8 +51,9 @@ class GitRevertResponse(BaseModel):
 
 
 class PrCommit(BaseModel):
-    """One commit as the walkthrough shows it. `body` has the SuperMe trailer block stripped —
-    that block is what put the commit in this group, so repeating it inside would be noise."""
+    """One commit as the walkthrough shows it.
+
+    `body` has the SuperMe trailer stripped: that block is what put the commit in this group."""
     sha: str
     short: str
     subject: str
@@ -60,8 +61,9 @@ class PrCommit(BaseModel):
 
 
 class PrFile(BaseModel):
-    """One file inside a task group, with the churn that group put on it (summed over the group's
-    commits, which is what ranks it — the biggest change is where the risk is)."""
+    """One file inside a task group, with the churn that group put on it.
+
+    Summed over the group's commits, because the biggest change is where the risk is."""
     path: str
     plus: int
     minus: int
@@ -77,9 +79,9 @@ class PrCheck(BaseModel):
 
 
 class PrGroup(BaseModel):
-    """One task's slice of the branch. `task` is null for commits with no trailer; they are shown last.
+    """One task's slice of the branch. `task` is null for commits with no trailer.
 
-    The four fields below the diff are the REVIEW NOTES, per TASK rather than per file."""
+    The four fields below the diff are the REVIEW NOTES, per task rather than per file."""
     task: str | None = None
     title: str | None = None    # the plan's `## Tasks` line for this id, when the plan still has it
     done: bool | None = None
@@ -92,8 +94,9 @@ class PrGroup(BaseModel):
 
 
 class PrStat(BaseModel):
-    """Header numbers: commit COUNT over the fork point, and the NET diff that actually lands
-    (not the sum of per-commit churn — a line written in t1 and rewritten in t3 lands once)."""
+    """Header numbers: commit count over the fork point, and the NET diff that lands.
+
+    Not the sum of per-commit churn: a line written and rewritten lands once."""
     commits: int
     files: int
     insertions: int

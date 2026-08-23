@@ -465,8 +465,7 @@ def publish_artifact(output_form: str, target_scope: str, repo_id: str | None, *
                      created: str = "") -> str:
     """Gate-2 publish: write a PUBLISHED artifact to its live home, return the path.
 
-    Server-side fields (name, `enabled`, scope, provenance) are stamped as defaults, never clobbering
-    the agent's. Raises ReservedScope for `core`."""
+    Server-side fields are stamped as defaults, never clobbering the agent's."""
     slug = slugify(slug)
     if output_form == "constitution":
         home = constitution_home(target_scope, repo_id)

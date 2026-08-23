@@ -1,8 +1,7 @@
 """Fault classification and the retry ladder.
 
-An overloaded upstream and a bad argument used to reach the same outcome: page the owner. An
-upstream error handed back as assistant TEXT raised nothing, so a cycle that never ran scored
-as a success.
+An overloaded upstream and a bad argument used to reach the same outcome. An upstream error
+handed back as assistant TEXT raised nothing.
 
 Run: PYTHONPATH=. python -m scripts.test_faults
 """
@@ -126,8 +125,10 @@ def test_rate_limit_waits_for_the_window() -> None:
 # ── ResilientTurn ───────────────────────────────────────────────────────────────────────────────
 
 class _FakeAgent:
-    """An agent whose turns are scripted. Each script entry is either a list of events to yield or
-    an exception to raise, so a test can say "fail twice, then succeed"."""
+    """An agent whose turns are scripted.
+
+    Each entry is events to yield or an exception to raise, so a test can say fail twice then
+    succeed."""
 
     def __init__(self, script):
         self.script = list(script)
@@ -277,7 +278,7 @@ def test_every_background_runner_is_wrapped() -> None:
     ok("…and its regex with it", "_API_ERROR_REPLY" not in loop)
 
     # Everything the runners lost with their `finally` must still be reached. `ResilientTurn`
-    # returns rather than raises, which is what makes the straight-line version equivalent.
+    # returns rather than raises.
     turns = src("superme_agent/daemon/services/turns.py")
     ok("the wrapper re-raises CancelledError rather than filing a shutdown as a fault",
        "except asyncio.CancelledError:" in turns and "raise" in turns)

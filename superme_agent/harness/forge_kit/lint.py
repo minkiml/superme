@@ -101,11 +101,9 @@ def _check_meta(fm, body, *, expected_name, want_tools, errors, warnings):
 
 
 def lint_constitution(text, *, expected_name, errors, warnings):
-    """A constitution is frontmatter-first: a required `description` — the always-resident catalog line —
-    plus an optional body.
+    """A constitution is frontmatter-first: a required `description` plus an optional body.
 
-    `name` and the runtime fields are stamped at publish, so the authored artifact need only carry the
-    description."""
+    `name` and the runtime fields are stamped at publish."""
     fm, body = _split_frontmatter(text)
     if fm is None:
         errors.append("A constitution must open with a '---' frontmatter block carrying a "

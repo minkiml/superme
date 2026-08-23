@@ -90,7 +90,7 @@ async def dev_work_item_pr_diff(item_id: str, path: str, task: str | None = None
                                 spine: SystemSpine = Depends(get_spine)) -> dict:
     """One file's patches under one task group, fetched when the reader expands the row.
 
-    A branch's whole diff is the one thing a review page must not make them wait for."""
+    A branch's whole diff is what a review page must not make them wait for."""
     ctx = contexts.resolve(context_id, "dev")
     return pr_view.pr_file_diff(ctx, context_id, item_id, path=path, task=task,
                                 dev=dev, spine=spine)

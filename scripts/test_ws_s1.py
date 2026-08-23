@@ -665,8 +665,7 @@ def test_glance(dev: DevKnowledgeService, root: Path) -> None:
 def test_item_scale(dev: DevKnowledgeService, tmp: Path) -> None:
     """Scale is the CONTENT dial: triage's judgment, carried into every later phase's turn.
 
-    A small item is told a boundary plus what to do when the boundary is wrong; the reason and
-    the escape hatch are what is pinned."""
+    A small item is told a boundary and what to do when the boundary is wrong."""
     from superme_agent.core import kernel_speech as ks
     print("item scale — the content dial")
     root = tmp / "scale-dev"

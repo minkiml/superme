@@ -43,10 +43,9 @@ def _event_refs(meta: dict | None) -> str:
 
 
 def _day_range(day: str) -> tuple[str, str] | None:
-    """Resolve a relative or calendar day to a [start, end) UTC range in the OWNER'S local timezone.
+    """Resolve a relative or calendar day to a [start, end) range in the OWNER'S timezone.
 
-    Events are stored UTC but "today" is a local-calendar notion, so a UTC+12 owner would otherwise
-    miss events still dated yesterday."""
+    Events are stored UTC but "today" is local, so a UTC+12 owner would miss yesterday's."""
     local_tz = datetime.now().astimezone().tzinfo
     d = day.strip().lower()
     if d == "today":
@@ -70,8 +69,7 @@ def _day_range(day: str) -> tuple[str, str] | None:
 def _fmt(events: list[dict]) -> str:
     """Render dev-log events as qualified, scannable records, newest first.
 
-    The `refs=` ids are a HISTORICAL record: the referenced row may since have been cleaned, so a
-    ref here does not prove a live row."""
+    The `refs=` ids are HISTORICAL: a referenced row may since have been cleaned."""
     if not events:
         return "(no matching activity)"
     lines = [

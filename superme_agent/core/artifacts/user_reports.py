@@ -51,10 +51,10 @@ def _bold_lenses(text: str) -> str:
 def write_plan_user_report(item_dir: Path, *, summary: str, approach: str = "",
                            confirm: str = "", decisions: str = "", assumptions: str = "",
                            item_kind: str | None = None) -> dict:
-    """Write the owner's answer to *what is being built, and what will prove it*.
+    """Write the owner's answer to what is being built, and what will prove it.
 
-    The prose slots are the planner's; everything factual is DERIVED from plan.md, because a
-    hand-copied claim is a claim ABOUT the plan."""
+    Everything factual is DERIVED from plan.md, because a hand-copied claim is a claim ABOUT the
+    plan."""
     # An OMITTED optional slot arrives as None, not "". Normalize once, here, where the type is
     # declared.
     approach, confirm = approach or "", confirm or ""
@@ -111,10 +111,9 @@ def write_plan_user_report(item_dir: Path, *, summary: str, approach: str = "",
 
 def write_vet_user_report(item_dir: Path, repo_dir: Path | None, *, summary: str = "",
                           confirms: str = "", looked_at: str = "", unknown: str = "") -> dict:
-    """Write the vet report: vet writes the narrative, code writes `## What didn't hold`.
+    """Vet writes the narrative, code writes `## What didn't hold`.
 
-    ONE-WRITER, so vet cannot write around a red check. No report while a check lacks an entry, a
-    lens a read, or a failure a diagnosis."""
+    One writer each, so vet cannot write around a red check."""
     item_dir = Path(item_dir)
     plan_path = item_dir / "artifacts" / artifact_file("plan")
     plan_ids = [c["id"] for c in parse_vet_plan(plan_path.read_text(encoding="utf-8")).get("checks", [])] \

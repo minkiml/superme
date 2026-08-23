@@ -31,11 +31,10 @@ class LifecycleOps:
         research_kind: str | None = None,
         born_at: str | None = None,
     ) -> dict:
-        """Stamp a new top-level work-item from a pushed inbox row, entering at
-        triage/active.
+        """Stamp a new top-level work-item from a pushed inbox row, entering at triage.
 
-        `kind` is REQUIRED with no default — a default gave every ticket an implementation pipeline.
-        `proposed_kind` is birth provenance, never routed on. Peers are validated to EXIST."""
+        `kind` is REQUIRED: a default gave every ticket an implementation pipeline. `proposed_kind` is
+        provenance, never routed on."""
         from ..vocab.kind_profiles import DEFAULT_SCALE, KIND_PROFILES, RESEARCH_KINDS, get_profile
         profile = get_profile(kind)
         # A button-launched sweep is born classified: the button IS the classification. Every
@@ -212,11 +211,9 @@ class LifecycleOps:
     )
 
     def reset_work_item(self, dev_root: Path, item_id: str) -> dict | None:
-        """Reset a work-item to its entry phase, keeping identity, relations and the ask —
-        the file half of a re-run.
+        """Reset a work-item to its entry phase, keeping identity, relations and the ask.
 
-        `preliminary/` STAYS: it is the pushed input, not work this item did. Runs and events are
-        permanent trace."""
+        `preliminary/` STAYS: it is the pushed input, not work this item did."""
         from ..vocab.kind_profiles import get_profile
         folder = Path(dev_root) / "work-items" / item_id
         item_md = folder / "item.md"

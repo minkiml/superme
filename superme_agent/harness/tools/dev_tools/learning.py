@@ -152,8 +152,7 @@ def _read_run(*, context_id, spine=None, **_):
 def _file_candidate(*, store, context_id, origin_session_id=None, capture_source="agent", **_):
     """The capture sweep's pen, called once per learning found in the swept slice.
 
-    Provenance is bound server-side from the sweep; the agent supplies only substance. Grounding
-    and dedup are distill's job downstream."""
+    Provenance is bound server-side; the agent supplies only substance."""
     async def file_candidate(args: dict) -> dict:
         statement = _s(args, "statement")
         if not statement:

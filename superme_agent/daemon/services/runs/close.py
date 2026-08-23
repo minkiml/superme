@@ -21,10 +21,9 @@ from .checkpoints import bank_auto_checkpoint, compacted_checkpoint
 from .completion import ensure_completion
 
 def fire_close_run(context_id: str, item_id: str, spine) -> bool:
-    """Fire the ONE closing run of the CLOSE phase — the workflow's only knowledge write.
+    """Fire the ONE closing run of the CLOSE phase, the workflow's only knowledge write.
 
-    Fires only for an item resting at `close` with no run in flight; when none can start it clears
-    anyway, with the gap on record."""
+    When none can start, the item clears anyway with the gap on record."""
     from ....gateway import contexts   # lazy: avoid an import cycle at module load
     ctx = None
     try:
@@ -67,10 +66,9 @@ def fire_close_run(context_id: str, item_id: str, spine) -> bool:
 
 async def _run_background_close(ctx, context_id: str, item_id: str, item_dir: Path,
                                 model: str | None = None, effort: str | None = None) -> None:
-    """Drive the item's ONE closing turn: RESUME its intake thread and let the close skill reflect the
-    locked changes into the anchor docs and the change log.
+    """Drive the item's ONE closing turn: resume its intake thread and reflect the locked changes.
 
-    The kernel clears the item from there — the run never completes it."""
+    The kernel clears the item from there, so the run never completes it."""
     dev_root = ctx.internal_root / "dev"
     item = _dev.read_work_item(dev_root, item_id) or {}
     session_id = ((item.get("sessions") or {}).get("intake") or item.get("session_id") or None)
@@ -145,10 +143,9 @@ async def _run_background_close(ctx, context_id: str, item_id: str, item_dir: Pa
 
 
 def _clear_or_retry(context_id: str, item_id: str, outcome: str) -> None:
-    """The post-CLOSE kernel hook: reported ⇒ clear the item; not ⇒ re-fire, and once the budget is
-    spent clear it anyway with the gap recorded.
+    """The post-CLOSE hook: reported clears the item, otherwise re-fire.
 
-    Clearance always completes — a closing run that cannot finish is a SuperMe fault."""
+    Clearance always completes: a closing run that cannot finish is a SuperMe fault."""
     from .. import clearance
     try:
         if outcome:

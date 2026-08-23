@@ -157,8 +157,7 @@ def test_the_registry_is_bound_where_every_item_run_passes():
 def test_disposal_stops_the_task_not_just_the_row():
     """A disposed item must stop RUNNING, not merely stop claiming to run.
 
-    The row half alone let a turn outlive its item and write into a folder the caller was
-    removing."""
+    The row half alone let a turn outlive its item and write into a folder being removed."""
     runs = src("superme_agent/daemon/services/runs.py")
     # The CODE, not the docstring above it — which names both halves while explaining the order.
     body = runs.split("def stop_item_work", 1)[1].split('"""')[2]
@@ -350,8 +349,7 @@ def test_the_total_counts_subagents_and_cannot_kill_a_run():
 def test_a_trail_row_cannot_kill_a_run():
     """A malformed tool argument must not kill the run that made it.
 
-    One raised out of the trail formatter, out of the capture, and out of the run's own task,
-    leaving the row `running` until the watchdog closed it."""
+    One raised out of the trail formatter and the run's own task, leaving the row `running`."""
     from superme_agent.daemon.services.runs import _artifact_desc, capture_event
 
     ok("the exact killer input now formats instead of raising",

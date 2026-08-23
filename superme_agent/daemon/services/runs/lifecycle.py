@@ -88,7 +88,7 @@ def begin_run(ctx, context_id: str, item_id: str, kind: str = "plan",
                model: str | None = None, phase: str | None = None) -> int | None:
     """Open a run row only if the item is not already running, then rest it `active`.
 
-    The row is both the live state and the run-lock, so a start race cannot lose it."""
+    The row is both live state and run-lock, so a race cannot lose it."""
     run_id = _spine.start_item_run(context_id, mode=ctx.mode, feature=kind,
                                    item_id=item_id, model=model, phase=phase)
     if run_id is None:

@@ -20,11 +20,10 @@ SEND_BACK_CAP = 3
 
 
 def deputy_root(ctx: Context) -> Path:
-    """The dev-scope root the artifacts hang under. The mandate is GOVERNANCE — harness cell, wiped
-    on disconnect.
+    """The dev-scope root the artifacts hang under, wiped on disconnect.
 
-    Takes a resolved Context, never an id: joining a caller's string here would seed a mandate for
-    a project that does not exist."""
+    Takes a resolved Context: a caller's string would seed a mandate for a project that does not
+    exist."""
     return LOCAL_HARNESS_DIR / ctx.id / "dev"
 
 

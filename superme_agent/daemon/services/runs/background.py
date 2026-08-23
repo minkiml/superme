@@ -31,21 +31,18 @@ async def run_background_plan(ctx, context_id: str, item_id: str, item_dir: Path
 async def run_background_item_skill(ctx, context_id: str, item_id: str, item_dir: Path,
                                      skill: str, model: str | None = None,
                                      effort: str | None = None) -> None:
-    """The generic phase-entry runner for any auto-fired item skill that is not plan: `review`,
-    `investigate`, `itemize`.
+    """The generic phase-entry runner for any auto-fired item skill that is not plan.
 
-    All carry the item's INTAKE role — one thread end to end — so only the skill differs. Thin
-    wrapper over `_background_intake_run`."""
+    All carry the item's INTAKE role, one thread end to end, so only the skill differs."""
     await _background_intake_run(ctx, context_id, item_id, item_dir,
                                  skill=skill, model=model, effort=effort)
 
 
 async def _run_background_triage(ctx, context_id: str, item_id: str, item_dir: Path,
                                  model: str | None = None, effort: str | None = None) -> None:
-    """Auto-triage on push: one triage turn, no surface, fired when an inbox item is pushed to the
-    workspace.
+    """Auto-triage on push: one triage turn, no surface.
 
-    The item lands at `awaiting_human` with its classification recorded, so the owner glances and
+    The item lands at `awaiting_human` with its classification recorded, so the owner just
     approves."""
     await _background_intake_run(ctx, context_id, item_id, item_dir,
                                  skill="triage", model=model, effort=effort)
@@ -54,11 +51,10 @@ async def _run_background_triage(ctx, context_id: str, item_id: str, item_dir: P
 async def _background_intake_run(ctx, context_id: str, item_id: str, item_dir: Path, *,
                                  skill: str, model: str | None = None,
                                  effort: str | None = None) -> None:
-    """Drive one background intake-phase turn with no surface attached, then clear run-state. Only the
-    skill and trigger differ.
+    """Drive one background intake-phase turn with no surface, then clear run-state.
 
-    RESUMES THIS PHASE'S OWN THREAD, or mints when it has none: re-entering a phase is one agent
-    looking at a changed tree."""
+    RESUMES this phase's own thread, or mints one: re-entering a phase is one agent looking at a
+    changed tree."""
     dev_root = ctx.internal_root / "dev"
     item = _dev.read_work_item(dev_root, item_id) or {}
     # A read-only kind reads its own detached checkout; swapping here keeps every phase on one
@@ -194,10 +190,9 @@ async def _background_intake_run(ctx, context_id: str, item_id: str, item_dir: P
 async def run_background_resolve(ctx, context_id: str, item_id: str, worktree: Path,
                                 conflicts: list[str], model: str | None = None,
                                   effort: str | None = None) -> None:
-    """Drive one background turn that edits a conflicted merge's markers, then COMPLETE the merge
-    mechanically daemon-side — the agent never commits.
+    """Drive one turn that edits a conflicted merge's markers, then complete the merge daemon-side.
 
-    Success re-enters `vet`; failure pages the owner with the merge still in the tree."""
+    The agent never commits. Success re-enters `vet`, failure pages the owner."""
     dev_root = ctx.internal_root / "dev"
     # No `report_completion` mount: the outcome is mechanical (did the merge finish), never the
     # agent's claim.

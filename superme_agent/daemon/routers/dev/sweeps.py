@@ -23,10 +23,9 @@ router = APIRouter()
 
 @router.get("/dev/research/sweeps/families", response_model=SweepFamiliesResponse)
 async def dev_sweep_families() -> dict:
-    """The launch bar's buttons — a projection of the research-families registry.
+    """The launch bar's buttons, a projection of the research-families registry.
 
-    Read-only and repo-independent: which sweeps exist is a property of this harness. Adding a family
-    is a row in that registry."""
+    Repo-independent: which sweeps exist is a property of this harness."""
     return {"families": [
         {"family": f.slug, "icon": f.icon, "blurb": f.blurb, "asks_interest": f.asks_interest}
         for f in kind_profiles.standing_families()
@@ -40,8 +39,7 @@ async def dev_sweep_launch(body: SweepLaunchBody,
                            spine: SystemSpine = Depends(get_spine)) -> dict:
     """Launch a standing sweep: mint the item at `investigate`, then fire its first run.
 
-    An unknown family, or one that is not standing, is a 400 rather than a research item with no button
-    behind it."""
+    An unknown family is a 400, never a research item with no button behind it."""
     fam = kind_profiles.FAMILY_BY_SLUG.get(str(body.family))
     if fam is None:
         raise HTTPException(status_code=400, detail=f"unknown family: {body.family}")

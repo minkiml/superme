@@ -39,10 +39,9 @@ def _run(cmd: str, worktree: Path) -> tuple[int, str] | None:
 
 
 def dry_run(item_dir: Path, repo_dir: Path) -> list[dict]:
-    """Execute the `run:` blocks the PLAN has already written, and record NOTHING.
+    """Execute the `run:` blocks the PLAN has already written, and record nothing.
 
-    Not a shell: it runs only the strings already in plan.md. The planner is looking for a command that
-    cannot start at all."""
+    Not a shell: the planner is looking for a command that cannot start at all."""
     rows: list[dict] = []
     for c in runnable_checks(item_dir):
         got = _run(c["run"], repo_dir)
@@ -56,10 +55,9 @@ def dry_run(item_dir: Path, repo_dir: Path) -> list[dict]:
 
 
 def audit_validation(item_dir: Path, worktree: Path, *, cycle: int | None = None) -> list[dict]:
-    """Re-run the commands BUILD recorded this cycle and compare the machine to build's claim.
+    """Re-run the commands BUILD recorded and compare the machine to its claim.
 
-    Validation stays build's to run, but not build's alone to WITNESS: a green nobody re-derived is a
-    sentence the loop would advance on."""
+    Validation is build's to run but not build's alone to WITNESS."""
     claims: dict[str, dict] = {}
     for r in _arts.validation_runs(Path(item_dir), cycle=cycle):
         claims[r["command"]] = r
@@ -100,8 +98,7 @@ def execute(item_dir: Path, worktree: Path, *, skip: list[str] | None = None,
             title: str = "") -> list[dict]:
     """Run every runnable check and record each verdict, one row per check.
 
-    Exit status decides, with no interpretation step: a check whose pass condition needs interpreting
-    should not carry a `run:`."""
+    Exit status decides: a check whose pass condition needs interpreting should not carry a `run:`."""
     checks = runnable_checks(item_dir, skip=skip)
     if not checks:
         return []

@@ -5,11 +5,9 @@ from datetime import datetime
 from ...app_state import spine as _spine
 
 def build_item_timeline(context_id: str, item_id: str) -> dict:
-    """Every run this item has had, oldest-first, each tagged with its phase, role and model and
-    carrying its ordered turn events.
+    """Every run this item has had, oldest-first, each with its phase, role, model and turn events.
 
-    Chronological across phases, so the whole item reads as one conversation. Read-only mirror of
-    the run/run_event tables."""
+    Chronological across phases, so the whole item reads as one conversation."""
     runs = _spine.runs_for_item(context_id, item_id)
     out = []
     for r in runs:

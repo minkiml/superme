@@ -354,8 +354,8 @@ def _spawn_listener(cwd: Path) -> subprocess.Popen:
 def test_general_session_shell() -> None:
     """A general session's shell ASKS; it does not refuse.
 
-    The classifier can prove read-only or prove nothing, so refusing the unprovable refused reading
-    the project's own data. The file-WRITE tools still hard-deny: they name their target."""
+    The classifier can prove read-only or nothing, so refusing the unprovable refused reading the
+    project."""
     print("general-session shell (ask, don't refuse)")
     asked: list[str] = []
 
@@ -409,8 +409,7 @@ def test_general_session_shell() -> None:
 def test_denial_truth() -> None:
     """A denial is the agent's only account of what happened.
 
-    The three ways an ask can end must not share one sentence: a timed-out card reporting a
-    refusal invites the agent to invent a rule. Pins the SHAPES."""
+    A timed-out card reporting a refusal invites the agent to invent a rule. Pins the SHAPES."""
     print("denial messages — three endings, three facts")
     from superme_agent.core.permissions import (APPROVAL_UNANSWERED, NO_HUMAN_TO_ASK, deny_all,
                                                 learning_write_approve)
@@ -451,8 +450,7 @@ def test_denial_truth() -> None:
 def test_vet_env(repo: Path, tmp: Path) -> None:
     """`stop_vet_env` and its call site: removing the worktree takes everything but the PROCESS.
 
-    A server belongs to a worktree because its CWD is that worktree, never because a state file
-    remembers its pid."""
+    A server belongs to a worktree by its cwd, never because a state file remembers its pid."""
     wt = tmp / "novet"
     wt.mkdir()
     ok("empty dir → no servers found", G.servers_in(wt) == [])

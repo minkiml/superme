@@ -116,8 +116,7 @@ export interface paths {
          * Sessions List
          * @description SuperMe's own past CHANNELS for a context, newest first.
          *
-         *     ONE ROW PER WORK-ITEM, not per session: the owner addresses the ITEM, and the phase decides which
-         *     agent answers. A channel's `id` is an ADDRESS.
+         *     ONE ROW PER WORK-ITEM: the owner addresses the ITEM and the phase decides who answers.
          */
         get: operations["sessions_list_sessions_get"];
         put?: never;
@@ -147,9 +146,9 @@ export interface paths {
         post?: never;
         /**
          * Session Delete
-         * @description Delete a CHANNEL — the row as the owner sees it, so a work-item drops all its phase threads.
+         * @description Delete a CHANNEL, so a work-item drops all its phase threads.
          *
-         *     One tier only: a hard delete of the resumable material. Runs and token trace are PRESERVED.
+         *     One tier only: a hard delete of the resumable material. Runs and token trace are preserved.
          */
         delete: operations["session_delete_sessions__session_id__delete"];
         options?: never;
@@ -200,8 +199,7 @@ export interface paths {
          * Connect Repo
          * @description Connect a domain: register a new repo into the spine and seed its knowledge home.
          *
-         *     `kind` selects its onboarding front door. New dirs are created and must be empty; existing dirs
-         *     must already be a directory.
+         *     `kind` selects its onboarding front door. A new dir is created and must be empty.
          */
         post: operations["connect_repo_repos_post"];
         delete?: never;
@@ -222,11 +220,10 @@ export interface paths {
         post?: never;
         /**
          * Disconnect Repo
-         * @description Disconnect a domain — forget the project from SuperMe entirely. IRREVERSIBLE.
+         * @description Disconnect a domain, forgetting the project entirely. IRREVERSIBLE.
          *
-         *     Deletes the registration, knowledge home, harness cell, pipeline state and every session. The
-         *     project FOLDER is never touched. Run rows and dev events are preserved and stamped
-         *     `session_fate='disconnected'`.
+         *     Deletes the registration, knowledge home, harness cell, pipeline state and sessions. The project
+         *     FOLDER is never touched, and run rows are preserved.
          */
         delete: operations["disconnect_repo_repos__repo_id__delete"];
         options?: never;
@@ -243,10 +240,9 @@ export interface paths {
         };
         /**
          * System Auth
-         * @description Can SuperMe reach Anthropic? Surfaces gate every agent action on this.
+         * @description Can SuperMe reach Anthropic? Every surface gates its agent actions on this.
          *
-         *     Cached for a minute, because asking the Claude CLI spawns a process — `refresh=true` is
-         *     what a person clicks after signing in.
+         *     Cached for a minute, since asking the CLI spawns a process. `refresh=true` is the click.
          */
         get: operations["system_auth_system_auth_get"];
         put?: never;
@@ -439,11 +435,9 @@ export interface paths {
         put?: never;
         /**
          * Set System Deputy
-         * @description The global deputy dial: whether a deputy judges autopilot gates, and how readily it escalates PER
-         *     GATE.
+         * @description Whether a deputy judges autopilot gates, and how readily it escalates PER GATE.
          *
-         *     Partial — omitted fields stay put. Rejects an unknown gate or level rather than silently
-         *     defaulting.
+         *     Partial: omitted fields stay put. An unknown gate or level is rejected, never defaulted.
          */
         post: operations["set_system_deputy_system_deputy_post"];
         delete?: never;
@@ -592,10 +586,9 @@ export interface paths {
         put?: never;
         /**
          * Set Repo Git
-         * @description Set this repo's review mode and/or anchor branch.
+         * @description Set this repo's review mode and anchor branch, both read live at every decision point.
          *
-         *     Both are read LIVE at every decision point. An anchor naming a branch that does not exist is
-         *     accepted and reported back as an `error`.
+         *     An anchor naming a missing branch is accepted and reported back as an `error`.
          */
         post: operations["set_repo_git_repos__repo_id__git_post"];
         delete?: never;
@@ -613,10 +606,9 @@ export interface paths {
         };
         /**
          * Get Repo Branches
-         * @description This repo's local branches — the anchor picker's option set.
+         * @description This repo's local branches, the anchor picker's option set.
          *
-         *     Read live off git: the anchor REFUSES on a branch that does not exist, so a stale list would offer
-         *     a setting that fails at the next merge.
+         *     Read live off git, because a stale list would offer a setting that fails at the next merge.
          */
         get: operations["get_repo_branches_repos__repo_id__branches_get"];
         put?: never;
@@ -638,8 +630,9 @@ export interface paths {
         put?: never;
         /**
          * Set Repo Meta
-         * @description Set a repo's VISUAL tag: display color and/or icon (emoji). A field omitted (None) is left
-         *     unchanged; an empty string clears it (falls back to the hashed-palette default / no icon).
+         * @description Set a repo's VISUAL tag: display colour and icon.
+         *
+         *     None leaves a field unchanged; an empty string clears it back to the default.
          */
         post: operations["set_repo_meta_repos__repo_id__meta_post"];
         delete?: never;
@@ -732,8 +725,8 @@ export interface paths {
          * Dev Inbox Update
          * @description Edit an inbox item: status, kind, tag, text or title.
          *
-         *     A PUSHED row is immutable trace, since its content already moved into the work-item — flipping it
-         *     back to `open` would let a second push mint a duplicate.
+         *     A PUSHED row is immutable trace: flipping it back to `open` would let a second push duplicate
+         *     it.
          */
         patch: operations["dev_inbox_update_dev_inbox__item_id__patch"];
         trace?: never;
@@ -749,10 +742,10 @@ export interface paths {
         put?: never;
         /**
          * Dev Inbox Push
-         * @description Push an inbox item to the workspace — the owner's push.
+         * @description Push an inbox item to the workspace, the owner's push.
          *
-         *     One shared transaction: create the work-item at triage, MOVE the inbox content into it as
-         *     `preliminary/` while the row stays as trace, then fire the auto-triage run.
+         *     One transaction: create the item at triage, move the content in as `preliminary/`, fire
+         *     auto-triage.
          */
         post: operations["dev_inbox_push_dev_inbox__item_id__push_post"];
         delete?: never;
@@ -770,15 +763,16 @@ export interface paths {
         };
         /**
          * Dev Inbox Brief
-         * @description One row's handoff brief. Agent-filed rows carry one from birth; a bare capture has
-         *     none, and `content: null` says so rather than 404-ing — an absent brief is the state the
-         *     owner can still fill, not a missing resource.
+         * @description One row's handoff brief. Agent-filed rows carry one from birth.
+         *
+         *     `content: null` rather than a 404: an absent brief is a state the owner can still fill.
          */
         get: operations["dev_inbox_brief_dev_inbox__item_id__brief_get"];
         /**
          * Dev Inbox Brief Save
-         * @description Overwrite one open row's handoff brief, creating it when the row never had one. 409 once
-         *     the row is pushed — the brief is the item's provenance from the moment it lands there.
+         * @description Overwrite one open row's handoff brief, creating it when the row never had one.
+         *
+         *     409 once pushed: from that moment the brief is the item's provenance.
          */
         put: operations["dev_inbox_brief_save_dev_inbox__item_id__brief_put"];
         post?: never;
@@ -797,10 +791,9 @@ export interface paths {
         };
         /**
          * Dev Read
-         * @description A context's parsed dev knowledge (files) + inbox queue (DB) + the glance view.
+         * @description A context's parsed dev knowledge, inbox queue and glance view.
          *
-         *     `running` lists work-item ids with a background /plan turn in flight, so the cards can
-         *     show a live "planning…" state while a background agent works.
+         *     `running` lists items with a background plan turn in flight, so a card can show planning.
          */
         get: operations["dev_read_dev_get"];
         put?: never;
@@ -820,7 +813,7 @@ export interface paths {
         };
         /**
          * Dev Attention
-         * @description Every item in at most one bucket, by strict priority, derived from durable state at read time.
+         * @description Every item in at most one bucket, by strict priority, derived at read time.
          *
          *     `badge` is the top non-empty tier's colour and count, or null when nothing claims attention.
          */
@@ -842,11 +835,9 @@ export interface paths {
         };
         /**
          * Dev Workgraph
-         * @description The DERIVED work-graph projection: repo root, deliverables, work-items and unpushed inbox rows,
-         *     with their edges.
+         * @description The derived work-graph: repo root, deliverables, work-items, unpushed rows and their edges.
          *
-         *     Assembled on demand from the authoritative feeds — nothing stored. A cycle is REPORTED as data,
-         *     never a 500.
+         *     Assembled on demand, nothing stored. A cycle is reported as data, never a 500.
          */
         get: operations["dev_workgraph_dev_workgraph_get"];
         put?: never;
@@ -866,10 +857,9 @@ export interface paths {
         };
         /**
          * Dev Log
-         * @description The activity log — a SELECTIVE read over the events table, never a dump.
+         * @description The activity log, a SELECTIVE read over the events table rather than a dump.
          *
-         *     `scope` takes a stored scope or `repo`, which adds the item-scoped kinds that are milestones of the
-         *     PROJECT rather than steps inside one item.
+         *     `scope` takes a stored scope or `repo`, which adds the PROJECT's milestones.
          */
         get: operations["dev_log_dev_log_get"];
         put?: never;
@@ -957,9 +947,10 @@ export interface paths {
         };
         /**
          * Dev Harness Foundation
-         * @description SuperMe's repo-agnostic identity + machinery — the Foundations surface. SELF.md is WHO
-         *     (all modes); the per-mode charters are WHAT-MODE (hand-authored, editable). Plus the LEARNED
-         *     universal constitution (always-on rules the learning loop published), per mode.
+         * @description SuperMe's repo-agnostic identity and machinery.
+         *
+         *     SELF.md is WHO, the per-mode charters are WHAT-MODE, and the learned universal constitution is
+         *     what the learning loop published.
          */
         get: operations["dev_harness_foundation_dev_harness_foundation_get"];
         /**
@@ -984,8 +975,9 @@ export interface paths {
         };
         /**
          * Dev Harness Deputy
-         * @description This repo's deputy mandate — the standing bar the deputy judges gates against while the owner
-         *     is away. Seeded from a template on first read, so there is always a mandate to show/edit.
+         * @description This repo's deputy mandate, the bar it judges gates against while the owner is away.
+         *
+         *     Seeded from a template on first read, so there is always one to show.
          */
         get: operations["dev_harness_deputy_dev_harness_deputy_get"];
         /**
@@ -1010,9 +1002,9 @@ export interface paths {
         };
         /**
          * Dev Palette
-         * @description The chat "/" palette for a (context, mode): user-facing SuperMe skills for the active mode's
-         *     plugin set (category not in the hidden set), computed live from disk, merged with the context's
-         *     cached external/native commands.
+         * @description The chat "/" palette for a (context, mode).
+         *
+         *     Computed live from disk for the active mode's plugins, merged with the cached external commands.
          */
         get: operations["dev_palette_dev_palette_get"];
         put?: never;
@@ -1064,9 +1056,9 @@ export interface paths {
         head?: never;
         /**
          * Dev Harness Published Toggle
-         * @description Enable/disable a published artifact at runtime (no delete). Constitution flips its frontmatter
-         *     flag; a skill/agent moves between the live plugin tree and its `.disabled/` shadow. Effective on
-         *     the next dev turn.
+         * @description Enable or disable a published artifact at runtime. No delete.
+         *
+         *     A skill moves between the live plugin tree and its `.disabled/` shadow, effective next turn.
          */
         patch: operations["dev_harness_published_toggle_dev_harness_published__proposal_id__patch"];
         trace?: never;
@@ -1107,9 +1099,9 @@ export interface paths {
         head?: never;
         /**
          * Dev Harness Constitution Toggle
-         * @description Enable/disable ANY constitution by (scope, slug) — no proposal needed. A disabled constitution
-         *     leaves the always-on catalog AND becomes unpullable (both filter on `enabled`), so it is fully
-         *     inert. Effective on the next dev turn.
+         * @description Enable or disable any constitution by (scope, slug). No proposal needed.
+         *
+         *     A disabled one leaves the always-on catalog and becomes unpullable, so it is fully inert.
          */
         patch: operations["dev_harness_constitution_toggle_dev_harness_constitutions__slug__patch"];
         trace?: never;
@@ -1129,9 +1121,9 @@ export interface paths {
         get: operations["dev_harness_constitution_file_dev_harness_constitution_file_get"];
         /**
          * Dev Harness Constitution File Save
-         * @description Save edits to one constitution file (the popup's edit mode) — the full raw markdown, frontmatter
-         *     kept so `enabled`/`description` survive. Takes effect on the next dev turn (constitutions are read
-         *     per-turn); no daemon restart needed.
+         * @description Save edits to one constitution file, frontmatter kept so `enabled` survives.
+         *
+         *     Constitutions are read per turn, so it takes effect on the next one.
          */
         put: operations["dev_harness_constitution_file_save_dev_harness_constitution_file_put"];
         post?: never;
@@ -1150,9 +1142,9 @@ export interface paths {
         };
         /**
          * Dev Harness Assets
-         * @description The shared asset pool (opt-in constitutional knowledge, e.g. `sql-expert`), each flagged with
-         *     whether THIS repo has ADOPTED and ENABLED it. The pool is shared; adoption is per-repo (no body
-         *     copy). Onboarding auto-adopts the confidently-relevant ones; the owner curates from here.
+         * @description The shared asset pool, each flagged with whether THIS repo has adopted and enabled it.
+         *
+         *     The pool is shared and adoption is per-repo, so nothing copies a body.
          */
         get: operations["dev_harness_assets_dev_harness_assets_get"];
         put?: never;
@@ -1219,10 +1211,9 @@ export interface paths {
         put?: never;
         /**
          * Dev Work Item Run
-         * @description The owner's manual RUN — fire the current phase's own background run.
+         * @description The owner's manual RUN: fire the current phase's own background run.
          *
-         *     The manual driver for a repo not on autopilot; on autopilot every phase fires itself. Refusals
-         *     follow the same rule the drilldown's button reads.
+         *     For a repo not on autopilot, where every phase would otherwise fire itself.
          */
         post: operations["dev_work_item_run_dev_work_items__item_id__run_post"];
         delete?: never;
@@ -1242,10 +1233,9 @@ export interface paths {
         put?: never;
         /**
          * Dev Work Item Resume
-         * @description RESUME a work-item whose run STOPPED: re-fire the phase's own background run.
+         * @description RESUME a work-item whose run stopped: re-fire the phase's background run.
          *
-         *     Nothing is rewound — the branch, worktree and artifacts stand, only the run is new. Distinct from
-         *     Re-run, which throws the work away.
+         *     Nothing is rewound. Distinct from Re-run, which throws the work away.
          */
         post: operations["dev_work_item_resume_dev_work_items__item_id__resume_post"];
         delete?: never;
@@ -1267,8 +1257,7 @@ export interface paths {
          * Dev Work Item Rerun
          * @description RE-RUN: throw this item's work away and start it over in place. Destructive.
          *
-         *     Artifacts, reports, checkpoints and sessions are deleted and the worktree removed; the id, branch,
-         *     run rows and graph relations survive.
+         *     Artifacts, reports and sessions go; the id, branch, run rows and relations survive.
          */
         post: operations["dev_work_item_rerun_dev_work_items__item_id__rerun_post"];
         delete?: never;
@@ -1290,8 +1279,7 @@ export interface paths {
          * Dev Work Item Authorize
          * @description The owner's grant or deny on a deferred authorization at review.
          *
-         *     Both RECORD and route nothing: the item stays at review so every request can be resolved in any
-         *     order. `denied` also waives the blocked check. The owner grants unconditionally.
+         *     Records and routes nothing, so requests can be resolved in any order. `denied` waives the check.
          */
         post: operations["dev_work_item_authorize_dev_work_items__item_id__authorize_post"];
         delete?: never;
@@ -1311,10 +1299,9 @@ export interface paths {
         put?: never;
         /**
          * Dev Work Item Compact
-         * @description Compact NOW: run the full compaction sequence on this item's bound session — checkpoint first,
-         *     then `/compact`, then the verdict.
+         * @description Compact NOW: checkpoint, then `/compact`, then the verdict.
          *
-         *     409 without a session or while a run is in flight, since the sequence takes the run-lock itself.
+         *     409 without a session or with a run in flight, since the sequence takes the run-lock itself.
          */
         post: operations["dev_work_item_compact_dev_work_items__item_id__compact_post"];
         delete?: never;
@@ -1395,10 +1382,9 @@ export interface paths {
         };
         /**
          * Dev Work Item Artifacts
-         * @description The call-trail: every tool, sub-agent and skill this item's runs invoked, grouped by run.
+         * @description Every tool, sub-agent and skill this item's runs invoked, grouped by run.
          *
-         *     `runs` rides along so each group can say WHAT that run was — otherwise a header reads "Run #653"
-         *     and the owner has to guess.
+         *     `runs` rides along so a group can say what its run WAS, not just "Run #653".
          */
         get: operations["dev_work_item_artifacts_dev_work_items__item_id__artifacts_get"];
         put?: never;
@@ -1439,8 +1425,9 @@ export interface paths {
         };
         /**
          * Dev Work Item Run Input
-         * @description The ACTUAL input a past run sent — the exact system prompt and body captured at send time — as a
-         *     standalone HTML page. A friendly page renders when a run has no capture.
+         * @description The exact system prompt and body a past run sent, captured at send time, as an HTML page.
+         *
+         *     A friendly page renders when a run has no capture.
          */
         get: operations["dev_work_item_run_input_dev_work_items__item_id__runs__run_id__input_html_get"];
         put?: never;
@@ -1484,10 +1471,9 @@ export interface paths {
         get?: never;
         /**
          * Dev Work Item Doc Edit
-         * @description The owner hand-edits `brief.md` or `plan.md` — the item's two statements of INTENT.
+         * @description The owner hand-edits `brief.md` or `plan.md`, the item's two statements of INTENT.
          *
-         *     Refused on a LIVE run, a TERMINAL item, or text failing the artifact's self-check. A save stamps
-         *     `edited_by_owner`.
+         *     Refused on a live run, a terminal item, or text failing the artifact's self-check.
          */
         put: operations["dev_work_item_doc_edit_dev_work_items__item_id__doc_put"];
         post?: never;
@@ -1508,10 +1494,10 @@ export interface paths {
         put?: never;
         /**
          * Dev Prompt Extraction Run
-         * @description Fire a THROWAWAY prompt-extraction probe: a disposable work-item that runs the real lifecycle
+         * @description Fire a throwaway prompt-extraction probe: a disposable item that runs the real lifecycle
          *     unattended to capture each phase's input, then tears itself down.
          *
-         *     One at a time per repo. Returns the current probe state.
+         *     One at a time per repo.
          */
         post: operations["dev_prompt_extraction_run_dev_prompt_extraction_run_post"];
         delete?: never;
@@ -1552,10 +1538,9 @@ export interface paths {
         put?: never;
         /**
          * Dev Work Item Advance
-         * @description Approve → advance a work-item to its kind's next phase.
+         * @description Approve, and advance a work-item to its kind's next phase.
          *
-         *     Refuses at the final phase, on a terminal item, or with a run in flight. The advance also rests
-         *     the item `active`. The autopilot driver uses the same core.
+         *     Refuses at the final phase, on a terminal item, or with a run in flight. Autopilot shares the core.
          */
         post: operations["dev_work_item_advance_dev_work_items__item_id__advance_post"];
         delete?: never;
@@ -1575,10 +1560,9 @@ export interface paths {
         put?: never;
         /**
          * Dev Work Item Autopilot
-         * @description Enrol or un-enrol a work-item in autopilot — the per-item policy that drives its gates without a
-         *     click.
+         * @description Enrol or un-enrol a work-item in autopilot, the policy that drives its gates without a click.
          *
-         *     Allowed only PRE-BUILD: the last moment before code exists that flipping it is cheap.
+         *     Allowed only PRE-BUILD, the last moment when flipping it is cheap.
          */
         post: operations["dev_work_item_autopilot_dev_work_items__item_id__autopilot_post"];
         delete?: never;
@@ -1596,11 +1580,9 @@ export interface paths {
         };
         /**
          * Dev Work Item Git
-         * @description The item's live git state, derived at read time: branch and dir existence, dirty files, ahead and
-         *     behind versus the anchor, merged.
+         * @description The item's live git state, derived at read time.
          *
-         *     Also echoes the repo's `review_mode`, read live, so a mode flip applies to items already at
-         *     review.
+         *     `review_mode` is echoed live, so a mode flip applies to items already at review.
          */
         get: operations["dev_work_item_git_dev_work_items__item_id__git_get"];
         put?: never;
@@ -1622,10 +1604,9 @@ export interface paths {
         put?: never;
         /**
          * Dev Work Item Git Merge
-         * @description The review-gate merge as a raw route — a thin wrapper over the SAME body `advance_item` runs.
+         * @description The review-gate merge as a raw route, over the same body `advance_item` runs.
          *
-         *     Routes by topology: a blocking child merges into its parent's branch, everything else to the
-         *     trunk.
+         *     Routes by topology: a blocking child merges into its parent's branch, everything else to trunk.
          */
         post: operations["dev_work_item_git_merge_dev_work_items__item_id__git_merge_post"];
         delete?: never;
@@ -1664,8 +1645,9 @@ export interface paths {
         };
         /**
          * Dev Work Item Pr Diff
-         * @description One file's patches under one task group, fetched when the reader expands the row — a
-         *     branch's whole diff is the one thing a review page must not make them wait for.
+         * @description One file's patches under one task group, fetched when the reader expands the row.
+         *
+         *     A branch's whole diff is what a review page must not make them wait for.
          */
         get: operations["dev_work_item_pr_diff_dev_work_items__item_id__pr_diff_get"];
         put?: never;
@@ -1709,11 +1691,9 @@ export interface paths {
         put?: never;
         /**
          * Dev Work Item Git Resolve
-         * @description Resolve-with-agent: the human decides WHETHER, the agent resolves, and nobody hand-edits conflict
-         *     markers.
+         * @description The human decides WHETHER, the agent resolves, and nobody hand-edits conflict markers.
          *
-         *     Re-runs the sync leaving conflicts in the worktree, then fires a background resolution run. The
-         *     daemon completes the merge mechanically.
+         *     Re-runs the sync leaving conflicts in the worktree, then fires a resolution run.
          */
         post: operations["dev_work_item_git_resolve_dev_work_items__item_id__git_resolve_post"];
         delete?: never;
@@ -1731,9 +1711,9 @@ export interface paths {
         };
         /**
          * Dev Work Item Report
-         * @description One phase's user-facing report for the Reports tab: the markdown 1:1, plus the path
-         *     to the agent-facing contract behind it. 404 when that phase wrote none — the tab greys
-         *     itself from the drilldown rather than probing.
+         * @description One phase's user-facing report, plus the path to the contract behind it.
+         *
+         *     404 when that phase wrote none, so the tab greys itself rather than probing.
          */
         get: operations["dev_work_item_report_dev_work_items__item_id__report__phase__get"];
         put?: never;
@@ -1755,16 +1735,14 @@ export interface paths {
          * Dev Work Item Owner Input
          * @description What the owner has written into the one section of the item that is theirs.
          *
-         *     Never 404s on a missing brief: `exists: false` tells the editor triage has not written one yet,
-         *     which is not a broken read.
+         *     Never 404s: `exists: false` says triage has not written a brief yet.
          */
         get: operations["dev_work_item_owner_input_dev_work_items__item_id__from_you_get"];
         /**
          * Dev Work Item Set Owner Input
          * @description Save the owner's own section, replacing it whole and leaving the rest untouched.
          *
-         *     HUMAN-ONLY: there is no agent tool behind it, because the value of the section is that an agent did
-         *     not write it.
+         *     HUMAN-ONLY: the value of the section is that an agent did not write it.
          */
         put: operations["dev_work_item_set_owner_input_dev_work_items__item_id__from_you_put"];
         post?: never;
@@ -1808,10 +1786,9 @@ export interface paths {
         put?: never;
         /**
          * Dev Work Item Abandon
-         * @description Abandon a work-item — HUMAN-ONLY, legal from any non-terminal phase.
+         * @description Abandon a work-item. Human-only, legal from any non-terminal phase.
          *
-         *     Ordered and each step idempotent: end live runs, remove the worktree, write the abandon note, set
-         *     the terminal status, resume a paused parent.
+         *     Ordered and each step idempotent, ending with resuming a paused parent.
          */
         post: operations["dev_work_item_abandon_dev_work_items__item_id__abandon_post"];
         delete?: never;
@@ -1829,10 +1806,9 @@ export interface paths {
         };
         /**
          * Dev Sweep Families
-         * @description The launch bar's buttons — a projection of the research-families registry.
+         * @description The launch bar's buttons, a projection of the research-families registry.
          *
-         *     Read-only and repo-independent: which sweeps exist is a property of this harness. Adding a family
-         *     is a row in that registry.
+         *     Repo-independent: which sweeps exist is a property of this harness.
          */
         get: operations["dev_sweep_families_dev_research_sweeps_families_get"];
         put?: never;
@@ -1856,8 +1832,7 @@ export interface paths {
          * Dev Sweep Launch
          * @description Launch a standing sweep: mint the item at `investigate`, then fire its first run.
          *
-         *     An unknown family, or one that is not standing, is a 400 rather than a research item with no button
-         *     behind it.
+         *     An unknown family is a 400, never a research item with no button behind it.
          */
         post: operations["dev_sweep_launch_dev_research_sweeps_post"];
         delete?: never;
@@ -1898,9 +1873,9 @@ export interface paths {
         };
         /**
          * Dev Memory Rollup
-         * @description The Learning tile drill-in: per-repo counts of captured candidates + published/learned
-         *     artifacts, each split dev/core. Learned is counted the SAME way `/dev/memory/stats` does
-         *     (published proposals reconciled with on-disk presence) so the numbers reconcile across surfaces.
+         * @description Per-repo counts of captured candidates and published artifacts, each split dev and core.
+         *
+         *     Learned is counted the same way `/dev/memory/stats` does, so the surfaces reconcile.
          */
         get: operations["dev_memory_rollup_dev_memory_rollup_get"];
         put?: never;
@@ -1924,8 +1899,7 @@ export interface paths {
          * Dev Memory Distill
          * @description Fire a background distill pass over the candidate pool.
          *
-         *     One pass per repo and scope at a time, guarded by a spine query rather than a shadow set. Returns
-         *     immediately; poll the stats for completion.
+         *     One pass per repo and scope, guarded by a spine query rather than a shadow set.
          */
         post: operations["dev_memory_distill_dev_memory_distill_post"];
         delete?: never;
@@ -1945,11 +1919,9 @@ export interface paths {
         put?: never;
         /**
          * Dev Sweep
-         * @description Ops hook: force a capture sweep over ONE named session, run to completion so the caller gets the
-         *     result.
+         * @description Force a capture sweep over ONE named session, run to completion.
          *
-         *     The everyday triggers are automatic; this is the by-id escape hatch, and the only caller that
-         *     supplies `focus`.
+         *     The everyday triggers are automatic; this is the by-id escape hatch.
          */
         post: operations["dev_sweep_dev_sweep_post"];
         delete?: never;
@@ -2011,9 +1983,9 @@ export interface paths {
         };
         /**
          * Memory Proposal Execution
-         * @description The proposal's execution trace — its lifecycle timeline, reused from the `events` table
-         *     (`meta.proposal_id`): approve → write.start/end (the forge run) → artifact edits → publish. A
-         *     synthetic head marks where distill filed it. Oldest-first; the gate-2 modal's Execution tab.
+         * @description The proposal's lifecycle timeline, reused from the `events` table.
+         *
+         *     Approve, the forge run, artifact edits, publish. A synthetic head marks where distill filed it.
          */
         get: operations["memory_proposal_execution_dev_memory_proposals__proposal_id__execution_get"];
         put?: never;
@@ -2035,10 +2007,9 @@ export interface paths {
         put?: never;
         /**
          * Memory Proposal Approve
-         * @description GATE 1 — the owner approves the proposal's INTENT and answers distill's questions.
+         * @description GATE 1: the owner approves the proposal's INTENT and answers distill's questions.
          *
-         *     Validates the form and scope, records the answers, and fires a background WRITE run that authors
-         *     the artifact and stages it for gate 2.
+         *     Fires a background write run that authors the artifact and stages it for gate 2.
          */
         post: operations["memory_proposal_approve_dev_memory_proposals__proposal_id__approve_post"];
         delete?: never;
@@ -2102,10 +2073,9 @@ export interface paths {
         put?: never;
         /**
          * Memory Proposal Reject
-         * @description The owner REJECTS a proposal: this framing is wrong, but the observation may still matter.
+         * @description The owner REJECTS a proposal: this framing is wrong, the observation may still matter.
          *
-         *     Marks it `rejected` and re-queues its source candidates, so a later distill pass can reframe them.
-         *     To stop re-suggestion, use DROP.
+         *     Re-queues its source candidates so a later pass can reframe them. To stop re-suggestion, drop.
          */
         post: operations["memory_proposal_reject_dev_memory_proposals__proposal_id__reject_post"];
         delete?: never;
@@ -2125,10 +2095,9 @@ export interface paths {
         put?: never;
         /**
          * Memory Proposal Drop
-         * @description Owner DROPS a proposal — this is noise, stop suggesting it.
+         * @description The owner DROPS a proposal: this is noise, stop suggesting it.
          *
-         *     Marks the proposal and its source candidates `dropped`, the negative signal the learning
-         *     loop reads. Unlike reject, dropped candidates are never re-queued.
+         *     Unlike reject, dropped candidates are never re-queued.
          */
         post: operations["memory_proposal_drop_dev_memory_proposals__proposal_id__drop_post"];
         delete?: never;
@@ -2166,9 +2135,9 @@ export interface paths {
         };
         /**
          * Dev Project Status
-         * @description Whether this project's memory is established (its PRD defines ≥1 deliverable) + the doc-set
-         *     presence flags + the connect-time onboarding choice. The dev workspace gates on `established`:
-         *     false ⇒ show the onboarding front door, launching `onboard_mode` when it's set.
+         * @description Whether this project's memory is established, with the doc-set flags and onboarding choice.
+         *
+         *     The workspace gates on `established`: false shows the onboarding front door.
          */
         get: operations["dev_project_status_dev_project_status_get"];
         put?: never;
@@ -2212,9 +2181,9 @@ export interface paths {
         };
         /**
          * Dev Verification Library
-         * @description This repo's verification library: the standing entries every
-         *     implementation plan inherits, and the available ones a plan cites by id. A repo with no library
-         *     reads as two empty lists — the correct starting state, never an error.
+         * @description This repo's standing entries and the available ones a plan cites by id.
+         *
+         *     A repo with no library reads as two empty lists, the correct starting state.
          */
         get: operations["dev_verification_library_dev_verification_get"];
         put?: never;
@@ -2267,9 +2236,9 @@ export interface paths {
         head?: never;
         /**
          * Dev Verification Move
-         * @description Promote an entry to standing, or demote it back to available. The OWNER'S call and nobody
-         *     else's: a standing entry taxes every future item in this repo, which is a spending decision and
-         *     the one brake on the library accreting.
+         * @description Promote an entry to standing, or demote it back. The OWNER'S call.
+         *
+         *     A standing entry taxes every future item, which is the one brake on the library accreting.
          */
         patch: operations["dev_verification_move_dev_verification__entry_id__patch"];
         trace?: never;
@@ -2304,8 +2273,9 @@ export interface paths {
         };
         /**
          * Dev Portrait
-         * @description The project PORTRAIT — what this project is, in six bands, one per anchor doc. Read-only and
-         *     derived on every call: the docs are the store, this is just the shape the view needs.
+         * @description What this project is, in six bands, one per anchor doc.
+         *
+         *     Read-only and derived per call: the docs are the store, this is the shape the view needs.
          */
         get: operations["dev_portrait_dev_portrait_get"];
         put?: never;
@@ -2325,8 +2295,9 @@ export interface paths {
         };
         /**
          * Dev Lint
-         * @description Health of this project's general knowledge, as findings the owner can act on — not a document
-         *     to read. Derived fresh on every call, so the lint itself can never be stale.
+         * @description Health of this project's general knowledge, as findings the owner can act on.
+         *
+         *     Derived fresh on every call, so the lint itself can never be stale.
          */
         get: operations["dev_lint_dev_lint_get"];
         put?: never;
@@ -2383,9 +2354,9 @@ export interface components {
         };
         /**
          * AboutRow
-         * @description One row of `About this work-item` — what this item IS, in the owner's own framing.
+         * @description One row of `About this work-item`, in the owner's own framing.
          *
-         *     A LIST, not an object: the order is the meaning, and an empty row is dropped server-side.
+         *     A LIST, not an object: the order is the meaning. An empty row is dropped server-side.
          */
         AboutRow: {
             /** Label */
@@ -2649,10 +2620,9 @@ export interface components {
         };
         /**
          * AttentionCard
-         * @description The what-you-need-to-do card, in three connected parts: WHY, DO (the exact act and the one
-         *     control that performs it), and BASIS.
+         * @description The what-you-need-to-do card in three parts: WHY, DO, and BASIS.
          *
-         *     None when nothing needs the owner — the card is hidden entirely, never an empty shell.
+         *     None when nothing needs the owner, so the card is hidden rather than empty.
          */
         AttentionCard: {
             /** Kind */
@@ -2801,9 +2771,9 @@ export interface components {
         };
         /**
          * BlockingChild
-         * @description One open sub-item the parent is waiting on, resolved to something the owner can read and go to.
+         * @description One open sub-item the parent waits on, resolved to something the owner can read and go to.
          *
-         *     `close_readiness` reports these as joined ids, which names a thing without saying what it is.
+         *     A joined id names a thing without saying what it is.
          */
         BlockingChild: {
             /** Id */
@@ -2898,9 +2868,9 @@ export interface components {
         };
         /**
          * CategoryNode
-         * @description One node of the semantic tree: a category total, its per-feature amounts, and how it should READ.
+         * @description One node of the semantic tree: a category total, its per-feature amounts, and how it reads.
          *
-         *     `label` and `collapsed` are taxonomy decisions carried here, so no renderer has to re-make them.
+         *     `label` and `collapsed` are taxonomy decisions, so no renderer re-makes them.
          */
         CategoryNode: {
             /**
@@ -3282,7 +3252,7 @@ export interface components {
          * @description One control, with its activation decided SERVER-SIDE.
          *
          *     `reason` is populated either way: greyed it says what would make it live, live it says what
-         *     clicking does. `home` places it. Never hide a control — an absent one explains nothing.
+         *     clicking does.
          */
         DrilldownAction: {
             /** Id */
@@ -3300,8 +3270,7 @@ export interface components {
          * DrilldownResponse
          * @description Everything the work-item drilldown renders, computed once per poll.
          *
-         *     One route instead of four, and one computation of the gate's checks — shared with the deputy, so
-         *     the owner can still check its call.
+         *     One computation of the gate's checks, shared with the deputy, so the owner can check its call.
          */
         DrilldownResponse: {
             /** Id */
@@ -3341,9 +3310,10 @@ export interface components {
         };
         /**
          * EvalMetrics
-         * @description The artifact's own run cost on a synthetic task (forge_kit/eval.py). kind 'run' = skill/agent
-         *     measured once; kind 'overhead' = constitution's always-on per-turn cost. Tolerant of pre-metrics
-         *     and error rows (everything optional, extra='allow' for forward-compat).
+         * @description The artifact's own run cost on a synthetic task.
+         *
+         *     `run` measures a skill once; `overhead` is a constitution's always-on per-turn cost. Every field
+         *     is optional.
          */
         EvalMetrics: {
             /** Kind */
@@ -3373,8 +3343,7 @@ export interface components {
          * EvalReport
          * @description A proposal's gate-2 eval report, stored on the row.
          *
-         *     Versioned via `schema_version`, and tolerant of legacy reports: every field is optional, so an older
-         *     or richer one never 500s a read.
+         *     Every field is optional, so an older or richer report never 500s a read.
          */
         EvalReport: {
             /** Schema Version */
@@ -3496,10 +3465,9 @@ export interface components {
         };
         /**
          * GateCheck
-         * @description One mechanical row of a gate's evaluation — computed from durable state, never a claim.
+         * @description One mechanical row of a gate's evaluation, computed from durable state rather than claimed.
          *
-         *     `blocking` is the must-resolve marker: a failing blocking check greys Approve, and every other row
-         *     is a named, visible fact.
+         *     `blocking` is the must-resolve marker: a failing one greys Approve.
          */
         GateCheck: {
             /** Criterion */
@@ -3798,10 +3766,9 @@ export interface components {
         };
         /**
          * InboxBriefResponse
-         * @description One row's handoff brief — the cold-start context the item it becomes reads first.
+         * @description One row's handoff brief, the cold-start context the item it becomes reads first.
          *
-         *     `content` is null when none was filed, which is legal. `editable` is false once pushed: the brief
-         *     has become provenance.
+         *     `editable` is false once pushed: the brief has become provenance.
          */
         InboxBriefResponse: {
             /** Id */
@@ -4092,9 +4059,10 @@ export interface components {
         };
         /**
          * LibraryEntry
-         * @description One proven check the repo keeps. `standing` entries are attached to every implementation
-         *     item's plan; `available` ones are cited by id. Same fields as a plan's check, because a plan
-         *     inherits the entry verbatim.
+         * @description One proven check the repo keeps.
+         *
+         *     `standing` attaches to every implementation plan, `available` is cited by id. A plan inherits it
+         *     verbatim.
          */
         LibraryEntry: {
             /** Id */
@@ -4228,10 +4196,9 @@ export interface components {
         };
         /**
          * NowStrip
-         * @description What is happening right now: the live phase and cycle, and what that phase concluded.
+         * @description The live phase and cycle, and what that phase concluded.
          *
-         *     The phase name and the running dot already answer "where is this", so no event sentence rides
-         *     here.
+         *     The phase name and the running dot already say where this is, so no event sentence rides here.
          */
         NowStrip: {
             /** Phase */
@@ -4277,8 +4244,9 @@ export interface components {
         };
         /**
          * OwnerInputBody
-         * @description The owner's `## From you` section, whole. Add and delete are both a PUT of the full slot
-         *     lists, because the owner is its only writer and no concurrent edit needs protecting.
+         * @description The owner's `## From you` section, whole.
+         *
+         *     Add and delete are both a PUT of the full lists, since the owner is its only writer.
          */
         OwnerInputBody: {
             /**
@@ -4299,10 +4267,9 @@ export interface components {
         };
         /**
          * OwnerInputResponse
-         * @description The one section of any report the OWNER writes, read back from disk after every save.
+         * @description The one section of any report the OWNER writes, re-read from disk after every save.
          *
-         *     SLOTS, not prose: one reference and one note per entry, so each can be added and removed on its
-         *     own.
+         *     SLOTS, not prose, so each entry can be added and removed on its own.
          */
         OwnerInputResponse: {
             /** Exists */
@@ -4354,8 +4321,9 @@ export interface components {
         };
         /**
          * PagedNotice
-         * @description Why an item is parked for the owner when it is not a plain gate wait — an escalation, a build⟷vet
-         *     halt, or a blocked run. None means a normal gate.
+         * @description Why an item is parked when it is not a plain gate wait.
+         *
+         *     An escalation, a build⟷vet halt, or a blocked run. None means a normal gate.
          */
         PagedNotice: {
             /** Source */
@@ -4380,8 +4348,7 @@ export interface components {
         };
         /**
          * PhaseReportResponse
-         * @description One phase's user-facing report for the Reports tab: the markdown 1:1, plus the path to the full
-         *     agent-facing contract behind it.
+         * @description One phase's user-facing report, plus the path to the agent-facing contract behind it.
          *
          *     The report is the compact read; the contract is one click away, never pasted in.
          */
@@ -4558,9 +4525,9 @@ export interface components {
         };
         /**
          * PortraitGoals
-         * @description project-prd. `now` must be specific; `direction` is allowed to be directional — the horizon
-         *     split dissolves the vision-vs-concreteness argument instead of losing it. Non-goals carry equal
-         *     weight: what a project refuses is as defining as what it pursues.
+         * @description The PRD's goals. `now` must be specific; `direction` may be directional.
+         *
+         *     Non-goals carry equal weight: what a project refuses is as defining as what it pursues.
          */
         PortraitGoals: {
             /**
@@ -4638,8 +4605,9 @@ export interface components {
         };
         /**
          * PrCommit
-         * @description One commit as the walkthrough shows it. `body` has the SuperMe trailer block stripped —
-         *     that block is what put the commit in this group, so repeating it inside would be noise.
+         * @description One commit as the walkthrough shows it.
+         *
+         *     `body` has the SuperMe trailer stripped: that block is what put the commit in this group.
          */
         PrCommit: {
             /** Sha */
@@ -4669,8 +4637,9 @@ export interface components {
         };
         /**
          * PrFile
-         * @description One file inside a task group, with the churn that group put on it (summed over the group's
-         *     commits, which is what ranks it — the biggest change is where the risk is).
+         * @description One file inside a task group, with the churn that group put on it.
+         *
+         *     Summed over the group's commits, because the biggest change is where the risk is.
          */
         PrFile: {
             /** Path */
@@ -4682,9 +4651,9 @@ export interface components {
         };
         /**
          * PrGroup
-         * @description One task's slice of the branch. `task` is null for commits with no trailer; they are shown last.
+         * @description One task's slice of the branch. `task` is null for commits with no trailer.
          *
-         *     The four fields below the diff are the REVIEW NOTES, per TASK rather than per file.
+         *     The four fields below the diff are the REVIEW NOTES, per task rather than per file.
          */
         PrGroup: {
             /** Task */
@@ -4733,8 +4702,9 @@ export interface components {
         };
         /**
          * PrStat
-         * @description Header numbers: commit COUNT over the fork point, and the NET diff that actually lands
-         *     (not the sum of per-commit churn — a line written in t1 and rewritten in t3 lands once).
+         * @description Header numbers: commit count over the fork point, and the NET diff that lands.
+         *
+         *     Not the sum of per-commit churn: a line written and rewritten lands once.
          */
         PrStat: {
             /** Commits */
@@ -4791,8 +4761,7 @@ export interface components {
          * ProjectStatusResponse
          * @description Whether this project's memory is established.
          *
-         *     The dev workspace gates on it: an un-established repo shows the onboarding front door instead of the
-         *     work tabs. A null `onboard_mode` means the landing offers both paths.
+         *     An un-established repo shows the onboarding front door instead of the work tabs.
          */
         ProjectStatusResponse: {
             /** Established */
@@ -4842,8 +4811,7 @@ export interface components {
          * ProofRow
          * @description One row per BUILT THING, each carrying its own validation and verification.
          *
-         *     The join key is the plan task id. `task: ""` is the item-wide row where untagged content lands, so
-         *     nothing is dropped and nothing is guessed at.
+         *     `task: ""` is the item-wide row where untagged content lands, so nothing is dropped.
          */
         ProofRow: {
             /** Task */
@@ -4868,8 +4836,7 @@ export interface components {
          * ProofVerdict
          * @description One check of the plan's exam: what it will prove, and where it stands.
          *
-         *     `ran` False means the loop has not reached it, so an owner approving a plan sees the proof they
-         *     approve. `result` is verbatim.
+         *     `ran` False means the loop has not reached it, so approving a plan shows the proof.
          */
         ProofVerdict: {
             /** Check */
@@ -4947,10 +4914,10 @@ export interface components {
         };
         /**
          * Proposal
-         * @description A memory proposal — a rich DB row with JSON columns.
+         * @description A memory proposal, a rich DB row with JSON columns.
          *
-         *     The declared fields document the stable shape; `extra='allow'` carries the rest. The enums are
-         *     locked, because their producer coerces to exactly those sets.
+         *     The declared fields document the stable shape. The enums are locked, since the producer coerces
+         *     to them.
          */
         Proposal: {
             /** Id */
@@ -5199,8 +5166,7 @@ export interface components {
         };
         /**
          * RepoBranchesResponse
-         * @description The anchor picker's option set: this repo's local branches, newest-committed first, work-item
-         *     branches excluded.
+         * @description This repo's local branches, newest first, work-item branches excluded.
          *
          *     `anchor` is what the anchor resolves to now, so the picker can show the branch in USE.
          */
@@ -5299,8 +5265,8 @@ export interface components {
          * RepoGitResponse
          * @description The repo's two git knobs after a write.
          *
-         *     `resolved_anchor` is what `anchor_branch` points at now; `error` when the configured branch does
-         *     not exist, which every git site refuses rather than falling back.
+         *     `error` when the configured branch does not exist, which every git site refuses rather than
+         *     falling back.
          */
         RepoGitResponse: {
             /** Ok */
@@ -5502,9 +5468,9 @@ export interface components {
         };
         /**
          * RunEventRow
-         * @description One entry of a run's event trail: a prompt, a reply block, a call, or that call's result.
+         * @description One entry of a run's event trail: a prompt, a reply, a call, or its result.
          *
-         *     `tool_id` pairs a result back to its call; `parent_tool_id` names the spawn a row happened inside.
+         *     `tool_id` pairs a result to its call, `parent_tool_id` names the spawn it sat inside.
          */
         RunEventRow: {
             /** Id */
@@ -5741,8 +5707,7 @@ export interface components {
          * SpawnedFrom
          * @description The provenance edge, child-side: which item this one branched off and how.
          *
-         *     `blocking` and `parallel` are real children that gate the parent's completion; `spawn` is
-         *     provenance only. Exactly one origin edge per item.
+         *     `blocking` and `parallel` gate the parent's completion; `spawn` is provenance only.
          */
         SpawnedFrom: {
             /** Item */

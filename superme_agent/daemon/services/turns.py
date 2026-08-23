@@ -31,10 +31,9 @@ class ResilientTurn:
         self.attempts = 0          # completed attempts, so 1 after a clean first try
 
     async def stream(self, agent, ctx, prompt: str, **kw) -> AsyncIterator:
-        """Yield the turn's events, re-attempting an attempt that failed having done nothing.
+        """Yield the turn's events, re-attempting one that failed having done nothing.
 
-        Registers the task against the item here rather than in each runner, so the stall
-        watchdog has something to cancel."""
+        Registers the task against the item here, so the stall watchdog has something to cancel."""
         watch = run_tasks.register(getattr(ctx, "id", ""), self.item_id)
         try:
             async for ev in self._attempts(agent, ctx, prompt, **kw):

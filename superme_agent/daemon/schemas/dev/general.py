@@ -23,8 +23,7 @@ class GeneralDocsResponse(BaseModel):
 class ProjectStatusResponse(BaseModel):
     """Whether this project's memory is established.
 
-    The dev workspace gates on it: an un-established repo shows the onboarding front door instead of the
-    work tabs. A null `onboard_mode` means the landing offers both paths."""
+    An un-established repo shows the onboarding front door instead of the work tabs."""
     established: bool
     onboard_mode: str | None = None
     docs: list[GeneralDoc]
@@ -48,9 +47,10 @@ class GeneralDocSaveResponse(BaseModel):
 # --- the verification library ---------------------------
 
 class LibraryEntry(BaseModel):
-    """One proven check the repo keeps. `standing` entries are attached to every implementation
-    item's plan; `available` ones are cited by id. Same fields as a plan's check, because a plan
-    inherits the entry verbatim."""
+    """One proven check the repo keeps.
+
+    `standing` attaches to every implementation plan, `available` is cited by id. A plan inherits it
+    verbatim."""
     id: str
     tier: str
     proves: str = ""
@@ -145,9 +145,9 @@ class PortraitIdentity(BaseModel):
 
 
 class PortraitGoals(BaseModel):
-    """project-prd. `now` must be specific; `direction` is allowed to be directional — the horizon
-    split dissolves the vision-vs-concreteness argument instead of losing it. Non-goals carry equal
-    weight: what a project refuses is as defining as what it pursues."""
+    """The PRD's goals. `now` must be specific; `direction` may be directional.
+
+    Non-goals carry equal weight: what a project refuses is as defining as what it pursues."""
     now: list[str] = []
     direction: list[str] = []
     non_goals: list[str] = []

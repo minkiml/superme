@@ -51,11 +51,9 @@ class ModelOps:
                 or self.effective_system_model())
 
     def role_model(self, repo_id: str, role: str, *, item_model: str | None = None) -> str:
-        """The model a named ROLE runs on: the item's pick → this repo's tier for that role →
-        the floor.
+        """The model a named ROLE runs on: the item's pick, this repo's tier, then the floor.
 
-        The project's default is deliberately absent: a judge inheriting the worker's tier is not an
-        independent check."""
+        The project default is absent: a judge inheriting the worker's tier is no check."""
         return item_model or self.get_model_override(repo_id, role) or self.effective_system_model()
 
     # --- per-agent model (the autonomous background sub-agents; owner-tunable) ------------------

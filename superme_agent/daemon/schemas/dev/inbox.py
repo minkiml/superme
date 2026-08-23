@@ -54,10 +54,9 @@ class InboxDeleteResponse(BaseModel):
 
 
 class InboxBriefResponse(BaseModel):
-    """One row's handoff brief — the cold-start context the item it becomes reads first.
+    """One row's handoff brief, the cold-start context the item it becomes reads first.
 
-    `content` is null when none was filed, which is legal. `editable` is false once pushed: the brief
-    has become provenance."""
+    `editable` is false once pushed: the brief has become provenance."""
     id: int
     content: str | None = None
     editable: bool

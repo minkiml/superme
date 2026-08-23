@@ -37,8 +37,7 @@ def unsubscribe(item_id: str, q: asyncio.Queue) -> None:
 def publish(item_id: str, frame: dict) -> None:
     """Fan `frame` out to every panel watching `item_id`.
 
-    Non-blocking and best-effort: a full queue drops the frame, and the panel's history refresh fills
-    the gap, so a slow consumer can never backpressure the run."""
+    Best-effort: a full queue drops the frame, so a slow consumer cannot backpressure the run."""
     subs = _subscribers.get(str(item_id))
     if not subs:
         return

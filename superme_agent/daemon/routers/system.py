@@ -454,7 +454,7 @@ async def set_repo_git(repo_id: str, body: RepoGitBody,
                        spine: SystemSpine = Depends(get_spine)) -> dict:
     """Set this repo's review mode and anchor branch, both read live at every decision point.
 
-    An anchor naming a branch that does not exist is accepted and reported back as an `error`."""
+    An anchor naming a missing branch is accepted and reported back as an `error`."""
     patch = {k: v for k, v in body.model_dump().items() if v is not None}
     try:
         rc = spine.update_repo(repo_id, **patch) if patch else spine.repo(repo_id)

@@ -53,8 +53,8 @@ async def dev_inbox_add(body: InboxBody, dev_store: DevStore = Depends(get_dev_s
 async def dev_inbox_update(item_id: int, body: InboxPatch, dev_store: DevStore = Depends(get_dev_store)) -> dict:
     """Edit an inbox item: status, kind, tag, text or title.
 
-    A PUSHED row is immutable trace, since its content already moved into the work-item — flipping it
-    back to `open` would let a second push mint a duplicate."""
+    A PUSHED row is immutable trace: flipping it back to `open` would let a second push duplicate
+    it."""
     cur = dev_store.get_inbox(item_id)
     if cur is None:
         raise HTTPException(status_code=404, detail="inbox item not found")
@@ -81,10 +81,10 @@ async def dev_inbox_push(item_id: int, body: InboxPushBody,
                          dev_store: DevStore = Depends(get_dev_store),
                          dev: DevKnowledgeService = Depends(get_dev),
                          spine: SystemSpine = Depends(get_spine)) -> dict:
-    """Push an inbox item to the workspace — the owner's push.
+    """Push an inbox item to the workspace, the owner's push.
 
-    One shared transaction: create the work-item at triage, MOVE the inbox content into it as
-    `preliminary/` while the row stays as trace, then fire the auto-triage run."""
+    One transaction: create the item at triage, move the content in as `preliminary/`, fire
+    auto-triage."""
     rows = dev_store.list_inbox(body.context_id)
     row = next((r for r in rows if r["id"] == item_id), None)
     if row is None:
@@ -128,9 +128,9 @@ async def dev_inbox_delete(item_id: int, dev_store: DevStore = Depends(get_dev_s
 
 @router.get("/dev/inbox/{item_id}/brief", response_model=InboxBriefResponse)
 async def dev_inbox_brief(item_id: int, dev_store: DevStore = Depends(get_dev_store)) -> dict:
-    """One row's handoff brief. Agent-filed rows carry one from birth; a bare capture has
-    none, and `content: null` says so rather than 404-ing — an absent brief is the state the
-    owner can still fill, not a missing resource."""
+    """One row's handoff brief. Agent-filed rows carry one from birth.
+
+    `content: null` rather than a 404: an absent brief is a state the owner can still fill."""
     row = dev_store.get_inbox(item_id)
     if row is None:
         raise HTTPException(status_code=404, detail="inbox item not found")
@@ -143,8 +143,9 @@ async def dev_inbox_brief(item_id: int, dev_store: DevStore = Depends(get_dev_st
 @router.put("/dev/inbox/{item_id}/brief", response_model=InboxBriefSaveResponse)
 async def dev_inbox_brief_save(item_id: int, body: InboxBriefBody,
                                dev_store: DevStore = Depends(get_dev_store)) -> dict:
-    """Overwrite one open row's handoff brief, creating it when the row never had one. 409 once
-    the row is pushed — the brief is the item's provenance from the moment it lands there."""
+    """Overwrite one open row's handoff brief, creating it when the row never had one.
+
+    409 once pushed: from that moment the brief is the item's provenance."""
     row = dev_store.get_inbox(item_id)
     if row is None:
         raise HTTPException(status_code=404, detail="inbox item not found")

@@ -227,8 +227,7 @@ def test_tool_autopush(tmp: Path) -> None:
 def test_push_tool(tmp: Path) -> None:
     """The general session's OPERATE act: start an item the owner points at.
 
-    The refusals matter as much as the happy path — an agent that can start work has to be
-    unable to start the wrong work."""
+    An agent that can start work has to be unable to start the wrong work."""
     print("push_inbox_item tool (general-session path)")
     store = DevStore(tmp / "push.db")
     dev = DevKnowledgeService()

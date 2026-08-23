@@ -44,9 +44,10 @@ def skill_text(phase: str) -> str:
 
 
 def tools_named_by(phase: str) -> set[str]:
-    """Registered tool names this skill mentions. Intersecting with the catalogue is what keeps
-    this precise: a skill's prose is full of backticked words, and only the ones that are real
-    tools are claims about what the run can do."""
+    """Registered tool names this skill mentions.
+
+    Intersecting with the catalogue is what keeps it precise: a skill's prose is full of backticked
+    words."""
     catalogue = {t.name for t in DEV_TOOLS}
     words = set(re.findall(r"`([a-z][a-z0-9_]{3,})`?\(?", skill_text(phase)))
     return words & catalogue
@@ -69,8 +70,7 @@ def test_a_named_tool_is_a_tool_the_phase_can_call():
 def test_a_background_scope_mounts_nothing_it_cannot_use():
     """The inverse check: a tool nobody's prose mentions.
 
-    The model reaches for it at the moment it is needed and is refused with nobody to appeal to,
-    so a scope with no human behind it mounts only what can proceed."""
+    A scope with no human behind it must mount only what can proceed."""
     for scope in BACKGROUND_SCOPES:
         mounted = set(TOOL_SCOPES.get(scope, ()))
         refused = sorted(t for t in mounted if not is_safe(f"mcp__dev__{t}", {}))

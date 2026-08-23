@@ -19,9 +19,9 @@ RESUMABLE_PHASES = ("triage", "plan", "build", "vet", "investigate", "review", "
 
 
 def resume_reason(item: dict, *, running: bool) -> tuple[bool, str]:
-    """Can this item be resumed, and the one line saying why or why not. PURE — the drilldown's
-    action list and the route share it, so the button's tooltip can never disagree with what the
-    route actually does."""
+    """Can this item be resumed, and the one line saying why or why not. PURE.
+
+    The drilldown and the route share it, so a tooltip cannot disagree with the route."""
     if item.get("done_at") or str(item.get("status")) == "done":
         return False, "this item is terminal — nothing to resume"
     if str(item.get("status")) != "error":
@@ -94,8 +94,7 @@ def resume_item(context_id: str, item_id: str) -> tuple[bool, str]:
 def run_phase(context_id: str, item_id: str) -> tuple[bool, str]:
     """The owner's manual RUN: fire the current phase's own background run.
 
-    The same dispatcher Resume uses, with a different precondition. Refuses a terminal item, one at a
-    gate, a stopped one, or a run in flight."""
+    The dispatcher Resume uses, with a different precondition."""
     try:
         ctx = contexts.resolve(context_id, "dev")
         if not ctx.internal_root:

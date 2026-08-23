@@ -174,9 +174,9 @@ class RunsResponse(BaseModel):
 
 
 class RunEventRow(BaseModel):
-    """One entry of a run's event trail: a prompt, a reply block, a call, or its result.
+    """One entry of a run's event trail: a prompt, a reply, a call, or its result.
 
-    `tool_id` pairs a result to its call, `parent_tool_id` names the spawn it happened inside."""
+    `tool_id` pairs a result to its call, `parent_tool_id` names the spawn it sat inside."""
     id: int
     seq: int
     kind: str

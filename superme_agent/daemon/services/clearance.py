@@ -31,9 +31,8 @@ def clear_item(context_id: str, item_id: str, *, actor: str = "daemon",
                knowledge_gap: str | None = None, _depth: int = 0) -> dict:
     """Clear a close-phase work-item to terminal.
 
-    Returns `{"ok": False, "refused": …}` when the item genuinely cannot clear yet. Never raises, never
-    deletes a log row. `knowledge_gap` records that the closing run never landed its writes; the item
-    clears regardless."""
+    Never raises and never deletes a log row. `knowledge_gap` records that the closing run never
+    landed its writes."""
     ctx = contexts.resolve(context_id, "dev")
     if not ctx.internal_root:
         return _refused("context has no internal root")

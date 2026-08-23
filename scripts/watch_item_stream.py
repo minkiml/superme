@@ -1,8 +1,8 @@
-"""F2 live-stream watcher — connects to /ws/agent, sends a `watch` frame for an
-item, and prints every inbound frame (esp. `timeline`) with a wall-clock stamp.
-Deterministic proof of the broker→WS live path while a background phase run streams.
+"""Connect to /ws/agent, watch one item, and print every inbound frame with a stamp.
 
-Usage: PYTHONPATH=. python -m scripts.watch_item_stream <item_id> [seconds]
+Deterministic proof of the broker-to-socket live path while a background run streams.
+
+    PYTHONPATH=. python -m scripts.watch_item_stream <item_id> [seconds]
 """
 import asyncio
 import json

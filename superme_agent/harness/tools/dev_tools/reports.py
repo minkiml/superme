@@ -26,8 +26,9 @@ class FilePlanReportArgs(TypedDict, total=False):
 
 def _file_plan_report(*, store, context_id, dev_root=None, bound_item_id=None, **_):
     async def file_plan_report(args: dict) -> dict:
-        """The plan gate's user report. The confirmation table is DERIVED from the verification plan's
-        checks — each row is a check's `proves:` line and how it will be run — and so are the stats."""
+        """The plan gate's user report.
+
+        The confirmation table is DERIVED from the verification plan's checks, and so are the stats."""
         from ....core import artifacts as _arts
         item_id = _s(args, "item_id")
         if (msg := _bound_err(item_id, bound_item_id)):
@@ -71,8 +72,8 @@ FileInvestigateReportArgs = FilePhaseReportArgs
 def _phase_report_pen(phase: str):
     """Build the pen for one phase's user-facing report.
 
-    ONE FACTORY, because there is one rule: `<item>/reports/report-<phase>.md`, built in code and
-    never named to an agent — a phase naming its own path resolves it against whatever its cwd is."""
+    One factory, and the path is never named to an agent: a phase naming its own resolves it against
+    its cwd."""
     def factory(*, store, context_id, dev_root=None, bound_item_id=None, **_):
         async def file_phase_report(args: dict) -> dict:
             from ....core import artifacts as _arts
@@ -154,9 +155,10 @@ class FileVetReportArgs(TypedDict, total=False):
 
 def _file_vet_report(*, store, context_id, dev_root=None, repo_dir=None, bound_item_id=None, **_):
     async def file_vet_report(args: dict) -> dict:
-        """The vet cycle's user report — HYBRID: you write the narrative, code writes
-        `## What didn't hold` off the recorded entries, so a failure reaches the owner whatever the
-        prose says."""
+        """The vet cycle's user report. Hybrid: you write the narrative.
+
+        Code writes `## What didn't hold` off the recorded entries, so a failure reaches the owner
+        regardless."""
         from ....core import artifacts as _arts
         item_id = _s(args, "item_id")
         if (msg := _bound_err(item_id, bound_item_id)):

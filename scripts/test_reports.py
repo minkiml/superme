@@ -72,8 +72,9 @@ def _lenses(d: Path) -> None:
 # ── the plan report ─────────────────────────────────────────────────────────────────────────────
 
 def test_the_table_says_what_each_check_MEANS_not_what_it_runs():
-    """The row is the check's own `proves:` line, verbatim. Deriving the meaning here instead would
-    be a second account of the same exam, free to drift from the one the vetter reads."""
+    """The row is the check's own `proves:` line, verbatim.
+
+    Deriving the meaning here would be a second account of the same exam, free to drift."""
     item = _item()
     text = _report(item)
     ok("a row leads with what will be TRUE, in the owner's terms",
@@ -433,7 +434,7 @@ def test_the_owner_s_own_section_survives_the_round_trip():
     """The only section of any report a PERSON writes.
 
     The words come back at plan as authority, so a lost line is an instruction the owner believes
-    they gave. SLOTS, not prose."""
+    they gave."""
     item = _brief()
     ok("an untouched brief reads as empty rather than as missing",
        _arts.owner_input(item) == {"exists": True, "references": [], "notes": []})
@@ -475,9 +476,10 @@ def test_the_owner_s_own_section_survives_the_round_trip():
 
 
 def test_a_slot_is_one_bullet_however_it_was_typed():
-    """One slot, one bullet, always. A pasted newline would otherwise split one note into two the
-    owner never wrote — and the plan phase turns each note into its own check, so a phantom slot is
-    a phantom exam question."""
+    """One slot, one bullet, always.
+
+    Plan turns each note into a check, so a pasted newline splitting one note is a phantom exam
+    question."""
     item = _brief()
     back = _arts.write_owner_input(
         item,
@@ -497,8 +499,7 @@ def test_a_slot_is_one_bullet_however_it_was_typed():
 def test_the_owner_s_words_reach_the_page_with_the_labels_that_name_them():
     """The read path decides what the owner and the deputy actually SEE.
 
-    It dropped a label whose content sat one blank line below it, so the section arrived as two
-    orphan paragraphs with nothing saying which was which."""
+    A label whose content sat a blank line below it arrived as two orphan paragraphs."""
     item = _brief()
     _arts.write_owner_input(
         item, references=[{"source": "docs/budget-rules.md", "description": "the ceiling rule"}],
@@ -518,8 +519,9 @@ def test_the_owner_s_words_reach_the_page_with_the_labels_that_name_them():
 
 
 def test_the_editor_never_authors_a_report_no_phase_wrote():
-    """Two absences that read the same to a component and must not: a brief with an empty section,
-    and no brief at all. Creating one here would put a report on disk that triage never wrote."""
+    """Two absences that read the same and must not: an empty section, and no brief at all.
+
+    Creating one here would put a report on disk that triage never wrote."""
     empty = Path(tempfile.mkdtemp(prefix="fromyou-")) / "item"
     (empty / "reports").mkdir(parents=True)
     ok("a missing brief reports itself instead of raising",
@@ -552,8 +554,7 @@ def test_the_editor_never_authors_a_report_no_phase_wrote():
 def test_the_drilldown_reads_the_owner_s_own_words_for_its_cards():
     """The cards are BUILT FROM THE REPORTS, not from a second summary of the same facts.
 
-    That is what keeps a card and its document from disagreeing, and why every report opens with
-    a one-line summary."""
+    That is what keeps a card and its document from disagreeing."""
     item = _brief("# Triage User-facing Brief\n\n"
                   "**Category:** Feature\n\n"
                   "**Background:** it came up while reconciling last month's receipts\n\n"
@@ -582,8 +583,7 @@ def test_the_drilldown_reads_the_owner_s_own_words_for_its_cards():
 def test_a_phase_card_never_shows_the_previous_pass():
     """Reports are a phase's CLOSING act, several overwritten in place.
 
-    Rendered unconditionally, the card showed the last pass while the current one was still
-    working — and in autopilot the item is running almost the whole time."""
+    Rendered unconditionally, the card showed the last pass while the current one still worked."""
     from superme_agent.daemon.services.drilldown import _live_summary
     item = Path(tempfile.mkdtemp(prefix="live-")) / "item"
     (item / "reports").mkdir(parents=True)
@@ -616,8 +616,7 @@ def test_a_phase_card_never_shows_the_previous_pass():
 def test_every_report_can_reach_the_record_behind_it():
     """Each user-facing report is the compact read; `contract` is the path to the whole thing.
 
-    Review had a record and offered no way to reach it, so the owner read the judgment with its
-    evidence unreachable."""
+    Review offered a judgment with its evidence unreachable."""
     item = Path(tempfile.mkdtemp(prefix="contract-")) / "item"
     (item / "reports").mkdir(parents=True)
     (item / "artifacts").mkdir(parents=True)

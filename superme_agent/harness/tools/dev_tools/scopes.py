@@ -349,10 +349,9 @@ for _scope, _names in TOOL_SCOPES.items():
 
 
 def make_dev_mcp_server(store, context_id: str, *, scope: str, **deps):
-    """Build the `dev` MCP server bound to one context's event store, carrying only the tools `scope`
-    may see. Unknown scopes raise.
+    """Build the `dev` MCP server for one context, carrying only the tools `scope` may see.
 
-    Optional deps thread per-turn state to specific learning tools and are ignored by the rest."""
+    Unknown scopes raise. Optional deps thread per-turn state to specific tools."""
     return build_mcp_server("dev", dev_tool_specs(scope),
                             store=store, context_id=context_id, **deps)
 

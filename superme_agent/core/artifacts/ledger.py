@@ -243,11 +243,9 @@ def record_verification(item_dir: Path, repo_dir: Path | None, *, check: str, ho
                         result: str, passed: bool, deferred: bool = False, note: str = "",
                         title: str = "", by: str = BY_AGENT,
                         met: list[str] | None = None, missed: list[str] | None = None) -> dict:
-    """Append one entry to the cycle report's `## Verification` check fence. Append-only,
-    so 'verified' is derived.
+    """Append one entry to the cycle report's check fence. Append-only, so 'verified' is derived.
 
-    `by` is PROVENANCE: `machine` beats `agent` and is FINAL for the cycle. A missed rubric criterion
-    FAILS the check; `deferred` is neither pass nor fail."""
+    `by` is provenance: `machine` beats `agent` and is final for the cycle."""
     # Single-line coerce: the ledger is line-oriented, so an embedded newline corrupts every entry
     # after it.
     def _one_line(s: str) -> str:

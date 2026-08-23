@@ -1050,8 +1050,7 @@ def test_review_entry_run() -> None:
 def test_repo_knobs(tmp: Path) -> None:
     """The repo's two git knobs, read live at every consumption point.
 
-    A flip reaches items already at review, and a configured anchor that does not exist RAISES
-    rather than falling back."""
+    A configured anchor that does not exist RAISES rather than falling back."""
     import subprocess
     from superme_agent.core import git_layer as G
     from superme_agent.core.spine import (REVIEW_MODES, REVIEW_MODE_DEFAULT, RepoConfig,
@@ -1156,7 +1155,7 @@ def test_repo_knobs(tmp: Path) -> None:
        and git_ops.repo_review_mode(_NoRepo(), _Spine()) == "fast")
 
     # --- both landing knobs live in the project's settings pane -----------------
-    # A setting on two surfaces is one rule with two owners.
+    # One rule with two owners.
     ps = src("web/frontend/src/features/config/sections/ProjectSettings.tsx")
     dw = src("web/frontend/src/features/dev/DevWorkspace.tsx")
     ok("the review-mode picker lives in Project - Settings",
@@ -1218,8 +1217,7 @@ def test_the_checkers_run_on_their_own_tier() -> None:
 def test_prompt_xray_covers_every_speaker() -> None:
     """The X-ray's two gaps: a speaker with no capture site, and a capture holding prose only.
 
-    Without the tools a turn carried and where it could write, two runs on identical words look
-    identical and behaved differently."""
+    Two runs on identical words look identical and behaved differently."""
     from superme_agent.daemon.services.runs import turn_surface
 
     dep = src("superme_agent/daemon/services/deputy.py")
@@ -1328,8 +1326,7 @@ def test_branch_list(tmp: Path) -> None:
 def test_merge_act(tmp: Path) -> None:
     """The merge act: squash into the anchor, and the freshness rule that owns it.
 
-    A squash commit is not an ancestor of the branch it squashed, so ancestry reads a merged item
-    as permanently unmerged."""
+    A squash is not an ancestor, so ancestry reads a merged item as unmerged."""
     import os
     import subprocess
     from superme_agent.core import git_layer as G
@@ -1491,10 +1488,10 @@ def test_merge_act(tmp: Path) -> None:
 
 
 def test_commit_contract(tmp: Path) -> None:
-    """The commit contract: the message is for the project, the trailers are for SuperMe.
+    """The message is for the project, the trailers are for SuperMe.
 
-    Nothing workspace-shaped appears above them, because a repository's readers have never heard
-    of this workspace. The mechanical rules are enforced AT THE TOOL."""
+    A repository's readers have never heard of this workspace. The mechanical rules bind at the
+    tool."""
     import asyncio
     import subprocess
     from superme_agent.core import git_layer as G
@@ -1817,8 +1814,7 @@ def test_pr_gate_and_page(tmp: Path) -> None:
 def test_commit_gate(tmp: Path) -> None:
     """The commit contract, enforced by a hook rather than asked for in prose.
 
-    The hook runs against real repos, refuses to install where that would be a theft, and a
-    refusal the build cannot author parks the item."""
+    A refusal build cannot author parks the item."""
     import subprocess
     from superme_agent.core import git_layer as GL
     from superme_agent.core import permissions as P
@@ -1937,8 +1933,7 @@ def test_commit_gate(tmp: Path) -> None:
 def test_build_loop_entry() -> None:
     """Approving the plan gate is the instruction to build, so entering `build` opens the loop.
 
-    For every item, not only an autopiloted one: a hand-driven item advanced to `build` otherwise
-    has nothing to start it."""
+    For every item: a hand-driven one otherwise has nothing to start it."""
     print("B6 — the build⟷vet loop opens for every item, autopilot or not")
     from superme_agent.daemon.services import gates as G
     gates_src = src("superme_agent/daemon/services/gates.py")

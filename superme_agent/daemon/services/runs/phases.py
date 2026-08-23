@@ -216,11 +216,10 @@ def fire_deputy_feedback(context_id: str, item_id: str, *, phase: str, feedback:
 async def _run_deputy_feedback_turn(ctx, context_id: str, item_id: str, item_dir: Path, *,
                                     session_id: str | None, phase: str, prompt: str,
                                     model: str | None, effort: str | None) -> None:
-    """Run one deputy send-back re-run: RESUME the item's session and let the agent re-run the phase
-    against the feedback.
+    """Resume the item's session and let the agent re-run the phase against the feedback.
 
-    Ends at `awaiting_human`, which re-fires the gate seam so the deputy re-judges the result. That
-    chaining IS the negotiation loop."""
+    Ends at `awaiting_human`, which re-fires the gate so the deputy re-judges. That chaining IS the
+    loop."""
     dev_root = ctx.internal_root / "dev"
     capture_prompt(context_id, prompt, item_id=item_id)
     # Re-read the item after any phase flip so the pointer names the phase this re-run actually

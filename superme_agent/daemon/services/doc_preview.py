@@ -28,8 +28,7 @@ def resolve_doc(item_dir: Path, rel_path: str) -> Path | None:
 def editable_artifact(item_dir: Path, rel_path: str) -> str | None:
     """The artifact KIND `rel_path` names, iff the owner may edit it.
 
-    Two gates, and the order matters: the path must resolve inside `artifacts/` before its filename is
-    matched, or a traversal would slip past the kind check."""
+    Order matters: the path must resolve inside `artifacts/` before its filename is matched."""
     target = resolve_doc(item_dir, rel_path)
     if target is None:
         return None
@@ -84,8 +83,9 @@ bSave.onclick=async()=>{
 
 def render_doc_page(item_id: str, rel_path: str, text: str, *,
                     context_id: str = "global", editable: bool = False) -> str:
-    """The doc page: its path as the title, the rendered document below it. `editable` adds the
-    Edit / Save / Cancel bar and the source textarea — offered only for `brief.md` and `plan.md`."""
+    """The doc page: its path as the title, the rendered document below.
+
+    `editable` adds the edit bar, offered only for `brief.md` and `plan.md`."""
     stamp = owner_edited_at(text)
     bar = js = ""
     if editable:

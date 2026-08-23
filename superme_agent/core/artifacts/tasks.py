@@ -8,11 +8,9 @@ _TASK_LINE = re.compile(r"^\s*-\s*\[(?P<tick>[ xX])\]\s*(?P<id>t\d+)\b[\s—:-]*
 
 
 def parse_tasks(plan_text: str) -> list[dict]:
-    """plan.md's `## Tasks` → [{id, done, text, detail}], in order. The id is what build's
-    commit trailers carry.
+    """plan.md's `## Tasks` to an ordered list, keyed by the id build's commit trailers carry.
 
-    A task is a BLOCK of two parts: `text` is the NAME the board shows, `detail` the indented spec
-    under it."""
+    `text` is the name the board shows, `detail` the indented spec under it."""
     body = split_sections(plan_text).get("Tasks", "")
     out: list[dict] = []
     cur: dict | None = None

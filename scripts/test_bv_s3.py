@@ -209,10 +209,9 @@ def test_resolve(tmp: Path) -> None:
 
 
 def test_reentry_delta(tmp: Path) -> None:
-    """The other half of the per-phase-session rule.
+    """Resuming gives a phase its own memory; this stops that memory OUTRANKING the disk.
 
-    Resuming gives the phase its own memory; this stops that memory OUTRANKING the disk. A review
-    resuming over a rewritten investigation would otherwise report that nothing had changed."""
+    A review resuming over a rewritten investigation would report that nothing had changed."""
     print("a re-entered phase is told what changed since IT last ran")
     sp = SystemSpine(db_path=tmp / "reentry.db")
     repo, wid = "r-reentry", "abc123def456"

@@ -63,10 +63,9 @@ def _norm_cwd(p) -> str:
 
 
 def resolve_item_session(item: dict, *, worktree, repo_dir, get_session, adopt) -> tuple[str, str | None]:
-    """The explicit phase→session map: which session a bound turn runs in.
+    """The explicit phase-to-session map: which session a bound turn runs in.
 
-    Returns `(slot, session_id-or-None)`; None means this turn mints. Other phases' threads are left
-    alone. `get_session` and `adopt` are injected to keep this pure."""
+    None means this turn mints. Other phases' threads are left alone."""
     phase = str(item.get("phase") or "triage")
     slot = kind_profiles.session_slot(phase)
     slots = item.get("sessions") or {}
@@ -91,8 +90,10 @@ def resolve_item_session(item: dict, *, worktree, repo_dir, get_session, adopt) 
 
 
 def _live_resume(msg_resume: str | None, resumed: dict | None) -> str | None:
-    """The resume sid a turn may actually use. A client resume resolving to no stored row is DANGLING —
-    the session was purged, and handing the sid to the CLI hard-fails the turn."""
+    """The resume sid a turn may actually use.
+
+    A client resume resolving to no stored row is DANGLING, and handing it to the CLI hard-fails the
+    turn."""
     return msg_resume if (msg_resume and resumed is not None) else None
 
 

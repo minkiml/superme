@@ -67,7 +67,7 @@ class ErrorFrame(BaseModel):
 
 
 class TimelineFrame(BaseModel):
-    """A live event from a work-item run this panel is WATCHING, pushed from the item's broker.
+    """A live event from a work-item run this panel is WATCHING.
 
     Run-lock means one live run per item, so the FE appends it to the current phase lane."""
     type: Literal["timeline"] = "timeline"
@@ -81,10 +81,9 @@ class TimelineFrame(BaseModel):
 
 
 class InvalidateFrame(BaseModel):
-    """The dashboard socket's "everything under these topics changed; refetch it".
+    """Everything under these topics changed; refetch it.
 
-    Carries no values, by design: the browser reads over ordinary HTTP, so a pushed frame and a polled
-    read cannot disagree. Coalesced into one frame per burst."""
+    Carries no values by design, so a pushed frame and a polled read cannot disagree."""
     type: Literal["invalidate"] = "invalidate"
     topics: list[str] = []
 
@@ -92,8 +91,7 @@ class InvalidateFrame(BaseModel):
 class DashboardHelloFrame(BaseModel):
     """Sent once when a dashboard panel connects.
 
-    Its arrival tells the browser push is live, which is when it raises polling to the slow backstop.
-    Losing the socket drops it back automatically."""
+    Its arrival tells the browser push is live, which is when it drops to the slow backstop."""
     type: Literal["dashboard_hello"] = "dashboard_hello"
     coalesce_ms: int = 250
 

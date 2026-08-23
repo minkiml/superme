@@ -19,8 +19,9 @@ PASS = 0
 
 
 def _spine_at(db: Path) -> spine_mod.SystemSpine:
-    """A throwaway spine on a tempdir DB. The config paths are the real ones (read-only here) —
-    only the DB is redirected, so nothing this suite writes touches the live system."""
+    """A throwaway spine on a tempdir DB.
+
+    Only the DB is redirected, so nothing this suite writes touches the live system."""
     return spine_mod.SystemSpine(db_path=db)
 
 
@@ -227,11 +228,10 @@ def test_compacted_build_thread_reloads_its_skill() -> None:
 def test_api_error_is_a_fault_not_a_success() -> None:
     """An upstream error arrives as assistant TEXT, not an exception.
 
-    So a turn whose whole output was one API error raised nothing, and the cycle was stamped a
-    success and then vetted."""
+    A turn whose whole output was one API error raised nothing and was stamped a success."""
     print("an API error that arrives as text is a fault, not a successful cycle")
-    # The judgment lives in the ONE classifier every runner shares. What this suite owns is the
-    # consequence: an empty cycle must not advance.
+    # The judgment lives in the one shared classifier. This suite owns the consequence: an empty
+    # cycle must not advance.
     from superme_agent.core.faults import classify
     from superme_agent.daemon.services.loop import decide_after_build
     ok("the SDK's own error line is recognized",

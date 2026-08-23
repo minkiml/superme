@@ -268,9 +268,9 @@ class GeneralOps:
                            for s in ("error", "warn", "info")}}
 
     def read_portrait(self, dev_root: Path) -> dict:
-        """The PORTRAIT — what this project IS, in the six bands the Project view renders.
+        """What this project IS, in the six bands the Project view renders.
 
-        Every band maps to exactly ONE doc, so the view can never become a place knowledge secretly lives."""
+        Every band maps to exactly ONE doc, so the view never becomes a place knowledge lives."""
         root = Path(dev_root)
         prd = _strip_fences(self.read_general_doc(root, "project-prd") or "")
         arch = _strip_fences(self.read_general_doc(root, "architecture") or "")

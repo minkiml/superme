@@ -30,9 +30,9 @@ def _now() -> str:
 
 
 def launch(context_id: str) -> dict:
-    """Mint + fire one throwaway probe for `context_id`, returning the status dict. One probe at a
-    time per repo: if one is already running (state says so AND its folder still exists), return that
-    instead of minting a second."""
+    """Mint and fire one throwaway probe for `context_id`.
+
+    One at a time per repo: an already-running probe is returned rather than a second minted."""
     from .. import app_state
     from ..app_state import get_spine
     from ...gateway import contexts

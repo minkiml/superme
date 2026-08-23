@@ -39,10 +39,9 @@ class UnknownContext(LookupError):
 
 
 def resolve(context_id: str | None, mode: str = "core") -> Context:
-    """Resolve a surface-facing context id (+ mode) to a Core Context.
+    """Resolve a surface-facing context id and mode to a Core Context.
 
-    An unknown id RAISES: answering as another project would write this work into that project's
-    home. `mode` comes FROM THE SURFACE — charter and plugins, never a sandbox."""
+    An unknown id RAISES: answering as another project would write this work into its home."""
     repos = get_spine().repos()
     cid = context_id or GLOBAL_ID
     rc = repos.get(cid)

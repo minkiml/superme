@@ -181,10 +181,9 @@ def test_soft_rules() -> None:
 
 
 def test_proves_is_the_human_field() -> None:
-    """`proves:` — the one check field written for the OWNER.
+    """`proves:` is the one check field written for the OWNER.
 
-    Every other field serves executing or judging, so before it there was nothing on the plan
-    gate that said what a check was FOR."""
+    Every other field serves executing or judging, so nothing said what a check was FOR."""
     print("proves — the check says what a pass MEANS, in the owner's terms")
     vp = A.parse_vet_plan(GOOD_PLAN)
     ok("the field parses off a check",

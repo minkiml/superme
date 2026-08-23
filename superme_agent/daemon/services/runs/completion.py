@@ -9,11 +9,9 @@ from .lifecycle import log
 
 def read_completion(context_id: str, item_id: str, sink: dict,
                     run_id: int | None = None) -> dict | None:
-    """A run's completion payload out of its `report_completion` sink, persisted as the `run.report`
-    event. None when the run never reported.
+    """A run's completion payload out of its `report_completion` sink. None when it never reported.
 
-    `run_id` names the run this report ENDS, resolved from the item's live row. Stored alongside
-    the payload, never inside it."""
+    `run_id` names the run this report ENDS, stored alongside the payload rather than inside it."""
     report = sink.get("report")
     if report:
         rid = run_id if run_id is not None else _spine.running_run_id(context_id, item_id)
@@ -29,11 +27,10 @@ UNREPORTED = "unreported"   # a run that finished but declared nothing, even aft
 async def ensure_completion(ctx, context_id: str, item_id: str, sink: dict, *, skill: str,
                             session_id: str | None, model: str | None, effort: str | None,
                             run_id: int | None = None) -> dict | None:
-    """`read_completion` with a BACKSTOP: when the run ended without declaring, spend one short turn
-    asking it to.
+    """`read_completion` with a BACKSTOP: a run that ended without declaring is asked to.
 
-    The nudge resumes the run's own session, keeping the work in context. Never inferred:
-    `outcome` encodes judgment only the agent holds."""
+    The nudge resumes its own session. Never inferred: `outcome` encodes judgment only the agent
+    holds."""
     report = read_completion(context_id, item_id, sink, run_id=run_id)
     if report or not session_id:
         if not report:

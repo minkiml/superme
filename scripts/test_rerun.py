@@ -141,9 +141,9 @@ def test_entry_and_no_counter(dev_root: Path) -> None:
 
 
 def test_soft_delete_split(dev_root: Path) -> None:
-    """The reader split. A re-run must leave the ITEM
-    looking fresh while the PROJECT's accounting still counts what the attempt cost. Nothing is
-    deleted; rows are stamped `discarded_at` and readers choose a side."""
+    """A re-run leaves the ITEM fresh while the PROJECT still counts what the attempt cost.
+
+    Nothing is deleted: rows are stamped `discarded_at` and readers choose a side."""
     print("\n[soft delete] the item forgets; the ledger does not")
 
     import tempfile

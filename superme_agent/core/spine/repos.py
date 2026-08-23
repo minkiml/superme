@@ -211,8 +211,7 @@ class RepoOps:
                       include_agent_threads: bool = False) -> int:
         """How many CHANNELS this repo has, so the tile and the list cannot disagree.
 
-        A work-item runs a thread per phase but is ONE channel, so its threads count once.
-        `include_agent_threads` adds the headless build/vet threads."""
+        A work-item runs a thread per phase but is ONE channel."""
         where = ["repo_id=?"]
         args: list = [repo_id]
         if mode is not None:

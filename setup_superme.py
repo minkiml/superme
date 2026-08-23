@@ -145,7 +145,7 @@ def _stores() -> None:
 def _hub_knowledge() -> None:
     """Put the shipped hub anchor docs in place once, so a guest's hub is readable on arrival.
 
-    Nobody can say what SuperMe is for on the day they clone it, so this repo's memory ships."""
+    Nobody can say what SuperMe is for on the day they clone it."""
     from superme_agent.gateway import contexts
     from superme_agent.paths import HUB_KNOWLEDGE_SEED_DIR
 

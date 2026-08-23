@@ -44,11 +44,10 @@ def _inject_checks(body: str, blocks: list[str]) -> str:
 def scaffold(item_dir: Path, artifact: str, *, title: str = "", item_kind: str | None = None,
              item_id: str | None = None, standing: list[str] | None = None,
              research_kind: str | None = None) -> dict:
-    """Deterministically scaffold one artifact skeleton. NEVER overwrites — filling happens by
-    editing. Unknown kinds fail loud.
+    """Deterministically scaffold one artifact skeleton. Never overwrites, and unknown kinds fail loud.
 
-    The KERNEL attaches the repo's `standing` checks: a copied-by-hand entry is one rewording from a
-    different check."""
+    The KERNEL attaches the repo's standing checks: a hand-copied entry is one rewording from
+    another check."""
     if artifact not in _SPECS:
         raise KeyError(f"unknown artifact kind {artifact!r} — known: {sorted(_SPECS)}")
     item_kind = get_profile(item_kind).kind

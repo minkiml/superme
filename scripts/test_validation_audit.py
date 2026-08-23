@@ -119,8 +119,9 @@ def test_the_two_lanes_never_read_each_other() -> None:
 
 
 def test_the_suite_is_refused_as_a_check() -> None:
-    """The suite is build's validation. As a vet-plan check it runs twice and files a validation
-    result as the item's own proof — which is exactly how it got into the library."""
+    """The suite is build's validation.
+
+    As a vet-plan check it runs twice and files a validation result as the item's own proof."""
     print("the vet plan refuses the project's own test suite")
     for cmd in ("python3 -m unittest discover -s tests", "pytest -q", "npm test",
                 "go test ./...", "cargo test", "pytest -q && echo done"):
@@ -226,8 +227,9 @@ def test_the_audit_compares_claim_to_machine() -> None:
 
 
 def test_an_audit_is_never_one_of_the_item_s_checks() -> None:
-    """The whole reason the test suite comes OUT of the vet plan is that unit tests are not the
-    item's exam. An audit entry that leaked into the evidence ledger would put it straight back."""
+    """Unit tests are not the item's exam, which is why the suite leaves the vet plan.
+
+    An audit entry leaking into the evidence ledger would put it straight back."""
     print("an audit is not a check")
     d = item()
     A.record_verification(d, None, check="c1", how="ran", result="exit 0", passed=True)
@@ -239,8 +241,9 @@ def test_an_audit_is_never_one_of_the_item_s_checks() -> None:
 
 
 def test_a_broken_claim_routes_back_to_build() -> None:
-    """The contract: build and vet are autonomous, so a false green is handled INSIDE the loop —
-    it goes back to build like any other failure, and never surfaces as a human decision."""
+    """Build and vet are autonomous, so a false green is handled INSIDE the loop.
+
+    It goes back to build like any other failure, never as a human decision."""
     print("routing — a false green is the loop's business, not the owner's")
     from superme_agent.daemon.services.loop import decide_after_vet
     live = {"id": "i1", "status": "active", "phase": "vet"}
@@ -261,8 +264,9 @@ def test_a_broken_claim_routes_back_to_build() -> None:
 
 
 def test_the_report_carries_it_whatever_vet_writes() -> None:
-    """`## What didn't hold` is machine-authored off the record. A finding about the build is
-    exactly the kind vet has least reason to volunteer, so it must not depend on vet mentioning it."""
+    """`## What didn't hold` is machine-authored off the record.
+
+    A finding about the build is what vet has least reason to volunteer."""
     print("the vet report cannot write around it")
     d = item()
     plan = d / "artifacts" / "plan.md"

@@ -32,8 +32,7 @@ TOPIC_SYSTEM = "sys:"
 def topics_for(event: dict) -> list[str]:
     """The invalidation topics one dev event implies.
 
-    Deliberately coarse — the repo prefix plus `sys:`. Being finer would mean this module deciding
-    which FE views care about which event kinds, a coupling that rots the first time either changes."""
+    Deliberately coarse: being finer would couple this module to which FE views care about what."""
     ctx = str(event.get("context_id") or "").strip()
     out = [TOPIC_SYSTEM]
     if ctx:

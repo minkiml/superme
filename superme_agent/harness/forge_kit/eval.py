@@ -122,10 +122,9 @@ def _strip_frontmatter(text):
 
 
 def _run_footprint(env_obj):
-    """Reduce the envelope to the HONEST resource figures, not the cumulative one.
+    """Reduce the envelope to the honest resource figures, not the cumulative one.
 
-    A naive total re-counts the same growing context every turn. Reported instead: `context` per turn,
-    net new `output`, and `turns`."""
+    A naive total re-counts the same growing context every turn."""
     turns = max(int(env_obj.get("num_turns") or 1), 1)
     mu = env_obj.get("modelUsage")
     if isinstance(mu, dict) and mu:
@@ -145,8 +144,7 @@ def _run_footprint(env_obj):
 def _run_claude(prompt, model, *, extra_args=None, timeout=TIMEOUT_S):
     """One hermetic `claude -p` call, JSON output, so real run metrics come back with the reply.
 
-    Hermetic means a throwaway cwd, so the operated repo's settings and memory cannot leak into the
-    judgment, and its native transcript is purged after."""
+    A throwaway cwd, so the operated repo cannot leak into the judgment."""
     cmd = console.argv("claude", "-p", "--strict-mcp-config", "--output-format", "json")
     if cmd is None:
         raise RuntimeError("the Claude CLI is not on PATH")
@@ -187,8 +185,7 @@ def _run_claude(prompt, model, *, extra_args=None, timeout=TIMEOUT_S):
 def _trial_run(form, artifact, *, task, model):
     """Ballpark the ARTIFACT's own run cost on one synthetic task.
 
-    A constitution never runs, so its overhead is estimated from its description's length. A skill or
-    agent is exercised once, read-only and turn-bounded."""
+    A constitution never runs, so its overhead is estimated from its description's length."""
     if form == "constitution":
         m = re.search(r"^description:\s*(.+)$", artifact, re.MULTILINE)
         resident = m.group(1).strip() if m else artifact.strip()

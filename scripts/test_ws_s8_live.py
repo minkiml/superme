@@ -170,7 +170,7 @@ def main() -> None:
         ok("fat turn completed", "noted" in t2["text"].lower(), t2["text"][:120])
 
         # -- the automatic compaction sequence ---------------------------------------
-        # `compact_before_run` gates the START of a run, so the next turn is what fires it.
+        # `compact_before_run` gates a run's START, so the next turn fires it.
         asyncio.run(turn_retry("Reply with exactly: go", work_item_id=iid, resume=sid))
         run = wait_compact_run(iid)
         ok("auto trigger fired a compact run (feature='compact') and it finished",

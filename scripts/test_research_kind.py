@@ -26,8 +26,8 @@ PASS = 0
 def flat(text: str) -> str:
     """Prose with its line wrapping collapsed.
 
-    A guide re-wraps whenever a sentence is edited, so a pin matching across a line break fails on
-    an unrelated word change. Structure pins match raw; sentence pins use this."""
+    A guide re-wraps whenever a sentence is edited, so a pin matching across a break fails
+    spuriously."""
     return " ".join(text.split())
 
 
