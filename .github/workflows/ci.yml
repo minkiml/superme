@@ -5,9 +5,11 @@
 # it works.
 name: CI
 
+# Work lands on superme-dev and main is fast-forwarded onto the same commit, so testing both
+# runs every job twice. A check belongs to a commit, and main inherits it.
 on:
   push:
-    branches: [main, superme-dev]
+    branches: [superme-dev]
   pull_request:
   workflow_dispatch:
 
