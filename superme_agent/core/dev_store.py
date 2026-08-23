@@ -7,6 +7,8 @@ context_id. Localhost and single-owner, so short-lived connections per call are 
 import json
 import re
 import sqlite3
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -116,10 +118,19 @@ class DevStore:
         self.db_path = Path(db_path)
         self._init()
 
-    def _conn(self) -> sqlite3.Connection:
+    @contextmanager
+    def _conn(self) -> Iterator[sqlite3.Connection]:
+        """A connection for one call, committed and then CLOSED.
+
+        sqlite's own context manager ends the transaction and leaves the handle open, which
+        holds a lock on the file for as long as the process lives."""
         c = sqlite3.connect(self.db_path)
         c.row_factory = sqlite3.Row
-        return c
+        try:
+            with c:
+                yield c
+        finally:
+            c.close()
 
     def _init(self) -> None:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)

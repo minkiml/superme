@@ -85,7 +85,7 @@
   "DevStore": {
    "home": "superme_agent.core.dev_store",
    "methods": [
-    "_conn(self) -> sqlite3.Connection",
+    "_conn(self) -> collections.abc.Iterator[sqlite3.Connection]",
     "_get(self, c: sqlite3.Connection, item_id: int) -> dict | None",
     "_get_candidate(self, c: sqlite3.Connection, cand_id: int) -> dict",
     "_get_event(self, c: sqlite3.Connection, event_id: int) -> dict",
@@ -2382,7 +2382,7 @@
     "_agent_file_effort(self, feature: str) -> str | None",
     "_agent_file_model(self, feature: str) -> str | None",
     "_agent_md_path(feature: str)",
-    "_conn(self) -> sqlite3.Connection",
+    "_conn(self) -> collections.abc.Iterator[sqlite3.Connection]",
     "_display_tokens(row) -> int",
     "_ensure_columns(c: sqlite3.Connection, table: str, cols: dict[str, str]) -> None",
     "_finish_usage_apply(self, c: sqlite3.Connection, run_id: int, usage: dict | None) -> None",
@@ -3233,7 +3233,7 @@
   "DevStore": {
    "home": "superme_agent.core.dev_store",
    "methods": [
-    "_conn(self) -> sqlite3.Connection",
+    "_conn(self) -> collections.abc.Iterator[sqlite3.Connection]",
     "_get(self, c: sqlite3.Connection, item_id: int) -> dict | None",
     "_get_candidate(self, c: sqlite3.Connection, cand_id: int) -> dict",
     "_get_event(self, c: sqlite3.Connection, event_id: int) -> dict",
@@ -4455,9 +4455,17 @@
    "home": "superme_agent.core.permissions",
    "sig": "def(tool_name: str, input_data: dict) -> list[str]"
   },
+  "_is_absolute_token": {
+   "home": "superme_agent.core.permissions",
+   "sig": "def(tok: str) -> bool"
+  },
   "_is_pseudo_device": {
    "home": "superme_agent.core.permissions",
    "sig": "def(token: str) -> bool"
+  },
+  "_outside_every": {
+   "home": "superme_agent.core.permissions",
+   "sig": "def(tok: str, roots: list[pathlib.Path]) -> bool"
   },
   "_path_tokens": {
    "home": "superme_agent.core.permissions",
@@ -4747,7 +4755,7 @@
     "_agent_file_effort(self, feature: str) -> str | None",
     "_agent_file_model(self, feature: str) -> str | None",
     "_agent_md_path(feature: str)",
-    "_conn(self) -> sqlite3.Connection",
+    "_conn(self) -> collections.abc.Iterator[sqlite3.Connection]",
     "_display_tokens(row) -> int",
     "_ensure_columns(c: sqlite3.Connection, table: str, cols: dict[str, str]) -> None",
     "_finish_usage_apply(self, c: sqlite3.Connection, run_id: int, usage: dict | None) -> None",
@@ -4973,7 +4981,7 @@
     "_agent_file_effort(self, feature: str) -> str | None",
     "_agent_file_model(self, feature: str) -> str | None",
     "_agent_md_path(feature: str)",
-    "_conn(self) -> sqlite3.Connection",
+    "_conn(self) -> collections.abc.Iterator[sqlite3.Connection]",
     "_display_tokens(row) -> int",
     "_ensure_columns(c: sqlite3.Connection, table: str, cols: dict[str, str]) -> None",
     "_finish_usage_apply(self, c: sqlite3.Connection, run_id: int, usage: dict | None) -> None",
@@ -5153,7 +5161,7 @@
    "home": "superme_agent.core.spine.base",
    "methods": [
     "_add_role_key(c: sqlite3.Connection, table: str, value_col: str) -> None",
-    "_conn(self) -> sqlite3.Connection",
+    "_conn(self) -> collections.abc.Iterator[sqlite3.Connection]",
     "_ensure_columns(c: sqlite3.Connection, table: str, cols: dict[str, str]) -> None",
     "_init_db(self) -> None",
     "_seed_repos_config(self) -> None",
@@ -5529,7 +5537,7 @@
    "home": "superme_agent.core.spine.base",
    "methods": [
     "_add_role_key(c: sqlite3.Connection, table: str, value_col: str) -> None",
-    "_conn(self) -> sqlite3.Connection",
+    "_conn(self) -> collections.abc.Iterator[sqlite3.Connection]",
     "_ensure_columns(c: sqlite3.Connection, table: str, cols: dict[str, str]) -> None",
     "_init_db(self) -> None",
     "_seed_repos_config(self) -> None",
@@ -5702,7 +5710,7 @@
     "_agent_file_effort(self, feature: str) -> str | None",
     "_agent_file_model(self, feature: str) -> str | None",
     "_agent_md_path(feature: str)",
-    "_conn(self) -> sqlite3.Connection",
+    "_conn(self) -> collections.abc.Iterator[sqlite3.Connection]",
     "_display_tokens(row) -> int",
     "_ensure_columns(c: sqlite3.Connection, table: str, cols: dict[str, str]) -> None",
     "_finish_usage_apply(self, c: sqlite3.Connection, run_id: int, usage: dict | None) -> None",
@@ -6481,7 +6489,7 @@
   "DevStore": {
    "home": "superme_agent.core.dev_store",
    "methods": [
-    "_conn(self) -> sqlite3.Connection",
+    "_conn(self) -> collections.abc.Iterator[sqlite3.Connection]",
     "_get(self, c: sqlite3.Connection, item_id: int) -> dict | None",
     "_get_candidate(self, c: sqlite3.Connection, cand_id: int) -> dict",
     "_get_event(self, c: sqlite3.Connection, event_id: int) -> dict",
@@ -6555,7 +6563,7 @@
     "_agent_file_effort(self, feature: str) -> str | None",
     "_agent_file_model(self, feature: str) -> str | None",
     "_agent_md_path(feature: str)",
-    "_conn(self) -> sqlite3.Connection",
+    "_conn(self) -> collections.abc.Iterator[sqlite3.Connection]",
     "_display_tokens(row) -> int",
     "_ensure_columns(c: sqlite3.Connection, table: str, cols: dict[str, str]) -> None",
     "_finish_usage_apply(self, c: sqlite3.Connection, run_id: int, usage: dict | None) -> None",
@@ -7016,7 +7024,7 @@
   "DevStore": {
    "home": "superme_agent.core.dev_store",
    "methods": [
-    "_conn(self) -> sqlite3.Connection",
+    "_conn(self) -> collections.abc.Iterator[sqlite3.Connection]",
     "_get(self, c: sqlite3.Connection, item_id: int) -> dict | None",
     "_get_candidate(self, c: sqlite3.Connection, cand_id: int) -> dict",
     "_get_event(self, c: sqlite3.Connection, event_id: int) -> dict",
@@ -7109,7 +7117,7 @@
     "_agent_file_effort(self, feature: str) -> str | None",
     "_agent_file_model(self, feature: str) -> str | None",
     "_agent_md_path(feature: str)",
-    "_conn(self) -> sqlite3.Connection",
+    "_conn(self) -> collections.abc.Iterator[sqlite3.Connection]",
     "_display_tokens(row) -> int",
     "_ensure_columns(c: sqlite3.Connection, table: str, cols: dict[str, str]) -> None",
     "_finish_usage_apply(self, c: sqlite3.Connection, run_id: int, usage: dict | None) -> None",
@@ -7410,7 +7418,7 @@
     "_agent_file_effort(self, feature: str) -> str | None",
     "_agent_file_model(self, feature: str) -> str | None",
     "_agent_md_path(feature: str)",
-    "_conn(self) -> sqlite3.Connection",
+    "_conn(self) -> collections.abc.Iterator[sqlite3.Connection]",
     "_display_tokens(row) -> int",
     "_ensure_columns(c: sqlite3.Connection, table: str, cols: dict[str, str]) -> None",
     "_finish_usage_apply(self, c: sqlite3.Connection, run_id: int, usage: dict | None) -> None",
@@ -7668,7 +7676,7 @@
   "DevStore": {
    "home": "superme_agent.core.dev_store",
    "methods": [
-    "_conn(self) -> sqlite3.Connection",
+    "_conn(self) -> collections.abc.Iterator[sqlite3.Connection]",
     "_get(self, c: sqlite3.Connection, item_id: int) -> dict | None",
     "_get_candidate(self, c: sqlite3.Connection, cand_id: int) -> dict",
     "_get_event(self, c: sqlite3.Connection, event_id: int) -> dict",
@@ -7747,7 +7755,7 @@
     "_agent_file_effort(self, feature: str) -> str | None",
     "_agent_file_model(self, feature: str) -> str | None",
     "_agent_md_path(feature: str)",
-    "_conn(self) -> sqlite3.Connection",
+    "_conn(self) -> collections.abc.Iterator[sqlite3.Connection]",
     "_display_tokens(row) -> int",
     "_ensure_columns(c: sqlite3.Connection, table: str, cols: dict[str, str]) -> None",
     "_finish_usage_apply(self, c: sqlite3.Connection, run_id: int, usage: dict | None) -> None",
@@ -8004,7 +8012,7 @@
   "DevStore": {
    "home": "superme_agent.core.dev_store",
    "methods": [
-    "_conn(self) -> sqlite3.Connection",
+    "_conn(self) -> collections.abc.Iterator[sqlite3.Connection]",
     "_get(self, c: sqlite3.Connection, item_id: int) -> dict | None",
     "_get_candidate(self, c: sqlite3.Connection, cand_id: int) -> dict",
     "_get_event(self, c: sqlite3.Connection, event_id: int) -> dict",
@@ -8299,7 +8307,7 @@
   "DevStore": {
    "home": "superme_agent.core.dev_store",
    "methods": [
-    "_conn(self) -> sqlite3.Connection",
+    "_conn(self) -> collections.abc.Iterator[sqlite3.Connection]",
     "_get(self, c: sqlite3.Connection, item_id: int) -> dict | None",
     "_get_candidate(self, c: sqlite3.Connection, cand_id: int) -> dict",
     "_get_event(self, c: sqlite3.Connection, event_id: int) -> dict",
@@ -8388,7 +8396,7 @@
     "_agent_file_effort(self, feature: str) -> str | None",
     "_agent_file_model(self, feature: str) -> str | None",
     "_agent_md_path(feature: str)",
-    "_conn(self) -> sqlite3.Connection",
+    "_conn(self) -> collections.abc.Iterator[sqlite3.Connection]",
     "_display_tokens(row) -> int",
     "_ensure_columns(c: sqlite3.Connection, table: str, cols: dict[str, str]) -> None",
     "_finish_usage_apply(self, c: sqlite3.Connection, run_id: int, usage: dict | None) -> None",
@@ -8600,7 +8608,7 @@
   "DevStore": {
    "home": "superme_agent.core.dev_store",
    "methods": [
-    "_conn(self) -> sqlite3.Connection",
+    "_conn(self) -> collections.abc.Iterator[sqlite3.Connection]",
     "_get(self, c: sqlite3.Connection, item_id: int) -> dict | None",
     "_get_candidate(self, c: sqlite3.Connection, cand_id: int) -> dict",
     "_get_event(self, c: sqlite3.Connection, event_id: int) -> dict",
@@ -8697,7 +8705,7 @@
     "_agent_file_effort(self, feature: str) -> str | None",
     "_agent_file_model(self, feature: str) -> str | None",
     "_agent_md_path(feature: str)",
-    "_conn(self) -> sqlite3.Connection",
+    "_conn(self) -> collections.abc.Iterator[sqlite3.Connection]",
     "_display_tokens(row) -> int",
     "_ensure_columns(c: sqlite3.Connection, table: str, cols: dict[str, str]) -> None",
     "_finish_usage_apply(self, c: sqlite3.Connection, run_id: int, usage: dict | None) -> None",
@@ -9008,7 +9016,7 @@
   "DevStore": {
    "home": "superme_agent.core.dev_store",
    "methods": [
-    "_conn(self) -> sqlite3.Connection",
+    "_conn(self) -> collections.abc.Iterator[sqlite3.Connection]",
     "_get(self, c: sqlite3.Connection, item_id: int) -> dict | None",
     "_get_candidate(self, c: sqlite3.Connection, cand_id: int) -> dict",
     "_get_event(self, c: sqlite3.Connection, event_id: int) -> dict",
@@ -9052,7 +9060,7 @@
     "_agent_file_effort(self, feature: str) -> str | None",
     "_agent_file_model(self, feature: str) -> str | None",
     "_agent_md_path(feature: str)",
-    "_conn(self) -> sqlite3.Connection",
+    "_conn(self) -> collections.abc.Iterator[sqlite3.Connection]",
     "_display_tokens(row) -> int",
     "_ensure_columns(c: sqlite3.Connection, table: str, cols: dict[str, str]) -> None",
     "_finish_usage_apply(self, c: sqlite3.Connection, run_id: int, usage: dict | None) -> None",
@@ -9291,7 +9299,7 @@
   "DevStore": {
    "home": "superme_agent.core.dev_store",
    "methods": [
-    "_conn(self) -> sqlite3.Connection",
+    "_conn(self) -> collections.abc.Iterator[sqlite3.Connection]",
     "_get(self, c: sqlite3.Connection, item_id: int) -> dict | None",
     "_get_candidate(self, c: sqlite3.Connection, cand_id: int) -> dict",
     "_get_event(self, c: sqlite3.Connection, event_id: int) -> dict",
@@ -9350,7 +9358,7 @@
     "_agent_file_effort(self, feature: str) -> str | None",
     "_agent_file_model(self, feature: str) -> str | None",
     "_agent_md_path(feature: str)",
-    "_conn(self) -> sqlite3.Connection",
+    "_conn(self) -> collections.abc.Iterator[sqlite3.Connection]",
     "_display_tokens(row) -> int",
     "_ensure_columns(c: sqlite3.Connection, table: str, cols: dict[str, str]) -> None",
     "_finish_usage_apply(self, c: sqlite3.Connection, run_id: int, usage: dict | None) -> None",
@@ -9588,7 +9596,7 @@
   "DevStore": {
    "home": "superme_agent.core.dev_store",
    "methods": [
-    "_conn(self) -> sqlite3.Connection",
+    "_conn(self) -> collections.abc.Iterator[sqlite3.Connection]",
     "_get(self, c: sqlite3.Connection, item_id: int) -> dict | None",
     "_get_candidate(self, c: sqlite3.Connection, cand_id: int) -> dict",
     "_get_event(self, c: sqlite3.Connection, event_id: int) -> dict",
@@ -9676,7 +9684,7 @@
     "_agent_file_effort(self, feature: str) -> str | None",
     "_agent_file_model(self, feature: str) -> str | None",
     "_agent_md_path(feature: str)",
-    "_conn(self) -> sqlite3.Connection",
+    "_conn(self) -> collections.abc.Iterator[sqlite3.Connection]",
     "_display_tokens(row) -> int",
     "_ensure_columns(c: sqlite3.Connection, table: str, cols: dict[str, str]) -> None",
     "_finish_usage_apply(self, c: sqlite3.Connection, run_id: int, usage: dict | None) -> None",
@@ -10445,7 +10453,7 @@
     "_agent_file_effort(self, feature: str) -> str | None",
     "_agent_file_model(self, feature: str) -> str | None",
     "_agent_md_path(feature: str)",
-    "_conn(self) -> sqlite3.Connection",
+    "_conn(self) -> collections.abc.Iterator[sqlite3.Connection]",
     "_display_tokens(row) -> int",
     "_ensure_columns(c: sqlite3.Connection, table: str, cols: dict[str, str]) -> None",
     "_finish_usage_apply(self, c: sqlite3.Connection, run_id: int, usage: dict | None) -> None",

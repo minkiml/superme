@@ -1,6 +1,8 @@
 """The SQLite connection and the schema, which every other mixin reads and writes."""
 
 import sqlite3
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -59,10 +61,19 @@ class Base:
             log.warning("could not snapshot the repo registry (%s)", e)
             return None
 
-    def _conn(self) -> sqlite3.Connection:
+    @contextmanager
+    def _conn(self) -> Iterator[sqlite3.Connection]:
+        """A connection for one call, committed and then CLOSED.
+
+        sqlite's own context manager ends the transaction and leaves the handle open, which
+        holds a lock on the file for as long as the process lives."""
         c = sqlite3.connect(self.db_path)
         c.row_factory = sqlite3.Row
-        return c
+        try:
+            with c:
+                yield c
+        finally:
+            c.close()
 
     @staticmethod
     def _ensure_columns(c: sqlite3.Connection, table: str, cols: dict[str, str]) -> None:
