@@ -4,8 +4,17 @@
 title="$1"; file="$2"
 python - "$title" "$file" <<'PY'
 import sys
+# A Windows console encodes stdout as cp1252, and every gate prints box glyphs.
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 title, path = sys.argv[1], sys.argv[2]
 text = open(path, encoding="utf-8", errors="replace").read()[-7000:]
 esc = text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
 print(f"::error title={title}::{esc}")
 PY
+
+# The reporter itself must never be the thing that fails silently.
+if [ $? -ne 0 ]; then
+    tail -c 4000 "$file" | tr -cd '\11\12\40-\176' | sed 's/%/%25/g' \
+        | awk -v t="$title" 'BEGIN{printf "::error title=%s (ascii fallback)::", t}
+                             {printf "%s%%0A", $0} END{print ""}'
+fi
