@@ -252,12 +252,12 @@ def test_port_matches_source() -> None:
        "r.tab === 'pipeline' ? '' :" in router_src)
     ok("canonicalisation runs on EVERY navigation, not just at mount",
        "if (canonical !== window.location.pathname)" in router_src and "function refresh()" in router_src)
-    ok("...and preserves the query string (the chat binding lives there — §3.1)",
+    ok("...and preserves the query string (the chat binding lives there)",
        "canonical + window.location.search" in router_src)
 
 
 def test_old_state_is_gone() -> None:
-    print("§6.3 invariant — one writer per row: the replaced state is DELETED, not shadowed")
+    print("one writer per row: the replaced state is DELETED, not shadowed")
     app = src("web/frontend/src/App.tsx")
     ok("`active` is no longer component state", "useState('nexus')" not in app)
     ok("`dest` is no longer component state", "setDest(" not in app and "const [dest" not in app)
@@ -293,7 +293,7 @@ def test_old_state_is_gone() -> None:
 
     # The last local state, deliberately: the address needs a route that does not exist yet.
     act = src("web/frontend/src/features/activity/GlobalActivity.tsx")
-    ok("`openRun` is still local — /run/:runId is blocked on a per-run GET (see §12.3)",
+    ok("`openRun` is still local — /run/:runId is blocked on a per-run GET",
        "const [openRun, setOpenRun]" in act)
 
 

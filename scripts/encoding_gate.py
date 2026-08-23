@@ -1,9 +1,7 @@
-"""Every text file read, write and subprocess decode names its encoding.
+"""Every text read, write and subprocess decode names its encoding.
 
-Python picks the LOCALE encoding when nothing says otherwise. That is UTF-8 on macOS and Linux
-and cp1252 on most Windows installs, so an unmarked `read_text()` is a UnicodeDecodeError the
-first time it meets an em-dash — and this system's artifacts are full of them. The bug cannot
-reproduce on the machine it was written on, which is why it needs a gate rather than a habit.
+Python picks the LOCALE otherwise, which is cp1252 on a Western Windows and mangles every
+non-ASCII artifact.
 
     python -m scripts.encoding_gate
 """

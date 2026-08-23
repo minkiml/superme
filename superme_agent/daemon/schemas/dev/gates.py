@@ -294,8 +294,8 @@ class OwnerNoteBody(BaseModel):
 
 
 class OwnerInputBody(BaseModel):
-    """The owner's § From you, whole. Add and delete are both a PUT of the full slot lists — the
-    owner is the section's only writer, so there is no concurrent edit for a delta to protect."""
+    """The owner's `## From you` section, whole. Add and delete are both a PUT of the full slot
+    lists, because the owner is its only writer and no concurrent edit needs protecting."""
     context_id: str = "global"
     references: list[OwnerReferenceBody] = []
     notes: list[OwnerNoteBody] = []

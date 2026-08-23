@@ -65,7 +65,7 @@ def _lenses(d) -> None:
         A.record_lens(d, lens=ln, probed="read the diff through this lens")
 
 def test_attempts_ledger(tmp: Path) -> None:
-    print("§Cycle outcome — the driver's own record")
+    print("`## Cycle outcome` — the driver's own record")
     d = make_item_dir(tmp, "item-att")
     ok("empty trail reads back empty", A.read_cycle_outcomes(d) == [])
     ok("no cycle report → outcome is a recorded no-op",
@@ -87,7 +87,7 @@ def test_attempts_ledger(tmp: Path) -> None:
 
 
 def test_fingerprint(tmp: Path, repo: Path) -> None:
-    print("convergence fingerprint (§8·O3)")
+    print("convergence fingerprint")
     d = make_item_dir(tmp, "item-fp")
     ok("no evidence → empty fingerprint (never trips the guard)",
        A.convergence_fingerprint(d) == "")
@@ -155,16 +155,14 @@ def test_no_progress_guard(tmp: Path, repo: Path) -> None:
     ok("a real build edit counts as movement", L._tree_moved_since_evidence(d, repo) is True)
     (repo / "a.py").write_text("x = 1\n", encoding="utf-8")
 
-    # Vet grades the tree AGAINST the plan, which is not in the worktree, so a revision fixing a
-    # broken check must be vetted.
+    # The plan is not in the worktree, so a revision fixing a broken check must be vetted.
     print("no-progress guard — a revision since the last verdict always re-vets")
     ok("an unrevised plan reads as not-moved", L._plan_moved_since_evidence(d) is False)
     (d / "artifacts" / "plan.md").write_text(
         "# Plan\n\n## Revision r1 — 2026-08-07T10:00:00\n- scope: targeted\n\n## Tasks\n", encoding="utf-8")
     ok("a revision recorded after the last verdict forces a vet",
        L._plan_moved_since_evidence(d) is True)
-    # ...and once a cycle has run under that revision the guard goes quiet: verify the new plan
-    # once, not never skip again.
+    # Verify the new plan once, not never skip again.
     A.append_cycle_outcome(d, evidence="failed", decision="review", reason="handed over")
     A.scaffold_cycle(d, title="after the revision")
     A.record_verification(d, repo, check="a", how="pytest", result="ok", passed=True)
@@ -225,8 +223,7 @@ def test_depth_none(tmp: Path, repo: Path) -> None:
     ok("...so the loop driver advances it to review",
        _d(evidence=ev)["action"] == "review")
 
-    # The authority is the PLAN, not the vetter: with no check ids, a free-form entry would drive
-    # the loop off something vet invented.
+    # With no check ids a free-form entry would drive the loop off something vet invented.
     try:
         A.record_verification(d, repo, check="looks-fine", how="read", result="ok", passed=True)
         ok("recording under depth:none refused", False, "should have raised")
@@ -377,14 +374,10 @@ def test_p4_permissions() -> None:
        P.approval_signature("Bash", {"command": "git commit -m x"}) == "Bash:git commit"
        and P.approval_signature("Bash", {"command": "git push"}) == "Bash:git push")
     ok("non-Bash tools key by name", P.approval_signature("Edit", {"file_path": "/a"}) == "tool:Edit")
-    # These sessions keep the REPO cwd, so a throwaway measurement must name its own folder. Under
-    # deny-all there is nobody to ask.
     import asyncio as _aio
     item = _P("/tmp/itemx")
     approve = P.scoped_writes_approve(item, P.deny_all)
 
-    # A deny hands back the REASON, not a bare False. The invariant is allow-versus-deny; the
-    # sentence is not this suite's business.
     def _ask(tool: str, **inp):
         return _aio.run(approve(tool, inp))
 
@@ -405,7 +398,7 @@ def test_p4_permissions() -> None:
 
 
 def test_decision() -> None:
-    print("decide_after_vet — §5.1 table + §5.2 breakers")
+    print("decide_after_vet — the table and the breakers")
     # Sticky owner holds: anything not active yields without a trace.
     r = _d(item={"id": "i", "status": "awaiting_human", "phase": "vet"})
     ok("non-active item → none (owner hold is sticky)",
@@ -414,8 +407,7 @@ def test_decision() -> None:
     ok("terminal item → none", r["action"] == "none")
     r = _d(item={"id": "i", "status": "active", "phase": "build"})
     ok("item off vet (CAS pre-check) → none", r["action"] == "none")
-    # --- the two faults split ----------------------------------------- A STOPPED run has nothing
-    # left to retry; one that recorded nothing keeps its retry.
+    # --- the two faults split -----------------------------------------
     r = _d(turn_error=True)
     ok("a stopped vet run → error, held where it died",
        r["action"] == "error" and r["status"] == "error" and r["exit"] == "error")
@@ -674,8 +666,7 @@ def test_start_guards(tmp: Path) -> None:
 def test_registration() -> None:
     print("route + taxonomy + skill contracts")
     from superme_agent.daemon.server import app
-    # Read the schema, not app.routes: how FastAPI stores an included router is private
-    # and has changed, while the generated document is the contract.
+    # How FastAPI stores an included router is private. The generated document is the contract.
     paths = set(app.openapi()["paths"])
     # One door onto the dispatcher both already shared, so no phase can be missing a firer.
     ok("POST /dev/work-items/{item_id}/run is registered", "/dev/work-items/{item_id}/run" in paths)

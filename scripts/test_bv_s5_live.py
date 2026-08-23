@@ -1,11 +1,7 @@
 """The build-vet loop driving itself end to end. COSTS TOKENS.
 
-Approving the plan gate is the last human action: build writes the work, vet judges it, and the
-loop lands the item at review with every cycle recorded.
-
-The CYCLE COUNT is deliberately not asserted. A defect planted for vet to catch is one the build
-reads in the same plan.md and fixes first time, so "fails, then passes" cannot be forced from
-outside; what holds either way is that the loop drives itself and every cycle carries a verdict.
+Approving the plan gate is the last human action. The cycle COUNT is deliberately not asserted,
+since a planted defect is one build often fixes first time.
 
 Needs a running daemon. Writes into `test-playground`, or SUPERME_TEST_CTX.
 """
@@ -146,8 +142,7 @@ def cleanup(trunk_sha0: str, iid: str | None) -> None:
                           {"context_id": CTX, "reason": "bv-s5 probe done"})
             except Exception as e:  # noqa: BLE001
                 print(f"cleanup: abandon failed ({e})")
-        # ONLY this item's branch and worktree. `item/*` and the whole worktrees root would take
-        # every other item's work with them — this repo holds work that is not ours.
+        # ONLY this item's. `item/*` and the worktrees root would take every other item with them.
         if iid:
             for wt in git_layer.worktrees_root(CTX).glob(f"{iid}*"):
                 shutil.rmtree(wt, ignore_errors=True)
@@ -192,8 +187,8 @@ def main() -> None:
 
         retry_409("POST", f"/dev/work-items/{iid}/advance?context_id={CTX}", {})  # triage → plan
         (item_dir / "artifacts").mkdir(parents=True, exist_ok=True)
-        # The plan RUN fires on entering plan and writes its own plan.md. Wait it out, then write
-        # ours — otherwise the run clobbers the planted checks and the suite proves nothing.
+        # Entering plan already fired a run that writes plan.md. Wait it out, or it clobbers the
+        # planted checks.
         settle(iid)
         (item_dir / "artifacts" / "plan.md").write_text(PLAN, encoding="utf-8")
         # plan → build. `enter_build_loop` fires on entry: from here nothing human touches it.

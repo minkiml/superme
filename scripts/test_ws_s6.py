@@ -206,8 +206,6 @@ def test_close_readiness(tmp: Path) -> None:
     ok("bare item refused — required artifacts missing", not cr["ok"]
        and not next(c for c in cr["checks"] if c["criterion"] == "required_artifacts")["ok"])
 
-    # Everything green: the merge commit is read from the item record, never re-asserted in a doc
-    # a closing agent could fill.
     _fill(item_dir, "plan", {"Tasks": "- [x] did it"})
     # Close reads what review settled; a close with no record reads the owner's report instead.
     _fill(item_dir, "review", {})
@@ -233,8 +231,7 @@ def test_close_readiness(tmp: Path) -> None:
        and "children_terminal" not in {c["criterion"]
                                        for c in GB.close_readiness(item, item_dir, kids)["checks"]})
 
-    # CLOSE RE-ADJUDICATES NOTHING: review's exit locks code and git, so a criterion reading
-    # either can only refuse paperwork for a settled decision.
+    # Review's exit locks code and git, so close can only refuse paperwork.
     (repo / "real.py").write_text("x = 2\n", encoding="utf-8")   # repo edit → the ledger IS stale...
     cr = GB.close_readiness(item, item_dir, [item])
     crits = {c["criterion"] for c in cr["checks"]}
@@ -272,8 +269,6 @@ def test_close_readiness(tmp: Path) -> None:
                            rec.read_text(encoding="utf-8")), encoding="utf-8")
     # Templates no longer carry authoring comments; the invariant is the READ, not the marker.
     ok("a freshly scaffolded record reads as no itemization yet", A.owner_decision(r_dir) == "")
-    # It asks whether the report STATES its proposed work: filing happens on approve, so no first
-    # approval can answer "was it filed".
     ok("research: report present but no proposed work refuses",
        _research("findings_delivered")["ok"] and not _research("spawns_exist")["ok"])
     rec.write_text(_re_sub(r"(?ms)^## Proposed work\n.*?(?=^## |\Z)",
@@ -377,7 +372,7 @@ def test_gate_state(tmp: Path) -> None:
     # Pinned STRUCTURALLY: `blocked_by` carries the check's own detail, and that wording is owner-
     # facing copy.
     ev_check = next((c for c in s["checks"] if c["criterion"] == "evidence_fresh"), None)
-    ok("review with no evidence → Approve greyed, with the reason named (§2.1 must-resolve)",
+    ok("review with no evidence → Approve greyed, with the reason named",
        ev_check is not None and ev_check["blocking"] and not ev_check["ok"]
        and ev_check["detail"] in s["blocked_by"])
     # Branch freshness is NOT a gate check: it can neither block nor be acted on there.

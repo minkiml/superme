@@ -40,7 +40,7 @@ def _item(plan: str = NONE_PLAN) -> Path:
 
 
 def _clean(item: Path, *, robustness: list[dict] | None = None) -> None:
-    _arts.record_lens(item, lens="intent", probed="read brief.md § Problem against the diff")
+    _arts.record_lens(item, lens="intent", probed="read brief.md `## Problem` against the diff")
     _arts.record_lens(item, lens="safety", probed="grepped eval/exec/shell=True; read the write paths")
     _arts.record_lens(item, lens="robustness", probed="tried empty string, None, a 1900 date",
                       findings=robustness or [])

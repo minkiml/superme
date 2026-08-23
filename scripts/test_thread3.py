@@ -50,8 +50,7 @@ def test_run_protocol() -> None:
                                        "kind": "implementation"}, "/dir", interactive=False)
     fg = KS.work_item_preamble("it1", {"title": "T", "phase": "plan",
                                        "kind": "implementation"}, "/dir")
-    # Pin the CHANNEL and its routes, not the sentence introducing them: a copy edit turned the
-    # old literal red while the protocol was intact.
+    # Pin the channel and its routes, never the sentence introducing them.
     ok("background variant carries the protocol (never-page · assumptions · authorization · ending)",
        "**Run protocol:**" in bg and "## Assumptions" in bg and "request_authorization" in bg
        and "report_completion" in bg)
@@ -136,8 +135,6 @@ def test_runners_flip() -> None:
         "learning": src("superme_agent/daemon/services/learning.py"),
         "deputy": src("superme_agent/daemon/services/deputy.py"),
     }
-    # The backstop that re-asks an undeclared run mounts the same sink, and pinning the count
-    # lower made adding it read as a regression.
     ok("intake + feedback + close runners mount the report_completion sink",
        runs_src["runs"].count("make_run_report_server(sink)") == 4)
     ok("the completion backstop exists and re-asks through the same sink",
@@ -266,15 +263,12 @@ def render_registry() -> dict[str, str]:
         "preamble.work_item.build.bg": KS.work_item_preamble("fix1", item, str(d),
                                                              interactive=False),
         "preamble.work_item.vet": KS.work_item_preamble("fix1", {**item, "phase": "vet"}, str(d)),
-        # The post-compaction variant: the same preamble plus the continuity notice, which is
-        # owed only while this thread's newest finished run is the compaction itself.
         "preamble.work_item.compacted": KS.work_item_preamble(
             "fix1", item, str(d), compacted_checkpoint=str(d / "checkpoints/20260101T000000.md")),
         "preamble.work_item.research": KS.work_item_preamble(
             "fix1", {"phase": "plan", "kind": "research", "title": "R"}, str(d)),
         "preamble.general": KS.general_preamble(),
-        # The general session's post-compaction notice. `has_artifacts=False` — no item
-        # folder to fall back on, so the banked memory is the only surviving copy.
+        # No item folder to fall back on, so the banked memory is the only surviving copy.
         "preamble.general.compacted": KS.general_preamble() + KS.compaction_notice(
             "/k/dev/session-memory/sess-1.md", has_artifacts=False),
         "preamble.onboarding.init": KS.onboarding_preamble("project-init"),

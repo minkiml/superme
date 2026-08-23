@@ -180,8 +180,7 @@ with tempfile.TemporaryDirectory() as td:
         body = body.replace(f"## {sec}\n", f"## {sec}\nreal content here\n")
     body = "\n".join(ln for ln in body.splitlines() if not ln.startswith("<fill:")) + "\n"
     p.write_text(body, encoding="utf-8")
-    # Re-classifying after the record was written must not go red: the owner's correction is not a
-    # defect in work already done.
+    # The owner's correction is not a defect in work already done.
     ok("a complete study record stays green after the item is re-classified",
        _arts.self_check(d, "investigation", item_kind="research") == [])
     ok("because the shape is read from the FILE, not the item",
@@ -214,8 +213,6 @@ _sp = src("superme_agent/core/spine.py")
 ok("the count is read from the spine's own subagent rows — unfakeable by the agent",
    "def subagent_count(" in _sp and "e.kind='subagent'" in _sp)
 
-# --- a reader can put a file somewhere --------------------------- A reader inherits the write
-# boundary but NOT the briefing, so its empty result reads clean.
 print("\n— a spawned reader is told where it may write —")
 _INV = Path("superme_agent/harness/plugins/superme-dev/skills/investigate")
 _skill = (_INV / "SKILL.md").read_text(encoding="utf-8")
@@ -324,8 +321,7 @@ ok("…and it cannot write — the tool allowlist is the enforcement the brief u
 for _name, _doc in (("skill", _sk), ("agent", _ag)):
     ok(f"the {_name} states the range-read rule, not just 'read less'",
        "offset" in _doc or "RANGE, not the file" in _doc)
-# The call ceiling was REMOVED, not forgotten: it never bound a spawn, and only risked capping
-# coverage. A checkable coverage claim replaces it.
+# A checkable coverage claim binds where a call ceiling did not.
 ok("the agent asks for coverage as NUMBERS, which a reader cannot fake by asserting completeness",
    "as numbers" in _ag.lower() and "cannot be checked" in _ag)
 ok("housekeeping starts from a mechanical inventory, not from reading",
@@ -338,8 +334,7 @@ ok("the skill and its checklist agree on what comes FIRST — the family guide, 
 # A partial agent id does not error; it silently falls back to a generic reader.
 ok("the skill spawns the FULL scoped identifier, not the bare name",
    "superme-dev:investigator" in _sk and "subagent_type: investigator\n" not in _sk)
-# A clean claim is unfalsifiable without its enumeration, and it is the claim that RETIRES a
-# question. Both readers owe it.
+# A clean claim is unfalsifiable without its enumeration.
 ok("the agent owes a receipt for 'I found nothing', not just for findings",
    "found nothing" in _ag and "enumerated" in _ag)
 ok("…and the parent refuses to record a clean area that arrived without numbers",
@@ -393,8 +388,7 @@ from superme_agent.daemon.services.runs import _artifact_desc
 ok("a spawn's trace row carries the brief's size",
    "brief 1843" in _artifact_desc("Agent", {"subagent_type": "Explore", "prompt": "x" * 1843})[2])
 
-# …and the brief ITSELF is kept: a size can prove one too short to carry a bar, never that the bar
-# was right.
+# A size can prove a brief too short to carry a bar, never that the bar was right.
 print("\n— the brief a worker was actually sent is kept, not just its length —")
 import tempfile as _tf
 from superme_agent.daemon.services.runs import _artifact_payload
@@ -430,16 +424,14 @@ ok("sizes still cover both: measured from the brief, parsed for the older spawn"
    _s.brief_sizes("r", "i", phase="investigate") == [len(BRIEF), 900])
 shutil.rmtree(_db.parent, ignore_errors=True)
 
-# Both halves can be right while the JOIN is missing: a payload nobody passes is a column that
-# stays NULL on every real run.
+# A payload nobody passes is a column that stays NULL on every real run.
 _runs_src = src("superme_agent/daemon/services/runs.py")
 ok("the recorder actually passes the payload through — the join, not just the two ends",
    "payload=_artifact_payload(" in _runs_src)
 ok("…and a spawn with no prompt records no size rather than a zero",
    "brief" not in _artifact_desc("Agent", {"subagent_type": "Explore"})[2])
 
-# The skill must say the reader starts WITHOUT the parent's context, so the brief is the only
-# channel. The invariant, not the sentence.
+# The reader starts without the parent's context, so the brief is the only channel.
 _split_step = _SPLIT_STEP
 ok("the skill requires a brief that stands alone, since the subagent inherits nothing",
    "read nothing else" in _split_step)
@@ -451,8 +443,7 @@ ok("…and preflights the subject before paying for a split",
 ok("every family guide says what travels in the brief",
    all("brief" in (_GUIDES / f"{f}.md").read_text(encoding="utf-8") for f in _kp.RESEARCH_KINDS))
 
-# One gate, one row set: NEITHER side reads a counter of its own, so adding one cannot reach the
-# owner and miss the deputy.
+# One gate, one row set. A counter of its own could reach the owner and miss the deputy.
 _dep = src("superme_agent/daemon/services/deputy.py")
 _rt = src("superme_agent/daemon/routers/dev/gates.py")
 ok("the deputy inlines no counter of its own — it spreads the shared reader",
@@ -577,8 +568,7 @@ ok("…and the record has a slot for them, so a post-hoc story cannot pass as me
 print("\n— the remaining step-6 edits —")
 ok("refactoring carries the deletion test as a named test",
    "deletion test" in (_GUIDES / "refactoring.md").read_text(encoding="utf-8"))
-# The rejection section must exist AND route away what only a later sweep needs, or it becomes a
-# stale judgment the next run inherits.
+# A rejection that routes nowhere becomes a stale judgment the next run inherits.
 _STAY = flat((_GUIDES / "housekeeping.md").read_text(encoding="utf-8"))
 ok("housekeeping's `What must stay` is a named destination for rejected candidates",
    "## What must stay" in _STAY and "What looks dead and isn't" in _STAY)
@@ -641,8 +631,7 @@ ok("the registry names both mirrors, so the next person knows where to look",
 print("\n— investigate no longer reads a plan a research item does not have —")
 _SK = Path("superme_agent/harness/plugins/superme-dev/skills/investigate")
 _isk = (_SK / "SKILL.md").read_text(encoding="utf-8")
-# The ORDER is pinned, not the explanation: guide, then questions, then code. Numbered steps
-# cannot contradict each other the way prose did.
+# The order is pinned, not the explanation: guide, then questions, then code.
 ok("the questions, the walls and Done are written before any code is read",
    "before you read any code" in flat(_isk))
 ok("…and the guide precedes even them, by step number",
@@ -701,8 +690,7 @@ ok("the first investigate run is fired for the owner, not left for a second clic
 print(f"\n✓ ALL {PASS} CHECKS PASS")
 
 
-# The trigger sequence is what a reader acts on first, and a long reference must show its full
-# scope on a partial read.
+# A long reference must show its full scope on a partial read.
 _AG = Path("superme_agent/harness/plugins/superme-dev/skills/investigate/agents/"
            "investigator-agent.md").read_text(encoding="utf-8")
 ok("the agent leads with its trigger sequence, not with rationale",
@@ -717,8 +705,6 @@ _toc = [str(f.relative_to(_HARNESS.parent)) for f in _HARNESS.rglob("references/
         if "## Contents" in f.read_text(encoding="utf-8")]
 ok(f"no reference file duplicates its own headings as a Contents block — found: {_toc}", not _toc)
 
-# ── no prompt surface logs an incident ──────────────────────────── The rule an incident produced
-# belongs; the incident does not. Docstrings are exempt.
 print("\n— prompts instruct, they do not log —")
 import re as _re
 _PROMPTS = (Path(__file__).resolve().parents[1] / "superme_agent/harness")
@@ -738,8 +724,6 @@ _commented = [str(f.relative_to(_HARNESS.parent)) for f in _HARNESS.rglob("*.md"
 ok(f"no markdown comment in any instruction surface — found {_commented}", not _commented)
 
 
-# ── work_kind: proposed on the row, resolved on the item ──────── The JOIN is what breaks:
-# written at one end, never read at the other.
 print("\n— work_kind: the filer proposes, triage confirms —")
 import superme_agent.core.inbox_flow as _flow
 from superme_agent.core.dev_store import DevStore
@@ -755,8 +739,6 @@ ok("push carries the row's proposal into BOTH the item's kind and its birth stam
    'kind=row.get("work_kind") or "implementation"' in _fl_src
    and 'proposed_kind=row.get("work_kind")' in _fl_src)
 ok("the filing tool writes it through to the store", "work_kind=wk," in _dt_src)
-# WHAT AN INBOX ITEM IS, enforced rather than described: requiring the kind IS requiring that the
-# row be work at all.
 ok("`work_kind` is REQUIRED on the filing tool — a row that cannot name which machinery it becomes "
    "is not an inbox item", 'work_kind: Required[Annotated[Literal["implementation", "research"]'
    in _dt_src)
@@ -824,8 +806,8 @@ ok("itemize carries the report's own typing instead of discarding it",
    "Carry the proposal's own typing into `work_kind`"
    in (_SKILL_HOME / "itemize" / "SKILL.md").read_text(encoding="utf-8"))
 
-# ── the handoff brief's contract ───────────────────────────────── The BAR is what a slot owes
-# when the filer has a source to carry it from.
+# ── the handoff brief's contract ─────────────────────────────────
+# What a slot owes when the filer has a source to carry it from.
 print("\n— the handoff brief owes a bar, not a template —")
 _ITZ = (_SKILL_HOME / "itemize" / "SKILL.md").read_text(encoding="utf-8")
 ok("the shape stays ONE skeleton — no per-caller brief template file was added",
@@ -899,8 +881,6 @@ ok("both push callers surface it — the owner's route and the agent's tool",
    in src("superme_agent/daemon/routers/dev/inbox.py")
    and "wi.get('brief_issues')" in _dt)
 
-# ── a research run must see the repo's ignored SOURCE ───────────── A negative claim cannot be
-# made from an incomplete tree.
 print("\n— the scratch worktree sees the ignored source the owner named —")
 from superme_agent.core.spine import RepoConfig, SystemSpine
 from superme_agent.daemon.services.git_ops import _mirror_source_ignored, _is_secret
@@ -964,8 +944,6 @@ with tempfile.TemporaryDirectory() as td:
 ok("the mirror runs only on a FRESH tree — a reused one already has it, read-only",
    "if not rec.get(\"reused\"):" in src("superme_agent/daemon/services/git_ops.py"))
 
-# ── a stopped run must not lose its correction ──────────────────── A resumed item re-firing the
-# plain prompt reads its own finished transcript and no-ops.
 print("\n— a resume carries the send-back, and a crash carries its cause —")
 from superme_agent.core import deputy as _dep
 from superme_agent.core.agent_service import _cli_stderr, cli_stderr_tail
@@ -1005,8 +983,7 @@ ok("a launch crash now REPORTS the cause instead of pointing at a stderr nobody 
    "unknown option" in _fault.reason)
 
 print("\n— the typed proposal block: what a research item may DECIDE vs must ASK —")
-# A research item finds things out; it does not choose. Exactly one shape may withhold work: a
-# question the owner has not answered.
+# A research item finds things out. Only an unanswered question may withhold work.
 _PROP_TEMPLATE = Path("superme_agent/harness/plugins/superme-dev/skills/review/templates/"
                       "review-research-template.md").read_text(encoding="utf-8")
 for _field in ("**Title:**", "**Kind:**", "**Why now:**", "**Delivers:**", "**Default applied:**",
@@ -1355,8 +1332,7 @@ with tempfile.TemporaryDirectory() as _td:
        _dl.settled_index(_root).count("\n") == 1 and "**Why**" not in _dl.settled_index(_root))
 
 print("\n— fan-out: the check answers to triage, not to the family default —")
-# A judgement living in prose no reader parses lets the check contradict a decision made upstream,
-# and blame the run for obeying.
+# A judgement living in prose no reader parses lets the check contradict it.
 from superme_agent.core.gate_briefs import fanout_check as _fo             # noqa: E402
 from superme_agent.core.vocab.kind_profiles import ITEM_FANOUT, item_fanout      # noqa: E402
 
@@ -1400,8 +1376,6 @@ ok("a `Rule` with no `Answer` promotes nothing — a rule is what a ruling estab
 ok("…and the gate calls that malformed, where the owner can still send the item back",
    any("`Rule` with no `Answer`" in i for i in _arts.research_proposal_issues([_p])))
 
-# A rule outlives the item, so the gate is the last place to refuse one. Named even when no
-# question is open.
 _ruled_gate = _rulings(_RULED)["detail"]
 ok("the review gate states what approving will write into the ledger, quoting the rule itself",
    "an exported symbol with a live external caller is kept" in _ruled_gate

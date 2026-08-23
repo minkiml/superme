@@ -170,8 +170,6 @@ def test_the_reader_sees_which_criterion_missed():
     _arts.record_verification(item, None, check="suite", how="ran", result="exit 0", passed=True)
     _lenses(item)
     text = Path(_arts.write_vet_user_report(item, None)["path"]).read_text(encoding="utf-8")
-    # The score rides the Proof row, criterion by criterion. What the REPORT owes is that the
-    # check came back red at all, machine-authored.
     ok("a missed rubric reaches the owner's report as a failure",
        "## What didn't hold" in text and "cli.py:31" in text)
     ok("…and the criteria themselves stay judged one by one on the record",

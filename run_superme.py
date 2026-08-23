@@ -50,10 +50,7 @@ def wait_for(url: str, proc: subprocess.Popen, seconds: int = 40) -> bool:
 def npm_argv() -> list[str] | None:
     """How to launch npm here, or None when it is not installed.
 
-    On Windows npm is a `.cmd`, which CreateProcess cannot execute — it has to go through the
-    command interpreter. This launcher imports nothing from the package on purpose, so it carries
-    its own copy of the rule rather than depending on an install that may not be configured yet.
-    """
+    On Windows npm is a `.cmd`, which only a shell can run."""
     exe = which("npm")
     if not exe:
         return None
@@ -67,10 +64,7 @@ def _interrupt(*_args) -> None:
 
 
 def take_signals() -> None:
-    """Route a kill through the same exit as Ctrl-C, so no child outlives the parent.
-
-    A parent started as a background job inherits SIGINT ignored, and would otherwise never
-    see Ctrl-C either."""
+    """Route a kill through the same exit as Ctrl-C, so no child outlives the parent."""
     signal.signal(signal.SIGINT, signal.default_int_handler)
     signal.signal(signal.SIGTERM, _interrupt)
 
@@ -92,8 +86,8 @@ def main() -> int:
 
     children: list[tuple[str, subprocess.Popen]] = []
 
-    # Windows decodes files and pipes as cp1252 unless told otherwise, and every artifact this
-    # system writes is UTF-8. Set for the children, not this process — it is already running.
+    # Windows defaults to cp1252 and everything here is UTF-8. Set on the children, not this
+    # process.
     env = dict(os.environ, PYTHONUTF8="1")
 
     def start(label: str, argv: list[str], cwd: Path) -> subprocess.Popen:

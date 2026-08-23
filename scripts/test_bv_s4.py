@@ -178,8 +178,6 @@ def test_readonly_permissions(tmp: Path) -> None:
     fn = build_can_use_tool(approve, cwd=wt, write_boundary=[wt],
                             deny_write_tools=VET_READONLY_NUDGE)
     r = _decide(fn, "Write", {"file_path": str(wt / "f.py"), "content": "x"})
-    # `in`, not `==`: a refusal also carries the kernel's tally, so the invariant is that vet's
-    # reason is the one given.
     ok("Write denied even INSIDE the freeze boundary",
        type(r).__name__ == "PermissionResultDeny" and VET_READONLY_NUDGE in r.message)
     r = _decide(fn, "Edit", {"file_path": str(wt / "f.py"), "old_string": "a", "new_string": "b"})
@@ -267,7 +265,7 @@ def test_scope_vs_ops() -> None:
     """The declared authorization scope is checked against the STAGED OPS. The
     reserved/delegable split is declared by the agent it constrains, so on its own it is an honour
     system; this is the code that makes the obvious lie refusable."""
-    print("authorization scope vs staged ops (§2.1)")
+    print("authorization scope vs staged ops")
     from superme_agent.core import artifacts as A
     intent = [{"doc": "project-prd", "section": "Deliverables", "op": "update", "content": "x"},
               {"doc": "project-prd", "section": "Success signals", "op": "update", "content": "y"}]

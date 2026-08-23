@@ -93,11 +93,10 @@ def vet_env_note(script: str) -> str:
 def vet_trigger(item_id: str, title: str, deferred: list[str] | None = None,
                 machine: list[dict] | None = None, audit: list[dict] | None = None,
                 vet_env: bool = False, kernel: bool = True) -> str:
-    """The background vet run · durable, since vet forgets each cycle. `deferred` are
-    build's intentional skips; `machine` are checks the kernel already ran.
+    """The background vet run, durable since vet forgets each cycle.
 
-    `kernel` false means this host has no sandbox to run them in — said out loud, because an
-    empty `machine` list otherwise reads as a plan that carried no runnable checks."""
+    `kernel` false means this host has no sandbox, said out loud because an empty `machine` list
+    otherwise reads as a plan with no runnable checks."""
     base = f"Run superme-dev:vet for work-item `{item_id}` (\"{title}\")."
     if not kernel:
         base += ("\n\nThis host has no sandbox the kernel can run a check in, so NOTHING was run "
@@ -876,7 +875,7 @@ _HANDOFF_REPORT_CAP = 8_000
 
 def _cycle_verdict_summary(item_dir: Path, cycle: int) -> str:
     """One line summarizing a cycle's recorded check verdicts, from the same
-    §Verification entries the loop reads."""
+    `## Verification` entries the loop reads."""
     latest: dict[str, bool] = {}
     for e in artifacts.evidence_entries(item_dir):
         if int(e.get("cycle") or 0) == cycle:

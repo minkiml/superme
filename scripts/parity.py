@@ -1,10 +1,10 @@
 """Behavior-parity harness: proves a refactor moved code without changing the API.
 
-Route inventory is the hard gate. Read in-process, so it describes the code on disk.
+Route inventory is the hard gate, read in-process so it describes the code on disk.
 
     python -m scripts.parity snapshot         # refresh the committed baseline
-    python -m scripts.parity check            # add --strict-shapes to gate on shape drift
-    python -m scripts.parity check --live     # ask a running daemon instead, and probe WS
+    python -m scripts.parity check            # --strict-shapes gates on shape drift
+    python -m scripts.parity check --live     # ask a running daemon, and probe WS
 """
 
 import asyncio
@@ -27,11 +27,10 @@ def _app():
 
 
 def _ws_routes(app) -> list[str]:
-    """The WebSocket paths the app actually declares — absent from OpenAPI, so measured here.
+    """The WebSocket paths the app declares, absent from OpenAPI so measured here.
 
-    FastAPI keeps changing how an included router is stored: a plain list once, then objects
-    carrying `routes`, and now a wrapper whose only handle is `original_router`. Follow every
-    shape — missing one reports the routes as DELETED, on an app that still serves them."""
+    FastAPI keeps changing how an included router is stored. Missing a shape reports live routes as
+    DELETED."""
     from starlette.routing import WebSocketRoute
 
     found: list[str] = []

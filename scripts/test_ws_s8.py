@@ -38,8 +38,7 @@ def test_effective_trigger(monkey_cfg) -> None:
     ok("per-kind override wins", C.effective_trigger("research") == 90)
     ok("unknown kind falls back to the default profile's trigger",
        C.effective_trigger(None) == 60)
-    # The retired session-floor raise: an observed fill must NEVER move the trigger. That
-    # arithmetic silently lifted 55 → 41-over-a-restart-measured-31 and killed compaction.
+    # An observed fill must never move the trigger.
     ok("no session state can move the trigger", not hasattr(C, "SESSION_FLOOR_MARGIN")
        and not hasattr(C, "note_fill"))
 

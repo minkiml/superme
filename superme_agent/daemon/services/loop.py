@@ -249,7 +249,7 @@ def _exit_no_progress(ctx, context_id: str, item_id: str, dev_root: Path, item_d
         _arts.append_cycle_outcome(item_dir, evidence="unchanged", decision="review",
                                    reason=d["reason"])
     except Exception:
-        log.exception("§Cycle outcome append failed for %s", item_id)
+        log.exception("cycle-outcome append failed for %s", item_id)
     _log_decision(context_id, item_id, cycle, d)
     _dev_store.log_event(context_id, "phase.advance",
                          f"Loop: {d['reason'][:120]} — advanced vet → review",
@@ -453,7 +453,7 @@ async def _run_background_vet(ctx, context_id: str, item_id: str,
                                        fingerprint=fingerprint if evidence.get("status") == "failed" else "",
                                        failed=d.get("failed") or (), tokens=spent, budget=budget)
         except Exception:
-            log.exception("§Cycle outcome append failed for %s", item_id)
+            log.exception("cycle-outcome append failed for %s", item_id)
     _log_decision(context_id, item_id, cycle, d)
     if d["action"] == "review":
         _dev_store.log_event(

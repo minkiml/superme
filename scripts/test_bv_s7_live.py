@@ -176,8 +176,7 @@ def cleanup(trunk_sha0: str, iid: str | None) -> None:
                           {"context_id": CTX, "reason": "bv-s7 probe done"})
             except Exception as e:  # noqa: BLE001
                 print(f"cleanup: abandon failed ({e})")
-        # ONLY this item's branch and worktree. `item/*` and the whole worktrees root would take
-        # every other item's work with them — this repo holds work that is not ours.
+        # ONLY this item's. `item/*` and the worktrees root would take every other item with them.
         if iid:
             for wt in git_layer.worktrees_root(CTX).glob(f"{iid}*"):
                 shutil.rmtree(wt, ignore_errors=True)
@@ -223,12 +222,12 @@ def main() -> None:
 
         retry_409("POST", f"/dev/work-items/{iid}/advance?context_id={CTX}", {})  # triage → plan
         (item_dir / "artifacts").mkdir(parents=True, exist_ok=True)
-        # The plan RUN fires on entering plan and writes its own plan.md. Wait it out, then write
-        # ours — otherwise the run clobbers the planted checks and the suite proves nothing.
+        # Entering plan already fired a run that writes plan.md. Wait it out, or it clobbers the
+        # planted checks.
         settle(iid)
         (item_dir / "artifacts" / "plan.md").write_text(PLAN, encoding="utf-8")
-        # plan → build. `enter_build_loop` fires on entry, so a real build agent writes the
-        # probe and the loop vets it — this suite never touches the worktree.
+        # `enter_build_loop` fires on entry, so a real build agent writes the probe and the loop
+        # vets it.
         adv = retry_409("POST", f"/dev/work-items/{iid}/advance?context_id={CTX}", {})
         wt = Path(adv["git"]["worktree"])
         ok("build entry created the worktree", wt.is_dir())
@@ -244,8 +243,8 @@ def main() -> None:
         settle(iid)          # review's entry run holds the lock the moment it lands
         t1 = asyncio.run(turn(FEEDBACK_PROMPT, work_item_id=iid))
         ok("routing turn completed on the review thread", bool(t1["session_id"]))
-        # `fire_phase_feedback`: a review `revise` flips the phase and re-runs the target IN-THREAD.
-        # There is no inline check mint — the plan phase defines the check when it re-plans.
+        # A review `revise` flips the phase and re-runs the target in-thread. The plan phase
+        # defines the check when it re-plans.
         for _ in range(40):
             events = [e for e in http("GET", f"/dev/log?context_id={CTX}&limit=60").get("events", [])
                       if e.get("item_id") == iid and e.get("kind") == "review.route"]
@@ -261,9 +260,6 @@ def main() -> None:
         ok("the send-back spent the approval — the PR is closed",
            not (it.get("git") or {}).get("pr_open"), str(it.get("git")))
 
-        # --- leg 3: one approval, then the loop drives it to green -------------------
-        # A send-back lands at PLAN, which is a gate by design — `_SEND_BACK_TARGET`. Approving the
-        # re-plan is the one human act; everything after it is the loop's.
         print("leg 3: approve the re-plan → build implements → fresh vet → review…")
         retry_409("POST", f"/dev/work-items/{iid}/advance?context_id={CTX}", {})   # plan → build
         phase, status = wait_phase(iid, "review", LOOP_TIMEOUT, item_dir)

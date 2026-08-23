@@ -406,9 +406,7 @@ VET_LOG = ".vet-env.log"
 def pid_alive(pid: int) -> bool:
     """Is `pid` a process we could signal?
 
-    `os.kill(pid, 0)` is the POSIX idiom and a trap on Windows, where every signal but the two
-    console events is TerminateProcess — asking whether it is alive would kill it.
-    """
+    `os.kill(pid, 0)` is the POSIX idiom and a trap on Windows, where it terminates."""
     if pid <= 0:
         return False
     if os.name == "nt":
@@ -430,11 +428,9 @@ def pid_alive(pid: int) -> bool:
 
 
 def _cwd_scan(wt: Path, match: str) -> list[int]:
-    """Every LISTENING process whose cwd is `wt`, asked of the OS. `match` additionally requires
-    the substring in the command line, so a scan cannot return the caller's own process tree.
+    """Every LISTENING process whose cwd is `wt`. `match` also requires it in the command line.
 
-    Needs `lsof`; empty when the host has none, which the caller must not read as "nothing runs".
-    """
+    Needs `lsof`, so empty is not the same as nothing running."""
     try:
         out = subprocess.run(["lsof", "-nP", "-iTCP", "-sTCP:LISTEN", "-t"],
                              capture_output=True, text=True, timeout=15, encoding="utf-8")
@@ -462,13 +458,9 @@ def _cwd_scan(wt: Path, match: str) -> list[int]:
 
 
 def servers_in(wt: Path, match: str = "") -> list[int]:
-    """Every live vet-env process belonging to `wt`: the ones the OS reports running THERE, plus
-    the one the worktree's own state file names.
+    """Every live vet-env process belonging to `wt`, by cwd and by the state file.
 
-    cwd leads — it is unforgeable, and the only answer that finds a SECOND server or one whose
-    state file was lost. It also needs `lsof`, which Windows has not got, so there the state file
-    is the whole answer and a lost one leaks a process rather than signalling the wrong one.
-    """
+    Windows has no `lsof`, so there the state file is the whole answer."""
     found = list(_cwd_scan(wt, match))
     try:
         recorded = int(json.loads((Path(wt) / VET_STATE).read_text(encoding="utf-8")).get("pid") or 0)
@@ -480,12 +472,10 @@ def servers_in(wt: Path, match: str = "") -> list[int]:
 
 
 def terminate(pid: int) -> bool:
-    """Stop a vet-env server and whatever it spawned, reporting whether anything was signalled.
+    """Stop a vet-env server and whatever it spawned.
 
-    The group is the target where the OS has groups: a server that forked a worker leaves the
-    worker holding the port. Windows has no `killpg` at all — an AttributeError, which is not an
-    OSError, so it has to be caught by name or it escapes every handler around it.
-    """
+    The group where the OS has groups. Windows has no `killpg`, and an AttributeError is not an
+    OSError."""
     killpg = getattr(os, "killpg", None)
     if killpg is not None:
         try:

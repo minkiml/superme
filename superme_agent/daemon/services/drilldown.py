@@ -123,16 +123,14 @@ def _actions(item: dict, state: dict, *, running: bool, git_health: dict | None,
     return _credential_gate(out)
 
 
-# Every control that starts a turn. Drop disposes an item and the PR page only reads, so both stay
-# live for an owner with no credential — there is still work to do on what already ran.
+# Drop disposes and the PR page only reads, so both stay live without a credential.
 _NEEDS_CREDENTIAL = {"approve", "run", "resume", "rerun"}
 
 
 def _credential_gate(actions: list[dict]) -> list[dict]:
     """Grey every control that would start agent work when nothing can authenticate.
 
-    The route refuses these anyway; this is what makes the refusal visible before the click, and it
-    overrides `active` last so no earlier rule can hand back a button the daemon will reject."""
+    Overrides `active` last, so no earlier rule hands back a button the daemon will reject."""
     status = auth_status()
     if status["ready"]:
         return actions

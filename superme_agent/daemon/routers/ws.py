@@ -354,9 +354,8 @@ async def ws_agent(ws: WebSocket) -> None:
                     adopt=lambda sid, r: _dev.set_work_item_session(
                         ctx.internal_root / "dev", work_item_id, sid, slot=r),
                 )
-                # `resolve_item_session` answers WHERE the turn runs (the slot). The ROLE is a
-                # different question with a different vocabulary — asking the slot for it makes
-                # every `== "intake"` test dead, since no slot carries that name.
+                # The slot says WHERE a turn runs, never which role it plays. No slot is named
+                # `intake`.
                 session_role = kind_profiles.session_role(str(item.get("phase") or "triage"))
                 # The bound turn runs in the CURRENT role's slot; a resume naming another role's
                 # thread is redirected.

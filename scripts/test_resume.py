@@ -90,8 +90,7 @@ def test_drilldown_control() -> None:
 
     ok("a running item offers neither", not _acts(stopped, running=True)["resume"]["active"])
 
-    # Never hidden — the owner's standing rule. A greyed control that explains itself teaches the
-    # model; an absent one hides it.
+    # A greyed control that explains itself teaches. An absent one hides the rule.
     for case in (stopped, parked, {"id": "c", "status": "active", "phase": "triage"}):
         ok(f"Resume is always RENDERED (phase={case['phase']}, status={case['status']})",
            "resume" in _acts(case))
@@ -119,8 +118,6 @@ def test_failed_resume_restores(dev_root: Path) -> None:
     ok("a successful resume leaves a run.resume event", '"run.resume"' in body)
     ok("…attributed to the owner", 'actor="owner"' in body)
 
-    # `set_work_item_status` clearing the reason is what makes the restore honest — without it a
-    # resumed item would still read as broken.
     dev.set_work_item_status(dev_root, "r1", "active")
     ok("clearing the status clears the reason",
        not (dev.read_work_item(dev_root, "r1") or {}).get("error_reason"))

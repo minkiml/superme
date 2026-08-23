@@ -90,7 +90,7 @@ def test_template() -> None:
 
 
 def test_parser() -> None:
-    print("parser — the §3.2 example round-trips")
+    print("parser — the worked example round-trips")
     vp = A.parse_vet_plan(GOOD_PLAN)
     ok("header fields parse", vp["present"] and vp["depth"] == "scenarios"
        and vp["env"] == "playground-cli" and vp["reason"].startswith("user-facing"))
@@ -115,7 +115,7 @@ def hard(text: str) -> list[str]:
 
 
 def test_hard_rules() -> None:
-    print("§3.4 HARD — every structural rule blocks")
+    print("HARD — every structural rule blocks")
     ok("illegal depth", any("depth must be one of" in i for i in
        hard(plan_with("depth: full\nreason: r\nenv: none\n", CHECK_OK))))
     ok("missing reason (even for none)", any("reason is required" in i for i in
@@ -156,7 +156,7 @@ def test_hard_rules() -> None:
 
 
 def test_soft_rules() -> None:
-    print("§3.4 SOFT — vagueness flags, never blocks")
+    print("SOFT — vagueness flags, never blocks")
     vague = plan_with("depth: checks\nreason: r\nenv: none\n",
                       CHECK_OK.replace('exit 0 and the summary line reads "1 passed"',
                                        "the add command works correctly"))
@@ -194,8 +194,7 @@ def test_proves_is_the_human_field() -> None:
            hard(plan_with("depth: checks\nreason: r\nenv: none\n",
                           "\n### one-check\n- traces: t\n- mode: command\n- scenario: s\n"
                           "- expect: exits zero and prints nothing\n"))))
-    # …unlike `covers`, which stays soft: a missing join lands the check in the item-wide row,
-    # while a missing meaning leaves every downstream reader guessing.
+    # `covers` stays soft: a missing meaning leaves every downstream reader guessing.
     ok("…where `covers` is still not required",
        not any("covers" in i for i in hard(plan_with("depth: checks\nreason: r\nenv: none\n",
                                                      CHECK_OK))))
@@ -250,7 +249,7 @@ def test_self_check_gate() -> None:
             (d / "artifacts" / "plan.md").write_text("---\nartifact: plan\n---\n" + text, encoding="utf-8")
 
         write_plan(GOOD_PLAN)
-        ok("the §3.2 example is gate-ready",
+        ok("the worked example is gate-ready",
            A.self_check(d, "plan", item_kind="implementation") == [],
            str(A.self_check(d, "plan", item_kind="implementation")))
         write_plan(plan_with("depth: scenarios\nreason: r\nenv: e\n", ""))
@@ -309,8 +308,7 @@ def test_gate_state_surface() -> None:
         item = {"id": "abc123def456", "title": "t", "kind": "implementation", "phase": "plan",
                 "status": "awaiting_human"}
         s = GB.gate_state(item, item_dir, d / "root", None, all_items=[item], events=[])
-        # The gate carries CHECK ROWS and nothing else; the depth judgment reaches the owner in
-        # the row that can act on it.
+        # The depth judgment reaches the owner in the row that can act on it.
         ok("a gate publishes no separate facts list", "facts" not in s)
         sharp = next(c for c in s["checks"] if c["criterion"] == "vet_plan_sharp")
         ok("a vague expect fails vet_plan_sharp, with the reason inline",

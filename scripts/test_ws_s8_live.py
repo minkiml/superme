@@ -1,12 +1,9 @@
 """The compaction runtime on a real session. COSTS TOKENS.
 
-The pre-compaction checkpoint lands BEFORE the compaction event, the verdict logs real boundary
-tokens, and two ineffective attempts latch a back-off. The compacted thread is then owed a POINTER
-to the bank, which self-clears after one real turn — nothing is injected, and a bound turn never
-mints a fresh session.
+The checkpoint lands BEFORE the compaction event, and the compacted thread is owed a POINTER to
+the bank that self-clears after one turn.
 
-Needs SUPERME_TEST_CTX.
-Run with the daemon up: PYTHONPATH=. python -m scripts.test_ws_s8_live
+Needs SUPERME_TEST_CTX and a running daemon.
 """
 
 import os
@@ -77,8 +74,7 @@ def http_code(method: str, path: str, body: dict | None = None) -> int:
 async def turn(prompt: str, *, work_item_id: str, resume: str | None = None) -> dict:
     out = {"text": "", "session_id": None}
     async with websockets.connect(WS, max_size=None) as ws:
-        # A small window is the point: the filler has to cross the trigger. The per-item /model
-        # route is gone, so the turn frame carries the pick (`ws.py` reads it as `msg.model`).
+        # The filler has to cross the trigger, and the turn frame carries the model pick.
         await ws.send(json.dumps({"type": "turn", "prompt": prompt, "context_id": CTX,
                                   "mode": "dev", "work_item_id": work_item_id, "resume": resume,
                                   "model": "haiku"}))
@@ -148,8 +144,7 @@ def main() -> None:
     print("config: floor-aware refusal + low trigger")
     ok("floor-violating trigger REFUSED (409)",
        http_code("POST", "/system/compaction", {"trigger_pct": 20}) == 409)
-    # 40 is the lowest the daemon now accepts: below it, compaction lands near the floor and
-    # re-fires on the next exchange.
+    # Below 40 the compaction lands near the floor and re-fires on the next exchange.
     cfg = http("POST", "/system/compaction", {"trigger_pct": 40, "min_gain_pct": 5})
     ok("low-but-legal trigger accepted", cfg["trigger_pct"] == 40 and cfg["floor_pct"] == 25)
 
@@ -175,8 +170,7 @@ def main() -> None:
         ok("fat turn completed", "noted" in t2["text"].lower(), t2["text"][:120])
 
         # -- the automatic compaction sequence ---------------------------------------
-        # `compact_before_run` gates the START of a run, so crossing the trigger is not enough —
-        # the next turn is what fires it. This tiny turn is that next turn.
+        # `compact_before_run` gates the START of a run, so the next turn is what fires it.
         asyncio.run(turn_retry("Reply with exactly: go", work_item_id=iid, resume=sid))
         run = wait_compact_run(iid)
         ok("auto trigger fired a compact run (feature='compact') and it finished",
@@ -214,10 +208,6 @@ def main() -> None:
         ok("'needs a fresh session' surfaces in the attention engine (needs_you)",
            any(r["id"] == iid for r in attn["buckets"]["needs_you"]))
 
-        # -- the compacted thread is owed a POINTER to the bank ----------------------
-        # No fresh session and no injected content: a turn bound to an item runs in that phase's
-        # SLOT (`ws.py`: turn_resume = slot_sid), and `compacted_checkpoint` hands it the banked
-        # file's PATH while the compaction is still the thread's newest finished run.
         print("read-back: the compacted thread is owed the banked checkpoint, then self-clears")
         from superme_agent.daemon.services.runs import compacted_checkpoint
         from superme_agent.gateway import contexts

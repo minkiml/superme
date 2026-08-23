@@ -48,13 +48,13 @@ def latest_cycle_report(item_dir: Path, *, char_cap: int = 8000) -> dict | None:
 
 
 def _cycle_closed(text: str) -> bool:
-    """A cycle is CLOSED once the driver has appended at least one §Cycle outcome entry."""
+    """A cycle is CLOSED once the driver has appended at least one `## Cycle outcome` entry."""
     return bool(_OUTCOME_HEAD.search(split_sections(text).get("Cycle outcome", "")))
 
 
 def scaffold_cycle(item_dir: Path, *, title: str = "") -> dict:
     """Scaffold the current OPEN cycle's report from the build skill's template. The open
-    cycle is the last file while its §Cycle outcome is empty, else last+1."""
+    cycle is the last file while its `## Cycle outcome` is empty, else last+1."""
     reports = cycle_reports(item_dir)
     cycle = 1
     if reports:
@@ -113,7 +113,7 @@ def _append_to_section(path: Path, heading: str, entry: str, *, fence: str = "")
     atomic_write(path, "\n".join(lines) + "\n")
 
 
-# §Cycle outcome — the driver's trail
+# `## Cycle outcome` — the driver's trail
 
 _OUTCOME_HEAD = re.compile(r"^### (?P<ts>\S+) — (?P<decision>\S+)$", re.MULTILINE)
 
@@ -122,7 +122,7 @@ def append_cycle_outcome(item_dir: Path, *, evidence: str, decision: str, reason
                          fingerprint: str = "", failed: list[str] | tuple = (),
                          tokens: int | None = None, budget: int | None = None,
                          loop_exit: str = "") -> dict | None:
-    """Append one driver decision to the LATEST cycle report's §Cycle outcome, closing
+    """Append one driver decision to the LATEST cycle report's `## Cycle outcome`, closing
     the cycle. `loop_exit` is the TYPED exit a revision reads its `concerns` off.
 
     Returns None when no cycle report exists — the DB `loop.decision` event still carries it."""

@@ -233,8 +233,7 @@ def test_freeze_boundary(repo: Path, tmp: Path) -> None:
     r = asyncio.run(check("Write", {"content": "no path at all"}))
     ok("pathless write fails closed", type(r).__name__ == "PermissionResultDeny")
 
-    # A phase agent in its own worktree owns its shell: tests and commits must not park on a
-    # human, or the loop cannot run.
+    # A phase agent owns its shell, or tests and commits park on a human and the loop stalls.
     can_sh = build_can_use_tool(never, cwd=wt, write_boundary=[wt, item_dir])
 
     async def shell(cmd):

@@ -1,11 +1,10 @@
 """Configure a SuperMe install: the local state a checkout does not carry.
 
-Prerequisites are yours — a Python environment with requirements.txt installed and npm
-install run. This installs nothing; it writes config and reports what is still missing.
+Re-running is safe.
 
-    python setup_superme.py            # configure, then report
-    python setup_superme.py --check    # report only, write nothing
-    python setup_superme.py --seed-hub # refresh the shipped hub docs from the live ones
+    python setup_superme.py             # write what is missing
+    python setup_superme.py --check     # report only
+    python setup_superme.py --seed-hub  # refresh the shipped hub docs from the live ones
 """
 
 import os
@@ -146,9 +145,7 @@ def _stores() -> None:
 def _hub_knowledge() -> None:
     """Put the shipped hub anchor docs in place once, so a guest's hub is readable on arrival.
 
-    Every other repo is onboarded by an owner who can say what it is for. Nobody can answer that
-    about SuperMe on the day they clone it, so this one repo's memory ships.
-    """
+    Nobody can say what SuperMe is for on the day they clone it, so this repo's memory ships."""
     from superme_agent.gateway import contexts
     from superme_agent.paths import HUB_KNOWLEDGE_SEED_DIR
 

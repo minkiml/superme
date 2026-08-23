@@ -438,8 +438,6 @@ def test_tool_registration() -> None:
                 # the remaining four pens of the same seven-template set
                 "file_triage_report", "file_build_report", "file_review_report",
                 "file_close_report",
-                # Itemize is handed the filed-versus-withheld split rather than judging it, and
-                # every phase that can ask the owner reads the ledger first.
                 "read_research_proposals", "read_decisions"}
 
        and all(t in {x.name for x in DEV_TOOLS} for t in names))

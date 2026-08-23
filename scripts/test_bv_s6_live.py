@@ -214,8 +214,8 @@ def main() -> None:
             "From the record you were handed this turn, answer in ONE line: how many loop "
             "cycles ran, which check failed in cycle 1, and where did the loop exit?",
             work_item_id=iid)
-        # MECHANICAL first: whether the kernel delivered the block is a fact, and it decides how
-        # to read anything the model then said about it.
+        # Whether the kernel delivered the block decides how to read anything the model said about
+        # it.
         ok("promotion header landed in exactly ONE user message",
            header_count(t1["session_id"]) == 1)
         um1 = user_messages(t1["session_id"])

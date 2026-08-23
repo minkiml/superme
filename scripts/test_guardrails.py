@@ -110,8 +110,6 @@ def test_the_stall_rule(monkeypatched=None):
        all(s["quiet_seconds"] >= watchdog.STALL_SECONDS for s in stalled))
     ok("the incident's own shape (24 minutes of silence) IS caught",
        any(s["quiet_seconds"] > 20 * 60 for s in stalled))
-    # Pinned as a RANGE, not the literal: above every legitimate pause measured, below the
-    # incident. A literal would restate a constant back to itself.
     ok("the threshold is far above a healthy run's rhythm and far below the incident",
        5 * 60 <= watchdog.STALL_SECONDS <= 30 * 60)
     ok("…and the SHIPPED default is that, not whatever a test env last set",
@@ -335,7 +333,7 @@ def test_the_total_counts_subagents_and_cannot_kill_a_run():
         ok("the scalar excludes cache_read, as every other surface does",
            live.tokens() == 15 + 150 + 525)
 
-        # THE PROPERTY THAT COST 486k TOKENS: a counter must not be able to stop the work.
+        # A counter must not be able to stop the work.
         live.bump("r", "i", step("m3", [1, 2], None, "x", 7))
         ok("a nonsense usage value is counted as 0, not raised",
            live.usage()["output_tokens"] == 25 + 500 + 7)

@@ -53,7 +53,7 @@ def _owner_slots(raw: str, *, sourced: bool) -> list[dict]:
 
 
 def owner_input(item_dir: Path) -> dict:
-    """What the owner wrote into `reports/report-triage.md` § From you. `exists` says whether
+    """What the owner wrote into `reports/report-triage.md` `## From you`. `exists` says whether
     the triage brief is on disk."""
     path = Path(item_dir) / "reports" / "report-triage.md"
     if not path.is_file():
@@ -106,7 +106,7 @@ def carry_owner_input(item_dir: Path, *, cap: int = _CARRY_CAP) -> str | None:
         block = block[:cap].rsplit("\n", 1)[0]
     return (
         "\n**From the owner (carried forward — their words, not a summary):**\n" + block
-        + ("\n- …truncated. The rest is in `reports/report-triage.md` § From you and "
+        + ("\n- …truncated. The rest is in `reports/report-triage.md` `## From you` and "
            "`artifacts/plan.md` § Decisions & clarifications." if over else "")
         + "\n→ These are STANDING instructions for this item. They outrank your own reading of the "
           "task; if one conflicts with what you were about to do, follow it or say why you cannot."

@@ -1,5 +1,4 @@
-"""Find code nothing runs. Candidates only — a route handler or a name reached by getattr
-looks unused and is not.
+"""Find code nothing runs. Candidates only, since a route handler looks unused and is not.
 
     python -m scripts.deadcode              # top-level names nothing refers to
     python -m scripts.deadcode --methods    # class methods nothing calls

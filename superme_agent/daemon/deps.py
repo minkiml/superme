@@ -21,9 +21,7 @@ log = logging.getLogger("superme-agent")
 def needs_credential() -> None:
     """Refuse a route that would start agent work when nothing can authenticate.
 
-    A dependency rather than a check per handler: the surface greys these actions out, but a
-    surface that forgot one would otherwise start a run doomed to fail on its first token.
-    """
+    A dependency, not a check per handler: a surface that forgot one would start a doomed run."""
     status = auth_status()
     if not status["ready"]:
         raise HTTPException(status_code=503, detail=status["detail"])

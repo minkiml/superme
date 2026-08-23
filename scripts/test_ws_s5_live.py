@@ -1,10 +1,9 @@
 """Real phase sessions driven by a live agent. COSTS TOKENS.
 
 A live turn births the intake thread, a resume stays on it, and the background plan run finishes
-structured. Needs SUPERME_TEST_CTX and a running daemon.
+structured.
 
-The orient block this suite once counted is GONE — nothing constructs it; `## Current focus` carries
-the pointer per turn and state is read on demand.
+Needs SUPERME_TEST_CTX and a running daemon.
 """
 
 import os
@@ -148,8 +147,7 @@ def main() -> None:
                 time.sleep(3)
         else:
             raise AssertionError(f"advance stayed 409 — {why}")
-        # Nothing fires the plan run here: entering plan already did. `/run` is the MANUAL driver
-        # for a phase that has not started, and it refuses an item already resting at its gate.
+        # Entering plan already fired it. `/run` drives a phase that has not started.
         deadline = time.time() + 420
         while time.time() < deadline:
             time.sleep(5)

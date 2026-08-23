@@ -1,23 +1,9 @@
-"""Boot a server that runs THIS WORKTREE's code, so verification runs against what was built.
+"""Boot a server running THIS WORKTREE's code, so a check cannot ask one serving another.
 
-Without it, a check asks whatever instance is already listening, serving the code IT loaded. A new
-endpoint reads as missing and a deleted one still reads as present — a pass for a surface nobody
-looked at.
-
-    eval "$(bash vet_env.sh start)"     # boots on a free port, exports the repo's URL variable
-    …run the checks…
+    eval "$(bash vet_env.sh start)"     # exports the repo's URL variable
     bash vet_env.sh stop                # ALWAYS, including after a failure
-    bash vet_env.sh status
 
-WHAT to boot comes from the repo's `vet_env` block; this script owns only the lifecycle. A repo
-without one has no vet env, so a check that needs it is unrunnable rather than misaimed.
-
-stdout carries ONLY the `export` line, so `eval` is safe; everything else goes to stderr.
-Refuses to run outside a worktree: the main checkout's server is the host, and a run is its child.
-
-Python rather than shell because the lifecycle is process work, and the shell answers differ per
-platform where Python's do not: Windows has no `lsof`, and its `ps` and `kill` see a different
-process table than the server runs in, so a shell `stop` there reports success over a live server.
+Python, not shell: Windows has no `lsof`, and its `ps` and `kill` see another process table.
 """
 
 import json
@@ -90,8 +76,7 @@ def spawn(cmd: str, port: int, port_env: str, wt: Path, log: Path) -> int:
     env = dict(os.environ, PYTHONPATH=str(wt))
     if port_env:
         env[port_env] = str(port)
-    # `{py}` is this interpreter, so a repo's `cmd` names its runtime without pinning a path.
-    # `posix=False` on Windows, where shlex eats the backslashes.
+    # `{py}` is this interpreter. `posix=False` on Windows, where shlex eats backslashes.
     argv = shlex.split(cmd.replace("{port}", str(port)).replace("{py}", sys.executable),
                        posix=os.name != "nt")
     # Detach: a new session on POSIX, a new process group off the console on Windows, which
@@ -114,12 +99,9 @@ def answers(url: str) -> bool:
 
 
 def link_env(wt: Path, main: Path) -> None:
-    """A worktree has no .env, so a server needing credentials would start but not work.
+    """Link the main checkout's .env in, so a server needing credentials can authenticate.
 
-    Symlink, so secrets get one home on disk. Windows refuses one without developer mode, and a
-    server that cannot authenticate fails every check for the wrong reason — so there, a copy,
-    announced: a second copy of a secret is worth knowing about.
-    """
+    Windows refuses a symlink without developer mode, so there it copies and says so."""
     if (wt / ".env").exists() or not (main / ".env").is_file():
         return
     try:
@@ -141,8 +123,7 @@ def cmd_start(wt: Path, main: Path, cfg: dict, match: str) -> None:
     url_env = cfg.get("url_env") or "VET_ENV_URL"
     ready = cfg.get("ready") or "/"
 
-    # ADOPT rather than stack: a lost state file would otherwise spawn a second server while
-    # the first still holds a port, and nothing afterwards knows it exists.
+    # Without this a lost state file spawns a second server while the first still holds a port.
     if running := servers_in(wt, match):
         pid = running[0]
         port = port_of(pid, wt)

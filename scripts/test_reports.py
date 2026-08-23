@@ -136,8 +136,7 @@ def test_nothing_factual_is_the_agent_s_to_assert():
         ok("a plan with no tasks is refused", "no `## Tasks`" in str(e))
         ok("…because an empty report would read as 'nothing needs proving'",
            "nothing needs proving" in str(e))
-    # An omitted optional slot arrives as None, and the contract tells the planner to omit it.
-    # Doing as told crashed the writer.
+    # The contract tells the planner to omit an optional slot, so the writer must take None.
     omitted = Path(_arts.write_plan_user_report(
         _item(), summary="s", approach=None, confirm=None,
         decisions=None, assumptions=None)["path"]).read_text(encoding="utf-8")
@@ -254,8 +253,7 @@ def test_the_check_table_names_who_actually_ran_it():
                               result="the date lands", passed=True)
     _lenses(item)
     _arts.write_vet_user_report(item, None)
-    # The per-check table left the vet REPORT, which read as a second copy of build's self-report.
-    # Provenance rides the Proof row instead.
+    # Provenance rides the Proof row.
     by = {v["check"]: v["by"] for r in _arts.proof_rows(item) for v in r["verified"]}
     ok("a kernel-executed check is still marked machine", by.get("suite-green") == _arts.BY_MACHINE)
     ok("…and an attested one agent, rather than leaving the reader to guess",
@@ -263,8 +261,6 @@ def test_the_check_table_names_who_actually_ran_it():
 
 
 def test_a_duplicated_section_never_swallows_recorded_evidence():
-    # Reader and writer must agree on WHICH section: writing to the first and reading the last
-    # made a full ledger read as empty.
     item = _item()
     _arts.scaffold_cycle(item)
     _arts.record_verification(item, None, check="suite-green", how="ran it", result="exit 0",
@@ -342,8 +338,7 @@ def test_the_vet_report_is_hybrid_and_the_split_is_load_bearing():
         ok(f"`{h}` is written once, not echoed", echoed.count(h) == 1)
     ok("…and the body under the echoed heading survives",
        "- it works" in echoed and "- the diff" in echoed and "- nothing" in echoed)
-    # The lens name is the bullet's LABEL, and the surface tints an opening bold; written plain,
-    # the readings render as grey.
+    # The surface tints an opening bold, so a plain lens name renders grey.
     lensed = Path(_arts.write_vet_user_report(
         item, None, summary="s", confirms="- c",
         looked_at="- Intent: does it solve it?\n- **Safety:** already bold\n"
@@ -377,8 +372,6 @@ def test_a_template_s_authoring_notes_never_become_the_document():
     ok("…and the sections it guarded are still named, in the skills where a rule belongs",
        "evidence nobody produced" in src("superme_agent/harness/plugins/superme-dev/skills/build/SKILL.md")
        and "machine-owned" in src("superme_agent/harness/plugins/superme-dev/skills/vet/SKILL.md"))
-    # Five skills copy a template by hand. The invariant is that none ships an authoring note,
-    # which is stronger than each warning about it.
     for s in ("review", "build", "close", "investigate", "triage"):
         d = ROOT / f"superme_agent/harness/plugins/superme-dev/skills/{s}/templates"
         for tpl in sorted(d.glob("*.md")) if d.is_dir() else []:
@@ -578,8 +571,6 @@ def test_the_drilldown_reads_the_owner_s_own_words_for_its_cards():
     ok("a phase with no report has no line to show — not a guessed one",
        _arts.report_summary(item, "vet") == "")
 
-    # Both answer the card's one question, so both land in `problem` rather than adding a row that
-    # is empty on every item.
     goal = _brief("# Triage User-facing Brief\n\n**Goal:** let the tool run from a phone\n")
     ok("a goal-shaped item still says what it is for", _arts.triage_facts(goal)["problem"]
        == "let the tool run from a phone")

@@ -73,9 +73,7 @@ def test_kind_profiles() -> None:
        kp.get_profile("implementation").worktree and not kp.get_profile("research").worktree
        and kp.get_profile("implementation").knowledge_writes
        and not kp.get_profile("research").knowledge_writes)
-    # Close reads what review settled, and the landing commit reads its delivered line. A close
-    # with no record reads the owner's report.
-    ok("required artifacts declared (readiness/closeout demolished — §3.1)",
+    ok("required artifacts declared (readiness and closeout are gone)",
        kp.get_profile("implementation").required_artifacts == ("plan", "review")
        and kp.get_profile("research").required_artifacts
        == ("investigation", "review"))
@@ -174,8 +172,8 @@ def test_status_router() -> None:
     all_done, opens = sr.children_terminal(items, "P")
     ok("parallel children gate completion", not all_done and opens == ["C3"], str(opens))
 
-    # --- the close-phase asymmetry -------------------------------------- A parent reaching close
-    # with an open PARALLEL child had no releaser, in a state pageing nobody.
+    # --- the close-phase asymmetry --------------------------------------
+    # A parent at close with an open PARALLEL child had no releaser.
     par = {"id": "Q", "status": "awaiting_child", "phase": "close", "kind": "implementation"}
     pk = {"id": "QC", "status": "active", "spawned_from": {"item": "Q", "relation": "parallel"}}
     fam = [par, pk]
@@ -187,8 +185,6 @@ def test_status_router() -> None:
     blk = {"id": "QB", "status": "active", "spawned_from": {"item": "Q", "relation": "blocking"}}
     ok("not while a blocking sibling is still open",
        sr.parent_to_resume([par, pk, blk], pk) is None)
-    # The close criterion asks the CLOSE question from every phase; a preview asking the mid-
-    # pipeline one would show a clean gate.
     ok("the close criterion is phase-independent",
        all(sr.children_terminal([{**par, "phase": p}, blk], "Q") == (False, ["QB"])
            for p in ("build", "vet", "review", "close")))
@@ -395,8 +391,6 @@ def test_deputy(tmp: Path) -> None:
     ok("send_back without change rejected", asyncio.run(call(
         {"machine": {"decision": "send_back", "gate": "plan"},
          "user": {"checked": "c", "because": "b"}})).get("is_error") is True)
-    # Two of the three parts are lists, and a paragraph where a list belongs is the failure the
-    # shape exists to prevent.
     ok("escalate without what_to_do rejected", asyncio.run(call(
         {"machine": {"decision": "escalate", "gate": "review"},
          "user": {"checked": "c", "because": "b",
@@ -449,8 +443,7 @@ def test_deputy(tmp: Path) -> None:
     ok("check rows carry the must-resolve mark the owner's Approve depends on",
        "evidence_fresh" in b and "must-resolve" in b and "greyed" in b)
     ok("review injects the verbatim success signal", "SIG-VERBATIM" in b)
-    # A parameter no call site filled told the merge gate to read an evidence ledger that carried
-    # a count and no verdicts.
+    # The merge gate must read verdicts, not a count.
     ok("review sees the vet's actual per-check verdicts",
        "c3" in b and "FAIL" in b and "pytest" in b)
     ok("the owner's decision block is GONE — no recommendation is fed to the judge",

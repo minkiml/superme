@@ -185,8 +185,7 @@ def test_fe_surfaces() -> None:
     # A picker shows the value IN FORCE: an inherit row beside it is one answer with two labels.
     pset = _norm(src("web/frontend/src/features/config/sections/ProjectSettings.tsx"))
     gen = _norm(src("web/frontend/src/features/config/sections/General.tsx"))
-    # Asserted on the option LISTS: the comment explaining the removal quotes the words, and a
-    # check its own rationale trips reads as a bug.
+    # Asserted on the option LISTS, since a check its own rationale trips reads as a bug.
     ok("no config picker offers a Default row beside the value it defaults to",
        all("const MODEL_OPTS = MODEL_CATALOG.map" in src
            and "const EFFORT_OPTS = EFFORT_CATALOG.map" in src
@@ -197,7 +196,6 @@ def test_fe_surfaces() -> None:
        and "toModelKey(repo.vetModel) || fallbackModel" in pset
        and "toModelKey(sys.deputy_model) || dFallbackModel" in gen)
 
-    # The roles are DATA and the tab is a loop, so a new one is an entry, not a new pair of rows.
     ok("the run roles are a list, and the Setting tab renders it",
        "export const RUN_ROLES = [" in panels_src
        and "{RUN_ROLES.map((r) => {" in panels_src

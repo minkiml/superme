@@ -17,8 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SKILLS = ROOT / "superme_agent/harness/plugins/superme-dev/skills"
 PASS = 0
 
-# The phases that fire as a background run under a skill of the same name, none of which has
-# anybody to approve anything.
+# Each fires as a background run under a skill of the same name, with nobody to approve.
 PHASES = ("triage", "plan", "build", "vet", "review", "close", "investigate")
 
 # Reports the drilldown reads at `<item_dir>/reports/report-<phase>.md`.

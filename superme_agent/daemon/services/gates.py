@@ -275,8 +275,8 @@ def advance_item(ctx, context_id: str, item_id: str, *, dev, dev_store, spine,
                 .get(str(hook.get("reason")),
                      f"Commit trailers are NOT enforced ({hook.get('reason') or 'unknown'})."),
                 item_id=item_id, actor="daemon", meta=hook)
-    # Strict hands review to the OWNER for every kind. A code item gets its PR below; a research
-    # item has nothing to land, so it waits here to be read rather than closing on a deputy's word.
+    # A research item has nothing to land, so it waits to be read rather than closing on a
+    # deputy's word.
     if cur == "review" and not profile.worktree and actor != "owner" \
             and not autopilot_core.is_prompt_extraction(item):
         from . import git_ops

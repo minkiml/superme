@@ -168,8 +168,7 @@ def write_artifact(item_dir: Path, name: str, text: str) -> None:
 
 def cleanup(trunk_sha0: str, iid: str | None) -> None:
     try:
-        # ONLY this item's branch and worktree. `item/*` and the whole worktrees root would take
-        # every other item's work with them — this repo holds work that is not ours.
+        # ONLY this item's. `item/*` and the worktrees root would take every other item with them.
         if iid:
             for wt in git_layer.worktrees_root(CTX).glob(f"{iid}*"):
                 shutil.rmtree(wt, ignore_errors=True)
@@ -249,8 +248,8 @@ def main() -> None:
 
         # --- build and vet belong to the LOOP, not to us -----------------------------
         print("build⟷vet loop (its own two sessions)")
-        # The plan RUN fires on entering plan and writes its own plan.md. Wait it out, then write
-        # ours — otherwise the run clobbers the planted checks and the suite proves nothing.
+        # Entering plan already fired a run that writes plan.md. Wait it out, or it clobbers the
+        # planted checks.
         settle(iid)
         write_artifact(item_dir, "plan.md", PLAN)
         adv = advance(iid)  # plan → build; entering build starts the loop

@@ -250,7 +250,7 @@ def record_verification(item_dir: Path, repo_dir: Path | None, *, check: str, ho
                         result: str, passed: bool, deferred: bool = False, note: str = "",
                         title: str = "", by: str = BY_AGENT,
                         met: list[str] | None = None, missed: list[str] | None = None) -> dict:
-    """Append one entry to the cycle report's `§Verification` check fence. Append-only,
+    """Append one entry to the cycle report's `## Verification` check fence. Append-only,
     so 'verified' is derived.
 
     `by` is PROVENANCE: `machine` beats `agent` and is FINAL for the cycle. A missed rubric criterion
@@ -503,7 +503,7 @@ def evidence_entries(item_dir: Path) -> list[dict]:
 
 
 def _ledger(item_dir: Path) -> list[dict]:
-    """Every entry in the §Verification fences, verdicts and diagnoses alike, in record order."""
+    """Every entry in the `## Verification` fences, verdicts and diagnoses alike, in record order."""
     entries: list[dict] = []
     for r in cycle_reports(item_dir):
         body = split_sections(Path(r["path"]).read_text(encoding="utf-8")).get("Verification", "")
@@ -675,10 +675,10 @@ _NO_VET_LINE = "**Nothing to verify.**"
 
 
 def note_no_verification(item_dir: Path) -> str | None:
-    """Write the `depth: none` cycle's §Verification content, CODE-WRITTEN and quoting
+    """Write the `depth: none` cycle's `## Verification` content, CODE-WRITTEN and quoting
     the plan's own `reason`.
 
-    Derived, so an empty §Verification can never be mistaken for a vet that gave up. Idempotent."""
+    Derived, so an empty `## Verification` can never be mistaken for a vet that gave up. Idempotent."""
     item_dir = Path(item_dir)
     reports = cycle_reports(item_dir)
     if not reports:

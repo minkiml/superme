@@ -31,7 +31,7 @@ def ok(name: str, cond: bool, detail: str = "") -> None:
 
 
 def test_role_map() -> None:
-    print("role map (§1.3)")
+    print("role map")
     # Research has no fresh-perspective boundary, so its whole life is one intake thread.
     want = {"triage": "intake", "plan": "intake", "review": "intake", "close": "intake",
             "build": "build", "vet": "vet", "investigate": "intake"}
@@ -89,8 +89,7 @@ def test_slots(tmp: Path) -> None:
        dev.read_work_item(root, wid)["session_id"] is None)
     dev.set_work_item_session(root, wid, "sid-review", slot="review")
 
-    # THE RULE, second half: the same phase resumes its own thread, because a revise round sends
-    # the item back and forward.
+    # The same phase resumes its own thread, because a revise sends the item back and forward.
     dev.set_work_item_phase(root, wid, "plan")
     ok("back at plan (a revise round): plan's OWN thread returns",
        dev.read_work_item(root, wid)["session_id"] == "sid-plan")
@@ -140,8 +139,7 @@ def test_legacy(tmp: Path) -> None:
     ok("no stale legacy shadow at review (fresh mint)",
        dev.read_work_item(root, wid)["session_id"] is None)
 
-    # An item carrying the retired shared slot keeps its thread at every intake phase, and loses
-    # it once a real slot is written.
+    # A thread survives every intake phase and is dropped once a real slot is written.
     root2 = tmp / "devroot-preslit"
     wid2 = dev.create_work_item(root2, "pre-split item", kind="implementation")["id"]
     md2 = root2 / "work-items" / wid2 / "item.md"
@@ -230,8 +228,6 @@ def test_reentry_delta(tmp: Path) -> None:
     ok("the cutoff is per-PHASE, not per-item",
        sp.last_phase_run_end(repo, wid, phase="review") is None)
 
-    # The disk half. mtimes are set explicitly so the assertion is about the comparison, not about
-    # how fast this suite runs.
     item = tmp / "item"
     (item / "artifacts").mkdir(parents=True)
     (item / "reports").mkdir()
@@ -270,8 +266,7 @@ def test_reentry_delta(tmp: Path) -> None:
        "do not conclude that nothing changed" in re_entry)
     ok("the trigger is still dropped from replay (prefix match survives the appended block)",
        _is_noise({}, kernel_speech.intake_trigger("plan", wid, "T", got)))
-    # EVERY skill the intake runner can fire, or the owner opens that session and reads the
-    # kernel's order as their own first message.
+    # Every skill the intake runner can fire, or the owner reads the kernel's order as their own.
     for sk in ("triage", "plan", "investigate", "review", "close", "itemize"):
         ok(f"…and so is `{sk}`'s — no phase shows its trigger as the owner's words",
            _is_noise({}, kernel_speech.intake_trigger(sk, wid, "T"))

@@ -29,8 +29,6 @@ def test_policy():
     p = sandbox_options([])["sandbox"]
     ok("the sandbox is on", p["enabled"] is True)
     ok("a command cannot opt itself out", p["allowUnsandboxedCommands"] is False)
-    # The callback carries the freeze boundary, so auto-approving shell would hand the sandbox a
-    # veto over rules it knows nothing about.
     ok("the permission callback still decides every shell command",
        p["autoAllowBashIfSandboxed"] is False)
     ok("a check may bind a local port — a dev server is verification, not an escape",
@@ -61,8 +59,6 @@ def test_one_choke_point():
 
 def test_code_touching_runs_are_sandboxed():
     loop = src("superme_agent/daemon/services/loop.py")
-    # Each runner names its boundary ONCE and hands the same list on, so a capture cannot claim a
-    # boundary the turn never got.
     ok("build + vet each define one write boundary", loop.count("boundary = [wt, item_dir]") == 2)
     # The X-ray reads the turn's own kwargs instead of restating the list.
     ok("...and both sandbox the shell to it, off the one list the turn is sent",

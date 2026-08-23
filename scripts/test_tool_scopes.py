@@ -139,8 +139,7 @@ def test_skills_name_only_visible_tools() -> None:
            str(missing))
 
 
-# Every site that mounts the dev server, with its scope. A computed one is listed so it is at
-# least accounted for.
+# A computed scope is listed so it is at least accounted for.
 COMPUTED = ("scope=scope",          # the two dev_mcp helpers, forwarding their caller's choice
             "scope=skill",          # the generic intake runner: the skill it fires IS the scope
             "scope=tool_scope",     # ws.py: session kind, or the bound item's current phase

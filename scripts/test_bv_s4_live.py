@@ -155,8 +155,7 @@ def git(cwd: Path, *args: str) -> str:
 
 def cleanup(trunk_sha0: str, iid: str | None) -> None:
     try:
-        # ONLY this item's branch and worktree. `item/*` and the whole worktrees root would take
-        # every other item's work with them — this repo holds work that is not ours.
+        # ONLY this item's. `item/*` and the worktrees root would take every other item with them.
         if iid:
             for wt in git_layer.worktrees_root(CTX).glob(f"{iid}*"):
                 shutil.rmtree(wt, ignore_errors=True)
@@ -216,8 +215,8 @@ def main() -> None:
 
         advance(iid)  # triage → plan
         (item_dir / "artifacts").mkdir(parents=True, exist_ok=True)
-        # The plan RUN fires on entering plan and writes its own plan.md. Wait it out, then write
-        # ours — otherwise the run clobbers the planted checks and the suite proves nothing.
+        # Entering plan already fired a run that writes plan.md. Wait it out, or it clobbers the
+        # planted checks.
         settle(iid)
         (item_dir / "artifacts" / "plan.md").write_text(PLAN, encoding="utf-8")
         ok("the planted checks are the ones on disk (the plan run did not clobber them)",
@@ -225,8 +224,8 @@ def main() -> None:
         adv = advance(iid)  # plan → build; entering build starts the loop
         wt = Path(adv["git"]["worktree"])
         ok("build entry created the worktree", wt.is_dir())
-        # Nothing here writes the build: `enter_build_loop` fires for every item, so a real build
-        # agent already owns this worktree. `loop.py` lands every exit at review.
+        # `enter_build_loop` fires for every item, so a real build agent already owns this
+        # worktree.
         print("build⟷vet loop (a real vet runs the planted write attempt)")
         ok("the loop reached review on its own", wait_phase(iid, "review"))
         settle(iid)

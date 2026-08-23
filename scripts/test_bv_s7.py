@@ -101,7 +101,7 @@ def _tasks_of(body: str) -> str:
 
 
 def test_plan_revision(tmp: Path) -> None:
-    print("core.plan_revision — the revision grammar (§3-bis)")
+    print("core.plan_revision — the revision grammar")
     d = make_dev_root(tmp, "root-rev") / "work-items" / "it7"
     text = PR.plan_path(d).read_text(encoding="utf-8")
 
@@ -250,7 +250,7 @@ def _split_log(body: str) -> str:
 
 
 def test_pre_grammar_plan_migrates(tmp: Path) -> None:
-    print("a plan authored BEFORE §3-bis migrates in place, losing nothing")
+    print("a plan authored before the revision grammar migrates in place, losing nothing")
     from superme_agent.core import artifacts as A
     d = make_dev_root(tmp, "root-legacy", phase="plan") / "work-items" / "it7"
     # The earlier shape: `## Tasks` mid-document, and ONE `## Revisions` section holding `### r1`.
@@ -288,7 +288,7 @@ def test_pre_grammar_plan_migrates(tmp: Path) -> None:
 
 
 def test_generation_scoping(tmp: Path) -> None:
-    print("a revision opens a GENERATION — both breakers re-zero (§3-bis.4)")
+    print("a revision opens a GENERATION — both breakers re-zero")
     from superme_agent.core import artifacts as A
     d = make_dev_root(tmp, "root-gen", phase="plan") / "work-items" / "it7"
 
@@ -900,7 +900,7 @@ def test_contracts() -> None:
        and any(t.name == "revise_plan" for t in DEV_TOOLS))
     ok("auto-allowed (prompting here pushes the agent toward the whole-file rewrite)",
        "mcp__dev__revise_plan" in SAFE_TOOLS)
-    ok("the pre-§2.1 second way back is GONE — tool, policy entry, and scheduler",
+    ok("the second way back is GONE — tool, policy entry, and scheduler",
        not any("route_review_feedback" in t.name for t in DEV_TOOLS)
        and not any("route_review_feedback" in t for t in SAFE_TOOLS)
        and not hasattr(__import__("superme_agent.daemon.services.loop",
@@ -1155,8 +1155,8 @@ def test_repo_knobs(tmp: Path) -> None:
        git_ops.repo_anchor(_NoRepo(), _Spine()) is None
        and git_ops.repo_review_mode(_NoRepo(), _Spine()) == "fast")
 
-    # --- both landing knobs live in the project's settings pane ----------------- A setting on
-    # two surfaces is one rule with two owners.
+    # --- both landing knobs live in the project's settings pane -----------------
+    # A setting on two surfaces is one rule with two owners.
     ps = src("web/frontend/src/features/config/sections/ProjectSettings.tsx")
     dw = src("web/frontend/src/features/dev/DevWorkspace.tsx")
     ok("the review-mode picker lives in Project - Settings",
@@ -1659,8 +1659,8 @@ def test_pr_gate_and_page(tmp: Path) -> None:
        'if mode == "strict" else ""' in dd
        and "the DEPUTY cannot land it" in dd)
 
-    # --- a spent approval closes the PR ----------------------------------------- Revise and re-
-    # vet leave review unmerged, so a stamp that survives strands it.
+    # --- a spent approval closes the PR ----------------------------------------
+    # Revise and re-vet leave review unmerged, so a surviving stamp strands it.
     dev = DevKnowledgeService()
     close_root = make_dev_root(tmp, "root-closepr")
     dev.set_work_item_git(close_root, "it7", git_pr_opened_at="2026-07-29T10:00:00")
@@ -1686,8 +1686,8 @@ def test_pr_gate_and_page(tmp: Path) -> None:
     ok("the merge path does NOT clear it — the merge commit is what closes that PR",
        "close_pr" not in gates_src.split('freshness") == "park"', 1)[1])
 
-    # --- the commit contract the walkthrough depends on ------------------------- The requirement
-    # sits IN the step that commits; a reflow is not a lost rule.
+    # --- the commit contract the walkthrough depends on -------------------------
+    # The requirement sits IN the step that commits.
     build_skill = " ".join(src("superme_agent/harness/plugins/superme-dev/skills/build/SKILL.md").split())
     step2 = build_skill.split("## Step 2", 1)[1].split("\n## ", 1)[0]
     ok("build's commit step names the trailer itself, not just a reference to read",
@@ -2005,7 +2005,7 @@ def test_proof_rows(tmp: Path) -> None:
     ok("an EMPHASIZED task id still joins, and the `**` never leaks into the text",
        by["t1"]["built"] and by["t1"]["built"][0].startswith("(`web/stats.py`)")
        and "**" not in by["t1"]["built"][0])
-    ok("a wrapped §Built bullet is ONE entry, continuation folded in",
+    ok("a wrapped `## Built` bullet is ONE entry, continuation folded in",
        len(by["t1"]["built"]) == 2
        and "wired the download button" in by["t1"]["built"][0])
     ok("built entries accumulate across cycles", "fixed the content type" in by["t1"]["built"][1])
@@ -2100,7 +2100,7 @@ def test_drilldown_payload(tmp: Path) -> None:
        all(a["reason"] for a in d["actions"]))
     ok("git controls are homed on the Git tab, not the frame's action bar",
        acts["pr"]["home"] == "git" and acts["approve"]["home"] == "actions")
-    ok("Drop is always live while the item lives (§2.1's table)", acts["drop"]["active"])
+    ok("Drop is always live while the item lives ", acts["drop"]["active"])
     ok("the owner's review label says MERGE — the act is the same in both modes",
        acts["approve"]["label"] == "Approve & merge")
     # `review_mode` is a REPO fact and arrives on its own; an absent mode must claim NEITHER.

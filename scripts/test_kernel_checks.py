@@ -188,8 +188,6 @@ def test_the_loop_runs_them_before_the_session():
        and "machine-run" in src("web/frontend/src/features/dev/WorkItemModal.tsx"))
 
     vet_skill = " ".join(src("superme_agent/harness/plugins/superme-dev/skills/vet/SKILL.md").split())
-    # The RULE, not the sentence: the vetter must be told the kernel already ran some checks and
-    # that re-running them is refused.
     ok("the vet skill says kernel-run checks are already done, and not to redo them",
        "kernel already executed" in vet_skill.lower()
        and "refuses a second entry" in vet_skill.lower())

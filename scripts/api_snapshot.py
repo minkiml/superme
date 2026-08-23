@@ -26,8 +26,7 @@ _ADDRESS = re.compile(r" at 0x[0-9a-fA-F]+")
 # Some defaults are paths built from the install root, which differs per checkout.
 _ROOT = ""
 
-# An annotation names our own classes fully qualified, so moving one would read as every
-# signature mentioning it changing. `home` already tracks where a class lives.
+# `home` already tracks where a class lives, so moving one must not read as a signature change.
 _QUALNAME = re.compile(r"superme_agent[\w.]*\.(\w+)")
 
 

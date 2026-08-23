@@ -1,9 +1,6 @@
-"""Whether SuperMe can reach Anthropic at all — the one place that answers it.
+"""Whether SuperMe can reach Anthropic at all, and the one place that answers it.
 
-Two credentials work, and either is enough: a plan token in `.env`, or a Claude CLI that is
-already signed in. Asking only about the token gets both directions wrong — a signed-in guest
-is told to go and fetch one, and a guest with neither is told nothing until their first turn
-fails.
+A plan token in .env or a signed-in Claude CLI. An API key is never used.
 """
 
 import json
@@ -14,8 +11,7 @@ import time
 from ..paths import ENV_FILE, log
 from .vocab import console
 
-# `claude auth status` spawns a process, and `/system/auth` is polled. One answer per minute is
-# plenty for a credential that changes when a person runs a command.
+# A credential changes when a person runs a command, so one probe a minute is plenty.
 _TTL_S = 60
 _CLI_TIMEOUT_S = 10
 
@@ -54,9 +50,7 @@ def _resolve() -> dict:
 def _cli_signed_in(probe: list[str]) -> bool:
     """Ask the CLI itself, so the answer holds on every platform it runs on.
 
-    Its JSON also carries the account's email and organisation. Only `loggedIn` is read, and
-    nothing from this reply is logged or returned.
-    """
+    Only `loggedIn` is read, and nothing from the reply is logged or returned."""
     try:
         p = subprocess.run(probe, capture_output=True, text=True,
                            timeout=_CLI_TIMEOUT_S, encoding="utf-8")
@@ -66,7 +60,6 @@ def _cli_signed_in(probe: list[str]) -> bool:
     try:
         return bool(json.loads(p.stdout or "{}").get("loggedIn"))
     except json.JSONDecodeError:
-        # Guessing from prose would read every unrecognised reply as a yes, which is the one
-        # wrong answer here: it restores the silent-failure this whole check exists to end.
+        # Reading an unparsed reply as a yes restores the silent failure this check exists to end.
         log.warning("`claude auth status` did not answer in JSON — treating auth as unknown")
         return False

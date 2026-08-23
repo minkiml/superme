@@ -240,8 +240,7 @@ def test_only_a_move_promotes_and_the_prose_survives_it():
 # ── wiring ──────────────────────────────────────────────────────────────────────────────────────
 
 def test_close_actually_has_a_way_to_write_the_doc():
-    # Vet nominated and close read it back, then had no legal write: the doc the constitution
-    # names close as the writer of was unwritable.
+    # The doc the constitution names close as the writer of must be writable by close.
     tools = src("superme_agent/harness/tools/dev_tools.py")
     ok("the delta tool's doc enum offers the library",
        '"roadmap", "resources", "verification"' in tools)
@@ -281,15 +280,11 @@ def test_wiring():
     ok("…and to leave the standing entries alone", "leave them exactly as they are" in " ".join(plan_skill.split()))
     vet_skill = src("superme_agent/harness/plugins/superme-dev/skills/vet/SKILL.md")
     ok("the vet skill carries the nomination duty", "nominate_check" in vet_skill)
-    # Rarity alone read as "don't", so the skill names the SHAPE to look for — a signal the plan
-    # already carries.
     ok("…and names the shape that is usually repo-wide", "empty `covers:`" in vet_skill)
     close_skill = src("superme_agent/harness/plugins/superme-dev/skills/close/SKILL.md")
     ok("close knows it is the writer", "read_verification_library(item_id)" in close_skill)
     ok("…and that entries land available, never standing", "only the owner promotes" in close_skill)
 
-    # The anchor-set CONTRACT has to know the doc exists, or an agent reads a tree that omits it
-    # and infers the file is stray.
     con = src("superme_agent/harness/constitution/dev/dev-knowledge-structure.md")
     ok("the dev-knowledge constitution lists it in the tree", "verification.md" in con)
     ok("…and says it is machine-maintained, not hand-authored", "never hand-author" in con)

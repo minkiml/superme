@@ -63,6 +63,8 @@ python run_superme.py
 That starts the core daemon (`:8787`), the web BFF (`:8000`) and the frontend (`:5173`), then
 open **http://localhost:5173**. Ctrl-C stops all three. Ports come from `.env`.
 
+---
+
 ## What is SuperMe
 
 It is built around two ideas. Everything you do with AI should accumulate into one body of

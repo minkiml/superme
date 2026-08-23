@@ -5,8 +5,7 @@ from datetime import date, datetime, timedelta, timezone
 from .common import _UNRECONCILED_STATUSES, log
 
 
-# The trend window's minimum. Fewer real days than this still draw this many columns, so a first
-# day of use reads as one day rather than as the whole period.
+# A floor, so one day of use reads as one day rather than as the whole period.
 TREND_DAYS = 14
 
 
@@ -171,12 +170,8 @@ class TokenOps:
         days: list[dict] = []
         cumulative = 0
         if by_day:
-            # A CONTIGUOUS day axis: gaps become zero-days, so bars cannot mis-space and the date
-            # axis cannot lie.
-            #
-            # It also always ENDS TODAY and spans at least `TREND_DAYS`. A window drawn to fit
-            # the data is a window that changes shape with it: one busy day renders as a block
-            # filling the chart, and a quiet week since the last run renders as nothing at all.
+            # Contiguous, always ending today, at least TREND_DAYS wide. A window fitted to the
+            # data changes shape with it.
             today = (datetime.now(timezone.utc) + timedelta(minutes=int(tz_offset))).date()
             end = max(date.fromisoformat(max(by_day)), today)
             start = min(date.fromisoformat(min(by_day)), end - timedelta(days=TREND_DAYS - 1))

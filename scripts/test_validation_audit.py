@@ -219,8 +219,7 @@ def test_the_audit_compares_claim_to_machine() -> None:
     ok("a claim the machine cannot reproduce IS one",
        len(bad) == 1 and bad[0]["command"] == "ruff check ."
        and bad[0]["claimed"] is True and bad[0]["actual"] is False)
-    # Build fixes it and the audit re-runs: the newer answer replaces the older one, or a resolved
-    # discrepancy would gate the item forever.
+    # The newer answer replaces the older, or a resolved discrepancy gates the item forever.
     A.record_validation_audit(d, None, command="ruff check .", claimed=True, actual=True,
                               result="exit 0")
     ok("…and a re-audit after the fix clears it", A.validation_discrepancies(d) == [])

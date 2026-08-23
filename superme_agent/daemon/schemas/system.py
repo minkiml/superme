@@ -41,8 +41,7 @@ class AuthStatusResponse(BaseModel):
     ready: bool
     method: Literal["token", "cli"] | None = None
     detail: str
-    # Where to paste a token. The setup page names the real file rather than saying ".env" and
-    # leaving a new owner to guess which one.
+    # The real path, so a new owner does not have to guess which .env.
     env_file: str
     cli_installed: bool
 
