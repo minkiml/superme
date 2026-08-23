@@ -1,9 +1,10 @@
 """Compaction of a session with NO work-item. COSTS TOKENS.
 
 `/compact` typed by the owner is intercepted rather than passed to the CLI, and the compaction
-opens a plain session run claiming zero measured usage. Needs a running daemon.
+opens a plain session run claiming zero measured usage. Needs SUPERME_TEST_CTX and a running daemon.
 """
 
+import os
 import asyncio
 import json
 import sqlite3
@@ -15,7 +16,21 @@ import websockets
 
 B = "http://127.0.0.1:8787"
 WS = "ws://127.0.0.1:8787/ws/agent"
-CTX = "test-playground"
+def _pick_ctx(preferred: str) -> str:
+    """This suite's context, else the one named in the environment. Never a guess: it creates and
+    abandons work-items in whatever it picks."""
+    from superme_agent.gateway import contexts
+    if contexts.exists(preferred):
+        return preferred
+    named = os.environ.get("SUPERME_TEST_CTX") or ""
+    if named and contexts.exists(named):
+        return named
+    raise SystemExit(f"context {preferred!r} is not in this SuperMe's registry, and "
+                     "SUPERME_TEST_CTX names no known repo — set it to a throwaway repo id "
+                     "from your repos.yaml")
+
+
+CTX = _pick_ctx("test-playground")
 MODEL = "sonnet"
 MEMDIR = Path("superme-knowledge") / f"{CTX}-knowledge" / "dev" / "session-memory"
 DB = Path("superme_agent") / ".system.db"

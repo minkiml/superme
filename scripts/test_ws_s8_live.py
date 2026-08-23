@@ -1,13 +1,18 @@
 """The compaction runtime on a real session. COSTS TOKENS.
 
 The pre-compaction checkpoint lands BEFORE the compaction event, the verdict logs real boundary
-tokens, and two ineffective attempts latch a back-off. A fresh session cold-starts from the bank.
+tokens, and two ineffective attempts latch a back-off. The compacted thread is then owed a POINTER
+to the bank, which self-clears after one real turn — nothing is injected, and a bound turn never
+mints a fresh session.
 
+Needs SUPERME_TEST_CTX.
 Run with the daemon up: PYTHONPATH=. python -m scripts.test_ws_s8_live
 """
 
+import os
 import asyncio
 import json
+import pathlib
 import sqlite3
 import time
 import urllib.error
@@ -18,7 +23,21 @@ import websockets
 
 B = "http://127.0.0.1:8787"
 WS = "ws://127.0.0.1:8787/ws/agent"
-CTX = "dummy"
+def _pick_ctx(preferred: str) -> str:
+    """This suite's context, else the one named in the environment. Never a guess: it creates and
+    abandons work-items in whatever it picks."""
+    from superme_agent.gateway import contexts
+    if contexts.exists(preferred):
+        return preferred
+    named = os.environ.get("SUPERME_TEST_CTX") or ""
+    if named and contexts.exists(named):
+        return named
+    raise SystemExit(f"context {preferred!r} is not in this SuperMe's registry, and "
+                     "SUPERME_TEST_CTX names no known repo — set it to a throwaway repo id "
+                     "from your repos.yaml")
+
+
+CTX = _pick_ctx("test-playground")
 KHOME = Path("superme-knowledge") / f"{CTX}-knowledge" / "dev"
 PASS = 0
 
@@ -34,14 +53,23 @@ def http(method: str, path: str, body: dict | None = None) -> dict:
     req = urllib.request.Request(B + path, method=method,
                                  headers={"content-type": "application/json"},
                                  data=json.dumps(body).encode() if body is not None else None)
-    with urllib.request.urlopen(req) as r:
-        return json.loads(r.read())
+    try:
+        with urllib.request.urlopen(req) as r:
+            return json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        # A bare status hides the daemon's reason, and the reason is the whole diagnosis.
+        raise AssertionError(f"{method} {path} -> {e.code}: {e.read().decode()[:300]}") from None
 
 
 def http_code(method: str, path: str, body: dict | None = None) -> int:
+    """The status alone, for a call whose REFUSAL is the thing under test — so it must not go
+    through `http`, which turns a refusal into a failure."""
+    req = urllib.request.Request(B + path, method=method,
+                                 headers={"content-type": "application/json"},
+                                 data=json.dumps(body).encode() if body is not None else None)
     try:
-        http(method, path, body)
-        return 200
+        with urllib.request.urlopen(req) as r:
+            return r.status
     except urllib.error.HTTPError as e:
         return e.code
 
@@ -49,8 +77,11 @@ def http_code(method: str, path: str, body: dict | None = None) -> int:
 async def turn(prompt: str, *, work_item_id: str, resume: str | None = None) -> dict:
     out = {"text": "", "session_id": None}
     async with websockets.connect(WS, max_size=None) as ws:
+        # A small window is the point: the filler has to cross the trigger. The per-item /model
+        # route is gone, so the turn frame carries the pick (`ws.py` reads it as `msg.model`).
         await ws.send(json.dumps({"type": "turn", "prompt": prompt, "context_id": CTX,
-                                  "mode": "dev", "work_item_id": work_item_id, "resume": resume}))
+                                  "mode": "dev", "work_item_id": work_item_id, "resume": resume,
+                                  "model": "haiku"}))
         while True:
             frame = json.loads(await asyncio.wait_for(ws.recv(), timeout=600))
             t = frame.get("type")
@@ -101,17 +132,32 @@ def transcript_path(session_id: str) -> Path | None:
     return hits[0] if hits else None
 
 
+def settle(iid: str, secs: int = 900) -> None:
+    """Every phase entry fires that phase's run, and the run holds the item lock for minutes."""
+    db = pathlib.Path("superme_agent") / ".system.db"
+    for _ in range(secs):
+        with sqlite3.connect(db) as c:
+            if not c.execute("select 1 from run where item_id=? and status='running'",
+                             (iid,)).fetchone():
+                return
+        time.sleep(1)
+    raise AssertionError(f"a run never released {iid}")
+
+
 def main() -> None:
     print("config: floor-aware refusal + low trigger")
     ok("floor-violating trigger REFUSED (409)",
        http_code("POST", "/system/compaction", {"trigger_pct": 20}) == 409)
-    cfg = http("POST", "/system/compaction", {"trigger_pct": 26, "min_gain_pct": 5})
-    ok("low-but-legal trigger accepted", cfg["trigger_pct"] == 26 and cfg["floor_pct"] == 25)
+    # 40 is the lowest the daemon now accepts: below it, compaction lands near the floor and
+    # re-fires on the next exchange.
+    cfg = http("POST", "/system/compaction", {"trigger_pct": 40, "min_gain_pct": 5})
+    ok("low-but-legal trigger accepted", cfg["trigger_pct"] == 40 and cfg["floor_pct"] == 25)
 
-    row = http("POST", "/dev/inbox", {"context_id": CTX, "title": "S8 live: compaction victim",
-                                      "text": "A session that will grow fat and get compacted."})
+    row = http("POST", "/dev/inbox",
+               {"context_id": CTX, "autopilot": False, "title": "S8 live: compaction victim",
+                "text": "A session that will grow fat and get compacted."})
     iid = http("POST", f"/dev/inbox/{row['id']}/push", {"context_id": CTX})["work_item"]["id"]
-    http("POST", f"/dev/work-items/{iid}/model", {"context_id": CTX, "model": "haiku"})
+    settle(iid)
     print(f"item = {iid}")
     item_dir = KHOME / "work-items" / iid
 
@@ -129,9 +175,12 @@ def main() -> None:
         ok("fat turn completed", "noted" in t2["text"].lower(), t2["text"][:120])
 
         # -- the automatic compaction sequence ---------------------------------------
+        # `compact_before_run` gates the START of a run, so crossing the trigger is not enough —
+        # the next turn is what fires it. This tiny turn is that next turn.
+        asyncio.run(turn_retry("Reply with exactly: go", work_item_id=iid, resume=sid))
         run = wait_compact_run(iid)
         ok("auto trigger fired a compact run (feature='compact') and it finished",
-           run is not None, "no compact run appeared — fill may not have crossed the trigger")
+           run is not None, "no compact run appeared — the next turn did not trip the gate")
         evs = list(reversed(item_events(iid)))   # oldest first
         cp_ev = next((e for e in evs if e["kind"] == "compaction.checkpoint"), None)
         vd_ev = next((e for e in evs if e["kind"] == "compaction.verdict"), None)
@@ -152,6 +201,7 @@ def main() -> None:
         http("POST", "/system/compaction", {"min_gain_pct": 95})
         last_id = run["id"]
         for n in (1, 2):
+            settle(iid)   # the result frame streams before the run row closes
             http("POST", f"/dev/work-items/{iid}/compact", {"context_id": CTX})
             r = wait_compact_run(iid, after_id=last_id)
             assert r, f"manual compact #{n} never finished"
@@ -164,25 +214,42 @@ def main() -> None:
         ok("'needs a fresh session' surfaces in the attention engine (needs_you)",
            any(r["id"] == iid for r in attn["buckets"]["needs_you"]))
 
-        # -- fresh session cold-starts from EXACTLY the banked checkpoint -------------
-        print("cold start: new session reads the banked checkpoint via the orient block")
-        newest = sorted((item_dir / "checkpoints").glob("*.md"), key=lambda p: p.stem)[-1]
-        marker = next(ln.strip() for ln in newest.read_text().splitlines()
-                      if ln.strip().startswith("## Working on"))
-        body_line = newest.read_text().split("## Working on", 1)[1].strip().splitlines()[0]
-        t3 = asyncio.run(turn("Reply with exactly: ready", work_item_id=iid))  # no resume → fresh
-        sid3 = t3["session_id"]
-        tp3 = transcript_path(sid3)
-        txt3 = tp3.read_text() if tp3 else ""
-        ok("fresh session's orient block carries the LATEST checkpoint content",
-           sid3 and sid3 != sid and "Latest checkpoint" in txt3 and body_line[:40] in txt3,
-           f"marker={body_line[:40]!r}")
+        # -- the compacted thread is owed a POINTER to the bank ----------------------
+        # No fresh session and no injected content: a turn bound to an item runs in that phase's
+        # SLOT (`ws.py`: turn_resume = slot_sid), and `compacted_checkpoint` hands it the banked
+        # file's PATH while the compaction is still the thread's newest finished run.
+        print("read-back: the compacted thread is owed the banked checkpoint, then self-clears")
+        from superme_agent.daemon.services.runs import compacted_checkpoint
+        from superme_agent.gateway import contexts
+        ctx = contexts.resolve(CTX, "dev")
+        item_row = http("GET", f"/dev/work-items/{iid}/detail?context_id={CTX}")["item"]
+        newest = sorted((item_dir / "checkpoints").glob("*.md"), key=lambda q: q.stem)[-1]
+        owed = compacted_checkpoint(ctx, item_row, sid)
+        ok("the read-back is owed and resolves to a banked checkpoint",
+           owed is not None and Path(owed).name.endswith(".md"), str(owed))
+        ok("...and it is the newest one banked for this thread's role",
+           owed is not None and Path(owed).resolve() == newest.resolve(),
+           f"owed={owed} newest={newest}")
+        settle(iid)
+        t3 = asyncio.run(turn_retry("Reply with exactly: ready", work_item_id=iid, resume=sid))
+        ok("the next real turn ran on the compacted thread", bool(t3["text"]))
+        ok("...and the turn stayed in the item's slot rather than minting a thread",
+           (t3["session_id"] or sid) == sid, str(t3["session_id"]))
+        for _ in range(10):     # the run row closes just after the result frame streams
+            if compacted_checkpoint(ctx, item_row, sid) is None:
+                break
+            time.sleep(3)
+        ok("...and the read-back self-cleared (no permanent floor)",
+           compacted_checkpoint(ctx, item_row, sid) is None,
+           str(compacted_checkpoint(ctx, item_row, sid)))
     finally:
         print("cleanup")
         http("POST", "/system/compaction", {"trigger_pct": 80, "min_gain_pct": "auto"})
         try:
-            res = http("DELETE", f"/dev/work-items/{iid}?context_id={CTX}")
-            print(f"  deleted {iid} (session_cleared={res.get('session_cleared')})")
+            settle(iid)
+            http("POST", f"/dev/work-items/{iid}/abandon",
+                 {"context_id": CTX, "reason": "ws-s8 probe done"})
+            print(f"  abandoned {iid}")
         except Exception as e:  # noqa: BLE001
             print(f"  cleanup FAILED for {iid}: {e}")
 

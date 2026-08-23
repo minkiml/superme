@@ -174,7 +174,7 @@ def test_fe_surfaces() -> None:
     ok("a card in a narrow lane says fill, spend and age, and drops the labels + the model",
        "const tightCards = laneW > 0 && laneW < 215" in panels
        and "{!tight && (model || ctx != null) && (" in panels
-       and "{!tight && researchKindLabel(it.research_kind) && (" in panels)
+       and "{!tight && (researchKindLabel(it.research_kind) || workKindLabel(it.kind)) && (" in panels)
     dash = _norm(src("web/frontend/src/features/dev/DevDashboard.tsx"))
     ok("the attention feed keeps WHICH item and drops the reason when there is no room",
        "{!tight && <span className=\"ml-1.5 text-[10px] text-faint\">{r.reason}</span>}" in dash)

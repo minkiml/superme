@@ -3,7 +3,7 @@
 Triage births intake, build births its own and RESUMES it, vet births its own, and review returns
 to intake. Abandon retires every role thread.
 
-Needs SUPERME_TEST_REPO and a running daemon.
+Needs a running daemon. Writes into `test-playground`, or SUPERME_TEST_CTX.
 Run: PYTHONPATH=. python -m scripts.test_bv_s3_live
 """
 
@@ -23,12 +23,29 @@ from superme_agent.core import git_layer
 
 B = "http://127.0.0.1:8787"
 WS = "ws://127.0.0.1:8787/ws/agent"
-CTX = "dummy"
-# This suite MUTATES the repo it points at: reset, clean, branch deletion.
-# Name a throwaway one, never a repo holding work you want.
-REPO = Path(os.environ.get("SUPERME_TEST_REPO") or "~/superme-test-repo").expanduser()
-if not (REPO / ".git").is_dir():
-    raise SystemExit(f"SUPERME_TEST_REPO is not a git repo: {REPO}")
+def _ctx_repo(ctx: str) -> Path:
+    """The context's OWN checkout. Naming the repo separately lets a suite write knowledge into one
+    project and branches into another."""
+    from superme_agent.gateway import contexts
+    return Path(contexts.resolve(ctx, "dev").cwd)
+
+
+def _pick_ctx(preferred: str) -> str:
+    """This suite's context, else the one named in the environment. Never a guess: it creates and
+    abandons work-items in whatever it picks."""
+    from superme_agent.gateway import contexts
+    if contexts.exists(preferred):
+        return preferred
+    named = os.environ.get("SUPERME_TEST_CTX") or ""
+    if named and contexts.exists(named):
+        return named
+    raise SystemExit(f"context {preferred!r} is not in this SuperMe's registry, and "
+                     "SUPERME_TEST_CTX names no known repo — set it to a throwaway repo id "
+                     "from your repos.yaml")
+
+
+CTX = _pick_ctx("test-playground")
+REPO = _ctx_repo(CTX)
 KHOME = Path("superme-knowledge") / f"{CTX}-knowledge" / "dev"
 DB = Path("superme_agent") / ".system.db"
 PASS = 0
@@ -54,6 +71,7 @@ env: none
 
 ### probe-exists
 - traces: d-s3 — the probe deliverable
+- proves: the probe module is there and answers with its own name
 - mode: inspection
 - scenario: read the worktree root for the probe module
 - expect: probe_s3.py exists at the worktree root and defines probe() returning 's3'
@@ -95,6 +113,7 @@ async def turn(prompt: str, *, work_item_id: str, resume: str | None = None) -> 
 
 def turn_retry(prompt: str, *, work_item_id: str, resume: str | None = None) -> dict:
     """Ride out the run-lock closing window between consecutive turns."""
+    settle(work_item_id)   # the phase run this turn follows still holds the lock
     import time
     for _ in range(10):
         t = asyncio.run(turn(prompt, work_item_id=work_item_id, resume=resume))
@@ -108,13 +127,15 @@ def advance(iid: str) -> dict:
     """Advance with a retry — a just-finished turn's run row may still be closing (409 window)."""
     import time
     for _ in range(10):
+        settle(iid)     # a run can take the lock between the wait and the POST
         try:
             return http("POST", f"/dev/work-items/{iid}/advance?context_id={CTX}", {})
         except urllib.error.HTTPError as e:
             if e.code != 409:
                 raise
+            why = e.read().decode()[:300]
             time.sleep(3)
-    raise AssertionError("advance stayed 409")
+    raise AssertionError(f"advance stayed 409 — {why}")
 
 
 def spine_session(sid: str) -> dict | None:
@@ -147,23 +168,46 @@ def write_artifact(item_dir: Path, name: str, text: str) -> None:
 
 def cleanup(trunk_sha0: str, iid: str | None) -> None:
     try:
-        subprocess.run(["git", "reset", "--hard", trunk_sha0, "-q"], cwd=REPO, check=False)
-        subprocess.run(["git", "clean", "-fdq", "--exclude=superme-knowledge"], cwd=REPO, check=False)
-        wt_root = git_layer.worktrees_root(CTX)   # worktrees first — a live one pins its branch
-        if wt_root.exists():
-            shutil.rmtree(wt_root, ignore_errors=True)
+        # ONLY this item's branch and worktree. `item/*` and the whole worktrees root would take
+        # every other item's work with them — this repo holds work that is not ours.
+        if iid:
+            for wt in git_layer.worktrees_root(CTX).glob(f"{iid}*"):
+                shutil.rmtree(wt, ignore_errors=True)
             subprocess.run(["git", "worktree", "prune"], cwd=REPO, check=False)
-        for br in subprocess.run(["git", "branch", "--list", "item/*", "--format=%(refname:short)"],
-                                 cwd=REPO, capture_output=True, text=True).stdout.split():
-            subprocess.run(["git", "branch", "-Dq", br], cwd=REPO, check=False)
+            for br in subprocess.run(["git", "branch", "--list", f"item/{iid}*",
+                                      "--format=%(refname:short)"],
+                                     cwd=REPO, capture_output=True, text=True).stdout.split():
+                subprocess.run(["git", "branch", "-Dq", br], cwd=REPO, check=False)
         if iid:
             shutil.rmtree(KHOME / "work-items" / iid, ignore_errors=True)
             for row in http("GET", f"/dev?context_id={CTX}").get("inbox", []):
                 if row.get("routed_to") == iid:
                     http("DELETE", f"/dev/inbox/{row['id']}")
-        print("cleanup: dummy repo + knowledge home restored")
+        print(f"cleanup: {iid} branch + worktree + knowledge home removed")
     except Exception as e:  # noqa: BLE001
         print(f"cleanup INCOMPLETE: {e}")
+
+
+def wait_phase(iid: str, phase: str, secs: int = 1800) -> bool:
+    """Wait for the item to REACH a phase — the loop drives itself and takes minutes."""
+    import time
+    for _ in range(secs):
+        if str((item_meta(iid) or {}).get("phase") or "") == phase:
+            return True
+        time.sleep(1)
+    return False
+
+
+def settle(iid: str, secs: int = 900) -> None:
+    """Every phase entry fires that phase's run, and the run holds the item lock for minutes."""
+    import time
+    for _ in range(secs):
+        with sqlite3.connect(DB) as c:
+            if not c.execute("select 1 from run where item_id=? and status='running'",
+                             (iid,)).fetchone():
+                return
+        time.sleep(1)
+    raise AssertionError(f"a run never released {iid}")
 
 
 def main() -> None:
@@ -171,68 +215,72 @@ def main() -> None:
     iid = None
     try:
         row = http("POST", "/dev/inbox", {"context_id": CTX, "title": "BV-S3 live: session probe",
-                                          "text": "Session-map probe item."})
+                                          "text": "Session-map probe item.",
+                                          "autopilot": False})
         iid = http("POST", f"/dev/inbox/{row['id']}/push", {"context_id": CTX})["work_item"]["id"]
         item_dir = KHOME / "work-items" / iid
         print(f"item = {iid}")
+        settle(iid)
 
-        # --- intake birth (triage) ------------------------------------------------
-        print("intake birth (triage turn)")
+        # --- triage: the first intake-family slot ----------------------------------
+        print("triage session (birth)")
         t1 = turn_retry("Reply with exactly: ok. Do nothing else — no tools.", work_item_id=iid)
-        sid_intake = t1["session_id"]
+        sid_triage = t1["session_id"]
         m = item_meta(iid)
-        ok("triage turn filled the INTAKE slot",
-           bool(sid_intake) and m.get("session_intake") == sid_intake, str(m))
-        srow = spine_session(sid_intake)
-        ok("intake session: kind='intake', repo cwd",
+        ok("triage turn filled the TRIAGE slot",
+           bool(sid_triage) and m.get("session_triage") == sid_triage, str(m))
+        srow = spine_session(sid_triage)
+        ok("triage session: role 'intake', repo cwd",
            srow and srow["kind"] == "intake" and Path(srow["cwd"]).resolve() == REPO.resolve(),
            str(srow))
 
-        # --- gates to build ---------------------------------------------------------
+        # --- plan: its OWN slot, the SAME role --------------------------------------
+        print("plan session (own slot, same role)")
         advance(iid)   # triage → plan
+        t2 = turn_retry("Reply with exactly: ok. Do nothing else — no tools.", work_item_id=iid)
+        sid_plan = t2["session_id"]
+        m = item_meta(iid)
+        ok("plan turn minted a SEPARATE session in the PLAN slot",
+           bool(sid_plan) and sid_plan != sid_triage and m.get("session_plan") == sid_plan, str(m))
+        ok("...carrying the same intake ROLE — a slot is not a kind",
+           (spine_session(sid_plan) or {}).get("kind") == "intake")
+        ok("the triage slot survived the move", m.get("session_triage") == sid_triage, str(m))
+        ok("triage transcript still on disk (not retired)", transcript_exists(sid_triage))
+
+        # --- build and vet belong to the LOOP, not to us -----------------------------
+        print("build⟷vet loop (its own two sessions)")
+        # The plan RUN fires on entering plan and writes its own plan.md. Wait it out, then write
+        # ours — otherwise the run clobbers the planted checks and the suite proves nothing.
+        settle(iid)
         write_artifact(item_dir, "plan.md", PLAN)
-        adv = advance(iid)  # plan → build
+        adv = advance(iid)  # plan → build; entering build starts the loop
         wt = Path(adv["git"]["worktree"])
         ok("build entry created the worktree", wt.is_dir())
-
-        # --- build birth + persistence ----------------------------------------------
-        print("build session (fresh mint, worktree cwd, persists)")
-        t2 = turn_retry("Reply with exactly: ok. Do nothing else — no tools.", work_item_id=iid)
-        sid_build = t2["session_id"]
+        # `loop.py`: every exit lands the item at review, so waiting for review waits for both.
+        ok("the loop reached review on its own", wait_phase(iid, "review"))
+        settle(iid)                       # review's own entry run mints the review session
         m = item_meta(iid)
-        ok("build turn minted a SEPARATE session", bool(sid_build) and sid_build != sid_intake)
-        ok("both slots on the item — intake SURVIVED build entry",
-           m.get("session_build") == sid_build and m.get("session_intake") == sid_intake, str(m))
-        ok("intake transcript still on disk (not retired)", transcript_exists(sid_intake))
+        sid_build, sid_vet = m.get("session_build"), m.get("session_vet")
+        ok("the loop filled the BUILD slot with a fresh session",
+           bool(sid_build) and sid_build not in (sid_triage, sid_plan), str(m))
         srow = spine_session(sid_build)
-        ok("build session: kind='build', worktree cwd",
+        ok("build session: role 'build', worktree cwd",
            srow and srow["kind"] == "build" and Path(srow["cwd"]).resolve() == wt.resolve(),
            str(srow))
-        t3 = turn_retry("Reply with exactly: ok again. No tools.", work_item_id=iid,
-                        resume=sid_build)
-        ok("second build turn RESUMES the same session (build remembers)",
-           t3["session_id"] == sid_build, str(t3["session_id"]))
-
-        # --- vet birth ----------------------------------------------------------------
-        print("vet session (own mint)")
-        advance(iid)   # build → vet
-        t4 = turn_retry("Reply with exactly: ok. Do nothing else — no tools.", work_item_id=iid)
-        sid_vet = t4["session_id"]
-        ok("vet turn minted its own session",
-           bool(sid_vet) and sid_vet not in (sid_intake, sid_build))
+        ok("the loop filled the VET slot with a session of its own",
+           bool(sid_vet) and sid_vet not in (sid_triage, sid_plan, sid_build), str(m))
         srow = spine_session(sid_vet)
-        ok("vet session: kind='vet', worktree cwd",
+        ok("vet session: role 'vet', worktree cwd",
            srow and srow["kind"] == "vet" and Path(srow["cwd"]).resolve() == wt.resolve(), str(srow))
 
-        # --- review returns to intake ---------------------------------------------------
-        print("review returns to the intake thread")
-        write_artifact(item_dir, "validation.md",
-                       "---\nartifact: validation\n---\n# Validation\n\n## Checklist\n"
-                       "- probe-exists\n\n## Evidence\n")
-        advance(iid)   # vet → review
-        t5 = turn_retry("Reply with exactly: ok. Do nothing else — no tools.", work_item_id=iid)
-        ok("review turn RESUMED the intake session (same id, no mint)",
-           t5["session_id"] == sid_intake, str(t5["session_id"]))
+        # --- review is its OWN thread ------------------------------------------------
+        print("review session (own slot, NOT a resumed triage)")
+        sid_review = m.get("session_review")
+        ok("review has a slot of its own", bool(sid_review), str(m))
+        ok("...and it is NOT the triage thread — one slot per phase",
+           sid_review not in (sid_triage, sid_plan, sid_build, sid_vet), str(sid_review))
+        ok("review session: role 'intake' — same family as triage and plan",
+           (spine_session(sid_review) or {}).get("kind") == "intake")
 
         # --- abandon retires every thread -------------------------------------------------
         print("abandon retires all role threads")
@@ -249,10 +297,10 @@ def main() -> None:
         else:
             raise AssertionError("abandon stayed 409")
         ok("abandon reports sessions cleared", ab.get("session_cleared") is True, str(ab))
-        gone = [s for s in (sid_intake, sid_build, sid_vet)
+        gone = [s for s in (sid_triage, sid_plan, sid_build, sid_vet, sid_review)
                 if spine_session(s) is None and not transcript_exists(s)]
-        ok("all three threads retired (spine rows + transcripts gone)",
-           len(gone) == 3, str(gone))
+        ok("every slot retired (spine rows + transcripts gone)",
+           len(gone) == 5, str(gone))
     finally:
         cleanup(trunk_sha0, iid)
 

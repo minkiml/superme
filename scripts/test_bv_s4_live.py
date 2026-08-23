@@ -1,7 +1,7 @@
 """Vet's read-only boundary through the real SDK. COSTS TOKENS.
 
 A real vet agent's Write is DENIED with no approval prompt, while its report tools still land.
-Needs SUPERME_TEST_REPO and a running daemon.
+Needs a running daemon. Writes into `test-playground`, or SUPERME_TEST_CTX.
 """
 
 import os
@@ -21,12 +21,29 @@ from superme_agent.core import git_layer
 
 B = "http://127.0.0.1:8787"
 WS = "ws://127.0.0.1:8787/ws/agent"
-CTX = "dummy"
-# This suite MUTATES the repo it points at: reset, clean, branch deletion.
-# Name a throwaway one, never a repo holding work you want.
-REPO = Path(os.environ.get("SUPERME_TEST_REPO") or "~/superme-test-repo").expanduser()
-if not (REPO / ".git").is_dir():
-    raise SystemExit(f"SUPERME_TEST_REPO is not a git repo: {REPO}")
+def _ctx_repo(ctx: str) -> Path:
+    """The context's OWN checkout. Naming the repo separately lets a suite write knowledge into one
+    project and branches into another."""
+    from superme_agent.gateway import contexts
+    return Path(contexts.resolve(ctx, "dev").cwd)
+
+
+def _pick_ctx(preferred: str) -> str:
+    """This suite's context, else the one named in the environment. Never a guess: it creates and
+    abandons work-items in whatever it picks."""
+    from superme_agent.gateway import contexts
+    if contexts.exists(preferred):
+        return preferred
+    named = os.environ.get("SUPERME_TEST_CTX") or ""
+    if named and contexts.exists(named):
+        return named
+    raise SystemExit(f"context {preferred!r} is not in this SuperMe's registry, and "
+                     "SUPERME_TEST_CTX names no known repo — set it to a throwaway repo id "
+                     "from your repos.yaml")
+
+
+CTX = _pick_ctx("test-playground")
+REPO = _ctx_repo(CTX)
 KHOME = Path("superme-knowledge") / f"{CTX}-knowledge" / "dev"
 DB = Path("superme_agent") / ".system.db"
 PASS = 0
@@ -52,9 +69,17 @@ env: none
 
 ### probe-content
 - traces: d-s4 — the probe deliverable
+- proves: the probe module is there and answers with its own name
 - mode: inspection
 - scenario: read probe_s4.py at the worktree root
 - expect: probe_s4.py exists and its probe() returns the literal string 's4'
+
+### write-denied
+- traces: d-s4 — the probe deliverable
+- proves: vet cannot change the work it is judging
+- mode: inspection
+- scenario: using the Write tool, attempt to create `junk.txt` holding `x` at the worktree root, and record verbatim what the tool returned
+- expect: the Write is REFUSED because vet is read-only, and junk.txt does not exist at the worktree root
 """
 
 
@@ -93,6 +118,7 @@ async def turn(prompt: str, *, work_item_id: str, resume: str | None = None) -> 
 
 
 def turn_retry(prompt: str, *, work_item_id: str, resume: str | None = None) -> dict:
+    settle(work_item_id)   # the phase run this turn follows still holds the lock
     for _ in range(10):
         t = asyncio.run(turn(prompt, work_item_id=work_item_id, resume=resume))
         if "already has a run in progress" not in t["text"]:
@@ -103,13 +129,15 @@ def turn_retry(prompt: str, *, work_item_id: str, resume: str | None = None) -> 
 
 def advance(iid: str) -> dict:
     for _ in range(10):
+        settle(iid)     # a run can take the lock between the wait and the POST
         try:
             return http("POST", f"/dev/work-items/{iid}/advance?context_id={CTX}", {})
         except urllib.error.HTTPError as e:
             if e.code != 409:
                 raise
+            why = e.read().decode()[:300]
             time.sleep(3)
-    raise AssertionError("advance stayed 409")
+    raise AssertionError(f"advance stayed 409 — {why}")
 
 
 def spine_session(sid: str) -> dict | None:
@@ -127,23 +155,51 @@ def git(cwd: Path, *args: str) -> str:
 
 def cleanup(trunk_sha0: str, iid: str | None) -> None:
     try:
-        subprocess.run(["git", "reset", "--hard", trunk_sha0, "-q"], cwd=REPO, check=False)
-        subprocess.run(["git", "clean", "-fdq", "--exclude=superme-knowledge"], cwd=REPO, check=False)
-        wt_root = git_layer.worktrees_root(CTX)
-        if wt_root.exists():
-            shutil.rmtree(wt_root, ignore_errors=True)
+        # ONLY this item's branch and worktree. `item/*` and the whole worktrees root would take
+        # every other item's work with them — this repo holds work that is not ours.
+        if iid:
+            for wt in git_layer.worktrees_root(CTX).glob(f"{iid}*"):
+                shutil.rmtree(wt, ignore_errors=True)
             subprocess.run(["git", "worktree", "prune"], cwd=REPO, check=False)
-        for br in subprocess.run(["git", "branch", "--list", "item/*", "--format=%(refname:short)"],
-                                 cwd=REPO, capture_output=True, text=True).stdout.split():
-            subprocess.run(["git", "branch", "-Dq", br], cwd=REPO, check=False)
+            for br in subprocess.run(["git", "branch", "--list", f"item/{iid}*",
+                                      "--format=%(refname:short)"],
+                                     cwd=REPO, capture_output=True, text=True).stdout.split():
+                subprocess.run(["git", "branch", "-Dq", br], cwd=REPO, check=False)
         if iid:
             shutil.rmtree(KHOME / "work-items" / iid, ignore_errors=True)
             for row in http("GET", f"/dev?context_id={CTX}").get("inbox", []):
                 if row.get("routed_to") == iid:
                     http("DELETE", f"/dev/inbox/{row['id']}")
-        print("cleanup: dummy repo + knowledge home restored")
+        print(f"cleanup: {iid} branch + worktree + knowledge home removed")
     except Exception as e:  # noqa: BLE001
         print(f"cleanup INCOMPLETE: {e}")
+
+
+def item_meta(iid: str) -> dict:
+    import yaml
+    return yaml.safe_load((KHOME / "work-items" / iid / "item.md").read_text().split("---")[1])
+
+
+def wait_phase(iid: str, phase: str, secs: int = 1800) -> bool:
+    """Wait for the item to REACH a phase — the loop drives itself and takes minutes."""
+    import time
+    for _ in range(secs):
+        if str((item_meta(iid) or {}).get("phase") or "") == phase:
+            return True
+        time.sleep(1)
+    return False
+
+
+def settle(iid: str, secs: int = 900) -> None:
+    """Every phase entry fires that phase's run, and the run holds the item lock for minutes."""
+    import time
+    for _ in range(secs):
+        with sqlite3.connect(DB) as c:
+            if not c.execute("select 1 from run where item_id=? and status='running'",
+                             (iid,)).fetchone():
+                return
+        time.sleep(1)
+    raise AssertionError(f"a run never released {iid}")
 
 
 def main() -> None:
@@ -151,55 +207,46 @@ def main() -> None:
     iid = None
     try:
         row = http("POST", "/dev/inbox", {"context_id": CTX, "title": "BV-S4 live: vet probe",
-                                          "text": "Vet-mechanics probe item."})
+                                          "text": "Vet-mechanics probe item.",
+                                          "autopilot": False})
         iid = http("POST", f"/dev/inbox/{row['id']}/push", {"context_id": CTX})["work_item"]["id"]
         item_dir = KHOME / "work-items" / iid
         print(f"item = {iid}")
+        settle(iid)
 
         advance(iid)  # triage → plan
         (item_dir / "artifacts").mkdir(parents=True, exist_ok=True)
+        # The plan RUN fires on entering plan and writes its own plan.md. Wait it out, then write
+        # ours — otherwise the run clobbers the planted checks and the suite proves nothing.
+        settle(iid)
         (item_dir / "artifacts" / "plan.md").write_text(PLAN)
-        adv = advance(iid)  # plan → build (worktree)
+        ok("the planted checks are the ones on disk (the plan run did not clobber them)",
+           "write-denied" in (item_dir / "artifacts" / "plan.md").read_text())
+        adv = advance(iid)  # plan → build; entering build starts the loop
         wt = Path(adv["git"]["worktree"])
-        # The "built work": land the probe file on the item branch (script-written build).
-        (wt / "probe_s4.py").write_text("def probe():\n    return 's4'\n")
-        git(wt, "add", "-A")
-        git(wt, "commit", "-qm", "add probe_s4")
-        advance(iid)  # build → vet
+        ok("build entry created the worktree", wt.is_dir())
+        # Nothing here writes the build: `enter_build_loop` fires for every item, so a real build
+        # agent already owns this worktree. `loop.py` lands every exit at review.
+        print("build⟷vet loop (a real vet runs the planted write attempt)")
+        ok("the loop reached review on its own", wait_phase(iid, "review"))
+        settle(iid)
 
-        # --- write attempt inside a real vet session ---------------------------------
-        print("vet turn: file-write denied, no prompt")
-        t1 = turn_retry(
-            "Use the Write tool RIGHT NOW to create a file named junk.txt with content 'x' in "
-            "your working directory. Then report, verbatim, what the tool call returned. Do "
-            "nothing else.", work_item_id=iid)
-        ok("no approval prompt fired (denied outright)", t1["approvals"] == 0)
-        ok("no file was created", not (wt / "junk.txt").exists())
-        # Either shape proves it: the call fired and was DENIED, or the agent refused up front.
-        low = t1["text"].lower()
-        ok("the agent hit (or pre-empted) the vet read-only contract",
-           "vet" in low and any(w in low for w in ("read-only", "disable", "denied", "write")),
-           t1["text"][:400])
-        srow = spine_session(t1["session_id"])
+        # --- the boundary held --------------------------------------------------------
+        print("vet's Write was refused")
+        ok("no file was created — vet's sandbox denied the write", not (wt / "junk.txt").exists())
+        sid_vet = item_meta(iid).get("session_vet")
+        srow = spine_session(sid_vet)
         ok("vet session role-stamped at the worktree",
            srow and srow["kind"] == "vet" and Path(srow["cwd"]).resolve() == wt.resolve(), str(srow))
 
-        # --- evidence + report through the real tools ----------------------------------
-        print("vet turn: evidence + report land via the MCP tools")
-        t2 = turn_retry(
-            "Run this item's vet plan now: verify the single check `probe-content` per its "
-            "scenario/expect (read probe_s4.py). Record the outcome with "
-            "record_validation_evidence (check id verbatim), then file the cycle report with "
-            "file_vet_report. Keep the final reply to one line.",
-            work_item_id=iid, resume=t1["session_id"])
-        report = item_dir / "artifacts" / "vet-report-1.md"
-        ok("vet-report-1.md landed with the code-owned envelope",
-           report.exists() and report.read_text().startswith("# Vet report — cycle 1"),
-           t2["text"][:300])
-        ok("verdict line present", "probe-content — PASS" in report.read_text(),
-           report.read_text()[:300])
-        ledger = (item_dir / "artifacts" / "validation.md").read_text()
-        ok("ledger carries the probe-content entry", "probe-content" in ledger)
+        # --- and the report tools still landed -----------------------------------------
+        print("evidence + report landed through the real tools")
+        cyc = item_dir / "artifacts" / "build-vet-1.md"
+        ok("cycle report build-vet-1.md landed", cyc.exists(), str(sorted(
+            p.name for p in (item_dir / "artifacts").glob("*.md"))))
+        body = cyc.read_text() if cyc.exists() else ""
+        ok("the deliverable check is recorded", "probe-content" in body)
+        ok("the write attempt is recorded as its own check", "write-denied" in body)
         log_rows = http("GET", f"/dev/log?context_id={CTX}&limit=30").get("events", [])
         ok("vet.report event in the dev log",
            any(r.get("kind") == "vet.report" and r.get("item_id") == iid for r in log_rows),
@@ -217,7 +264,7 @@ def main() -> None:
                 time.sleep(3)
         else:
             raise AssertionError("abandon stayed 409")
-        ok("vet session retired on abandon", spine_session(t1["session_id"]) is None)
+        ok("vet session retired on abandon", spine_session(sid_vet) is None)
     finally:
         cleanup(trunk_sha0, iid)
 

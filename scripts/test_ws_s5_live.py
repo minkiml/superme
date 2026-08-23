@@ -1,13 +1,19 @@
 """Real phase sessions driven by a live agent. COSTS TOKENS.
 
-The orient block lands in the transcript EXACTLY once: a resumed second turn must not re-inject
-it. Needs a running daemon.
+A live turn births the intake thread, a resume stays on it, and the background plan run finishes
+structured. Needs SUPERME_TEST_CTX and a running daemon.
+
+The orient block this suite once counted is GONE — nothing constructs it; `## Current focus` carries
+the pointer per turn and state is read on demand.
 """
 
+import os
 import asyncio
 import json
+import pathlib
 import sqlite3
 import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -15,7 +21,21 @@ import websockets
 
 B = "http://127.0.0.1:8787"
 WS = "ws://127.0.0.1:8787/ws/agent"
-CTX = "dummy"
+def _pick_ctx(preferred: str) -> str:
+    """This suite's context, else the one named in the environment. Never a guess: it creates and
+    abandons work-items in whatever it picks."""
+    from superme_agent.gateway import contexts
+    if contexts.exists(preferred):
+        return preferred
+    named = os.environ.get("SUPERME_TEST_CTX") or ""
+    if named and contexts.exists(named):
+        return named
+    raise SystemExit(f"context {preferred!r} is not in this SuperMe's registry, and "
+                     "SUPERME_TEST_CTX names no known repo — set it to a throwaway repo id "
+                     "from your repos.yaml")
+
+
+CTX = _pick_ctx("test-playground")
 PASS = 0
 
 
@@ -30,8 +50,12 @@ def http(method: str, path: str, body: dict | None = None) -> dict:
     req = urllib.request.Request(B + path, method=method,
                                  headers={"content-type": "application/json"},
                                  data=json.dumps(body).encode() if body is not None else None)
-    with urllib.request.urlopen(req) as r:
-        return json.loads(r.read())
+    try:
+        with urllib.request.urlopen(req) as r:
+            return json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        # A bare status hides the daemon's reason, and the reason is the whole diagnosis.
+        raise AssertionError(f"{method} {path} -> {e.code}: {e.read().decode()[:300]}") from None
 
 
 async def turn(prompt: str, *, work_item_id: str | None = None, resume: str | None = None) -> dict:
@@ -57,26 +81,6 @@ async def turn(prompt: str, *, work_item_id: str | None = None, resume: str | No
                 raise AssertionError(f"turn errored: {frame.get('message')}")
 
 
-def transcript_path(session_id: str) -> Path | None:
-    hits = list(Path.home().glob(f".claude/projects/*/{session_id}.jsonl"))
-    return hits[0] if hits else None
-
-
-def orient_user_count(tp: Path) -> int:
-    """Occurrences of the orient block in REAL user messages only. The SDK transcript also mirrors
-    each prompt into bookkeeping records (queue-operation, last-prompt) — those aren't conversation
-    content and re-count the same single injection."""
-    n = 0
-    for line in tp.read_text().splitlines():
-        try:
-            d = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if d.get("type") == "user" and "Work-item orientation (kernel-assembled" in line:
-            n += 1
-    return n
-
-
 async def turn_retry(prompt: str, *, work_item_id: str, resume: str | None) -> dict:
     """A resumed follow-up can land inside the tiny window where the previous turn's run row is
     still closing (the result frame streams before end_run) — retry through the busy reply."""
@@ -88,13 +92,26 @@ async def turn_retry(prompt: str, *, work_item_id: str, resume: str | None) -> d
     raise AssertionError("item stayed run-locked")
 
 
+def settle(iid: str, secs: int = 900) -> None:
+    """Every phase entry fires that phase's run, and the run holds the item lock for minutes."""
+    db = pathlib.Path("superme_agent") / ".system.db"
+    for _ in range(secs):
+        with sqlite3.connect(db) as c:
+            if not c.execute("select 1 from run where item_id=? and status='running'",
+                             (iid,)).fetchone():
+                return
+        time.sleep(1)
+    raise AssertionError(f"a run never released {iid}")
+
+
 def main() -> None:
     # -- mint the item --------------------------------------------------------------
     row = http("POST", "/dev/inbox", {
-        "context_id": CTX, "title": "S5 live gate: greet util",
+        "context_id": CTX, "autopilot": False, "title": "S5 live gate: greet util",
         "text": "Add a tiny greet(name) helper to dummy_code.py that returns 'hello <name>', "
                 "with one happy-path check."})
     iid = http("POST", f"/dev/inbox/{row['id']}/push", {"context_id": CTX})["work_item"]["id"]
+    settle(iid)
     print(f"item = {iid}")
 
     try:
@@ -113,23 +130,26 @@ def main() -> None:
         t2 = asyncio.run(turn_retry(
             "Thanks — nothing to change. Just acknowledge in one short sentence.",
             work_item_id=iid, resume=sid))
-        sid2 = t2["session_id"] or sid
-        n = sum(orient_user_count(tp) for s in {sid, sid2}
-                if (tp := transcript_path(s)) is not None)
-        ok("orient block in USER messages EXACTLY once (no per-turn re-injection)",
-           n == 1, f"count={n}")
+        ok("the resumed turn stayed on the same thread", (t2["session_id"] or sid) == sid,
+           str(t2["session_id"]))
 
         # -- background plan run --------------------------------------------------------
         print("background plan (structured completion)")
-        for _ in range(10):   # the follow-up turn's run row may still be closing (409 window)
+        why = ""
+        for _ in range(10):
+            settle(iid)      # the phase run holds the item lock; a retry cannot outwait it
             try:
                 http("POST", f"/dev/work-items/{iid}/advance?context_id={CTX}", {})  # triage → plan
                 break
-            except Exception:
+            except urllib.error.HTTPError as e:
+                if e.code != 409:
+                    raise
+                why = e.read().decode()[:300]   # a refusal that says nothing costs a whole round
                 time.sleep(3)
         else:
-            raise AssertionError("advance stayed 409")
-        http("POST", f"/dev/work-items/{iid}/plan", {"context_id": CTX})
+            raise AssertionError(f"advance stayed 409 — {why}")
+        # Nothing fires the plan run here: entering plan already did. `/run` is the MANUAL driver
+        # for a phase that has not started, and it refuses an item already resting at its gate.
         deadline = time.time() + 420
         while time.time() < deadline:
             time.sleep(5)
@@ -162,7 +182,8 @@ def main() -> None:
     finally:
         # -- purge the dummy item (pre-build → hard delete clears folder + session + inbox row)
         try:
-            res = http("DELETE", f"/dev/work-items/{iid}?context_id={CTX}")
+            res = http("POST", f"/dev/work-items/{iid}/abandon",
+                       {"context_id": CTX, "reason": "ws-s5 probe done"})
             print(f"cleanup: deleted {iid} (session_cleared={res.get('session_cleared')})")
         except Exception as e:  # noqa: BLE001
             print(f"cleanup FAILED for {iid}: {e}")

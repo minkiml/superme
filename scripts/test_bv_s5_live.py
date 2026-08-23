@@ -1,9 +1,13 @@
 """The build-vet loop driving itself end to end. COSTS TOKENS.
 
-A real vet fails a planted defect, a real build fixes it, and the loop exits at review on its
-own — no human action between the launch and the page.
+Approving the plan gate is the last human action: build writes the work, vet judges it, and the
+loop lands the item at review with every cycle recorded.
 
-Needs SUPERME_TEST_REPO and a running daemon.
+The CYCLE COUNT is deliberately not asserted. A defect planted for vet to catch is one the build
+reads in the same plan.md and fixes first time, so "fails, then passes" cannot be forced from
+outside; what holds either way is that the loop drives itself and every cycle carries a verdict.
+
+Needs a running daemon. Writes into `test-playground`, or SUPERME_TEST_CTX.
 """
 
 import os
@@ -19,12 +23,29 @@ from pathlib import Path
 from superme_agent.core import git_layer
 
 B = "http://127.0.0.1:8787"
-CTX = "dummy"
-# This suite MUTATES the repo it points at: reset, clean, branch deletion.
-# Name a throwaway one, never a repo holding work you want.
-REPO = Path(os.environ.get("SUPERME_TEST_REPO") or "~/superme-test-repo").expanduser()
-if not (REPO / ".git").is_dir():
-    raise SystemExit(f"SUPERME_TEST_REPO is not a git repo: {REPO}")
+def _ctx_repo(ctx: str) -> Path:
+    """The context's OWN checkout. Naming the repo separately lets a suite write knowledge into one
+    project and branches into another."""
+    from superme_agent.gateway import contexts
+    return Path(contexts.resolve(ctx, "dev").cwd)
+
+
+def _pick_ctx(preferred: str) -> str:
+    """This suite's context, else the one named in the environment. Never a guess: it creates and
+    abandons work-items in whatever it picks."""
+    from superme_agent.gateway import contexts
+    if contexts.exists(preferred):
+        return preferred
+    named = os.environ.get("SUPERME_TEST_CTX") or ""
+    if named and contexts.exists(named):
+        return named
+    raise SystemExit(f"context {preferred!r} is not in this SuperMe's registry, and "
+                     "SUPERME_TEST_CTX names no known repo — set it to a throwaway repo id "
+                     "from your repos.yaml")
+
+
+CTX = _pick_ctx("test-playground")
+REPO = _ctx_repo(CTX)
 KHOME = Path("superme-knowledge") / f"{CTX}-knowledge" / "dev"
 DB = Path("superme_agent") / ".system.db"
 PASS = 0
@@ -39,7 +60,7 @@ artifact: plan
 One probe file; the point is the loop driving itself.
 
 ## Tasks
-- [x] add probe file returning the right value
+- [ ] add `probe_s5.py` at the worktree root, with `probe()` returning exactly the string `s5`
 
 ## Inner checks
 - `python -c "import probe_s5; assert probe_s5.probe() == 's5'"`
@@ -51,6 +72,7 @@ env: none
 
 ### probe-value
 - traces: d-s5 — the probe deliverable
+- proves: the probe module is there and answers with its own name
 - mode: command
 - scenario: in the worktree, run `python -c "import probe_s5; print(probe_s5.probe())"`
 - expect: the command prints exactly s5 and exits 0
@@ -73,14 +95,18 @@ def http(method: str, path: str, body: dict | None = None) -> dict:
 
 
 def retry_409(method: str, path: str, body: dict | None = None, tries: int = 20) -> dict:
+    iid = path.split("/dev/work-items/", 1)[1].split("/", 1)[0] if "/dev/work-items/" in path else ""
     for _ in range(tries):
+        if iid:
+            settle(iid)     # a phase run holds the item lock; a 409 retry cannot outwait it
         try:
             return http(method, path, body)
         except urllib.error.HTTPError as e:
             if e.code != 409:
                 raise
+            why = e.read().decode()[:300]
             time.sleep(3)
-    raise AssertionError(f"{path} stayed 409")
+    raise AssertionError(f"{path} stayed 409 — {why}")
 
 
 def item_row(iid: str) -> dict:
@@ -120,23 +146,36 @@ def cleanup(trunk_sha0: str, iid: str | None) -> None:
                           {"context_id": CTX, "reason": "bv-s5 probe done"})
             except Exception as e:  # noqa: BLE001
                 print(f"cleanup: abandon failed ({e})")
-        subprocess.run(["git", "reset", "--hard", trunk_sha0, "-q"], cwd=REPO, check=False)
-        subprocess.run(["git", "clean", "-fdq", "--exclude=superme-knowledge"], cwd=REPO, check=False)
-        wt_root = git_layer.worktrees_root(CTX)
-        if wt_root.exists():
-            shutil.rmtree(wt_root, ignore_errors=True)
+        # ONLY this item's branch and worktree. `item/*` and the whole worktrees root would take
+        # every other item's work with them — this repo holds work that is not ours.
+        if iid:
+            for wt in git_layer.worktrees_root(CTX).glob(f"{iid}*"):
+                shutil.rmtree(wt, ignore_errors=True)
             subprocess.run(["git", "worktree", "prune"], cwd=REPO, check=False)
-        for br in subprocess.run(["git", "branch", "--list", "item/*", "--format=%(refname:short)"],
-                                 cwd=REPO, capture_output=True, text=True).stdout.split():
-            subprocess.run(["git", "branch", "-Dq", br], cwd=REPO, check=False)
+            for br in subprocess.run(["git", "branch", "--list", f"item/{iid}*",
+                                      "--format=%(refname:short)"],
+                                     cwd=REPO, capture_output=True, text=True).stdout.split():
+                subprocess.run(["git", "branch", "-Dq", br], cwd=REPO, check=False)
         if iid:
             shutil.rmtree(KHOME / "work-items" / iid, ignore_errors=True)
             for row in http("GET", f"/dev?context_id={CTX}").get("inbox", []):
                 if row.get("routed_to") == iid:
                     http("DELETE", f"/dev/inbox/{row['id']}")
-        print("cleanup: dummy repo + knowledge home restored")
+        print(f"cleanup: {iid} branch + worktree + knowledge home removed")
     except Exception as e:  # noqa: BLE001
         print(f"cleanup INCOMPLETE: {e}")
+
+
+def settle(iid: str, secs: int = 900) -> None:
+    """Every phase entry fires that phase's run, and the run holds the item lock for minutes."""
+    import time
+    for _ in range(secs):
+        with sqlite3.connect(DB) as c:
+            if not c.execute("select 1 from run where item_id=? and status='running'",
+                             (iid,)).fetchone():
+                return
+        time.sleep(1)
+    raise AssertionError(f"a run never released {iid}")
 
 
 def main() -> None:
@@ -144,68 +183,59 @@ def main() -> None:
     iid = None
     try:
         row = http("POST", "/dev/inbox", {"context_id": CTX, "title": "BV-S5 live: loop probe",
-                                          "text": "Loop-driver probe item."})
+                                          "text": "Loop-driver probe item.",
+                                          "autopilot": False})
         iid = http("POST", f"/dev/inbox/{row['id']}/push", {"context_id": CTX})["work_item"]["id"]
         item_dir = KHOME / "work-items" / iid
         print(f"item = {iid}")
+        settle(iid)
 
         retry_409("POST", f"/dev/work-items/{iid}/advance?context_id={CTX}", {})  # triage → plan
         (item_dir / "artifacts").mkdir(parents=True, exist_ok=True)
+        # The plan RUN fires on entering plan and writes its own plan.md. Wait it out, then write
+        # ours — otherwise the run clobbers the planted checks and the suite proves nothing.
+        settle(iid)
         (item_dir / "artifacts" / "plan.md").write_text(PLAN)
-        adv = retry_409("POST", f"/dev/work-items/{iid}/advance?context_id={CTX}", {})  # plan → build
+        # plan → build. `enter_build_loop` fires on entry: from here nothing human touches it.
+        adv = retry_409("POST", f"/dev/work-items/{iid}/advance?context_id={CTX}", {})
         wt = Path(adv["git"]["worktree"])
-        # The planted DEFECT: the probe returns the wrong value — cycle 1 must fail on it.
-        (wt / "probe_s5.py").write_text("def probe():\n    return 'WRONG'\n")
-        git(wt, "add", "-A")
-        git(wt, "commit", "-qm", "add probe_s5 (planted defect)")
-        retry_409("POST", f"/dev/work-items/{iid}/advance?context_id={CTX}", {})  # build → vet
-
-        # --- the single human action: launch the loop --------------------------------
-        r = http("POST", f"/dev/work-items/{iid}/vet", {"context_id": CTX})
-        ok("loop launched", r.get("ok") is True and r.get("status") == "vetting")
+        ok("build entry created the worktree", wt.is_dir())
 
         # --- watch it drive itself ----------------------------------------------------
-        print("loop running (vet-fail → build-fix → vet-pass; no human from here)…")
+        print("loop running (build → vet → …; no human from here)…")
         deadline = time.time() + LOOP_TIMEOUT
-        phase, status = "vet", "active"
+        phase, status = "build", "active"
         while time.time() < deadline:
             it = item_row(iid)
             phase, status = str(it.get("phase")), str(it.get("status"))
-            if phase == "review":
-                break
-            if status == "awaiting_human":   # loop halted early — a breaker or fail-closed fired
+            # `review` + `active` means review's own entry run is still writing: not rested yet.
+            if status == "awaiting_human":
                 break
             time.sleep(10)
-        ok("loop exited at the review gate (no human between launch and page)",
-           phase == "review" and status == "awaiting_human",
-           f"phase={phase} status={status} attempts="
-           + (item_dir / "artifacts" / "attempts.md").read_text()[-600:]
-           if (item_dir / "artifacts" / "attempts.md").exists() else f"phase={phase} status={status}")
+        ok("loop exited at the review gate (no human between the plan gate and the page)",
+           phase == "review" and status == "awaiting_human", f"phase={phase} status={status}")
 
-        # --- cycle 1: real failure, recorded ------------------------------------------
-        r1 = (item_dir / "artifacts" / "vet-report-1.md").read_text()
-        ok("cycle-1 report FAILED the planted defect", "probe-value — FAIL" in r1, r1[:300])
-        # --- the fix landed in the worktree by the build cycle -------------------------
+        # --- every cycle recorded, the last one green ---------------------------------
+        cycles = sorted((item_dir / "artifacts").glob("build-vet-*.md"))
+        ok("the loop wrote at least one cycle report", cycles, str(sorted(
+            f.name for f in (item_dir / "artifacts").glob("*.md"))))
+        final = cycles[-1].read_text()
+        ok("the final cycle carries the plan's check", "probe-value" in final, final[:300])
+        # The outcome's decision is the heading suffix under `## Cycle outcome`, not a field.
+        outcome = final.split("## Cycle outcome")[-1]
+        ok("the final cycle exited to review", "— review" in outcome, outcome[:400])
+
+        # --- and the work is really there ----------------------------------------------
         out = subprocess.run(["python", "-c", "import probe_s5; print(probe_s5.probe())"],
                              cwd=wt, capture_output=True, text=True)
-        ok("build cycle fixed the worktree (probe now returns s5)",
+        ok("the build's work satisfies the check for real (probe returns s5)",
            out.stdout.strip() == "s5", out.stdout + out.stderr)
         commits = git(wt, "log", "--oneline")
-        ok("the fix was committed on the item branch", len(commits.splitlines()) >= 2, commits)
-        # --- cycle 2: pass, recorded ----------------------------------------------------
-        r2 = (item_dir / "artifacts" / "vet-report-2.md").read_text()
-        ok("cycle-2 report PASSED", "probe-value — PASS" in r2, r2[:300])
-        ledger = (item_dir / "artifacts" / "validation.md").read_text()
-        ok("ledger carries both cycles' evidence", ledger.count("probe-value") >= 2)
-        # --- the driver's own record ----------------------------------------------------
-        att = (item_dir / "artifacts" / "attempts.md").read_text()
-        ok("attempts.md records the build hop then the review exit",
-           "decision: build" in att and "decision: review" in att
-           and att.index("decision: build") < att.index("decision: review"), att)
+        ok("the work was committed on the item branch", commits.strip() != "", commits)
         # --- runs + events + sessions ---------------------------------------------------
         feats = [r["feature"] for r in item_runs(iid)]
-        ok("run history shows the loop's hops (vet, build, vet)",
-           feats.count("vet") >= 2 and feats.count("build") >= 1, str(feats))
+        ok("run history shows the loop ran both halves itself",
+           feats.count("vet") >= 1 and feats.count("build") >= 1, str(feats))
         ok("no run row left open", all(r["status"] != "running" for r in item_runs(iid)))
         log_rows = http("GET", f"/dev/log?context_id={CTX}&limit=60").get("events", [])
         kinds = [e.get("kind") for e in log_rows if e.get("item_id") == iid]

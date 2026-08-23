@@ -1,7 +1,7 @@
 """Handoff promotion through the real socket seam. COSTS TOKENS.
 
 The watermark advances at Result and a SECOND turn does not re-inject: exactly one promotion
-header, ever. Needs SUPERME_TEST_REPO and a running daemon.
+header, ever. Needs a running daemon. Writes into `test-playground`, or SUPERME_TEST_CTX.
 """
 
 import os
@@ -20,12 +20,29 @@ from superme_agent.core import artifacts as A
 
 B = "http://127.0.0.1:8787"
 WS = "ws://127.0.0.1:8787/ws/agent"
-CTX = "dummy"
-# This suite MUTATES the repo it points at: reset, clean, branch deletion.
-# Name a throwaway one, never a repo holding work you want.
-REPO = Path(os.environ.get("SUPERME_TEST_REPO") or "~/superme-test-repo").expanduser()
-if not (REPO / ".git").is_dir():
-    raise SystemExit(f"SUPERME_TEST_REPO is not a git repo: {REPO}")
+def _ctx_repo(ctx: str) -> Path:
+    """The context's OWN checkout. Naming the repo separately lets a suite write knowledge into one
+    project and branches into another."""
+    from superme_agent.gateway import contexts
+    return Path(contexts.resolve(ctx, "dev").cwd)
+
+
+def _pick_ctx(preferred: str) -> str:
+    """This suite's context, else the one named in the environment. Never a guess: it creates and
+    abandons work-items in whatever it picks."""
+    from superme_agent.gateway import contexts
+    if contexts.exists(preferred):
+        return preferred
+    named = os.environ.get("SUPERME_TEST_CTX") or ""
+    if named and contexts.exists(named):
+        return named
+    raise SystemExit(f"context {preferred!r} is not in this SuperMe's registry, and "
+                     "SUPERME_TEST_CTX names no known repo — set it to a throwaway repo id "
+                     "from your repos.yaml")
+
+
+CTX = _pick_ctx("test-playground")
+REPO = _ctx_repo(CTX)
 KHOME = Path("superme-knowledge") / f"{CTX}-knowledge" / "dev"
 DB = Path("superme_agent") / ".system.db"
 PASS = 0
@@ -53,6 +70,7 @@ env: none
 
 ### probe-value
 - traces: d-s6
+- proves: the probe module is there and answers with its own name
 - mode: command
 - scenario: run the probe
 - expect: the probe prints exactly s6
@@ -93,6 +111,7 @@ async def turn(prompt: str, *, work_item_id: str, resume: str | None = None) -> 
 
 
 def turn_retry(prompt: str, *, work_item_id: str, resume: str | None = None) -> dict:
+    settle(work_item_id)   # the phase run this turn follows still holds the lock
     for _ in range(10):
         t = asyncio.run(turn(prompt, work_item_id=work_item_id, resume=resume))
         if "already has a run in progress" not in t["text"]:
@@ -146,27 +165,47 @@ def seed_record(item_dir: Path) -> None:
     (item_dir / "artifacts" / "plan.md").write_text(PLAN)
     A.record_verification(item_dir, REPO, check="probe-value", how="ran the probe",
                       result="printed WRONG, expected s6", passed=False)
-    A.write_vet_user_report(item_dir, REPO,
-                       findings="### probe-value\n- expected: s6\n- actual: WRONG")
+    # A red check owes a diagnosis and every standing lens owes a read, or the report is refused.
+    A.record_diagnosis(item_dir, check="probe-value", where="probe_s6.py::probe",
+                       why="the function returns the literal 'WRONG'")
+    for lens in A.STANDING_LENSES:
+        A.record_lens(item_dir, probed="the one-line probe module", lens=lens)
+    A.write_vet_user_report(item_dir, REPO)
     A.append_cycle_outcome(item_dir, evidence="failed", decision="build",
                      reason="1 check(s) failed — handing the vet report to a build cycle",
                      fingerprint="aabbccddeeff", failed=["probe-value"],
                      tokens=12000, budget=500000)
     A.record_verification(item_dir, REPO, check="probe-value", how="ran the probe",
                       result="printed s6", passed=True)
+    for lens in A.STANDING_LENSES:
+        A.record_lens(item_dir, probed="the one-line probe module", lens=lens)
     A.write_vet_user_report(item_dir, REPO)
     A.append_cycle_outcome(item_dir, evidence="passed", decision="review",
                      reason="every check green and fresh — advancing to the review gate")
+
+
+def settle(iid: str, secs: int = 900) -> None:
+    """Every phase entry fires that phase's run, and the run holds the item lock for minutes."""
+    import time
+    for _ in range(secs):
+        with sqlite3.connect(DB) as c:
+            if not c.execute("select 1 from run where item_id=? and status='running'",
+                             (iid,)).fetchone():
+                return
+        time.sleep(1)
+    raise AssertionError(f"a run never released {iid}")
 
 
 def main() -> None:
     iid = None
     try:
         row = http("POST", "/dev/inbox", {"context_id": CTX, "title": "BV-S6 live: handoff probe",
-                                          "text": "Handoff-promotion probe item."})
+                                          "text": "Handoff-promotion probe item.",
+                                          "autopilot": False})
         iid = http("POST", f"/dev/inbox/{row['id']}/push", {"context_id": CTX})["work_item"]["id"]
         item_dir = KHOME / "work-items" / iid
         print(f"item = {iid}")
+        settle(iid)
         seed_record(item_dir)
 
         # --- turn 1: the promotion rides in ------------------------------------------
@@ -175,16 +214,21 @@ def main() -> None:
             "From the record you were handed this turn, answer in ONE line: how many loop "
             "cycles ran, which check failed in cycle 1, and where did the loop exit?",
             work_item_id=iid)
-        low = t1["text"].lower()
-        ok("agent narrates FROM the record (names the check + the review exit)",
-           "probe-value" in low and "review" in low, t1["text"][:400])
-        it = item_row(iid)
-        ok("watermark advanced at Result", int(it.get("handoffs_promoted") or 0) == 2, str(it))
+        # MECHANICAL first: whether the kernel delivered the block is a fact, and it decides how
+        # to read anything the model then said about it.
         ok("promotion header landed in exactly ONE user message",
            header_count(t1["session_id"]) == 1)
         um1 = user_messages(t1["session_id"])
-        ok("latest report rode verbatim, older cycle collapsed",
-           "Vet report — cycle 2" in um1 and "vet-report-1.md verdicts:" in um1)
+        ok("the driver's decisions rode in the block",
+           "probe-value" in um1 and "→ review" in um1, um1[:300])
+        ok("the latest cycle report rode verbatim, named",
+           "Latest cycle report (build-vet-1.md, verbatim)" in um1)
+        it = item_row(iid)
+        ok("watermark advanced at Result", int(it.get("handoffs_promoted") or 0) == 2, str(it))
+        # Only now the model's own use of it — a softer claim, and never the first thing to fail.
+        low = t1["text"].lower()
+        ok("agent narrates FROM the record (names the check + the review exit)",
+           "probe-value" in low and "review" in low, t1["text"][:400])
 
         # --- turn 2: no re-injection ---------------------------------------------------
         print("turn 2: no re-injection on the resumed thread")
