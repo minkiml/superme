@@ -783,9 +783,11 @@ def _deputy_check_rows(state: dict) -> str:
     checks = state.get("checks") or []
     if not checks:
         return "_(this gate has no mechanical checks.)_"
+    # A bare ✗ reads as something to fix, so a failing row says which kind of failing it is.
     lines = [f"- {'✓' if c.get('ok') else '✗'} **{c.get('criterion')}** — {c.get('detail')}"
-             + ("  _[must-resolve: this one greys the owner's Approve]_"
-                if c.get("blocking") and not c.get("ok") else "")
+             + ("" if c.get("ok") else
+                "  _[must-resolve: this one greys the owner's Approve]_" if c.get("blocking") else
+                "  _[advisory: does NOT grey Approve, and is not grounds for a send_back alone]_")
              for c in checks]
     blocked = state.get("blocked_by") or []
     lines.append("")
