@@ -322,7 +322,8 @@ async def ws_agent(ws: WebSocket) -> None:
             protected_paths = None    # review turns set this: plan.md is not review's to write
             item_worktree = None
             turn_resume = _live_resume(msg.resume, resumed)
-            session_role = None   # the bound turn's session role (intake|build|vet); None unbound
+            session_slot = None   # the bound turn's storage slot (triage|plan|build|vet|review|close)
+            session_role = None   # its ROLE (intake|build|vet) — NOT the slot; only build and vet share a name
             handoff_mark = None   # step-6 watermark to persist at Result (a promotion rode this turn)
             main_repo_dir = ctx.cwd   # the REAL repo root, captured before any worktree swap
             grill_parked = False  # plan's grill: this bound chat is a Q&A round
@@ -341,12 +342,16 @@ async def ws_agent(ws: WebSocket) -> None:
                 # build legitimately ticks its task list.
                 if str(item.get("phase")) == "review":
                     protected_paths = [item_dir / "artifacts" / "plan.md"]
-                session_role, slot_sid = resolve_item_session(
+                session_slot, slot_sid = resolve_item_session(
                     item, worktree=item_worktree, repo_dir=main_repo_dir,
                     get_session=_spine.get_session,
                     adopt=lambda sid, r: _dev.set_work_item_session(
                         ctx.internal_root / "dev", work_item_id, sid, slot=r),
                 )
+                # `resolve_item_session` answers WHERE the turn runs (the slot). The ROLE is a
+                # different question with a different vocabulary — asking the slot for it makes
+                # every `== "intake"` test dead, since no slot carries that name.
+                session_role = kind_profiles.session_role(str(item.get("phase") or "triage"))
                 # The bound turn runs in the CURRENT role's slot; a resume naming another role's
                 # thread is redirected.
                 turn_resume = slot_sid
@@ -551,7 +556,7 @@ async def ws_agent(ws: WebSocket) -> None:
                             try:
                                 _dev.set_work_item_session(
                                     ctx.internal_root / "dev", work_item_id, ev.session_id,
-                                    slot=session_role or "triage",
+                                    slot=session_slot or "triage",
                                 )
                                 # Reverse stamp at a work-item session's birth: from here the
                                 # daemon reads this, not the client payload.
