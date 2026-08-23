@@ -5,6 +5,7 @@ install run. This installs nothing; it writes config and reports what is still m
 
     python setup_superme.py            # configure, then report
     python setup_superme.py --check    # report only, write nothing
+    python setup_superme.py --seed-hub # refresh the shipped hub docs from the live ones
 """
 
 import os
@@ -15,6 +16,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 APP = ROOT / "superme_agent"
 CHECK = "--check" in sys.argv[1:]
+SEED_HUB = "--seed-hub" in sys.argv[1:]
 
 OK, WARN, BAD = "ok", "warn", "missing"
 _MARK = {OK: "+", WARN: "~", BAD: "!"}
@@ -73,6 +75,7 @@ def main() -> int:
     _knowledge_home()
     if not missing:
         _stores()
+        _hub_knowledge()
 
     return _summary()
 
@@ -138,6 +141,54 @@ def _stores() -> None:
             note(WARN, "no hub in the registry", "add a `global` entry to config/repos.yaml")
     except Exception as e:
         note(BAD, "could not open the local databases", f"{type(e).__name__}: {e}")
+
+
+def _hub_knowledge() -> None:
+    """Put the shipped hub anchor docs in place once, so a guest's hub is readable on arrival.
+
+    Every other repo is onboarded by an owner who can say what it is for. Nobody can answer that
+    about SuperMe on the day they clone it, so this one repo's memory ships.
+    """
+    from superme_agent.gateway import contexts
+    from superme_agent.paths import HUB_KNOWLEDGE_SEED_DIR
+
+    seed = HUB_KNOWLEDGE_SEED_DIR
+    try:
+        live = contexts.resolve("global", "dev").internal_root / "dev" / "general"
+    except Exception as e:  # noqa: BLE001 — no hub in the registry is already reported above
+        note(WARN, "hub knowledge skipped", f"{type(e).__name__}: {e}")
+        return
+    # Refreshing runs FROM the live docs, so an empty seed is the ordinary case — test it first.
+    if SEED_HUB:
+        _refresh_seed(live, seed)
+        return
+    docs = [p for p in seed.glob("*.md") if p.name != "README.md"] if seed.is_dir() else []
+    if not docs:
+        note(WARN, "no hub docs to install", f"{seed.relative_to(ROOT)} holds no anchor docs")
+        return
+    if live.is_dir() and any(live.glob("*.md")):
+        note(OK, "hub knowledge present", "yours now — setup never overwrites it")
+        return
+    if CHECK:
+        note(WARN, "hub knowledge absent", f"would be copied to {live}")
+        return
+    shutil.copytree(seed, live, dirs_exist_ok=True,
+                    ignore=shutil.ignore_patterns("README.md"))
+    note(OK, "hub knowledge installed", f"{len(docs)} anchor docs → {live}")
+
+
+def _refresh_seed(live: Path, seed: Path) -> None:
+    """`--seed-hub`: copy the LIVE hub docs back over the shipped ones. The owner's copy is the
+    source; this is how it reaches the next guest."""
+    if not (live.is_dir() and any(live.glob("*.md"))):
+        note(BAD, "nothing to seed from", f"no anchor docs at {live}")
+        return
+    for stale in seed.glob("*.md"):
+        if stale.name != "README.md":
+            stale.unlink()
+    shutil.copytree(live, seed, dirs_exist_ok=True)
+    note(OK, "shipped hub docs refreshed",
+         f"{len(list(seed.glob('*.md'))) - 1} docs ← {live}")
 
 
 def _summary() -> int:

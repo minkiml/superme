@@ -57,6 +57,10 @@ SYSTEM_CONFIG_FILE = CONFIG_DIR / "system.yaml"      # singleton static-meta
 REPOS_CONFIG_FILE = CONFIG_DIR / "repos.yaml"        # repo registry, scope-aware
 # The registry is local state — the spine writes to it — so the tracked file is a seed.
 REPOS_SEED_FILE = CONFIG_DIR / "repos.example.yaml"
+# The hub's own anchor docs, shipped. A guest has not written SuperMe and cannot answer what it is
+# for, so the one repo whose memory arrives with the install is this one. Copied out at setup and
+# theirs to edit after — the live copy is written by agents and must not be a tracked file.
+HUB_KNOWLEDGE_SEED_DIR = CONFIG_DIR / "hub-knowledge"
 SYSTEM_DB_FILE = APP_DIR / ".system.db"              # live: session, run, model_override
 # One gitignored knowledge repo holds every connected repo's sub-home, keyed by repo id.
 KNOWLEDGE_REPO_DIR = Path(
