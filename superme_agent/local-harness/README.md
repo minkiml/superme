@@ -29,4 +29,3 @@ path — `{constitution, skill, agent}` (one coarse `constitution` bucket for al
 > relocation pass moves it here, and `config.py` / `agent_service.py` path resolution switches to
 > this tree. The empty `.gitkeep`s mark the target shape; nothing loads from here yet.
 
-See `general_docs/development-dashboard-PRD.md` §4.11 and `general_docs/system-spine-spec.md`.

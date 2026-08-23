@@ -38,12 +38,20 @@ Comprehension map — core/: <entry points, modules, data flow> · daemon/: <…
 ```
 
 ## Step 4: Clarify intent with the owner
-Where the code can't tell you *why* — intent, direction, priorities — interview the owner, one question
-at a time, to confirm the inferred intent and fill the gaps.
+**Read the owner's own prose before you ask anything.** The README, anything under `docs/`, a vision
+or pitch note at the repo root: intent lives in what was written for humans, not in the code. List
+what you found and what it settles. Asking for something already on the page spends the owner's turn
+on retrieval, and inferring past it invents a direction nobody chose.
+
+Then interview, one question at a time, on what that prose leaves open.
 
 **Always ask, even if the code left you confident.** Intent is the one thing code cannot supply, and a
 confident agent that skips this writes the PRD from inferred intent and never finds out it guessed
 wrong. Short is fine — two questions beats none.
+
+Check before drafting: for every direction claim you are about to write, can you name the owner's
+sentence or the owner's answer it came from? If it came from the code, it is a description of what
+exists — write it as one, not as intent.
 
 **Every question carries a recommendation, and a recommendation is useless bare.** For any question
 that shapes a deliverable, the data model, or what's next, lay it out as a LIST — one labelled

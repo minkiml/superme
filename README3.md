@@ -1,65 +1,49 @@
 # SuperMe
 
-**SuperMe** is a local-only, dashboard-driven personal agent system. One AI identity hosted onto
-every repository you own, engineered around a single owner rather than a team. Its goal is that
-everything you build and run with AI stops being scattered sessions and starts accumulating into one
-knowledge estate that represents you, and that you stay in command of it without becoming its
-bottleneck.
-
-![The Nexus, every connected repo, live](docs/img/nexus.png)
+**SuperMe** is a local-only, dashboard-driven personal agent, hosted onto every repository you own,
+engineered for a single owner rather than a team. It is built around two ideas. Everything you do
+with AI should accumulate into one body of knowledge that represents you, and you should stay in
+command of that work without becoming its bottleneck.
 
 ---
 
 ### Your AI use builds a digital twin of you
 
-Your work isn't one repo. It isn't one project, one workspace, one session, one AI activity. It's an
-**estate of knowledge that represents you**. Projects, side work, a business, the tooling that runs
-all of it, and every decision you made along the way.
+Your work isn't one repo, one project, one workspace, one topic. It's projects, side work, a
+business, and the tooling that runs them. Each piece sits under its own scope and stays there. Every
+piece is a real part of what you do with AI, and none of them connect.
 
-Today that estate is shattered. A thread per session, a context per tool, a memory per project. None
-of them know about each other, none of them survive the session, and none of them can be connected
-into anything central. You are the only integration layer, and you are doing it from memory.
-
-SuperMe is that layer. One identity, hosted onto every repo you own including its own codebase, where
-every repo becomes knowledge the system reasons over, and every body of knowledge can become a repo.
-Building and operating happen in the same place, under an identity that accumulates instead of
-resetting. What it learns from working becomes skills and rules, one approval at a time.
-
-*(illustration, knowledge and memory structure. Universal harness vs per-host knowledge, hub vs
-project hosts, core vs dev)*
+SuperMe is that join, gradually evolving as a digital version of you. One identity across every
+repo you own, including its own code, where each repo becomes knowledge it can read and any body of
+knowledge can become a repo.
 
 ---
 
 ### Human-in-the-loop is the principle. Human throughput is the engineering.
 
-That the human decides is settled here. Output nobody verified isn't performance, it's exposure.
-Every phase gates on the owner, and autopilot never crosses review.
+You decide. Work nobody verified isn't speed and isn't performance, it's risk. But that puts you on
+the critical path. An agent produces more in an hour than you can read in a day, and it works on
+several things at once, so you lose the thread of what was done and where each piece now stands.
+That leaves you two bad options, read all of it slowly or skim it and hope. So what makes a system
+fast is not how well or how quickly it works. **It is how well it keeps you in the loop, and how
+quickly you can understand where things are.**
 
-Which puts you on the critical path of everything. AI keeps getting better and faster. You don't.
-Agents now produce more in an hour than one person can read in a day, so **every gate is a stop, and
-the sum of those stops is the system's real throughput.** The bottleneck isn't the agent's speed.
-It's your comprehension.
+That is what SuperMe is built to address. Work stops and waits for you wherever the decision is
+yours, at points called gates, and nothing crosses one on its own. Everything else is engineering
+around those points. What you see when you arrive at one, and how fast you can build enough context
+to trust it and act.
 
-So the hard problem in SuperMe isn't *whether* to gate. It's what a gate costs you. The system is
-continuously rebuilt around one question.
+These are the questions that drive the design, and they are still open.
 
-> At this gate, in this situation, what gets the owner to a confident decision in the least time?
-
-Which is really a stack of harder ones, and these are live design work rather than settled features.
-
-- **What actually needs your judgment here**, and what should have been checked mechanically before
-  you were ever asked?
-- **What must be exposed at this gate, and what is noise?** The answer differs by gate, by kind of
-  work, and by how much you already know.
-- **How should a code change be presented** so it's understood rather than skimmed?
-- **Which artifacts earn their existence**, and what skills write them well enough to be worth your
-  time?
-- **How do you come back cold?** You step away for two days and return with nearly fresh memory of
-  work that was mid-flight. Fast, faithful context restoration is a first-class problem here, not an
-  afterthought.
-
-*(illustration, comprehension flow. item → artifacts → mechanical checks → report → your decision
-→ trace)*
+- What here needs your judgment, and what should the system have settled before asking you?
+- What must be shown at this gate, and what is noise? It differs by gate, by kind of work, and by
+  what you already know.
+- What shape should that information take so you grasp it quickly instead of reading it slowly?
+- What proof does the system owe you, and in what form does that proof actually convince?
+- How do you present a code change so it gets read rather than skimmed?
+- Which artifacts earn their existence, and what makes one worth your time?
+- How do you come back cold? Two days away and the work is nearly fresh again. Restoring that
+  context fast is a first-class problem here, not an afterthought.
 
 What that discipline has produced so far.
 
@@ -101,22 +85,16 @@ context fill. Nothing is a black box when it goes wrong.
   Knowledge lives outside it and is pulled on demand. The two never mix.
 - **Kernel-owned context management.** Compaction fires on a run boundary at a threshold you set,
   never mid-task, always checkpointed first.
-- **Plan auth only.** `ANTHROPIC_API_KEY` is dropped from the process whether or not you set it, so
-  a key in your shell can never quietly bill you.
 
-### Coming
+### Working on now
 
-- **Multi-LLM engine support.** Claude and OpenAI, same harness, same gates.
+- **Multi-LLM engine support.** OpenAI model family, and so on.
 - **Operational knowledge and memory structure.** The core-mode twin, the taxonomy and retrieval
   model for the non-code half of the estate.
-
-### Out of scope
-
-- **Team platforms.** No seats, no roles, no sharing model. One owner, though the projects they
-  connect can be a team's, or a business's.
-- **Hosting.** No cloud, no account, no telemetry. It runs on your machine and stays there.
-- **Model-agnosticism.** One harness, one auth path. No API keys, no model zoo.
-- **Chat as the product.** Chat exists, but the work doesn't run there.
+- **Better comprehension through visualization.** Showing the shape of the work, so the state of
+  things is something you see instead of something you reconstruct.
+- **Integrations.** Notion, Slack and the other places your work already lives, so knowledge
+  outside your repos joins the estate too.
 
 ---
 
