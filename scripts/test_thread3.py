@@ -234,7 +234,7 @@ def render_registry() -> dict[str, str]:
               {"kind": "tool", "name": "Read", "description": "a.py"},
               {"kind": "result", "name": "Read", "description": "contents"},
               {"kind": "reply", "description": "did it"}]
-    return {
+    out = {
         "trigger.intake.plan": KS.intake_trigger("plan", "fix1", "Fixture"),
         "trigger.intake.triage": KS.intake_trigger("triage", "fix1", "Fixture"),
         "trigger.vet": KS.vet_trigger("fix1", "Fixture"),
@@ -289,6 +289,9 @@ def render_registry() -> dict[str, str]:
         "assembler.handoff": KS.render_handoff_block({"id": "fix1"}, d)[0],
         "assembler.diagnosis_trace": KS.diagnosis_trace_block(run, events, 7),
     }
+    # The fixture dir reaches the rendered text spelled with the platform's separator; the
+    # baseline holds one spelling.
+    return {k: v.replace(str(FIXTURE_DIR), FIXTURE_DIR.as_posix()) for k, v in out.items()}
 
 
 def test_snapshot() -> None:

@@ -1230,7 +1230,8 @@ def test_prompt_xray_covers_every_speaker() -> None:
                      write_boundary=[Path("/wt")], sandbox_writes=[Path("/wt")], resumes=True)
     ok("the surface records the model it ran on", s["model"] == "sonnet" and s["effort"] == "high")
     ok("...the tools it carried", s["mcp"] == ["dev", "run"])
-    ok("...where it could write, as plain strings", s["sandbox_writes"] == ["/wt"])
+    ok("...where it could write, as plain strings",
+       s["sandbox_writes"] == [str(Path("/wt"))])
     ok("...and whether a transcript it does NOT hold is also in play",
        s["resumes"] is True)
     ok("a read-only turn says so rather than leaving it implied",

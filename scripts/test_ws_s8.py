@@ -152,7 +152,7 @@ def test_session_memory(tmp: Path) -> None:
     ok("no memory yet reads None", A.read_session_memory(root, "sess-1") is None)
     p = A.session_memory_path(root, "sess-1")
     ok("the path is derived from the session id — nothing to store a pointer in",
-       str(p).endswith("dev/session-memory/sess-1.md"))
+       p.as_posix().endswith("dev/session-memory/sess-1.md"))
     # The AGENT writes this file: a general session has no item tools, so there is no kernel
     # writer.
     p.parent.mkdir(parents=True, exist_ok=True)
