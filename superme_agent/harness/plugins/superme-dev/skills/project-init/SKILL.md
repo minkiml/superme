@@ -23,7 +23,7 @@ Read a doc's guide from `../../general-dev-knowledge-asset/<doc>.md` before you 
 
 ## Step 3: Pre-study, then report back
 Before you ask anything, learn what you could have looked up. Spawn focused research subagents (model:
-sonnet; one per question, self-contained prompt, explicit return shape) on what is knowable **from outside**: stack norms
+sonnet; `run_in_background: false`; one per question, self-contained prompt, explicit return shape) on what is knowable **from outside**: stack norms
 and conventions, the plumbing available, data, comparable systems and what they got right, hard constraints.
 
 **Scope boundary — do not research product intent.** What this is for, who it's for, the first

@@ -47,8 +47,8 @@ second entry.
 
 Run each remaining check's `scenario` live in the worktree (shell via `Bash` — running things IS the
 job). Checks are independent, so when several are expensive, fan them out to parallel subagents
-(model: haiku — mechanical execution, not judgment), one check per agent, each returning the
-verbatim result. You record, and you judge.
+(model: haiku, `run_in_background: false` — mechanical execution, not judgment), one check per agent,
+each returning the verbatim result. You record, and you judge.
 
 - **Judge strictly against `expect`** — met exactly is a pass. Anything else, including a check that
   cannot run at all (environment won't start, command crashes, timeout), is a FAIL. "Mostly works"

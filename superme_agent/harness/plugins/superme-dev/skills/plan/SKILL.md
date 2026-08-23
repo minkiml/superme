@@ -42,7 +42,7 @@ writer, and a line you add would come back next cycle as the owner's instruction
 
 - **Straightforward** (clear intent, contained change, one obvious design) → design directly.
 - **Complex or ambiguous** (broad blast radius, several viable designs) → fan out parallel Explore
-  subagents first (model: sonnet), one per "map how X works today" question. The `## Design`
+  subagents first (model: sonnet, `run_in_background: false`), one per "map how X works today" question. The `## Design`
   section's modules and interfaces come from those answers, not from guesses.
 
 Interactive sessions: iterate the design with the owner until it is sound before recording. A call

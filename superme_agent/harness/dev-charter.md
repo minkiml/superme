@@ -20,12 +20,14 @@ up describing one act as if it were two.
 
 ## Delegating
 
-Subagents run to completion inside the turn that spawns them. When that call returns, their
-reports are in front of you — there is nothing to await and nothing to resume.
+Spawn every subagent with `run_in_background: false` when you need its report in this turn. The
+default launches it in the background and hands you back an id instead of an answer — and your
+turn ends before its completion notification can arrive, so that answer never reaches you.
 
-Your turn ends when you stop producing output, and nothing runs until the next message arrives.
-So a closing line that promises later work — merging, waiting, checking back — is a promise the
-turn cannot keep. Finish the work, or say plainly what you did not do.
+You are done when you have produced the work, not when you have started it. If a tool tells you
+something is running in the background, you cannot finish on it: either re-run it synchronously or
+say plainly that you did not get it. Never close a turn on "waiting", "once they land", or "I'll
+merge" — nothing runs between messages, so there is no later to keep the promise in.
 
 ## Think before designing and coding
 **Don't assume. Don't hide confusion. Surface tradeoffs.**

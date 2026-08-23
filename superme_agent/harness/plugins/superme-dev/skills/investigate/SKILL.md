@@ -82,7 +82,7 @@ declaration list, a file walk — run it yourself, once, into your scratch direc
 reader exists. Split first and every reader rebuilds it, so the sweep's most expensive command is
 paid for once per reader and their counts disagree.
 
-Then spawn one `subagent_type: superme-dev:investigator` per slice. Use that exact string: a partial
+Then spawn one `subagent_type: superme-dev:investigator` per slice, each with `run_in_background: false`. Use that exact string: a partial
 identifier resolves to a generic reader instead of erroring.
 
 Split by question, then by SIZE — the census tells you which slices are big. Cut an outsized one by
