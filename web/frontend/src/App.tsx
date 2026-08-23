@@ -253,6 +253,13 @@ export default function App() {
     navigate({ name: 'setup' }, { replace: true })
   }, [auth.ready, route.name])
 
+  useEffect(() => {
+    // The guide is an address for a CONDITION, so it has to leave when the condition does —
+    // otherwise "I've done that" succeeds and shows you the instructions again. Replace, because
+    // Back to a guide you no longer need is not a place worth returning to.
+    if (auth.ready && route.name === 'setup') navigate({ name: 'nexus' }, { replace: true })
+  }, [auth.ready, route.name])
+
   if (route.name === 'setup') {
     return (
       <div className="flex h-full flex-col bg-app font-sans text-fg">

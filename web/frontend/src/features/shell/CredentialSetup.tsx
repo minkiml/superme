@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { KeyRound, Terminal, Check, Copy, RefreshCw, ArrowRight, Download, FileText } from 'lucide-react'
+import { KeyRound, Terminal, Check, Copy, ArrowRight, Download, FileText } from 'lucide-react'
 import { getAuthStatus, type AuthStatus } from '@/lib/api'
 import { invalidate } from '@/lib/live'
 import { K } from '@/lib/live/keys'
@@ -76,9 +76,9 @@ export default function CredentialSetup({ status, onSkip }: {
         </div>
         <h1 className="text-[22px] font-semibold text-fg">Connect your Claude account</h1>
         <p className="mt-2.5 text-[13.5px] leading-relaxed text-muted">
-          SuperMe runs its agents through Claude Code, on your own Claude plan. Until it can reach
-          Anthropic, you can look around but nothing will run. Either way below works — most people
-          already have the first.
+          SuperMe runs its agents through Claude Code, on your own Claude plan (API key is not
+          supported). Get an OAuth token and set it in <code className="font-mono text-[12px] text-fg">.env</code>.
+          See the instructions below.
         </p>
 
         <div className="mt-7 flex flex-col gap-3">
@@ -123,9 +123,8 @@ export default function CredentialSetup({ status, onSkip }: {
           <button
             onClick={recheck}
             disabled={checking}
-            className="inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-[13px] font-medium text-on-accent transition hover:opacity-90 disabled:opacity-50"
+            className="rounded-md bg-accent px-4 py-2 text-[13px] font-medium text-on-accent transition hover:opacity-90 disabled:opacity-50"
           >
-            <RefreshCw size={14} className={checking ? 'animate-spin' : ''} />
             {checking ? 'Checking…' : "I've done that"}
           </button>
           <button
@@ -142,11 +141,6 @@ export default function CredentialSetup({ status, onSkip }: {
           </p>
         )}
 
-        <p className="mt-8 border-t border-line pt-4 text-[12px] leading-relaxed text-faint">
-          SuperMe accepts plan auth only. <code className="font-mono">ANTHROPIC_API_KEY</code> is
-          dropped from the process whether or not you set it, so a key in your shell can never
-          quietly bill you instead.
-        </p>
       </div>
     </div>
   )
