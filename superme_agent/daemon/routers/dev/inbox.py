@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from ...app_state import (
     DevKnowledgeService, DevStore, SystemSpine, get_dev, get_dev_store, get_spine,
 )
-from ...deps import dev_root
+from ...deps import dev_root, needs_credential
 from ...schemas.dev.inbox import (InboxBody, InboxBriefBody, InboxBriefResponse,
                                   InboxBriefSaveResponse, InboxDeleteResponse, InboxPatch,
                                   InboxPushBody, InboxPushResponse, InboxRow)
@@ -75,7 +75,8 @@ async def dev_inbox_update(item_id: int, body: InboxPatch, dev_store: DevStore =
 
 
 @router.post("/dev/inbox/{item_id}/push", response_model=InboxPushResponse,
-             response_model_exclude_unset=True)
+             response_model_exclude_unset=True,
+             dependencies=[Depends(needs_credential)])
 async def dev_inbox_push(item_id: int, body: InboxPushBody,
                          dev_store: DevStore = Depends(get_dev_store),
                          dev: DevKnowledgeService = Depends(get_dev),

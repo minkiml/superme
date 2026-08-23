@@ -9,7 +9,8 @@ import asyncio
 from fastapi import APIRouter, Depends, HTTPException
 
 from ...app_state import DevStore, SystemSpine, get_dev_store, get_spine
-from ...deps import proposal_slug as _proposal_slug, published_ident as _published_ident
+from ...deps import (needs_credential, proposal_slug as _proposal_slug,
+                     published_ident as _published_ident)
 from ....gateway import contexts
 from ...services.learning import (
     run_background_distill, run_background_write, run_sweep, sweep_idle_sessions,
@@ -142,7 +143,9 @@ async def dev_memory_rollup(dev_store: DevStore = Depends(get_dev_store),
             "drafted": tot_draft, "learned": tot_learn}
 
 
-@router.post("/dev/memory/distill", response_model=DistillResponse, response_model_exclude_unset=True)
+@router.post("/dev/memory/distill", response_model=DistillResponse,
+             response_model_exclude_unset=True,
+             dependencies=[Depends(needs_credential)])
 async def dev_memory_distill(context_id: str = "global",
                              dev_store: DevStore = Depends(get_dev_store),
                              spine: SystemSpine = Depends(get_spine)) -> dict:

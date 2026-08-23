@@ -36,6 +36,13 @@ class RunRow(BaseModel):
     outcome: str | None = None
 
 
+class AuthStatusResponse(BaseModel):
+    """Whether SuperMe holds a credential at all. `detail` is the sentence a surface shows."""
+    ready: bool
+    method: Literal["token", "cli"] | None = None
+    detail: str
+
+
 class SystemResponse(BaseModel):
     """The System singleton: static config + the live half (in-flight runs) + the repo roster."""
     identity: str

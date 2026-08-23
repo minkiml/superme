@@ -33,6 +33,15 @@ export type CategoryNode = Schema<'CategoryNode'>
 export type TokenTimeseries = Schema<'TokenTimeseriesResponse'>
 export type TokenDay = Schema<'TokenDay'>
 
+// Whether SuperMe holds an Anthropic credential at all. Every agent action reads this: with no
+// credential the daemon refuses the run outright, so the surface greys it rather than letting the
+// owner start something that cannot finish.
+export type AuthStatus = Schema<'AuthStatusResponse'>
+
+export function getAuthStatus(refresh = false): Promise<AuthStatus> {
+  return getJSON(`/api/system/auth${refresh ? '?refresh=true' : ''}`)
+}
+
 export function getSystem(): Promise<SystemOverview> {
   return getJSON('/api/system')
 }

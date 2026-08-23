@@ -86,12 +86,3 @@ DAEMON_HOST = os.environ.get("SUPERME_DAEMON_HOST", "127.0.0.1")
 DAEMON_PORT = int(os.environ.get("SUPERME_DAEMON_PORT", "8787"))
 # How long the daemon waits for a surface to answer an approval before denying (s).
 DAEMON_APPROVAL_TIMEOUT = int(os.environ.get("SUPERME_APPROVAL_TIMEOUT", "180"))
-
-
-def check_auth() -> None:
-    """Warn when no plan credential is set, rather than failing on the first turn."""
-    if not os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"):
-        log.warning(
-            "CLAUDE_CODE_OAUTH_TOKEN is not set — every agent turn will fail. Run "
-            "`claude setup-token` and put the token in .env."
-        )

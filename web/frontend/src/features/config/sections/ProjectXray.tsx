@@ -4,6 +4,7 @@ import { runPromptExtraction, getPromptExtractionStatus, type PromptExtractionSt
 import { fmtLocal } from '@/lib/format'
 import { PHASE_LABEL, Empty } from '@/features/dev/common'
 import { PaneHead } from '../controls'
+import { useAuthGate } from '@/lib/authGate'
 
 // Inspect the REAL input prompts SuperMe sends over a work-item's lifecycle.
 //
@@ -13,6 +14,7 @@ import { PaneHead } from '../controls'
 export default function ProjectXray({ contextId, repoLabel }: { contextId: string; repoLabel: string }) {
   const [st, setSt] = useState<PromptExtractionStatus | null>(null)
   const [err, setErr] = useState<string | null>(null)
+  const { reason: authReason } = useAuthGate()   // the probe is a full lifecycle of runs
   const [launching, setLaunching] = useState(false)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -55,8 +57,8 @@ export default function ProjectXray({ contextId, repoLabel }: { contextId: strin
       <div className="mb-5 flex items-center gap-3">
         <button
           onClick={fire}
-          disabled={running || launching}
-          title="Fire a throwaway probe that runs a full lifecycle and captures each phase's input"
+          disabled={running || launching || !!authReason}
+          title={authReason ?? "Fire a throwaway probe that runs a full lifecycle and captures each phase's input"}
           className="inline-flex items-center gap-1 rounded-md border border-accent/40 bg-accent/10 px-2 py-1 text-[12px] text-accent-text transition hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {launching || running ? (

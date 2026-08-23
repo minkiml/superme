@@ -12,6 +12,7 @@ export const K = {
   runs: (limit: number) => `sys:runs:${limit}`,
   systemAttention: 'sys:attention',
   systemOverview: 'sys:overview',
+  authStatus: 'sys:auth',
   contexts: 'sys:contexts',
 
   // ── one repo's dev surface ───────────────────────────────────────────────────────────────────

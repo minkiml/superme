@@ -4,6 +4,7 @@ import { type WorkItem } from '@/lib/api'
 import { fmtTokens, fmtDuration, fmtModel } from '@/lib/format'
 import { PHASE_VERB, STATUS_COLOR, STATUS_LABEL, STATUS_STRIPE, primaryStatus, agoLabel, researchKindLabel, workKindLabel, kindChipClass } from '../common'
 import { useContainerWidth } from '@/lib/layout'
+import { useAuthGate } from '@/lib/authGate'
 
 // The board: every live work item as a card, grouped by what it is waiting on.
 
@@ -141,6 +142,8 @@ function WorkCard({
   onResume?: (it: WorkItem) => void // only ever called for a STOPPED card (see below)
   tight?: boolean // the lane is too narrow for the full four rows — see below
 }) {
+  // Resuming re-fires the run, so with no credential the card says why instead.
+  const { reason: authReason } = useAuthGate()
   const clickable = !!onOpen
   const running = !!planning || !!it.running
   // A fixed four-row card; live values win while a run is in flight. A pure glance and entry point.
@@ -238,8 +241,9 @@ function WorkCard({
       {stopped && onResume && (
         <button
           onClick={(e) => { e.stopPropagation(); onResume(it) }}
-          title={it.error_reason ? `Re-fire the run that stopped — ${it.error_reason}` : 'Re-fire the run that stopped'}
-          className="mt-0.5 self-start rounded border border-danger/50 px-1.5 py-0.5 text-[10.5px] font-medium text-danger transition hover:bg-danger/10"
+          disabled={!!authReason}
+          title={authReason ?? (it.error_reason ? `Re-fire the run that stopped — ${it.error_reason}` : 'Re-fire the run that stopped')}
+          className="mt-0.5 self-start rounded border border-danger/50 px-1.5 py-0.5 text-[10.5px] font-medium text-danger transition hover:bg-danger/10 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
         >
           Resume
         </button>

@@ -31,6 +31,7 @@ from ..services.runs import (
     bank_auto_checkpoint, capture_prompt, capture_event, compacted_checkpoint,
     compacted_session_memory, fire_auto_triage, read_completion,
 )
+from ...core.auth import auth_status
 from ...core import kernel_speech
 from ...core.vocab import kind_profiles
 from ...core import (
@@ -234,6 +235,11 @@ async def ws_agent(ws: WebSocket) -> None:
             msg = await inbox.get()
             if msg is None:
                 break  # client disconnected
+            # Nothing downstream can run without a credential, and the SDK's own failure names
+            # neither the cause nor the fix.
+            if not (auth := auth_status())["ready"]:
+                await send({"type": "error", "message": auth["detail"]})
+                continue
             ctx = contexts.resolve(msg.context_id, msg.mode or "core")
             prompt = msg.prompt
             # The session's durable stamp decides whether this is a work-item turn; only at birth

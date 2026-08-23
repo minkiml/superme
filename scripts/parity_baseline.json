@@ -60,6 +60,7 @@
     "GET /system",
     "GET /system/agent-models",
     "GET /system/attention",
+    "GET /system/auth",
     "GET /system/compaction",
     "GET /system/inventory",
     "GET /tokens",
@@ -1026,6 +1027,40 @@
             "reason"
           ],
           "title": "AttentionRow",
+          "type": "object"
+        },
+        "AuthStatusResponse": {
+          "description": "Whether SuperMe holds a credential at all. `detail` is the sentence a surface shows.",
+          "properties": {
+            "detail": {
+              "title": "Detail",
+              "type": "string"
+            },
+            "method": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "token",
+                    "cli"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Method"
+            },
+            "ready": {
+              "title": "Ready",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ready",
+            "detail"
+          ],
+          "title": "AuthStatusResponse",
           "type": "object"
         },
         "AuthorizationRequest": {
@@ -15868,6 +15903,47 @@
             }
           },
           "summary": "System Attention"
+        }
+      },
+      "/system/auth": {
+        "get": {
+          "description": "Can SuperMe reach Anthropic? Surfaces gate every agent action on this.\n\nCached for a minute, because asking the Claude CLI spawns a process \u2014 `refresh=true` is\nwhat a person clicks after signing in.",
+          "operationId": "system_auth_system_auth_get",
+          "parameters": [
+            {
+              "in": "query",
+              "name": "refresh",
+              "required": false,
+              "schema": {
+                "default": false,
+                "title": "Refresh",
+                "type": "boolean"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/AuthStatusResponse"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "System Auth"
         }
       },
       "/system/compaction": {

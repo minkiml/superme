@@ -220,4 +220,6 @@ export {
   type CategoryNode,
   type TokenTimeseries,
   type TokenDay,
+  getAuthStatus,
+  type AuthStatus,
 } from './system'

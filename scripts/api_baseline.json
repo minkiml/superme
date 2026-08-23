@@ -2283,6 +2283,35 @@
    "sig": "def(kind: str | None) -> KindProfile"
   }
  },
+ "superme_agent.core.auth": {
+  "_CLI_TIMEOUT_S": {
+   "sig": "value:int"
+  },
+  "_TTL_S": {
+   "sig": "value:int"
+  },
+  "_cached": {
+   "sig": "value:NoneType"
+  },
+  "_cached_at": {
+   "sig": "value:float"
+  },
+  "_cli_signed_in": {
+   "home": "superme_agent.core.auth",
+   "sig": "def() -> bool"
+  },
+  "_resolve": {
+   "home": "superme_agent.core.auth",
+   "sig": "def() -> dict"
+  },
+  "auth_status": {
+   "home": "superme_agent.core.auth",
+   "sig": "def(*, refresh: bool = False) -> dict"
+  },
+  "log": {
+   "sig": "value:Logger"
+  }
+ },
  "superme_agent.core.autopilot": {
   "AWAITING_SLOT": {
    "sig": "value:str"
@@ -6323,9 +6352,9 @@
   "DAEMON_PORT": {
    "sig": "value:int"
   },
-  "check_auth": {
-   "home": "superme_agent.paths",
-   "sig": "def() -> None"
+  "auth_status": {
+   "home": "superme_agent.core.auth",
+   "sig": "def(*, refresh: bool = False) -> dict"
   },
   "log": {
    "sig": "value:Logger"
@@ -10171,6 +10200,11 @@
    "methods": [],
    "sig": "class"
   },
+  "AuthStatusResponse": {
+   "home": "superme_agent.daemon.schemas.system",
+   "methods": [],
+   "sig": "class"
+  },
   "AutopilotConcurrencyBody": {
    "home": "superme_agent.daemon.schemas.system",
    "methods": [],
@@ -10503,6 +10537,10 @@
    "home": "superme_agent.daemon.routers.system",
    "sig": "def(s: str) -> str"
   },
+  "auth_status": {
+   "home": "superme_agent.core.auth",
+   "sig": "def(*, refresh: bool = False) -> dict"
+  },
   "connect_repo": {
    "home": "superme_agent.daemon.routers.system",
    "sig": "def(body: RepoConnectBody, spine: SystemSpine = Depends(dependency=<function get_spine>, use_cache=True, scope=None)) -> dict"
@@ -10608,6 +10646,10 @@
   "system_attention": {
    "home": "superme_agent.daemon.routers.system",
    "sig": "def() -> list[dict]"
+  },
+  "system_auth": {
+   "home": "superme_agent.daemon.routers.system",
+   "sig": "def(refresh: bool = False) -> dict"
   },
   "system_overview": {
    "home": "superme_agent.daemon.routers.system",
@@ -12063,6 +12105,11 @@
    "sig": "class"
   },
   "AttentionHold": {
+   "home": "superme_agent.daemon.schemas.system",
+   "methods": [],
+   "sig": "class"
+  },
+  "AuthStatusResponse": {
    "home": "superme_agent.daemon.schemas.system",
    "methods": [],
    "sig": "class"
@@ -16596,10 +16643,6 @@
   },
   "SYSTEM_DB_FILE": {
    "sig": "value:PosixPath"
-  },
-  "check_auth": {
-   "home": "superme_agent.paths",
-   "sig": "def() -> None"
   },
   "log": {
    "sig": "value:Logger"

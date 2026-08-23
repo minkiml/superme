@@ -86,21 +86,22 @@ def _importable(name: str) -> bool:
 
 
 def _auth() -> None:
-    """Report only whether the plan token is set. Its value is never read back or printed."""
+    """Report whether SuperMe can authenticate — either credential counts. Never reads a value back."""
+    sys.path.insert(0, str(ROOT))
+    try:
+        from superme_agent.core.auth import auth_status
+    except ImportError:
+        note(WARN, "auth not checked", "install the Python packages first")
+        return
+    status = auth_status(refresh=True)
+    note(OK if status["ready"] else BAD,
+         "auth ready" if status["ready"] else "no credential", status["detail"])
+
     env = ROOT / ".env"
     text = env.read_text(encoding="utf-8") if env.is_file() else ""
-    filled = {
-        line.split("=", 1)[0].strip()
-        for line in text.splitlines()
-        if not line.lstrip().startswith("#") and "=" in line and line.split("=", 1)[1].strip()
-    }
-    key = "CLAUDE_CODE_OAUTH_TOKEN"
-    if key in filled or os.environ.get(key):
-        note(OK, "auth credential set")
-    else:
-        note(BAD, "auth credential missing",
-             "put a token from `claude setup-token` in .env as CLAUDE_CODE_OAUTH_TOKEN")
-    if "ANTHROPIC_API_KEY" in filled:
+    if any(line.split("=", 1)[0].strip() == "ANTHROPIC_API_KEY" and line.split("=", 1)[1].strip()
+           for line in text.splitlines()
+           if not line.lstrip().startswith("#") and "=" in line):
         note(WARN, "ANTHROPIC_API_KEY is set and will be ignored",
              "SuperMe runs on Claude plan auth only; the key is dropped from the process")
 

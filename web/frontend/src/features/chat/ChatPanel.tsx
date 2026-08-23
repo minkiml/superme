@@ -5,6 +5,7 @@ import MessageList from './MessageList'
 import TimelineView from './TimelineView'
 import ApprovalCard from './ApprovalCard'
 import Composer from './Composer'
+import { useAuthGate } from '@/lib/authGate'
 import SessionDrawer from './SessionDrawer'
 import { sessionCategory } from './sessionCategory'
 import ConfirmDialog from '@/ui/ConfirmDialog'
@@ -238,6 +239,9 @@ export default function ChatPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessions.activeId, contextId])
 
+  // No credential means the daemon refuses the turn, so the rail says so instead of sending one.
+  const { reason: authReason } = useAuthGate()
+
   function send() {
     const text = input
     if (!text.trim()) return
@@ -394,10 +398,13 @@ export default function ChatPanel({
         onPaletteOpen={socket.refreshCommands}
         modelOverride={sessionModel}
         effortOverride={sessionEffort}
-        // Read-only whenever there is nothing to send into: an autonomous phase, a vanished item,
-        // or a terminal one.
+        // Read-only whenever there is nothing to send into: no credential, an autonomous phase, a
+        // vanished item, or a terminal one. The credential comes first — it outranks every
+        // per-item reason, and the daemon refuses the turn regardless.
         locked={
-          boundTerminal
+          authReason
+            ? { reason: authReason }
+            : boundTerminal
             ? { reason: 'This work-item and its sessions are closed — the transcript is history.' }
             : activeSess?.item_gone
             ? { reason: 'This work-item no longer exists — the conversation is history now.' }

@@ -12,6 +12,7 @@ import {
   type PrView, type PrDiff,
 } from '@/lib/api'
 import { useViewportWidth, PANE } from '@/lib/layout'
+import { useAuthGate } from '@/lib/authGate'
 
 // The dedicated PR page. A PAGE, not a panel: a diff read in a third of a screen is a diff nobody
 // reads.
@@ -93,6 +94,9 @@ export default function PrPage({ itemId, contextId }: {
     document.title = pr?.branch ? `PR · ${pr.branch}` : `PR · ${itemId}`
   }, [pr?.branch, itemId])
 
+  // Merge advances the item, and the next phase fires its own run.
+  const { reason: authReason } = useAuthGate()
+
   async function merge() {
     setMerging(true)
     setErr(null)
@@ -137,8 +141,8 @@ export default function PrPage({ itemId, contextId }: {
         ) : (
           <button
             onClick={merge}
-            disabled={merging || !pr}
-            title="Merge — the review approve: squashes this branch onto the anchor, applies the staged knowledge delta, then advances to close. On a moved anchor it holds here and says why."
+            disabled={merging || !pr || !!authReason}
+            title={authReason ?? "Merge — the review approve: squashes this branch onto the anchor, applies the staged knowledge delta, then advances to close. On a moved anchor it holds here and says why."}
             className="inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-on-accent transition hover:opacity-90 disabled:opacity-50"
           >
             {merging ? <Loader2 size={14} className="animate-spin" /> : <GitMerge size={14} />} Merge

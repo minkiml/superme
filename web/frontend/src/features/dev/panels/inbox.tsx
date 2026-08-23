@@ -8,6 +8,7 @@ import { fmtLocal, toModelKey } from '@/lib/format'
 import { KIND_TEXT, workKindLabel } from '../common'
 import { InboxItemModal } from './InboxItemModal'
 import { DEFAULT_RUN_EFFORT, DEFAULT_RUN_MODEL, InboxConfigPatch, RoleDefaults } from './runConfig'
+import { useAuthGate } from '@/lib/authGate'
 
 // The inbox: what has been filed but not yet pushed into work.
 
@@ -165,6 +166,7 @@ function InboxCard({
   onSave: (patch: InboxConfigPatch) => Promise<void>
   onDelete: () => void
 }) {
+  const { reason: authReason } = useAuthGate()
   const [editing, setEditing] = useState(false)
   const [confirmDel, setConfirmDel] = useState(false)
 
@@ -220,9 +222,12 @@ function InboxCard({
               )}
               {e.kind !== 'note' && (
                 <button
-                  title="Push to workspace — creates a queued work-item"
+                  // Pushing triages the item, which is a run — greyed rather than hidden, so the
+                  // reason is readable where the click would have been.
+                  title={authReason ?? 'Push to workspace — creates a queued work-item'}
                   onClick={onPush}
-                  className="inline-flex items-center gap-1 rounded-md bg-accent-soft px-2 py-1 text-[11px] font-medium text-accent-text transition hover:bg-accent hover:text-on-accent"
+                  disabled={!!authReason}
+                  className="inline-flex items-center gap-1 rounded-md bg-accent-soft px-2 py-1 text-[11px] font-medium text-accent-text transition hover:bg-accent hover:text-on-accent disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-accent-soft disabled:hover:text-accent-text"
                 >
                   Push <ArrowRight size={12} />
                 </button>

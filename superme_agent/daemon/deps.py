@@ -9,10 +9,24 @@ import logging
 
 from fastapi import HTTPException
 
+from ..core.auth import auth_status
 from ..gateway import contexts
 from ..paths import LOCAL_HARNESS_DIR, SLASH_COMMANDS_FILE
 
 log = logging.getLogger("superme-agent")
+
+
+# --- the credential gate --------------------------------------------------------
+
+def needs_credential() -> None:
+    """Refuse a route that would start agent work when nothing can authenticate.
+
+    A dependency rather than a check per handler: the surface greys these actions out, but a
+    surface that forgot one would otherwise start a run doomed to fail on its first token.
+    """
+    status = auth_status()
+    if not status["ready"]:
+        raise HTTPException(status_code=503, detail=status["detail"])
 
 
 # --- context resolution ---------------------------------------------------------

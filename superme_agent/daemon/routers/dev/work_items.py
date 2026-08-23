@@ -14,7 +14,7 @@ from ...app_state import (
     DevKnowledgeService, DevStore, SessionStore, SystemSpine,
     get_dev, get_dev_store, get_sessions, get_spine,
 )
-from ...deps import dev_root as _dev_root
+from ...deps import dev_root as _dev_root, needs_credential
 from ....core import artifacts
 from ....core.vocab import status_router
 from ....gateway import contexts
@@ -35,7 +35,8 @@ router = APIRouter()
 
 
 # --- background "Plan it": run /plan with no chat surface -------------------
-@router.post("/dev/work-items/{item_id}/run", response_model=PlanResponse)
+@router.post("/dev/work-items/{item_id}/run", response_model=PlanResponse,
+             dependencies=[Depends(needs_credential)])
 async def dev_work_item_run(item_id: str, body: PlanBody,
                             dev: DevKnowledgeService = Depends(get_dev),
                             spine: SystemSpine = Depends(get_spine)) -> dict:
@@ -63,7 +64,8 @@ async def dev_work_item_run(item_id: str, body: PlanBody,
     return {"ok": True, "status": "running", "id": item_id, "model": model}
 
 
-@router.post("/dev/work-items/{item_id}/resume", response_model=PlanResponse)
+@router.post("/dev/work-items/{item_id}/resume", response_model=PlanResponse,
+             dependencies=[Depends(needs_credential)])
 async def dev_work_item_resume(item_id: str, body: PlanBody,
                                dev: DevKnowledgeService = Depends(get_dev),
                                spine: SystemSpine = Depends(get_spine)) -> dict:
@@ -90,7 +92,8 @@ async def dev_work_item_resume(item_id: str, body: PlanBody,
     return {"ok": True, "status": str(item.get("phase") or "active"), "id": item_id, "model": model}
 
 
-@router.post("/dev/work-items/{item_id}/rerun", response_model=PlanResponse)
+@router.post("/dev/work-items/{item_id}/rerun", response_model=PlanResponse,
+             dependencies=[Depends(needs_credential)])
 async def dev_work_item_rerun(item_id: str, body: PlanBody,
                               dev: DevKnowledgeService = Depends(get_dev),
                               spine: SystemSpine = Depends(get_spine)) -> dict:
@@ -114,7 +117,8 @@ async def dev_work_item_rerun(item_id: str, body: PlanBody,
     return {"ok": True, "status": str(fresh.get("phase") or "active"), "id": item_id, "model": model}
 
 
-@router.post("/dev/work-items/{item_id}/authorize", response_model=PlanResponse)
+@router.post("/dev/work-items/{item_id}/authorize", response_model=PlanResponse,
+             dependencies=[Depends(needs_credential)])
 async def dev_work_item_authorize(item_id: str, body: AuthorizeBody,
                                   dev: DevKnowledgeService = Depends(get_dev),
                                   spine: SystemSpine = Depends(get_spine)) -> dict:
@@ -142,7 +146,8 @@ async def dev_work_item_authorize(item_id: str, body: AuthorizeBody,
     return {"ok": True, "status": status, "id": item_id, "model": model}
 
 
-@router.post("/dev/work-items/{item_id}/compact", response_model=PlanResponse)
+@router.post("/dev/work-items/{item_id}/compact", response_model=PlanResponse,
+             dependencies=[Depends(needs_credential)])
 async def dev_work_item_compact(item_id: str, body: PlanBody,
                                 dev: DevKnowledgeService = Depends(get_dev),
                                 spine: SystemSpine = Depends(get_spine)) -> dict:
@@ -329,7 +334,8 @@ async def dev_work_item_doc_edit(item_id: str, body: DocEditBody,
             "edited_by_owner": artifacts.owner_edited_at(text)}
 
 
-@router.post("/dev/prompt-extraction/run", response_model=PromptExtractionStatusResponse)
+@router.post("/dev/prompt-extraction/run", response_model=PromptExtractionStatusResponse,
+             dependencies=[Depends(needs_credential)])
 async def dev_prompt_extraction_run(context_id: str = "global") -> dict:
     """Fire a THROWAWAY prompt-extraction probe: a disposable work-item that runs the real lifecycle
     unattended to capture each phase's input, then tears itself down.
@@ -359,7 +365,8 @@ async def dev_prompt_extraction_status(context_id: str = "global") -> dict:
 # route.
 
 
-@router.post("/dev/work-items/{item_id}/advance", response_model=WorkItemAdvanceResponse)
+@router.post("/dev/work-items/{item_id}/advance", response_model=WorkItemAdvanceResponse,
+             dependencies=[Depends(needs_credential)])
 async def dev_work_item_advance(item_id: str, context_id: str = "global",
                                 dev: DevKnowledgeService = Depends(get_dev),
                                 dev_store: DevStore = Depends(get_dev_store),

@@ -14,6 +14,7 @@ from pathlib import Path
 from ...core import artifacts as _arts
 from ...core import decision_ledger as _ledger
 from ...core import gate_briefs
+from ...core.auth import auth_status
 from ...core.vocab import kind_profiles, status_router
 from . import attention as _attention
 from .rerun import rerun_reason as _rerun_reason
@@ -119,7 +120,25 @@ def _actions(item: dict, state: dict, *, running: bool, git_health: dict | None,
                            "no branch yet — it is created when build starts"))
     # There is no second merge control: it was a second door onto review's Approve, with a weaker
     # lock.
-    return out
+    return _credential_gate(out)
+
+
+# Every control that starts a turn. Drop disposes an item and the PR page only reads, so both stay
+# live for an owner with no credential — there is still work to do on what already ran.
+_NEEDS_CREDENTIAL = {"approve", "run", "resume", "rerun"}
+
+
+def _credential_gate(actions: list[dict]) -> list[dict]:
+    """Grey every control that would start agent work when nothing can authenticate.
+
+    The route refuses these anyway; this is what makes the refusal visible before the click, and it
+    overrides `active` last so no earlier rule can hand back a button the daemon will reject."""
+    status = auth_status()
+    if status["ready"]:
+        return actions
+    return [{**a, "active": False, "reason": status["detail"]}
+            if a["id"] in _NEEDS_CREDENTIAL and a["active"] else a
+            for a in actions]
 
 
 def _blocking_children(item: dict, all_items: list[dict]) -> list[dict]:

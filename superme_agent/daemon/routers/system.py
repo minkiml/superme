@@ -12,7 +12,8 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from ..app_state import SystemSpine, get_spine, dev as _dev
 from ..deps import dev_root
-from ..schemas.system import (AgentModelBody, AgentModelsResponse, AutopilotConcurrencyBody,
+from ..schemas.system import (AgentModelBody, AgentModelsResponse, AuthStatusResponse,
+                              AutopilotConcurrencyBody,
                               CompactionConfigBody, CompactionConfigResponse, DeputyConfigBody,
                               DeputyConfigResponse, LearningBody, LearningResponse, RepoAttention,
                               RepoAutopilotResponse, RepoBranchesResponse, RepoConnectBody,
@@ -22,6 +23,7 @@ from ..schemas.system import (AgentModelBody, AgentModelsResponse, AutopilotConc
                               RepoModelResponse, RepoOverview, RunTraceResponse, RunsResponse,
                               SweepConfigBody, SweepConfigResponse, SystemResponse,
                               TokenTimeseriesResponse, TokenUsageResponse)
+from ...core.auth import auth_status
 from ...core.vocab.models import AGENT_MODEL_FEATURES
 from ...core import git_layer
 from ...core.spine import MODES, RepoConfig
@@ -234,6 +236,16 @@ async def repos_overview(spine: SystemSpine = Depends(get_spine)) -> list[dict]:
             "scopes": scopes,
         })
     return out
+
+
+@router.get("/system/auth", response_model=AuthStatusResponse)
+async def system_auth(refresh: bool = False) -> dict:
+    """Can SuperMe reach Anthropic? Surfaces gate every agent action on this.
+
+    Cached for a minute, because asking the Claude CLI spawns a process — `refresh=true` is
+    what a person clicks after signing in.
+    """
+    return auth_status(refresh=refresh)
 
 
 @router.get("/system/attention", response_model=list[RepoAttention])

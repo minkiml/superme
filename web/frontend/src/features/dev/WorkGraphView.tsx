@@ -9,6 +9,7 @@ import {
   getWorkGraph, getDev, getAttention, pushInbox,
   type WorkGraphData, type WorkGraphNode, type DevData, type AttentionData, type WorkItem,
 } from '@/lib/api'
+import { useAuthGate } from '@/lib/authGate'
 
 // How everything relates: the derived graph projection, laid out with dagre.
 //
@@ -98,6 +99,9 @@ export default function WorkGraphView({
     return () => clearTimeout(t)
   }, [data?.running, load])
 
+  // Pushing triages the row, which is a run — with no credential there is nothing to hand it.
+  const { reason: authReason } = useAuthGate()
+
   // Push a spawn row into a real work-item straight from the graph.
   const push = useCallback(async (inboxId: number) => {
     setPushing(inboxId)
@@ -135,7 +139,8 @@ export default function WorkGraphView({
         }
       }
       if (d.kind === 'inbox_spawn') {
-        ;(n.data as Record<string, unknown>).onPush = () => push(d.inbox_id!)
+        ;(n.data as Record<string, unknown>).onPush = authReason ? undefined
+                                                                : () => push(d.inbox_id!)
         ;(n.data as Record<string, unknown>).pushing = pushing === d.inbox_id
       }
     }

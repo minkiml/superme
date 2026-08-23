@@ -234,6 +234,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/system/auth": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * System Auth
+         * @description Can SuperMe reach Anthropic? Surfaces gate every agent action on this.
+         *
+         *     Cached for a minute, because asking the Claude CLI spawns a process — `refresh=true` is
+         *     what a person clicks after signing in.
+         */
+        get: operations["system_auth_system_auth_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/system/attention": {
         parameters: {
             query?: never;
@@ -2716,6 +2739,18 @@ export interface components {
             reason: string;
             /** Gate */
             gate?: string | null;
+        };
+        /**
+         * AuthStatusResponse
+         * @description Whether SuperMe holds a credential at all. `detail` is the sentence a surface shows.
+         */
+        AuthStatusResponse: {
+            /** Ready */
+            ready: boolean;
+            /** Method */
+            method?: ("token" | "cli") | null;
+            /** Detail */
+            detail: string;
         };
         /**
          * AuthorizationRequest
@@ -6859,6 +6894,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RepoDisconnectResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    system_auth_system_auth_get: {
+        parameters: {
+            query?: {
+                refresh?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthStatusResponse"];
                 };
             };
             /** @description Validation Error */

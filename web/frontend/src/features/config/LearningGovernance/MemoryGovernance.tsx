@@ -6,6 +6,7 @@ import { fmtLocalDate } from '@/lib/format'
 import { Empty } from '@/features/dev/common'
 import { ReviewQueue } from './ReviewQueue'
 import { AgentWorking } from './bits'
+import { useAuthGate } from '@/lib/authGate'
 
 // The memory surface: what has been learned, and what is waiting to be judged.
 
@@ -13,6 +14,7 @@ export function MemoryGovernance({ contextId }: { contextId: string }) {
   const [props, setProps] = useState<MemoryProposal[]>([])
   const [stats, setStats] = useState<MemoryStats | null>(null)
   const [err, setErr] = useState<string | null>(null)
+  const { reason: authReason } = useAuthGate()   // distilling is a run
   const [distilling, setDistilling] = useState(false)
   const [popup, setPopup] = useState<null | 'candidates' | 'knowledge'>(null)
   const poll = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -125,8 +127,9 @@ export function MemoryGovernance({ contextId }: { contextId: string }) {
         <span className="text-xs text-faint">{props.length} pending</span>
         <button
           onClick={onDistill}
-          disabled={distilling || candCount === 0}
-          title={candCount === 0 ? 'No candidates to distill' : 'Run distill over the candidate pool'}
+          disabled={distilling || candCount === 0 || !!authReason}
+          title={authReason ?? (candCount === 0 ? 'No candidates to distill'
+                                                : 'Run distill over the candidate pool')}
           className="ml-auto inline-flex items-center gap-1 rounded-md border border-accent/40 bg-accent/10 px-2 py-1 text-[12px] text-accent-text transition hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {distilling ? (
