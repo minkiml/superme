@@ -1,11 +1,73 @@
 # SuperMe
 
-**SuperMe** is a local-only, dashboard-driven personal agent, hosted onto every repository you own,
-engineered for a single owner rather than a team. It is built around two ideas. Everything you do
-with AI should accumulate into one body of knowledge that represents you, and you should stay in
-command of that work without becoming its bottleneck.
+**SuperMe** is a local-only, dashboard-driven personal agent, hosted onto every repository and body
+of knowledge you own, slowly evolving into a digital twin of you. Engineered for a single owner
+rather than a team.
 
 ---
+
+## Requirements
+
+- **Python 3.11+** and a virtual environment of your choosing
+- **Node.js** with npm
+- The **[Claude Code](https://claude.com/claude-code) CLI**, signed in to a Claude plan
+
+`requirements.txt` names exact versions — the ones this was tested against. Install into a
+virtual environment rather than your system Python, so the pins are SuperMe's alone.
+
+## Setup
+
+**1 · Install dependencies** into your environment.
+
+```bash
+pip install -r requirements.txt
+npm install --prefix web/frontend
+```
+
+**2 · Configure SuperMe.** This writes the local config a checkout does not carry — your `.env`,
+your repo registry, your knowledge home, and the two SQLite stores. It installs nothing, and
+re-running it is safe.
+
+```bash
+python setup_superme.py
+```
+
+**3 · Have a credential.** Either one works, and you may already have the first:
+
+- **You are signed in to the Claude CLI** — `claude auth login`, or you signed in when you
+  installed it. Nothing else to do; SuperMe uses the same credential `claude` does.
+- **Or put a long-lived token in `.env`** — run `claude setup-token` and add it:
+
+  ```
+  CLAUDE_CODE_OAUTH_TOKEN=...
+  ```
+
+Re-run `python setup_superme.py --check` at any point to see what is still missing. It reports
+without writing anything.
+
+**Optional — check the install itself.** Seconds, reads everything and changes nothing:
+
+```bash
+bash scripts/check_fast.sh
+```
+
+It proves the routes, the import surface, the layering, the file encodings and the frontend
+types all agree with the code on disk. Worth running after any dependency change.
+
+## Run
+
+```bash
+python run_superme.py
+```
+
+That starts the core daemon (`:8787`), the web BFF (`:8000`) and the frontend (`:5173`), then
+open **http://localhost:5173**. Ctrl-C stops all three. Ports come from `.env`.
+
+## What is SuperMe
+
+It is built around two ideas. Everything you do with AI should accumulate into one body of
+knowledge that represents you, and you should stay in command of that work without becoming its
+bottleneck.
 
 ### Your AI use builds a digital twin of you
 
@@ -98,61 +160,3 @@ context fill. Nothing is a black box when it goes wrong.
 - **Integrations.** Notion, Slack and the other places your work already lives, so knowledge
   outside your repos joins the estate too.
 
----
-
-## Requirements
-
-- **Python 3.11+** and a virtual environment of your choosing
-- **Node.js** with npm
-- The **[Claude Code](https://claude.com/claude-code) CLI**, signed in to a Claude plan
-
-`requirements.txt` names exact versions — the ones this was tested against. Install into a
-virtual environment rather than your system Python, so the pins are SuperMe's alone.
-
-## Setup
-
-**1 · Install dependencies** into your environment.
-
-```bash
-pip install -r requirements.txt
-npm install --prefix web/frontend
-```
-
-**2 · Configure SuperMe.** This writes the local config a checkout does not carry — your `.env`,
-your repo registry, your knowledge home, and the two SQLite stores. It installs nothing, and
-re-running it is safe.
-
-```bash
-python setup_superme.py
-```
-
-**3 · Have a credential.** Either one works, and you may already have the first:
-
-- **You are signed in to the Claude CLI** — `claude auth login`, or you signed in when you
-  installed it. Nothing else to do; SuperMe uses the same credential `claude` does.
-- **Or put a long-lived token in `.env`** — run `claude setup-token` and add it:
-
-  ```
-  CLAUDE_CODE_OAUTH_TOKEN=...
-  ```
-
-Re-run `python setup_superme.py --check` at any point to see what is still missing. It reports
-without writing anything.
-
-**Optional — check the install itself.** Seconds, reads everything and changes nothing:
-
-```bash
-bash scripts/check_fast.sh
-```
-
-It proves the routes, the import surface, the layering, the file encodings and the frontend
-types all agree with the code on disk. Worth running after any dependency change.
-
-## Run
-
-```bash
-python run_superme.py
-```
-
-That starts the core daemon (`:8787`), the web BFF (`:8000`) and the frontend (`:5173`), then
-open **http://localhost:5173**. Ctrl-C stops all three. Ports come from `.env`.

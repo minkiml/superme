@@ -66,24 +66,3 @@ scripts/            check_fast.sh (the gate) · parity · the test suites
 web/                bff/ (reverse proxy) · frontend/ (cockpit)
 superme-knowledge/  the knowledge repo (sibling, gitignored) — see its README
 ```
-
-## Run
-
-```bash
-python run_superme.py    # daemon (:8787) + BFF (:8000) + Vite (:5173); Ctrl-C stops all three
-```
-
-Then open http://localhost:5173. To run a layer alone: `python -m superme_agent.daemon` /
-`python -m web.bff` / `npm --prefix web/frontend run dev`.
-
-**Auth (OAuth, Claude Max):** `claude setup-token` → put the `sk-ant-oat01-…` token in the repo-root
-`.env` as `CLAUDE_CODE_OAUTH_TOKEN`. `ANTHROPIC_API_KEY` is dropped in `paths.py` and never used.
-
-## The gate
-
-```bash
-STRICT=1 bash scripts/check_fast.sh      # route-parity + OpenAPI shape drift + frontend tsc
-```
-
-Run it between edits. Re-baseline deliberately (`python -m scripts.parity snapshot`) only when a route
-change is intended.
