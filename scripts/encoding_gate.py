@@ -1,4 +1,4 @@
-"""Every text read, write and subprocess decode names its encoding.
+"""Every text read, write and subprocess decode names its encoding, and so does stdout.
 
 Python picks the LOCALE otherwise, which is cp1252 on a Western Windows and mangles every
 non-ASCII artifact.
@@ -7,6 +7,8 @@ non-ASCII artifact.
 """
 
 import ast
+import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -15,6 +17,27 @@ ROOTS = ("superme_agent", "web", "scripts")
 # Markdown trees and installed packages, neither of which is ours to gate.
 SKIP = ("plugins", "local-harness", "__pycache__", "node_modules", ".venv")
 EXTRA = ("setup_superme.py", "run_superme.py")
+
+# What Python would pick on a Western Windows, forced so the probe reads the same everywhere.
+_HOSTILE = "cp1252"
+_GLYPH = "✓"
+
+
+def _survives(code: str) -> bool:
+    """Whether a fresh process still emits a non-ASCII glyph with the locale against it."""
+    p = subprocess.run([sys.executable, "-c", f"{code}; print({_GLYPH!r})"],
+                       capture_output=True, cwd=ROOT,
+                       env={**os.environ, "PYTHONIOENCODING": _HOSTILE})
+    return _GLYPH.encode("utf-8") in p.stdout
+
+
+def streams() -> list[str]:
+    """Entry points whose output would fall back to the locale."""
+    bad = [f"importing `{s}` leaves stdout on the locale"
+           for s in ("superme_agent.paths", "scripts") if not _survives(f"import {s}")]
+    bad += [f"{e} never calls utf8_streams()" for e in EXTRA
+            if "utf8_streams()" not in (ROOT / e).read_text(encoding="utf-8")]
+    return bad
 
 
 def _mode(call: ast.Call, idx: int) -> str:
@@ -63,6 +86,11 @@ def files():
 
 
 def main() -> int:
+    if loose := streams():
+        print("✗ STDOUT NOT UTF-8 — non-ASCII output dies on a Windows pipe:")
+        for why in loose:
+            print(f"    {why}")
+        return 1
     bad = [(p, ln, what) for p in files() for ln, what in offenders(p)]
     if bad:
         print(f"✗ ENCODING NOT DECLARED — {len(bad)} call(s) fall back to the locale:")
@@ -71,7 +99,7 @@ def main() -> int:
         if len(bad) > 40:
             print(f"    … and {len(bad) - 40} more")
         return 1
-    print("✓ every text read, write and subprocess decode declares utf-8")
+    print("✓ every text read, write and subprocess decode declares utf-8, and stdout too")
     return 0
 
 

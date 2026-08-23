@@ -15,14 +15,14 @@ ROOT = Path(__file__).resolve().parent.parent
 PKG = ROOT / "superme_agent"
 SKIP_PARTS = ("plugins", "local-harness")
 
-# What each area is allowed to import. `paths` is the one root module everything may reach.
+# What each area is allowed to import. The root modules below are what everything may reach.
 ALLOWED: dict[str, set[str]] = {
     "core": {"core"},
     "gateway": {"core", "gateway"},
     "harness": {"core", "gateway", "harness"},
     "daemon": {"core", "gateway", "harness", "daemon"},
 }
-ROOT_MODULES = {"superme_agent.paths", "superme_agent"}
+ROOT_MODULES = {"superme_agent.paths", "superme_agent.stdio", "superme_agent"}
 
 # Tolerated violations of ALLOWED, pinned so no new one slips in. These three make core
 # and harness mutually dependent.

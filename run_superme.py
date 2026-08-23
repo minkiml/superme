@@ -16,6 +16,10 @@ import urllib.request
 from pathlib import Path
 from shutil import which
 
+from superme_agent.stdio import utf8_streams
+
+utf8_streams()
+
 ROOT = Path(__file__).resolve().parent
 FRONTEND = ROOT / "web" / "frontend"
 

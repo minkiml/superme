@@ -9,6 +9,10 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from .stdio import utf8_streams
+
+utf8_streams()
+
 APP_DIR = Path(__file__).resolve().parent
 ROOT_DIR = APP_DIR.parent                               # repo root = the default workspace cwd
 

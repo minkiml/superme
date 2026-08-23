@@ -12,6 +12,10 @@ import shutil
 import sys
 from pathlib import Path
 
+from superme_agent.stdio import utf8_streams
+
+utf8_streams()
+
 ROOT = Path(__file__).resolve().parent
 APP = ROOT / "superme_agent"
 CHECK = "--check" in sys.argv[1:]
