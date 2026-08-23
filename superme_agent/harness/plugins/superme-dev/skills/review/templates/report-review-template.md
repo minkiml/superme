@@ -6,7 +6,10 @@
 <fill:the objection, answered — one short block>
 
 ## What you're approving
-<fill:the change as an outcome, not a changelog. Show it if it is showable: a fenced before/after, a small table, the actual output. On a research item this is the answer and what it rests on>
+**Problem:** <fill:one line, plain words — the symptom in the owner's own terms. Research: the question they asked>
+**Worked solution:** <fill:plain words — the shape this item took to answer it. Not a changelog>
+**Current behaviour:** <fill:plain words — what the owner can do now that they could not before, and what changed for what already worked. Every line traces to a `## Verification` run; a claim nothing exercised belongs under Completion. Research: what is now known that was assumed before>
+**Completion:** <fill:complete · complete with caveats · incomplete — and the reason, always. What is unfinished, what vet or the deputy raised and where it landed, what nothing exercised. A bare "complete" is a claim, not a report>
 
 ## What to push back on
 <fill:the judgment calls inside this that could have gone the other way — the one worth overruling first, and how expensive reversing it would be. If there is genuinely nothing, say what you considered and rejected; a blank version of this section is a review that didn't happen>

@@ -168,7 +168,7 @@ same four questions.
 
 | section | implementation | research |
 |---|---|---|
-| What you're approving | the change, as an outcome | the answer, and what it rests on |
+| What you're approving | problem · solution · now vs before · completion | question · how it was answered · what is now known · how much was covered |
 | What to push back on | the calls that could have gone the other way | the judgement calls in the method |
 | How much to trust it | proven vs taken on trust | measured vs reasoned |
 | Where this leaves the project | what pattern it sets, what it left behind | what the answer opens up |
@@ -182,8 +182,15 @@ same four questions.
 - **A departure from a recorded decision gets its own line under `What to push back on`**, named as
   what it departs from — never folded into the plan verdict. Ranking the two bars against each other
   is what lets the stronger one hide the weaker.
-- **Nothing here restates triage.** Why this was worth doing is something they already read and
-  approved.
+- **Four beats, and the third is a CHECK.** `What you're approving` runs `**Problem:**` · `**Worked
+  solution:**` · `**Current behaviour:**` · `**Completion:**`. The first two are the owner's own
+  framing, one line each. The third is this phase's real job: what the code does NOW against what it
+  did before, every line traceable to a `## Verification` run. Reviewing whether the plan was
+  followed is not reviewing whether the problem was solved.
+- **`**Completion:**` reports state, never a recommendation.** Complete, complete with caveats, or
+  incomplete — and always the reason: what is unfinished, what vet or the deputy raised and where it
+  landed, what nothing exercised. Push-back carries the calls that could have gone the other way and
+  the trust table carries what is proven; this line carries only whether the item is finished.
 - **Don't restate the cycles' `## For the reviewer`.** The owner already read those beside the code
   on the PR page; this report answers a different question — whether the item should land at all.
   Mention one only when the DECISION turns on it, and then say what it means for the merge.
