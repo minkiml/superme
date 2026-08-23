@@ -89,10 +89,7 @@ function RoadmapBoardView({ contextId }: { contextId: string }) {
       <div className="mx-auto max-w-2xl p-6">
         {err && <div className="mb-3 text-sm text-danger">Couldn’t load — {err}</div>}
 
-        <div className="mb-2 flex items-baseline gap-2">
-          <h2 className="text-[13px] font-semibold uppercase tracking-wider text-muted">Roadmap</h2>
-          <span className="text-[12px] text-faint">deliverable → wave → its work-items</span>
-        </div>
+        <h2 className="mb-2 text-[13px] font-semibold uppercase tracking-wider text-muted">Roadmap</h2>
 
         {board === null ? (
           <div className="flex items-center gap-2 text-sm text-muted"><Loader2 size={14} className="animate-spin" /> Loading…</div>

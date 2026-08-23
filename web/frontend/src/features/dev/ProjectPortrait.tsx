@@ -184,19 +184,6 @@ export default function ProjectPortrait({ contextId }: { contextId: string }) {
         </Band>
       )}
 
-      {/* 6 — where the external things are. */}
-      {p.resources.length > 0 && (
-        <Band title="Where things are" src="resources">
-          <div className="space-y-2">
-            {p.resources.map((r, i) => (
-              <div key={i} className="flex gap-3 text-[12.5px] leading-relaxed">
-                {r.key && <span className="w-28 shrink-0 text-[11.5px] text-faint">{r.key}</span>}
-                <span className="min-w-0 text-muted">{r.value}</span>
-              </div>
-            ))}
-          </div>
-        </Band>
-      )}
     </div>
   )
 }
