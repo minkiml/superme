@@ -29,13 +29,13 @@ jobs:
         python: ['3.11', '3.13']
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
           cache: npm
@@ -60,7 +60,13 @@ jobs:
 
       - name: Gate
         shell: bash
-        run: bash scripts/check_fast.sh
+        run: |
+          set +e
+          bash scripts/check_fast.sh 2>&1 | tee gate.log
+          code=${PIPESTATUS[0]}
+          # Log downloads need admin rights; an annotation is readable by anyone.
+          [ $code -ne 0 ] && bash .github/annotate.sh "Gate" gate.log
+          exit $code
 
       - name: Offline suites
         shell: bash
@@ -72,7 +78,11 @@ jobs:
             case "$f" in *_live.py|*_reconcile.py) continue ;; esac
             name=$(basename "$f" .py)
             echo "──────── $name"
-            python -m "scripts.$name" || failed="$failed $name"
+            if ! python -m "scripts.$name" > "$name.log" 2>&1; then
+              failed="$failed $name"
+              bash .github/annotate.sh "$name" "$name.log"
+            fi
+            tail -5 "$name.log"
           done
           if [ -n "$failed" ]; then
             echo "FAILED:$failed"
