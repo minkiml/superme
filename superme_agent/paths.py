@@ -56,6 +56,8 @@ SYSTEM_CONFIG_FILE = CONFIG_DIR / "system.yaml"      # singleton static-meta
 REPOS_CONFIG_FILE = CONFIG_DIR / "repos.yaml"        # repo registry, scope-aware
 # The registry is local state — the spine writes to it — so the tracked file is a seed.
 REPOS_SEED_FILE = CONFIG_DIR / "repos.example.yaml"
+# Losing the registry loses every connected repo, and it has no git history to fall back on.
+REPOS_BACKUP_DIR = CONFIG_DIR / "repos-backups"
 # A guest cannot answer what SuperMe is for, so this repo's memory ships.
 HUB_KNOWLEDGE_SEED_DIR = CONFIG_DIR / "hub-knowledge"
 SYSTEM_DB_FILE = APP_DIR / ".system.db"              # live: session, run, model_override

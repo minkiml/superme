@@ -33,6 +33,7 @@ class RepoOps:
         # The new entry keyed by id (the id key is redundant under the block, so drop it).
         spec = {k: v for k, v in rc.to_dict().items() if k != "id"}
         block = textwrap.indent(yaml.safe_dump({rc.id: spec}, sort_keys=False), "  ")
+        self.snapshot_registry("add")
         path = Path(self._repos_config_path)
         text = path.read_text(encoding="utf-8") if path.exists() else ""
         if "repos:" not in text:                       # fresh/empty file → start the mapping
@@ -64,6 +65,7 @@ class RepoOps:
             # A one-key mapping, not a bare scalar: safe_dump of a scalar emits a whole document.
             return "    " + yaml.safe_dump({key: val}, sort_keys=False).strip() + "\n"
 
+        self.snapshot_registry("update")
         path = Path(self._repos_config_path)
         text = path.read_text(encoding="utf-8")
         if text and not text.endswith("\n"):   # else an appended key joins the last line
@@ -105,6 +107,7 @@ class RepoOps:
         rc = self.repos().get(repo_id)
         if rc is None:
             raise ValueError(f"unknown repo id '{repo_id}'")
+        self.snapshot_registry("remove")
         path = Path(self._repos_config_path)
         out, dropping = [], False
         for ln in path.read_text(encoding="utf-8").splitlines(keepends=True):
@@ -135,6 +138,33 @@ class RepoOps:
         with self._conn() as c:
             return {r["repo_id"]: dict(r)
                     for r in c.execute("SELECT * FROM archived_repo").fetchall()}
+
+    def orphaned_repos(self) -> list[dict]:
+        """Repos with work on disk but no registry entry, and no tombstone saying they were
+        disconnected.
+
+        The registry is the only record that is a single editable file, so it is the only one
+        that can be lost while the knowledge home and the worktrees survive. A repo in that
+        state is invisible: its items still exist and nothing reaches them.
+        """
+        from ...paths import KNOWLEDGE_REPO_DIR
+        from ..git_layer import worktrees_home
+
+        known = set(self.repos()) | set(self.archived_repos())
+        found: dict[str, set[str]] = {}
+        for base, suffix in ((KNOWLEDGE_REPO_DIR, "-knowledge"), (worktrees_home(), "")):
+            try:
+                entries = [p for p in base.iterdir() if p.is_dir()]
+            except OSError:
+                continue
+            for p in entries:
+                rid = p.name[:-len(suffix)] if suffix and p.name.endswith(suffix) else p.name
+                if suffix and not p.name.endswith(suffix):
+                    continue
+                if rid and rid not in known:
+                    found.setdefault(rid, set()).add(str(base / p.name))
+        return [{"repo_id": rid, "evidence": sorted(paths)}
+                for rid, paths in sorted(found.items())]
 
     def repo_for_cwd(self, cwd) -> str | None:
         """Reverse-resolve a cwd to a repo id (the logical key for a session)."""

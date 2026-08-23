@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Radar, Activity, SlidersHorizontal, Boxes } from 'lucide-react'
 import TopBar from '@/features/shell/TopBar'
 import CredentialBanner from '@/features/shell/CredentialBanner'
+import OrphanedRepoBanner from '@/features/shell/OrphanedRepoBanner'
 import CredentialSetup from '@/features/shell/CredentialSetup'
 import { useAuthGate } from '@/lib/authGate'
 import NavColumn, { type NavRow } from '@/features/shell/NavColumn'
@@ -280,6 +281,7 @@ export default function App() {
       />
 
       <CredentialBanner onOpenSetup={() => navigate({ name: 'setup' })} />
+      <OrphanedRepoBanner />
 
       <div className="flex min-h-0 flex-1">
         <NavColumn

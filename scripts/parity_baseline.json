@@ -5101,8 +5101,30 @@
           "title": "Orphan",
           "type": "object"
         },
+        "OrphanedRepo": {
+          "description": "A repo id found on disk that the registry does not list and no tombstone explains.",
+          "properties": {
+            "evidence": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Evidence",
+              "type": "array"
+            },
+            "repo_id": {
+              "title": "Repo Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "repo_id",
+            "evidence"
+          ],
+          "title": "OrphanedRepo",
+          "type": "object"
+        },
         "OwnerInputBody": {
-          "description": "The owner's \u00a7 From you, whole. Add and delete are both a PUT of the full slot lists \u2014 the\nowner is the section's only writer, so there is no concurrent edit for a delta to protect.",
+          "description": "The owner's `## From you` section, whole. Add and delete are both a PUT of the full slot\nlists, because the owner is its only writer and no concurrent edit needs protecting.",
           "properties": {
             "context_id": {
               "default": "global",
@@ -9083,6 +9105,13 @@
                 "$ref": "#/components/schemas/RunRow"
               },
               "title": "Live Runs",
+              "type": "array"
+            },
+            "orphaned_repos": {
+              "items": {
+                "$ref": "#/components/schemas/OrphanedRepo"
+              },
+              "title": "Orphaned Repos",
               "type": "array"
             },
             "policy_version": {

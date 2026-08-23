@@ -4266,6 +4266,16 @@ export interface components {
             items?: string[] | null;
         };
         /**
+         * OrphanedRepo
+         * @description A repo id found on disk that the registry does not list and no tombstone explains.
+         */
+        OrphanedRepo: {
+            /** Repo Id */
+            repo_id: string;
+            /** Evidence */
+            evidence: string[];
+        };
+        /**
          * OwnerInputBody
          * @description The owner's `## From you` section, whole. Add and delete are both a PUT of the full slot
          *     lists, because the owner is its only writer and no concurrent edit needs protecting.
@@ -5896,6 +5906,8 @@ export interface components {
             running: number;
             /** Repos */
             repos: string[];
+            /** Orphaned Repos */
+            orphaned_repos?: components["schemas"]["OrphanedRepo"][];
         };
         /** TableInfo */
         TableInfo: {

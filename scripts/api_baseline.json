@@ -2453,6 +2453,7 @@
     "live_run(self, repo_id: str, item_id: str) -> dict | None",
     "live_runs(self, repo_id: str | None = None) -> list[dict]",
     "log_run_event(self, *, repo_id: str, kind: str, name: str, description: str | None = None, run_id: int | None = None, item_id: str | None = None, tool_id: str | None = None, parent_tool_id: str | None = None, payload: str | None = None) -> None",
+    "orphaned_repos(self) -> list[dict]",
     "read_hits(self, repo_id: str, item_id: str, *, phase: str, needle: str) -> int",
     "read_run_input(self, run_id: int) -> dict | None",
     "recent_runs(self, *, limit: int = 50) -> list[dict]",
@@ -2509,6 +2510,7 @@
     "set_session_title(self, session_id: str, title: str | None) -> bool",
     "set_sweep_config(self, *, idle_seconds: int | None = None, poll_seconds: int | None = None, min_user_msgs: int | None = None) -> dict",
     "set_sweep_watermark(self, session_id: str, position: int) -> None",
+    "snapshot_registry(self, reason: str) -> pathlib.Path | None",
     "stamp_session_item(self, session_id: str, item_id: str) -> bool",
     "stamp_session_kind(self, session_id: str, kind: str, subject_run_id: int | None = None) -> bool",
     "start_item_run(self, repo_id: str, *, mode: str = 'dev', feature: str = 'plan', item_id: str, model: str | None = None, phase: str | None = None) -> int | None",
@@ -4825,6 +4827,7 @@
     "live_run(self, repo_id: str, item_id: str) -> dict | None",
     "live_runs(self, repo_id: str | None = None) -> list[dict]",
     "log_run_event(self, *, repo_id: str, kind: str, name: str, description: str | None = None, run_id: int | None = None, item_id: str | None = None, tool_id: str | None = None, parent_tool_id: str | None = None, payload: str | None = None) -> None",
+    "orphaned_repos(self) -> list[dict]",
     "read_hits(self, repo_id: str, item_id: str, *, phase: str, needle: str) -> int",
     "read_run_input(self, run_id: int) -> dict | None",
     "recent_runs(self, *, limit: int = 50) -> list[dict]",
@@ -4881,6 +4884,7 @@
     "set_session_title(self, session_id: str, title: str | None) -> bool",
     "set_sweep_config(self, *, idle_seconds: int | None = None, poll_seconds: int | None = None, min_user_msgs: int | None = None) -> dict",
     "set_sweep_watermark(self, session_id: str, position: int) -> None",
+    "snapshot_registry(self, reason: str) -> pathlib.Path | None",
     "stamp_session_item(self, session_id: str, item_id: str) -> bool",
     "stamp_session_kind(self, session_id: str, kind: str, subject_run_id: int | None = None) -> bool",
     "start_item_run(self, repo_id: str, *, mode: str = 'dev', feature: str = 'plan', item_id: str, model: str | None = None, phase: str | None = None) -> int | None",
@@ -5049,6 +5053,7 @@
     "live_run(self, repo_id: str, item_id: str) -> dict | None",
     "live_runs(self, repo_id: str | None = None) -> list[dict]",
     "log_run_event(self, *, repo_id: str, kind: str, name: str, description: str | None = None, run_id: int | None = None, item_id: str | None = None, tool_id: str | None = None, parent_tool_id: str | None = None, payload: str | None = None) -> None",
+    "orphaned_repos(self) -> list[dict]",
     "read_hits(self, repo_id: str, item_id: str, *, phase: str, needle: str) -> int",
     "read_run_input(self, run_id: int) -> dict | None",
     "recent_runs(self, *, limit: int = 50) -> list[dict]",
@@ -5105,6 +5110,7 @@
     "set_session_title(self, session_id: str, title: str | None) -> bool",
     "set_sweep_config(self, *, idle_seconds: int | None = None, poll_seconds: int | None = None, min_user_msgs: int | None = None) -> dict",
     "set_sweep_watermark(self, session_id: str, position: int) -> None",
+    "snapshot_registry(self, reason: str) -> pathlib.Path | None",
     "stamp_session_item(self, session_id: str, item_id: str) -> bool",
     "stamp_session_kind(self, session_id: str, kind: str, subject_run_id: int | None = None) -> bool",
     "start_item_run(self, repo_id: str, *, mode: str = 'dev', feature: str = 'plan', item_id: str, model: str | None = None, phase: str | None = None) -> int | None",
@@ -5168,9 +5174,16 @@
     "_conn(self) -> sqlite3.Connection",
     "_ensure_columns(c: sqlite3.Connection, table: str, cols: dict[str, str]) -> None",
     "_init_db(self) -> None",
-    "_seed_repos_config(self) -> None"
+    "_seed_repos_config(self) -> None",
+    "snapshot_registry(self, reason: str) -> pathlib.Path | None"
    ],
    "sig": "class"
+  },
+  "REGISTRY_BACKUPS": {
+   "sig": "value:int"
+  },
+  "REPOS_BACKUP_DIR": {
+   "sig": "value:PosixPath"
   },
   "REPOS_CONFIG_FILE": {
    "sig": "value:PosixPath"
@@ -5369,6 +5382,7 @@
     "add_repo(self, rc: RepoConfig) -> RepoConfig",
     "archived_repos(self) -> dict[str, dict]",
     "live_agent_runs(self, repo_id: str, mode: str) -> dict",
+    "orphaned_repos(self) -> list[dict]",
     "reconcile(self) -> list[dict]",
     "remove_repo(self, repo_id: str) -> RepoConfig",
     "repo(self, repo_id: str) -> RepoConfig | None",
@@ -5536,7 +5550,8 @@
     "_conn(self) -> sqlite3.Connection",
     "_ensure_columns(c: sqlite3.Connection, table: str, cols: dict[str, str]) -> None",
     "_init_db(self) -> None",
-    "_seed_repos_config(self) -> None"
+    "_seed_repos_config(self) -> None",
+    "snapshot_registry(self, reason: str) -> pathlib.Path | None"
    ],
    "sig": "class"
   },
@@ -5592,6 +5607,7 @@
     "add_repo(self, rc: RepoConfig) -> RepoConfig",
     "archived_repos(self) -> dict[str, dict]",
     "live_agent_runs(self, repo_id: str, mode: str) -> dict",
+    "orphaned_repos(self) -> list[dict]",
     "reconcile(self) -> list[dict]",
     "remove_repo(self, repo_id: str) -> RepoConfig",
     "repo(self, repo_id: str) -> RepoConfig | None",
@@ -5766,6 +5782,7 @@
     "live_run(self, repo_id: str, item_id: str) -> dict | None",
     "live_runs(self, repo_id: str | None = None) -> list[dict]",
     "log_run_event(self, *, repo_id: str, kind: str, name: str, description: str | None = None, run_id: int | None = None, item_id: str | None = None, tool_id: str | None = None, parent_tool_id: str | None = None, payload: str | None = None) -> None",
+    "orphaned_repos(self) -> list[dict]",
     "read_hits(self, repo_id: str, item_id: str, *, phase: str, needle: str) -> int",
     "read_run_input(self, run_id: int) -> dict | None",
     "recent_runs(self, *, limit: int = 50) -> list[dict]",
@@ -5822,6 +5839,7 @@
     "set_session_title(self, session_id: str, title: str | None) -> bool",
     "set_sweep_config(self, *, idle_seconds: int | None = None, poll_seconds: int | None = None, min_user_msgs: int | None = None) -> dict",
     "set_sweep_watermark(self, session_id: str, position: int) -> None",
+    "snapshot_registry(self, reason: str) -> pathlib.Path | None",
     "stamp_session_item(self, session_id: str, item_id: str) -> bool",
     "stamp_session_kind(self, session_id: str, kind: str, subject_run_id: int | None = None) -> bool",
     "start_item_run(self, repo_id: str, *, mode: str = 'dev', feature: str = 'plan', item_id: str, model: str | None = None, phase: str | None = None) -> int | None",
@@ -6617,6 +6635,7 @@
     "live_run(self, repo_id: str, item_id: str) -> dict | None",
     "live_runs(self, repo_id: str | None = None) -> list[dict]",
     "log_run_event(self, *, repo_id: str, kind: str, name: str, description: str | None = None, run_id: int | None = None, item_id: str | None = None, tool_id: str | None = None, parent_tool_id: str | None = None, payload: str | None = None) -> None",
+    "orphaned_repos(self) -> list[dict]",
     "read_hits(self, repo_id: str, item_id: str, *, phase: str, needle: str) -> int",
     "read_run_input(self, run_id: int) -> dict | None",
     "recent_runs(self, *, limit: int = 50) -> list[dict]",
@@ -6673,6 +6692,7 @@
     "set_session_title(self, session_id: str, title: str | None) -> bool",
     "set_sweep_config(self, *, idle_seconds: int | None = None, poll_seconds: int | None = None, min_user_msgs: int | None = None) -> dict",
     "set_sweep_watermark(self, session_id: str, position: int) -> None",
+    "snapshot_registry(self, reason: str) -> pathlib.Path | None",
     "stamp_session_item(self, session_id: str, item_id: str) -> bool",
     "stamp_session_kind(self, session_id: str, kind: str, subject_run_id: int | None = None) -> bool",
     "start_item_run(self, repo_id: str, *, mode: str = 'dev', feature: str = 'plan', item_id: str, model: str | None = None, phase: str | None = None) -> int | None",
@@ -6818,6 +6838,10 @@
    "sig": "def() -> None"
   },
   "_reconcile_worktrees": {
+   "home": "superme_agent.daemon.lifespan",
+   "sig": "def() -> None"
+  },
+  "_report_orphaned_repos": {
    "home": "superme_agent.daemon.lifespan",
    "sig": "def() -> None"
   },
@@ -7165,6 +7189,7 @@
     "live_run(self, repo_id: str, item_id: str) -> dict | None",
     "live_runs(self, repo_id: str | None = None) -> list[dict]",
     "log_run_event(self, *, repo_id: str, kind: str, name: str, description: str | None = None, run_id: int | None = None, item_id: str | None = None, tool_id: str | None = None, parent_tool_id: str | None = None, payload: str | None = None) -> None",
+    "orphaned_repos(self) -> list[dict]",
     "read_hits(self, repo_id: str, item_id: str, *, phase: str, needle: str) -> int",
     "read_run_input(self, run_id: int) -> dict | None",
     "recent_runs(self, *, limit: int = 50) -> list[dict]",
@@ -7221,6 +7246,7 @@
     "set_session_title(self, session_id: str, title: str | None) -> bool",
     "set_sweep_config(self, *, idle_seconds: int | None = None, poll_seconds: int | None = None, min_user_msgs: int | None = None) -> dict",
     "set_sweep_watermark(self, session_id: str, position: int) -> None",
+    "snapshot_registry(self, reason: str) -> pathlib.Path | None",
     "stamp_session_item(self, session_id: str, item_id: str) -> bool",
     "stamp_session_kind(self, session_id: str, kind: str, subject_run_id: int | None = None) -> bool",
     "start_item_run(self, repo_id: str, *, mode: str = 'dev', feature: str = 'plan', item_id: str, model: str | None = None, phase: str | None = None) -> int | None",
@@ -7464,6 +7490,7 @@
     "live_run(self, repo_id: str, item_id: str) -> dict | None",
     "live_runs(self, repo_id: str | None = None) -> list[dict]",
     "log_run_event(self, *, repo_id: str, kind: str, name: str, description: str | None = None, run_id: int | None = None, item_id: str | None = None, tool_id: str | None = None, parent_tool_id: str | None = None, payload: str | None = None) -> None",
+    "orphaned_repos(self) -> list[dict]",
     "read_hits(self, repo_id: str, item_id: str, *, phase: str, needle: str) -> int",
     "read_run_input(self, run_id: int) -> dict | None",
     "recent_runs(self, *, limit: int = 50) -> list[dict]",
@@ -7520,6 +7547,7 @@
     "set_session_title(self, session_id: str, title: str | None) -> bool",
     "set_sweep_config(self, *, idle_seconds: int | None = None, poll_seconds: int | None = None, min_user_msgs: int | None = None) -> dict",
     "set_sweep_watermark(self, session_id: str, position: int) -> None",
+    "snapshot_registry(self, reason: str) -> pathlib.Path | None",
     "stamp_session_item(self, session_id: str, item_id: str) -> bool",
     "stamp_session_kind(self, session_id: str, kind: str, subject_run_id: int | None = None) -> bool",
     "start_item_run(self, repo_id: str, *, mode: str = 'dev', feature: str = 'plan', item_id: str, model: str | None = None, phase: str | None = None) -> int | None",
@@ -7799,6 +7827,7 @@
     "live_run(self, repo_id: str, item_id: str) -> dict | None",
     "live_runs(self, repo_id: str | None = None) -> list[dict]",
     "log_run_event(self, *, repo_id: str, kind: str, name: str, description: str | None = None, run_id: int | None = None, item_id: str | None = None, tool_id: str | None = None, parent_tool_id: str | None = None, payload: str | None = None) -> None",
+    "orphaned_repos(self) -> list[dict]",
     "read_hits(self, repo_id: str, item_id: str, *, phase: str, needle: str) -> int",
     "read_run_input(self, run_id: int) -> dict | None",
     "recent_runs(self, *, limit: int = 50) -> list[dict]",
@@ -7855,6 +7884,7 @@
     "set_session_title(self, session_id: str, title: str | None) -> bool",
     "set_sweep_config(self, *, idle_seconds: int | None = None, poll_seconds: int | None = None, min_user_msgs: int | None = None) -> dict",
     "set_sweep_watermark(self, session_id: str, position: int) -> None",
+    "snapshot_registry(self, reason: str) -> pathlib.Path | None",
     "stamp_session_item(self, session_id: str, item_id: str) -> bool",
     "stamp_session_kind(self, session_id: str, kind: str, subject_run_id: int | None = None) -> bool",
     "start_item_run(self, repo_id: str, *, mode: str = 'dev', feature: str = 'plan', item_id: str, model: str | None = None, phase: str | None = None) -> int | None",
@@ -8438,6 +8468,7 @@
     "live_run(self, repo_id: str, item_id: str) -> dict | None",
     "live_runs(self, repo_id: str | None = None) -> list[dict]",
     "log_run_event(self, *, repo_id: str, kind: str, name: str, description: str | None = None, run_id: int | None = None, item_id: str | None = None, tool_id: str | None = None, parent_tool_id: str | None = None, payload: str | None = None) -> None",
+    "orphaned_repos(self) -> list[dict]",
     "read_hits(self, repo_id: str, item_id: str, *, phase: str, needle: str) -> int",
     "read_run_input(self, run_id: int) -> dict | None",
     "recent_runs(self, *, limit: int = 50) -> list[dict]",
@@ -8494,6 +8525,7 @@
     "set_session_title(self, session_id: str, title: str | None) -> bool",
     "set_sweep_config(self, *, idle_seconds: int | None = None, poll_seconds: int | None = None, min_user_msgs: int | None = None) -> dict",
     "set_sweep_watermark(self, session_id: str, position: int) -> None",
+    "snapshot_registry(self, reason: str) -> pathlib.Path | None",
     "stamp_session_item(self, session_id: str, item_id: str) -> bool",
     "stamp_session_kind(self, session_id: str, kind: str, subject_run_id: int | None = None) -> bool",
     "start_item_run(self, repo_id: str, *, mode: str = 'dev', feature: str = 'plan', item_id: str, model: str | None = None, phase: str | None = None) -> int | None",
@@ -8745,6 +8777,7 @@
     "live_run(self, repo_id: str, item_id: str) -> dict | None",
     "live_runs(self, repo_id: str | None = None) -> list[dict]",
     "log_run_event(self, *, repo_id: str, kind: str, name: str, description: str | None = None, run_id: int | None = None, item_id: str | None = None, tool_id: str | None = None, parent_tool_id: str | None = None, payload: str | None = None) -> None",
+    "orphaned_repos(self) -> list[dict]",
     "read_hits(self, repo_id: str, item_id: str, *, phase: str, needle: str) -> int",
     "read_run_input(self, run_id: int) -> dict | None",
     "recent_runs(self, *, limit: int = 50) -> list[dict]",
@@ -8801,6 +8834,7 @@
     "set_session_title(self, session_id: str, title: str | None) -> bool",
     "set_sweep_config(self, *, idle_seconds: int | None = None, poll_seconds: int | None = None, min_user_msgs: int | None = None) -> dict",
     "set_sweep_watermark(self, session_id: str, position: int) -> None",
+    "snapshot_registry(self, reason: str) -> pathlib.Path | None",
     "stamp_session_item(self, session_id: str, item_id: str) -> bool",
     "stamp_session_kind(self, session_id: str, kind: str, subject_run_id: int | None = None) -> bool",
     "start_item_run(self, repo_id: str, *, mode: str = 'dev', feature: str = 'plan', item_id: str, model: str | None = None, phase: str | None = None) -> int | None",
@@ -9098,6 +9132,7 @@
     "live_run(self, repo_id: str, item_id: str) -> dict | None",
     "live_runs(self, repo_id: str | None = None) -> list[dict]",
     "log_run_event(self, *, repo_id: str, kind: str, name: str, description: str | None = None, run_id: int | None = None, item_id: str | None = None, tool_id: str | None = None, parent_tool_id: str | None = None, payload: str | None = None) -> None",
+    "orphaned_repos(self) -> list[dict]",
     "read_hits(self, repo_id: str, item_id: str, *, phase: str, needle: str) -> int",
     "read_run_input(self, run_id: int) -> dict | None",
     "recent_runs(self, *, limit: int = 50) -> list[dict]",
@@ -9154,6 +9189,7 @@
     "set_session_title(self, session_id: str, title: str | None) -> bool",
     "set_sweep_config(self, *, idle_seconds: int | None = None, poll_seconds: int | None = None, min_user_msgs: int | None = None) -> dict",
     "set_sweep_watermark(self, session_id: str, position: int) -> None",
+    "snapshot_registry(self, reason: str) -> pathlib.Path | None",
     "stamp_session_item(self, session_id: str, item_id: str) -> bool",
     "stamp_session_kind(self, session_id: str, kind: str, subject_run_id: int | None = None) -> bool",
     "start_item_run(self, repo_id: str, *, mode: str = 'dev', feature: str = 'plan', item_id: str, model: str | None = None, phase: str | None = None) -> int | None",
@@ -9394,6 +9430,7 @@
     "live_run(self, repo_id: str, item_id: str) -> dict | None",
     "live_runs(self, repo_id: str | None = None) -> list[dict]",
     "log_run_event(self, *, repo_id: str, kind: str, name: str, description: str | None = None, run_id: int | None = None, item_id: str | None = None, tool_id: str | None = None, parent_tool_id: str | None = None, payload: str | None = None) -> None",
+    "orphaned_repos(self) -> list[dict]",
     "read_hits(self, repo_id: str, item_id: str, *, phase: str, needle: str) -> int",
     "read_run_input(self, run_id: int) -> dict | None",
     "recent_runs(self, *, limit: int = 50) -> list[dict]",
@@ -9450,6 +9487,7 @@
     "set_session_title(self, session_id: str, title: str | None) -> bool",
     "set_sweep_config(self, *, idle_seconds: int | None = None, poll_seconds: int | None = None, min_user_msgs: int | None = None) -> dict",
     "set_sweep_watermark(self, session_id: str, position: int) -> None",
+    "snapshot_registry(self, reason: str) -> pathlib.Path | None",
     "stamp_session_item(self, session_id: str, item_id: str) -> bool",
     "stamp_session_kind(self, session_id: str, kind: str, subject_run_id: int | None = None) -> bool",
     "start_item_run(self, repo_id: str, *, mode: str = 'dev', feature: str = 'plan', item_id: str, model: str | None = None, phase: str | None = None) -> int | None",
@@ -9718,6 +9756,7 @@
     "live_run(self, repo_id: str, item_id: str) -> dict | None",
     "live_runs(self, repo_id: str | None = None) -> list[dict]",
     "log_run_event(self, *, repo_id: str, kind: str, name: str, description: str | None = None, run_id: int | None = None, item_id: str | None = None, tool_id: str | None = None, parent_tool_id: str | None = None, payload: str | None = None) -> None",
+    "orphaned_repos(self) -> list[dict]",
     "read_hits(self, repo_id: str, item_id: str, *, phase: str, needle: str) -> int",
     "read_run_input(self, run_id: int) -> dict | None",
     "recent_runs(self, *, limit: int = 50) -> list[dict]",
@@ -9774,6 +9813,7 @@
     "set_session_title(self, session_id: str, title: str | None) -> bool",
     "set_sweep_config(self, *, idle_seconds: int | None = None, poll_seconds: int | None = None, min_user_msgs: int | None = None) -> dict",
     "set_sweep_watermark(self, session_id: str, position: int) -> None",
+    "snapshot_registry(self, reason: str) -> pathlib.Path | None",
     "stamp_session_item(self, session_id: str, item_id: str) -> bool",
     "stamp_session_kind(self, session_id: str, kind: str, subject_run_id: int | None = None) -> bool",
     "start_item_run(self, repo_id: str, *, mode: str = 'dev', feature: str = 'plan', item_id: str, model: str | None = None, phase: str | None = None) -> int | None",
@@ -10485,6 +10525,7 @@
     "live_run(self, repo_id: str, item_id: str) -> dict | None",
     "live_runs(self, repo_id: str | None = None) -> list[dict]",
     "log_run_event(self, *, repo_id: str, kind: str, name: str, description: str | None = None, run_id: int | None = None, item_id: str | None = None, tool_id: str | None = None, parent_tool_id: str | None = None, payload: str | None = None) -> None",
+    "orphaned_repos(self) -> list[dict]",
     "read_hits(self, repo_id: str, item_id: str, *, phase: str, needle: str) -> int",
     "read_run_input(self, run_id: int) -> dict | None",
     "recent_runs(self, *, limit: int = 50) -> list[dict]",
@@ -10541,6 +10582,7 @@
     "set_session_title(self, session_id: str, title: str | None) -> bool",
     "set_sweep_config(self, *, idle_seconds: int | None = None, poll_seconds: int | None = None, min_user_msgs: int | None = None) -> dict",
     "set_sweep_watermark(self, session_id: str, position: int) -> None",
+    "snapshot_registry(self, reason: str) -> pathlib.Path | None",
     "stamp_session_item(self, session_id: str, item_id: str) -> bool",
     "stamp_session_kind(self, session_id: str, kind: str, subject_run_id: int | None = None) -> bool",
     "start_item_run(self, repo_id: str, *, mode: str = 'dev', feature: str = 'plan', item_id: str, model: str | None = None, phase: str | None = None) -> int | None",
@@ -12219,6 +12261,11 @@
   },
   "Literal": {
    "sig": "value:_LiteralSpecialForm"
+  },
+  "OrphanedRepo": {
+   "home": "superme_agent.daemon.schemas.system",
+   "methods": [],
+   "sig": "class"
   },
   "RepoAttention": {
    "home": "superme_agent.daemon.schemas.system",
@@ -16694,6 +16741,9 @@
    "sig": "value:PosixPath"
   },
   "PLUGINS_DIR": {
+   "sig": "value:PosixPath"
+  },
+  "REPOS_BACKUP_DIR": {
    "sig": "value:PosixPath"
   },
   "REPOS_CONFIG_FILE": {

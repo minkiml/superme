@@ -46,6 +46,12 @@ class AuthStatusResponse(BaseModel):
     cli_installed: bool
 
 
+class OrphanedRepo(BaseModel):
+    """A repo id found on disk that the registry does not list and no tombstone explains."""
+    repo_id: str
+    evidence: list[str]          # the dirs that prove it existed
+
+
 class SystemResponse(BaseModel):
     """The System singleton: static config + the live half (in-flight runs) + the repo roster."""
     identity: str
@@ -67,6 +73,9 @@ class SystemResponse(BaseModel):
     live_runs: list[RunRow]
     running: int
     repos: list[str]
+    # Repos with work on disk and no registry entry. A lost entry otherwise looks exactly like a
+    # repo that was never connected.
+    orphaned_repos: list[OrphanedRepo] = Field(default_factory=list)
 
 
 class RepoScope(BaseModel):

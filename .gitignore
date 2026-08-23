@@ -19,6 +19,8 @@ superme-knowledge/
 # Local repo registry: the spine writes this machine's paths into it.
 # Seeded from config/repos.example.yaml on first start.
 /superme_agent/config/repos.yaml
+# Snapshots of it, taken before each write and once per boot. Local state, real paths.
+/superme_agent/config/repos-backups/
 
 # Per-user operational cells. Only the shared asset pool and this dir's README ship.
 superme_agent/local-harness/*

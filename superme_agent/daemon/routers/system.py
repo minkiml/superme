@@ -77,6 +77,7 @@ async def system_overview(spine: SystemSpine = Depends(get_spine)) -> dict:
     """The System singleton: static config + live half (in-flight runs) + the repo roster."""
     data = spine.system()
     data["repos"] = list(spine.repos().keys())
+    data["orphaned_repos"] = spine.orphaned_repos()
     cfg = spine.get_sweep_config()
     data["sweep_idle_seconds"] = cfg["idle_seconds"]
     data["sweep_poll_seconds"] = cfg["poll_seconds"]

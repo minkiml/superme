@@ -1,10 +1,14 @@
 """The SQLite connection and the schema, which every other mixin reads and writes."""
 
 import sqlite3
+from datetime import datetime, timezone
 from pathlib import Path
 
-from ...paths import REPOS_CONFIG_FILE, REPOS_SEED_FILE, SYSTEM_CONFIG_FILE, SYSTEM_DB_FILE
+from ...paths import (REPOS_BACKUP_DIR, REPOS_CONFIG_FILE, REPOS_SEED_FILE, SYSTEM_CONFIG_FILE,
+                      SYSTEM_DB_FILE)
 from .common import log
+
+REGISTRY_BACKUPS = 12
 
 
 class Base:
@@ -15,6 +19,7 @@ class Base:
         self._system_config_path = Path(system_config)
         self._repos_config_path = Path(repos_config)
         self._seed_repos_config()
+        self.snapshot_registry("boot")
         self._init_db()
 
     def _seed_repos_config(self) -> None:
@@ -28,6 +33,36 @@ class Base:
             log.info("seeded %s from %s", path.name, REPOS_SEED_FILE.name)
         except OSError as e:
             log.warning("could not seed %s (%s); starting with no repos", path.name, e)
+
+    def snapshot_registry(self, reason: str) -> Path | None:
+        """Copy the registry aside before it changes, and once per boot.
+
+        It is gitignored local state, so a bad write or an overwrite from outside is otherwise
+        unrecoverable. The boot copy is what survives the second kind, which no writer sees.
+        """
+        src = self._repos_config_path
+        if not src.is_file():
+            return None
+        try:
+            text = src.read_text(encoding="utf-8")
+            REPOS_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+            kept = sorted(REPOS_BACKUP_DIR.glob("repos-*.yaml"))
+            # An unchanged registry needs no second copy; restarts would otherwise evict the
+            # older ones that hold the state a boot copy cannot.
+            if kept and kept[-1].read_text(encoding="utf-8") == text:
+                return None
+            # Microseconds, because the reason follows the stamp in the name: two copies in one
+            # second would otherwise sort by reason, and both the prune and the check above read
+            # the newest by name.
+            stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%f")
+            dest = REPOS_BACKUP_DIR / f"repos-{stamp}-{reason}.yaml"
+            dest.write_text(text, encoding="utf-8")
+            for stale in sorted(REPOS_BACKUP_DIR.glob("repos-*.yaml"))[:-REGISTRY_BACKUPS]:
+                stale.unlink(missing_ok=True)
+            return dest
+        except OSError as e:
+            log.warning("could not snapshot the repo registry (%s)", e)
+            return None
 
     def _conn(self) -> sqlite3.Connection:
         c = sqlite3.connect(self.db_path)
