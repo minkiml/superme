@@ -73,7 +73,7 @@ export default function CredentialSetup({ status, onSkip }: {
           <KeyRound size={14} />
           <span className="text-[11px] font-medium uppercase tracking-wider">Setup</span>
         </div>
-        <h1 className="text-[22px] font-semibold text-fg">Connect Claude</h1>
+        <h1 className="text-[22px] font-semibold text-fg">Connect Claude Code</h1>
         <p className="mt-2.5 text-[13.5px] leading-relaxed text-muted">
           SuperMe runs every agent turn through Claude Code on your Claude plan. Set up either one
           below.
