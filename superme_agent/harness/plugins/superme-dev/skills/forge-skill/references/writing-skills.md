@@ -6,7 +6,11 @@ and runs **in the main context** (unless `context: fork`), auto-invoked by seman
 `description`. So write for that reader: lean, concrete, imperative.
 
 
-**Write in the workspace's own words.** `../../references/glossary.md` holds the vocabulary every skill, template and report shares — record vs report, run vs session, receipt, check, bar — with an `Avoid` line on each naming the synonym that will be read as something else. A new artifact that invents its own word for an existing thing is the drift this file exists to stop.
+**Read the writing standard first:** `<forge_kit>/references/principle-for-skills.md` — the run's
+prompt names the absolute `forge_kit` path. It owns the writing rules, the 16 frontmatter fields and
+the discoverability rules; this file only adds what is specific to SuperMe.
+
+**Write in the workspace's own words.** `../../../references/glossary.md` holds the vocabulary every skill, template and report shares — record vs report, run vs session, receipt, check, bar — with an `Avoid` line on each naming the synonym that will be read as something else. A new artifact that invents its own word for an existing thing is the drift this file exists to stop.
 
 ## Resolution order — pick the lightest that holds
 `skill (inline) → subagent (separate context) → command (explicit-only)`. A skill is the **default** for a
@@ -19,9 +23,9 @@ not a skill.* (Some SuperMe skills — the `forge-*` — are auto-only, never `/
   `<what it does>. Use when <triggers/keywords/contexts>`, third person, present tense. Include a
   **near-miss** where siblings could collide (the strongest triggering technique). Must carry a **"Use
   when"** clause *(lint WARN without)*; **≤1024 chars, no angle brackets** *(lint ERROR)*.
-- **Goals + constraints, not a railroad** — state *what to achieve* and the *rules it must follow*; let a
-  capable model choose the *how*. Steps are checkpoints, not a micro-script. Over-dictation makes the skill
-  brittle and worse (the model reasons better than it obeys).
+- **Number the steps in execution order** — each one an action or a check on an action. Say what to
+  do and the rule it must hold to; do not script keystrokes the model already knows. A step that
+  writes to a file a later step creates is visible in a numbered list and invisible in prose.
 - **Only what pushes off the default** — delete any step a competent agent already does; the body's job is
   the SuperMe-specific procedure and the non-obvious *whys*. State each rule **once** — not in the intro,
   a step, *and* a summary.
@@ -47,38 +51,12 @@ not a skill.* (Some SuperMe skills — the `forge-*` — are auto-only, never `/
 - **Any Others on demand and as necessary** - any other types of skill's sub-folder can be made with relevant contents in it
 
 ## Frontmatter
-- **Claude Code Native (16):** 
 
-| Field | Type | Required (No: optional) | Description |
-|-------|------|----------|-------------|
-| `name` | string | Yes | Display name and `/slash-command` identifier. Defaults to the directory name if omitted |
-| `description` | string | Yes | What the skill does. Shown in autocomplete and used by Claude for auto-discovery |
-| `when_to_use` | string | No | Additional context for when Claude should invoke the skill — trigger phrases and example requests. Appended to `description` in the skill listing, counts toward the 1,536-character cap |
-| `argument-hint` | string | No | Hint shown during autocomplete (e.g., `[issue-number]`, `[filename]`) |
-| `arguments` | string/list | No | Named positional arguments for `$name` substitution in the skill content. Accepts a space-separated string or a YAML list — names map to argument positions in order |
-| `disable-model-invocation` | boolean | No | Set `true` to prevent Claude from automatically invoking this skill |
-| `user-invocable` | boolean | No | Set `false` to hide from the `/` menu — skill becomes background knowledge only, intended for agent preloading |
-| `allowed-tools` | string | No | Tools allowed without permission prompts when this skill is active |
-| `disallowed-tools` | string/list | No | Tools removed from Claude's available pool while the skill is active (e.g. block `AskUserQuestion` for a background loop). Accepts a space/comma-separated string or YAML list — the restriction clears on the next message |
-| `model` | string | Yes | Model to use when this skill runs (e.g., `haiku`, `sonnet`, `opus`) |
-| `effort` | string | No | Override the model effort level when invoked (`low`, `medium`, `high`, `xhigh`, `max`) |
-| `context` | string | No | Set to `fork` to run the skill in an isolated subagent context |
-| `agent` | string | No | Subagent type when `context: fork` is set (default: `general-purpose`) |
-| `hooks` | object | No | Lifecycle hooks scoped to this skill |
-| `paths` | string/list | No | Glob patterns that limit when the skill auto-activates. Accepts a comma-separated string or YAML list — Claude loads the skill only when working with matching files |
-| `shell` | string | No | Shell for `` !`command` `` blocks — `bash` (default) or `powershell`. Requires `CLAUDE_CODE_USE_POWERSHELL_TOOL=1` |
+The 16 native fields and the discoverability rules are in the writing standard (above) — read it
+there rather than from a second copy. Only these are SuperMe's own:
 
 - **SuperMe-added (catalog only, no native behavior):** `category`, `access`.
 - **`model` is an alias** (`sonnet`/`opus`/`haiku`) — never a pinned id *(lint ERROR; resolved at runtime)*.
-
-### Optimize the frontmatter for discoverability
-
-The `name` and `description` in the frontmatter of your `SKILL.md` are the only fields that the agent sees before triggering a skill. If they are not optimized for discoverability and specific enough, your skill is invisible.
-
-* **Adhere to Strict Naming:** The name field must be 1-64 characters, contain only lowercase letters, numbers, and hyphens (no consecutive hyphens), and **must exactly match the parent directory name** (e.g., name: `angular-testing` must live in `angular-testing/SKILL.md`).  
-* **Write Trigger-Optimized Descriptions:** (Max 1,024 characters). This is the only metadata the agent sees for routing. Describe the capability in the third person and include "negative triggers."  
-  * **Bad:** "React skills." (Too vague).
-  * **Good:** "Creates and builds React components using Tailwind CSS. Use when the user wants to update component styles or UI logic. Don't use it for Vue, Svelte, or vanilla CSS projects."
 
 ## An example Template
 **`<…>` marks a placeholder — replace the whole token; a literal `<>` in the `description` fails lint.**
@@ -107,7 +85,7 @@ category: <optional>
 - [ ] **Right artifact** — a procedure the agent runs, not knowledge/delegation/posture?
 - [ ] **Lightest type** — a skill genuinely beats a subagent/command here?
 - [ ] **Description routes** — `<what>. Use when <triggers + near-miss>`; ≤1024, no `< >`?
-- [ ] **Body is SuperMe-specific** — no obvious steps; goals-not-railroad; each rule stated once?
+- [ ] **Body is SuperMe-specific** — no obvious steps; numbered in execution order; each rule stated once?
 - [ ] **Altitude of why** — decision-boundary rationale kept, system/persuasion cut?
 - [ ] **Action steps name their tool** — script/shell steps say "run via Bash"; typed params not re-spec'd?
 - [ ] **Progressive disclosure** — bulky detail in `references/`, deterministic work in `scripts/`?

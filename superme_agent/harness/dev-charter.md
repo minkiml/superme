@@ -15,7 +15,7 @@ when a task needs it; don't modify it unless asked.
 
 **Writing a skill, a template, an artifact or a report?** The workspace's full vocabulary — record vs
 report, run vs session, receipt, check, bar, and the word-pairs that have already caused bugs — is
-`plugins/superme-dev/references/glossary.md`. Use its words exactly; a synonym is how two phases end
+`{DEV_GLOSSARY}`. Use its words exactly; a synonym is how two phases end
 up describing one act as if it were two.
 
 ## Delegating

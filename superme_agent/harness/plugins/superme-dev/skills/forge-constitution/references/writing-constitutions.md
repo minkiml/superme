@@ -1,7 +1,7 @@
 # Authoring standard — constitution
 
 
-**Write in the workspace's own words.** `../../references/glossary.md` holds the vocabulary every skill, template and report shares — record vs report, run vs session, receipt, check, bar — with an `Avoid` line on each naming the synonym that will be read as something else. A new artifact that invents its own word for an existing thing is the drift this file exists to stop.
+**Write in the workspace's own words.** `../../../references/glossary.md` holds the vocabulary every skill, template and report shares — record vs report, run vs session, receipt, check, bar — with an `Avoid` line on each naming the synonym that will be read as something else. A new artifact that invents its own word for an existing thing is the drift this file exists to stop.
 
 ## What it is (and is not)
 A unit of SuperMe's operational intelligence — a **convention**, a **small reference**, or a

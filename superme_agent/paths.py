@@ -42,6 +42,16 @@ DEV_PLUGIN_DIR = PLUGINS_DIR / "superme-dev"         # mode=dev
 # hand-authored and never auto-written.
 CONSTITUTION_DIR = HARNESS_DIR / "constitution"
 
+# A session's cwd is the operated repo, so a charter path into the plugin must be absolute.
+CHARTER_PATH_TOKENS = {"{DEV_GLOSSARY}": DEV_PLUGIN_DIR / "references" / "glossary.md"}
+
+
+def fill_charter_paths(text: str) -> str:
+    """Charter text with each `{TOKEN}` replaced by the install path it names."""
+    for token, path in CHARTER_PATH_TOKENS.items():
+        text = text.replace(token, str(path))
+    return text
+
 
 def plugins_for(mode: str, op_home: Path | None = None) -> list[str]:
     """Plugin paths for a turn: the universal harness, then this repo's own operational cell."""

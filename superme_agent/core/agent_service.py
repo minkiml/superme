@@ -21,7 +21,8 @@ from claude_agent_sdk import (
 )
 
 from ..paths import (
-    SELF_FILE, CHARTER_FILES, HARNESS_DIR, LOCAL_HARNESS_DIR, CONSTITUTION_DIR, plugins_for,
+    SELF_FILE, CHARTER_FILES, HARNESS_DIR, LOCAL_HARNESS_DIR, CONSTITUTION_DIR,
+    fill_charter_paths, plugins_for,
 )
 from .vocab.models import normalize_model
 from .operational import (constitution_catalog, list_repo_assets, silent_skill_names,
@@ -131,7 +132,8 @@ class AgentService:
         self._persona = persona if persona is not None else SELF_FILE.read_text(encoding="utf-8")
         # Per-mode charters (WHAT MODE), loaded once. Selected by Context.mode per turn.
         self._charters = {
-            mode: path.read_text(encoding="utf-8") for mode, path in CHARTER_FILES.items() if path.exists()
+            mode: fill_charter_paths(path.read_text(encoding="utf-8"))
+            for mode, path in CHARTER_FILES.items() if path.exists()
         }
         # Real contextWindow per model, so per-step frames divide by the same window the Result
         # does. Warms after the first turn.
@@ -203,6 +205,12 @@ class AgentService:
     _SILENT_SKILL_DENY = ("This is an internal SuperMe skill — it runs only inside the learning "
                           "pipeline, not from chat.")
     _CATEGORY_DENY = {
+        "workspace": (
+            "The work-item phase skills only run inside a work-item, and this session is not tied "
+            "to one — the item's artifacts and this phase's pens are both absent here, so the "
+            "procedure would run against nothing. Open the item on the board to work it, or file "
+            "an inbox item for work that has none yet."
+        ),
         "onboarding": (
             "Onboarding is already done for this project — it has established project's single source of truth (anchor docs), "
             "so the onboarding skills are closed and would overwrite that memory rather than build "
@@ -302,7 +310,7 @@ class AgentService:
 
     def _build_options(
         self, ctx: Context, *, resume, model, approve: ApproveFn, extra_mcp_servers,
-        enforce_silent: bool = False, effort: str | None = None, scope_reads: bool = False,
+        enforce_silent: bool = True, effort: str | None = None, scope_reads: bool = False,
         system_append: str | None = None, gate_general_mutations: bool = False,
         general_write_root: Path | None = None, write_boundary: list[Path] | None = None,
         shell_roots: list[Path] | None = None,
@@ -377,7 +385,7 @@ class AgentService:
         effort: str | None = None,
         approve: ApproveFn,
         extra_mcp_servers: dict | None = None,
-        enforce_silent: bool = False,
+        enforce_silent: bool = True,
         scope_reads: bool = False,
         system_append: str | None = None,
         gate_general_mutations: bool = False,

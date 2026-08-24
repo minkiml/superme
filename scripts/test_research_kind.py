@@ -511,13 +511,20 @@ ok("…and Flagged ambiguities, including the pair that cost weeks",
    "## Flagged ambiguities" in _g and "`feature` vs `phase`" in _g)
 ok("…and an Avoid line on the terms that drift",
    _g.count("*Avoid*:") >= 20)
-ok("the charter points at it (one line — the charter is always loaded)",
-   "glossary.md" in src("superme_agent/harness/dev-charter.md"))
+# The charter is read in a session whose cwd is the operated repo, so the pointer is only real
+# once it is filled — a relative one silently resolves to nothing.
+from superme_agent.paths import fill_charter_paths          # noqa: E402
+_charter = fill_charter_paths(src("superme_agent/harness/dev-charter.md"))
+ok("the charter points at it, as a path that resolves from anywhere",
+   str(_gl_doc.resolve()) in _charter)
+_stds = [Path("superme_agent/harness/plugins/superme-dev/skills") / r
+         for r in ("forge-skill/references/writing-skills.md",
+                   "forge-agent/references/writing-agents.md",
+                   "forge-constitution/references/writing-constitutions.md")]
 ok("every authoring standard points at it too",
-   all("glossary.md" in (Path("superme_agent/harness/plugins/superme-dev/skills") / r).read_text(encoding="utf-8")
-       for r in ("forge-skill/references/writing-skills.md",
-                 "forge-agent/references/writing-agents.md",
-                 "forge-constitution/references/writing-constitutions.md")))
+   all("glossary.md" in f.read_text(encoding="utf-8") for f in _stds))
+ok("…at a depth that actually resolves from where each one sits",
+   all((f.parent / "../../../references/glossary.md").resolve() == _gl_doc.resolve() for f in _stds))
 
 
 # ── the guide prose pass ────────────────────────────────────────── "12 of 41" is unreadable
