@@ -20,6 +20,8 @@ TIMEOUT_S = 180
 # Read-only tools and a turn cap, so an unvetted artifact can neither mutate the machine nor run
 # away on cost.
 _TRIAL_TOOLS = "Read,Grep,Glob"
+# The judge runs in a throwaway cwd, so a path relative to anything resolves to nothing.
+SKILL_PRINCIPLES = Path(__file__).resolve().parent / "references" / "principle-for-skills.md"
 _TRIAL_MAX_TURNS = 8
 _TRIAL_TIMEOUT_S = 150
 
@@ -31,7 +33,8 @@ _RUBRIC = {
         "whether the description routes them correctly; call out over-broad or too-narrow wording.\n"
         "2) LOGIC — act as an agent that just loaded this skill to do a realistic task in its "
         "domain. Walk the body step by step and flag every point where the instructions are "
-        "ambiguous, missing, or force you to guess -- see, `./references/principle-for-skills.md`,the best practices for skills ."
+        "ambiguous, missing, or force you to guess. Read the standard it is judged against first: "
+        f"`{SKILL_PRINCIPLES}`."
     ),
     "agent": (
         "You are auditing a sub-agent definition (an agent.md) that another agent authored. Two "

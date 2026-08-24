@@ -243,6 +243,7 @@ def write_trigger(prop: dict, *, slug: str, workspace, existing_path: str | None
         "approved proposal, validate it with the forge_kit, then stage it via `stage_artifact`.",
         "",
         f"forge_kit: {forge_kit}   (run: python <forge_kit>/lint.py … and python <forge_kit>/eval.py …)",
+        f"writing standard: {forge_kit}/references/principle-for-skills.md   (read before drafting)",
         f"scratch workspace: {workspace}   (draft + run the toolkit here; do not write anywhere else)",
         f"publish slug: {slug}   (the artifact's on-disk name — frontmatter `name` must match it)",
         "",
