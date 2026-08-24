@@ -730,7 +730,9 @@ def build_can_use_tool(approve: ApproveFn, *, blocked_skills: dict[str, str] | N
         if is_safe(tool_name, input_data):
             return PermissionResultAllow()
         verdict = await approve(tool_name, input_data)
-        log.info("approval: %s -> %s", tool_name, "ALLOW" if verdict is True else "DENY")
+        # The command too: a bare "Bash -> DENY" leaves nobody able to say what was refused.
+        log.info("approval: %s -> %s%s", tool_name, "ALLOW" if verdict is True else "DENY",
+                 f" [{str(input_data.get('command'))[:200]}]" if tool_name == "Bash" else "")
         if verdict is True:
             return PermissionResultAllow()
         # A command refused ABOUT ITSELF, and fixable — that sentence wins over the approver's
