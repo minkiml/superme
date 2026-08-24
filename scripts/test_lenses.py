@@ -175,7 +175,10 @@ def test_wiring():
        "mcp__dev__record_lens" in src("superme_agent/harness/policy.py"))
 
     skill = src("superme_agent/harness/plugins/superme-dev/skills/vet/SKILL.md")
-    ok("the vet skill carries the three lenses", "three standing lenses" in skill)
+    # The count lives in STANDING_LENSES; a skill that spells it out drifts the day one is added.
+    ok("the vet skill names the pen", "`record_lens`" in skill)
+    ok("…and every standing lens it must record",
+       all(f"`{ln}`" in skill for ln in _arts.STANDING_LENSES))
     ok("…forbids manufacturing a finding", "Nothing found is the right answer when nothing is wrong" in skill)
     ok("…and says they run under depth: none too",
        "including one whose plan declared `depth: none`" in " ".join(skill.split()))

@@ -72,18 +72,21 @@ you prescribe it, the next cycle implements your idea and you grade your own des
 
 The report is refused while any failing check has no diagnosis this cycle.
 
-### 2c — The three standing lenses
+### 2c — The standing lenses
 
 The plan's checks defend what the planner thought of. These ask what nobody had to remember to ask,
 and they run on **every** cycle — including one whose plan declared `depth: none`, where they are the
 whole record.
 
-| lens | ask |
-|---|---|
-| `intent` | does this solve the problem `brief.md` § Problem states? |
-| `safety` | unsafe evaluation, injection, destructive paths, secrets in the open |
-| `robustness` | which inputs did you try, and which are unhandled? |
-| `performance` | only against a budget the plan actually named |
+Call `record_lens` once per lens, per cycle. The first three are required; the report is refused
+while any of them has no read this cycle.
+
+| lens | required | ask |
+|---|---|---|
+| `intent` | yes | does this solve the problem `brief.md` § Problem states? |
+| `safety` | yes | unsafe evaluation, injection, destructive paths, secrets in the open |
+| `robustness` | yes | which inputs did you try, and which are unhandled? |
+| `performance` | only against a budget the plan named | does it stay inside that budget? |
 
 - **Nothing found is the right answer when nothing is wrong.** `probed` is what proves you looked:
   four entries — `"empty string → handled"`, `"None → handled"`, `"a 400-char name → handled"`,
@@ -125,12 +128,6 @@ fixing, never address the builder directly.
 - Plain, easy language. Fewer words wins.
 - Never restate the item's kind, deliverable or id. Spend the space on the judgment behind them.
 - Omit a prose field rather than filling it with "none" — an absent block reads better.
-
-## Chat response style
-- Use plain and easy language.
-- Keep your response short, clear, and to the point.
-- Use bullets or numbered lists to organize information if there is more than one point.
-- Do not use more than 30 words.
 
 ## Reporting the run
 

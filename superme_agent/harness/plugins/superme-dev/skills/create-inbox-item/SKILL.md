@@ -111,7 +111,7 @@ genuinely distinct, unrelated pieces of work.
   amber=running.
   **Why:** Opening a trace gives no at-a-glance outcome — the user must scroll to tell if it finished.
   **Context:** Source the pill from the run's terminal status, not the last visible trace event.
-  **References:** web/frontend/src/features/activity/RunTraceModal.tsx
+  **References:** the component that renders the trace header
   ```
 - confirm: `Filed inbox item #58 — "Status pill on run trace header in Activity dashboard". In your Item Inbox to review & push into a work-item.`
 

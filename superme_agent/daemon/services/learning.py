@@ -177,6 +177,8 @@ async def run_background_write(ctx, context_id: str, proposal_id: int, run_id: i
         # stays DB-only.
         approve=learning_write_approve(workspace),
         extra_mcp_servers=turn_mcp,
+        enforce_silent=False,   # the ONE run entitled to the forge-* skills
+
     ):
         if isinstance(ev, Usage):
             _spine.bump_run(run_id, add_tokens=ev.total_tokens, ctx_pct=ev.ctx_pct)
