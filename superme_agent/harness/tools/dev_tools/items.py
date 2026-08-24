@@ -69,52 +69,41 @@ def _scaffold_artifact(*, store, context_id, dev_root=None, bound_item_id=None, 
 
 class SetTriageClassificationArgs(TypedDict, total=False):
     item_id: Required[Annotated[str, "the work-item id"]]
-    title: Required[Annotated[str, ("the item's name as the board should now read it — a few words, "
-                                    "under 60 characters, no closing period. You have read the whole "
-                                    "ask, so fix a weak one here; pass the existing title back "
-                                    "unchanged when it already reads well")]]
+    title: Required[Annotated[str, (((((("the name the board should show: a few words, under 60 "
+                                         "characters, no period. Fix a weak one; pass a good one "
+                                         "back unchanged"))))))]]
     kind: Required[Annotated[Literal["implementation", "research"],
-                             ("the confirmed kind — implementation (changes code; worktree + "
-                              "vet/review pipeline) or research (answers questions; "
-                              "read-only on code, findings instead of merges)")]]
-    deliverable: Annotated[str, ("the deliverable this item anchors to: an existing `d-<slug>` "
-                                 "from the project PRD, or omit/'none' for a standalone chore. "
-                                 "NEVER invent a new slug here — a NEW deliverable is proposed in "
-                                 "prose for the owner to confirm first")]
+                             (((((("`implementation` = changes code, with a worktree and the vet "
+                                   "and review pipeline. `research` = answers a question, read-only "
+                                   "on code, delivering findings rather than a merge"))))))]]
+    deliverable: Annotated[str, (((((("an existing `d-<slug>` from the project PRD, or omit for a "
+                                      "standalone chore. Never invent a slug: a new deliverable is "
+                                      "proposed in prose"))))))]
     scale: Required[Annotated[Literal["small", "standard"],
-                              ("how much CONTENT this item's work is worth. `small` = you can "
-                               "already name the change and where it goes, so every later phase "
-                               "reads narrow and writes short. `standard` = anything you'd have to "
-                               "investigate, anything touching more than one area, anything where "
-                               "the approach is a real choice. The size of the diff is not the "
-                               "test: a one-line change to something load-bearing is standard")]]
+                              (((((("`small` = you can already name the change and where it goes, "
+                                    "so later phases stay narrow. `standard` = anything to "
+                                    "investigate, more than one area, or a real choice of approach"))))))]]
     fanout: Annotated[Literal["expected", "bounded"],
-                      ("research only: does this surface need SPLITTING across subagents? "
-                       "`expected` is the default and divides a whole-repo sweep. Set `bounded` "
-                       "when you have looked and it does not — one folder, one subsystem. "
-                       "Investigate obeys it, and the review gate judges the run against it. A "
-                       "different question from `scale`: a bounded surface can still be big work")]
-    scale_reason: Required[Annotated[str, ("one line, in your own words, for why that scale — what "
-                                           "you saw that settled it. Required for BOTH values: the "
-                                           "owner reads it at the gate to disagree with")]]
+                      (((((("research only. `expected` = the default, which divides a whole-repo "
+                            "sweep across subagents. `bounded` = you looked and it does not divide: "
+                            "one folder, one subsystem. A different question from `scale`"))))))]
+    scale_reason: Required[Annotated[str, (((((("one line in your own words for why that scale, and "
+                                                "what settled it. Required for both values: the "
+                                                "owner reads it at the gate"))))))]]
     research_kind: Annotated[Literal["audit", "refactoring", "housekeeping", "security",
                                      "study", "deep-diagnosis"],
-                             ("REQUIRED when kind is `research`, rejected otherwise — the family "
-                              "of investigation, which decides what counts as an answer. `audit`: "
-                              "is this surface sound. `refactoring`: what shape should this code "
-                              "be. `housekeeping`: what has gone stale. `security`: what is "
-                              "exposed. `study`: how do others do this. `deep-diagnosis`: what is "
-                              "the mechanism behind a behaviour we cannot explain. Pick by the "
-                              "QUESTION, not the subject")]
-    kind_override_reason: Annotated[str, ("ONLY when you are recording a kind that contradicts the "
-                                          "one this item was filed under, and only after the owner "
-                                          "has told you which it is. Quote their answer. Without "
-                                          "it a contradicting kind is refused — overruling the "
-                                          "filer is the owner's call, not yours")]
-    research_kind_reason: Annotated[str, ("one line for why that family — required alongside "
-                                          "`research_kind`. The label picks the method the "
-                                          "investigation follows and the shape of its record, so "
-                                          "the owner argues with this line at the gate")]
+                             (((((("required when kind is `research`, rejected otherwise. `audit` = "
+                                   "is this surface sound · `refactoring` = what shape should this "
+                                   "code be · `housekeeping` = what has gone stale · `security` = "
+                                   "what is exposed · `study` = how do others do this · "
+                                   "`deep-diagnosis` = the mechanism behind a behaviour we cannot "
+                                   "explain. Pick by the question, not the subject"))))))]
+    kind_override_reason: Annotated[str, (((((("only when recording a kind that contradicts the one "
+                                               "it was filed under, after the owner says which. "
+                                               "Quote their answer, or it is refused"))))))]
+    research_kind_reason: Annotated[str, (((((("one line for why that family, required alongside "
+                                               "`research_kind`. The label picks the method the "
+                                               "investigation follows and the shape of its record"))))))]
 
 
 def _set_triage_classification(*, store, context_id, dev_root=None, bound_item_id=None, **_):
@@ -223,8 +212,8 @@ def _set_triage_classification(*, store, context_id, dev_root=None, bound_item_i
 class WriteCheckpointArgs(TypedDict, total=False):
     item_id: Required[Annotated[str, "the work-item id"]]
     working_on: Required[Annotated[str, "what is being worked on right now"]]
-    decisions: Annotated[str, "decisions made + tradeoffs/leans — the reasoning a transcript loses"]
-    remaining: Required[Annotated[str, "what remains, concretely — next session starts here"]]
+    decisions: Annotated[str, "decisions made, with the tradeoffs and leanings a transcript loses"]
+    remaining: Required[Annotated[str, "what remains, concretely; the next session starts here"]]
     notes: Annotated[str, "tried-but-failed, gotchas, anything else worth carrying"]
 
 
@@ -261,7 +250,8 @@ def _write_checkpoint(*, store, context_id, dev_root=None, repo_dir=None, bound_
 
 
 class SyncFromAnchorBranchArgs(TypedDict, total=False):
-    item_id: Required[Annotated[str, "the work-item id (must have a live worktree — build phase)"]]
+    item_id: Required[Annotated[str, ((((("the work-item id. It must have a live worktree, so this "
+                                          "is build only")))))]]
 
 
 def _sync_from_anchor_branch(*, store, context_id, dev_root=None, main_repo_dir=None, bound_item_id=None,

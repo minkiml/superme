@@ -52,29 +52,28 @@ def _list_inbox(*, store, context_id, **_):
 # implementation.
 
 class CreateInboxItemArgs(TypedDict, total=False):
-    title: Required[Annotated[str, ("the ticket's headline — a few words naming it, under 60 "
-                                    "characters, no closing period. Not the ask; that is `body`")]]
-    body: Required[Annotated[str, ("the item content — a crisp synthesis of intent + the on-point "
-                                   "context/decisions and any pointers or references (work-item ids, "
-                                   "paths, doc names). NOT a raw transcript dump")]]
+    title: Required[Annotated[str, (((((("the ticket's headline: a few words naming it, under 60 "
+                                         "characters, no closing period. Not the ask, which is "
+                                         "`body`"))))))]]
+    body: Required[Annotated[str, (((((("the item content: a crisp synthesis of intent, the "
+                                        "on-point context and decisions, and any pointers: "
+                                        "work-item ids or paths. Never a raw transcript"))))))]]
     work_kind: Required[Annotated[Literal["implementation", "research"],
-                         ("which machinery this becomes when pushed: `implementation` changes code "
-                          "(plan → build → vet → review, on its own branch), `research` answers a "
-                          "question (investigate → findings, nothing merged). Pick by what the item "
-                          "DELIVERS — one whose output is a decision, a report or an answer is "
-                          "research even when code prompted it. If you cannot name which, this is "
-                          "not an inbox item and must not be filed. Triage re-reads it, so a wrong "
-                          "pick costs a question, not a wrong pipeline")]]
-    spawned_from_item: Annotated[str, ("branch-off ONLY: the parent work-item id this spawns from "
-                                       "(requires `relation`)")]
+                         (((((("`implementation` = the deliverable is changed code, on its own "
+                               "branch. `research` = the deliverable is an answer, a report or a "
+                               "decision, and nothing merges. Pick by what the item delivers, not "
+                               "by what prompted it"))))))]]
+    spawned_from_item: Annotated[str, (((((("branch-off only: the parent work-item id this spawns "
+                                            "from. Requires `relation`"))))))]
     relation: Annotated[Literal["blocking", "parallel", "spawn"],
-                        ("branch-off type: blocking (parent can't proceed without it — auto-pushed, "
-                         "pauses the parent) · parallel (child work, auto-pushed, gates the parent's "
-                         "completion) · spawn (independent follow-up — waits in the inbox for the "
-                         "owner's push)")]
-    background: Annotated[str, "handoff brief: the problem/story — why this was raised"]
+                        (((((("`blocking` = the parent cannot proceed without it, so it is "
+                              "auto-pushed and the parent pauses · `parallel` = independent child "
+                              "work, auto-pushed, gating the parent's completion · `spawn` = a "
+                              "follow-up that waits in the inbox for the owner's push"))))))]
+    background: Annotated[str, "handoff brief: the problem, and why it was raised"]
     discussion: Annotated[str, "handoff brief: what was discussed/concluded so far"]
-    direction: Annotated[str, "handoff brief: high-level direction or options, with leanings — NO plans/implementation detail"]
+    direction: Annotated[str, ((((("handoff brief: the high-level direction or options, with "
+                                   "leanings. No plans, no implementation detail")))))]
     constraints: Annotated[str, "handoff brief: constraints, tried-but-failed, out-of-scope"]
 
 
@@ -200,8 +199,8 @@ def _create_inbox_item(*, store, context_id, dev_root=None, fire_triage=None, **
 # Start an item the owner points at. Filing a ticket and starting one are different decisions.
 
 class PushInboxItemArgs(TypedDict, total=False):
-    item_id: Required[Annotated[int, ("the OPEN inbox item's numeric id — the number in the "
-                                      "`inbox:<id>` that read_inbox prints, without the prefix")]]
+    item_id: Required[Annotated[int, (((((("the open inbox item's numeric id, as `read_inbox` "
+                                           "prints it in `inbox:<id>`, without the prefix"))))))]]
 
 
 def _push_inbox_item(*, store, context_id, dev_root=None, fire_triage=None,
@@ -259,29 +258,29 @@ def _push_inbox_item(*, store, context_id, dev_root=None, fire_triage=None,
 # `after` edges.
 
 class ItemizeItemArgs(TypedDict, total=False):
-    key: Required[Annotated[str, ("a batch-LOCAL handle for this item, used only to wire `after` "
-                                  "edges within this launch (e.g. the deliverable id `d-cli`) — the "
-                                  "real work-item id is minted on creation")]]
-    title: Required[Annotated[str, ("the card label — a few words naming the change, under 60 "
-                                    "characters, no closing period. Not the ask; that is "
-                                    "`description`")]]
-    description: Annotated[str, ("the intent — what value this item delivers. Crisp; NOT a plan "
-                                 "(the item's own plan phase does that)")]
-    after: Annotated[list[str], ("keys of items in THIS batch (or ids of existing work-items) that "
-                                 "must finish before this one starts — from the PRD deliverables' "
-                                 "`Needs` edges. Omit for items that can start immediately")]
+    key: Required[Annotated[str, (((((("a handle local to this batch, used only to wire `after` "
+                                       "edges within it. The real work-item id is minted on "
+                                       "creation"))))))]]
+    title: Required[Annotated[str, (((((("the card label: a few words naming the change, under 60 "
+                                         "characters, no closing period. Not the ask, which is "
+                                         "`description`"))))))]]
+    description: Annotated[str, (((((("the intent: what value this item delivers, crisply. Not a "
+                                      "plan; the item's own plan phase does that"))))))]
+    after: Annotated[list[str], (((((("keys of items in this batch, or ids of existing work-items, "
+                                      "that must finish before this one starts. Omit when it can "
+                                      "start immediately"))))))]
     kind: Required[Annotated[Literal["implementation", "research"],
-                             ("which machinery this item runs: `implementation` changes code (plan "
-                              "→ build → vet → review, on its own branch), `research` answers a "
-                              "question (investigate → findings, nothing merged). Pick by what the "
-                              "item DELIVERS — one whose output is a decision, a report or an "
-                              "answer is research even when code prompted it")]]
+                             (((((("`implementation` = the deliverable is changed code, on its own "
+                                   "branch. `research` = the deliverable is an answer, a report or "
+                                   "a decision, and nothing merges. Pick by what the item delivers, "
+                                   "not by what prompted it"))))))]]
 
 
 class ItemizeAndLaunchArgs(TypedDict, total=False):
-    items: Required[Annotated[list[ItemizeItemArgs], ("the launch cohort — one entry per work-item. "
-                                                      "Created together on autopilot, wired by their "
-                                                      "`after` edges, stamped with one shared cohort id")]]
+    items: Required[Annotated[list[ItemizeItemArgs], (((((("the launch cohort, one entry per "
+                                                           "work-item. They are created together, "
+                                                           "wired by their `after` edges, under one "
+                                                           "shared cohort id"))))))]]
 
 
 def _itemize_and_launch(*, store, context_id, **_):
@@ -307,14 +306,14 @@ def _itemize_and_launch(*, store, context_id, **_):
 
 class AppendInboxItemArgs(TypedDict, total=False):
     item_id: Required[Annotated[int, "the existing inbox item's id to augment"]]
-    addition: Required[Annotated[str, ("the NEW, on-point content from this discussion to append — "
-                                       "what the existing item doesn't already cover. Never a rewrite; "
-                                       "the existing text is preserved and this is added under it")]]
+    addition: Required[Annotated[str, (((((("the new, on-point content from this discussion: what "
+                                            "the existing item does not already cover. It is added "
+                                            "under the existing text, which is preserved"))))))]]
     brief_field: Annotated[Literal["background", "discussion", "direction", "constraints"],
-                           ("which handoff-brief section this addition belongs under (default "
-                            "`discussion`). Name it when you are filling a slot the original "
-                            "filing left empty — an addition mirrored into the wrong section is "
-                            "as good as lost to the triage session that reads by section")]
+                           (((((("which handoff-brief section this belongs under, default "
+                                 "`discussion`. `background` = why it was raised · `discussion` = "
+                                 "what was concluded · `direction` = options and leanings · "
+                                 "`constraints` = limits and out-of-scope"))))))]
 
 
 def _append_inbox_item(*, store, context_id, dev_root=None, **_):

@@ -104,9 +104,9 @@ BASE_TOOLS: list[ToolSpec] = [
         "adopt_knowledge_assets",
         "Ranks the shared knowledge-asset pool against a project spec and adopts the clearly "
         "relevant items for this repo. Use it once while onboarding a project, after its "
-        "architecture is drafted. Do not use it in ordinary chat: it writes the repo's adopted- "
-        "asset list, which the owner then curates. Returns the assets adopted and the others that "
-        "looked relevant.",
+        "architecture is drafted. Do not use it in ordinary chat: it writes the repo's "
+        "adopted-asset list, which the owner then curates. Returns the assets adopted and the "
+        "others that looked relevant.",
         AdoptKnowledgeAssetsArgs, _adopt_knowledge_assets,
     ),
 ]

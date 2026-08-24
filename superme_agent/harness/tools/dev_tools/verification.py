@@ -38,10 +38,10 @@ def _check_plan_commands(*, store, context_id, dev_root=None, repo_dir=None, bou
 
 class RecordValidationArgs(TypedDict, total=False):
     item_id: Required[Annotated[str, "the work-item id"]]
-    command: Required[Annotated[str, ("the command you ran, verbatim and re-runnable from the "
-                                      "worktree root — vet re-executes this exact string to audit "
-                                      "the claim, so a paraphrase makes the record uncheckable")]]
-    result: Required[Annotated[str, "the MACHINE result — exit code, counts, output tail"]]
+    command: Required[Annotated[str, (((((("the command you ran, verbatim and re-runnable from the "
+                                           "worktree root. The vet pass re-executes this exact "
+                                           "string, so a paraphrase cannot be checked"))))))]]
+    result: Required[Annotated[str, "the machine result: exit code, counts, output tail"]]
     passed: Required[Annotated[bool, "did it pass"]]
     task: Annotated[str, "the plan task id this run defends, when it defends exactly one (`t3`)"]
 
@@ -74,16 +74,17 @@ class RecordVerificationArgs(TypedDict, total=False):
     item_id: Required[Annotated[str, "the work-item id"]]
     check: Required[Annotated[str, "the verification-plan check id, verbatim (it keys the ledger)"]]
     how: Required[Annotated[str, "the exact command / procedure that ran"]]
-    result: Required[Annotated[str, "the MACHINE result — exit code, counts, output tail"]]
+    result: Required[Annotated[str, "the machine result: exit code, counts, output tail"]]
     passed: Required[Annotated[bool, "did the check pass (false when deferred)"]]
     note: Annotated[str, "for a failure: expected vs actual in one line"]
-    deferred: Annotated[bool, ("set true for a check the BUILD deferred to the owner (a needs-you "
-                               "item pending authorization at review): it is recorded as an "
-                               "intentional skip, not a failure — you did NOT run it")]
-    met: Annotated[list[str], ("rubric checks only: the plan's criteria this build MEETS, verbatim. "
-                               "Every criterion the plan lists must appear in met or missed")]
-    missed: Annotated[list[str], ("rubric checks only: the criteria it does NOT meet. Any missed "
-                                  "criterion means passed=false — a rubric is the bar, not a score")]
+    deferred: Annotated[bool, (((((("true for a check the build deferred to the owner, pending "
+                                    "authorization at review. It records an intentional skip rather "
+                                    "than a failure"))))))]
+    met: Annotated[list[str], (((((("rubric checks only: the plan's criteria this build meets, "
+                                    "verbatim. Every criterion must appear in `met` or `missed`"))))))]
+    missed: Annotated[list[str], (((((("rubric checks only: the criteria it does not meet. Any "
+                                       "missed criterion means `passed` is false; a rubric is a "
+                                       "bar, not a score"))))))]
 
 
 def _record_verification(*, store, context_id, dev_root=None, repo_dir=None,
@@ -116,15 +117,14 @@ def _record_verification(*, store, context_id, dev_root=None, repo_dir=None,
 
 class RecordDiagnosisArgs(TypedDict, total=False):
     item_id: Required[Annotated[str, "the work-item id"]]
-    check: Required[Annotated[str, "the FAILING check's plan id, verbatim"]]
-    where: Required[Annotated[str, ("the narrowest located source — file:line, the failing frame, "
-                                    "the request that errored. Not 'in the parser' when you know "
-                                    "which line")]]
-    why: Required[Annotated[str, ("the mechanism, as far as the evidence supports it — what "
-                                  "actually happens, not what should have")]]
-    unknown: Annotated[str, ("what you could NOT determine, if anything. An honest gap beats a "
-                             "confident guess: it tells the next build cycle where you did not "
-                             "look")]
+    check: Required[Annotated[str, "the failing check's plan id, verbatim"]]
+    where: Required[Annotated[str, (((((("the narrowest located source: a file and line, the "
+                                         "failing frame, the request that errored. Not 'in the "
+                                         "parser' when you know the line"))))))]]
+    why: Required[Annotated[str, (((((("the mechanism as far as the evidence supports it: what "
+                                       "actually happens, not what should have"))))))]]
+    unknown: Annotated[str, (((((("what you could not determine, if anything. An honest gap tells "
+                                  "the next build cycle where you did not look"))))))]
 
 
 def _record_diagnosis(*, store, context_id, dev_root=None, bound_item_id=None, **_):
@@ -157,15 +157,12 @@ class RecordLensArgs(TypedDict, total=False):
     item_id: Required[Annotated[str, "the work-item id"]]
     lens: Required[Annotated[Literal["intent", "safety", "robustness", "performance"],
                              "which standing lens this entry records"]]
-    probed: Required[Annotated[list[str], ("what you examined or tried through this lens, ONE "
-                                           "PROBE PER ENTRY — an input you tried, a path you read, "
-                                           "a command you ran, each with its outcome. Not a "
-                                           "paragraph: the owner reads this list to see what was "
-                                           "actually checked, and it is what makes a clean pass a "
-                                           "real answer")]]
+    probed: Required[Annotated[list[str], (((((("what you examined or tried through this lens, one "
+                                                "probe per entry: an input, a path, a command you "
+                                                "ran, each with its outcome"))))))]]
     findings: Annotated[list[LensFindingArg],
-                        ("what the lens found. Empty is expected and correct when there is "
-                         "nothing — never manufacture one to fill the list")]
+                        (((((("what the lens found. Empty is expected and correct when there is "
+                              "nothing; never manufacture one"))))))]
 
 
 def _record_lens(*, store, context_id, dev_root=None, bound_item_id=None, **_):
@@ -193,9 +190,9 @@ def _record_lens(*, store, context_id, dev_root=None, bound_item_id=None, **_):
 class NominateCheckArgs(TypedDict, total=False):
     item_id: Required[Annotated[str, "the work-item id"]]
     check: Required[Annotated[str, "the verification-plan check id to nominate"]]
-    general: Required[Annotated[str, ("what makes it general — the property of THIS REPO it "
-                                      "defends, said without mentioning this item. If you cannot "
-                                      "say it that way, it isn't a library entry")]]
+    general: Required[Annotated[str, (((((("the property of this repo the check defends, said "
+                                           "without mentioning this item. If you cannot say it that "
+                                           "way, it is not an entry"))))))]]
 
 
 def _nominate_check(*, store, context_id, dev_root=None, bound_item_id=None, **_):
@@ -217,8 +214,8 @@ def _nominate_check(*, store, context_id, dev_root=None, bound_item_id=None, **_
 
 
 class ReadVerificationLibraryArgs(TypedDict, total=False):
-    item_id: Annotated[str, "the work-item id — include it at close to also get this item's "
-                            "nominations rendered as ready-to-write entries"]
+    item_id: Annotated[str, ((((("the work-item id. Include it at close to also get this item's "
+                                 "nominations, rendered as ready-to-write entries")))))]
 
 
 def _read_verification_library(*, store, context_id, dev_root=None, bound_item_id=None, **_):

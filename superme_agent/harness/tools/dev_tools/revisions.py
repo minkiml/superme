@@ -9,24 +9,23 @@ from .items import _bound_err, _item_dir
 class KnowledgeOpArg(TypedDict):
     doc: Annotated[Literal["project-prd", "architecture", "capabilities", "decisions",
                            "roadmap", "resources", "verification"],
-                   "which anchor doc this op edits (the retired `spec` is read-only — its "
-                   "content lives in architecture/decisions now). `verification` is close's "
-                   "library write and nothing else's: append a vet nomination under `Available`, "
-                   "never under `Standing` (promoting is the owner's call alone)"]
+                   ((((("which anchor doc this op edits. `verification` is close's library write "
+                        "alone: append a nomination under `Available`, never under `Standing`")))))]
     section: Annotated[str, "the exact `## heading` text the op targets (must exist in the doc)"]
     op: Annotated[Literal["update", "append", "supersede", "rename_section"],
-                  "update/supersede replace the section body; append extends it; rename_section "
-                  "rewrites the `## heading` LINE itself (content = the new heading text)"]
-    content: Annotated[str, ("for body ops: the section BODY markdown only — do NOT repeat the "
-                             "`## <section>` heading (the writer keeps it; a repeated heading is "
-                             "stripped). For rename_section: the new heading TEXT, one line, no `##`")]
+                  ((((("`update` and `supersede` replace the section body · `append` extends it · "
+                       "`rename_section` rewrites the heading line, with the new text in `content`")))))]
+    content: Annotated[str, (((((("for body ops, the section body markdown only, without repeating "
+                                  "the `## heading`. For `rename_section`, the new heading text on "
+                                  "one line, without `##`"))))))]
 
 
 class ApplyKnowledgeEditsArgs(TypedDict, total=False):
     item_id: Required[Annotated[str, "the work-item id"]]
     ops: Required[Annotated[list[KnowledgeOpArg],
-                            ("the edit ops — validated, then written to the anchor docs and "
-                             "recorded in this week's change log. A rejection writes nothing")]]
+                            (((((("the edit ops. They are validated, then written to the anchor "
+                                  "docs and recorded in this week's change log; a rejection writes "
+                                  "nothing"))))))]]
 
 
 def _apply_knowledge_edits(*, store, context_id, dev_root=None, repo_dir=None,
@@ -102,43 +101,42 @@ def _apply_knowledge_edits(*, store, context_id, dev_root=None, repo_dir=None,
 
 class PlanOpArg(TypedDict, total=False):
     op: Required[Annotated[Literal["update", "append", "add_task", "edit_task", "remove_task"],
-                           "update/append act on a section BODY; the *_task ops act on ONE task "
-                           "line in `## Tasks` (its `- [x]` state survives an edit)"]]
+                           ((((("`update` and `append` act on a section body · `add_task`, "
+                                "`edit_task` and `remove_task` act on one task line, whose `- [x]` "
+                                "state survives an edit")))))]]
     section: Annotated[str, "section ops only: the exact `## heading` text (must already exist)"]
     task: Annotated[str, "edit_task/remove_task only: the task id, e.g. `t3`"]
-    content: Annotated[str, ("the new text — a section BODY (no `## heading`) for section ops, the "
-                             "task text (no `- [ ] t<n> —` prefix) for add_task/edit_task; omit "
-                             "for remove_task")]
+    content: Annotated[str, (((((("a section body without its `## heading` for section ops, or the "
+                                  "task text without its `- [ ] t<n>` prefix. Omit for "
+                                  "`remove_task`"))))))]
 
 
 class PlanChangeArg(TypedDict, total=False):
-    area: Required[Annotated[str, ("what this change answers, in a few words (`caching design`, "
-                                   "`cli tasks`) — a concern with no change is a dropped concern, "
-                                   "and this is what makes that visible")]]
+    area: Required[Annotated[str, (((((("what this change answers, in a few words. A concern with "
+                                        "no change is a dropped concern, and this is what shows it"))))))]]
     scope: Required[Annotated[Literal["resume", "targeted", "redesign"],
-                              "resume = the plan was right; run another generation against it "
-                              "unchanged (NO ops — an edit here is refused) · targeted = right in "
-                              "approach, wrong in places · redesign = the approach itself was "
-                              "wrong; rewrite it and remove the void tasks explicitly"]]
+                              ((((("`resume` = the plan was right, so run another generation "
+                                   "against it unchanged and pass no ops · `targeted` = right in "
+                                   "approach, wrong in places · `redesign` = the approach was "
+                                   "wrong, so rewrite it and remove the void tasks")))))]]
     note: Required[Annotated[str, "one line: what changed here, or why nothing needed to"]]
-    ops: Annotated[list[PlanOpArg], ("this change's edits — required except at `resume`, where "
-                                     "they are refused")]
-    superseded: Annotated[str, ("redesign only: what prior work is void and what build must undo "
-                                "(forward, with new commits — never a reset)")]
+    ops: Annotated[list[PlanOpArg], (((((("this change's edits, required except at `resume`, where "
+                                          "they are refused"))))))]
+    superseded: Annotated[str, (((((("redesign only: what prior work is void, and what build must "
+                                     "undo forward with new commits rather than a reset"))))))]
 
 
 class RevisePlanArgs(TypedDict, total=False):
     item_id: Required[Annotated[str, "the work-item id"]]
-    feedback: Required[Annotated[str, ("the feedback driving this revision, VERBATIM — the "
-                                       "owner's (or deputy's) words, never your paraphrase")]]
-    directive: Required[Annotated[str, ("what the next build does DIFFERENTLY because of this "
-                                        "revision — the one line it acts on")]]
-    still_in_force: Required[Annotated[str, ("what earlier revisions still bind (`nothing` on the "
-                                             "first). Build reads the newest block; this is what "
-                                             "makes that honest")]]
+    feedback: Required[Annotated[str, (((((("the feedback driving this revision, verbatim in the "
+                                            "owner's or deputy's words, never your paraphrase"))))))]]
+    directive: Required[Annotated[str, (((((("the one line the next build acts on: what it does "
+                                             "differently because of this revision"))))))]]
+    still_in_force: Required[Annotated[str, (((((("what earlier revisions still bind, or `nothing` "
+                                                  "on the first. Build reads only the newest block"))))))]]
     changes: Required[Annotated[list[PlanChangeArg],
-                                "one entry per concern, each with its OWN scope — validated "
-                                "first; a refusal writes nothing"]]
+                                ((((("one entry per concern, each with its own scope. They are "
+                                     "validated first, and a refusal writes nothing")))))]]
 
 
 def _revise_plan(*, store, context_id, dev_root=None, bound_item_id=None, spine=None, **_):

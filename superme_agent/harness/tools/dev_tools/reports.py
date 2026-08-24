@@ -7,21 +7,18 @@ from .items import _bound_err, _item_dir
 
 class FilePlanReportArgs(TypedDict, total=False):
     item_id: Required[Annotated[str, "the work-item id"]]
-    summary: Required[Annotated[str, ("one line, plain words — what is going to happen. The "
-                                      "dashboard shows this line on its own, so it must stand "
-                                      "without the rest of the report")]]
-    approach: Annotated[str, ("the plan in the owner's terms, bullets — implementation: what "
-                              "changes and what deliberately does not; research: what we are "
-                              "trying to find out. A small ASCII flow in a fence when it carries "
-                              "the meaning better than words")]
-    confirm: Annotated[str, ("implementation: what the checks will NOT tell you, one short "
-                             "paragraph under the confirmation table (the table itself is "
-                             "derived); research: how we will look and what we will not, since a "
-                             "research item has no table")]
-    decisions: Annotated[str, ("one per line, each tagged (Owner) or (Agent), from plan.md "
-                               "## Decisions & clarifications. Omit if none were made")]
-    assumptions: Annotated[str, ("one per line, each tagged (Owner) or (Agent) — what this plan "
-                                 "takes for granted and would have to revisit. Omit if none")]
+    summary: Required[Annotated[str, (((((("one line in plain words: what is going to happen. The "
+                                           "dashboard shows it alone, so it must stand without the "
+                                           "report"))))))]]
+    approach: Annotated[str, (((((("the plan in the owner's terms, as bullets. Implementation: what "
+                                   "changes and what deliberately does not. Research: what we are "
+                                   "trying to find out"))))))]
+    confirm: Annotated[str, (((((("implementation: what the checks will not tell you, one short "
+                                  "paragraph. Research: how we will look, and how we will not"))))))]
+    decisions: Annotated[str, (((((("one per line, tagged (Owner) or (Agent), from the plan's "
+                                    "decisions section. Omit when none were made"))))))]
+    assumptions: Annotated[str, (((((("one per line, tagged (Owner) or (Agent): what the plan takes "
+                                      "for granted and would revisit. Omit when none"))))))]
 
 
 def _file_plan_report(*, store, context_id, dev_root=None, bound_item_id=None, **_):
@@ -61,9 +58,9 @@ def _file_plan_report(*, store, context_id, dev_root=None, bound_item_id=None, *
 class FilePhaseReportArgs(TypedDict, total=False):
     """The argument shape every whole-body pen shares: the item, and the finished report."""
     item_id: Required[Annotated[str, "the work-item id"]]
-    body: Required[Annotated[str, ("the whole report, filled from this phase's template in "
-                                   "`templates/` — every section, every `<fill:…>` slot replaced. "
-                                   "Passed verbatim; nothing is derived and nothing is appended")]]
+    body: Required[Annotated[str, (((((("the whole report, filled from this phase's template with "
+                                        "every `<fill:…>` slot replaced. It is written verbatim; "
+                                        "nothing is derived or appended"))))))]]
 
 
 # Phases whose report is one whole body, handed over as written. plan and vet derive part of
@@ -104,22 +101,17 @@ def _file_phase_report(*, store, context_id, dev_root=None, bound_item_id=None, 
 
 class FileVetReportArgs(TypedDict, total=False):
     item_id: Required[Annotated[str, "the work-item id"]]
-    summary: Required[Annotated[str, ("one line — what this pass establishes, in the owner's "
-                                      "terms. The dashboard shows it alone, so it must stand "
-                                      "without the report around it")]]
-    confirms: Required[Annotated[str, ("`## What this confirms` — a bullet per thing that is now "
-                                       "known to be true, in the product's words, not the check's. "
-                                       "Do NOT re-list the checks: the Task tab carries them, and "
-                                       "a second list makes your independent pass read like "
-                                       "build's self-report")]]
-    looked_at: Required[Annotated[str, ("`## What else was looked at` — the lenses in plain "
-                                        "language: what question you asked, what you probed, and "
-                                        "what came of it. A lens that found nothing still earns "
-                                        "its bullet; what you probed is the evidence the question "
-                                        "was asked")]]
-    unknown: Annotated[str, ("`## What I can't tell you` — one line and a short reason, for what "
-                             "this pass could not settle and why. Omit only when there is "
-                             "genuinely nothing, which is rare")]
+    summary: Required[Annotated[str, (((((("one line: what this pass establishes, in the owner's "
+                                           "terms. The dashboard shows it alone, so it must stand "
+                                           "by itself"))))))]]
+    confirms: Required[Annotated[str, (((((("a bullet per thing now known to be true, in the "
+                                            "product's words not the check's. Do not re-list the "
+                                            "checks the Task tab has"))))))]]
+    looked_at: Required[Annotated[str, (((((("the lenses in plain language: the question you asked, "
+                                             "what you probed, what came of it. A lens that found "
+                                             "nothing still earns its bullet"))))))]]
+    unknown: Annotated[str, (((((("one line and a short reason for what this pass could not settle. "
+                                  "Omit it only when there is genuinely nothing"))))))]
 
 
 def _file_vet_report(*, store, context_id, dev_root=None, repo_dir=None, bound_item_id=None, **_):

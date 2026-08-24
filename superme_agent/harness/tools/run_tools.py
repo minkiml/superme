@@ -37,58 +37,52 @@ COMMIT_TYPES = ("feat", "fix", "refactor", "chore")
 
 class CommitSpec(TypedDict, total=False):
     type: Required[Annotated[Literal["feat", "fix", "refactor", "chore"],
-                             "feat = observable behaviour gained something · fix = observable "
-                             "behaviour was corrected · refactor = observable behaviour is "
-                             "unchanged · chore = not product code at all (dependencies, build, "
-                             "tooling). Pick by that question, not by which word sounds closest."]]
+                             ((((("`feat` = observable behaviour gained something · `fix` = "
+                                  "observable behaviour was corrected · `refactor` = observable "
+                                  "behaviour is unchanged · `chore` = not product code at all. Pick "
+                                  "by that question")))))]]
     subject: Required[Annotated[str,
-                                "the commit subject WITHOUT the type prefix: imperative mood, "
-                                "capitalized, no trailing period, at most 50 characters. Describe "
-                                "the change to someone reading the project's history who has never "
-                                "heard of this work-item — no ids, no phase names, no task numbers."]]
+                                ((((("the subject without the type prefix: imperative, capitalized, "
+                                     "no period, at most 50 characters. Write it for a reader who "
+                                     "never heard of this work-item")))))]]
 
 
 class CompletionMachine(TypedDict, total=False):
     outcome: Required[Annotated[Literal[
         "success", "partial", "clean_noop", "blocked", "needs_user", "split", "revise",
         "exhausted", "stagnated"],
-        "success = the work is delivered · partial = you delivered what you could and recorded "
-        "the rest as assumptions (a wall you couldn't pass yourself) · clean_noop = nothing to "
-        "do · blocked = NOTHING was doable at all (reserve it for that — a wall on SOME tasks is "
-        "partial, not blocked) · needs_user = the run must pause for the owner's answers (pair "
-        "with user.questions) · split = this item should split into sub-items (plan phase only — "
-        "machine.pointers names the child briefs + execution schedule) · revise = the PLAN "
-        "must change, so the item goes back to plan. Two phases reach it: review, when the "
-        "conversation concludes the work must change (carry the owner's words verbatim in "
-        "user.summary), and build, when the plan cannot be built as written — build is guarded "
-        "out of amending it, so this is the only way back · exhausted / stagnated "
-        "= out of budget or no progress"]]
-    counts: Annotated[dict, "small numeric facts about the run (e.g. tasks done / checks passed) "
-                            "— numbers only, never prose"]
+        ((((("`success` = the work is delivered · `partial` = you delivered what you could and "
+             "recorded the rest as assumptions · `clean_noop` = there was nothing to do · `blocked` "
+             "= nothing was doable at all, so a wall on some tasks is `partial` instead · "
+             "`needs_user` = the run pauses for the owner's answers, paired with `user.questions` · "
+             "`split` = the item should become sub-items, plan phase only · `revise` = the plan "
+             "must change, so the item returns to plan · `exhausted` and `stagnated` = out of "
+             "budget, or no progress")))))]]
+    counts: Annotated[dict, ((((("small numeric facts about the run, such as tasks done or checks "
+                                 "passed. Numbers only, never prose")))))]
     pointers: Annotated[list[str], "paths of the artifacts this run produced or updated"]
     commit: Annotated[CommitSpec,
-                      "review phase, code-producing items only — how this item should read in the "
-                      "project's permanent history once it lands. You are the last phase that "
-                      "knows what actually shipped, so you declare it and the history is written "
-                      "from it."]
+                      ((((("review phase, code-producing items only: how this item should read in "
+                           "the project's history. You are the last phase that knows what actually "
+                           "shipped")))))]
 
 
 class OpenQuestion(TypedDict, total=False):
-    question: Required[Annotated[str, "the question alone, phrased as a question — no rationale, "
-                                      "no options; those are the fields below"]]
+    question: Required[Annotated[str, ((((("the question alone, phrased as a question. No rationale "
+                                           "and no options; those are the fields below")))))]]
     recommend: Required[Annotated[str, "the answer you recommend, stated as an answer the owner "
                                        "can simply accept"]]
-    why: Required[Annotated[str, "one line — the ground for that recommendation"]]
+    why: Required[Annotated[str, "one line: the ground for that recommendation"]]
     instead: Annotated[str, "the alternative and the condition that would select it, as "
                             "'<alternative>, if <when you would pick it>'"]
 
 
 class CompletionUser(TypedDict, total=False):
-    summary: Required[Annotated[str, "one line — what this run accomplished or why it stopped"]]
-    next: Required[Annotated[str, "one line — what should happen next"]]
+    summary: Required[Annotated[str, "one line: what this run accomplished, or why it stopped"]]
+    next: Required[Annotated[str, "one line: what should happen next"]]
     questions: Annotated[list[OpenQuestion],
-                         "outcome needs_user only — one entry per open question, each carrying "
-                         "its own recommendation; the owner can settle the round by accepting them"]
+                         ((((("for outcome `needs_user` only: one entry per open question, each "
+                              "carrying its own recommendation the owner can accept")))))]
 
 
 class ReportCompletionArgs(TypedDict, total=False):
@@ -199,12 +193,12 @@ def _report_completion(*, completion_sink: dict | None = None, **_):
 
 class VerdictMachine(TypedDict, total=False):
     decision: Required[Annotated[Literal["approve", "send_back", "escalate"],
-        "approve advances the phase · send_back posts your change into the work-item and routes "
-        "it back through build⟷vet · escalate pages the owner"]]
+        ((((("`approve` = advance the phase · `send_back` = post your change into the work-item and "
+             "route it back through build and vet · `escalate` = page the owner")))))]]
     gate: Required[Annotated[Literal["triage", "plan", "review"], "the gate you are judging"]]
-    authorize: Annotated[str, "send_back only — the id of the DELEGATED authorization request you "
-                              "are granting (from authorizations.md). Scope is re-checked, and a "
-                              "grant the owner has not delegated is refused"]
+    authorize: Annotated[str, ((((("send_back only: the id of the delegated authorization request "
+                                   "you are granting. Scope is re-checked, and an undelegated grant "
+                                   "is refused")))))]
 
 
 def _lines(raw) -> list[str]:
@@ -233,33 +227,30 @@ class VerdictEscalation(TypedDict, total=False):
     """The owner's page card. Three parts, the middle two LISTS, one point per entry.
 
     A paged owner reads this cold, and the kernel renders it so the shape cannot drift."""
-    summary: Required[Annotated[str, "ONE line, plain and concrete: what is going on. No preamble, "
-                                     "no restating the item title"]]
-    concerns: Required[Annotated[list[str], "why this genuinely needs the owner — one short, plain "
-                                            "line per concern, each standing on its own"]]
-    what_to_do: Required[Annotated[list[str], "the owner's options or steps — one short, plain line "
-                                              "each: the exact command or click path and what they "
-                                              "should see, or, for a decision, each option with "
-                                              "your recommendation marked"]]
+    summary: Required[Annotated[str, ((((("one line, plain and concrete: what is going on. No "
+                                          "preamble, no restating the item title")))))]]
+    concerns: Required[Annotated[list[str], ((((("why this genuinely needs the owner: one short "
+                                                 "plain line per concern, each standing on its own")))))]]
+    what_to_do: Required[Annotated[list[str], ((((("the owner's options or steps, one short line "
+                                                   "each: the exact command or click path, or each "
+                                                   "option with your recommendation marked")))))]]
 
 
 class VerdictUser(TypedDict, total=False):
-    checked: Required[Annotated[str, "what you actually inspected — artifacts by name (at review, "
-                                     "the vet results too) and what convinced you; never a "
-                                     "paraphrase of the brief"]]
-    because: Required[Annotated[str, "ONE sentence under 200 characters — the ground for the "
-                                     "decision, as the owner reads it in the channel. Not a "
-                                     "summary of your reasoning: the single fact that decided it. "
-                                     "Longer detail belongs in `checked`"]]
-    change: Annotated[str, "send_back only — the one specific, actionable change the build/vet "
-                           "agents must make"]
-    escalation: Annotated[VerdictEscalation, "escalate only — the owner's page card"]
+    checked: Required[Annotated[str, ((((("what you actually inspected: artifacts by name, and the "
+                                          "vet results at review. Never a paraphrase of the brief")))))]]
+    because: Required[Annotated[str, ((((("one sentence under 200 characters: the single fact that "
+                                          "decided it, as the owner reads it. Longer detail belongs "
+                                          "in `checked`")))))]]
+    change: Annotated[str, ((((("send_back only: the one specific, actionable change the build and "
+                                "vet agents must make")))))]
+    escalation: Annotated[VerdictEscalation, "escalate only: the owner's page card"]
 
 
 class SubmitGateVerdictArgs(TypedDict, total=False):
     machine: Required[Annotated[VerdictMachine, "carried out as given; never shown to the owner"]]
-    user: Required[Annotated[VerdictUser, "the Deputy sub-tab's approval-trace row — never "
-                                          "routed on"]]
+    user: Required[Annotated[VerdictUser, ((((("the approval-trace row in the Deputy tab; never "
+                                               "routed on")))))]]
 
 
 def _submit_gate_verdict(*, verdict_sink: dict | None = None, **_):

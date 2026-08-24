@@ -13,36 +13,39 @@ _LOG_LEVELS = {"recent": 100, "mid": 300, "max": 500}
 # Per-param docs live on the schema and answer "what is this arg", never "when should I call this
 # tool".
 class DevLogArgs(TypedDict, total=False):
-    day: Annotated[str, "'today' | 'yesterday' | 'YYYY-MM-DD' (owner's local tz)"]
-    since: Annotated[str, "ISO timestamp — start of a custom range"]
-    until: Annotated[str, "ISO timestamp — end of a custom range"]
+    day: Annotated[str, "'today', 'yesterday', or `YYYY-MM-DD` in the owner's local timezone"]
+    since: Annotated[str, "an ISO timestamp starting a custom range"]
+    until: Annotated[str, "an ISO timestamp ending a custom range"]
     scope: Annotated[str, "'dev' for repo-level (non-item-scoped) events only"]
-    item_id: Annotated[str, "a single work-item's id — its timeline"]
+    item_id: Annotated[str, "one work-item's id, for its timeline alone"]
     level: Annotated[Literal["recent", "mid", "max"],
-                     "reading depth: recent=100 rows (default) · mid=300 · max=500"]
-    limit: Annotated[int, "exact row cap override (1–500) — use `level` unless you need a precise count"]
+                     "reading depth: `recent` = 100 rows, the default · `mid` = 300 · `max` = 500"]
+    limit: Annotated[int, ((((("an exact row cap from 1 to 500. Use `level` unless you need a "
+                               "precise count")))))]
 
 
 class FileCandidateArgs(TypedDict, total=False):
     # The capture sweep saw the moment and later phases did not, so the candidate must be self-
     # sufficient.
-    statement: Required[Annotated[str, "what to do — the durable operational learning, stated so it stands alone (1–3 sentences)"]]
+    statement: Required[Annotated[str, ((((("the durable operational learning, stated so it stands "
+                                            "alone, in one to three sentences")))))]]
     rationale: Annotated[str, "why it matters / what triggered it / the problem it solves"]
     evidence: Annotated[str, "the concrete instance(s) from the slice + a pointer (item id / path / quote)"]
     scope_hint: Annotated[Literal["repo_dev", "universal_dev", "core"],
-                          "where the learning applies (default repo_dev). The FORM "
-                          "(constitution/skill/agent) is distill's call, not yours — don't classify it."]
+                          ((((("where the learning applies, default `repo_dev`. `repo_dev` = this "
+                               "repo's dev work · `universal_dev` = every repo · `core` = the "
+                               "product itself. The form it takes is distill's call, not yours")))))]
     origin_item_id: Annotated[str, "the work-item in scope, if the slice names one"]
 
 
 class StageArtifactArgs(TypedDict, total=False):
     # Which proposal this belongs to is bound server-side from the write run; the agent supplies
     # only content.
-    content: Required[Annotated[str, ("the complete final artifact, frontmatter-first: for constitution "
-                                      "a `description` (+ optional body); for skill the full SKILL.md; for "
-                                      "agent the full agent.md — clean, concise, on-point")]]
-    eval_report: Annotated[str, ("the forge_kit eval report as a JSON string (the last line eval.py "
-                                 "printed) — the behavioural verdict shown to the gate-2 reviewer")]
+    content: Required[Annotated[str, (((((("the complete final artifact, frontmatter first: a "
+                                           "`description` for a constitution, the full `SKILL.md` "
+                                           "for a skill, the full agent.md for an agent"))))))]]
+    eval_report: Annotated[str, (((((("the forge_kit eval report as JSON, the last line `eval.py` "
+                                      "printed. It is the reviewer's evidence"))))))]
     note: Annotated[str, "one optional line on a choice you made, for the gate-2 reviewer"]
 
 
@@ -52,13 +55,15 @@ class ReviewCandidatesArgs(TypedDict, total=False):
 
 
 class ReadRunArgs(TypedDict, total=False):
-    run_id: Annotated[int, "the run (Activity item) id to inspect — its full trace. Omit to list recent runs first."]
+    run_id: Annotated[int, ((((("the run id to inspect, for its full trace. Omit it to list recent "
+                                "runs first")))))]
     limit: Annotated[int, "list mode only: max recent runs (default 20, cap 100)"]
 
 
 class DropCandidatesArgs(TypedDict, total=False):
     candidate_ids: Required[Annotated[list[int], "the candidate ids to drop, from read_candidates"]]
-    reason: Annotated[str, "one short phrase why (e.g. 'self-recitation', 'too-thin') — logged only"]
+    reason: Annotated[str, ((((("one short phrase, such as 'self-recitation' or 'too-thin'. It is "
+                                "logged only")))))]
 
 
 class ClarificationArg(TypedDict, total=False):
@@ -70,15 +75,17 @@ class ClarificationArg(TypedDict, total=False):
 class ProposeLearningArgs(TypedDict, total=False):
     title: Required[Annotated[str, "short headline"]]
     body: Required[Annotated[str, "the consolidated proposal narrative"]]
-    summary: Annotated[str, "purpose · usage · why-raised (one short para; for owner + write phase)"]
+    summary: Annotated[str, "purpose, usage, and why it was raised, in one short paragraph"]
     candidate_ids: Annotated[list[int], "the source candidate ids, from read_candidates"]
     output_form: Annotated[Literal["constitution", "skill", "agent"],
                            "the artifact form this proposal targets (default constitution)"]
     target_scope: Annotated[Literal["repo_dev", "universal_dev", "core"],
-                            "where the artifact will live (default repo_dev)"]
-    fields: Annotated[dict, ("the fields the chosen `output_form` needs — constitution: "
-                             "statement, scope, rationale; skill: name, when_to_use, procedure, "
-                             "tools, scope; agent: name, role, tools, model, trigger")]
+                            ((((("where the artifact will live: `repo_dev` = this repo · "
+                                 "`universal_dev` = every repo · `core` = the product")))))]
+    fields: Annotated[dict, (((((("the fields the chosen `output_form` needs. Constitution: "
+                                  "statement, scope, rationale. Skill: name, when_to_use, "
+                                  "procedure, tools, scope. Agent: name, role, tools, model, "
+                                  "trigger"))))))]
     clarifications: Annotated[list[ClarificationArg],
                               "questions for the owner's gate, one entry each"]
     apply_target: Annotated[str, "drafted destination slug"]
@@ -92,14 +99,14 @@ class ReviewProposalsArgs(TypedDict, total=False):
 
 
 class MergeProposalArgs(TypedDict, total=False):
-    proposal_id: Required[Annotated[int, "the existing OPEN proposal to fold the candidate(s) into"]]
-    candidate_ids: Required[Annotated[list[int], "the NEW source candidate ids to merge in"]]
+    proposal_id: Required[Annotated[int, "the existing open proposal to fold the candidates into"]]
+    candidate_ids: Required[Annotated[list[int], "the new source candidate ids to merge in"]]
     title: Annotated[str, "an enriched headline; omit to keep the existing one"]
     body: Annotated[str, "the re-consolidated narrative, incorporating the new substance"]
-    summary: Annotated[str, "refreshed purpose · usage · why-raised"]
+    summary: Annotated[str, "refreshed purpose, usage, and why it was raised"]
     fields: Annotated[dict, "updated form-specific fields, same shape as propose_learning"]
     confidence: Annotated[Literal["high", "medium", "low"],
-                          "refreshed confidence — recurrence usually raises it"]
+                          "refreshed confidence; recurrence usually raises it"]
 
 
 # Each factory takes the shared deps (**_ absorbs any it doesn't use) and returns the async handler.

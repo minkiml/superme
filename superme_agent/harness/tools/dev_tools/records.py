@@ -6,8 +6,8 @@ from .render import _err, _ok, _s
 from .items import _bound_err, _item_dir
 
 class ReadDecisionsArgs(TypedDict, total=False):
-    entry_id: Annotated[str, "a `D-NNN` id to read in full — omit to get the index of every "
-                             "decision's id, status and title"]
+    entry_id: Annotated[str, ((((("a `D-NNN` id to read in full. Omit it for the index of every "
+                                  "decision's id, status and title")))))]
 
 
 def _read_decisions(*, store, context_id, dev_root=None, bound_item_id=None, **_):
@@ -93,10 +93,11 @@ class RequestAuthorizationArgs(TypedDict, total=False):
     scope: Required[Annotated[
         Literal["doc-sync", "rename-to-shipped", "roadmap-mark-done",
                 "prd-identity", "roadmap-scope", "new-decision", "doc-delete"],
-        "the authorization scope, matched against the deputy's delegated authority: sync-to-reality "
-        "scopes (doc-sync · rename-to-shipped · roadmap-mark-done) are delegable; intent-defining "
-        "scopes (prd-identity · roadmap-scope · new-decision · doc-delete) are owner-reserved"]]
-    check: Annotated[str, "the vet-plan check id this blocks — so vet DEFERS it instead of failing it"]
+        ((((("matched against the deputy's delegated authority. Delegable: `doc-sync` · "
+             "`rename-to-shipped` · `roadmap-mark-done`. Owner-reserved: `prd-identity` · "
+             "`roadmap-scope` · `new-decision` · `doc-delete`")))))]]
+    check: Annotated[str, ((((("the vet-plan check id this blocks, so that check defers instead of "
+                               "failing")))))]
 
 
 def _request_authorization(*, store, context_id, dev_root=None, bound_item_id=None, **_):
