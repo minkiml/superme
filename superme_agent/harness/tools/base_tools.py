@@ -94,7 +94,10 @@ def _suggest_assets(*, activated: set | None = None, repo_dir: Path | None = Non
 BASE_TOOLS: list[ToolSpec] = [
     ToolSpec(
         "pull_constitution",
-        "Load a constitution's full body by name (from the always-on catalog).",
+        "Load one constitution item's full body by name, taken from the catalog already in front "
+        "of you. Use it when the catalog line alone does not tell you what the rule requires. It "
+        "resolves names from that catalog only — a name that is not in scope simply misses, and "
+        "it reads nothing else on disk.",
         PullConstitutionArgs, _pull_constitution,
     ),
     ToolSpec(

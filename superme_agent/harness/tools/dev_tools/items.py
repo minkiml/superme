@@ -70,11 +70,9 @@ def _scaffold_artifact(*, store, context_id, dev_root=None, bound_item_id=None, 
 class SetTriageClassificationArgs(TypedDict, total=False):
     item_id: Required[Annotated[str, "the work-item id"]]
     title: Required[Annotated[str, ("the item's name as the board should now read it — a few words, "
-                                    "under 60 characters, no closing period (e.g. \"Add dark mode "
-                                    "support\"). You have read the whole ask, so this is where a "
-                                    "weak name gets fixed: an owner capturing a ticket often pastes "
-                                    "the request itself. Pass the existing title back unchanged when "
-                                    "it already reads well — that is a no-op, not a cost")]]
+                                    "under 60 characters, no closing period. You have read the whole "
+                                    "ask, so fix a weak one here; pass the existing title back "
+                                    "unchanged when it already reads well")]]
     kind: Required[Annotated[Literal["implementation", "research"],
                              ("the confirmed kind — implementation (changes code; worktree + "
                               "vet/review pipeline) or research (answers questions; "
@@ -85,51 +83,38 @@ class SetTriageClassificationArgs(TypedDict, total=False):
                                  "prose for the owner to confirm first")]
     scale: Required[Annotated[Literal["small", "standard"],
                               ("how much CONTENT this item's work is worth. `small` = you can "
-                               "already name the change and where it goes, and a reader would take "
-                               "it in at a glance: every later phase then writes short and reads "
-                               "narrow. `standard` = anything you'd have to investigate, anything "
-                               "touching more than one area, anything where the approach is a real "
-                               "choice. Scale never changes the PIPELINE — a small item still gets "
-                               "its branch, its numbered tasks, a commit per task and a merge. Size "
-                               "of the DIFF is not the test, and neither is the task count: a "
-                               "one-line change to something load-bearing is standard")]]
+                               "already name the change and where it goes, so every later phase "
+                               "reads narrow and writes short. `standard` = anything you'd have to "
+                               "investigate, anything touching more than one area, anything where "
+                               "the approach is a real choice. The size of the diff is not the "
+                               "test: a one-line change to something load-bearing is standard")]]
     fanout: Annotated[Literal["expected", "bounded"],
-                      ("research only, and only worth setting when it is `bounded`: does this "
-                       "surface need SPLITTING across subagents? `expected` (the default) is the "
-                       "family's own prescription — a whole-repo sweep divides. `bounded` is you "
-                       "saying you looked and it does not: one folder, one subsystem, one thread's "
-                       "worth. Investigate obeys your call, and the review gate then judges the run "
-                       "against it instead of against the family default. Separate from `scale` on "
-                       "purpose — size and splittability are different questions, and a bounded "
-                       "surface can still be real work")]
+                      ("research only: does this surface need SPLITTING across subagents? "
+                       "`expected` is the default and divides a whole-repo sweep. Set `bounded` "
+                       "when you have looked and it does not — one folder, one subsystem. "
+                       "Investigate obeys it, and the review gate judges the run against it. A "
+                       "different question from `scale`: a bounded surface can still be big work")]
     scale_reason: Required[Annotated[str, ("one line, in your own words, for why that scale — what "
-                                           "you saw that settled it. Required for BOTH values: this "
-                                           "is what the owner reads at the gate to disagree with, "
-                                           "and a bare label cannot be argued with")]]
+                                           "you saw that settled it. Required for BOTH values: the "
+                                           "owner reads it at the gate to disagree with")]]
     research_kind: Annotated[Literal["audit", "refactoring", "housekeeping", "security",
                                      "study", "deep-diagnosis"],
-                             ("REQUIRED when kind is `research`, rejected otherwise — which family "
-                              "of investigation this is, which decides what counts as an answer. "
-                              "`audit`: is this surface sound — coverage, performance, logic, "
-                              "features, bugs. `refactoring`: this code is hard to work in, what "
-                              "shape should it be. `housekeeping`: what has gone stale — comments, "
-                              "dead code, unused declarations, anything that shouldn't be there. "
-                              "`security`: what is exposed — risks, unsafe smells, unsanitized or "
-                              "junk data. `study`: how does someone else do this, and what should "
-                              "we take. `deep-diagnosis`: what is the mechanism behind a behaviour "
-                              "we cannot explain. Pick by the QUESTION, not the subject — reading "
-                              "another project to find OUR bug is deep-diagnosis, not study, and a "
-                              "sweep that happens to find a bug is still an audit")]
+                             ("REQUIRED when kind is `research`, rejected otherwise — the family "
+                              "of investigation, which decides what counts as an answer. `audit`: "
+                              "is this surface sound. `refactoring`: what shape should this code "
+                              "be. `housekeeping`: what has gone stale. `security`: what is "
+                              "exposed. `study`: how do others do this. `deep-diagnosis`: what is "
+                              "the mechanism behind a behaviour we cannot explain. Pick by the "
+                              "QUESTION, not the subject")]
     kind_override_reason: Annotated[str, ("ONLY when you are recording a kind that contradicts the "
                                           "one this item was filed under, and only after the owner "
                                           "has told you which it is. Quote their answer. Without "
                                           "it a contradicting kind is refused — overruling the "
                                           "filer is the owner's call, not yours")]
     research_kind_reason: Annotated[str, ("one line for why that family — required alongside "
-                                          "`research_kind`, same reason as scale_reason: this is "
-                                          "what the owner argues with at the gate, and this label "
-                                          "picks both the method the investigation follows and the "
-                                          "shape of the record it writes")]
+                                          "`research_kind`. The label picks the method the "
+                                          "investigation follows and the shape of its record, so "
+                                          "the owner argues with this line at the gate")]
 
 
 def _set_triage_classification(*, store, context_id, dev_root=None, bound_item_id=None, **_):

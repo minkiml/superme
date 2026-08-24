@@ -34,8 +34,10 @@ ITEM_DEV_TOOLS: list[ToolSpec] = [
     ),
     ToolSpec(
         "scaffold_artifact",
-        "Scaffold a work-item artifact skeleton (brief/plan/investigation) — "
-        "code owns the structure, you fill the <fill:…> prose slots.",
+        "Scaffold this work-item's artifact skeleton — the headings and the `<fill:…>` slots you "
+        "then fill in place. Use it once, before writing an artifact that does not exist yet. It "
+        "creates structure and no content, and it will not rewrite an artifact already written: "
+        "an existing plan is changed through `revise_plan`, never rescaffolded.",
         ScaffoldArtifactArgs, _scaffold_artifact,
     ),
     ToolSpec(
@@ -48,15 +50,20 @@ ITEM_DEV_TOOLS: list[ToolSpec] = [
     ),
     ToolSpec(
         "record_validation",
-        "Record one of BUILD's own validation runs — the command, the machine result, pass/fail. "
-        "Validation stays yours to run; recording it as data is what lets vet audit the claim "
-        "instead of taking a sentence's word for it.",
+        "Record one of BUILD's own validation runs — the command you ran, the machine result, "
+        "pass or fail. Use it for every check you run yourself while building: recorded as data, "
+        "the claim can later be re-executed and audited instead of taken on a sentence's word. "
+        "Record only a run you actually performed, never one you intend to, and never the "
+        "verification plan's own checks — those are executed and recorded by the vet pass.",
         RecordValidationArgs, _record_validation,
     ),
     ToolSpec(
         "record_verification",
-        "Record one machine-checked verification entry into the current cycle report "
-        "(check + how + result + pass/fail; freshness-tracked against the repo state).",
+        "Record ONE of the verification plan's checks, executed live: which check, how it ran, "
+        "the machine result, pass or fail. Use it once per check id in the plan, as you go. It "
+        "records what actually ran — never a check you reasoned through but did not execute — and "
+        "it is not build's own validation, which is already recorded and which you re-execute "
+        "rather than trust.",
         RecordVerificationArgs, _record_verification,
     ),
     ToolSpec(
@@ -140,8 +147,10 @@ ITEM_DEV_TOOLS: list[ToolSpec] = [
     ),
     ToolSpec(
         "write_checkpoint",
-        "Bank a session-continuity checkpoint onto a work-item (working-on / decisions / "
-        "remaining / notes) — what a fresh session cold-starts from.",
+        "Bank this thread's continuity checkpoint onto the work-item — what is being worked on, "
+        "what remains, what got decided, what to watch out for. Use it before a long session ends "
+        "or is compacted; a fresh session cold-starts from it. Record only what exists nowhere "
+        "else: point at the plan and the reports rather than copying them.",
         WriteCheckpointArgs, _write_checkpoint,
     ),
     ToolSpec(
@@ -167,6 +176,22 @@ ITEM_DEV_TOOLS: list[ToolSpec] = [
         "takes task-level ops so the `- [x]` build earned survives. Appends the revision block the "
         "next build reads first, and opens a fresh build⟷vet generation.",
         RevisePlanArgs, _revise_plan,
+        examples=({
+            "item_id": "a1b2c3d4e5f6",
+            "feedback": "The cache design is wrong — evict on write, not on a timer.",
+            "directive": "Rebuild the cache to evict on write; leave the CLI tasks alone.",
+            "still_in_force": "nothing",
+            "changes": [
+                {"area": "caching design", "scope": "redesign",
+                 "note": "Timer eviction replaced by write-through.",
+                 "superseded": "t4's timer loop is void — remove it in a new commit.",
+                 "ops": [{"op": "update", "section": "## Design",
+                          "content": "The cache evicts on write..."},
+                         {"op": "remove_task", "task": "t4"}]},
+                {"area": "cli tasks", "scope": "resume",
+                 "note": "Untouched by the feedback; run again as written."},
+            ],
+        },),
     ),
 ]
 
@@ -179,9 +204,11 @@ ITEM_DEV_TOOLS: list[ToolSpec] = [
 MAIN_DEV_TOOLS: list[ToolSpec] = [
     ToolSpec(
         "read_dev_log",
-        "This repo's dev activity log — the cross-run record of what's happened in its dev work over "
-        "time (agent runs, learning-pipeline steps, inbox & work-item changes, constitution/asset "
-        "edits), newest first.",
+        "This repo's dev activity log — the cross-run record of what has happened in its dev work "
+        "over time (agent runs, learning steps, inbox and work-item changes, constitution and "
+        "asset edits), newest first. Use it to find out WHEN something happened or whether work "
+        "already exists. It is not the content of that work: an artifact is read at its path, and "
+        "one run's tool-by-tool trail is `read_run`.",
         DevLogArgs, _dev_log,
     ),
     ToolSpec(
@@ -194,31 +221,45 @@ MAIN_DEV_TOOLS: list[ToolSpec] = [
     ),
     ToolSpec(
         "read_candidates",
-        "Read the operational-learning candidate pool (what capture has filed), newest first.",
+        "Read the CANDIDATE pool — single learnings capture filed from one conversation each, "
+        "newest first, before anyone has judged them. Use it at the start of a distill pass, to "
+        "see what is waiting. It does not return proposals: a candidate already consolidated into "
+        "one is read with `read_proposals`. Reading changes nothing; dropping is "
+        "`drop_candidates`.",
         ReviewCandidatesArgs, _review_candidates,
     ),
     ToolSpec(
         "read_proposals",
-        "Read the OPEN operational-learning proposals (consolidated from the candidate pool and "
-        "awaiting the owner's gate), newest first.",
+        "Read the OPEN proposals — consolidated learnings standing at the owner's gate, newest "
+        "first. Use it BEFORE filing a new one, so a learning that recurs strengthens an existing "
+        "proposal instead of minting a near-duplicate beside it. It does not return the raw "
+        "candidates behind them (`read_candidates`), and never one the owner has settled.",
         ReviewProposalsArgs, _review_proposals,
     ),
     ToolSpec(
         "read_run",
-        "Read one agent run's execution trace — its prompt/reply/tool-call trail + outcome "
-        "(pass a run_id) — or omit run_id to list recent runs.",
+        "Read ONE run's execution trace — the prompt, replies, tool calls and outcome of a single "
+        "run. Pass a run_id, or omit it to list recent runs and pick one. Use it to find out what "
+        "an individual run actually did. For activity across many runs use `read_dev_log`; this "
+        "is read-only and re-runs nothing.",
         ReadRunArgs, _read_run,
     ),
     ToolSpec(
         "create_inbox_item",
-        "Create one inbox item (ticket) from a discussion — the sanctioned way to itemize real "
-        "work. Also the branch-off front door: pass spawned_from_item + relation "
-        "(blocking/parallel auto-push into a child work-item; spawn waits for the owner).",
+        "File ONE inbox ticket for real work that surfaced in this discussion — the sanctioned way "
+        "to itemize, and the branch-off front door (pass spawned_from_item + relation: "
+        "blocking/parallel auto-push into a child work-item, spawn waits for the owner). Check "
+        "`read_inbox` first: work an open item already covers is added to it with "
+        "`append_inbox_item`, not filed again. Filing is not starting — you author the ticket and "
+        "stop. A decision already made is not work and does not belong here.",
         CreateInboxItemArgs, _create_inbox_item,
     ),
     ToolSpec(
         "append_inbox_item",
-        "Append new discussion content onto an EXISTING inbox item (never edits it) — the dedup path.",
+        "Add what THIS discussion newly says to an inbox item that already covers the work. Use it "
+        "when `read_inbox` matched an item missing a facet you have just settled — that is how a "
+        "near-duplicate is avoided. The addition lands under the existing text: it never edits or "
+        "replaces a word of it, so do not restate what the item already says.",
         AppendInboxItemArgs, _append_inbox_item,
     ),
     ToolSpec(
@@ -247,27 +288,57 @@ MAIN_DEV_TOOLS: list[ToolSpec] = [
 LEARNING_DEV_TOOLS: list[ToolSpec] = [
     ToolSpec(
         "file_candidate",
-        "File one durable operational learning found in a swept conversation slice as a candidate.",
+        "File ONE durable operational learning found in the conversation slice being swept — a "
+        "candidate, not a decision. Use it for a lesson that would still change what an agent does "
+        "in a future run. Do not use it to record what happened, and do not decide what form the "
+        "learning should take: consolidation and form are distill's call, later.",
         FileCandidateArgs, _file_candidate,
     ),
     ToolSpec(
         "stage_artifact",
-        "Stage the final authored artifact for a proposal (the write phase's pen → drafted).",
+        "Stage the finished artifact you authored for this proposal: the whole file body, plus "
+        "the eval report that is the reviewer's evidence. Call it once, as this run's last "
+        "action. It marks the proposal drafted and writes nothing to disk — adoption stays the "
+        "owner's decision at the gate.",
         StageArtifactArgs, _stage_artifact,
     ),
     ToolSpec(
         "propose_memory",
-        "File one consolidated operational-learning proposal from processed candidates.",
+        "File ONE consolidated operational-learning proposal from candidates you have read — the "
+        "artifact the owner gates. Use it only for a learning no open proposal already covers; "
+        "when one does, fold into it with `merge_into_proposal` rather than filing a parallel "
+        "proposal. It files a proposal and applies nothing — whether the artifact is ever written "
+        "is the owner's decision at the gate.",
         ProposeMemoryArgs, _propose_memory,
+        examples=({
+            "title": "Name the branch before editing shared config",
+            "body": "Three runs edited the shared config on the trunk and had to be reverted...",
+            "summary": "Stops a shared-config edit landing on the trunk · used at build entry",
+            "candidate_ids": [41, 47],
+            "output_form": "constitution",
+            "target_scope": "repo_dev",
+            "fields": {"statement": "Cut a branch before editing shared config.",
+                       "scope": "any run that writes outside its own module",
+                       "rationale": "A trunk edit is reverted, not merged."},
+            "clarifications": [{"question": "Does this bind research runs too?",
+                                "suggested": "yes", "blocking": False}],
+            "confidence": "high",
+        },),
     ),
     ToolSpec(
         "merge_into_proposal",
-        "Fold new candidate(s) into an existing open proposal — cross-run consolidation of a recurring learning.",
+        "Fold new candidates into an EXISTING open proposal — how a learning seen again across "
+        "runs strengthens one proposal instead of spawning near-duplicates. Use it when "
+        "`read_proposals` shows one already covering the same learning. It cannot create a "
+        "proposal (`propose_memory`) and cannot touch one the owner has already settled.",
         MergeProposalArgs, _merge_into_proposal,
     ),
     ToolSpec(
         "drop_candidates",
-        "Permanently drop candidates that fail distill's gate (keeps the pool lean — quality over quantity).",
+        "Permanently drop candidates that fail the distill gate — self-recitation, a restatement "
+        "of the obvious, anything too thin to become an artifact. Use it on candidates you have "
+        "just read, in a distill pass. The drop cannot be undone, so a candidate you are unsure "
+        "about is left in the pool rather than dropped.",
         DropCandidatesArgs, _drop_candidates,
     ),
 ]

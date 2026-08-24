@@ -69,7 +69,8 @@ class CompletionMachine(TypedDict, total=False):
     commit: Annotated[CommitSpec,
                       "review phase, code-producing items only — how this item should read in the "
                       "project's permanent history once it lands. You are the last phase that "
-                      "knows what actually shipped, so you declare it and the kernel writes it."]
+                      "knows what actually shipped, so you declare it and the history is written "
+                      "from it."]
 
 
 class OpenQuestion(TypedDict, total=False):
@@ -92,9 +93,9 @@ class CompletionUser(TypedDict, total=False):
 
 class ReportCompletionArgs(TypedDict, total=False):
     machine: Required[Annotated[CompletionMachine,
-                                "routed by the kernel — never rendered to the user"]]
+                                "routed on to decide what happens next; never shown to the owner"]]
     user: Required[Annotated[CompletionUser,
-                             "rendered to the user wholesale — never routed on"]]
+                             "shown to the owner exactly as written; never routed on"]]
 
 
 def _open_questions(raw) -> tuple[list[dict], str]:
@@ -140,7 +141,7 @@ def _commit_spec(raw) -> tuple[dict | None, str]:
         return None, "machine.commit.subject is required — the summary line, no type prefix."
     if subject.lower().startswith(tuple(f"{t}:" for t in COMMIT_TYPES)):
         return None, ("machine.commit.subject carries its own type prefix. Give the subject alone; "
-                      "the type is the separate field and the kernel joins them.")
+                      "the type is the separate field, and the two are joined for you.")
     if len(subject) > SUBJECT_MAX:
         return None, (f"machine.commit.subject is {len(subject)} characters, over {SUBJECT_MAX}. "
                       "Say the change, not its justification — the body carries the why.")
@@ -202,8 +203,8 @@ class VerdictMachine(TypedDict, total=False):
         "it back through build⟷vet · escalate pages the owner"]]
     gate: Required[Annotated[Literal["triage", "plan", "review"], "the gate you are judging"]]
     authorize: Annotated[str, "send_back only — the id of the DELEGATED authorization request you "
-                              "are granting (from authorizations.md); the kernel re-checks scope "
-                              "and refuses a grant the owner has not delegated"]
+                              "are granting (from authorizations.md). Scope is re-checked, and a "
+                              "grant the owner has not delegated is refused"]
 
 
 def _lines(raw) -> list[str]:
@@ -256,7 +257,7 @@ class VerdictUser(TypedDict, total=False):
 
 
 class DeputyVerdictArgs(TypedDict, total=False):
-    machine: Required[Annotated[VerdictMachine, "executed by the kernel — never rendered"]]
+    machine: Required[Annotated[VerdictMachine, "carried out as given; never shown to the owner"]]
     user: Required[Annotated[VerdictUser, "the Deputy sub-tab's approval-trace row — never "
                                           "routed on"]]
 
@@ -321,15 +322,23 @@ def _deputy_verdict(*, verdict_sink: dict | None = None, **_):
 
 REPORT_COMPLETION_TOOL = ToolSpec(
     "report_completion",
-    "Report this run's structured completion payload to the kernel. Call once, as the run's "
-    "final action.",
+    "Declare how this run ended: the outcome that routes the work onward, and the one-line "
+    "summary the owner reads. Call it exactly once, as this run's final action. A run that never "
+    "calls it is recorded as undeclared, and nothing downstream learns what happened. It reports "
+    "an ending — it does not advance the item or carry out whatever comes next.",
     ReportCompletionArgs, _report_completion,
+    examples=({"machine": {"outcome": "success", "counts": {"tasks_done": 4, "checks_passed": 6},
+                           "pointers": ["artifacts/plan.md"]},
+               "user": {"summary": "All four tasks are done and every check passes.",
+                        "next": "Waiting on your review."}},),
 )
 
 DEPUTY_VERDICT_TOOL = ToolSpec(
     "deputy_verdict",
-    "Emit the verdict for the gate being judged; the kernel executes it. Call once, as the "
-    "dispatch's final action.",
+    "Deliver the verdict on the gate you were asked to judge — approve it, send it back, or "
+    "escalate to the owner. Call it exactly once, as this dispatch's final action; the decision "
+    "is carried out as given. Do not use it to do the work yourself, to change the plan, or to "
+    "judge any gate other than the one named.",
     DeputyVerdictArgs, _deputy_verdict,
 )
 

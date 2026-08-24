@@ -57,23 +57,30 @@ class ReadRunArgs(TypedDict, total=False):
 
 
 class DropCandidatesArgs(TypedDict, total=False):
-    candidate_ids: Required[Annotated[str, "candidate ids to drop, comma-separated"]]
+    candidate_ids: Required[Annotated[list[int], "the candidate ids to drop, from read_candidates"]]
     reason: Annotated[str, "one short phrase why (e.g. 'self-recitation', 'too-thin') — logged only"]
+
+
+class ClarificationArg(TypedDict, total=False):
+    question: Required[Annotated[str, "the question for the owner, phrased as a question"]]
+    suggested: Annotated[str, "the answer you would take if they say nothing"]
+    blocking: Annotated[bool, "true when the artifact cannot be written until they answer"]
 
 
 class ProposeMemoryArgs(TypedDict, total=False):
     title: Required[Annotated[str, "short headline"]]
     body: Required[Annotated[str, "the consolidated proposal narrative"]]
     summary: Annotated[str, "purpose · usage · why-raised (one short para; for owner + write phase)"]
-    candidate_ids: Annotated[str, "source candidate ids, comma-separated"]
+    candidate_ids: Annotated[list[int], "the source candidate ids, from read_candidates"]
     output_form: Annotated[Literal["constitution", "skill", "agent"],
                            "the artifact form this proposal targets (default constitution)"]
     target_scope: Annotated[Literal["repo_dev", "universal_dev", "core"],
                             "where the artifact will live (default repo_dev)"]
-    fields: Annotated[str, ("JSON object of form-specific fields — constitution: "
-                            "{statement,scope,rationale}; skill: {name,when_to_use,procedure,tools,scope}; "
-                            "agent: {name,role,tools,model,trigger}")]
-    clarifications: Annotated[str, "JSON array of batch gate-1 questions, each {question, suggested, blocking}"]
+    fields: Annotated[dict, ("the fields the chosen `output_form` needs — constitution: "
+                             "statement, scope, rationale; skill: name, when_to_use, procedure, "
+                             "tools, scope; agent: name, role, tools, model, trigger")]
+    clarifications: Annotated[list[ClarificationArg],
+                              "questions for the owner's gate, one entry each"]
     apply_target: Annotated[str, "drafted destination slug"]
     cluster: Annotated[str, "optional grouping label"]
     confidence: Annotated[Literal["high", "medium", "low"], "how solidly grounded the proposal is"]
@@ -86,13 +93,13 @@ class ReviewProposalsArgs(TypedDict, total=False):
 
 class MergeProposalArgs(TypedDict, total=False):
     proposal_id: Required[Annotated[int, "the existing OPEN proposal to fold the candidate(s) into"]]
-    candidate_ids: Required[Annotated[str, "the NEW source candidate ids to merge in, comma-separated"]]
-    title: Annotated[str, "optional — enriched headline (omit to keep the existing one)"]
-    body: Annotated[str, "optional — the re-consolidated narrative incorporating the new substance"]
-    summary: Annotated[str, "optional — refreshed purpose · usage · why-raised"]
-    fields: Annotated[str, "optional — updated form-specific fields (JSON), same shape as propose_memory"]
+    candidate_ids: Required[Annotated[list[int], "the NEW source candidate ids to merge in"]]
+    title: Annotated[str, "an enriched headline; omit to keep the existing one"]
+    body: Annotated[str, "the re-consolidated narrative, incorporating the new substance"]
+    summary: Annotated[str, "refreshed purpose · usage · why-raised"]
+    fields: Annotated[dict, "updated form-specific fields, same shape as propose_memory"]
     confidence: Annotated[Literal["high", "medium", "low"],
-                          "optional — refreshed confidence (recurrence usually raises it)"]
+                          "refreshed confidence — recurrence usually raises it"]
 
 
 # Each factory takes the shared deps (**_ absorbs any it doesn't use) and returns the async handler.
@@ -239,16 +246,20 @@ def _drop_candidates(*, store, context_id, **_):
     return drop_candidates
 
 
-def _propose_memory(*, store, context_id, **_):
-    def j(args: dict, k: str):
-        raw = _s(args, k)
-        if not raw:
-            return None
-        try:
-            return json.loads(raw)
-        except (ValueError, TypeError):
-            return None  # tolerate a non-JSON arg rather than failing the whole proposal
+def _obj(args: dict, k: str):
+    """A structured arg as it arrives, or parsed from JSON text a hand-built call passed."""
+    raw = args.get(k)
+    if raw in (None, "", [], {}):
+        return None
+    if isinstance(raw, (dict, list)):
+        return raw
+    try:
+        return json.loads(str(raw))
+    except (ValueError, TypeError):
+        return None
 
+
+def _propose_memory(*, store, context_id, **_):
     async def propose_memory(args: dict) -> dict:
         title, body = _s(args, "title"), _s(args, "body")
         if not title or not body:
@@ -261,8 +272,8 @@ def _propose_memory(*, store, context_id, **_):
                 output_form=_s(args, "output_form") or "constitution",
                 target_scope=_s(args, "target_scope") or "repo_dev",
                 summary=_s(args, "summary"),
-                fields=j(args, "fields"),
-                clarifications=j(args, "clarifications"),
+                fields=_obj(args, "fields"),
+                clarifications=_obj(args, "clarifications"),
                 apply_target=_s(args, "apply_target"),
                 cluster=_s(args, "cluster"),
                 confidence=_s(args, "confidence"),
@@ -297,15 +308,6 @@ def _review_proposals(*, store, context_id, **_):
 
 
 def _merge_into_proposal(*, store, context_id, **_):
-    def j(args: dict, k: str):
-        raw = _s(args, k)
-        if not raw:
-            return None
-        try:
-            return json.loads(raw)
-        except (ValueError, TypeError):
-            return None
-
     async def merge_into_proposal(args: dict) -> dict:
         try:
             pid = int(args.get("proposal_id"))
@@ -318,7 +320,7 @@ def _merge_into_proposal(*, store, context_id, **_):
             prop = store.merge_memory_proposal(
                 pid, context_id, add_candidate_ids=ids,
                 title=_s(args, "title"), body=_s(args, "body"),
-                summary=_s(args, "summary"), fields=j(args, "fields"),
+                summary=_s(args, "summary"), fields=_obj(args, "fields"),
                 confidence=_s(args, "confidence"))
         except ValueError as e:
             return _err(str(e))

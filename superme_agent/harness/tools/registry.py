@@ -7,6 +7,7 @@ handler to its deps.
 
 from __future__ import annotations
 
+import json
 import types as _types
 from dataclasses import dataclass
 from typing import (Annotated, Any, Awaitable, Callable, Literal, Union,
@@ -96,14 +97,24 @@ def spec_schema(spec: "ToolSpec") -> dict[str, Any]:
 class ToolSpec:
     """One tool: description, typed schema, and a deps-bound handler factory.
 
-    An agent routes on the `description`, so it names what the tool achieves, when to use it, and
-    what it will NOT do."""
+    An agent routes on the `description`: what the tool achieves, when to use it, what it
+    will NOT do."""
 
     name: str
     description: str                       # what it achieves · when to use it · what it won't do
     schema: type | dict[str, Any]          # a TypedDict (Annotated docs) or a full JSON-Schema dict
     build: Callable[..., Handler]          # (**deps) -> async handler
     examples: tuple[dict[str, Any], ...] = ()   # whole valid argument sets, for a shape prose can't fix
+
+
+def _kind(prop: dict[str, Any]) -> str:
+    """One property's type as the listing shows it, an array carrying what it holds."""
+    if prop.get("enum"):
+        return "|".join(str(v) for v in prop["enum"])
+    name = str(prop.get("type") or "any")
+    if name == "array":
+        return f"array<{_kind(prop.get('items') or {})}>"
+    return name
 
 
 def describe_specs(specs: list[ToolSpec]) -> str:
@@ -117,13 +128,18 @@ def describe_specs(specs: list[ToolSpec]) -> str:
         required = set(schema.get("required") or [])
         lines = [s.name, f"    {s.description}"]
         for key, prop in props.items():
-            kind = "|".join(str(v) for v in prop["enum"]) if prop.get("enum") else \
-                str(prop.get("type") or "any")
             doc = prop.get("description") or ""
             opt = "" if key in required else ", optional"
-            lines.append(f"    · {key} ({kind}{opt})" + (f" — {doc}" if doc else ""))
+            lines.append(f"    · {key} ({_kind(prop)}{opt})" + (f" — {doc}" if doc else ""))
+            # A nested object's own fields, or the listing shows only the word "object".
+            inner = prop.get("items") if prop.get("type") == "array" else prop
+            for sub, sub_prop in ((inner or {}).get("properties") or {}).items():
+                sub_opt = "" if sub in set((inner or {}).get("required") or ()) else ", optional"
+                sub_doc = sub_prop.get("description") or ""
+                lines.append(f"        · {sub} ({_kind(sub_prop)}{sub_opt})"
+                             + (f" — {sub_doc}" if sub_doc else ""))
         for example in schema.get("examples") or []:
-            lines.append(f"    example: {example}")
+            lines.append(f"    example: {json.dumps(example)}")
         blocks.append("\n".join(lines))
     return "\n\n".join(blocks)
 

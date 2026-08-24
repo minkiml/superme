@@ -60,12 +60,11 @@ class CreateInboxItemArgs(TypedDict, total=False):
     work_kind: Required[Annotated[Literal["implementation", "research"],
                          ("which machinery this becomes when pushed: `implementation` changes code "
                           "(plan → build → vet → review, on its own branch), `research` answers a "
-                          "question (investigate → findings, no branch, nothing merged). Pick by "
-                          "what the item DELIVERS — an item whose output is a decision, a report "
-                          "or an answer is research even when code prompted it. REQUIRED: if you "
-                          "cannot name which of the two this becomes, it is not an inbox item and "
-                          "must not be filed. Triage re-reads your choice and disputes it if it "
-                          "disagrees, so a wrong one costs a question, not a wrong pipeline")]]
+                          "question (investigate → findings, nothing merged). Pick by what the item "
+                          "DELIVERS — one whose output is a decision, a report or an answer is "
+                          "research even when code prompted it. If you cannot name which, this is "
+                          "not an inbox item and must not be filed. Triage re-reads it, so a wrong "
+                          "pick costs a question, not a wrong pipeline")]]
     spawned_from_item: Annotated[str, ("branch-off ONLY: the parent work-item id this spawns from "
                                        "(requires `relation`)")]
     relation: Annotated[Literal["blocking", "parallel", "spawn"],
@@ -264,8 +263,8 @@ class ItemizeItemArgs(TypedDict, total=False):
                                   "edges within this launch (e.g. the deliverable id `d-cli`) — the "
                                   "real work-item id is minted on creation")]]
     title: Required[Annotated[str, ("the card label — a few words naming the change, under 60 "
-                                    "characters, no closing period (e.g. \"Add dark mode "
-                                    "support\"). Not the ask; that is `description`")]]
+                                    "characters, no closing period. Not the ask; that is "
+                                    "`description`")]]
     description: Annotated[str, ("the intent — what value this item delivers. Crisp; NOT a plan "
                                  "(the item's own plan phase does that)")]
     after: Annotated[list[str], ("keys of items in THIS batch (or ids of existing work-items) that "
@@ -274,10 +273,9 @@ class ItemizeItemArgs(TypedDict, total=False):
     kind: Required[Annotated[Literal["implementation", "research"],
                              ("which machinery this item runs: `implementation` changes code (plan "
                               "→ build → vet → review, on its own branch), `research` answers a "
-                              "question (investigate → findings, no branch, nothing merged). Pick "
-                              "by what the item DELIVERS — an item whose output is a decision, a "
-                              "report or an answer is research even when code prompted it. Triage "
-                              "re-reads your choice and disputes it if it disagrees")]]
+                              "question (investigate → findings, nothing merged). Pick by what the "
+                              "item DELIVERS — one whose output is a decision, a report or an "
+                              "answer is research even when code prompted it")]]
 
 
 class ItemizeAndLaunchArgs(TypedDict, total=False):

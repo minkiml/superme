@@ -1,7 +1,7 @@
 """Recording evidence: a validation run, a verification, a diagnosis, a lens."""
 
 import asyncio
-from typing import Annotated, Required, TypedDict
+from typing import Annotated, Literal, Required, TypedDict
 
 from .render import _err, _ok, _s
 from .items import _bound_err, _item_dir
@@ -147,18 +147,25 @@ def _record_diagnosis(*, store, context_id, dev_root=None, bound_item_id=None, *
     return record_diagnosis
 
 
+class LensFindingArg(TypedDict, total=False):
+    severity: Required[Annotated[Literal["low", "medium", "high"],
+                                 "severity decides whether this gates the cycle"]]
+    text: Required[Annotated[str, "the finding in one line, naming where it is"]]
+
+
 class RecordLensArgs(TypedDict, total=False):
     item_id: Required[Annotated[str, "the work-item id"]]
-    lens: Required[Annotated[str, "intent | safety | robustness | performance"]]
-    probed: Required[Annotated[list[str], ("what you actually examined or tried through this lens, "
-                                           "ONE PROBE PER ENTRY — an input you tried, a path you "
-                                           "read, a command you ran, each with its outcome. Not a "
+    lens: Required[Annotated[Literal["intent", "safety", "robustness", "performance"],
+                             "which standing lens this entry records"]]
+    probed: Required[Annotated[list[str], ("what you examined or tried through this lens, ONE "
+                                           "PROBE PER ENTRY — an input you tried, a path you read, "
+                                           "a command you ran, each with its outcome. Not a "
                                            "paragraph: the owner reads this list to see what was "
-                                           "actually checked. A clean pass is a real answer, and "
-                                           "this is what makes it one")]]
-    findings: Annotated[list[dict], ("what the lens found, each {severity: low|medium|high, text}. "
-                                     "Empty is expected and correct when there is nothing — never "
-                                     "manufacture one. Name where in the text")]
+                                           "actually checked, and it is what makes a clean pass a "
+                                           "real answer")]]
+    findings: Annotated[list[LensFindingArg],
+                        ("what the lens found. Empty is expected and correct when there is "
+                         "nothing — never manufacture one to fill the list")]
 
 
 def _record_lens(*, store, context_id, dev_root=None, bound_item_id=None, **_):
