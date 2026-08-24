@@ -54,13 +54,14 @@ function OverTime({ ts, tokens, full }: { ts: TokenTimeseries; tokens: TokenUsag
   return (
     <div className="space-y-3">
       <TabBar size="sm" value={mode} onChange={setMode} tabs={[['type', 'By type'], ['cumulative', 'Cumulative']] as const} />
+      {/* The columns divide the width; a floor on each would paint the series outside the modal. */}
       <div className="flex h-40 items-end gap-1 border-b border-line pb-0">
         {series.map(({ d, total }, i) => {
           // Edge-aware, so it never clips out of the modal: the outer thirds open inward.
           const f = series.length <= 1 ? 0.5 : i / (series.length - 1)
           const anchorX = f < 0.34 ? 'left-0' : f > 0.66 ? 'right-0' : 'left-1/2 -translate-x-1/2'
           return (
-          <div key={d.day} className="group relative flex h-full flex-1 flex-col justify-end" style={{ minWidth: 6 }}>
+          <div key={d.day} className="group relative flex h-full min-w-0 flex-1 flex-col justify-end">
             {mode === 'type'
               ? types.map((t) => {
                   const v = (d[t.key as keyof typeof d] as number) ?? 0

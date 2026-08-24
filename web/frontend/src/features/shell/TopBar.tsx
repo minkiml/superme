@@ -37,6 +37,10 @@ const CHIPS: Chip[] = [
 
 // The token-type colours, 3-type (no cache read — the "new work" split the chip's number is). Same
 // hexes as the drill-in's TYPE_META so the sparkline and the full chart read as one thing.
+// A fixed window, not the whole history: the series grows by a day forever, and a sparkline that
+// grows with it outgrows its own panel.
+const SPARK_DAYS = 30
+
 const SPARK_TYPES = [
   { key: 'input', color: '#6ea8fe' },
   { key: 'cache_creation', color: '#e0a35a' },
@@ -45,15 +49,16 @@ const SPARK_TYPES = [
 
 // Stripped to the bars: at this size a shape is all that reads, and the drill-in has the numbers.
 function TokenSpark({ ts }: { ts: TokenTimeseries | null }) {
-  const days = ts?.days ?? []
+  const days = (ts?.days ?? []).slice(-SPARK_DAYS)
   if (!days.length) return <div className="text-[11px] text-muted">No usage yet</div>
   const total = (d: TokenTimeseries['days'][number]) =>
     SPARK_TYPES.reduce((s, t) => s + ((d[t.key as keyof typeof d] as number) ?? 0), 0)
   const max = Math.max(1, ...days.map(total))
   return (
-    <div className="flex h-12 w-40 items-end gap-px">
+    // The columns divide the width; none may claim a floor, or the row paints outside the panel.
+    <div className="flex h-12 w-40 items-end gap-px overflow-hidden">
       {days.map((d) => (
-        <div key={d.day} className="flex h-full flex-1 flex-col justify-end" style={{ minWidth: 3 }}>
+        <div key={d.day} className="flex h-full min-w-0 flex-1 flex-col justify-end">
           {SPARK_TYPES.map((t) => {
             const v = (d[t.key as keyof typeof d] as number) ?? 0
             return v ? (
