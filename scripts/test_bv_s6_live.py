@@ -8,6 +8,7 @@ import os
 import asyncio
 import glob
 import json
+import shutil
 import sqlite3
 import time
 import urllib.error
@@ -248,12 +249,15 @@ def main() -> None:
            header_count(t3["session_id"]) == 2 and "revet" in um3.split(HEADER)[-1])
         ok("watermark caught up", int(item_row(iid).get("handoffs_promoted") or 0) == 3)
     finally:
+        cleaned = True
         if iid:
+            cleaned = False
             for _ in range(10):   # the just-finished turn's run row may still be closing (409)
                 try:
                     sqlite3.connect(DB).close()
-                    http("DELETE", f"/dev/work-items/{iid}?context_id={CTX}")
-                    print("cleanup: item hard-deleted (pre-build path)")
+                    http("POST", f"/dev/work-items/{iid}/abandon",
+                         {"context_id": CTX, "reason": "bv-s6 probe done"})
+                    cleaned = True
                     break
                 except urllib.error.HTTPError as e:
                     if e.code != 409:
@@ -261,9 +265,17 @@ def main() -> None:
                         break
                     time.sleep(3)
             else:
-                print("cleanup INCOMPLETE: delete stayed 409")
+                print("cleanup INCOMPLETE: abandon stayed 409")
+            if cleaned:
+                shutil.rmtree(KHOME / "work-items" / iid, ignore_errors=True)
+                for row in http("GET", f"/dev?context_id={CTX}").get("inbox", []):
+                    if row.get("routed_to") == iid:
+                        http("DELETE", f"/dev/inbox/{row['id']}")
+                print(f"cleanup: {iid} abandoned, knowledge home and inbox row removed")
 
-    print(f"\nALL GREEN — {PASS} live checks passed (self-cleaned).")
+    # A pass line that claims cleanup it did not do is how the leak stayed invisible.
+    print(f"\nALL GREEN — {PASS} live checks passed"
+          + (" (self-cleaned)." if cleaned else " — CLEANUP INCOMPLETE, item left behind."))
 
 
 if __name__ == "__main__":
