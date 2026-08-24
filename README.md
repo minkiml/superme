@@ -76,7 +76,7 @@ Your work isn't one repo, one project, one workspace, one topic. It's projects, 
 business, and the tooling that runs them. Each piece sits under its own scope and stays there. Every
 piece is a real part of what you do with AI, and none of them connect.
 
-SuperMe is that join, gradually evolving as a digital version of you. One identity across every
+**SuperMe is that join, gradually evolving as a digital version of you.** One identity across every
 repo you own, including its own code, where each repo becomes knowledge it can read and any body of
 knowledge can become a repo.
 
@@ -91,7 +91,7 @@ That leaves you two bad options, read all of it slowly or skim it and hope. So w
 fast is not how well or how quickly it works. **It is how well it keeps you in the loop, and how
 quickly you can understand where things are.**
 
-That is what SuperMe is built to address. Work stops and waits for you wherever the decision is
+That is what **SuperMe** is built to address. Work stops and waits for you wherever the decision is
 yours, at points called gates, and nothing crosses one on its own. Everything else is engineering
 around those points. What you see when you arrive at one, and how fast you can build enough context
 to trust it and act.
@@ -115,12 +115,12 @@ These are the questions that drive the design, and they are still open.
 Every bullet here is a screenshot. Anything the interface does not show yet is in *Other features*
 below.
 
-**Reports written for you, not logs.** What it did, what to push back on, how much to trust each
+**Reports written to keep you in the loop & context and for your quick comprehension, not logs.** What it did, what to push back on, how much to trust each
 claim, and where it leaves the project.
 
 ![The plan report at a gate: a summary, the approach, and a table pairing what must be true with how you will know](assets/gate-report.png)
 
-**Every task tied to the check that defends it.** The confirmation is derived rather than written,
+**Every task tied to the check that verifies and defends it.** The confirmation is derived rather than written,
 so a task nothing proves is named at the gate instead of three cycles later.
 
 ![Tasks and verification in one view, each task listing the named tests that cover it and each check how it was run](assets/gate-task.png)
@@ -130,7 +130,7 @@ cost and how long it has been waiting printed on the card.
 
 ![The kanban board, cards showing model, context fill, tokens and age across triage, work, review and close](assets/work-items.png)
 
-**A deputy can hold the routine gates, and shows its work.** It approves only what it can justify,
+**A deputy is for speeding and soft-autopilot, holding the routine gates, and shows its work.** It approves only what it can justify,
 and every judgment records what it read to get there.
 
 ![The deputy log: each gate approved, the reasoning behind it, and the files it checked](assets/deputy.png)
@@ -175,6 +175,8 @@ context fill. Nothing is a black box when it goes wrong.
 - **Integrations.** Notion, Slack and the other places your work already lives, so knowledge
   outside your repos joins the estate too.
 
+### Quick notes & observations
+- 
 
 ---
 
